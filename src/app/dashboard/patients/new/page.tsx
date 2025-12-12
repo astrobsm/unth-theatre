@@ -139,16 +139,31 @@ export default function NewPatientPage() {
               <label className="label">Ward *</label>
               <select name="ward" required className="input-field">
                 <option value="">Select Ward</option>
-                <option value="Surgical Ward A">Surgical Ward A</option>
-                <option value="Surgical Ward B">Surgical Ward B</option>
-                <option value="Surgical Ward C">Surgical Ward C</option>
-                <option value="Medical Ward">Medical Ward</option>
-                <option value="Gynecology Ward">Gynecology Ward</option>
-                <option value="Pediatric Ward">Pediatric Ward</option>
-                <option value="Orthopedic Ward">Orthopedic Ward</option>
-                <option value="Emergency Ward">Emergency Ward</option>
-                <option value="ICU">Intensive Care Unit</option>
-                <option value="Other">Other</option>
+                <option value="Ward 1">Ward 1</option>
+                <option value="Ward 2">Ward 2</option>
+                <option value="Ward 3">Ward 3</option>
+                <option value="Ward 4">Ward 4</option>
+                <option value="Ward 5">Ward 5</option>
+                <option value="Ward 6A">Ward 6A</option>
+                <option value="Ward 6B">Ward 6B</option>
+                <option value="Ward 8">Ward 8</option>
+                <option value="Ward 9">Ward 9</option>
+                <option value="Ward 10">Ward 10</option>
+                <option value="Neurosurgical Ward">Neurosurgical Ward</option>
+                <option value="Surgical Emergency Ward">Surgical Emergency Ward</option>
+                <option value="Medical Emergency Ward">Medical Emergency Ward</option>
+                <option value="ICU">ICU</option>
+                <option value="Post Natal Ward">Post Natal Ward</option>
+                <option value="Oncology Ward">Oncology Ward</option>
+                <option value="Male Medical Ward">Male Medical Ward</option>
+                <option value="Female Medical Ward">Female Medical Ward</option>
+                <option value="Male Medical Ward Extension">Male Medical Ward Extension</option>
+                <option value="Psychiatric Ward">Psychiatric Ward</option>
+                <option value="Eye Ward">Eye Ward</option>
+                <option value="White Room (Private)">White Room (Private)</option>
+                <option value="Pink Room (Private)">Pink Room (Private)</option>
+                <option value="Blue Room (Private)">Blue Room (Private)</option>
+                <option value="Others">Others (Specify in Notes)</option>
               </select>
             </div>
           </div>

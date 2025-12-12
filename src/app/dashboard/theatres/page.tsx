@@ -81,6 +81,7 @@ export default function TheatresPage() {
   const handleAddTheatre = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
     
     try {
       const response = await fetch('/api/theatres', {
@@ -100,10 +101,16 @@ export default function TheatresPage() {
       if (response.ok) {
         setShowAddTheatre(false);
         fetchTheatres();
-        e.currentTarget.reset();
+        if (form) {
+          form.reset();
+        }
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to add theatre');
       }
     } catch (error) {
       console.error('Failed to add theatre:', error);
+      alert('Error adding theatre');
     }
   };
 
