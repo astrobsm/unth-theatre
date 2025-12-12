@@ -1,0 +1,1887 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SYSTEM_ADMINISTRATOR
+  THEATRE_MANAGER
+  THEATRE_CHAIRMAN
+  SURGEON
+  ANAESTHETIST
+  NURSE_ANAESTHETIST
+  SCRUB_NURSE
+  CIRCULATING_NURSE
+  HOLDING_AREA_NURSE
+  RECOVERY_ROOM_NURSE
+  THEATRE_STORE_KEEPER
+  PORTER
+  ANAESTHETIC_TECHNICIAN
+  BIOMEDICAL_ENGINEER
+  CLEANER
+  THEATRE_COORDINATOR
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ItemCategory {
+  CONSUMABLE
+  MACHINE
+  DEVICE
+  OTHER
+}
+
+enum SurgeryStatus {
+  SCHEDULED
+  IN_HOLDING_AREA
+  READY_FOR_THEATRE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SurgeryType {
+  ELECTIVE
+  URGENT
+  EMERGENCY
+}
+
+enum SurgeryReadinessStatus {
+  PENDING_CHECKS
+  PENDING_DEPOSIT
+  READY
+  BLOCKED
+}
+
+enum AnesthesiaType {
+  GENERAL
+  SPINAL
+  LOCAL
+  REGIONAL
+  SEDATION
+}
+
+enum EquipmentStatus {
+  OPERATIONAL
+  FAULTY
+  UNDER_MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum MaintenanceInterval {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  AS_NEEDED
+}
+
+enum FaultStatus {
+  REPORTED
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum FaultPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum PatientMovementPhase {
+  WARD
+  PORTER_DISPATCHED
+  HOLDING_AREA
+  INSIDE_THEATRE
+  SURGERY_STARTED
+  SURGERY_ENDED
+  RECOVERY_ROOM
+  RETURNED_TO_WARD
+}
+
+enum NotificationType {
+  STOCK_ALERT
+  EQUIPMENT_FAULT
+  MAINTENANCE_DUE
+  SURGERY_SCHEDULED
+  FAULT_REPORTED
+  REQUISITION_APPROVAL
+  SYSTEM_ALERT
+  RED_ALERT
+  HOLDING_AREA_ALERT
+  PACU_ALERT
+  SAFETY_CONCERN
+}
+
+enum HoldingAreaStatus {
+  ARRIVED
+  VERIFICATION_IN_PROGRESS
+  DISCREPANCY_FOUND
+  RED_ALERT_ACTIVE
+  CLEARED_FOR_THEATRE
+  TRANSFERRED_TO_THEATRE
+}
+
+enum PACUDischargeReadiness {
+  NOT_READY
+  READY_WITH_CONCERNS
+  READY_FOR_WARD
+  DISCHARGED_TO_WARD
+}
+
+enum ConsciousnessLevel {
+  FULLY_AWAKE
+  DROWSY_BUT_ROUSABLE
+  SEDATED
+  UNCONSCIOUS
+  UNRESPONSIVE
+}
+
+enum AirwayStatus {
+  PATENT
+  MAINTAINED
+  COMPROMISED
+  INTUBATED
+  OXYGEN_THERAPY
+}
+
+enum RedAlertType {
+  MISSING_DOCUMENTATION
+  ABNORMAL_VITALS
+  CONSENT_ISSUE
+  SURGICAL_SITE_DISCREPANCY
+  ALLERGY_CONCERN
+  FASTING_VIOLATION
+  IDENTITY_MISMATCH
+  PACU_COMPLICATION
+  RECOVERY_CONCERN
+  OTHER
+}
+
+enum CancellationCategory {
+  PATIENT_CONDITION
+  EQUIPMENT_FAILURE
+  STAFF_UNAVAILABILITY
+  EMERGENCY_PRIORITY
+  PATIENT_REQUEST
+  ADMINISTRATIVE
+  OTHER
+}
+
+enum MortalityLocation {
+  PREOPERATIVE
+  INTRAOPERATIVE
+  POSTOPERATIVE_RECOVERY
+  POSTOPERATIVE_WARD
+}
+
+enum PatientLocation {
+  WARD
+  HOLDING_AREA
+  THEATRE_SUITE
+  RECOVERY
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum TheatreSuiteStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  RESERVED
+}
+
+enum AllocationType {
+  SURGERY
+  MAINTENANCE
+  EMERGENCY
+  RESERVED
+}
+
+enum TheatreSetupStatus {
+  COLLECTED
+  RETURNED
+  IN_USE
+}
+
+enum ExtraRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED
+}
+
+model User {
+  id            String      @id @default(uuid())
+  staffId       String?     @unique
+  username      String      @unique
+  email         String?     @unique
+  password      String
+  fullName      String
+  role          UserRole
+  status        UserStatus  @default(PENDING)
+  phoneNumber   String?
+  department    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  approvedBy    String?
+  approvedAt    DateTime?
+  
+  // Relations
+  surgeries     Surgery[]   @relation("SurgeonSurgeries")
+  assistingSurgeries Surgery[] @relation("AssistantSurgeries")
+  anesthesiaSurgeries Surgery[] @relation("AnesthetistSurgeries")
+  transfers     PatientTransfer[]
+  cancellations CaseCancellation[]
+  maintenanceLogs MaintenanceLog[]
+  auditLogs     AuditLog[]
+  whoChecklists WHOChecklist[] @relation("WHOChecklists")
+  theatreSetups TheatreSetup[]
+  setupReturns  TheatreSetupReturn[]
+  extraRequests TheatreExtraRequest[]
+  
+  @@map("users")
+}
+
+model InventoryItem {
+  id            String        @id @default(uuid())
+  name          String
+  category      ItemCategory
+  description   String?
+  unitCostPrice Decimal       @db.Decimal(10, 2)
+  quantity      Int
+  reorderLevel  Int           @default(10)
+  supplier      String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  surgeryItems  SurgeryItem[]
+  supplyRecords SupplyRecord[]
+  maintenanceLogs MaintenanceLog[]
+  
+  @@map("inventory_items")
+}
+
+model SupplyRecord {
+  id            String        @id @default(uuid())
+  itemId        String
+  quantity      Int
+  costPrice     Decimal       @db.Decimal(10, 2)
+  totalCost     Decimal       @db.Decimal(10, 2)
+  supplier      String
+  suppliedDate  DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+  
+  @@map("supply_records")
+}
+
+model MaintenanceLog {
+  id            String            @id @default(uuid())
+  itemId        String
+  description   String
+  status        MaintenanceStatus
+  scheduledDate DateTime
+  completedDate DateTime?
+  technician    String?
+  cost          Decimal?          @db.Decimal(10, 2)
+  notes         String?
+  createdBy     String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  item          InventoryItem     @relation(fields: [itemId], references: [id])
+  user          User              @relation(fields: [createdBy], references: [id])
+  
+  @@map("maintenance_logs")
+}
+
+model Patient {
+  id            String    @id @default(uuid())
+  folderNumber  String    @unique
+  ptNumber      String?   @unique
+  name          String
+  age           Int
+  gender        String
+  ward          String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  surgeries     Surgery[]
+  transfers     PatientTransfer[]
+  fitnessAssessments PreoperativeFitnessAssessment[]
+  mortalities   Mortality[]
+  holdingAreaAssessments HoldingAreaAssessment[]
+  pacuAssessments PACUAssessment[]
+  anesthesiaRecords AnesthesiaMonitoringRecord[]
+  
+  @@map("patients")
+}
+
+model Surgery {
+  id                    String                  @id @default(uuid())
+  patientId             String
+  surgeonId             String
+  assistantSurgeonId    String?
+  anesthetistId         String?
+  scrubNurseId          String?
+  subspecialty          String
+  unit                  String                  // Surgical unit/department
+  indication            String                  // Clinical indication
+  procedureName         String
+  scheduledDate         DateTime
+  scheduledTime         String
+  status                SurgeryStatus           @default(SCHEDULED)
+  surgeryType           SurgeryType             @default(ELECTIVE)
+  readinessStatus       SurgeryReadinessStatus  @default(PENDING_CHECKS)
+  
+  // Anesthesia
+  anesthesiaType        AnesthesiaType?
+  
+  // Requirements
+  needICU               Boolean                 @default(false)
+  needBloodTransfusion  Boolean                 @default(false)
+  needDiathermy         Boolean                 @default(false)
+  needStereo            Boolean                 @default(false)
+  needMontrellMattress  Boolean                 @default(false)
+  needStirups           Boolean                 @default(false)
+  needPneumaticTourniquet Boolean               @default(false)
+  needCArm              Boolean                 @default(false)
+  needMicroscope        Boolean                 @default(false)
+  needSuction           Boolean                 @default(false)
+  otherSpecialNeeds     String?
+  remarks               String?
+  
+  // Costs
+  totalItemsCost        Decimal?                @db.Decimal(10, 2)
+  patientCharge         Decimal?                @db.Decimal(10, 2)
+  depositAmount         Decimal?                @db.Decimal(10, 2)
+  depositConfirmed      Boolean                 @default(false)
+  
+  // Timing
+  knifeOnSkinTime       DateTime?
+  surgeryEndTime        DateTime?
+  completedAt           DateTime?
+  actualStartTime       DateTime?
+  actualEndTime         DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  patient               Patient                 @relation(fields: [patientId], references: [id])
+  surgeon               User                    @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])
+  assistantSurgeon      User?                   @relation("AssistantSurgeries", fields: [assistantSurgeonId], references: [id])
+  anesthetist           User?                   @relation("AnesthetistSurgeries", fields: [anesthetistId], references: [id])
+  items                 SurgeryItem[]
+  whoChecklists         WHOChecklist[]
+  cancellation          CaseCancellation?
+  mortality             Mortality?
+  consumptions          ConsumableConsumption[]
+  movements             PatientMovement[]
+  safetyCheck           PreoperativeSafetyCheck?
+  holdingAreaAssessment HoldingAreaAssessment?
+  intraOperativeRecord  IntraOperativeRecord?
+  pacuAssessment        PACUAssessment?
+  surgicalTiming        SurgicalTiming?
+  surgicalCount         SurgicalCountChecklist?
+  anesthesiaRecord      AnesthesiaMonitoringRecord?
+  
+  @@map("surgeries")
+}
+
+model SurgeryItem {
+  id            String        @id @default(uuid())
+  surgeryId     String
+  itemId        String
+  quantity      Int
+  unitCost      Decimal       @db.Decimal(10, 2)
+  totalCost     Decimal       @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now())
+  
+  surgery       Surgery       @relation(fields: [surgeryId], references: [id])
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+  
+  @@map("surgery_items")
+}
+
+model WHOChecklist {
+  id                    String    @id @default(uuid())
+  surgeryId             String
+  
+  // SIGN IN (To be read out loud) - Before induction of anaesthesia
+  // At least nurse and anaesthetist
+  patientConfirmed      Boolean?
+  hasPatientConfirmedIdentity Boolean?
+  hasPatientConfirmedSite Boolean?
+  hasPatientConfirmedProcedure Boolean?
+  hasPatientConfirmedConsent Boolean?
+  siteMarked            Boolean?
+  anesthesiaChecked     Boolean?
+  isAnesthesiaSafetyCheckComplete Boolean?
+  pulseOximeterOn       Boolean?
+  isPulseOximeterOnPatient Boolean?
+  pulseOximeterFunctioning Boolean?
+  allergyChecked        Boolean?
+  knownAllergy          Boolean?
+  allergyDetails        String?
+  difficultyAirwayRisk  Boolean?
+  aspirationRisk        Boolean?
+  riskOfBloodLoss       Boolean?
+  bloodLossEstimate     String?   // e.g., ">500ml (7ml/kg in children)"
+  twoIVAccessPlanned    Boolean?
+  asaGrade              String?   // ASA grade (circle) 1 2 3 4 5
+  signInNotes           String?
+  
+  // TIME OUT (To be read out loud) - Before skin incision
+  // At least nurse, anaesthetist and surgeon
+  haveTeamMembersIntroduced Boolean?
+  teamIntroduced        Boolean?
+  teamMembersByNameRole Boolean?
+  
+  // Surgeon, Anaesthetist and Nurse Verbally Confirm:
+  confirmPatientName    Boolean?
+  confirmProcedurePlanned Boolean?
+  whatProcedureSiteFunctionPlanned String?
+  
+  // Anticipated Critical Events
+  // TO SURGEON:
+  criticalStepsReviewed Boolean?
+  criticalOrUnexpectedSteps String?  // What are critical/unexpected steps you want team to know about?
+  howMuchBloodlossAnticipated String?
+  whatAnticipatedDurationOfSurgery String?
+  anyEquipmentOrInvestigations String?  // Any specific equipment or special investigations required?
+  
+  // TO ANAESTHETIST:
+  anyPatientSpecificConcerns String?  // Are there any patient specific concerns?
+  
+  // TO NURSE:
+  equipmentConcerns     Boolean?
+  hasSterilityBeenConfirmed Boolean?
+  instrumentsSterilityConfirmed String?  // Has the sterility of the instruments been confirmed (including indicator results)?
+  bloodAvailableForProcedure String?     // Is blood available for the procedure
+  implantOrGadgetAvailable String?       // Implants are Gadget
+  antibioticGiven       Boolean?
+  antibioticsProphylaxisGiven String?    // Antibiotic prophylaxis given in last 60 min
+  imagingDisplayed      Boolean?
+  essentialImagingDisplayed String?      // Essential imaging displayed if applicable
+  timeOutNotes          String?
+  
+  // SIGN OUT (To be read out loud) - Before any member of the team leaves the operating room
+  // At least nurse, anaesthetist and surgeon
+  nurseVerballyConfirms Boolean?
+  procedureRecorded     Boolean?
+  nameOfProcedurePerformed String?  // The name of the procedure performed
+  instrumentCountCorrect Boolean?
+  completionOfInstrumentCount String?   // Completion of instrument, sponge (swabs) and needle counts
+  specimenLabeling      String?         // Specimen labelling (read aloud, including patient name)
+  specimenLabeled       Boolean?
+  whetherAnyEquipmentProblems String?   // Whether there are any equipment problems to be addressed
+  equipmentProblems     Boolean?
+  
+  // TO SURGEON, ANAESTHETIST AND NURSE
+  keyConcernsForRecovery String?        // What are the key concerns for recovery and management of this patient?
+  breathingSpontaneously Boolean?
+  vitalSignsNormalAndStable Boolean?
+  postOperativeCareDecisions String?
+  icuOrPcuCare          Boolean?
+  airwayChallenge       Boolean?
+  transferToRecoveryRoom Boolean?
+  
+  // Patient Details Section
+  patientSurname        String?
+  patientFirstName      String?
+  patientHospitalNumber String?
+  patientWard           String?
+  surgicalOperation     String?
+  checklistCompletedBy  String?         // Name and signature
+  checklistCompletedAt  DateTime?
+  surgeonName           String?
+  surgeonSignature      String?
+  surgeonDate           DateTime?
+  anesthetistName       String?
+  anesthetistSignature  String?
+  anesthetistDate       DateTime?
+  perioperativeNurseName String?
+  perioperativeNurseSignature String?
+  perioperativeNurseDate DateTime?
+  
+  signOutNotes          String?
+  completedById         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  surgery               Surgery   @relation(fields: [surgeryId], references: [id])
+  completedBy           User?     @relation("WHOChecklists", fields: [completedById], references: [id])
+  
+  @@map("who_checklists")
+}
+
+model PreoperativeFitnessAssessment {
+  id                String    @id @default(uuid())
+  patientId         String
+  assessmentDate    DateTime  @default(now())
+  
+  // Comorbidities
+  diabetes          Boolean   @default(false)
+  hypertension      Boolean   @default(false)
+  heartDisease      Boolean   @default(false)
+  asthma            Boolean   @default(false)
+  kidneyDisease     Boolean   @default(false)
+  liverDisease      Boolean   @default(false)
+  otherComorbidities String?
+  
+  // Medications
+  currentMedications String?
+  allergies         String?
+  
+  // Assessment
+  asaScore          Int?      // American Society of Anesthesiologists score
+  fitnessLevel      String?   // "FIT", "FIT_WITH_PRECAUTIONS", "UNFIT"
+  recommendations   String?
+  assessedBy        String
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  patient           Patient   @relation(fields: [patientId], references: [id])
+  
+  @@map("preoperative_fitness_assessments")
+}
+
+model PatientTransfer {
+  id            String          @id @default(uuid())
+  patientId     String
+  fromLocation  PatientLocation
+  toLocation    PatientLocation
+  transferTime  DateTime        @default(now())
+  transferredBy String
+  notes         String?
+  
+  patient       Patient         @relation(fields: [patientId], references: [id])
+  user          User            @relation(fields: [transferredBy], references: [id])
+  
+  @@map("patient_transfers")
+}
+
+model CaseCancellation {
+  id              String              @id @default(uuid())
+  surgeryId       String              @unique
+  reason          String
+  category        CancellationCategory
+  detailedNotes   String
+  cancelledBy     String
+  cancelledAt     DateTime            @default(now())
+  
+  surgery         Surgery             @relation(fields: [surgeryId], references: [id])
+  user            User                @relation(fields: [cancelledBy], references: [id])
+  
+  @@map("case_cancellations")
+}
+
+model AuditLog {
+  id            String    @id @default(uuid())
+  userId        String
+  action        String
+  tableName     String
+  recordId      String?
+  changes       String?   // JSON string of changes
+  ipAddress     String?
+  createdAt     DateTime  @default(now())
+  
+  user          User      @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
+
+model TheatreSuite {
+  id            String              @id @default(uuid())
+  name          String              @unique
+  location      String
+  capacity      Int                 @default(1)
+  equipment     String?             // JSON array of standard equipment
+  status        TheatreSuiteStatus  @default(AVAILABLE)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  
+  allocations   TheatreAllocation[]
+  setups        TheatreSetup[]
+  assignedEquipment Equipment[]
+  
+  @@map("theatre_suites")
+}
+
+model TheatreAllocation {
+  id            String          @id @default(uuid())
+  theatreId     String
+  surgeryId     String?
+  allocationType AllocationType
+  startTime     DateTime
+  endTime       DateTime
+  date          DateTime
+  allocatedBy   String
+  notes         String?
+  equipment     String?         // JSON array of specific equipment needed
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  theatre       TheatreSuite    @relation(fields: [theatreId], references: [id])
+  
+  @@map("theatre_allocations")
+}
+
+model Mortality {
+  id                String            @id @default(uuid())
+  surgeryId         String            @unique
+  patientId         String
+  timeOfDeath       DateTime
+  location          MortalityLocation
+  causeOfDeath      String
+  contributingFactors String?
+  resuscitationAttempted Boolean       @default(false)
+  resuscitationDetails String?
+  reportedBy        String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  surgery           Surgery           @relation(fields: [surgeryId], references: [id])
+  patient           Patient           @relation(fields: [patientId], references: [id])
+  audit             MortalityAudit?
+  
+  @@map("mortalities")
+}
+
+model MortalityAudit {
+  id                String    @id @default(uuid())
+  mortalityId       String    @unique
+  auditDate         DateTime  @default(now())
+  reviewedBy        String
+  findings          String
+  preventability    String?   // "PREVENTABLE", "POSSIBLY_PREVENTABLE", "NOT_PREVENTABLE"
+  recommendations   String?
+  actionsTaken      String?
+  followUpRequired  Boolean   @default(false)
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  mortality         Mortality @relation(fields: [mortalityId], references: [id])
+  
+  @@map("mortality_audits")
+}
+
+model TheatreSetup {
+  id                String              @id @default(uuid())
+  theatreId         String
+  collectedBy       String
+  setupDate         DateTime
+  collectionTime    DateTime            @default(now())
+  status            TheatreSetupStatus  @default(COLLECTED)
+  
+  // Geolocation
+  latitude          Decimal?            @db.Decimal(10, 8)
+  longitude         Decimal?            @db.Decimal(11, 8)
+  location          String?
+  
+  // Antiseptics
+  spiritQuantity    Int                 @default(0)
+  savlonQuantity    Int                 @default(0)
+  povidoneQuantity  Int                 @default(0)
+  
+  // Protective Equipment
+  faceMaskQuantity  Int                 @default(0)
+  nursesCapQuantity Int                 @default(0)
+  
+  // CSSD Supplies
+  cssdGauzeQuantity Int                 @default(0)
+  cssdCottonQuantity Int                @default(0)
+  
+  // Surgical Supplies
+  surgicalBladesQuantity Int            @default(0)
+  suctionTubbingsQuantity Int           @default(0)
+  disposablesQuantity Int               @default(0)
+  
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  theatre           TheatreSuite        @relation(fields: [theatreId], references: [id])
+  nurse             User                @relation(fields: [collectedBy], references: [id])
+  returns           TheatreSetupReturn[]
+  
+  @@map("theatre_setups")
+}
+
+model TheatreSetupReturn {
+  id                String    @id @default(uuid())
+  setupId           String
+  returnedBy        String
+  returnTime        DateTime  @default(now())
+  
+  // Returned quantities
+  spiritReturned    Int       @default(0)
+  savlonReturned    Int       @default(0)
+  povidoneReturned  Int       @default(0)
+  faceMaskReturned  Int       @default(0)
+  nursesCapReturned Int       @default(0)
+  cssdGauzeReturned Int       @default(0)
+  cssdCottonReturned Int      @default(0)
+  surgicalBladesReturned Int  @default(0)
+  suctionTubbingsReturned Int @default(0)
+  disposablesReturned Int     @default(0)
+  
+  returnReason      String
+  notes             String?
+  createdAt         DateTime  @default(now())
+  
+  setup             TheatreSetup @relation(fields: [setupId], references: [id])
+  nurse             User         @relation(fields: [returnedBy], references: [id])
+  
+  @@map("theatre_setup_returns")
+}
+
+model TheatreExtraRequest {
+  id                String              @id @default(uuid())
+  theatreId         String
+  requestedBy       String
+  requestDate       DateTime            @default(now())
+  status            ExtraRequestStatus  @default(PENDING)
+  
+  // Requested items
+  itemName          String
+  quantityRequested Int
+  reason            String
+  urgency           String?             // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  
+  // Approval details
+  approvedBy        String?
+  approvedAt        DateTime?
+  quantityApproved  Int?
+  rejectionReason   String?
+  
+  // Fulfillment
+  fulfilledBy       String?
+  fulfilledAt       DateTime?
+  quantityFulfilled Int?
+  
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  requester         User                @relation(fields: [requestedBy], references: [id])
+  
+  @@map("theatre_extra_requests")
+}
+
+// ==================== ENHANCED MODELS ====================
+
+model StoreConsumable {
+  id                String    @id @default(uuid())
+  name              String
+  category          String
+  unit              String              // e.g., "pieces", "boxes", "bottles"
+  stockLevel        Int
+  reorderLevel      Int       @default(10)
+  expiryDate        DateTime?
+  vendor            String?
+  unitPrice         Decimal?  @db.Decimal(10, 2)
+  batchNumber       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  consumptionRecords ConsumableConsumption[]
+  
+  @@map("store_consumables")
+}
+
+model ConsumableConsumption {
+  id                String    @id @default(uuid())
+  consumableId      String
+  surgeryId         String?
+  scrubNurseId      String
+  quantityIssued    Int
+  quantityReturned  Int       @default(0)
+  issuedAt          DateTime  @default(now())
+  returnedAt        DateTime?
+  notes             String?
+  
+  consumable        StoreConsumable @relation(fields: [consumableId], references: [id])
+  surgery           Surgery?        @relation(fields: [surgeryId], references: [id])
+  
+  @@map("consumable_consumptions")
+}
+
+model Equipment {
+  id                  String              @id @default(uuid())
+  name                String
+  category            String
+  serialNumber        String?             @unique
+  manufacturer        String?
+  vendor              String?
+  assignedTheatreId   String?
+  status              EquipmentStatus     @default(OPERATIONAL)
+  maintenanceInterval MaintenanceInterval @default(AS_NEEDED)
+  lastServiceDate     DateTime?
+  nextServiceDue      DateTime?
+  warrantyExpiry      DateTime?
+  installationDate    DateTime?
+  responsibleStaff    String?
+  contactNumber       String?
+  contactEmail        String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  
+  // Relations
+  assignedTheatre     TheatreSuite?       @relation(fields: [assignedTheatreId], references: [id])
+  maintenanceRecords  EquipmentMaintenance[]
+  faultReports        FaultReport[]
+  dailyStatusLogs     DailyEquipmentStatus[]
+  
+  @@map("equipment")
+}
+
+model EquipmentMaintenance {
+  id                String            @id @default(uuid())
+  equipmentId       String
+  scheduledDate     DateTime
+  completedDate     DateTime?
+  performedBy       String?
+  status            MaintenanceStatus @default(SCHEDULED)
+  maintenanceType   String            // "Routine", "Repair", "Calibration"
+  findings          String?
+  actionsTaken      String?
+  nextServiceDate   DateTime?
+  cost              Decimal?          @db.Decimal(10, 2)
+  letterGenerated   Boolean           @default(false)
+  letterSentDate    DateTime?
+  acknowledgedBy    String?
+  acknowledgedAt    DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  equipment         Equipment         @relation(fields: [equipmentId], references: [id])
+  
+  @@map("equipment_maintenance")
+}
+
+model DailyEquipmentStatus {
+  id                String            @id @default(uuid())
+  equipmentId       String
+  logDate           DateTime          @default(now())
+  status            EquipmentStatus
+  reportedBy        String
+  comments          String?
+  faultReported     Boolean           @default(false)
+  
+  equipment         Equipment         @relation(fields: [equipmentId], references: [id])
+  
+  @@map("daily_equipment_status")
+}
+
+model FaultReport {
+  id                String        @id @default(uuid())
+  equipmentId       String?
+  reportedBy        String
+  faultType         String        // "Equipment", "Consumable", "Environmental", "Safety"
+  description       String
+  priority          FaultPriority @default(MEDIUM)
+  status            FaultStatus   @default(REPORTED)
+  acknowledgedBy    String?
+  acknowledgedAt    DateTime?
+  resolvedBy        String?
+  resolvedAt        DateTime?
+  resolution        String?
+  closedBy          String?
+  closedAt          DateTime?
+  alertsSent        Int           @default(0)
+  lastAlertSent     DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  equipment         Equipment?    @relation(fields: [equipmentId], references: [id])
+  
+  @@map("fault_reports")
+}
+
+model PatientMovement {
+  id                String                @id @default(uuid())
+  surgeryId         String
+  phase             PatientMovementPhase
+  timestamp         DateTime              @default(now())
+  recordedBy        String?
+  notes             String?
+  
+  surgery           Surgery               @relation(fields: [surgeryId], references: [id])
+  
+  @@map("patient_movements")
+}
+
+model UserReport {
+  id                String        @id @default(uuid())
+  reportedBy        String
+  reportType        String        // "Challenge", "Suggestion", "Bottleneck", "Safety Concern"
+  title             String
+  description       String
+  category          String?       // "Operational", "Equipment", "Workflow", "Safety"
+  status            String        @default("Open") // "Open", "Under Review", "Resolved", "Closed"
+  priority          String?
+  assignedTo        String?
+  resolution        String?
+  resolvedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@map("user_reports")
+}
+
+model SystemNotification {
+  id                String            @id @default(uuid())
+  userId            String?           // null = broadcast to all
+  type              NotificationType
+  title             String
+  message           String
+  priority          String            @default("NORMAL") // "NORMAL", "HIGH", "URGENT"
+  isRead            Boolean           @default(false)
+  actionUrl         String?
+  relatedEntityType String?           // "Equipment", "Surgery", "Fault", etc.
+  relatedEntityId   String?
+  createdAt         DateTime          @default(now())
+  readAt            DateTime?
+  
+  @@map("system_notifications")
+}
+
+model PreoperativeSafetyCheck {
+  id                    String    @id @default(uuid())
+  surgeryId             String    @unique
+  whoChecklistComplete  Boolean   @default(false)
+  dvtRiskAssessed       Boolean   @default(false)
+  bleedingRiskAssessed  Boolean   @default(false)
+  medicationCleared     Boolean   @default(false)
+  depositConfirmed      Boolean   @default(false)
+  allChecksComplete     Boolean   @default(false)
+  completedBy           String?
+  completedAt           DateTime?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  surgery               Surgery   @relation(fields: [surgeryId], references: [id])
+  
+  @@map("preoperative_safety_checks")
+}
+
+// ==================== PRE-OPERATIVE HOLDING AREA MODULE ====================
+
+model HoldingAreaAssessment {
+  id                        String              @id @default(uuid())
+  surgeryId                 String              @unique
+  patientId                 String
+  
+  // Reception Checklist Integration
+  arrivalTime               DateTime            @default(now())
+  receivedBy                String              // Holding area nurse ID
+  status                    HoldingAreaStatus   @default(ARRIVED)
+  
+  // RECEPTION CHECKLIST - PHASE 1: IDENTIFICATION
+  patientIdentityConfirmed  Boolean             @default(false)
+  patientStatedName         Boolean             @default(false)      // Patient states his/her name
+  crossCheckWithWristBand   Boolean             @default(false)      // Cross check with patient wrist band
+  compareWithFolderName     Boolean             @default(false)      // Compare with the name on patient's folder
+  compareWithOperationList  Boolean             @default(false)      // Compare with name on the operation list
+  compareWithWardSlip       Boolean             @default(false)      // Compare with name on the ward slip
+  identityVerificationMethod String?            // "ID Band", "Photo ID", "Verbal", "Family Confirmation"
+  identityNotes             String?
+  receptionRemarks          String?
+  
+  // RECEPTION CHECKLIST - PHASE 2: VERIFICATION OF PATIENTS
+  consentFormComplete       Boolean             @default(false)
+  surgeryFeePaidRecorded    Boolean             @default(false)
+  receiptSighted            Boolean             @default(false)
+  nilPerOralMaintained      Boolean             @default(false)
+  operationSiteMarked       Boolean             @default(false)
+  operationSiteShaved       Boolean             @default(false)      // If applicable
+  patientDressedInGown      Boolean             @default(false)      // Including cap
+  pantiesOrBoxersRemoved    Boolean             @default(false)      // Tights and bracelets over removed
+  jewelriesRemoved          Boolean             @default(false)      // Including rings removed
+  dentureNailPlatesRemoved  Boolean             @default(false)
+  glassesContactLensRemoved Boolean             @default(false)
+  makeUpNailPolishRemoved   Boolean             @default(false)      // Including nail polish removed
+  capOrCrownRemoved         Boolean             @default(false)      // Capped/crowned/loose teeth
+  investigationResultsAttached Boolean           @default(false)      // If applicable
+  unitsOfBloodAvailable     Boolean             @default(false)      // If requested
+  allNotesDrugsChartsAttached Boolean            @default(false)      // All notes, drugs and fluid charts attached
+  prescriptionsAttachedToFolder Boolean          @default(false)      // All prescriptions given if prescribed
+  routineVitalSignsChecked  Boolean             @default(false)      // Routine vital signs checked and recorded
+  verificationRemarks       String?
+  
+  // Preoperative Nursing Visit Integration - BIODATA
+  maritalStatus             String?
+  
+  // Preoperative - CO-MORBID CONDITIONS
+  patientOnMedication       Boolean             @default(false)
+  onMedicationForComorbid   Boolean             @default(false)
+  comorbidConditionsList    String?             // List of conditions
+  needToDiscontinueMeds     Boolean             @default(false)
+  medsToDiscontinue         String?             // Which medications
+  
+  // Preoperative - PHYSICAL EXAMINATION
+  headToToeAssessmentSatisfactory Boolean       @default(false)
+  specificConcern           String?
+  pulseRate                 Int?
+  respiratoryRate           Int?                // per minute
+  bloodPressure             String?             // e.g., "120/80"
+  bloodPressureSystolic     Int?                // mmHg
+  bloodPressureDiastolic    Int?                // mmHg
+  spo2                      Int?                // oxygen saturation percentage
+  weight                    Decimal?            @db.Decimal(5, 2)   // in kg
+  height                    Decimal?            @db.Decimal(5, 2)   // in cm
+  gcs                       Int?                // Glasgow Coma Scale
+  temperature               Decimal?            @db.Decimal(4, 1)   // Celsius
+  canSupportRespiration     Boolean             @default(true)
+  useOfAssistiveDevices     Boolean             @default(false)
+  assistiveDeviceType       String?             // Prosthesis type
+  
+  // Preoperative - PSYCHOLOGICAL STATUS ASSESSMENT
+  psychologicalStatus       String?             // "Stable" or "Unstable"
+  
+  // Preoperative - INFORMED CONSENT
+  understandingOfProcedure  Boolean             @default(false)
+  consentFormSigned         Boolean             @default(false)
+  consentWitnessed          Boolean             @default(false)
+  consentNotSigned          Boolean             @default(false)
+  consentRemarks            String?
+  
+  // Preoperative - SURGERY REQUIREMENTS
+  requiresCatheterizingBag  Boolean             @default(false)
+  requiresAnestheticDrugs   Boolean             @default(false)
+  requiresBlood             Boolean             @default(false)
+  requiresOtherSpecify      String?
+  
+  // Preoperative - OPERATION FEE
+  operationFeePaid          Boolean             @default(false)
+  operationFeeNotYetPaid    Boolean             @default(false)
+  
+  // Preoperative - PRE-ANAESTHESIA REVIEW
+  patientReviewed           Boolean             @default(false)
+  patientNotYetReviewed     Boolean             @default(false)
+  patientNotForReview       Boolean             @default(false)
+  typeOfAnesthesia          String?
+  
+  // Preoperative - LABORATORY INVESTIGATIONS
+  labInvestigationsCarriedOut Boolean           @default(false)
+  labResultsAvailable       Boolean             @default(false)
+  labResultsAbnormality     String?             // Any abnormality
+  
+  // Preoperative - PRE-OPERATIVE TEACHING
+  preOpTeachingGiven        Boolean             @default(false)
+  watchPerOralMaintained    Boolean             @default(false)
+  
+  // Preoperative - GENERAL IMPRESSION
+  patientReadyForSurgery    Boolean             @default(false)
+  readinessRemarks          String?
+  
+  // Preoperative - PERIOPERATIVE NURSE(S) DETAILS
+  perioperativeNurse1       String?             // Name
+  perioperativeNurse1Designation String?
+  perioperativeNurse2       String?             // Name
+  perioperativeNurse2Designation String?
+  dateOfPreVisit            DateTime?
+  timeOfPreVisit            String?
+  
+  // Surgical Site & Procedure Verification
+  surgicalSiteMarked        Boolean             @default(false)
+  surgicalSiteConfirmed     Boolean             @default(false)
+  procedureConfirmed        Boolean             @default(false)
+  lateralityConfirmed       Boolean?            // For left/right procedures
+  siteVerificationNotes     String?
+  
+  // Consent Validation
+  consentFormPresent        Boolean             @default(false)
+  consentUnderstandingConfirmed Boolean         @default(false)
+  consentNotes              String?
+  
+  // Allergy Status
+  allergyStatusChecked      Boolean             @default(false)
+  hasAllergies              Boolean             @default(false)
+  allergyDetails            String?             // JSON or text with allergy list
+  allergyBandPresent        Boolean?
+  
+  // Fasting Status
+  fastingStatusChecked      Boolean             @default(false)
+  fastingCompliant          Boolean             @default(false)
+  lastOralIntakeTime        DateTime?
+  lastOralIntakeType        String?             // "Solid food", "Clear fluids", "Medication"
+  fastingNotes              String?
+  
+  // Vital Signs
+  heartRate                 Int?                // bpm
+  oxygenSaturation          Int?                // percentage
+  bloodGlucose              Decimal?            @db.Decimal(5, 2) // mmol/L
+  vitalSignsNormal          Boolean             @default(true)
+  vitalSignsConcerns        String?
+  
+  // Documentation Completeness
+  preOpAssessmentPresent    Boolean             @default(false)
+  labResultsPresent         Boolean             @default(false)
+  imagingPresent            Boolean?
+  ecgPresent                Boolean?
+  crossMatchPresent         Boolean?
+  anesthesiaAssessmentPresent Boolean           @default(false)
+  medicationChartPresent    Boolean             @default(false)
+  allDocumentationComplete  Boolean             @default(false)
+  missingDocumentation      String?             // List of missing items
+  
+  // Pre-medications & IV Access
+  preMedicationGiven        Boolean             @default(false)
+  preMedicationDetails      String?
+  ivAccessEstablished       Boolean             @default(false)
+  ivSiteLocation            String?
+  
+  // Red Alert Management
+  discrepancyDetected       Boolean             @default(false)
+  redAlertTriggered         Boolean             @default(false)
+  redAlertType              RedAlertType?
+  redAlertDescription       String?
+  redAlertTime              DateTime?
+  redAlertResolvedBy        String?
+  redAlertResolvedAt        DateTime?
+  redAlertResolution        String?
+  
+  // Transfer Authorization
+  clearedForTheatre         Boolean             @default(false)
+  clearanceTime             DateTime?
+  clearanceNotes            String?
+  transferredToTheatre      Boolean             @default(false)
+  transferTime              DateTime?
+  handoverNurse             String?             // Theatre nurse receiving patient
+  
+  // Audit Trail
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  
+  // Relations
+  surgery                   Surgery             @relation(fields: [surgeryId], references: [id])
+  patient                   Patient             @relation(fields: [patientId], references: [id])
+  redAlerts                 HoldingAreaRedAlert[]
+  
+  @@map("holding_area_assessments")
+}
+
+model HoldingAreaRedAlert {
+  id                    String                  @id @default(uuid())
+  assessmentId          String
+  alertType             RedAlertType
+  severity              String                  @default("HIGH") // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  description           String
+  triggeredBy           String                  // Nurse who triggered alert
+  triggeredAt           DateTime                @default(now())
+  
+  // Notifications Sent
+  surgeonNotified       Boolean                 @default(false)
+  anesthetistNotified   Boolean                 @default(false)
+  coordinatorNotified   Boolean                 @default(false)
+  notificationsSentAt   DateTime?
+  
+  // Resolution
+  acknowledged          Boolean                 @default(false)
+  acknowledgedBy        String?
+  acknowledgedAt        DateTime?
+  resolved              Boolean                 @default(false)
+  resolvedBy            String?
+  resolvedAt            DateTime?
+  resolutionAction      String?
+  resolutionNotes       String?
+  
+  // Relations
+  assessment            HoldingAreaAssessment   @relation(fields: [assessmentId], references: [id])
+  
+  @@map("holding_area_red_alerts")
+}
+
+// ==================== INTRA-OPERATIVE DOCUMENTATION ====================
+
+model IntraOperativeRecord {
+  id                        String      @id @default(uuid())
+  surgeryId                 String      @unique
+  
+  // Theatre Entry
+  theatreEntryTime          DateTime?
+  patientPositioning        String?     // "Supine", "Prone", "Lateral", "Lithotomy"
+  timeOut                   DateTime?   // Surgical timeout performed
+  timeOutConfirmedBy        String?
+  
+  // Anesthesia Documentation
+  anesthesiaStart           DateTime?
+  anesthesiaType            AnesthesiaType?
+  anesthetistId             String?
+  nurseAnesthetistId        String?
+  anesthesiaNotes           String?
+  
+  // Surgical Team
+  primarySurgeonId          String
+  assistantSurgeonIds       String?     // JSON array of IDs
+  scrubNurseId              String?
+  circulatingNurseId        String?
+  
+  // Surgical Events
+  knifeToSkinTime           DateTime?   // Incision time
+  procedureStartTime        DateTime?
+  procedureEndTime          DateTime?
+  closureStartTime          DateTime?
+  closureEndTime            DateTime?
+  
+  // Intraoperative Events Log
+  eventsLog                 String?     // JSON array of timestamped events
+  complicationsOccurred     Boolean     @default(false)
+  complicationDetails       String?
+  
+  // Specimens & Pathology
+  specimensSent             Boolean     @default(false)
+  specimenDetails           String?     // JSON or text
+  
+  // Medications & Fluids
+  medicationsAdministered   String?     // JSON array
+  fluidsAdministered        String?     // JSON array with volumes
+  bloodProductsGiven        Boolean     @default(false)
+  bloodProductDetails       String?
+  
+  // Surgical Count
+  instrumentCountCorrect    Boolean?
+  swabCountCorrect          Boolean?
+  needleCountCorrect        Boolean?
+  countDiscrepancy          String?
+  
+  // Drains & Devices
+  drainsInserted            Boolean     @default(false)
+  drainDetails              String?     // Types and locations
+  catheterInserted          Boolean     @default(false)
+  catheterType              String?
+  
+  // Estimated Blood Loss
+  estimatedBloodLoss        Int?        // in mL
+  urineOutput               Int?        // in mL
+  
+  // Transfer to Recovery
+  transferToPACUTime        DateTime?
+  handoverToRecoveryNurse   String?
+  
+  // Audit
+  createdBy                 String
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  
+  // Relations
+  surgery                   Surgery     @relation(fields: [surgeryId], references: [id])
+  anesthesiaRecord          AnesthesiaMonitoringRecord?
+  
+  @@map("intraoperative_records")
+}
+
+// ==================== WHO INTRAOPERATIVE ANAESTHESIA MONITORING ====================
+
+model AnesthesiaMonitoringRecord {
+  id                        String      @id @default(uuid())
+  intraOperativeRecordId    String      @unique
+  surgeryId                 String      @unique
+  patientId                 String
+  
+  // Pre-Anesthesia Assessment
+  preOpDiagnosis            String?
+  proposedProcedure         String?
+  asaClassification         String?     // "I", "II", "III", "IV", "V", "E"
+  weightKg                  Decimal?    @db.Decimal(5, 2)
+  heightCm                  Decimal?    @db.Decimal(5, 2)
+  bmi                       Decimal?    @db.Decimal(4, 1)
+  
+  // Anesthesia Type & Technique
+  anesthesiaType            AnesthesiaType
+  anesthesiaTechnique       String?     // "Spinal", "Epidural", "General-ETT", "General-LMA", "Combined"
+  
+  // SPINAL/EPIDURAL SPECIFIC
+  spinalLevel               String?     // e.g., "L3-L4", "L4-L5"
+  spinalNeedleSize          String?     // e.g., "25G", "27G"
+  localAnestheticUsed       String?     // e.g., "Bupivacaine 0.5% Heavy"
+  localAnestheticDose       String?     // e.g., "15mg (3ml)"
+  additives                 String?     // e.g., "Fentanyl 25mcg"
+  spinalAttempts            Int?
+  spinalSuccessful          Boolean?
+  highestSensoryLevel       String?     // e.g., "T6", "T8"
+  motorBlock                String?     // "Bromage 0-3"
+  
+  // GENERAL ANESTHESIA SPECIFIC
+  inductionAgents           String?     // JSON array: [{"drug": "Propofol", "dose": "2mg/kg", "time": "10:30"}]
+  inductionTime             DateTime?
+  intubationMethod          String?     // "ETT", "LMA", "Mask"
+  ettSize                   String?     // e.g., "7.5mm"
+  ettCuffPressure           Int?        // cmH2O
+  intubationAttempts        Int?
+  intubationDifficulty      String?     // "Easy", "Moderate", "Difficult"
+  airwayGrade               String?     // Cormack-Lehane: "I", "II", "III", "IV"
+  maintenanceAgents         String?     // JSON array of volatile/IV agents
+  ventilationMode           String?     // "Spontaneous", "Controlled", "Assisted"
+  tidalVolume               Int?        // mL
+  respiratoryRate           Int?        // per minute
+  peep                      Int?        // cmH2O
+  fio2                      Int?        // percentage
+  
+  // Monitoring Equipment
+  ecgMonitored              Boolean     @default(true)
+  nibpMonitored             Boolean     @default(true)
+  spo2Monitored             Boolean     @default(true)
+  etco2Monitored            Boolean     @default(false)
+  temperatureMonitored      Boolean     @default(false)
+  cvpMonitored              Boolean     @default(false)
+  arterialLineInserted      Boolean     @default(false)
+  arterialLineSite          String?
+  centralLineInserted       Boolean     @default(false)
+  centralLineSite           String?
+  urinaryCatheterInserted   Boolean     @default(false)
+  nasogastricTubeInserted   Boolean     @default(false)
+  
+  // Baseline Vital Signs
+  baselineHR                Int?
+  baselineBP                String?     // "120/80"
+  baselineSpo2              Int?
+  baselineTemp              Decimal?    @db.Decimal(4, 1)
+  baselineRR                Int?
+  
+  // Fluid Management
+  ivAccessSites             String?     // JSON array
+  crystalloidsGiven         Int?        // Total mL
+  colloidsGiven             Int?        // Total mL
+  bloodProductsGiven        String?     // JSON: [{"type": "PRBC", "units": 2}]
+  totalFluidInput           Int?        // mL
+  urineOutput               Int?        // mL
+  estimatedBloodLoss        Int?        // mL
+  fluidBalance              Int?        // mL (calculated)
+  
+  // Medications & Drugs Administered
+  antibioticProphylaxis     String?     // Drug name and time
+  muscleRelaxants           String?     // JSON array
+  analgesics                String?     // JSON array
+  vasoactiveDrugs           String?     // JSON array
+  otherMedications          String?     // JSON array
+  
+  // Anesthesia Events & Complications
+  hypotensionOccurred       Boolean     @default(false)
+  hypotensionManagement     String?
+  hypertensionOccurred      Boolean     @default(false)
+  hypertensionManagement    String?
+  bradycardiaOccurred       Boolean     @default(false)
+  bradycardiaManagement     String?
+  tachycardiaOccurred       Boolean     @default(false)
+  tachycardiaManagement     String?
+  desaturationOccurred      Boolean     @default(false)
+  desaturationManagement    String?
+  difficultAirway           Boolean     @default(false)
+  difficultAirwayDetails    String?
+  anaphylaxis               Boolean     @default(false)
+  anaphylaxisManagement     String?
+  otherComplications        String?     // JSON array
+  
+  // Emergence & Recovery
+  anesthesiaEndTime         DateTime?
+  emergenceAgents           String?     // Reversal agents
+  extubationTime            DateTime?
+  extubationCondition       String?     // "Awake", "Deep", "Failed"
+  postOpVentilation         Boolean     @default(false)
+  transferToPACU            Boolean     @default(true)
+  transferToICU             Boolean     @default(false)
+  
+  // Post-Anesthesia Notes
+  anesthesiaDuration        Int?        // minutes (calculated)
+  surgicalDuration          Int?        // minutes (calculated)
+  anesthetistNotes          String?
+  complications             String?
+  postOpOrders              String?
+  
+  // Signatures & Verification
+  anesthetistName           String?
+  anesthetistSignature      String?
+  nurseAnesthetistName      String?
+  recordCompletedAt         DateTime?
+  
+  // Audit Trail
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  
+  // Relations
+  intraOperativeRecord      IntraOperativeRecord  @relation(fields: [intraOperativeRecordId], references: [id])
+  surgery                   Surgery               @relation(fields: [surgeryId], references: [id])
+  patient                   Patient               @relation(fields: [patientId], references: [id])
+  vitalSignsRecords         AnesthesiaVitalSigns[]
+  
+  @@map("anesthesia_monitoring_records")
+}
+
+model AnesthesiaVitalSigns {
+  id                        String      @id @default(uuid())
+  anesthesiaRecordId        String
+  
+  // Time Recording
+  recordedAt                DateTime    @default(now())
+  minutesFromStart          Int?        // Auto-calculated from anesthesia start
+  eventPhase                String?     // "INDUCTION", "MAINTENANCE", "EMERGENCE"
+  
+  // Cardiovascular
+  heartRate                 Int?        // bpm
+  systolicBP                Int?        // mmHg
+  diastolicBP               Int?        // mmHg
+  meanArterialPressure      Int?        // mmHg (calculated or measured)
+  
+  // Respiratory
+  respiratoryRate           Int?        // per minute
+  spo2                      Int?        // percentage
+  etco2                     Int?        // mmHg
+  peakAirwayPressure        Int?        // cmH2O
+  tidalVolume               Int?        // mL
+  minuteVolume              Decimal?    @db.Decimal(5, 2) // L/min
+  
+  // Temperature
+  temperature               Decimal?    @db.Decimal(4, 1) // Celsius
+  
+  // Depth of Anesthesia
+  bisValue                  Int?        // Bispectral Index (0-100)
+  macValue                  Decimal?    @db.Decimal(3, 1) // Minimum Alveolar Concentration
+  
+  // Other Parameters
+  cvp                       Int?        // cmH2O
+  urineOutput               Int?        // mL (cumulative or interval)
+  
+  // Interventions at this time
+  interventions             String?     // JSON: drugs given, ventilator changes, etc.
+  
+  // Notes
+  notes                     String?
+  alertTriggered            Boolean     @default(false)
+  alertType                 String?     // "HYPOTENSION", "DESATURATION", etc.
+  
+  // Relations
+  anesthesiaRecord          AnesthesiaMonitoringRecord @relation(fields: [anesthesiaRecordId], references: [id])
+  
+  @@map("anesthesia_vital_signs")
+  @@index([anesthesiaRecordId, recordedAt])
+}
+
+// ==================== POST-OPERATIVE RECOVERY (PACU) MODULE ====================
+
+model PACUAssessment {
+  id                        String                  @id @default(uuid())
+  surgeryId                 String                  @unique
+  patientId                 String
+  
+  // PACU Entry
+  admissionTime             DateTime                @default(now())
+  receivedBy                String                  // Recovery room nurse ID
+  handoverFrom              String?                 // Theatre nurse/anesthetist
+  
+  // Initial Assessment (on arrival)
+  consciousnessLevel        ConsciousnessLevel
+  airwayStatus              AirwayStatus
+  breathingPattern          String?                 // "Spontaneous", "Assisted", "Ventilated"
+  oxygenTherapy             Boolean                 @default(false)
+  oxygenFlowRate            Decimal?                @db.Decimal(4, 1) // L/min
+  
+  // Cardiovascular Status
+  heartRateOnAdmission      Int?
+  bloodPressureOnAdmission  String?                 // "120/80"
+  peripheralPerfusion       String?                 // "Good", "Poor", "Mottled"
+  capillaryRefillTime       String?                 // "<2 seconds", ">2 seconds"
+  
+  // Pain Assessment
+  painScoreOnAdmission      Int?                    // 0-10 scale
+  painLocation              String?
+  painManagedAdequately     Boolean                 @default(false)
+  
+  // Surgical Site
+  surgicalSiteCondition     String?                 // "Clean and dry", "Oozing", "Bleeding"
+  dressingIntact            Boolean                 @default(true)
+  drainsPresent             Boolean                 @default(false)
+  drainType                 String?
+  drainOutput               String?                 // "Minimal", "Moderate", "Heavy"
+  
+  // Fluid Balance
+  ivFluidsRunning           Boolean                 @default(false)
+  fluidType                 String?
+  fluidRate                 String?
+  urineOutput               Int?                    // mL
+  catheterInSitu            Boolean                 @default(false)
+  
+  // Temperature
+  temperatureOnAdmission    Decimal?                @db.Decimal(4, 1)
+  normothermic              Boolean                 @default(true)
+  warmingMeasures           String?
+  
+  // Nausea & Vomiting
+  nauseaPresent             Boolean                 @default(false)
+  vomitingOccurred          Boolean                 @default(false)
+  antiemeticsGiven          Boolean                 @default(false)
+  
+  // Complications & Red Alerts
+  complicationsDetected     Boolean                 @default(false)
+  complicationDetails       String?
+  redAlertTriggered         Boolean                 @default(false)
+  redAlertType              RedAlertType?
+  redAlertDescription       String?
+  redAlertTime              DateTime?
+  redAlertResolvedBy        String?
+  redAlertResolvedAt        DateTime?
+  
+  // Discharge Readiness
+  dischargeReadiness        PACUDischargeReadiness  @default(NOT_READY)
+  dischargeTime             DateTime?
+  dischargedTo              String?                 // Ward/ICU name
+  dischargeVitalsStable     Boolean                 @default(false)
+  dischargePainControlled   Boolean                 @default(false)
+  dischargeFullyConscious   Boolean                 @default(false)
+  dischargeNauseaFree       Boolean                 @default(false)
+  
+  // Final Assessment
+  medicationsGivenInPACU    String?                 // JSON array
+  totalTimeInPACU           Int?                    // Minutes
+  dischargeNotes            String?
+  warningSignsExplained     Boolean                 @default(false)
+  wardNurseHandover         String?                 // Nurse receiving patient on ward
+  
+  // Audit Trail
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  
+  // Relations
+  surgery                   Surgery                 @relation(fields: [surgeryId], references: [id])
+  patient                   Patient                 @relation(fields: [patientId], references: [id])
+  vitalSigns                PACUVitalSigns[]
+  redAlerts                 PACURedAlert[]
+  
+  @@map("pacu_assessments")
+}
+
+model PACUVitalSigns {
+  id                    String          @id @default(uuid())
+  pacuAssessmentId      String
+  recordedAt            DateTime        @default(now())
+  recordedBy            String          // Nurse ID
+  
+  // Vital Signs
+  consciousnessLevel    ConsciousnessLevel?
+  heartRate             Int?
+  bloodPressure         String?         // "120/80"
+  respiratoryRate       Int?
+  oxygenSaturation      Int?            // SpO2 percentage
+  temperature           Decimal?        @db.Decimal(4, 1)
+  painScore             Int?            // 0-10
+  
+  // Clinical Notes
+  notes                 String?
+  interventionRequired  Boolean         @default(false)
+  interventionDetails   String?
+  
+  // Relations
+  pacuAssessment        PACUAssessment  @relation(fields: [pacuAssessmentId], references: [id])
+  
+  @@map("pacu_vital_signs")
+}
+
+model PACURedAlert {
+  id                    String          @id @default(uuid())
+  pacuAssessmentId      String
+  alertType             RedAlertType
+  severity              String          @default("HIGH")
+  description           String
+  triggeredBy           String
+  triggeredAt           DateTime        @default(now())
+  
+  // Notifications
+  surgeonNotified       Boolean         @default(false)
+  anesthetistNotified   Boolean         @default(false)
+  wardNotified          Boolean         @default(false)
+  notificationsSentAt   DateTime?
+  
+  // Resolution
+  acknowledged          Boolean         @default(false)
+  acknowledgedBy        String?
+  acknowledgedAt        DateTime?
+  resolved              Boolean         @default(false)
+  resolvedBy            String?
+  resolvedAt            DateTime?
+  resolutionAction      String?
+  
+  // Relations
+  pacuAssessment        PACUAssessment  @relation(fields: [pacuAssessmentId], references: [id])
+  
+  @@map("pacu_red_alerts")
+}
+
+// ==================== SURGICAL COUNT CHECKLIST MODULE ====================
+
+model SurgicalCountChecklist {
+  id                        String      @id @default(uuid())
+  surgeryId                 String      @unique
+  
+  // Theatre and Patient Details
+  surgicalOperationType     String?     // Type of operation
+  operationDate             DateTime?
+  surgeonName               String?
+  scrubNurseName            String?
+  circulatingNurseName      String?
+  
+  // Pre-Surgery Count (Initial Count)
+  // Instruments
+  preCountInstruments       Int         @default(0)
+  preCountInstrumentsRecorded Boolean   @default(false)
+  
+  // Swabs (categorized)
+  preCountSmallSwabs        Int         @default(0)      // Swab small
+  preCountMediumSwabs       Int         @default(0)      // Swab medium
+  preCountLargeSwabs        Int         @default(0)      // Swab large
+  preCountRollSwabs         Int         @default(0)      // Roll swabs
+  preCountTapeLaparotomy    Int         @default(0)      // Tape laparotomy
+  preCountAbdominalPack     Int         @default(0)      // Abdominal pack
+  preCountSwabsRecorded     Boolean     @default(false)
+  
+  // Sharps
+  preCountBlades            Int         @default(0)      // Blades
+  preCountNeedles           Int         @default(0)      // Needles
+  preCountSutures           Int         @default(0)      // Sutures
+  preCountTrocars           Int         @default(0)      // Trocars
+  preCountSharpsRecorded    Boolean     @default(false)
+  
+  // Others
+  preCountOthers            String?                       // Other items
+  
+  // Added Count (Additional items during surgery)
+  addedInstruments          Int         @default(0)
+  addedSmallSwabs           Int         @default(0)
+  addedMediumSwabs          Int         @default(0)
+  addedLargeSwabs           Int         @default(0)
+  addedRollSwabs            Int         @default(0)
+  addedTapeLaparotomy       Int         @default(0)
+  addedAbdominalPack        Int         @default(0)
+  addedBlades               Int         @default(0)
+  addedNeedles              Int         @default(0)
+  addedSutures              Int         @default(0)
+  addedTrocars              Int         @default(0)
+  addedOthers               String?
+  
+  // First Count (Before closure)
+  firstCountInstruments     Int         @default(0)
+  firstCountSmallSwabs      Int         @default(0)
+  firstCountMediumSwabs     Int         @default(0)
+  firstCountLargeSwabs      Int         @default(0)
+  firstCountRollSwabs       Int         @default(0)
+  firstCountTapeLaparotomy  Int         @default(0)
+  firstCountAbdominalPack   Int         @default(0)
+  firstCountBlades          Int         @default(0)
+  firstCountNeedles         Int         @default(0)
+  firstCountSutures         Int         @default(0)
+  firstCountTrocars         Int         @default(0)
+  firstCountOthers          String?
+  firstCountTime            DateTime?
+  firstCountCorrect         Boolean?
+  firstCountDiscrepancy     String?     // Description of any discrepancy
+  
+  // Second Count (After closure/final count)
+  secondCountInstruments    Int         @default(0)
+  secondCountSmallSwabs     Int         @default(0)
+  secondCountMediumSwabs    Int         @default(0)
+  secondCountLargeSwabs     Int         @default(0)
+  secondCountRollSwabs      Int         @default(0)
+  secondCountTapeLaparotomy Int         @default(0)
+  secondCountAbdominalPack  Int         @default(0)
+  secondCountBlades         Int         @default(0)
+  secondCountNeedles        Int         @default(0)
+  secondCountSutures        Int         @default(0)
+  secondCountTrocars        Int         @default(0)
+  secondCountOthers         String?
+  secondCountTime           DateTime?
+  secondCountCorrect        Boolean?
+  secondCountDiscrepancy    String?     // Description of any discrepancy
+  
+  // Final Count Verification
+  allCountsCorrect          Boolean     @default(false)
+  finalCountVerifiedBy      String?     // Scrub nurse
+  finalCountWitnessedBy     String?     // Circulating nurse
+  surgeonNotifiedOfCount    Boolean     @default(false)
+  
+  // Discrepancy Management
+  discrepancyOccurred       Boolean     @default(false)
+  discrepancyType           String?     // "Missing item", "Extra item", "Count mismatch"
+  discrepancyDetails        String?
+  discrepancyResolved       Boolean     @default(false)
+  discrepancyResolution     String?
+  xRayOrdered               Boolean     @default(false)
+  xRayResult                String?
+  incidentReportFiled       Boolean     @default(false)
+  
+  // Count Documentation
+  countSheetCompleted       Boolean     @default(false)
+  signatureScrubNurse       String?
+  signatureCirculatingNurse String?
+  signatureSurgeon          String?
+  
+  // Remarks
+  remarks                   String?
+  specialNotes              String?
+  
+  // Audit Trail
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  completedAt               DateTime?
+  
+  // Relations
+  surgery                   Surgery     @relation(fields: [surgeryId], references: [id])
+  countEvents               SurgicalCountEvent[]
+  
+  @@map("surgical_count_checklists")
+}
+
+model SurgicalCountEvent {
+  id                    String                    @id @default(uuid())
+  countChecklistId      String
+  eventType             String                    // "PRE_COUNT", "ADDED_ITEMS", "FIRST_COUNT", "SECOND_COUNT", "DISCREPANCY"
+  itemType              String                    // "INSTRUMENTS", "SWABS", "SHARPS", "OTHERS"
+  itemDescription       String?
+  quantityAdded         Int?
+  quantityRemoved       Int?
+  recordedBy            String                    // Nurse ID/name
+  recordedAt            DateTime                  @default(now())
+  notes                 String?
+  
+  // Relations
+  countChecklist        SurgicalCountChecklist    @relation(fields: [countChecklistId], references: [id])
+  
+  @@map("surgical_count_events")
+}
+
+// ============================================================================
+// SURGICAL TIMING MODULE
+// ============================================================================
+
+enum SurgicalPhase {
+  PATIENT_IN_ROOM
+  ANESTHESIA_START
+  ANESTHESIA_READY
+  TIMEOUT_COMPLETED
+  INCISION
+  PROCEDURE_START
+  PROCEDURE_END
+  CLOSURE_START
+  CLOSURE_END
+  DRESSING_APPLIED
+  PATIENT_EXTUBATED
+  PATIENT_OUT_OF_ROOM
+}
+
+model SurgicalTiming {
+  id                        String          @id @default(uuid())
+  surgeryId                 String          @unique
+  
+  // Pre-Operative Times
+  patientEnteredRoomTime    DateTime?       // Patient arrived in OR
+  anesthesiaStartTime       DateTime?       // Anesthesia induction started
+  anesthesiaReadyTime       DateTime?       // Patient ready for surgery
+  
+  // Timeout
+  timeoutStartTime          DateTime?       // WHO timeout started
+  timeoutCompletedTime      DateTime?       // WHO timeout completed
+  timeoutPerformedBy        String?         // Staff who led timeout
+  timeoutTeamPresent        String?         // JSON: Team members present
+  
+  // Surgical Times
+  incisionTime              DateTime?       // Knife to skin (first incision)
+  procedureStartTime        DateTime?       // Actual procedure start
+  procedureEndTime          DateTime?       // Procedure completed
+  closureStartTime          DateTime?       // Wound closure started
+  closureEndTime            DateTime?       // Wound closure completed
+  dressingAppliedTime       DateTime?       // Dressing applied
+  
+  // Post-Operative Times
+  patientExtubatedTime      DateTime?       // Patient extubated (if applicable)
+  patientLeftRoomTime       DateTime?       // Patient left OR
+  
+  // Sign Out
+  signOutTime               DateTime?       // WHO sign out completed
+  signOutPerformedBy        String?         // Staff who led sign out
+  
+  // Calculated Durations (in minutes)
+  anesthesiaDuration        Int?            // anesthesiaReady - anesthesiaStart
+  surgicalDuration          Int?            // procedureEnd - incisionTime
+  totalORTime               Int?            // patientLeftRoom - patientEnteredRoom
+  closureDuration           Int?            // closureEnd - closureStart
+  turnoverTime              Int?            // Next patient in - previous patient out
+  
+  // Delays and Interruptions
+  delayOccurred             Boolean         @default(false)
+  delayReason               String?         // Reason for any delay
+  delayDuration             Int?            // Minutes of delay
+  interruptionOccurred      Boolean         @default(false)
+  interruptionReason        String?
+  interruptionDuration      Int?            // Minutes
+  
+  // Team Members Present
+  surgeonPresent            String?         // JSON: Surgeon(s) details
+  anesthetistPresent        String?         // JSON: Anesthetist details
+  scrubNursePresent         String?         // JSON: Scrub nurse(s)
+  circulatingNursePresent   String?         // JSON: Circulating nurse(s)
+  otherTeamMembers          String?         // JSON: Other team members
+  
+  // Notes
+  timingNotes               String?
+  recordedBy                String          // User who recorded times
+  
+  // Audit
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+  
+  // Relations
+  surgery                   Surgery         @relation(fields: [surgeryId], references: [id])
+  events                    SurgicalEvent[]
+  
+  @@map("surgical_timings")
+}
+
+model SurgicalEvent {
+  id                    String          @id @default(uuid())
+  surgicalTimingId      String
+  
+  eventType             SurgicalPhase
+  eventTime             DateTime
+  recordedBy            String          // User ID
+  notes                 String?
+  
+  // Auto-calculated
+  minutesFromStart      Int?            // Minutes from patient entering room
+  
+  createdAt             DateTime        @default(now())
+  
+  // Relations
+  surgicalTiming        SurgicalTiming  @relation(fields: [surgicalTimingId], references: [id])
+  
+  @@map("surgical_events")
+}
+
