@@ -60,23 +60,38 @@ export default function DashboardLayout({
   }
 
   const menuItems = [
+    // 1. Overview
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
-    { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
-    { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
-    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness', badge: 'NEW' },
-    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup', badge: 'NEW' },
-    { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
+    
+    // 2. Pre-operative Phase
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
+    { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
+    
+    // 3. Theatre Preparation
+    { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
+    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup', badge: 'NEW' },
+    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness', badge: 'NEW' },
+    
+    // 4. Patient Journey - Pre-Op
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
-    { href: '/dashboard/pacu', icon: Bed, label: 'PACU' },
-    { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
-    { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Transfers' },
-    { href: '/dashboard/mortality', icon: Heart, label: 'Mortality' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
+    
+    // 5. Operative Phase
+    { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
+    
+    // 6. Post-operative Phase
+    { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
+    { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Patient Transfers' },
+    
+    // 7. Critical Events & Monitoring
+    { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
     { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
-    { href: '/dashboard/reports', icon: FileText, label: 'Reports' },
+    { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
+    
+    // 8. Resources & Management
+    { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
+    { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
 
   // Add admin-only menu items
