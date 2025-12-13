@@ -29,20 +29,30 @@ export default function PatientsPage() {
       const response = await fetch('/api/patients');
       if (response.ok) {
         const data = await response.json();
-        setPatients(data);
+        // Ensure data is an array
+        if (Array.isArray(data)) {
+          setPatients(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setPatients([]);
+        }
+      } else {
+        console.error('Failed to fetch patients:', response.status);
+        setPatients([]);
       }
     } catch (error) {
       console.error('Failed to fetch patients:', error);
+      setPatients([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredPatients = patients.filter(patient =>
+  const filteredPatients = Array.isArray(patients) ? patients.filter(patient =>
     patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (patient.ptNumber && patient.ptNumber.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  ) : [];
 
   return (
     <div className="space-y-6">
