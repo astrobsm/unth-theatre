@@ -1596,6 +1596,7 @@ model AnesthesiaMonitoringRecord {
   surgery                   Surgery               @relation(fields: [surgeryId], references: [id])
   patient                   Patient               @relation(fields: [patientId], references: [id])
   vitalSignsRecords         AnesthesiaVitalSigns[]
+  medicationRecords         AnesthesiaMedicationRecord[]
   
   @@map("anesthesia_monitoring_records")
 }
@@ -1647,6 +1648,71 @@ model AnesthesiaVitalSigns {
   
   @@map("anesthesia_vital_signs")
   @@index([anesthesiaRecordId, recordedAt])
+}
+
+// Medication Administration During Anesthesia
+model AnesthesiaMedicationRecord {
+  id                        String      @id @default(uuid())
+  anesthesiaRecordId        String
+  
+  // Administration Time
+  administeredAt            DateTime    @default(now())
+  minutesFromStart          Int?        // Auto-calculated from anesthesia start
+  eventPhase                String?     // "INDUCTION", "MAINTENANCE", "EMERGENCE"
+  
+  // Medication Type
+  medicationType            String      // "ANESTHETIC", "ANALGESIC", "MUSCLE_RELAXANT", "ANTIBIOTIC", "VASOACTIVE", "IV_FLUID", "BLOOD_PRODUCT", "OTHER"
+  
+  // Medication Details
+  medicationName            String      // e.g., "Propofol", "Fentanyl", "Normal Saline", "PRBC"
+  dosage                    String?     // e.g., "2mg/kg", "100mcg", "500ml"
+  concentration             String?     // e.g., "1%", "50mcg/ml"
+  route                     String      // "IV", "IM", "INHALATION", "EPIDURAL", "SPINAL", "ORAL"
+  site                      String?     // IV site or injection location
+  
+  // IV Fluid Specific
+  fluidType                 String?     // "CRYSTALLOID", "COLLOID"
+  volumeML                  Int?        // Total volume
+  rateMLPerHour             Int?        // Infusion rate
+  
+  // Blood Product Specific
+  bloodProductType          String?     // "PRBC", "FFP", "PLATELETS", "CRYOPRECIPITATE", "WHOLE_BLOOD"
+  bloodUnits                Decimal?    @db.Decimal(3, 1)
+  bloodBatchNumber          String?
+  bloodGroupRh              String?     // "A+", "O-", etc.
+  transfusionStartTime      DateTime?
+  transfusionEndTime        DateTime?
+  transfusionRateMLPerHour  Int?
+  crossMatchDone            Boolean?
+  transfusionReaction       Boolean     @default(false)
+  transfusionReactionType   String?
+  
+  // Continuous Infusion
+  isContinuousInfusion      Boolean     @default(false)
+  infusionStartTime         DateTime?
+  infusionEndTime           DateTime?
+  totalVolumeInfused        Int?        // mL
+  
+  // Reason & Response
+  indication                String?     // Why drug was given
+  response                  String?     // Patient response
+  adverseEffect             Boolean     @default(false)
+  adverseEffectDescription  String?
+  
+  // Administration Details
+  administeredBy            String?     // Name of person who administered
+  verifiedBy                String?     // Name of person who verified
+  notes                     String?
+  
+  // Audit
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  
+  // Relations
+  anesthesiaRecord          AnesthesiaMonitoringRecord @relation(fields: [anesthesiaRecordId], references: [id])
+  
+  @@map("anesthesia_medication_records")
+  @@index([anesthesiaRecordId, administeredAt])
 }
 
 // ==================== POST-OPERATIVE RECOVERY (PACU) MODULE ====================

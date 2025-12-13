@@ -71,15 +71,30 @@ interface VitalSigns {
   alertType: string | null;
 }
 
+interface MedicationRecord {
+  id: string;
+  medicationName: string;
+  dosage: string;
+  route: string;
+  administeredAt: string;
+  medicationType: string;
+  volumeML?: number;
+  rateMLPerHour?: number;
+  bloodProductType?: string;
+  bloodUnits?: number;
+}
+
 export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const [surgeryId, setSurgeryId] = useState<string>('');
   const [record, setRecord] = useState<AnesthesiaRecord | null>(null);
+  const [medications, setMedications] = useState<MedicationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showInitDialog, setShowInitDialog] = useState(false);
   const [showVitalsDialog, setShowVitalsDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'fluids' | 'complications'>('overview');
+  const [showMedicationDialog, setShowMedicationDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'medications' | 'fluids' | 'complications'>('overview');
   
   const [initData, setInitData] = useState({
     anesthesiaType: 'GENERAL',
@@ -100,7 +115,27 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
     eventPhase: 'MAINTENANCE',
   });
 
-  const fetchRecord = async () => {
+  const [medicationData, setMedicationData] = useState({
+    medicationType: 'ANESTHETIC',
+    medicationName: '',
+    dosage: '',
+    concentration: '',
+    route: 'IV',
+    site: '',
+    eventPhase: 'MAINTENANCE',
+    volumeML: 0,
+    rateMLPerHour: 0,
+    bloodProductType: '',
+    bloodUnits: 0,
+    bloodBatchNumber: '',
+    bloodGroupRh: '',
+    crossMatchDone: false,
+    transfusionRateMLPerHour: 0,
+    indication: '',
+    notes: '',
+  });
+
+  const fetchRecord = async () {
     if (!surgeryId) return;
     
     try {
@@ -108,6 +143,7 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
       if (response.ok) {
         const data = await response.json();
         setRecord(data);
+        fetchMedications();
       } else if (response.status === 404) {
         setRecord(null);
       }
@@ -115,6 +151,20 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
       console.error('Error fetching anesthesia record:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMedications = async () => {
+    if (!surgeryId) return;
+    
+    try {
+      const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia/medications`);
+      if (response.ok) {
+        const data = await response.json();
+        setMedications(data);
+      }
+    } catch (error) {
+      console.error('Error fetching medications:', error);
     }
   };
 
@@ -198,6 +248,72 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
         await fetchRecord();
         setShowVitalsDialog(false);
         // Reset vital data
+        setVitalData({
+          heartRate: 0,
+          systolicBP: 0,
+          diastolicBP: 0,
+          spo2: 0,
+          etco2: 0,
+          temperature: 0,
+          eventPhase: 'MAINTENANCE',
+        });
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to record vitals');
+      }
+    } catch (error) {
+      console.error('Error recording vitals:', error);
+      alert('Failed to record vitals');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const recordMedication = async () => {
+    if (!surgeryId) return;
+    
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia/medications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(medicationData)
+      });
+
+      if (response.ok) {
+        await fetchMedications();
+        setShowMedicationDialog(false);
+        // Reset form
+        setMedicationData({
+          medicationType: 'ANESTHETIC',
+          medicationName: '',
+          dosage: '',
+          concentration: '',
+          route: 'IV',
+          site: '',
+          eventPhase: 'MAINTENANCE',
+          volumeML: 0,
+          rateMLPerHour: 0,
+          bloodProductType: '',
+          bloodUnits: 0,
+          bloodBatchNumber: '',
+          bloodGroupRh: '',
+          crossMatchDone: false,
+          transfusionRateMLPerHour: 0,
+          indication: '',
+          notes: '',
+        });
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to record medication');
+      }
+    } catch (error) {
+      console.error('Error recording medication:', error);
+      alert('Failed to record medication');
+    } finally {
+      setSaving(false);
+    }
+  };
         setVitalData({
           heartRate: 0,
           systolicBP: 0,
@@ -414,7 +530,7 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
       {/* Tabs */}
       <div className="bg-white border-b mb-6">
         <div className="flex space-x-8">
-          {['overview', 'vitals', 'fluids', 'complications'].map((tab) => (
+          {['overview', 'vitals', 'medications', 'fluids', 'complications'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -588,6 +704,71 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
         </div>
       )}
 
+      {activeTab === 'medications' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">Medication Administration Record</h3>
+            <button
+              onClick={() => setShowMedicationDialog(true)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+            >
+              + Add Medication
+            </button>
+          </div>
+
+          <div className="bg-white border rounded-lg overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium">Time</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium">Type</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium">Medication</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium">Dosage</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium">Route</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {medications.map((med) => (
+                  <tr key={med.id}>
+                    <td className="px-4 py-3 text-sm">
+                      {new Date(med.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        med.medicationType === 'BLOOD_PRODUCT' ? 'bg-red-100 text-red-800' :
+                        med.medicationType === 'IV_FLUID' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {med.medicationType.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium">{med.medicationName}</td>
+                    <td className="px-4 py-3 text-sm">{med.dosage}</td>
+                    <td className="px-4 py-3 text-sm">{med.route}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {med.medicationType === 'IV_FLUID' && med.volumeML && (
+                        <span>{med.volumeML}ml @ {med.rateMLPerHour || 0}ml/hr</span>
+                      )}
+                      {med.medicationType === 'BLOOD_PRODUCT' && med.bloodProductType && (
+                        <span>{med.bloodProductType} - {med.bloodUnits} units</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {medications.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                      No medications recorded yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'fluids' && (
         <div className="bg-white border rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-4">Fluid Management</h3>
@@ -733,6 +914,250 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
               </button>
               <button
                 onClick={() => setShowVitalsDialog(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Medication Dialog */}
+      {showMedicationDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 max-w-3xl w-full m-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">Record Medication Administration</h3>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Medication Type *</label>
+                  <select
+                    value={medicationData.medicationType}
+                    onChange={(e) => setMedicationData({...medicationData, medicationType: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2"
+                  >
+                    <option value="ANESTHETIC">Anesthetic</option>
+                    <option value="ANALGESIC">Analgesic</option>
+                    <option value="MUSCLE_RELAXANT">Muscle Relaxant</option>
+                    <option value="ANTIBIOTIC">Antibiotic</option>
+                    <option value="VASOACTIVE">Vasoactive Drug</option>
+                    <option value="IV_FLUID">IV Fluid</option>
+                    <option value="BLOOD_PRODUCT">Blood Product</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Phase</label>
+                  <select
+                    value={medicationData.eventPhase}
+                    onChange={(e) => setMedicationData({...medicationData, eventPhase: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2"
+                  >
+                    <option value="INDUCTION">Induction</option>
+                    <option value="MAINTENANCE">Maintenance</option>
+                    <option value="EMERGENCE">Emergence</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name *</label>
+                  <input
+                    type="text"
+                    value={medicationData.medicationName}
+                    onChange={(e) => setMedicationData({...medicationData, medicationName: e.target.value})}
+                    placeholder="e.g., Propofol, Normal Saline, PRBC"
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dosage</label>
+                  <input
+                    type="text"
+                    value={medicationData.dosage}
+                    onChange={(e) => setMedicationData({...medicationData, dosage: e.target.value})}
+                    placeholder="e.g., 2mg/kg, 100mcg"
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Concentration</label>
+                  <input
+                    type="text"
+                    value={medicationData.concentration}
+                    onChange={(e) => setMedicationData({...medicationData, concentration: e.target.value})}
+                    placeholder="e.g., 1%, 50mcg/ml"
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Route *</label>
+                  <select
+                    value={medicationData.route}
+                    onChange={(e) => setMedicationData({...medicationData, route: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2"
+                  >
+                    <option value="IV">IV</option>
+                    <option value="IM">IM</option>
+                    <option value="INHALATION">Inhalation</option>
+                    <option value="EPIDURAL">Epidural</option>
+                    <option value="SPINAL">Spinal</option>
+                    <option value="ORAL">Oral</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
+                  <input
+                    type="text"
+                    value={medicationData.site}
+                    onChange={(e) => setMedicationData({...medicationData, site: e.target.value})}
+                    placeholder="IV site or location"
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              {/* IV Fluid Specific Fields */}
+              {medicationData.medicationType === 'IV_FLUID' && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium text-sm text-gray-700 mb-3">IV Fluid Details</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Volume (mL)</label>
+                      <input
+                        type="number"
+                        value={medicationData.volumeML}
+                        onChange={(e) => setMedicationData({...medicationData, volumeML: parseInt(e.target.value) || 0})}
+                        className="w-full border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Rate (mL/hr)</label>
+                      <input
+                        type="number"
+                        value={medicationData.rateMLPerHour}
+                        onChange={(e) => setMedicationData({...medicationData, rateMLPerHour: parseInt(e.target.value) || 0})}
+                        className="w-full border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Blood Product Specific Fields */}
+              {medicationData.medicationType === 'BLOOD_PRODUCT' && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium text-sm text-gray-700 mb-3">Blood Product Details</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Product Type</label>
+                      <select
+                        value={medicationData.bloodProductType}
+                        onChange={(e) => setMedicationData({...medicationData, bloodProductType: e.target.value})}
+                        className="w-full border rounded-lg px-3 py-2"
+                      >
+                        <option value="">Select Type</option>
+                        <option value="PRBC">Packed Red Blood Cells</option>
+                        <option value="FFP">Fresh Frozen Plasma</option>
+                        <option value="PLATELETS">Platelets</option>
+                        <option value="CRYOPRECIPITATE">Cryoprecipitate</option>
+                        <option value="WHOLE_BLOOD">Whole Blood</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Units</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={medicationData.bloodUnits}
+                        onChange={(e) => setMedicationData({...medicationData, bloodUnits: parseFloat(e.target.value) || 0})}
+                        className="w-full border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Batch Number</label>
+                      <input
+                        type="text"
+                        value={medicationData.bloodBatchNumber}
+                        onChange={(e) => setMedicationData({...medicationData, bloodBatchNumber: e.target.value})}
+                        className="w-full border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Blood Group/Rh</label>
+                      <input
+                        type="text"
+                        value={medicationData.bloodGroupRh}
+                        onChange={(e) => setMedicationData({...medicationData, bloodGroupRh: e.target.value})}
+                        placeholder="e.g., A+, O-"
+                        className="w-full border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Transfusion Rate (mL/hr)</label>
+                      <input
+                        type="number"
+                        value={medicationData.transfusionRateMLPerHour}
+                        onChange={(e) => setMedicationData({...medicationData, transfusionRateMLPerHour: parseInt(e.target.value) || 0})}
+                        className="w-full border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={medicationData.crossMatchDone}
+                          onChange={(e) => setMedicationData({...medicationData, crossMatchDone: e.target.checked})}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">Cross-match done</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Indication</label>
+                <input
+                  type="text"
+                  value={medicationData.indication}
+                  onChange={(e) => setMedicationData({...medicationData, indication: e.target.value})}
+                  placeholder="Reason for administration"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={medicationData.notes}
+                  onChange={(e) => setMedicationData({...medicationData, notes: e.target.value})}
+                  rows={2}
+                  placeholder="Additional notes..."
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={recordMedication}
+                disabled={saving || !medicationData.medicationName}
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? 'Recording...' : 'Record Medication'}
+              </button>
+              <button
+                onClick={() => setShowMedicationDialog(false)}
                 className="px-4 py-2 border rounded-lg hover:bg-gray-50"
               >
                 Cancel
