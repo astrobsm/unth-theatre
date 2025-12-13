@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
     const setupLog = await prisma.anesthesiaSetupLog.create({
       data: {
         technicianId: session.user.id,
-        technicianName: session.user.name || session.user.username,
-        technicianCode: session.user.staffCode || undefined,
+        technicianName: session.user.name || 'Unknown',
+        technicianCode: undefined,
         theatreId: theatre.id,
         theatreName: theatre.name,
         allocationId: validatedData.allocationId,

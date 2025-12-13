@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface AnesthesiaRecord {
@@ -84,9 +84,11 @@ interface MedicationRecord {
   bloodUnits?: number;
 }
 
-export default function AnesthesiaMonitoringPage({ params }: { params: { id: string } }) {
+export default function AnesthesiaMonitoringPage() {
   const router = useRouter();
-  const [surgeryId, setSurgeryId] = useState<string>('');
+  const params = useParams();
+  const surgeryId = params.id as string;
+  
   const [record, setRecord] = useState<AnesthesiaRecord | null>(null);
   const [medications, setMedications] = useState<MedicationRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,10 +134,10 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
     crossMatchDone: false,
     transfusionRateMLPerHour: 0,
     indication: '',
-    notes: '',
+    notes: ''
   });
 
-  const fetchRecord = async () {
+  const fetchRecord = async () => {
     if (!surgeryId) return;
     
     try {
@@ -167,10 +169,6 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
       console.error('Error fetching medications:', error);
     }
   };
-
-  useEffect(() => {
-    setSurgeryId(params.id);
-  }, [params]);
 
   useEffect(() => {
     if (surgeryId) {

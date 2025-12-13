@@ -488,6 +488,7 @@ export default function PACUAssessmentDetailPage() {
       )}
 
       {/* Trigger Red Alert Button */}
+      {/* TODO: Implement red alert functionality
       {!assessment.redAlertTriggered && (
         <div className="mb-6">
           <button
@@ -498,6 +499,7 @@ export default function PACUAssessmentDetailPage() {
           </button>
         </div>
       )}
+      */}
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">

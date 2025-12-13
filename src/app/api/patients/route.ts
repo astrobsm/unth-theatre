@@ -31,7 +31,7 @@ const patientSchema = z.object({
   recentBleeding: z.boolean().optional(),
   
   // Pressure Sore Risk
-  pressureSoreRisk: z.number().optional(),
+  pressureSoreRisk: z.string().optional(),
   hasPressureSores: z.boolean().optional(),
   mobilityStatus: z.string().optional(),
   nutritionalStatus: z.string().optional(),
@@ -52,7 +52,7 @@ const patientSchema = z.object({
   otherMedications: z.string().optional(),
   
   // WHO Operative Fitness Risk Assessment
-  whoRiskClass: z.number().int().min(1).max(5).optional().nullable(),
+  whoRiskClass: z.string().optional().nullable(),
   asaScore: z.number().int().min(1).max(6).optional().nullable(),
   comorbidities: z.string().optional(),
   cardiovascularStatus: z.string().optional(),

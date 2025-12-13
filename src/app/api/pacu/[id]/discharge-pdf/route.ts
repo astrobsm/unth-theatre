@@ -36,18 +36,10 @@ export async function GET(
                       orderBy: { recordedAt: 'asc' }
                     }
                   }
-                },
-                consumablesUsed: {
-                  include: {
-                    inventoryItem: true
-                  }
                 }
               }
             },
-            holdingAreaAssessments: {
-              orderBy: { admissionTime: 'desc' },
-              take: 1
-            }
+            holdingAreaAssessment: true
           }
         },
         vitalSigns: {
@@ -81,19 +73,19 @@ export async function GET(
         anesthetist: pacuAssessment.surgery.anesthetist ? 
           { fullName: pacuAssessment.surgery.anesthetist.fullName } : undefined
       },
-      holdingArea: pacuAssessment.surgery.holdingAreaAssessments[0] ? {
-        admissionTime: pacuAssessment.surgery.holdingAreaAssessments[0].admissionTime.toISOString(),
+      holdingArea: pacuAssessment.surgery.holdingAreaAssessment ? {
+        admissionTime: pacuAssessment.surgery.holdingAreaAssessment.arrivalTime.toISOString(),
         vitalSigns: {
-          heartRate: pacuAssessment.surgery.holdingAreaAssessments[0].heartRate,
-          systolicBP: pacuAssessment.surgery.holdingAreaAssessments[0].systolicBP,
-          diastolicBP: pacuAssessment.surgery.holdingAreaAssessments[0].diastolicBP,
-          oxygenSaturation: pacuAssessment.surgery.holdingAreaAssessments[0].oxygenSaturation,
-          temperature: pacuAssessment.surgery.holdingAreaAssessments[0].temperature
+          heartRate: pacuAssessment.surgery.holdingAreaAssessment.pulseRate,
+          systolicBP: pacuAssessment.surgery.holdingAreaAssessment.bloodPressureSystolic,
+          diastolicBP: pacuAssessment.surgery.holdingAreaAssessment.bloodPressureDiastolic,
+          oxygenSaturation: pacuAssessment.surgery.holdingAreaAssessment.spo2,
+          temperature: pacuAssessment.surgery.holdingAreaAssessment.temperature
         },
         preOpChecklist: {
-          consentVerified: pacuAssessment.surgery.holdingAreaAssessments[0].consentVerified,
-          siteMarked: pacuAssessment.surgery.holdingAreaAssessments[0].siteMarked,
-          fastingConfirmed: pacuAssessment.surgery.holdingAreaAssessments[0].fastingConfirmed
+          consentVerified: pacuAssessment.surgery.holdingAreaAssessment.consentFormSigned,
+          siteMarked: pacuAssessment.surgery.holdingAreaAssessment.operationSiteMarked,
+          fastingConfirmed: pacuAssessment.surgery.holdingAreaAssessment.nilPerOralMaintained
         }
       } : undefined,
       anesthesia: pacuAssessment.surgery.intraOperativeRecord?.anesthesiaRecord ? {
@@ -127,24 +119,14 @@ export async function GET(
       pacu: {
         admissionTime: pacuAssessment.admissionTime.toISOString(),
         dischargeTime: pacuAssessment.dischargeTime?.toISOString(),
-        aldreteTotalScore: pacuAssessment.aldreteTotalScore || 0,
         vitalSigns: pacuAssessment.vitalSigns.map(vs => ({
           recordedAt: vs.recordedAt.toISOString(),
-          systolicBP: vs.systolicBP,
-          diastolicBP: vs.diastolicBP,
-          heartRate: vs.heartRate,
-          oxygenSaturation: vs.oxygenSaturation,
-          painScore: vs.painScore
-        })),
-        complications: pacuAssessment.complications || ''
-      },
-      bom: pacuAssessment.surgery.intraOperativeRecord?.consumablesUsed.map(item => ({
-        itemName: item.inventoryItem.name,
-        category: item.inventoryItem.category,
-        quantity: item.quantity,
-        unitCost: parseFloat(item.inventoryItem.unitCost.toString()),
-        totalCost: item.quantity * parseFloat(item.inventoryItem.unitCost.toString())
-      })) || []
+          bloodPressure: vs.bloodPressure || '',
+          heartRate: vs.heartRate || 0,
+          oxygenSaturation: vs.oxygenSaturation || 0,
+          painScore: vs.painScore || 0
+        }))
+      }
     };
 
     return NextResponse.json(dischargeData);

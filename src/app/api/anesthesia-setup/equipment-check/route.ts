@@ -65,8 +65,16 @@ export async function POST(request: NextRequest) {
     });
 
     // If equipment is faulty and requires immediate attention, send alert
+    // TODO: Implement alert system when general alert model is added
     if (!validatedData.isFunctional && validatedData.requiresImmediateAttention) {
       // Create alert/notification
+      console.log('Equipment malfunction alert:', {
+        equipment: validatedData.equipmentName,
+        theatre: setupLog.theatreName,
+        description: validatedData.malfunctionDescription
+      });
+
+      /* Commented out until Alert model is added to schema
       await prisma.alert.create({
         data: {
           title: `CRITICAL: Equipment Malfunction - ${validatedData.equipmentName}`,
@@ -79,6 +87,7 @@ export async function POST(request: NextRequest) {
           isActive: true,
         },
       });
+      */
 
       // Mark alert as sent
       await prisma.equipmentCheckLog.update({
