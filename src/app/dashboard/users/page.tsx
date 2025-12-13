@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, XCircle, Clock, KeyRound } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash } from 'lucide-react';
 
 interface User {
   id: string;
@@ -11,6 +11,7 @@ interface User {
   email: string | null;
   role: string;
   status: string;
+  staffCode: string | null;
   createdAt: string;
   resetToken: string | null;
   resetTokenExpiry: Date | null;
@@ -23,6 +24,9 @@ export default function UsersPage() {
   const [resetUserId, setResetUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+  const [staffCodeUserId, setStaffCodeUserId] = useState<string | null>(null);
+  const [newStaffCode, setNewStaffCode] = useState('');
+  const [staffCodeLoading, setStaffCodeLoading] = useState(false);
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -106,6 +110,36 @@ export default function UsersPage() {
       alert('Failed to reset password');
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleAssignStaffCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffCodeUserId || !newStaffCode) return;
+
+    setStaffCodeLoading(true);
+    try {
+      const response = await fetch(`/api/users/${staffCodeUserId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffCode: newStaffCode }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`Staff code "${newStaffCode}" assigned successfully!`);
+        setStaffCodeUserId(null);
+        setNewStaffCode('');
+        fetchUsers();
+      } else {
+        alert(data.error || 'Failed to assign staff code');
+      }
+    } catch (error) {
+      console.error('Failed to assign staff code:', error);
+      alert('Failed to assign staff code');
+    } finally {
+      setStaffCodeLoading(false);
     }
   };
 
@@ -211,6 +245,9 @@ export default function UsersPage() {
                   Role
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Staff Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
@@ -235,6 +272,15 @@ export default function UsersPage() {
                       {user.role}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {user.staffCode ? (
+                      <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-mono">
+                        {user.staffCode}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {user.status === 'APPROVED' && (
                       <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs">
@@ -257,7 +303,17 @@ export default function UsersPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
+                    <button
+                      onClick={() => {
+                        setStaffCodeUserId(user.id);
+                        setNewStaffCode(user.staffCode || '');
+                      }}
+                      className="text-purple-600 hover:text-purple-900"
+                      title="Assign/Edit staff code"
+                    >
+                      <Hash className="w-5 h-5 inline" />
+                    </button>
                     <button
                       onClick={() => {
                         setResetUserId(user.id);
@@ -266,7 +322,7 @@ export default function UsersPage() {
                       className="text-primary-600 hover:text-primary-900"
                       title="Reset user password"
                     >
-                      <KeyRound className="w-5 h-5 inline" /> Reset Password
+                      <KeyRound className="w-5 h-5 inline" />
                     </button>
                   </td>
                 </tr>
@@ -275,6 +331,55 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {/* Staff Code Assignment Modal */}
+      {staffCodeUserId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold mb-4">Assign Staff Code</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Staff codes are used by cleaners and porters for quick duty logging.
+              Recommended format: CLN001, PRT001, etc.
+            </p>
+            <form onSubmit={handleAssignStaffCode} className="space-y-4">
+              <div>
+                <label className="label">Staff Code</label>
+                <input
+                  type="text"
+                  className="input-field font-mono"
+                  placeholder="e.g., CLN001 or PRT001"
+                  value={newStaffCode}
+                  onChange={(e) => setNewStaffCode(e.target.value.toUpperCase())}
+                  required
+                  maxLength={10}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Must be unique. Leave empty to remove staff code.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={staffCodeLoading}
+                  className="btn-primary flex-1 disabled:opacity-50"
+                >
+                  {staffCodeLoading ? 'Saving...' : 'Save Staff Code'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffCodeUserId(null);
+                    setNewStaffCode('');
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Password Reset Modal */}
       {resetUserId && (
