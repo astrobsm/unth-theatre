@@ -23,6 +23,12 @@ import {
   AlertTriangle,
   Menu,
   X,
+  Activity,
+  Gauge,
+  ClipboardCheck,
+  Sparkles,
+  BriefcaseMedical,
+  TrendingUp,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -58,6 +64,8 @@ export default function DashboardLayout({
     { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
     { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
+    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness', badge: 'NEW' },
+    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup', badge: 'NEW' },
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
@@ -68,6 +76,7 @@ export default function DashboardLayout({
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports' },
+    { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
   ];
 
   // Add admin-only menu items
@@ -105,14 +114,19 @@ export default function DashboardLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center px-6 py-3 transition-all duration-200 ${
+                  className={`flex items-center px-6 py-3 transition-all duration-200 relative ${
                     isActive
                       ? 'bg-primary-700 border-l-4 border-accent-500 text-white'
                       : 'text-primary-100 hover:bg-primary-700 hover:border-l-4 hover:border-accent-500'
                   }`}
                 >
                   <item.icon className="w-5 h-5 mr-3" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && (
+                    <span className="ml-2 px-2 py-0.5 bg-accent-500 text-white text-xs font-bold rounded-full">
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

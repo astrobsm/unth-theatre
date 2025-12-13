@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Package, 
   Calendar, 
@@ -13,7 +14,11 @@ import {
   ArrowLeftRight,
   Heart,
   ClipboardList,
-  FileText
+  FileText,
+  Gauge,
+  BriefcaseMedical,
+  ClipboardCheck,
+  Sparkles,
 } from 'lucide-react';
 
 interface DashboardStats {
@@ -180,26 +185,114 @@ export default function DashboardPage() {
             <span>Theatre Allocation</span>
           </button>
           <button 
-            onClick={() => router.push('/dashboard/mortality/new')}
-            className="btn-secondary flex items-center justify-center space-x-2"
+            onClick={() => router.push('/dashboard/theatre-readiness')}
+            className="btn-secondary flex items-center justify-center space-x-2 relative"
           >
-            <Heart className="w-5 h-5" />
-            <span>Record Mortality</span>
+            <Gauge className="w-5 h-5" />
+            <span>Theatre Readiness</span>
+            <span className="absolute -top-1 -right-1 bg-accent-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">NEW</span>
           </button>
           <button 
-            onClick={() => router.push('/dashboard/surgeries')}
-            className="btn-secondary flex items-center justify-center space-x-2"
+            onClick={() => router.push('/dashboard/anesthesia-setup')}
+            className="btn-secondary flex items-center justify-center space-x-2 relative"
           >
-            <ClipboardList className="w-5 h-5" />
-            <span>WHO Checklist</span>
+            <BriefcaseMedical className="w-5 h-5" />
+            <span>Anesthesia Setup</span>
+            <span className="absolute -top-1 -right-1 bg-accent-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">NEW</span>
           </button>
           <button 
-            onClick={() => router.push('/dashboard/reports')}
-            className="btn-secondary flex items-center justify-center space-x-2"
+            onClick={() => router.push('/dashboard/reports/staff-effectiveness')}
+            className="btn-secondary flex items-center justify-center space-x-2 relative"
           >
-            <FileText className="w-5 h-5" />
-            <span>Generate Report</span>
+            <TrendingUp className="w-5 h-5" />
+            <span>Staff Analytics</span>
+            <span className="absolute -top-1 -right-1 bg-accent-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">NEW</span>
           </button>
+        </div>
+      </div>
+
+      {/* Quick Duty Logging for Cleaners & Porters */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <ClipboardCheck className="w-6 h-6 text-blue-600" />
+              Quick Duty Logging
+            </h3>
+            <span className="badge badge-primary">Cleaners & Porters</span>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Staff can quickly log their cleaning, transport, and other duties using their staff codes
+          </p>
+          <Link href="/auth/login" className="btn-primary inline-flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            Go to Quick Logging
+          </Link>
+        </div>
+
+        <div className="card bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Activity className="w-6 h-6 text-purple-600" />
+              Staff Effectiveness
+            </h3>
+            <span className="badge badge-secondary">Analytics</span>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            View performance metrics, work logs, and productivity analytics for cleaning and porter staff
+          </p>
+          <Link href="/dashboard/reports/staff-effectiveness" className="btn-secondary inline-flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            View Analytics
+          </Link>
+        </div>
+      </div>
+
+      {/* Module Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="card bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-green-600 p-3 rounded-lg">
+              <Gauge className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800">Theatre Readiness</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Real-time status of all theatres with setup completion, location tracking, and equipment readiness
+          </p>
+          <Link href="/dashboard/theatre-readiness" className="text-green-600 hover:text-green-700 font-semibold text-sm flex items-center gap-1">
+            View Status Dashboard →
+          </Link>
+        </div>
+
+        <div className="card bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-orange-600 p-3 rounded-lg">
+              <BriefcaseMedical className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800">Anesthesia Setup</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Daily equipment checks, setup logging with geolocation, and malfunction alerts for technicians
+          </p>
+          <Link href="/dashboard/anesthesia-setup" className="text-orange-600 hover:text-orange-700 font-semibold text-sm flex items-center gap-1">
+            Start Setup Logging →
+          </Link>
+        </div>
+
+        <div className="card bg-gradient-to-br from-cyan-50 to-sky-50 border-2 border-cyan-200">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-cyan-600 p-3 rounded-lg">
+              <ClipboardCheck className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800">Staff Duty Tracking</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Track cleaning sessions, patient transports, and other duties with timestamps and performance metrics
+          </p>
+          <Link href="/dashboard/reports/staff-effectiveness" className="text-cyan-600 hover:text-cyan-700 font-semibold text-sm flex items-center gap-1">
+            View Work Logs →
+          </Link>
         </div>
       </div>
 
