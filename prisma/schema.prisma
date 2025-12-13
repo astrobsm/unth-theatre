@@ -284,6 +284,7 @@ model User {
   cleaningLogs  TheatreCleaningLog[]
   transportLogs PatientTransportLog[]
   dutyLogs      StaffDutyLog[]
+  technicianSetupLogs AnesthesiaSetupLog[] @relation("TechnicianSetupLogs")
   
   @@map("users")
 }
@@ -760,6 +761,7 @@ model TheatreSuite {
   setups        TheatreSetup[]
   assignedEquipment Equipment[]
   cleaningLogs  TheatreCleaningLog[]
+  setupLogs     AnesthesiaSetupLog[] @relation("TheatreSetupLogs")
   
   @@map("theatre_suites")
 }
@@ -802,6 +804,7 @@ model TheatreAllocation {
   anaesthetistRegistrar User?   @relation("AnaesthetistRegistrarAllocations", fields: [anaesthetistRegistrarId], references: [id])
   cleaner       User?           @relation("CleanerAllocations", fields: [cleanerId], references: [id])
   porter        User?           @relation("PorterAllocations", fields: [porterId], references: [id])
+  setupLogs     AnesthesiaSetupLog[] @relation("AllocationSetupLogs")
   
   @@map("theatre_allocations")
 }
@@ -1030,6 +1033,7 @@ model Equipment {
   maintenanceRecords  EquipmentMaintenance[]
   faultReports        FaultReport[]
   dailyStatusLogs     DailyEquipmentStatus[]
+  equipmentChecks     EquipmentCheckLog[]
   
   @@map("equipment")
 }
@@ -2272,5 +2276,138 @@ model StaffDutyLog {
   staff                 User            @relation(fields: [staffId], references: [id])
   
   @@map("staff_duty_logs")
+}
+
+// Anaesthetic Technician Setup Tracking
+
+enum SetupStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  READY
+  BLOCKED
+}
+
+enum EquipmentCondition {
+  OPERATIONAL
+  NEEDS_ATTENTION
+  FAULTY
+  NOT_AVAILABLE
+}
+
+model AnesthesiaSetupLog {
+  id                    String              @id @default(uuid())
+  
+  // Technician Info
+  technicianId          String
+  technicianName        String
+  technicianCode        String?
+  
+  // Theatre Info
+  theatreId             String
+  theatreName           String
+  allocationId          String?             // Link to theatre allocation
+  
+  // Date
+  setupDate             DateTime            @db.Date
+  
+  // Timing
+  setupStartTime        DateTime            @default(now())
+  setupEndTime          DateTime?
+  readyTime             DateTime?           // When marked as ready
+  durationMinutes       Int?
+  
+  // Status
+  status                SetupStatus         @default(IN_PROGRESS)
+  isReady               Boolean             @default(false)
+  
+  // Geolocation (Mandatory)
+  latitude              Float
+  longitude             Float
+  locationName          String              // Reverse geocoded place name
+  locationAddress       String?             // Full address
+  
+  // Readiness Checklist
+  gasSupplyChecked      Boolean             @default(false)
+  suctionChecked        Boolean             @default(false)
+  monitorsChecked       Boolean             @default(false)
+  ventilatorChecked     Boolean             @default(false)
+  anesthesiaMachineChecked Boolean          @default(false)
+  emergencyDrugsChecked Boolean             @default(false)
+  airwayEquipmentChecked Boolean            @default(false)
+  ivEquipmentChecked    Boolean             @default(false)
+  
+  // Notes
+  setupNotes            String?
+  blockingIssues        String?             // Issues preventing readiness
+  
+  // End of Day
+  endOfDayLogged        Boolean             @default(false)
+  endOfDayTime          DateTime?
+  endOfDayNotes         String?
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  technician            User                @relation("TechnicianSetupLogs", fields: [technicianId], references: [id])
+  theatre               TheatreSuite        @relation("TheatreSetupLogs", fields: [theatreId], references: [id])
+  allocation            TheatreAllocation?  @relation("AllocationSetupLogs", fields: [allocationId], references: [id])
+  equipmentChecks       EquipmentCheckLog[]
+  
+  @@map("anesthesia_setup_logs")
+}
+
+model EquipmentCheckLog {
+  id                    String              @id @default(uuid())
+  
+  // Setup Log Reference
+  setupLogId            String
+  
+  // Equipment Info
+  equipmentId           String?             // Reference to Equipment model
+  equipmentName         String
+  equipmentType         String              // e.g., "Ventilator", "Monitor", "Suction"
+  serialNumber          String?
+  
+  // Check Details
+  checkTime             DateTime            @default(now())
+  condition             EquipmentCondition
+  isFunctional          Boolean
+  
+  // Malfunction Details
+  malfunctionDescription String?
+  malfunctionSeverity   String?             // LOW, MEDIUM, HIGH, CRITICAL
+  requiresImmediateAttention Boolean        @default(false)
+  
+  // Alert Tracking
+  alertSent             Boolean             @default(false)
+  alertSentAt           DateTime?
+  alertRecipients       String?             // JSON: List of users notified
+  
+  // Resolution
+  issueResolved         Boolean             @default(false)
+  resolvedAt            DateTime?
+  resolvedBy            String?
+  resolutionNotes       String?
+  
+  // Testing Details
+  testParameters        String?             // JSON: Test results/parameters
+  calibrationStatus     String?
+  lastMaintenanceDate   DateTime?
+  
+  // Notes
+  notes                 String?
+  recommendations       String?
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  setupLog              AnesthesiaSetupLog  @relation(fields: [setupLogId], references: [id], onDelete: Cascade)
+  equipment             Equipment?          @relation(fields: [equipmentId], references: [id])
+  
+  @@map("equipment_check_logs")
 }
 
