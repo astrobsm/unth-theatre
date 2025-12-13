@@ -32,6 +32,8 @@ const registerSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('Registration attempt:', { username: body.username, role: body.role });
+    
     const validatedData = registerSchema.parse(body);
 
     // Check if username already exists
@@ -89,6 +91,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Validation error:', error.errors);
       return NextResponse.json(
         { error: "Invalid input data", details: error.errors },
         { status: 400 }

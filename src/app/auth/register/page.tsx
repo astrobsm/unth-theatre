@@ -44,12 +44,19 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Registration failed');
+        // Handle validation errors
+        if (data.details && Array.isArray(data.details)) {
+          const errorMessages = data.details.map((d: any) => d.message).join(', ');
+          setError(`${data.error}: ${errorMessages}`);
+        } else {
+          setError(data.error || 'Registration failed');
+        }
       } else {
         alert('Registration successful! Your account is pending approval.');
         router.push('/auth/login');
       }
     } catch (err) {
+      console.error('Registration error:', err);
       setError('An error occurred during registration');
     } finally {
       setLoading(false);
