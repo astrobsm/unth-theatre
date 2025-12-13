@@ -134,7 +134,7 @@ export default function AnesthesiaMonitoringPage() {
     crossMatchDone: false,
     transfusionRateMLPerHour: 0,
     indication: '',
-    notes: ''
+    notes: '',
   });
 
   const fetchRecord = async () => {
