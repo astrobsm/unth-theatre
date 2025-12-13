@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 
+export const dynamic = 'force-dynamic';
+
 const patientSchema = z.object({
   // Basic Information
   name: z.string().min(1),
@@ -99,6 +101,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    console.log('Received patient data:', JSON.stringify(body, null, 2));
+    
     const validatedData = patientSchema.parse(body);
 
     const patient = await prisma.patient.create({
@@ -125,6 +129,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Validation error:', JSON.stringify(error.errors, null, 2));
       return NextResponse.json(
         { error: "Invalid input data", details: error.errors },
         { status: 400 }
@@ -133,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     console.error("Patient create error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
