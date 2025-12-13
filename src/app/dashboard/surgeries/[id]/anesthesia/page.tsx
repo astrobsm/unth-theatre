@@ -84,7 +84,7 @@ interface MedicationRecord {
   bloodUnits?: number;
 }
 
-export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{ id: string }> }) {
+export default function AnesthesiaMonitoringPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [surgeryId, setSurgeryId] = useState<string>('');
   const [record, setRecord] = useState<AnesthesiaRecord | null>(null);
@@ -169,11 +169,7 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
   };
 
   useEffect(() => {
-    const initParams = async () => {
-      const resolvedParams = await params;
-      setSurgeryId(resolvedParams.id);
-    };
-    initParams();
+    setSurgeryId(params.id);
   }, [params]);
 
   useEffect(() => {
@@ -310,26 +306,6 @@ export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{
     } catch (error) {
       console.error('Error recording medication:', error);
       alert('Failed to record medication');
-    } finally {
-      setSaving(false);
-    }
-  };
-        setVitalData({
-          heartRate: 0,
-          systolicBP: 0,
-          diastolicBP: 0,
-          spo2: 0,
-          etco2: 0,
-          temperature: 0,
-          eventPhase: 'MAINTENANCE',
-        });
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to record vitals');
-      }
-    } catch (error) {
-      console.error('Error recording vitals:', error);
-      alert('Failed to record vitals');
     } finally {
       setSaving(false);
     }
