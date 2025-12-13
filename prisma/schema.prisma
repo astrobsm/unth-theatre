@@ -250,6 +250,7 @@ model User {
   status        UserStatus  @default(PENDING)
   phoneNumber   String?
   department    String?
+  staffCode     String?     @unique // Code for cleaners, porters, and other staff to log duties
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   approvedBy    String?
@@ -278,6 +279,11 @@ model User {
   anaesthetistRegistrarAllocations TheatreAllocation[] @relation("AnaesthetistRegistrarAllocations")
   cleanerAllocations TheatreAllocation[] @relation("CleanerAllocations")
   porterAllocations TheatreAllocation[] @relation("PorterAllocations")
+  
+  // Staff Duty Tracking Relations
+  cleaningLogs  TheatreCleaningLog[]
+  transportLogs PatientTransportLog[]
+  dutyLogs      StaffDutyLog[]
   
   @@map("users")
 }
@@ -443,6 +449,7 @@ model Patient {
   holdingAreaAssessments HoldingAreaAssessment[]
   pacuAssessments PACUAssessment[]
   anesthesiaRecords AnesthesiaMonitoringRecord[]
+  transportLogs PatientTransportLog[]
   
   @@map("patients")
 }
@@ -515,6 +522,7 @@ model Surgery {
   surgicalCount         SurgicalCountChecklist?
   anesthesiaRecord      AnesthesiaMonitoringRecord?
   teamMembers           SurgicalTeamMember[]
+  transportLogs         PatientTransportLog[]
   
   @@map("surgeries")
 }
@@ -751,6 +759,7 @@ model TheatreSuite {
   allocations   TheatreAllocation[]
   setups        TheatreSetup[]
   assignedEquipment Equipment[]
+  cleaningLogs  TheatreCleaningLog[]
   
   @@map("theatre_suites")
 }
@@ -2110,5 +2119,158 @@ model SurgicalEvent {
   surgicalTiming        SurgicalTiming  @relation(fields: [surgicalTimingId], references: [id])
   
   @@map("surgical_events")
+}
+
+// Staff Duty Tracking Models
+
+enum DutyStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum DutyType {
+  THEATRE_CLEANING
+  PATIENT_TRANSPORT
+  WASHING_MACINTOSH
+  EQUIPMENT_STERILIZATION
+  LINEN_MANAGEMENT
+  WASTE_DISPOSAL
+  EQUIPMENT_SETUP
+  OTHER
+}
+
+model TheatreCleaningLog {
+  id                    String          @id @default(uuid())
+  
+  // Cleaner Info
+  cleanerId             String
+  cleanerCode           String          // Staff code assigned at profile creation
+  cleanerName           String
+  
+  // Theatre Info
+  theatreId             String
+  theatreName           String
+  
+  // Timing
+  startTime             DateTime        @default(now())
+  endTime               DateTime?
+  durationMinutes       Int?            // Calculated when completed
+  
+  // Status
+  status                DutyStatus      @default(IN_PROGRESS)
+  
+  // Details
+  cleaningType          String?         // e.g., "Post-Surgery", "Daily", "Deep Clean"
+  notes                 String?
+  
+  // Quality Check
+  verifiedBy            String?         // Staff who verified cleaning
+  verifiedAt            DateTime?
+  qualityRating         Int?            // 1-5 rating
+  
+  // Audit
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  // Relations
+  cleaner               User            @relation(fields: [cleanerId], references: [id])
+  theatre               TheatreSuite    @relation(fields: [theatreId], references: [id])
+  
+  @@map("theatre_cleaning_logs")
+}
+
+model PatientTransportLog {
+  id                    String          @id @default(uuid())
+  
+  // Porter Info
+  porterId              String
+  porterCode            String          // Staff code assigned at profile creation
+  porterName            String
+  
+  // Patient Info
+  patientId             String?
+  patientName           String
+  patientFolderNumber   String
+  
+  // Surgery Info (optional - if related to surgery)
+  surgeryId             String?
+  
+  // Transport Details
+  fromLocation          String          // e.g., "Ward 5A", "Holding Area", "PACU"
+  toLocation            String          // e.g., "Theatre 2", "ICU", "Ward 3B"
+  transportType         String?         // e.g., "Pre-Op Transfer", "Post-Op Transfer", "Emergency"
+  
+  // Timing
+  startTime             DateTime        @default(now())
+  endTime               DateTime?
+  durationMinutes       Int?            // Calculated when completed
+  
+  // Status
+  status                DutyStatus      @default(IN_PROGRESS)
+  
+  // Details
+  notes                 String?
+  complications         String?         // Any issues during transport
+  equipmentUsed         String?         // e.g., "Stretcher", "Wheelchair", "Bed"
+  
+  // Verification
+  receivedBy            String?         // Staff who received patient
+  receivedAt            DateTime?
+  
+  // Audit
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  // Relations
+  porter                User            @relation(fields: [porterId], references: [id])
+  patient               Patient?        @relation(fields: [patientId], references: [id])
+  surgery               Surgery?        @relation(fields: [surgeryId], references: [id])
+  
+  @@map("patient_transport_logs")
+}
+
+model StaffDutyLog {
+  id                    String          @id @default(uuid())
+  
+  // Staff Info
+  staffId               String
+  staffCode             String          // Staff code assigned at profile creation
+  staffName             String
+  staffRole             UserRole
+  
+  // Duty Details
+  dutyType              DutyType
+  dutyDescription       String?         // Custom description
+  
+  // Timing
+  startTime             DateTime        @default(now())
+  endTime               DateTime?
+  durationMinutes       Int?            // Calculated when completed
+  
+  // Status
+  status                DutyStatus      @default(IN_PROGRESS)
+  
+  // Location/Equipment
+  location              String?         // Where duty was performed
+  equipmentInvolved     String?         // JSON: Equipment used or cleaned
+  
+  // Details
+  quantity              Int?            // e.g., number of items washed
+  notes                 String?
+  
+  // Quality/Verification
+  verifiedBy            String?
+  verifiedAt            DateTime?
+  qualityRating         Int?            // 1-5 rating
+  
+  // Audit
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  // Relations
+  staff                 User            @relation(fields: [staffId], references: [id])
+  
+  @@map("staff_duty_logs")
 }
 
