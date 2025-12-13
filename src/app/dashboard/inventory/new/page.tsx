@@ -9,6 +9,7 @@ export default function NewInventoryPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -16,7 +17,7 @@ export default function NewInventoryPage() {
     setError('');
 
     const formData = new FormData(e.currentTarget);
-    const data = {
+    const data: any = {
       name: formData.get('name'),
       category: formData.get('category'),
       description: formData.get('description'),
@@ -25,6 +26,21 @@ export default function NewInventoryPage() {
       reorderLevel: parseInt(formData.get('reorderLevel') as string),
       supplier: formData.get('supplier'),
     };
+
+    // Add category-specific fields
+    const category = formData.get('category') as string;
+    
+    if (category === 'MACHINE' || category === 'DEVICE') {
+      data.depreciationRate = formData.get('depreciationRate') ? parseFloat(formData.get('depreciationRate') as string) : null;
+      data.halfLife = formData.get('halfLife') ? parseFloat(formData.get('halfLife') as string) : null;
+      data.deviceId = formData.get('deviceId') || null;
+    }
+    
+    if (category === 'CONSUMABLE') {
+      data.manufacturingDate = formData.get('manufacturingDate') || null;
+      data.expiryDate = formData.get('expiryDate') || null;
+      data.batchNumber = formData.get('batchNumber') || null;
+    }
 
     try {
       const response = await fetch('/api/inventory', {
@@ -83,7 +99,13 @@ export default function NewInventoryPage() {
 
             <div>
               <label className="label">Category *</label>
-              <select name="category" required className="input-field">
+              <select 
+                name="category" 
+                required 
+                className="input-field"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
                 <option value="">Select Category</option>
                 <option value="CONSUMABLE">Consumable</option>
                 <option value="MACHINE">Machine</option>
@@ -140,6 +162,91 @@ export default function NewInventoryPage() {
               />
             </div>
           </div>
+
+          {/* Dynamic Fields for MACHINE/DEVICE */}
+          {(selectedCategory === 'MACHINE' || selectedCategory === 'DEVICE') && (
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {selectedCategory === 'MACHINE' ? 'Machine' : 'Device'} Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="label">Device/Machine ID</label>
+                  <input
+                    type="text"
+                    name="deviceId"
+                    className="input-field"
+                    placeholder="e.g., DEV-2024-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Depreciation Rate (%/year)</label>
+                  <input
+                    type="number"
+                    name="depreciationRate"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className="input-field"
+                    placeholder="e.g., 10.5"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Annual depreciation percentage</p>
+                </div>
+
+                <div>
+                  <label className="label">Half Life (years)</label>
+                  <input
+                    type="number"
+                    name="halfLife"
+                    step="0.1"
+                    min="0"
+                    className="input-field"
+                    placeholder="e.g., 5"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Expected operational lifespan</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Dynamic Fields for CONSUMABLE */}
+          {selectedCategory === 'CONSUMABLE' && (
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Consumable Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="label">Manufacturing Date</label>
+                  <input
+                    type="date"
+                    name="manufacturingDate"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Expiry Date</label>
+                  <input
+                    type="date"
+                    name="expiryDate"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Batch Number</label>
+                  <input
+                    type="text"
+                    name="batchNumber"
+                    className="input-field"
+                    placeholder="e.g., BATCH-2024-12-001"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="label">Description</label>

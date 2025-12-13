@@ -13,6 +13,18 @@ const allocationSchema = z.object({
   date: z.string().datetime(),
   notes: z.string().optional(),
   equipment: z.array(z.string()).optional(),
+  // Surgery-specific fields
+  surgicalUnit: z.string().optional(),
+  surgeryType: z.enum(["ELECTIVE", "URGENT", "EMERGENCY"]).optional(),
+  // Staff assignments
+  scrubNurseId: z.string().uuid().optional().nullable(),
+  circulatingNurseId: z.string().uuid().optional().nullable(),
+  anaestheticTechnicianId: z.string().uuid().optional().nullable(),
+  anaesthetistConsultantId: z.string().uuid().optional().nullable(),
+  anaesthetistSeniorRegistrarId: z.string().uuid().optional().nullable(),
+  anaesthetistRegistrarId: z.string().uuid().optional().nullable(),
+  cleanerId: z.string().uuid().optional().nullable(),
+  porterId: z.string().uuid().optional().nullable(),
 });
 
 export async function GET(request: NextRequest) {
@@ -96,17 +108,38 @@ export async function POST(request: NextRequest) {
 
     const allocation = await prisma.theatreAllocation.create({
       data: {
-        ...validatedData,
+        theatreId: validatedData.theatreId,
+        surgeryId: validatedData.surgeryId,
+        allocationType: validatedData.allocationType,
         startTime: new Date(validatedData.startTime),
         endTime: new Date(validatedData.endTime),
         date: new Date(validatedData.date),
         allocatedBy: session.user.id,
+        notes: validatedData.notes,
         equipment: validatedData.equipment
           ? JSON.stringify(validatedData.equipment)
           : null,
+        surgicalUnit: validatedData.surgicalUnit,
+        surgeryType: validatedData.surgeryType,
+        scrubNurseId: validatedData.scrubNurseId || null,
+        circulatingNurseId: validatedData.circulatingNurseId || null,
+        anaestheticTechnicianId: validatedData.anaestheticTechnicianId || null,
+        anaesthetistConsultantId: validatedData.anaesthetistConsultantId || null,
+        anaesthetistSeniorRegistrarId: validatedData.anaesthetistSeniorRegistrarId || null,
+        anaesthetistRegistrarId: validatedData.anaesthetistRegistrarId || null,
+        cleanerId: validatedData.cleanerId || null,
+        porterId: validatedData.porterId || null,
       },
       include: {
         theatre: true,
+        scrubNurse: { select: { id: true, fullName: true, role: true } },
+        circulatingNurse: { select: { id: true, fullName: true, role: true } },
+        anaestheticTechnician: { select: { id: true, fullName: true, role: true } },
+        anaesthetistConsultant: { select: { id: true, fullName: true, role: true } },
+        anaesthetistSeniorRegistrar: { select: { id: true, fullName: true, role: true } },
+        anaesthetistRegistrar: { select: { id: true, fullName: true, role: true } },
+        cleaner: { select: { id: true, fullName: true, role: true } },
+        porter: { select: { id: true, fullName: true, role: true } },
       },
     });
 

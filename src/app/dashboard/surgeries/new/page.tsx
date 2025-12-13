@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface Patient {
@@ -20,10 +20,16 @@ interface Surgeon {
   fullName: string;
 }
 
+interface TeamMember {
+  userId: string;
+  role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER';
+}
+
 export default function NewSurgeryPage() {
   const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [surgeons, setSurgeons] = useState<Surgeon[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchPatient, setSearchPatient] = useState('');
@@ -78,6 +84,7 @@ export default function NewSurgeryPage() {
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
       otherSpecialNeeds: formData.get('otherSpecialNeeds'),
+      teamMembers: teamMembers.filter(tm => tm.userId !== ''), // Only send team members with selected users
     };
 
     try {
@@ -98,6 +105,20 @@ export default function NewSurgeryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const addTeamMember = (role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER') => {
+    setTeamMembers([...teamMembers, { userId: '', role }]);
+  };
+
+  const removeTeamMember = (index: number) => {
+    setTeamMembers(teamMembers.filter((_, i) => i !== index));
+  };
+
+  const updateTeamMember = (index: number, userId: string) => {
+    const updated = [...teamMembers];
+    updated[index].userId = userId;
+    setTeamMembers(updated);
   };
 
   const filteredPatients = patients.filter(
@@ -313,6 +334,203 @@ export default function NewSurgeryPage() {
               rows={3}
               placeholder="Specify any other special requirements..."
             />
+          </div>
+        </div>
+
+        {/* Surgical Team Members */}
+        <div className="card">
+          <div className="flex items-center gap-3 mb-4">
+            <Users className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Surgical Team</h2>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Add team members who will be involved in this surgical procedure
+          </p>
+
+          <div className="space-y-4">
+            {/* Consultants */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">Consultants</label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('CONSULTANT')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Consultant
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'CONSULTANT').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No consultants added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'CONSULTANT' ? (
+                      <div key={index} className="flex gap-2">
+                        <select
+                          value={member.userId}
+                          onChange={(e) => updateTeamMember(index, e.target.value)}
+                          className="input-field flex-1"
+                        >
+                          <option value="">Select Consultant</option>
+                          {surgeons.map((surgeon) => (
+                            <option key={surgeon.id} value={surgeon.id}>
+                              {surgeon.fullName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeTeamMember(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Senior Registrars */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">Senior Registrars</label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('SENIOR_REGISTRAR')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Senior Registrar
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'SENIOR_REGISTRAR').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No senior registrars added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'SENIOR_REGISTRAR' ? (
+                      <div key={index} className="flex gap-2">
+                        <select
+                          value={member.userId}
+                          onChange={(e) => updateTeamMember(index, e.target.value)}
+                          className="input-field flex-1"
+                        >
+                          <option value="">Select Senior Registrar</option>
+                          {surgeons.map((surgeon) => (
+                            <option key={surgeon.id} value={surgeon.id}>
+                              {surgeon.fullName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeTeamMember(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Registrars */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">Registrars</label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('REGISTRAR')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Registrar
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'REGISTRAR').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No registrars added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'REGISTRAR' ? (
+                      <div key={index} className="flex gap-2">
+                        <select
+                          value={member.userId}
+                          onChange={(e) => updateTeamMember(index, e.target.value)}
+                          className="input-field flex-1"
+                        >
+                          <option value="">Select Registrar</option>
+                          {surgeons.map((surgeon) => (
+                            <option key={surgeon.id} value={surgeon.id}>
+                              {surgeon.fullName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeTeamMember(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* House Officers */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">House Officers</label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('HOUSE_OFFICER')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add House Officer
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'HOUSE_OFFICER').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No house officers added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'HOUSE_OFFICER' ? (
+                      <div key={index} className="flex gap-2">
+                        <select
+                          value={member.userId}
+                          onChange={(e) => updateTeamMember(index, e.target.value)}
+                          className="input-field flex-1"
+                        >
+                          <option value="">Select House Officer</option>
+                          {surgeons.map((surgeon) => (
+                            <option key={surgeon.id} value={surgeon.id}>
+                              {surgeon.fullName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeTeamMember(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

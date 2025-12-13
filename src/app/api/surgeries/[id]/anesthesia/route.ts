@@ -5,13 +5,13 @@ import prisma from '@/lib/prisma';
 // GET - Get anesthesia monitoring record for a surgery
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { error, session } = await requirePermission('anesthesiaMonitoring', 'read');
     if (error) return error;
 
-    const { id } = params;
+    const { id } = await params;
 
     const anesthesiaRecord = await prisma.anesthesiaMonitoringRecord.findUnique({
       where: { surgeryId: id },
@@ -68,13 +68,13 @@ export async function GET(
 // POST - Initialize anesthesia monitoring record for a surgery
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { error, session } = await requirePermission('anesthesiaMonitoring', 'create');
     if (error) return error;
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     // Check if anesthesia record already exists
@@ -187,13 +187,13 @@ export async function POST(
 // PUT - Update anesthesia monitoring record
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { error, session } = await requirePermission('anesthesiaMonitoring', 'update');
     if (error) return error;
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     const existing = await prisma.anesthesiaMonitoringRecord.findUnique({

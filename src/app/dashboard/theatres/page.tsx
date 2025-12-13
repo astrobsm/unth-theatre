@@ -36,6 +36,12 @@ interface DailySummary {
   }>;
 }
 
+interface User {
+  id: string;
+  fullName: string;
+  role: string;
+}
+
 export default function TheatresPage() {
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
@@ -46,10 +52,20 @@ export default function TheatresPage() {
   const [showAddTheatre, setShowAddTheatre] = useState(false);
   const [showAddAllocation, setShowAddAllocation] = useState(false);
   const [selectedTheatre, setSelectedTheatre] = useState<string>('');
+  const [allocationType, setAllocationType] = useState<string>('SURGERY');
+  
+  // Staff lists
+  const [scrubNurses, setScrubNurses] = useState<User[]>([]);
+  const [circulatingNurses, setCirculatingNurses] = useState<User[]>([]);
+  const [anaestheticTechnicians, setAnaestheticTechnicians] = useState<User[]>([]);
+  const [anaesthetists, setAnaesthetists] = useState<User[]>([]);
+  const [cleaners, setCleaners] = useState<User[]>([]);
+  const [porters, setPorters] = useState<User[]>([]);
 
   useEffect(() => {
     fetchTheatres();
     fetchDailySummary();
+    fetchStaff();
   }, [selectedDate]);
 
   const fetchTheatres = async () => {
@@ -75,6 +91,54 @@ export default function TheatresPage() {
       }
     } catch (error) {
       console.error('Failed to fetch daily summary:', error);
+    }
+  };
+
+  const fetchStaff = async () => {
+    try {
+      // Fetch scrub nurses
+      const scrubResponse = await fetch('/api/users?role=SCRUB_NURSE&status=APPROVED');
+      if (scrubResponse.ok) {
+        const data = await scrubResponse.json();
+        setScrubNurses(data.users || []);
+      }
+
+      // Fetch circulating nurses
+      const circulatingResponse = await fetch('/api/users?role=CIRCULATING_NURSE&status=APPROVED');
+      if (circulatingResponse.ok) {
+        const data = await circulatingResponse.json();
+        setCirculatingNurses(data.users || []);
+      }
+
+      // Fetch anaesthetic technicians
+      const techResponse = await fetch('/api/users?role=ANAESTHETIC_TECHNICIAN&status=APPROVED');
+      if (techResponse.ok) {
+        const data = await techResponse.json();
+        setAnaestheticTechnicians(data.users || []);
+      }
+
+      // Fetch anaesthetists (all types)
+      const anaesthetistResponse = await fetch('/api/users?role=ANAESTHETIST&status=APPROVED');
+      if (anaesthetistResponse.ok) {
+        const data = await anaesthetistResponse.json();
+        setAnaesthetists(data.users || []);
+      }
+
+      // Fetch cleaners
+      const cleanerResponse = await fetch('/api/users?role=CLEANER&status=APPROVED');
+      if (cleanerResponse.ok) {
+        const data = await cleanerResponse.json();
+        setCleaners(data.users || []);
+      }
+
+      // Fetch porters
+      const porterResponse = await fetch('/api/users?role=PORTER&status=APPROVED');
+      if (porterResponse.ok) {
+        const data = await porterResponse.json();
+        setPorters(data.users || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch staff:', error);
     }
   };
 
@@ -121,22 +185,39 @@ export default function TheatresPage() {
     const startTime = new Date(`${selectedDate}T${formData.get('startTime')}`);
     const endTime = new Date(`${selectedDate}T${formData.get('endTime')}`);
     
+    const allocationData: any = {
+      theatreId: formData.get('theatreId'),
+      allocationType: formData.get('allocationType'),
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      date: new Date(selectedDate).toISOString(),
+      notes: formData.get('notes'),
+      equipment: (formData.get('equipment') as string)
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean),
+      // Staff assignments
+      scrubNurseId: formData.get('scrubNurseId') || null,
+      circulatingNurseId: formData.get('circulatingNurseId') || null,
+      anaestheticTechnicianId: formData.get('anaestheticTechnicianId') || null,
+      anaesthetistConsultantId: formData.get('anaesthetistConsultantId') || null,
+      anaesthetistSeniorRegistrarId: formData.get('anaesthetistSeniorRegistrarId') || null,
+      anaesthetistRegistrarId: formData.get('anaesthetistRegistrarId') || null,
+      cleanerId: formData.get('cleanerId') || null,
+      porterId: formData.get('porterId') || null,
+    };
+
+    // Add surgery-specific fields if allocation type is SURGERY
+    if (formData.get('allocationType') === 'SURGERY') {
+      allocationData.surgicalUnit = formData.get('surgicalUnit');
+      allocationData.surgeryType = formData.get('surgeryType');
+    }
+    
     try {
       const response = await fetch('/api/allocations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          theatreId: formData.get('theatreId'),
-          allocationType: formData.get('allocationType'),
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString(),
-          date: new Date(selectedDate).toISOString(),
-          notes: formData.get('notes'),
-          equipment: (formData.get('equipment') as string)
-            .split(',')
-            .map((e) => e.trim())
-            .filter(Boolean),
-        }),
+        body: JSON.stringify(allocationData),
       });
 
       if (response.ok) {
@@ -144,6 +225,7 @@ export default function TheatresPage() {
         fetchTheatres();
         fetchDailySummary();
         e.currentTarget.reset();
+        setAllocationType('SURGERY');
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to create allocation');
@@ -437,13 +519,119 @@ export default function TheatresPage() {
               </div>
               <div>
                 <label className="label">Allocation Type</label>
-                <select name="allocationType" required className="input-field">
+                <select 
+                  name="allocationType" 
+                  required 
+                  className="input-field"
+                  value={allocationType}
+                  onChange={(e) => setAllocationType(e.target.value)}
+                >
                   <option value="SURGERY">Surgery</option>
                   <option value="MAINTENANCE">Maintenance</option>
                   <option value="EMERGENCY">Emergency</option>
                   <option value="RESERVED">Reserved</option>
                 </select>
               </div>
+
+              {/* Surgery-specific fields */}
+              {allocationType === 'SURGERY' && (
+                <>
+                  <div>
+                    <label className="label">Operating Surgical Unit *</label>
+                    <select name="surgicalUnit" required className="input-field">
+                      <option value="">Select Surgical Unit</option>
+                      <optgroup label="CTU">
+                        <option value="CTU 1">CTU 1</option>
+                        <option value="CTU 2">CTU 2</option>
+                        <option value="CTU 3">CTU 3</option>
+                        <option value="CTU 4">CTU 4</option>
+                      </optgroup>
+                      <optgroup label="Paediatric Surgery">
+                        <option value="PAEDIATRIC SURGERY UNIT 1">Paediatric Surgery Unit 1</option>
+                        <option value="PAEDIATRIC SURGERY UNIT 2">Paediatric Surgery Unit 2</option>
+                        <option value="PAEDIATRIC SURGERY UNIT 3">Paediatric Surgery Unit 3</option>
+                        <option value="PAEDIATRIC SURGERY UNIT 4">Paediatric Surgery Unit 4</option>
+                      </optgroup>
+                      <optgroup label="Plastic Surgery">
+                        <option value="PLASTIC SURGERY UNIT 1">Plastic Surgery Unit 1</option>
+                        <option value="PLASTIC SURGERY UNIT 2">Plastic Surgery Unit 2</option>
+                        <option value="PLASTIC SURGERY UNIT 3">Plastic Surgery Unit 3</option>
+                        <option value="PLASTIC SURGERY UNIT 4">Plastic Surgery Unit 4</option>
+                      </optgroup>
+                      <optgroup label="Urology">
+                        <option value="UROLOGY UNIT 1">Urology Unit 1</option>
+                        <option value="UROLOGY UNIT 2">Urology Unit 2</option>
+                        <option value="UROLOGY UNIT 3">Urology Unit 3</option>
+                        <option value="UROLOGY UNIT 4">Urology Unit 4</option>
+                      </optgroup>
+                      <optgroup label="General Surgery">
+                        <option value="GENERAL SURGERY UNIT 1">General Surgery Unit 1</option>
+                        <option value="GENERAL SURGERY UNIT 2">General Surgery Unit 2</option>
+                        <option value="GENERAL SURGERY UNIT 3">General Surgery Unit 3</option>
+                        <option value="GENERAL SURGERY UNIT 4">General Surgery Unit 4</option>
+                      </optgroup>
+                      <optgroup label="Ophthalmology">
+                        <option value="OPHTHALMOLOGY UNIT 1">Ophthalmology Unit 1</option>
+                        <option value="OPHTHALMOLOGY UNIT 2">Ophthalmology Unit 2</option>
+                        <option value="OPHTHALMOLOGY UNIT 3">Ophthalmology Unit 3</option>
+                        <option value="OPHTHALMOLOGY UNIT 4">Ophthalmology Unit 4</option>
+                        <option value="OPHTHALMOLOGY UNIT 5">Ophthalmology Unit 5</option>
+                        <option value="OPHTHALMOLOGY UNIT 6">Ophthalmology Unit 6</option>
+                      </optgroup>
+                      <optgroup label="Neurosurgery">
+                        <option value="NEUROSURGERY UNIT 1">Neurosurgery Unit 1</option>
+                        <option value="NEUROSURGERY UNIT 2">Neurosurgery Unit 2</option>
+                        <option value="NEUROSURGERY UNIT 3">Neurosurgery Unit 3</option>
+                        <option value="NEUROSURGERY UNIT 4">Neurosurgery Unit 4</option>
+                      </optgroup>
+                      <optgroup label="ENT">
+                        <option value="ENT UNIT 1">ENT Unit 1</option>
+                        <option value="ENT UNIT 2">ENT Unit 2</option>
+                        <option value="ENT UNIT 3">ENT Unit 3</option>
+                        <option value="ENT UNIT 4">ENT Unit 4</option>
+                        <option value="ENT UNIT 5">ENT Unit 5</option>
+                      </optgroup>
+                      <optgroup label="O/G Firm">
+                        <option value="O/G FIRM 1">O/G Firm 1</option>
+                        <option value="O/G FIRM 2">O/G Firm 2</option>
+                        <option value="O/G FIRM 3">O/G Firm 3</option>
+                        <option value="O/G FIRM 4">O/G Firm 4</option>
+                        <option value="O/G FIRM 5">O/G Firm 5</option>
+                        <option value="O/G FIRM 6">O/G Firm 6</option>
+                        <option value="O/G FIRM 7">O/G Firm 7</option>
+                        <option value="O/G FIRM 8">O/G Firm 8</option>
+                        <option value="O/G FIRM 9">O/G Firm 9</option>
+                        <option value="O/G FIRM 10">O/G Firm 10</option>
+                      </optgroup>
+                      <optgroup label="Maxillofacial">
+                        <option value="MAXILLOFACIAL UNIT 1">Maxillofacial Unit 1</option>
+                        <option value="MAXILLOFACIAL UNIT 2">Maxillofacial Unit 2</option>
+                        <option value="MAXILLOFACIAL UNIT 3">Maxillofacial Unit 3</option>
+                        <option value="MAXILLOFACIAL UNIT 4">Maxillofacial Unit 4</option>
+                        <option value="MAXILLOFACIAL UNIT 5">Maxillofacial Unit 5</option>
+                        <option value="MAXILLOFACIAL UNIT 6">Maxillofacial Unit 6</option>
+                      </optgroup>
+                      <optgroup label="Orthopedic Surgery">
+                        <option value="ORTHOPEDIC SURGERY UNIT 1">Orthopedic Surgery Unit 1</option>
+                        <option value="ORTHOPEDIC SURGERY UNIT 2">Orthopedic Surgery Unit 2</option>
+                        <option value="ORTHOPEDIC SURGERY UNIT 3">Orthopedic Surgery Unit 3</option>
+                        <option value="ORTHOPEDIC SURGERY UNIT 4">Orthopedic Surgery Unit 4</option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="label">Surgery Type *</label>
+                    <select name="surgeryType" required className="input-field">
+                      <option value="">Select Surgery Type</option>
+                      <option value="ELECTIVE">Elective</option>
+                      <option value="URGENT">Urgent</option>
+                      <option value="EMERGENCY">Emergency</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Start Time</label>
@@ -454,6 +642,118 @@ export default function TheatresPage() {
                   <input type="time" name="endTime" required className="input-field" />
                 </div>
               </div>
+
+              {/* Staff Assignments Section */}
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Staff Assignments</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Scrub Nurse */}
+                  <div>
+                    <label className="label">Scrub Nurse</label>
+                    <select name="scrubNurseId" className="input-field">
+                      <option value="">Select Scrub Nurse</option>
+                      {scrubNurses.map((nurse) => (
+                        <option key={nurse.id} value={nurse.id}>
+                          {nurse.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Circulating Nurse */}
+                  <div>
+                    <label className="label">Circulating Nurse</label>
+                    <select name="circulatingNurseId" className="input-field">
+                      <option value="">Select Circulating Nurse</option>
+                      {circulatingNurses.map((nurse) => (
+                        <option key={nurse.id} value={nurse.id}>
+                          {nurse.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Anaesthetic Technician */}
+                  <div>
+                    <label className="label">Anaesthetic Technician</label>
+                    <select name="anaestheticTechnicianId" className="input-field">
+                      <option value="">Select Anaesthetic Technician</option>
+                      {anaestheticTechnicians.map((tech) => (
+                        <option key={tech.id} value={tech.id}>
+                          {tech.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Anaesthetist - Consultant */}
+                  <div>
+                    <label className="label">Anaesthetist (Consultant)</label>
+                    <select name="anaesthetistConsultantId" className="input-field">
+                      <option value="">Select Consultant</option>
+                      {anaesthetists.map((anaesthetist) => (
+                        <option key={anaesthetist.id} value={anaesthetist.id}>
+                          {anaesthetist.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Anaesthetist - Senior Registrar */}
+                  <div>
+                    <label className="label">Anaesthetist (Senior Registrar)</label>
+                    <select name="anaesthetistSeniorRegistrarId" className="input-field">
+                      <option value="">Select Senior Registrar</option>
+                      {anaesthetists.map((anaesthetist) => (
+                        <option key={anaesthetist.id} value={anaesthetist.id}>
+                          {anaesthetist.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Anaesthetist - Registrar */}
+                  <div>
+                    <label className="label">Anaesthetist (Registrar)</label>
+                    <select name="anaesthetistRegistrarId" className="input-field">
+                      <option value="">Select Registrar</option>
+                      {anaesthetists.map((anaesthetist) => (
+                        <option key={anaesthetist.id} value={anaesthetist.id}>
+                          {anaesthetist.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Cleaner */}
+                  <div>
+                    <label className="label">Cleaner</label>
+                    <select name="cleanerId" className="input-field">
+                      <option value="">Select Cleaner</option>
+                      {cleaners.map((cleaner) => (
+                        <option key={cleaner.id} value={cleaner.id}>
+                          {cleaner.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Porter */}
+                  <div>
+                    <label className="label">Porter</label>
+                    <select name="porterId" className="input-field">
+                      <option value="">Select Porter</option>
+                      {porters.map((porter) => (
+                        <option key={porter.id} value={porter.id}>
+                          {porter.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="label">Equipment Needed (comma-separated)</label>
                 <textarea

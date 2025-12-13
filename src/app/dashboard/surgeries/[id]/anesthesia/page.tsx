@@ -71,8 +71,9 @@ interface VitalSigns {
   alertType: string | null;
 }
 
-export default function AnesthesiaMonitoringPage({ params }: { params: { id: string } }) {
+export default function AnesthesiaMonitoringPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const [surgeryId, setSurgeryId] = useState<string>('');
   const [record, setRecord] = useState<AnesthesiaRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -99,13 +100,11 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
     eventPhase: 'MAINTENANCE',
   });
 
-  useEffect(() => {
-    fetchRecord();
-  }, [params.id]);
-
   const fetchRecord = async () => {
+    if (!surgeryId) return;
+    
     try {
-      const response = await fetch(`/api/surgeries/${params.id}/anesthesia`);
+      const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia`);
       if (response.ok) {
         const data = await response.json();
         setRecord(data);
@@ -119,10 +118,27 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
     }
   };
 
+  useEffect(() => {
+    const initParams = async () => {
+      const resolvedParams = await params;
+      setSurgeryId(resolvedParams.id);
+    };
+    initParams();
+  }, [params]);
+
+  useEffect(() => {
+    if (surgeryId) {
+      fetchRecord();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surgeryId]);
+
   const initializeRecord = async () => {
+    if (!surgeryId) return;
+    
     setSaving(true);
     try {
-      const response = await fetch(`/api/surgeries/${params.id}/anesthesia`, {
+      const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(initData)
@@ -145,9 +161,11 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
   };
 
   const updateRecord = async (updates: any) => {
+    if (!surgeryId) return;
+    
     setSaving(true);
     try {
-      const response = await fetch(`/api/surgeries/${params.id}/anesthesia`, {
+      const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -166,9 +184,11 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
   };
 
   const recordVitals = async () => {
+    if (!surgeryId) return;
+    
     setSaving(true);
     try {
-      const response = await fetch(`/api/surgeries/${params.id}/anesthesia/vitals`, {
+      const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia/vitals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vitalData)
@@ -211,7 +231,7 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="mb-6">
-          <Link href={`/dashboard/surgeries/${params.id}`} className="text-blue-600 hover:underline">
+          <Link href={`/dashboard/surgeries/${surgeryId}`} className="text-blue-600 hover:underline">
             ← Back to Surgery
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mt-4">Anesthesia Monitoring Record</h1>
@@ -354,7 +374,7 @@ export default function AnesthesiaMonitoringPage({ params }: { params: { id: str
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-6">
-        <Link href={`/dashboard/surgeries/${params.id}`} className="text-blue-600 hover:underline">
+        <Link href={`/dashboard/surgeries/${surgeryId}`} className="text-blue-600 hover:underline">
           ← Back to Surgery
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mt-4">WHO Anesthesia Monitoring Record</h1>

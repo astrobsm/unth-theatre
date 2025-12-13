@@ -104,6 +104,13 @@ enum FaultPriority {
   LOW
 }
 
+enum SurgicalTeamRole {
+  CONSULTANT
+  SENIOR_REGISTRAR
+  REGISTRAR
+  HOUSE_OFFICER
+}
+
 enum PatientMovementPhase {
   WARD
   PORTER_DISPATCHED
@@ -252,6 +259,7 @@ model User {
   surgeries     Surgery[]   @relation("SurgeonSurgeries")
   assistingSurgeries Surgery[] @relation("AssistantSurgeries")
   anesthesiaSurgeries Surgery[] @relation("AnesthetistSurgeries")
+  teamMemberSurgeries SurgicalTeamMember[] @relation("TeamMemberSurgeries")
   transfers     PatientTransfer[]
   cancellations CaseCancellation[]
   maintenanceLogs MaintenanceLog[]
@@ -260,6 +268,16 @@ model User {
   theatreSetups TheatreSetup[]
   setupReturns  TheatreSetupReturn[]
   extraRequests TheatreExtraRequest[]
+  
+  // Theatre Allocation Staff Relations
+  scrubNurseAllocations TheatreAllocation[] @relation("ScrubNurseAllocations")
+  circulatingNurseAllocations TheatreAllocation[] @relation("CirculatingNurseAllocations")
+  anaestheticTechnicianAllocations TheatreAllocation[] @relation("AnaestheticTechnicianAllocations")
+  anaesthetistConsultantAllocations TheatreAllocation[] @relation("AnaesthetistConsultantAllocations")
+  anaesthetistSeniorRegistrarAllocations TheatreAllocation[] @relation("AnaesthetistSeniorRegistrarAllocations")
+  anaesthetistRegistrarAllocations TheatreAllocation[] @relation("AnaesthetistRegistrarAllocations")
+  cleanerAllocations TheatreAllocation[] @relation("CleanerAllocations")
+  porterAllocations TheatreAllocation[] @relation("PorterAllocations")
   
   @@map("users")
 }
@@ -276,10 +294,25 @@ model InventoryItem {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   
+  // Equipment Maintenance Fields (for MACHINE and DEVICE categories)
+  halfLife              Float?        // Equipment half-life in years
+  depreciationRate      Float?        // Annual depreciation rate (percentage)
+  deviceId              String?       // Unique device/machine identifier
+  maintenanceIntervalDays Int?        // Days between maintenance
+  lastMaintenanceDate   DateTime?     // Last maintenance performed
+  nextMaintenanceDate   DateTime?     // Calculated next maintenance due date
+  
+  // Consumable Fields (for CONSUMABLE category)
+  manufacturingDate     DateTime?     // Manufacturing date
+  expiryDate            DateTime?     // Expiry date
+  batchNumber           String?       // Batch/Lot number
+  
   // Relations
   surgeryItems  SurgeryItem[]
   supplyRecords SupplyRecord[]
   maintenanceLogs MaintenanceLog[]
+  maintenanceAlerts MaintenanceAlert[]
+  theatreSetupItems TheatreSetupItem[]
   
   @@map("inventory_items")
 }
@@ -319,6 +352,24 @@ model MaintenanceLog {
   @@map("maintenance_logs")
 }
 
+model MaintenanceAlert {
+  id              String    @id @default(uuid())
+  itemId          String
+  alertDate       DateTime  // Date when maintenance is due
+  status          String    @default("PENDING") // PENDING, ACKNOWLEDGED, COMPLETED, DISMISSED
+  acknowledged    Boolean   @default(false)
+  acknowledgedBy  String?
+  acknowledgedAt  DateTime?
+  completedDate   DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  item            InventoryItem @relation(fields: [itemId], references: [id])
+  
+  @@map("maintenance_alerts")
+}
+
 model Patient {
   id            String    @id @default(uuid())
   folderNumber  String    @unique
@@ -329,6 +380,60 @@ model Patient {
   ward          String
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  
+  // Preoperative Assessment Fields
+  // DVT Risk Assessment
+  dvtRiskScore          Int?       // DVT risk score
+  hasDVTHistory         Boolean    @default(false)
+  hasMobilityIssues     Boolean    @default(false)
+  hasActiveCancer       Boolean    @default(false)
+  hasPriorDVT           Boolean    @default(false)
+  dDimerTestDone        Boolean    @default(false)
+  dDimerResult          String?    // Result of D-dimer test
+  dDimerValue           Float?     // Numeric value
+  
+  // Bleeding Risk Assessment
+  bleedingRiskScore     Int?       // Bleeding risk score
+  hasBleedingDisorder   Boolean    @default(false)
+  hasLiverDisease       Boolean    @default(false)
+  hasRenalImpairment    Boolean    @default(false)
+  recentBleeding        Boolean    @default(false)
+  
+  // Pressure Sore Risk
+  pressureSoreRisk      String?    // LOW, MEDIUM, HIGH
+  hasPressureSores      Boolean    @default(false)
+  mobilityStatus        String?    // Description of mobility
+  nutritionalStatus     String?    // GOOD, FAIR, POOR
+  
+  // Medications Affecting Surgery
+  onAnticoagulants      Boolean    @default(false)
+  anticoagulantName     String?    // e.g., Warfarin, Heparin
+  anticoagulantLastDose DateTime?
+  onAntiplatelets       Boolean    @default(false)
+  antiplateletName      String?    // e.g., Aspirin, Clopidogrel
+  antiplateletLastDose  DateTime?
+  onACEInhibitors       Boolean    @default(false)
+  aceInhibitorName      String?
+  aceInhibitorLastDose  DateTime?
+  onARBs                Boolean    @default(false)
+  arbName               String?
+  arbLastDose           DateTime?
+  otherMedications      String?    // Other relevant medications
+  
+  // WHO Operative Fitness Risk Assessment
+  whoRiskClass          String?    // I, II, III, IV, V, VI
+  asaScore              Int?       // 1-6 ASA classification
+  comorbidities         String?    // List of comorbidities
+  cardiovascularStatus  String?    // Assessment
+  respiratoryStatus     String?    // Assessment
+  metabolicStatus       String?    // Assessment
+  
+  // Final Assessment
+  finalRiskScore        Int?       // Calculated final risk score (0-100)
+  fitnessForSurgery     String?    // FIT, UNFIT, CONDITIONAL
+  assessmentNotes       String?    // Additional notes
+  assessedBy            String?    // User who completed assessment
+  assessmentDate        DateTime?  // When assessment was completed
   
   // Relations
   surgeries     Surgery[]
@@ -409,8 +514,24 @@ model Surgery {
   surgicalTiming        SurgicalTiming?
   surgicalCount         SurgicalCountChecklist?
   anesthesiaRecord      AnesthesiaMonitoringRecord?
+  teamMembers           SurgicalTeamMember[]
   
   @@map("surgeries")
+}
+
+model SurgicalTeamMember {
+  id            String            @id @default(uuid())
+  surgeryId     String
+  userId        String
+  role          SurgicalTeamRole
+  specialNotes  String?
+  createdAt     DateTime          @default(now())
+  
+  // Relations
+  surgery       Surgery           @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+  user          User              @relation("TeamMemberSurgeries", fields: [userId], references: [id])
+  
+  @@map("surgical_team_members")
 }
 
 model SurgeryItem {
@@ -645,10 +766,33 @@ model TheatreAllocation {
   allocatedBy   String
   notes         String?
   equipment     String?         // JSON array of specific equipment needed
+  
+  // Surgery-specific fields
+  surgicalUnit  String?         // Operating surgical unit (e.g., CTU 1, Paediatric Surgery Unit 1)
+  surgeryType   SurgeryType?    // ELECTIVE, URGENT, EMERGENCY
+  
+  // Staff assignments
+  scrubNurseId          String?
+  circulatingNurseId    String?
+  anaestheticTechnicianId String?
+  anaesthetistConsultantId String?
+  anaesthetistSeniorRegistrarId String?
+  anaesthetistRegistrarId String?
+  cleanerId             String?
+  porterId              String?
+  
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   
   theatre       TheatreSuite    @relation(fields: [theatreId], references: [id])
+  scrubNurse    User?           @relation("ScrubNurseAllocations", fields: [scrubNurseId], references: [id])
+  circulatingNurse User?        @relation("CirculatingNurseAllocations", fields: [circulatingNurseId], references: [id])
+  anaestheticTechnician User?   @relation("AnaestheticTechnicianAllocations", fields: [anaestheticTechnicianId], references: [id])
+  anaesthetistConsultant User?  @relation("AnaesthetistConsultantAllocations", fields: [anaesthetistConsultantId], references: [id])
+  anaesthetistSeniorRegistrar User? @relation("AnaesthetistSeniorRegistrarAllocations", fields: [anaesthetistSeniorRegistrarId], references: [id])
+  anaesthetistRegistrar User?   @relation("AnaesthetistRegistrarAllocations", fields: [anaesthetistRegistrarId], references: [id])
+  cleaner       User?           @relation("CleanerAllocations", fields: [cleanerId], references: [id])
+  porter        User?           @relation("PorterAllocations", fields: [porterId], references: [id])
   
   @@map("theatre_allocations")
 }
@@ -697,6 +841,7 @@ model TheatreSetup {
   id                String              @id @default(uuid())
   theatreId         String
   collectedBy       String
+  scrubNurseName    String?             // Name of scrub nurse collecting items
   setupDate         DateTime
   collectionTime    DateTime            @default(now())
   status            TheatreSetupStatus  @default(COLLECTED)
@@ -706,6 +851,7 @@ model TheatreSetup {
   longitude         Decimal?            @db.Decimal(11, 8)
   location          String?
   
+  // Legacy fixed items (kept for backward compatibility)
   // Antiseptics
   spiritQuantity    Int                 @default(0)
   savlonQuantity    Int                 @default(0)
@@ -731,8 +877,23 @@ model TheatreSetup {
   theatre           TheatreSuite        @relation(fields: [theatreId], references: [id])
   nurse             User                @relation(fields: [collectedBy], references: [id])
   returns           TheatreSetupReturn[]
+  items             TheatreSetupItem[]  // Dynamic items from inventory
   
   @@map("theatre_setups")
+}
+
+// New model to track flexible inventory items collected for theatre setup
+model TheatreSetupItem {
+  id              String       @id @default(uuid())
+  setupId         String
+  inventoryItemId String
+  quantityTaken   Int
+  createdAt       DateTime     @default(now())
+  
+  setup           TheatreSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  
+  @@map("theatre_setup_items")
 }
 
 model TheatreSetupReturn {

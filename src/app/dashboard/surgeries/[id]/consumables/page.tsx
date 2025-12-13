@@ -26,6 +26,17 @@ interface InventoryItem {
   quantityAvailable: number;
 }
 
+interface TheatreSetupItem {
+  inventoryItemId: string;
+  quantityTaken: number;
+  inventoryItem: {
+    id: string;
+    name: string;
+    category: string;
+    unitCostPrice: number;
+  };
+}
+
 interface ConsumableItem {
   inventoryItemId: string;
   quantity: number;
@@ -51,6 +62,7 @@ export default function SurgeryConsumablesPage() {
 
   const [surgery, setSurgery] = useState<Surgery | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [theatreSetupItems, setTheatreSetupItems] = useState<TheatreSetupItem[]>([]);
   const [consumables, setConsumables] = useState<ConsumableItem[]>([]);
   const [existingConsumables, setExistingConsumables] = useState<ExistingConsumable[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +72,6 @@ export default function SurgeryConsumablesPage() {
 
   useEffect(() => {
     fetchSurgery();
-    fetchInventory();
     fetchExistingConsumables();
   }, [surgeryId]);
 
@@ -71,6 +82,11 @@ export default function SurgeryConsumablesPage() {
         const data = await response.json();
         const surgeryData = Array.isArray(data) ? data.find((s: Surgery) => s.id === surgeryId) : data;
         setSurgery(surgeryData);
+        
+        // Fetch theatre setup items for the surgery date
+        if (surgeryData?.scheduledDate) {
+          fetchTheatreSetupItems(surgeryData.scheduledDate);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch surgery:', error);
@@ -79,12 +95,59 @@ export default function SurgeryConsumablesPage() {
     }
   };
 
+  const fetchTheatreSetupItems = async (surgeryDate: string) => {
+    try {
+      const date = new Date(surgeryDate).toISOString().split('T')[0];
+      const response = await fetch(`/api/theatre-setup?date=${date}`);
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Extract all items from theatre setups for the day
+        const allItems: TheatreSetupItem[] = [];
+        data.forEach((setup: any) => {
+          if (setup.items && setup.items.length > 0) {
+            allItems.push(...setup.items);
+          }
+        });
+        
+        setTheatreSetupItems(allItems);
+        
+        // Convert to inventory format for the dropdown
+        const inventoryFromSetup = allItems.map((item: TheatreSetupItem) => ({
+          id: item.inventoryItem.id,
+          name: item.inventoryItem.name,
+          category: item.inventoryItem.category,
+          unitCostPrice: item.inventoryItem.unitCostPrice,
+          quantityAvailable: item.quantityTaken,
+        }));
+        
+        // Remove duplicates and sum quantities
+        const mergedInventory = inventoryFromSetup.reduce((acc: InventoryItem[], curr) => {
+          const existing = acc.find(item => item.id === curr.id);
+          if (existing) {
+            existing.quantityAvailable += curr.quantityAvailable;
+          } else {
+            acc.push(curr);
+          }
+          return acc;
+        }, []);
+        
+        setInventory(mergedInventory);
+      }
+    } catch (error) {
+      console.error('Failed to fetch theatre setup items:', error);
+    }
+  };
+
   const fetchInventory = async () => {
+    // This function is now replaced by fetchTheatreSetupItems
+    // Keeping it for potential fallback
     try {
       const response = await fetch('/api/inventory');
       if (response.ok) {
         const data = await response.json();
-        setInventory(data.filter((item: InventoryItem) => item.quantityAvailable > 0));
+        const items = data.items || data;
+        setInventory(items.filter((item: InventoryItem) => item.quantityAvailable > 0));
       }
     } catch (error) {
       console.error('Failed to fetch inventory:', error);
@@ -289,7 +352,19 @@ export default function SurgeryConsumablesPage() {
       {/* Add New Consumables */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Add Consumables</h2>
+          <div>
+            <h2 className="text-xl font-semibold">Add Consumables</h2>
+            {inventory.length > 0 && (
+              <p className="text-sm text-gray-600 mt-1">
+                Showing items collected by scrub nurse for this theatre on {new Date(surgery.scheduledDate).toLocaleDateString()}
+              </p>
+            )}
+            {inventory.length === 0 && (
+              <p className="text-sm text-yellow-600 mt-1">
+                ⚠️ No items found in theatre setup for this date. Please ensure materials have been collected.
+              </p>
+            )}
+          </div>
           <button onClick={addConsumable} className="btn-primary flex items-center gap-2">
             <Plus className="w-5 h-5" />
             Add Item
@@ -307,10 +382,12 @@ export default function SurgeryConsumablesPage() {
               <div key={index} className="border border-gray-200 rounded-lg p-4">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                   <div className="md:col-span-6">
-                    <label className="label">Inventory Item *</label>
+                    <label className="label">
+                      Inventory Item (from Theatre Setup) *
+                    </label>
                     <input
                       type="text"
-                      placeholder="Search items..."
+                      placeholder="Search collected items..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="input-field mb-2"
@@ -324,7 +401,7 @@ export default function SurgeryConsumablesPage() {
                       <option value="">Select Item</option>
                       {filteredInventory.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.name} - ₦{item.unitCostPrice.toLocaleString()} ({item.quantityAvailable} available)
+                          {item.name} - ₦{item.unitCostPrice.toLocaleString()} ({item.quantityAvailable} collected)
                         </option>
                       ))}
                     </select>

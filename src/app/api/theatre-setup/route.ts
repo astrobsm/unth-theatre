@@ -10,7 +10,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get('date');
+
+    const where: any = {};
+    
+    // Filter by date if provided
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      where.setupDate = {
+        gte: startOfDay,
+        lte: endOfDay,
+      };
+    }
+
     const setups = await prisma.theatreSetup.findMany({
+      where,
       include: {
         theatre: {
           select: {
@@ -22,6 +41,18 @@ export async function GET(request: NextRequest) {
           select: {
             fullName: true,
           },
+        },
+        items: {
+          include: {
+            inventoryItem: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
+                unitCostPrice: true,
+              }
+            }
+          }
         },
       },
       orderBy: {
@@ -47,6 +78,7 @@ export async function POST(request: NextRequest) {
     const {
       theatreId,
       setupDate,
+      scrubNurseName,
       latitude,
       longitude,
       location,
@@ -60,6 +92,7 @@ export async function POST(request: NextRequest) {
       surgicalBladesQuantity,
       suctionTubbingsQuantity,
       disposablesQuantity,
+      items, // New: array of dynamic inventory items
       notes,
     } = body;
 
@@ -67,11 +100,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Create theatre setup record
+    // Create theatre setup record with dynamic items
     const setup = await prisma.theatreSetup.create({
       data: {
         theatreId,
         collectedBy: session.user.id,
+        scrubNurseName: scrubNurseName || session.user.name,
         setupDate: new Date(setupDate),
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
@@ -88,14 +122,53 @@ export async function POST(request: NextRequest) {
         disposablesQuantity: disposablesQuantity || 0,
         notes,
         status: 'COLLECTED',
+        // Create related items
+        items: items && items.length > 0 ? {
+          create: items.map((item: any) => ({
+            inventoryItemId: item.inventoryItemId,
+            quantityTaken: item.quantityTaken,
+          }))
+        } : undefined,
       },
       include: {
         theatre: true,
         nurse: true,
+        items: {
+          include: {
+            inventoryItem: true,
+          }
+        },
       },
     });
 
+    // Update inventory quantities for dynamic items
+    if (items && items.length > 0) {
+      for (const item of items) {
+        await prisma.inventoryItem.update({
+          where: { id: item.inventoryItemId },
+          data: {
+            quantity: {
+              decrement: item.quantityTaken,
+            }
+          }
+        });
+      }
+    }
+
     // Create audit log
+    const totalFixedItems = (spiritQuantity || 0) +
+      (savlonQuantity || 0) +
+      (povidoneQuantity || 0) +
+      (faceMaskQuantity || 0) +
+      (nursesCapQuantity || 0) +
+      (cssdGauzeQuantity || 0) +
+      (cssdCottonQuantity || 0) +
+      (surgicalBladesQuantity || 0) +
+      (suctionTubbingsQuantity || 0) +
+      (disposablesQuantity || 0);
+
+    const totalDynamicItems = items ? items.reduce((sum: number, item: any) => sum + item.quantityTaken, 0) : 0;
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -104,17 +177,11 @@ export async function POST(request: NextRequest) {
         recordId: setup.id,
         changes: JSON.stringify({
           theatreId,
-          totalItems:
-            (spiritQuantity || 0) +
-            (savlonQuantity || 0) +
-            (povidoneQuantity || 0) +
-            (faceMaskQuantity || 0) +
-            (nursesCapQuantity || 0) +
-            (cssdGauzeQuantity || 0) +
-            (cssdCottonQuantity || 0) +
-            (surgicalBladesQuantity || 0) +
-            (suctionTubbingsQuantity || 0) +
-            (disposablesQuantity || 0),
+          scrubNurseName: scrubNurseName || session.user.name,
+          totalFixedItems,
+          totalDynamicItems,
+          totalItems: totalFixedItems + totalDynamicItems,
+          dynamicItems: items || [],
         }),
       },
     });

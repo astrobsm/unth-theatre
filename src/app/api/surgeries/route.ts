@@ -18,6 +18,10 @@ const surgerySchema = z.object({
   needStereo: z.boolean().default(false),
   needMontrellMattress: z.boolean().default(false),
   otherSpecialNeeds: z.string().optional(),
+  teamMembers: z.array(z.object({
+    userId: z.string(),
+    role: z.enum(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER']),
+  })).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -80,14 +84,33 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
 
+    const { teamMembers, ...surgeryData } = validatedData;
+
     const surgery = await prisma.surgery.create({
       data: {
-        ...validatedData,
+        ...surgeryData,
         scheduledDate: new Date(validatedData.scheduledDate),
+        // Create team members if provided
+        teamMembers: teamMembers && teamMembers.length > 0 ? {
+          create: teamMembers.map(tm => ({
+            userId: tm.userId,
+            role: tm.role,
+          }))
+        } : undefined,
       },
       include: {
         patient: true,
         surgeon: true,
+        teamMembers: {
+          include: {
+            user: {
+              select: {
+                fullName: true,
+                role: true,
+              }
+            }
+          }
+        }
       }
     });
 
