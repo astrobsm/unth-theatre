@@ -162,10 +162,16 @@ export default function LoginPage() {
             </button>
           </div>
           
-          <div className="text-center">
+          <div className="text-center space-y-2">
+            <Link
+              href="/auth/reset-password"
+              className="block text-sm text-gray-600 hover:text-primary-600"
+            >
+              Forgot your password?
+            </Link>
             <Link
               href="/auth/register"
-              className="text-sm text-primary-600 hover:text-primary-700"
+              className="block text-sm text-primary-600 hover:text-primary-700"
             >
               Don&apos;t have an account? Register here
             </Link>

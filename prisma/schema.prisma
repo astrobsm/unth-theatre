@@ -251,6 +251,8 @@ model User {
   phoneNumber   String?
   department    String?
   staffCode     String?     @unique // Code for cleaners, porters, and other staff to log duties
+  resetToken    String?     // Password reset token
+  resetTokenExpiry DateTime? // Reset token expiration
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   approvedBy    String?

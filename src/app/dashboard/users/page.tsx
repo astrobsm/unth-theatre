@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, XCircle, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound } from 'lucide-react';
 
 interface User {
   id: string;
@@ -12,12 +12,17 @@ interface User {
   role: string;
   status: string;
   createdAt: string;
+  resetToken: string | null;
+  resetTokenExpiry: Date | null;
 }
 
 export default function UsersPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -66,6 +71,41 @@ export default function UsersPage() {
     } catch (error) {
       console.error('Failed to reject user:', error);
       alert('Failed to reject user');
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetUserId || !newPassword) return;
+
+    if (newPassword.length < 8) {
+      alert('Password must be at least 8 characters long');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const response = await fetch('/api/auth/reset-password/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: resetUserId, newPassword }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`Password reset successfully for user!\n\nNew password: ${newPassword}\n\nPlease share this with the user securely.`);
+        setResetUserId(null);
+        setNewPassword('');
+        fetchUsers();
+      } else {
+        alert(data.error || 'Failed to reset password');
+      }
+    } catch (error) {
+      console.error('Failed to reset password:', error);
+      alert('Failed to reset password');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -173,6 +213,9 @@ export default function UsersPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status
                 </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -208,6 +251,23 @@ export default function UsersPage() {
                         Rejected
                       </span>
                     )}
+                    {user.resetToken && (
+                      <span className="ml-2 px-2 py-1 rounded-full bg-orange-100 text-orange-800 text-xs">
+                        Reset Requested
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                    <button
+                      onClick={() => {
+                        setResetUserId(user.id);
+                        setNewPassword('');
+                      }}
+                      className="text-primary-600 hover:text-primary-900"
+                      title="Reset user password"
+                    >
+                      <KeyRound className="w-5 h-5 inline" /> Reset Password
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -215,6 +275,51 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {/* Password Reset Modal */}
+      {resetUserId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold mb-4">Reset User Password</h3>
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="label">New Password</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Enter new password (min 8 characters)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This password will be shown once. Make sure to share it securely with the user.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="btn-primary flex-1 disabled:opacity-50"
+                >
+                  {resetLoading ? 'Resetting...' : 'Reset Password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetUserId(null);
+                    setNewPassword('');
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
