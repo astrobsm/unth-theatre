@@ -47,23 +47,32 @@ export default function SurgeriesPage() {
       const response = await fetch('/api/surgeries');
       if (response.ok) {
         const data = await response.json();
-        setSurgeries(data);
+        if (Array.isArray(data)) {
+          setSurgeries(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setSurgeries([]);
+        }
+      } else {
+        console.error('Failed to fetch surgeries:', response.status);
+        setSurgeries([]);
       }
     } catch (error) {
       console.error('Failed to fetch surgeries:', error);
+      setSurgeries([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredSurgeries = surgeries.filter(surgery => {
+  const filteredSurgeries = Array.isArray(surgeries) ? surgeries.filter(surgery => {
     const matchesSearch = 
       surgery.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       surgery.patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       surgery.procedureName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || surgery.status === statusFilter;
     return matchesSearch && matchesStatus;
-  });
+  }) : [];
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -39,10 +39,19 @@ export default function UsersPage() {
       const response = await fetch('/api/users');
       if (response.ok) {
         const data = await response.json();
-        setUsers(data);
+        if (Array.isArray(data)) {
+          setUsers(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setUsers([]);
+        }
+      } else {
+        console.error('Failed to fetch users:', response.status);
+        setUsers([]);
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -151,8 +160,8 @@ export default function UsersPage() {
     );
   }
 
-  const pendingUsers = users.filter(u => u.status === 'PENDING');
-  const approvedUsers = users.filter(u => u.status === 'APPROVED');
+  const pendingUsers = Array.isArray(users) ? users.filter(u => u.status === 'PENDING') : [];
+  const approvedUsers = Array.isArray(users) ? users.filter(u => u.status === 'APPROVED') : [];
 
   return (
     <div className="space-y-6">
