@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -8,7 +8,25 @@ const registerSchema = z.object({
   email: z.string().email().optional().or(z.literal('')),
   password: z.string().min(6),
   fullName: z.string().min(2),
-  role: z.enum(['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'SCRUB_NURSE']),
+  role: z.enum([
+    'ADMIN',
+    'SYSTEM_ADMINISTRATOR',
+    'THEATRE_MANAGER',
+    'THEATRE_CHAIRMAN',
+    'SURGEON',
+    'ANAESTHETIST',
+    'NURSE_ANAESTHETIST',
+    'SCRUB_NURSE',
+    'CIRCULATING_NURSE',
+    'HOLDING_AREA_NURSE',
+    'RECOVERY_ROOM_NURSE',
+    'THEATRE_STORE_KEEPER',
+    'PORTER',
+    'ANAESTHETIC_TECHNICIAN',
+    'BIOMEDICAL_ENGINEER',
+    'CLEANER',
+    'THEATRE_COORDINATOR'
+  ]),
 });
 
 export async function POST(request: NextRequest) {
