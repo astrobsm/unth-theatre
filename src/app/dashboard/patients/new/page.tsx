@@ -258,31 +258,31 @@ export default function NewPatientPage() {
       
       // Medications Affecting Surgery
       onAnticoagulants: bleedingFactors.anticoagulants,
-      anticoagulantName: formData.get('anticoagulantName'),
-      anticoagulantLastDose: formData.get('anticoagulantLastDose'),
+      anticoagulantName: bleedingFactors.anticoagulants ? formData.get('anticoagulantName') || null : null,
+      anticoagulantLastDose: bleedingFactors.anticoagulants ? formData.get('anticoagulantLastDose') || null : null,
       onAntiplatelets: bleedingFactors.nsaids,
-      antiplateletName: formData.get('antiplateletName'),
-      antiplateletLastDose: formData.get('antiplateletLastDose'),
+      antiplateletName: bleedingFactors.nsaids ? formData.get('antiplateletName') || null : null,
+      antiplateletLastDose: bleedingFactors.nsaids ? formData.get('antiplateletLastDose') || null : null,
       onACEInhibitors: false,
       aceInhibitorName: null,
       aceInhibitorLastDose: null,
       onARBs: false,
       arbName: null,
       arbLastDose: null,
-      otherMedications: formData.get('otherMedications'),
+      otherMedications: formData.get('otherMedications') || null,
       
       // WHO Operative Fitness Risk Assessment
-      whoRiskClass: whoRiskClass,
+      whoRiskClass: whoRiskClass || null,
       asaScore: asaScore,
-      comorbidities: formData.get('comorbidities'),
-      cardiovascularStatus: formData.get('cardiovascularStatus'),
-      respiratoryStatus: formData.get('respiratoryStatus'),
-      metabolicStatus: formData.get('metabolicStatus'),
+      comorbidities: formData.get('comorbidities') || null,
+      cardiovascularStatus: formData.get('cardiovascularStatus') || null,
+      respiratoryStatus: formData.get('respiratoryStatus') || null,
+      metabolicStatus: formData.get('metabolicStatus') || null,
       
       // Final Assessment
       finalRiskScore: (dvtScore + bleedingScore + (23 - bradenScore)) / 3,
       fitnessForSurgery: formData.get('fitnessForSurgery'),
-      assessmentNotes: formData.get('assessmentNotes'),
+      assessmentNotes: formData.get('assessmentNotes') || null,
       assessedBy: formData.get('assessedBy'),
       assessmentDate: formData.get('assessmentDate') ? new Date(formData.get('assessmentDate') as string) : new Date(),
     };

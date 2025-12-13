@@ -10,7 +10,7 @@ const patientSchema = z.object({
   // Basic Information
   name: z.string().min(1),
   folderNumber: z.string().min(1),
-  ptNumber: z.string().optional(),
+  ptNumber: z.string().optional().nullable().transform(val => val || null),
   age: z.number().int().positive(),
   gender: z.string(),
   ward: z.string(),
@@ -22,7 +22,7 @@ const patientSchema = z.object({
   hasActiveCancer: z.boolean().optional(),
   hasPriorDVT: z.boolean().optional(),
   dDimerTestDone: z.boolean().optional(),
-  dDimerResult: z.string().optional().nullable(),
+  dDimerResult: z.string().optional().nullable().transform(val => val || null),
   dDimerValue: z.number().optional().nullable(),
   
   // Bleeding Risk Assessment
@@ -33,39 +33,39 @@ const patientSchema = z.object({
   recentBleeding: z.boolean().optional(),
   
   // Pressure Sore Risk
-  pressureSoreRisk: z.string().optional(),
+  pressureSoreRisk: z.string().optional().nullable().transform(val => val || null),
   hasPressureSores: z.boolean().optional(),
-  mobilityStatus: z.string().optional(),
-  nutritionalStatus: z.string().optional(),
+  mobilityStatus: z.string().optional().nullable().transform(val => val || null),
+  nutritionalStatus: z.string().optional().nullable().transform(val => val || null),
   
   // Medications Affecting Surgery
   onAnticoagulants: z.boolean().optional(),
-  anticoagulantName: z.string().optional().nullable(),
-  anticoagulantLastDose: z.string().optional().nullable(),
+  anticoagulantName: z.string().optional().nullable().transform(val => val || null),
+  anticoagulantLastDose: z.string().optional().nullable().transform(val => val || null),
   onAntiplatelets: z.boolean().optional(),
-  antiplateletName: z.string().optional().nullable(),
-  antiplateletLastDose: z.string().optional().nullable(),
+  antiplateletName: z.string().optional().nullable().transform(val => val || null),
+  antiplateletLastDose: z.string().optional().nullable().transform(val => val || null),
   onACEInhibitors: z.boolean().optional(),
-  aceInhibitorName: z.string().optional().nullable(),
-  aceInhibitorLastDose: z.string().optional().nullable(),
+  aceInhibitorName: z.string().optional().nullable().transform(val => val || null),
+  aceInhibitorLastDose: z.string().optional().nullable().transform(val => val || null),
   onARBs: z.boolean().optional(),
-  arbName: z.string().optional().nullable(),
-  arbLastDose: z.string().optional().nullable(),
-  otherMedications: z.string().optional(),
+  arbName: z.string().optional().nullable().transform(val => val || null),
+  arbLastDose: z.string().optional().nullable().transform(val => val || null),
+  otherMedications: z.string().optional().nullable().transform(val => val || null),
   
   // WHO Operative Fitness Risk Assessment
-  whoRiskClass: z.string().optional().nullable(),
+  whoRiskClass: z.string().optional().nullable().transform(val => val || null),
   asaScore: z.number().int().min(1).max(6).optional().nullable(),
-  comorbidities: z.string().optional(),
-  cardiovascularStatus: z.string().optional(),
-  respiratoryStatus: z.string().optional(),
-  metabolicStatus: z.string().optional(),
+  comorbidities: z.string().optional().nullable().transform(val => val || null),
+  cardiovascularStatus: z.string().optional().nullable().transform(val => val || null),
+  respiratoryStatus: z.string().optional().nullable().transform(val => val || null),
+  metabolicStatus: z.string().optional().nullable().transform(val => val || null),
   
   // Final Assessment
-  finalRiskScore: z.number().optional(),
-  fitnessForSurgery: z.string().optional(),
-  assessmentNotes: z.string().optional(),
-  assessedBy: z.string().optional(),
+  finalRiskScore: z.number().optional().nullable(),
+  fitnessForSurgery: z.string().optional().nullable().transform(val => val || null),
+  assessmentNotes: z.string().optional().nullable().transform(val => val || null),
+  assessedBy: z.string().optional().nullable().transform(val => val || null),
   assessmentDate: z.date().or(z.string().transform((str) => new Date(str))).optional(),
 });
 
