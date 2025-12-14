@@ -25,6 +25,7 @@ const allocationSchema = z.object({
   anaesthetistRegistrarId: z.string().uuid().optional().nullable(),
   cleanerId: z.string().uuid().optional().nullable(),
   porterId: z.string().uuid().optional().nullable(),
+  shift: z.enum(["MORNING", "CALL", "NIGHT"]).optional().nullable(),
 });
 
 export async function GET(request: NextRequest) {
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest) {
         anaesthetistRegistrarId: validatedData.anaesthetistRegistrarId || null,
         cleanerId: validatedData.cleanerId || null,
         porterId: validatedData.porterId || null,
+        shift: validatedData.shift || null,
       },
       include: {
         theatre: true,
