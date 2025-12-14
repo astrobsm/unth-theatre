@@ -90,7 +90,7 @@ export default function DashboardLayout({
     
     // 8. Resources & Management
     { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
-    { href: '/dashboard/roster', icon: Calendar, label: 'Duty Roster', badge: 'NEW' },
+    { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster', badge: 'NEW' },
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
