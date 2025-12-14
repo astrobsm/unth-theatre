@@ -23,9 +23,9 @@ export async function GET(request: NextRequest) {
 
     const alerts = await prisma.equipmentFaultAlert.findMany({
       where: {
-        ...(status && { status }),
+        ...(status && { status: status as any }),
         ...(severity && { severity }),
-        ...(priority && { priority }),
+        ...(priority && { priority: priority as any }),
       },
       include: {
         checkout: {
