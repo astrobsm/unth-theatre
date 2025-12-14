@@ -1459,7 +1459,7 @@ model IntraOperativeRecord {
   anesthesiaNotes           String?
   
   // Surgical Team
-  primarySurgeonId          String
+  primarySurgeonId          String?
   assistantSurgeonIds       String?     // JSON array of IDs
   scrubNurseId              String?
   circulatingNurseId        String?
