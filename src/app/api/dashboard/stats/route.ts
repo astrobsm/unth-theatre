@@ -20,7 +20,6 @@ export async function GET() {
       totalSurgeries,
       scheduledSurgeries,
       totalPatients,
-      lowStockItems,
       todaySurgeries,
     ] = await Promise.all([
       prisma.surgery.count(),
@@ -28,13 +27,6 @@ export async function GET() {
         where: { status: 'SCHEDULED' }
       }),
       prisma.patient.count(),
-      prisma.inventoryItem.count({
-        where: {
-          quantity: {
-            lte: prisma.inventoryItem.fields.reorderLevel
-          }
-        }
-      }),
       prisma.surgery.count({
         where: {
           scheduledDate: {
@@ -44,6 +36,16 @@ export async function GET() {
         }
       }),
     ]);
+
+    // Get low stock items separately with proper query
+    const inventoryItems = await prisma.inventoryItem.findMany({
+      select: {
+        id: true,
+        quantity: true,
+        reorderLevel: true,
+      }
+    });
+    const lowStockItems = inventoryItems.filter(item => item.quantity <= item.reorderLevel).length;
 
     return NextResponse.json({
       totalSurgeries,
