@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Organize staff by category
-    const staffSuggestions = {
+    const staffSuggestions: Record<string, string | null> = {
       scrubNurse: null,
       circulatingNurse: null,
       anaestheticTechnician: null,
