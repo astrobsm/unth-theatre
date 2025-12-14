@@ -4,6 +4,28 @@ import { hasPermission, UserRole } from './permissions';
 import { NextResponse } from 'next/server';
 
 /**
+ * CORS headers for all API responses
+ */
+export function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version, X-CSRF-Token',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
+
+/**
+ * Handle OPTIONS preflight requests
+ */
+export function handleCorsPreFlight() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders(),
+  });
+}
+
+/**
  * Verify user has required permissions for API route
  */
 export async function requirePermission(
