@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { THEATRES } from '@/lib/constants';
 
 interface Roster {
   id: string;

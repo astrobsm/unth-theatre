@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator } from 'lucide-react';
 import Link from 'next/link';
+import { WARDS } from '@/lib/constants';
 
 // Comprehensive Risk Assessment Calculators
 
@@ -405,11 +406,9 @@ export default function NewPatientPage() {
               <label className="label">Ward *</label>
               <select name="ward" required className="input-field">
                 <option value="">Select Ward</option>
-                <option value="Ward 1">Ward 1</option>
-                <option value="Ward 2">Ward 2</option>
-                <option value="ICU">ICU</option>
-                <option value="Surgical Emergency">Surgical Emergency</option>
-                <option value="Medical Emergency">Medical Emergency</option>
+                {WARDS.map((ward) => (
+                  <option key={ward} value={ward}>{ward}</option>
+                ))}
               </select>
             </div>
           </div>

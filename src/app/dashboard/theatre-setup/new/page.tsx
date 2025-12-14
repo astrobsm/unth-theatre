@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { THEATRES } from '@/lib/constants';
 import {
   Package,
   MapPin,
@@ -391,9 +392,9 @@ export default function NewTheatreSetupPage() {
                 className="input-field"
               >
                 <option value="">Select a theatre</option>
-                {theatres.map((theatre) => (
-                  <option key={theatre.id} value={theatre.id}>
-                    {theatre.name} - {theatre.location}
+                {THEATRES.map((theatre) => (
+                  <option key={theatre} value={theatre}>
+                    {theatre}
                   </option>
                 ))}
               </select>

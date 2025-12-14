@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { THEATRES } from '@/lib/constants';
 
 interface TheatreStatus {
   theatreId: string;

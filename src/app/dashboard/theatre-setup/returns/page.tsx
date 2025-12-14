@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Package, TrendingDown, AlertCircle, Loader } from 'lucide-react';
+import { THEATRES } from '@/lib/constants';
 
 interface TheatreSetup {
   id: string;

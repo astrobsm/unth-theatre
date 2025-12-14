@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Plus, Loader } from 'lucide-react';
+import { THEATRES } from '@/lib/constants';
 
 interface Theatre {
   id: string;
@@ -86,9 +87,9 @@ export default function ExtraRequestsPage() {
                 className="input-field"
               >
                 <option value="">Select theatre</option>
-                {theatres.map((theatre) => (
-                  <option key={theatre.id} value={theatre.id}>
-                    {theatre.name} - {theatre.location}
+                {THEATRES.map((theatre) => (
+                  <option key={theatre} value={theatre}>
+                    {theatre}
                   </option>
                 ))}
               </select>

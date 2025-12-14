@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { THEATRES } from '@/lib/constants';
 
 interface Theatre {
   id: string;
@@ -290,9 +291,9 @@ export default function AnesthesiaSetupPage() {
                 onChange={(e) => setSelectedTheatre(e.target.value)}
               >
                 <option value="">-- Select Theatre --</option>
-                {theatres.map((theatre) => (
-                  <option key={theatre.id} value={theatre.id}>
-                    {theatre.name}
+                {THEATRES.map((theatre) => (
+                  <option key={theatre} value={theatre}>
+                    {theatre}
                   </option>
                 ))}
               </select>
