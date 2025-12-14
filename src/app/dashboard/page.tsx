@@ -51,7 +51,15 @@ export default function DashboardPage() {
       const response = await fetch('/api/dashboard/stats');
       if (response.ok) {
         const data = await response.json();
-        setStats(data);
+        // Validate that we got a proper stats object, not an error
+        if (data && typeof data === 'object' && !data.error && typeof data.totalSurgeries === 'number') {
+          setStats(data);
+        } else {
+          console.error('Invalid dashboard stats response:', data);
+          // Keep default stats (zeros) if response is invalid
+        }
+      } else {
+        console.error('Failed to fetch dashboard stats, status:', response.status);
       }
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
