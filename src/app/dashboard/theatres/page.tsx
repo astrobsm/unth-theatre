@@ -53,6 +53,8 @@ export default function TheatresPage() {
   const [showAddAllocation, setShowAddAllocation] = useState(false);
   const [selectedTheatre, setSelectedTheatre] = useState<string>('');
   const [allocationType, setAllocationType] = useState<string>('SURGERY');
+  const [selectedShift, setSelectedShift] = useState<string>('MORNING');
+  const [autofilledStaff, setAutofilledStaff] = useState<any>(null);
   
   // Staff lists
   const [scrubNurses, setScrubNurses] = useState<User[]>([]);
@@ -147,6 +149,33 @@ export default function TheatresPage() {
     }
   };
 
+  const fetchRosterSuggestions = async (theatreId: string, date: string, shift: string) => {
+    try {
+      const response = await fetch(`/api/roster/autofill?theatreId=${theatreId}&date=${date}&shift=${shift}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAutofilledStaff(data.staffSuggestions);
+        
+        // Auto-fill the form if we have staff suggestions
+        if (data.staffSuggestions) {
+          setTimeout(() => {
+            Object.keys(data.staffSuggestions).forEach((key) => {
+              const value = data.staffSuggestions[key];
+              if (value) {
+                const element = document.querySelector(`[name="${key}Id"]`) as HTMLSelectElement;
+                if (element) {
+                  element.value = value;
+                }
+              }
+            });
+          }, 100);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch roster suggestions:', error);
+    }
+  };
+
   const handleAddTheatre = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -193,6 +222,7 @@ export default function TheatresPage() {
     const allocationData: any = {
       theatreId: formData.get('theatreId'),
       allocationType: formData.get('allocationType'),
+      shift: formData.get('shift'),
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       date: new Date(selectedDate).toISOString(),
@@ -507,13 +537,24 @@ export default function TheatresPage() {
 
       {/* Add Allocation Modal */}
       {showAddAllocation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Add Theatre Allocation</h2>
-            <form onSubmit={handleAddAllocation} className="space-y-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div className="sticky top-0 bg-white z-10 px-6 pt-6 pb-4 border-b">
+              <h2 className="text-2xl font-bold">Add Theatre Allocation</h2>
+            </div>
+            <form onSubmit={handleAddAllocation} className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
               <div>
                 <label className="label">Theatre Suite</label>
-                <select name="theatreId" required className="input-field">
+                <select 
+                  name="theatreId" 
+                  required 
+                  className="input-field"
+                  onChange={(e) => {
+                    if (e.target.value && selectedDate && selectedShift) {
+                      fetchRosterSuggestions(e.target.value, selectedDate, selectedShift);
+                    }
+                  }}
+                >
                   <option value="">Select Theatre</option>
                   {theatres.map((theatre) => (
                     <option key={theatre.id} value={theatre.id}>
@@ -522,6 +563,28 @@ export default function TheatresPage() {
                   ))}
                 </select>
               </div>
+              
+              <div>
+                <label className="label">Shift *</label>
+                <select 
+                  name="shift" 
+                  required 
+                  className="input-field"
+                  value={selectedShift}
+                  onChange={(e) => {
+                    setSelectedShift(e.target.value);
+                    const theatreSelect = document.querySelector('[name="theatreId"]') as HTMLSelectElement;
+                    if (theatreSelect?.value && selectedDate) {
+                      fetchRosterSuggestions(theatreSelect.value, selectedDate, e.target.value);
+                    }
+                  }}
+                >
+                  <option value="MORNING">Morning</option>
+                  <option value="CALL">Call</option>
+                  <option value="NIGHT">Night</option>
+                </select>
+              </div>
+              
               <div>
                 <label className="label">Allocation Type</label>
                 <select 
@@ -650,9 +713,16 @@ export default function TheatresPage() {
 
               {/* Staff Assignments Section */}
               <div className="border-t pt-4 mt-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Staff Assignments</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                  Staff Assignments
+                  {autofilledStaff && (
+                    <span className="ml-2 text-sm text-green-600 font-normal">
+                      (Auto-filled from roster)
+                    </span>
+                  )}
+                </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
                   {/* Scrub Nurse */}
                   <div>
                     <label className="label">Scrub Nurse</label>
@@ -772,19 +842,23 @@ export default function TheatresPage() {
                 <label className="label">Notes</label>
                 <textarea name="notes" className="input-field" rows={2} />
               </div>
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowAddAllocation(false)}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  Add Allocation
-                </button>
-              </div>
             </form>
+            <div className="sticky bottom-0 bg-white z-10 px-6 py-4 border-t flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAddAllocation(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                form="allocation-form"
+                className="btn-primary"
+              >
+                Add Allocation
+              </button>
+            </div>
           </div>
         </div>
       )}
