@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const surgerySchema = z.object({
   patientId: z.string(),
-  surgeonId: z.string(),
+  surgeonName: z.string(),
   unit: z.string(),
   subspecialty: z.string(),
   indication: z.string(),
@@ -19,7 +19,7 @@ const surgerySchema = z.object({
   needMontrellMattress: z.boolean().default(false),
   otherSpecialNeeds: z.string().optional(),
   teamMembers: z.array(z.object({
-    userId: z.string(),
+    name: z.string(),
     role: z.enum(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER']),
   })).optional(),
 });
@@ -89,11 +89,14 @@ export async function POST(request: NextRequest) {
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
+        surgeonName: validatedData.surgeonName,
+        surgeonId: null, // No user ID when entering name directly
         scheduledDate: new Date(validatedData.scheduledDate),
         // Create team members if provided
         teamMembers: teamMembers && teamMembers.length > 0 ? {
           create: teamMembers.map(tm => ({
-            userId: tm.userId,
+            memberName: tm.name,
+            userId: null, // No user ID when entering name directly
             role: tm.role,
           }))
         } : undefined,

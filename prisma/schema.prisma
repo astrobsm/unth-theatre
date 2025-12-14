@@ -496,7 +496,8 @@ model Patient {
 model Surgery {
   id                    String                  @id @default(uuid())
   patientId             String
-  surgeonId             String
+  surgeonId             String?
+  surgeonName           String?                 // Direct entry of surgeon name
   assistantSurgeonId    String?
   anesthetistId         String?
   scrubNurseId          String?
@@ -544,7 +545,7 @@ model Surgery {
   
   // Relations
   patient               Patient                 @relation(fields: [patientId], references: [id])
-  surgeon               User                    @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])
+  surgeon               User?                   @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])
   assistantSurgeon      User?                   @relation("AssistantSurgeries", fields: [assistantSurgeonId], references: [id])
   anesthetist           User?                   @relation("AnesthetistSurgeries", fields: [anesthetistId], references: [id])
   items                 SurgeryItem[]
@@ -569,14 +570,15 @@ model Surgery {
 model SurgicalTeamMember {
   id            String            @id @default(uuid())
   surgeryId     String
-  userId        String
+  userId        String?
+  memberName    String?           // Direct entry of team member name
   role          SurgicalTeamRole
   specialNotes  String?
   createdAt     DateTime          @default(now())
   
   // Relations
   surgery       Surgery           @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
-  user          User              @relation("TeamMemberSurgeries", fields: [userId], references: [id])
+  user          User?             @relation("TeamMemberSurgeries", fields: [userId], references: [id])
   
   @@map("surgical_team_members")
 }

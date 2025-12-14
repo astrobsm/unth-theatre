@@ -21,7 +21,7 @@ interface Surgeon {
 }
 
 interface TeamMember {
-  userId: string;
+  name: string;
   role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER';
 }
 
@@ -72,7 +72,7 @@ export default function NewSurgeryPage() {
     
     const data = {
       patientId: formData.get('patientId'),
-      surgeonId: formData.get('surgeonId'),
+      surgeonName: formData.get('surgeonName'),
       unit: formData.get('unit'),
       subspecialty: formData.get('subspecialty'),
       indication: formData.get('indication'),
@@ -84,7 +84,7 @@ export default function NewSurgeryPage() {
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
       otherSpecialNeeds: formData.get('otherSpecialNeeds'),
-      teamMembers: teamMembers.filter(tm => tm.userId !== ''), // Only send team members with selected users
+      teamMembers: teamMembers.filter(tm => tm.name.trim() !== ''), // Only send team members with names
     };
 
     try {
@@ -108,16 +108,16 @@ export default function NewSurgeryPage() {
   };
 
   const addTeamMember = (role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER') => {
-    setTeamMembers([...teamMembers, { userId: '', role }]);
+    setTeamMembers([...teamMembers, { name: '', role }]);
   };
 
   const removeTeamMember = (index: number) => {
     setTeamMembers(teamMembers.filter((_, i) => i !== index));
   };
 
-  const updateTeamMember = (index: number, userId: string) => {
+  const updateTeamMember = (index: number, name: string) => {
     const updated = [...teamMembers];
-    updated[index].userId = userId;
+    updated[index].name = name;
     setTeamMembers(updated);
   };
 
@@ -191,31 +191,37 @@ export default function NewSurgeryPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="label">Surgeon *</label>
-              <select name="surgeonId" required className="input-field">
-                <option value="">Select Surgeon</option>
-                {surgeons.map((surgeon) => (
-                  <option key={surgeon.id} value={surgeon.id}>
-                    {surgeon.fullName}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                name="surgeonName"
+                required
+                className="input-field"
+                placeholder="Enter surgeon name"
+              />
             </div>
 
             <div>
               <label className="label">Surgical Unit *</label>
-              <select name="unit" required className="input-field">
-                <option value="">Select Unit</option>
-                <option value="General Surgery">General Surgery</option>
-                <option value="Orthopedics">Orthopedics</option>
-                <option value="Neurosurgery">Neurosurgery</option>
-                <option value="Cardiothoracic">Cardiothoracic</option>
-                <option value="Urology">Urology</option>
-                <option value="Gynecology">Gynecology</option>
-                <option value="ENT">ENT</option>
-                <option value="Ophthalmology">Ophthalmology</option>
-                <option value="Plastic Surgery">Plastic Surgery</option>
-                <option value="Pediatric Surgery">Pediatric Surgery</option>
-              </select>
+              <input
+                type="text"
+                name="unit"
+                required
+                className="input-field"
+                placeholder="e.g., General Surgery, Orthopedics"
+                list="unit-suggestions"
+              />
+              <datalist id="unit-suggestions">
+                <option value="General Surgery" />
+                <option value="Orthopedics" />
+                <option value="Neurosurgery" />
+                <option value="Cardiothoracic" />
+                <option value="Urology" />
+                <option value="Gynecology" />
+                <option value="ENT" />
+                <option value="Ophthalmology" />
+                <option value="Plastic Surgery" />
+                <option value="Pediatric Surgery" />
+              </datalist>
             </div>
 
             <div>
@@ -368,18 +374,13 @@ export default function NewSurgeryPage() {
                   {teamMembers.map((member, index) => 
                     member.role === 'CONSULTANT' ? (
                       <div key={index} className="flex gap-2">
-                        <select
-                          value={member.userId}
+                        <input
+                          type="text"
+                          value={member.name}
                           onChange={(e) => updateTeamMember(index, e.target.value)}
                           className="input-field flex-1"
-                        >
-                          <option value="">Select Consultant</option>
-                          {surgeons.map((surgeon) => (
-                            <option key={surgeon.id} value={surgeon.id}>
-                              {surgeon.fullName}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Enter consultant name"
+                        />
                         <button
                           type="button"
                           onClick={() => removeTeamMember(index)}
@@ -414,18 +415,13 @@ export default function NewSurgeryPage() {
                   {teamMembers.map((member, index) => 
                     member.role === 'SENIOR_REGISTRAR' ? (
                       <div key={index} className="flex gap-2">
-                        <select
-                          value={member.userId}
+                        <input
+                          type="text"
+                          value={member.name}
                           onChange={(e) => updateTeamMember(index, e.target.value)}
                           className="input-field flex-1"
-                        >
-                          <option value="">Select Senior Registrar</option>
-                          {surgeons.map((surgeon) => (
-                            <option key={surgeon.id} value={surgeon.id}>
-                              {surgeon.fullName}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Enter senior registrar name"
+                        />
                         <button
                           type="button"
                           onClick={() => removeTeamMember(index)}
@@ -460,18 +456,13 @@ export default function NewSurgeryPage() {
                   {teamMembers.map((member, index) => 
                     member.role === 'REGISTRAR' ? (
                       <div key={index} className="flex gap-2">
-                        <select
-                          value={member.userId}
+                        <input
+                          type="text"
+                          value={member.name}
                           onChange={(e) => updateTeamMember(index, e.target.value)}
                           className="input-field flex-1"
-                        >
-                          <option value="">Select Registrar</option>
-                          {surgeons.map((surgeon) => (
-                            <option key={surgeon.id} value={surgeon.id}>
-                              {surgeon.fullName}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Enter registrar name"
+                        />
                         <button
                           type="button"
                           onClick={() => removeTeamMember(index)}
@@ -506,18 +497,13 @@ export default function NewSurgeryPage() {
                   {teamMembers.map((member, index) => 
                     member.role === 'HOUSE_OFFICER' ? (
                       <div key={index} className="flex gap-2">
-                        <select
-                          value={member.userId}
+                        <input
+                          type="text"
+                          value={member.name}
                           onChange={(e) => updateTeamMember(index, e.target.value)}
                           className="input-field flex-1"
-                        >
-                          <option value="">Select House Officer</option>
-                          {surgeons.map((surgeon) => (
-                            <option key={surgeon.id} value={surgeon.id}>
-                              {surgeon.fullName}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Enter house officer name"
+                        />
                         <button
                           type="button"
                           onClick={() => removeTeamMember(index)}
