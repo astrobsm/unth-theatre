@@ -219,6 +219,20 @@ enum TheatreSuiteStatus {
   RESERVED
 }
 
+enum DutyShift {
+  MORNING
+  CALL
+  NIGHT
+}
+
+enum StaffCategory {
+  NURSES
+  ANAESTHETISTS
+  PORTERS
+  CLEANERS
+  ANAESTHETIC_TECHNICIANS
+}
+
 enum AllocationType {
   SURGERY
   MAINTENANCE
@@ -287,8 +301,28 @@ model User {
   transportLogs PatientTransportLog[]
   dutyLogs      StaffDutyLog[]
   technicianSetupLogs AnesthesiaSetupLog[] @relation("TechnicianSetupLogs")
+  rosterAssignments Roster[]
   
   @@map("users")
+}
+
+model Roster {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staffName        String        // Name from Excel upload
+  staffCategory    StaffCategory // NURSES, ANAESTHETISTS, PORTERS, CLEANERS, ANAESTHETIC_TECHNICIANS
+  date             DateTime      @db.Date
+  theatreId        String?
+  theatre          TheatreSuite? @relation(fields: [theatreId], references: [id], onDelete: SetNull)
+  shift            DutyShift     // MORNING, CALL, NIGHT
+  uploadedBy       String
+  uploadedAt       DateTime      @default(now())
+  notes            String?       @db.Text
+
+  @@index([date, theatreId, shift])
+  @@index([staffCategory, date])
+  @@map("rosters")
 }
 
 model InventoryItem {
@@ -764,6 +798,7 @@ model TheatreSuite {
   assignedEquipment Equipment[]
   cleaningLogs  TheatreCleaningLog[]
   setupLogs     AnesthesiaSetupLog[] @relation("TheatreSetupLogs")
+  rosters       Roster[]
   
   @@map("theatre_suites")
 }
@@ -793,6 +828,7 @@ model TheatreAllocation {
   anaesthetistRegistrarId String?
   cleanerId             String?
   porterId              String?
+  shift                 DutyShift? // MORNING, CALL, NIGHT
   
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
