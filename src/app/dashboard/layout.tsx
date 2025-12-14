@@ -97,8 +97,8 @@ export default function DashboardLayout({
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
 
-  // Add equipment checkout for anaesthetic technicians
-  if (session.user.role === 'ANAESTHETIC_TECHNICIAN') {
+  // Add equipment checkout for anaesthetic technicians and admins
+  if (session.user.role === 'ANAESTHETIC_TECHNICIAN' || session.user.role === 'ADMIN') {
     menuItems.splice(8, 0, { 
       href: '/dashboard/equipment-checkout', 
       icon: PackageCheck, 
@@ -107,8 +107,8 @@ export default function DashboardLayout({
     });
   }
 
-  // Add fault alerts for managers and chairmen
-  if (session.user.role === 'THEATRE_MANAGER' || session.user.role === 'THEATRE_CHAIRMAN') {
+  // Add fault alerts for managers, chairmen, and admins
+  if (session.user.role === 'THEATRE_MANAGER' || session.user.role === 'THEATRE_CHAIRMAN' || session.user.role === 'ADMIN') {
     menuItems.splice(14, 0, { 
       href: '/dashboard/fault-alerts', 
       icon: AlertOctagon, 

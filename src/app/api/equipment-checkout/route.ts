@@ -70,10 +70,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only anaesthetic technicians can checkout equipment
-    if (session.user.role !== 'ANAESTHETIC_TECHNICIAN') {
+    // Only anaesthetic technicians and admins can checkout equipment
+    if (session.user.role !== 'ANAESTHETIC_TECHNICIAN' && session.user.role !== 'ADMIN') {
       return NextResponse.json(
-        { error: 'Only anaesthetic technicians can checkout equipment' },
+        { error: 'Only anaesthetic technicians and admins can checkout equipment' },
         { status: 403 }
       );
     }
