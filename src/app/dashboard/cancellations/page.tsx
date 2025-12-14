@@ -40,7 +40,12 @@ export default function CancellationsPage() {
       const response = await fetch('/api/cancellations');
       if (response.ok) {
         const data = await response.json();
-        setCancellations(data);
+        if (Array.isArray(data)) {
+          setCancellations(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setCancellations([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch cancellations:', error);
@@ -82,12 +87,12 @@ export default function CancellationsPage() {
     'OTHER',
   ];
 
-  const filteredCancellations = cancellations.filter(
+  const filteredCancellations = Array.isArray(cancellations) ? cancellations.filter(
     (c) => !categoryFilter || c.category === categoryFilter
-  );
+  ) : [];
 
   const categoryCounts = categories.reduce((acc, cat) => {
-    acc[cat] = cancellations.filter((c) => c.category === cat).length;
+    acc[cat] = Array.isArray(cancellations) ? cancellations.filter((c) => c.category === cat).length : 0;
     return acc;
   }, {} as Record<string, number>);
 

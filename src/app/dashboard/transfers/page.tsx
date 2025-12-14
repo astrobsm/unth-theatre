@@ -34,7 +34,12 @@ export default function TransfersPage() {
       const response = await fetch('/api/transfers');
       if (response.ok) {
         const data = await response.json();
-        setTransfers(data);
+        if (Array.isArray(data)) {
+          setTransfers(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setTransfers([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch transfers:', error);
@@ -73,7 +78,7 @@ export default function TransfersPage() {
     }).format(date);
   };
 
-  const filteredTransfers = transfers.filter((transfer) => {
+  const filteredTransfers = Array.isArray(transfers) ? transfers.filter((transfer) => {
     const matchesLocation = !filterLocation || 
       transfer.fromLocation === filterLocation || 
       transfer.toLocation === filterLocation;
@@ -81,7 +86,7 @@ export default function TransfersPage() {
       transfer.patient.name.toLowerCase().includes(filterPatient.toLowerCase()) ||
       transfer.patient.folderNumber.toLowerCase().includes(filterPatient.toLowerCase());
     return matchesLocation && matchesPatient;
-  });
+  }) : [];
 
   return (
     <div className="space-y-6">

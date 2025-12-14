@@ -43,7 +43,12 @@ export default function MortalityPage() {
       const response = await fetch('/api/mortality');
       if (response.ok) {
         const data = await response.json();
-        setMortalities(data);
+        if (Array.isArray(data)) {
+          setMortalities(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setMortalities([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch mortalities:', error);
@@ -82,16 +87,16 @@ export default function MortalityPage() {
     }).format(date);
   };
 
-  const filteredMortalities = mortalities.filter((m) => {
+  const filteredMortalities = Array.isArray(mortalities) ? mortalities.filter((m) => {
     return !filterLocation || m.location === filterLocation;
-  });
+  }) : [];
 
   const stats = {
-    total: mortalities.length,
-    preoperative: mortalities.filter((m) => m.location === 'PREOPERATIVE').length,
-    intraoperative: mortalities.filter((m) => m.location === 'INTRAOPERATIVE').length,
-    postoperative: mortalities.filter((m) => m.location.startsWith('POSTOPERATIVE')).length,
-    audited: mortalities.filter((m) => m.audits.length > 0).length,
+    total: Array.isArray(mortalities) ? mortalities.length : 0,
+    preoperative: Array.isArray(mortalities) ? mortalities.filter((m) => m.location === 'PREOPERATIVE').length : 0,
+    intraoperative: Array.isArray(mortalities) ? mortalities.filter((m) => m.location === 'INTRAOPERATIVE').length : 0,
+    postoperative: Array.isArray(mortalities) ? mortalities.filter((m) => m.location.startsWith('POSTOPERATIVE')).length : 0,
+    audited: Array.isArray(mortalities) ? mortalities.filter((m) => m.audits.length > 0).length : 0,
   };
 
   return (

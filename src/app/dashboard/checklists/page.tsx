@@ -38,7 +38,12 @@ export default function ChecklistsPage() {
       const response = await fetch('/api/checklists');
       if (response.ok) {
         const data = await response.json();
-        setChecklists(data);
+        if (Array.isArray(data)) {
+          setChecklists(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setChecklists([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch checklists:', error);
@@ -81,18 +86,18 @@ export default function ChecklistsPage() {
     });
   };
 
-  const filteredChecklists = checklists.filter((c) => {
+  const filteredChecklists = Array.isArray(checklists) ? checklists.filter((c) => {
     if (statusFilter === 'all') return true;
     const status = getChecklistStatus(c);
     if (statusFilter === 'completed') return status.label === 'Completed';
     if (statusFilter === 'pending') return status.label !== 'Completed';
     return true;
-  });
+  }) : [];
 
-  const totalChecklists = checklists.length;
-  const completedChecklists = checklists.filter(
+  const totalChecklists = Array.isArray(checklists) ? checklists.length : 0;
+  const completedChecklists = Array.isArray(checklists) ? checklists.filter(
     (c) => c.signInCompleted && c.timeOutCompleted && c.signOutCompleted
-  ).length;
+  ).length : 0;
   const pendingChecklists = totalChecklists - completedChecklists;
 
   return (

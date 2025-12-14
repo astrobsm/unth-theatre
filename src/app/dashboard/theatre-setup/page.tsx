@@ -346,21 +346,21 @@ export default function TheatreSetupPage() {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const filteredSetups = setups.filter((setup) => {
+  const filteredSetups = Array.isArray(setups) ? setups.filter((setup) => {
     const statusMatch = statusFilter === 'all' || setup.status === statusFilter;
     const dateMatch = !dateFilter || setup.setupDate.startsWith(dateFilter);
     return statusMatch && dateMatch;
-  });
+  }) : [];
 
-  const todaySetups = setups.filter(
+  const todaySetups = Array.isArray(setups) ? setups.filter(
     (s) => s.setupDate === new Date().toISOString().split('T')[0]
-  ).length;
+  ).length : 0;
 
-  const collectedToday = setups.filter(
+  const collectedToday = Array.isArray(setups) ? setups.filter(
     (s) =>
       s.setupDate === new Date().toISOString().split('T')[0] &&
       s.status === 'COLLECTED'
-  ).length;
+  ).length : 0;
 
   return (
     <div className="space-y-6">

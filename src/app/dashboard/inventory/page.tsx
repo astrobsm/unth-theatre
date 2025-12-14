@@ -28,7 +28,12 @@ export default function InventoryPage() {
       const response = await fetch('/api/inventory');
       if (response.ok) {
         const data = await response.json();
-        setItems(data);
+        if (Array.isArray(data)) {
+          setItems(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setItems([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch inventory:', error);
@@ -37,13 +42,13 @@ export default function InventoryPage() {
     }
   };
 
-  const filteredItems = items.filter(item => {
+  const filteredItems = Array.isArray(items) ? items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filter === 'ALL' || item.category === filter;
     return matchesSearch && matchesFilter;
-  });
+  }) : [];
 
-  const lowStockItems = items.filter(item => item.quantity <= item.reorderLevel);
+  const lowStockItems = Array.isArray(items) ? items.filter(item => item.quantity <= item.reorderLevel) : [];
 
   return (
     <div className="space-y-6">
