@@ -89,9 +89,22 @@ export async function POST(
 
     // Create RED ALERTS for faulty equipment
     if (faultyItems.length > 0) {
+      // Get theatre manager and chairman to set notification flags
+      const managers = await prisma.user.findMany({
+        where: {
+          role: {
+            in: ['THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
+          },
+          status: 'APPROVED',
+        },
+      });
+
+      const hasManager = managers.some(m => m.role === 'THEATRE_MANAGER');
+      const hasChairman = managers.some(m => m.role === 'THEATRE_CHAIRMAN');
+
       for (const faultyItem of faultyItems) {
-        // Create fault alert
-        const alert = await prisma.equipmentFaultAlert.create({
+        // Create fault alert (managers will see this in Fault Alerts dashboard)
+        await prisma.equipmentFaultAlert.create({
           data: {
             checkoutId: id,
             itemName: faultyItem.itemName,
@@ -105,50 +118,8 @@ export async function POST(
             status: 'REPORTED',
             priority: faultyItem.severity === 'CRITICAL' ? 'CRITICAL' : 'HIGH',
             requiresImmediateAction: true,
-          },
-        });
-
-        // Get theatre manager and chairman
-        const managers = await prisma.user.findMany({
-          where: {
-            role: {
-              in: ['THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
-            },
-            status: 'APPROVED',
-          },
-        });
-
-        // Create notifications for managers and chairman
-        const notificationRecipients: string[] = [];
-        for (const manager of managers) {
-          await prisma.notification.create({
-            data: {
-              userId: manager.id,
-              type: 'RED_ALERT',
-              title: `🚨 FAULTY EQUIPMENT ALERT`,
-              message: `URGENT: ${faultyItem.itemName} returned FAULTY from ${checkout.theatreId}. 
-Severity: ${faultyItem.severity}
-Reported by: ${checkout.technicianName}
-Shift: ${checkout.shift}
-Fault: ${faultyItem.faultDescription}`,
-              priority: 'URGENT',
-              category: 'EQUIPMENT_FAULT',
-              isRead: false,
-            },
-          });
-          notificationRecipients.push(manager.fullName);
-        }
-
-        // Update alert with notification info
-        await prisma.equipmentFaultAlert.update({
-          where: { id: alert.id },
-          data: {
-            managerNotified: true,
-            chairmanNotified: managers.some(m => m.role === 'THEATRE_CHAIRMAN'),
-            notificationsSent: JSON.stringify({
-              recipients: notificationRecipients,
-              sentAt: new Date().toISOString(),
-            }),
+            managerNotified: hasManager,
+            chairmanNotified: hasChairman,
           },
         });
       }
