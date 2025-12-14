@@ -11,6 +11,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPasswordValue, setNewPasswordValue] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [userId, setUserId] = useState('');
   
   // Quick duty logging states
   const [showDutyPanel, setShowDutyPanel] = useState(false);
@@ -33,49 +37,105 @@ export default function LoginPage() {
 
       if (result?.error) {
         setError(result.error);
-      } else {
-        // Fetch user session to get role
-        const response = await fetch('/api/auth/session');
-        if (response.ok) {
-          const session = await response.json();
-          const userRole = session?.user?.role;
+        setLoading(false);
+        return;
+      }
 
-          // Role-based navigation
-          switch (userRole) {
-            case 'ANAESTHETIST':
-            case 'NURSE_ANAESTHETIST':
-              router.push('/dashboard/surgeries'); // Anesthetists go directly to surgeries
-              break;
-            case 'SCRUB_NURSE':
-            case 'CIRCULATING_NURSE':
-              router.push('/dashboard/surgeries'); // Nurses go directly to surgeries
-              break;
-            case 'SURGEON':
-              router.push('/dashboard/surgeries'); // Surgeons go to their surgeries
-              break;
-            case 'THEATRE_STORE_KEEPER':
-              router.push('/dashboard/inventory'); // Store keepers go to inventory
-              break;
-            case 'HOLDING_AREA_NURSE':
-              router.push('/dashboard/holding-area'); // Holding area nurses
-              break;
-            case 'RECOVERY_ROOM_NURSE':
-              router.push('/dashboard/pacu'); // Recovery room nurses go to PACU
-              break;
-            case 'THEATRE_MANAGER':
-            case 'THEATRE_CHAIRMAN':
-            case 'ADMIN':
-              router.push('/dashboard'); // Managers/admins go to main dashboard
-              break;
-            default:
-              router.push('/dashboard'); // Default to main dashboard
+      // Fetch user session to check if password change is required
+      const sessionResponse = await fetch('/api/auth/session');
+      if (sessionResponse.ok) {
+        const session = await sessionResponse.json();
+        
+        // Check if user must change password
+        const userCheckResponse = await fetch(`/api/users/check-first-login`);
+        if (userCheckResponse.ok) {
+          const userData = await userCheckResponse.json();
+          
+          if (userData.mustChangePassword || userData.isFirstLogin) {
+            setUserId(userData.id);
+            setShowChangePassword(true);
+            setLoading(false);
+            return;
           }
-        } else {
-          router.push('/dashboard');
         }
+
+        const userRole = session?.user?.role;
+
+        // Role-based navigation
+        switch (userRole) {
+          case 'ANAESTHETIST':
+          case 'NURSE_ANAESTHETIST':
+            router.push('/dashboard/surgeries');
+            break;
+          case 'SCRUB_NURSE':
+          case 'CIRCULATING_NURSE':
+            router.push('/dashboard/surgeries');
+            break;
+          case 'SURGEON':
+            router.push('/dashboard/surgeries');
+            break;
+          case 'THEATRE_STORE_KEEPER':
+            router.push('/dashboard/inventory');
+            break;
+          case 'HOLDING_AREA_NURSE':
+            router.push('/dashboard/holding-area');
+            break;
+          case 'RECOVERY_ROOM_NURSE':
+            router.push('/dashboard/pacu');
+            break;
+          case 'THEATRE_MANAGER':
+          case 'THEATRE_CHAIRMAN':
+          case 'ADMIN':
+            router.push('/dashboard');
+            break;
+          default:
+            router.push('/dashboard');
+        }
+      } else {
+        router.push('/dashboard');
       }
     } catch (err) {
       setError('An error occurred during login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (newPasswordValue !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (newPasswordValue.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/change-password-first-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: newPasswordValue }),
+      });
+
+      if (response.ok) {
+        alert('Password changed successfully! Please log in with your new password.');
+        setShowChangePassword(false);
+        setNewPasswordValue('');
+        setConfirmPassword('');
+        router.push('/dashboard');
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to change password');
+      }
+    } catch (err) {
+      setError('An error occurred while changing password');
     } finally {
       setLoading(false);
     }
@@ -266,6 +326,57 @@ export default function LoginPage() {
           )}
         </div>
       </div>
+
+      {/* Password Change Modal for First Login */}
+      {showChangePassword && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Change Your Password</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              For security reasons, you must change your password before continuing.
+              Please choose a strong password with at least 8 characters.
+            </p>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div>
+                <label className="label">New Password</label>
+                <input
+                  type="password"
+                  value={newPasswordValue}
+                  onChange={(e) => setNewPasswordValue(e.target.value)}
+                  className="input-field"
+                  placeholder="Enter new password"
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div>
+                <label className="label">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="input-field"
+                  placeholder="Re-enter new password"
+                  required
+                  minLength={8}
+                />
+              </div>
+              {error && (
+                <div className="text-red-600 text-sm bg-red-50 p-3 rounded">
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full disabled:opacity-50"
+              >
+                {loading ? 'Changing Password...' : 'Change Password & Continue'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 

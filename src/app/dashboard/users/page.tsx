@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, XCircle, Clock, KeyRound, Hash } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface User {
   id: string;
@@ -17,6 +18,11 @@ interface User {
   resetTokenExpiry: Date | null;
 }
 
+interface UploadResult {
+  created: number;
+  errors: any[];
+}
+
 export default function UsersPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
@@ -27,6 +33,8 @@ export default function UsersPage() {
   const [staffCodeUserId, setStaffCodeUserId] = useState<string | null>(null);
   const [newStaffCode, setNewStaffCode] = useState('');
   const [staffCodeLoading, setStaffCodeLoading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -152,6 +160,89 @@ export default function UsersPage() {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadResult(null);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      // Transform Excel data to match expected format
+      const transformedUsers = jsonData.map((row: any) => ({
+        fullName: row['Full Name'] || row['Name'],
+        username: row['Username'],
+        email: row['Email'] || null,
+        role: row['Role'],
+        phoneNumber: row['Phone Number'] || row['Phone'] || null,
+        department: row['Department'] || null,
+        staffCode: row['Staff Code'] || null,
+        staffId: row['Staff ID'] || null,
+        password: row['Password'] || null, // Optional custom password
+      }));
+
+      // Upload to API
+      const response = await fetch('/api/users/bulk-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: transformedUsers }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadResult(result);
+        fetchUsers(); // Refresh user list
+        event.target.value = ''; // Reset file input
+      } else {
+        alert(result.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to process Excel file');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const template = [
+      {
+        'Full Name': 'John Doe',
+        'Username': 'johndoe',
+        'Email': 'john@example.com',
+        'Role': 'SURGEON',
+        'Phone Number': '08012345678',
+        'Department': 'Surgery',
+        'Staff Code': 'SRG001',
+        'Staff ID': 'EMP001',
+        'Password': 'optional-custom-password',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Users Template');
+    
+    // Add notes sheet
+    const notes = [
+      { Note: 'Required Fields:', Value: 'Full Name, Username, Role' },
+      { Note: 'Valid Roles:', Value: 'ADMIN, SYSTEM_ADMINISTRATOR, THEATRE_MANAGER, THEATRE_CHAIRMAN, SURGEON, SCRUB_NURSE, CIRCULATING_NURSE, ANAESTHETIST, ANAESTHETIC_TECHNICIAN, CLEANER, PORTER, VIEWER' },
+      { Note: 'Password:', Value: 'If blank, username will be used as default password' },
+      { Note: 'First Login:', Value: 'All users must change password on first login' },
+      { Note: 'Status:', Value: 'All uploaded users are auto-approved' },
+    ];
+    const notesWs = XLSX.utils.json_to_sheet(notes);
+    XLSX.utils.book_append_sheet(wb, notesWs, 'Instructions');
+
+    XLSX.writeFile(wb, 'staff_upload_template.xlsx');
+  };
+
   if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'THEATRE_MANAGER')) {
     return (
       <div className="text-center py-8">
@@ -166,6 +257,75 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+
+      {/* Bulk Upload Section */}
+      <div className="card bg-gradient-to-r from-primary-50 to-accent-50 border border-primary-200">
+        <h2 className="text-xl font-semibold mb-4 flex items-center">
+          <Upload className="w-6 h-6 mr-2 text-primary-600" />
+          Bulk Staff Upload
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Upload an Excel file with staff details to create multiple user accounts at once. 
+          All users will receive auto-generated credentials and must change their password on first login.
+        </p>
+        
+        <div className="flex gap-4 items-start">
+          <div className="flex-1">
+            <label className="btn-primary cursor-pointer inline-flex items-center disabled:opacity-50">
+              <Upload className="w-4 h-4 mr-2" />
+              {uploading ? 'Uploading...' : 'Upload Excel File'}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileUpload}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+            <p className="text-xs text-gray-500 mt-2">
+              Accepts .xlsx and .xls files. Required columns: Full Name, Username, Role
+            </p>
+          </div>
+          <button
+            onClick={downloadTemplate}
+            className="btn-secondary inline-flex items-center"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download Template
+          </button>
+        </div>
+
+        {/* Upload Results */}
+        {uploadResult && (
+          <div className="mt-4 p-4 bg-white rounded-lg border">
+            <h3 className="font-semibold text-green-700 mb-2">
+              ✓ Upload Complete: {uploadResult.created} user(s) created successfully
+            </h3>
+            
+            {uploadResult.errors.length > 0 && (
+              <div className="mt-3">
+                <h4 className="font-semibold text-red-700 mb-2">
+                  ⚠ {uploadResult.errors.length} error(s) occurred:
+                </h4>
+                <div className="max-h-40 overflow-y-auto bg-red-50 rounded p-2">
+                  {uploadResult.errors.map((error, index) => (
+                    <div key={index} className="text-sm text-red-800 mb-1">
+                      <strong>Row {error.row}:</strong> {error.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setUploadResult(null)}
+              className="mt-3 text-sm text-gray-600 hover:text-gray-900"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Pending Approvals */}
       {pendingUsers.length > 0 && (
