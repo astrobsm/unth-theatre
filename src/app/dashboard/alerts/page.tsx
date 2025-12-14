@@ -52,7 +52,12 @@ export default function AlertsDashboardPage() {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        setAlertsData(data);
+        if (data && typeof data === 'object') {
+          setAlertsData(data);
+        } else {
+          console.error('API returned invalid data:', data);
+          setAlertsData(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching alerts:', error);

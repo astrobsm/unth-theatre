@@ -73,7 +73,12 @@ export default function TheatresPage() {
       const response = await fetch(`/api/theatres?date=${selectedDate}`);
       if (response.ok) {
         const data = await response.json();
-        setTheatres(data);
+        if (Array.isArray(data)) {
+          setTheatres(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setTheatres([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch theatres:', error);

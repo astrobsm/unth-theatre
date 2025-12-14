@@ -59,7 +59,12 @@ export default function TheatreSetupPage() {
       const response = await fetch('/api/theatre-setup');
       if (response.ok) {
         const data = await response.json();
-        setSetups(data);
+        if (Array.isArray(data)) {
+          setSetups(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setSetups([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch setups:', error);

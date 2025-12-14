@@ -61,7 +61,12 @@ export default function HoldingAreaPage() {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        setAssessments(data);
+        if (Array.isArray(data)) {
+          setAssessments(data);
+        } else {
+          console.error('API returned non-array data:', data);
+          setAssessments([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching assessments:', error);
