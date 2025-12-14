@@ -304,6 +304,8 @@ model User {
   dutyLogs      StaffDutyLog[]
   technicianSetupLogs AnesthesiaSetupLog[] @relation("TechnicianSetupLogs")
   rosterAssignments Roster[]
+  equipmentCheckouts EquipmentCheckout[] @relation("TechnicianCheckouts")
+  reportedFaults    EquipmentFaultAlert[] @relation("ReportedFaults")
   
   @@map("users")
 }
@@ -358,6 +360,7 @@ model InventoryItem {
   maintenanceLogs MaintenanceLog[]
   maintenanceAlerts MaintenanceAlert[]
   theatreSetupItems TheatreSetupItem[]
+  checkoutItems CheckoutItem[] @relation("CheckoutItems")
   
   @@map("inventory_items")
 }
@@ -2453,3 +2456,131 @@ model EquipmentCheckLog {
   @@map("equipment_check_logs")
 }
 
+// Equipment Checkout/Check-in System for Anaesthetic Technicians
+enum CheckoutStatus {
+  CHECKED_OUT
+  RETURNED
+  OVERDUE
+}
+
+enum ItemCondition {
+  FUNCTIONAL
+  FAULTY
+  NEEDS_MAINTENANCE
+  DAMAGED
+}
+
+model EquipmentCheckout {
+  id                    String              @id @default(uuid())
+  
+  // Technician & Theatre Info
+  technicianId          String
+  technicianName        String
+  theatreId             String              // Theatre assigned for shift
+  shift                 DutyShift
+  date                  DateTime
+  
+  // Checkout Details
+  checkoutTime          DateTime            @default(now())
+  checkoutNotes         String?
+  
+  // Return Details  
+  returnTime            DateTime?
+  returnNotes           String?
+  status                CheckoutStatus      @default(CHECKED_OUT)
+  
+  // Items
+  items                 CheckoutItem[]
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  technician            User                @relation("TechnicianCheckouts", fields: [technicianId], references: [id])
+  faultyAlerts          EquipmentFaultAlert[]
+  
+  @@map("equipment_checkouts")
+}
+
+model CheckoutItem {
+  id                    String              @id @default(uuid())
+  checkoutId            String
+  
+  // Item Info
+  inventoryItemId       String?
+  itemName              String
+  itemCategory          String              // MACHINE, DEVICE, etc.
+  quantity              Int                 @default(1)
+  serialNumber          String?
+  
+  // Checkout Condition
+  checkoutCondition     ItemCondition       @default(FUNCTIONAL)
+  checkoutRemarks       String?
+  
+  // Return Condition
+  returnCondition       ItemCondition?
+  returnRemarks         String?
+  returnTime            DateTime?
+  
+  // Fault Reporting
+  isFaulty              Boolean             @default(false)
+  faultDescription      String?
+  faultSeverity         String?             // LOW, MEDIUM, HIGH, CRITICAL
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  checkout              EquipmentCheckout   @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  inventoryItem         InventoryItem?      @relation("CheckoutItems", fields: [inventoryItemId], references: [id])
+  
+  @@map("checkout_items")
+}
+
+model EquipmentFaultAlert {
+  id                    String              @id @default(uuid())
+  checkoutId            String
+  
+  // Faulty Item Details
+  itemName              String
+  faultDescription      String
+  severity              String              // LOW, MEDIUM, HIGH, CRITICAL
+  reportedBy            String              // Technician name
+  reportedById          String              // Technician user ID
+  
+  // Alert Info
+  alertTime             DateTime            @default(now())
+  theatreId             String
+  shift                 DutyShift
+  date                  DateTime
+  
+  // Status Tracking
+  status                FaultStatus         @default(REPORTED)
+  acknowledgedBy        String?
+  acknowledgedAt        DateTime?
+  resolvedBy            String?
+  resolvedAt            DateTime?
+  resolutionNotes       String?
+  
+  // Priority & Escalation
+  priority              FaultPriority       @default(HIGH)
+  requiresImmediateAction Boolean           @default(true)
+  escalatedToChairman   Boolean             @default(false)
+  
+  // Notifications Sent
+  managerNotified       Boolean             @default(false)
+  chairmanNotified      Boolean             @default(false)
+  notificationsSent     String?             // JSON: List of recipients and times
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  checkout              EquipmentCheckout   @relation(fields: [checkoutId], references: [id])
+  reportedByUser        User                @relation("ReportedFaults", fields: [reportedById], references: [id])
+  
+  @@map("equipment_fault_alerts")
+}

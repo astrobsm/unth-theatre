@@ -29,6 +29,8 @@ import {
   Sparkles,
   BriefcaseMedical,
   TrendingUp,
+  PackageCheck,
+  AlertOctagon,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -94,6 +96,26 @@ export default function DashboardLayout({
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
+
+  // Add equipment checkout for anaesthetic technicians
+  if (session.user.role === 'ANAESTHETIC_TECHNICIAN') {
+    menuItems.splice(8, 0, { 
+      href: '/dashboard/equipment-checkout', 
+      icon: PackageCheck, 
+      label: 'Equipment Checkout', 
+      badge: 'NEW' 
+    });
+  }
+
+  // Add fault alerts for managers and chairmen
+  if (session.user.role === 'THEATRE_MANAGER' || session.user.role === 'THEATRE_CHAIRMAN') {
+    menuItems.splice(14, 0, { 
+      href: '/dashboard/fault-alerts', 
+      icon: AlertOctagon, 
+      label: 'Fault Alerts', 
+      badge: 'NEW' 
+    });
+  }
 
   // Add admin-only menu items
   if (session.user.role === 'ADMIN' || session.user.role === 'SYSTEM_ADMINISTRATOR' || session.user.role === 'THEATRE_MANAGER') {

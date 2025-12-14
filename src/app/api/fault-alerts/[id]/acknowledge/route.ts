@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Only managers and chairmen can acknowledge alerts
+    if (session.user.role !== 'THEATRE_MANAGER' && session.user.role !== 'THEATRE_CHAIRMAN') {
+      return NextResponse.json({ error: 'Forbidden: Only Theatre Managers and Chairmen can acknowledge alerts' }, { status: 403 });
+    }
+
+    const { id } = params;
+
+    const alert = await prisma.equipmentFaultAlert.findUnique({
+      where: { id },
+    });
+
+    if (!alert) {
+      return NextResponse.json({ error: 'Fault alert not found' }, { status: 404 });
+    }
+
+    if (alert.status !== 'PENDING') {
+      return NextResponse.json({ error: 'Alert has already been acknowledged' }, { status: 400 });
+    }
+
+    const updatedAlert = await prisma.equipmentFaultAlert.update({
+      where: { id },
+      data: {
+        status: 'ACKNOWLEDGED',
+        acknowledgedAt: new Date(),
+        acknowledgedBy: session.user.name || 'Unknown',
+        acknowledgedById: session.user.id,
+      },
+    });
+
+    return NextResponse.json({ alert: updatedAlert });
+  } catch (error) {
+    console.error('Error acknowledging fault alert:', error);
+    return NextResponse.json({ error: 'Failed to acknowledge fault alert' }, { status: 500 });
+  }
+}

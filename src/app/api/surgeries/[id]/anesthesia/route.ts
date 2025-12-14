@@ -108,7 +108,7 @@ export async function POST(
       intraOpRecord = await prisma.intraOperativeRecord.create({
         data: {
           surgery: { connect: { id } },
-          primarySurgeonId: surgery.surgeonId,
+          ...(surgery.surgeonId && { primarySurgeonId: surgery.surgeonId }),
           createdBy: session.user.id
         }
       });
