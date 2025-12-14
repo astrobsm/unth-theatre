@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Fault alert not found' }, { status: 404 });
     }
 
-    if (alert.status !== 'PENDING') {
+    if (alert.status !== 'REPORTED') {
       return NextResponse.json({ error: 'Alert has already been acknowledged' }, { status: 400 });
     }
 

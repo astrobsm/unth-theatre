@@ -181,7 +181,7 @@ export default function FaultAlertsPage() {
     }
   };
 
-  const pendingAlerts = alerts.filter(a => a.status === 'PENDING').length;
+  const pendingAlerts = alerts.filter(a => a.status === 'REPORTED').length;
   const criticalAlerts = alerts.filter(a => a.severity === 'CRITICAL' && a.status !== 'RESOLVED').length;
 
   return (
@@ -236,7 +236,7 @@ export default function FaultAlertsPage() {
             className="input-field"
           >
             <option value="all">All Statuses</option>
-            <option value="PENDING">Pending</option>
+            <option value="REPORTED">Reported</option>
             <option value="ACKNOWLEDGED">Acknowledged</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="RESOLVED">Resolved</option>
@@ -365,7 +365,7 @@ export default function FaultAlertsPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 ml-4">
-                  {alert.status === 'PENDING' && (
+                  {alert.status === 'REPORTED' && (
                     <button
                       onClick={() => handleAcknowledge(alert.id)}
                       disabled={actionLoading}
