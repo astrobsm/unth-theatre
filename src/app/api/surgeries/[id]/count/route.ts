@@ -115,7 +115,7 @@ export async function POST(
         },
         surgicalOperationType: surgery.procedureName,
         operationDate: surgery.scheduledDate,
-        surgeonName: surgery.surgeon.fullName,
+        surgeonName: surgery.surgeonName || surgery.surgeon?.fullName || 'Not assigned',
         scrubNurseName: body.scrubNurseName || session.user.name || 'Unknown',
         circulatingNurseName: body.circulatingNurseName,
         

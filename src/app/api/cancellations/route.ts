@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
           folderNumber: c.surgery.patient.folderNumber,
         },
         surgeon: {
-          fullName: c.surgery.surgeon.fullName,
+          fullName: c.surgery.surgeonName || c.surgery.surgeon?.fullName || 'Not assigned',
         },
       },
       category: c.category,

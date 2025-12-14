@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
         id: s.id,
         patient: s.patient.name,
         folderNumber: s.patient.folderNumber,
-        surgeon: s.surgeon.fullName,
+        surgeon: s.surgeonName || s.surgeon?.fullName || 'Not assigned',
         procedure: s.procedureName,
         unit: s.unit,
         scheduledDate: s.scheduledDate,

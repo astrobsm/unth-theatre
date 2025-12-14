@@ -69,7 +69,7 @@ export async function GET(
         scheduledDate: pacuAssessment.surgery.scheduledDate.toISOString(),
         actualStartTime: pacuAssessment.surgery.actualStartTime?.toISOString(),
         actualEndTime: pacuAssessment.surgery.actualEndTime?.toISOString(),
-        surgeon: { fullName: pacuAssessment.surgery.surgeon.fullName },
+        surgeon: { fullName: pacuAssessment.surgery.surgeonName || pacuAssessment.surgery.surgeon?.fullName || 'Not assigned' },
         anesthetist: pacuAssessment.surgery.anesthetist ? 
           { fullName: pacuAssessment.surgery.anesthetist.fullName } : undefined
       },

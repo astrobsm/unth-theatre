@@ -376,7 +376,7 @@ export function generatePatientDischargePDF(data: PatientDischargeData) {
   doc.setFontSize(10);
   doc.text(`Procedure: ${data.surgery.procedureName}`, 20, currentY);
   currentY += 6;
-  doc.text(`Surgeon: ${data.surgery.surgeon.fullName}`, 20, currentY);
+  doc.text(`Surgeon: ${data.surgery.surgeonName || data.surgery.surgeon?.fullName || 'Not assigned'}`, 20, currentY);
   currentY += 6;
   if (data.surgery.anesthetist) {
     doc.text(`Anesthetist: ${data.surgery.anesthetist.fullName}`, 20, currentY);
