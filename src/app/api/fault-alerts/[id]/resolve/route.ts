@@ -45,20 +45,9 @@ export async function POST(
         status: 'RESOLVED',
         resolvedAt: new Date(),
         resolvedBy: session.user.name || 'Unknown',
-        resolvedById: session.user.id,
         resolutionNotes,
       },
     });
-
-    // Also update the related checkout item as fixed
-    if (alert.checkoutItemId) {
-      await prisma.checkoutItem.update({
-        where: { id: alert.checkoutItemId },
-        data: {
-          isFaulty: false,
-        },
-      });
-    }
 
     return NextResponse.json({ alert: updatedAlert });
   } catch (error) {

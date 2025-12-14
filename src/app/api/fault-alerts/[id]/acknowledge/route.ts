@@ -39,7 +39,6 @@ export async function POST(
         status: 'ACKNOWLEDGED',
         acknowledgedAt: new Date(),
         acknowledgedBy: session.user.name || 'Unknown',
-        acknowledgedById: session.user.id,
       },
     });
 
