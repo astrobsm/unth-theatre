@@ -279,6 +279,7 @@ interface PatientDischargeData {
     scheduledDate: string;
     actualStartTime?: string;
     actualEndTime?: string;
+    surgeonName?: string;
     surgeon: { fullName: string };
     anesthetist?: { fullName: string };
   };
