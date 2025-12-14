@@ -28,7 +28,11 @@ export default function InventoryPage() {
       const response = await fetch('/api/inventory');
       if (response.ok) {
         const data = await response.json();
-        if (Array.isArray(data)) {
+        // Inventory API returns {items: [...]}
+        if (data && Array.isArray(data.items)) {
+          setItems(data.items);
+        } else if (Array.isArray(data)) {
+          // Fallback: handle if API ever returns array directly
           setItems(data);
         } else {
           console.error('API returned non-array data:', data);
