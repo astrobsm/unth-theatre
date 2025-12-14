@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     const checkout = await prisma.equipmentCheckout.create({
       data: {
         technicianId: session.user.id,
-        technicianName: session.user.name,
+        technicianName: session.user.name || 'Unknown',
         theatreId,
         shift,
         date: new Date(date),
