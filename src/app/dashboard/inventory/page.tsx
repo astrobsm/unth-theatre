@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Search, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Package, AlertTriangle, Upload, Download } from 'lucide-react';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 
 interface InventoryItem {
   id: string;
@@ -18,6 +19,8 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('ALL');
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<any>(null);
 
   useEffect(() => {
     fetchInventory();
@@ -54,15 +57,232 @@ export default function InventoryPage() {
 
   const lowStockItems = Array.isArray(items) ? items.filter(item => item.quantity <= item.reorderLevel) : [];
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadResult(null);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      // Transform Excel data to match our schema
+      const items = jsonData.map((row: any) => ({
+        name: row['Item Name'] || row['name'],
+        category: row['Category'] || row['category'],
+        description: row['Description'] || row['description'],
+        unitCostPrice: parseFloat(row['Unit Cost Price'] || row['unitCostPrice'] || 0),
+        quantity: parseInt(row['Quantity'] || row['quantity'] || 0),
+        reorderLevel: parseInt(row['Reorder Level'] || row['reorderLevel'] || 10),
+        supplier: row['Supplier'] || row['supplier'],
+        // Consumable fields
+        manufacturingDate: row['Manufacturing Date'] || row['manufacturingDate'],
+        expiryDate: row['Expiry Date'] || row['expiryDate'],
+        batchNumber: row['Batch Number'] || row['batchNumber'],
+        // Equipment fields
+        halfLife: row['Half Life (Years)'] || row['halfLife'],
+        depreciationRate: row['Depreciation Rate (%)'] || row['depreciationRate'],
+        deviceId: row['Device ID'] || row['deviceId'],
+        maintenanceIntervalDays: row['Maintenance Interval (Days)'] || row['maintenanceIntervalDays'],
+        lastMaintenanceDate: row['Last Maintenance Date'] || row['lastMaintenanceDate'],
+      }));
+
+      const response = await fetch('/api/inventory/bulk-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+
+      const result = await response.json();
+      setUploadResult(result);
+
+      if (result.created > 0) {
+        fetchInventory(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadResult({ error: 'Failed to process file' });
+    } finally {
+      setUploading(false);
+      event.target.value = ''; // Reset file input
+    }
+  };
+
+  const downloadTemplate = () => {
+    // Create sample data
+    const sampleData = [
+      {
+        'Item Name': 'Surgical Gloves (Box)',
+        'Category': 'CONSUMABLE',
+        'Description': 'Sterile latex gloves, size 7.5',
+        'Unit Cost Price': 5000,
+        'Quantity': 100,
+        'Reorder Level': 20,
+        'Supplier': 'Medical Supplies Ltd',
+        'Manufacturing Date': '2024-01-15',
+        'Expiry Date': '2026-01-15',
+        'Batch Number': 'GLV-2024-001',
+        'Half Life (Years)': '',
+        'Depreciation Rate (%)': '',
+        'Device ID': '',
+        'Maintenance Interval (Days)': '',
+        'Last Maintenance Date': '',
+      },
+      {
+        'Item Name': 'Anesthesia Machine',
+        'Category': 'MACHINE',
+        'Description': 'Modern anesthesia delivery system',
+        'Unit Cost Price': 15000000,
+        'Quantity': 5,
+        'Reorder Level': 2,
+        'Supplier': 'MedEquip International',
+        'Manufacturing Date': '',
+        'Expiry Date': '',
+        'Batch Number': '',
+        'Half Life (Years)': 10,
+        'Depreciation Rate (%)': 10,
+        'Device ID': 'ANE-001',
+        'Maintenance Interval (Days)': 180,
+        'Last Maintenance Date': '2024-01-01',
+      },
+      {
+        'Item Name': 'Surgical Scissors',
+        'Category': 'DEVICE',
+        'Description': 'Stainless steel surgical scissors',
+        'Unit Cost Price': 25000,
+        'Quantity': 50,
+        'Reorder Level': 10,
+        'Supplier': 'Surgical Tools Co',
+        'Manufacturing Date': '',
+        'Expiry Date': '',
+        'Batch Number': '',
+        'Half Life (Years)': 5,
+        'Depreciation Rate (%)': 20,
+        'Device ID': 'SCI-050',
+        'Maintenance Interval (Days)': 90,
+        'Last Maintenance Date': '2024-01-01',
+      },
+    ];
+
+    // Create instructions sheet
+    const instructions = [
+      ['INVENTORY BULK UPLOAD TEMPLATE'],
+      [''],
+      ['INSTRUCTIONS:'],
+      ['1. Fill in the required fields (marked with *) for each item'],
+      ['2. Categories must be: CONSUMABLE, MACHINE, DEVICE, or OTHER'],
+      ['3. For CONSUMABLE items, fill Manufacturing Date, Expiry Date, Batch Number'],
+      ['4. For MACHINE/DEVICE items, fill equipment-specific fields'],
+      ['5. Dates should be in YYYY-MM-DD format (e.g., 2024-01-15)'],
+      ['6. Numeric values should not have commas or currency symbols'],
+      ['7. Save as Excel file (.xlsx) and upload'],
+      [''],
+      ['REQUIRED FIELDS (* = required):'],
+      ['- Item Name *'],
+      ['- Category * (CONSUMABLE, MACHINE, DEVICE, or OTHER)'],
+      ['- Unit Cost Price * (numeric value)'],
+      ['- Quantity * (whole number)'],
+      [''],
+      ['OPTIONAL FIELDS:'],
+      ['- Description'],
+      ['- Reorder Level (default: 10)'],
+      ['- Supplier'],
+      [''],
+      ['FOR CONSUMABLES:'],
+      ['- Manufacturing Date (YYYY-MM-DD)'],
+      ['- Expiry Date (YYYY-MM-DD)'],
+      ['- Batch Number'],
+      [''],
+      ['FOR MACHINES/DEVICES:'],
+      ['- Half Life (Years) - e.g., 10'],
+      ['- Depreciation Rate (%) - e.g., 10'],
+      ['- Device ID - unique identifier'],
+      ['- Maintenance Interval (Days) - e.g., 180'],
+      ['- Last Maintenance Date (YYYY-MM-DD)'],
+    ];
+
+    const wb = XLSX.utils.book_new();
+    
+    // Add sample data sheet
+    const ws1 = XLSX.utils.json_to_sheet(sampleData);
+    XLSX.utils.book_append_sheet(wb, ws1, 'Sample Data');
+    
+    // Add instructions sheet
+    const ws2 = XLSX.utils.aoa_to_sheet(instructions);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Instructions');
+
+    XLSX.writeFile(wb, 'Inventory_Upload_Template.xlsx');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
-        <Link href="/dashboard/inventory/new" className="btn-primary flex items-center">
-          <Plus className="w-5 h-5 mr-2" />
-          Add Item
-        </Link>
+        <div className="flex gap-3">
+          <button
+            onClick={downloadTemplate}
+            className="btn-secondary flex items-center"
+          >
+            <Download className="w-5 h-5 mr-2" />
+            Download Template
+          </button>
+          <label className="btn-secondary flex items-center cursor-pointer">
+            <Upload className="w-5 h-5 mr-2" />
+            {uploading ? 'Uploading...' : 'Bulk Upload'}
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileUpload}
+              disabled={uploading}
+              className="hidden"
+            />
+          </label>
+          <Link href="/dashboard/inventory/new" className="btn-primary flex items-center">
+            <Plus className="w-5 h-5 mr-2" />
+            Add Item
+          </Link>
+        </div>
       </div>
+
+      {/* Upload Result */}
+      {uploadResult && (
+        <div className={`p-4 rounded-lg ${uploadResult.error ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+          <h3 className="font-semibold mb-2">
+            {uploadResult.error ? '❌ Upload Failed' : '✅ Upload Complete'}
+          </h3>
+          {uploadResult.created !== undefined && (
+            <p className="text-sm mb-2">
+              Successfully created {uploadResult.created} of {uploadResult.total} items
+            </p>
+          )}
+          {uploadResult.errors && uploadResult.errors.length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium mb-2">
+                {uploadResult.errors.length} error(s) - Click to view
+              </summary>
+              <div className="max-h-60 overflow-y-auto bg-white p-3 rounded border">
+                {uploadResult.errors.map((err: any, idx: number) => (
+                  <div key={idx} className="mb-2 pb-2 border-b last:border-0">
+                    <p className="font-medium text-red-600">Row {err.row}: {err.error}</p>
+                    {err.data && (
+                      <pre className="text-xs mt-1 text-gray-600">
+                        {JSON.stringify(err.data, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+          {uploadResult.error && (
+            <p className="text-sm text-red-600">{uploadResult.error}</p>
+          )}
+        </div>
+      )}
 
       {/* Alert for low stock */}
       {lowStockItems.length > 0 && (
