@@ -55,7 +55,7 @@ export default function FaultAlertsPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (session?.user.role !== 'THEATRE_MANAGER' && session?.user.role !== 'THEATRE_CHAIRMAN') {
+    if (session?.user.role !== 'THEATRE_MANAGER' && session?.user.role !== 'THEATRE_CHAIRMAN' && session?.user.role !== 'ADMIN') {
       router.push('/dashboard');
       return;
     }

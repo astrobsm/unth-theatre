@@ -69,7 +69,7 @@ export default function EquipmentCheckoutPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (session?.user.role !== 'ANAESTHETIC_TECHNICIAN') {
+    if (session?.user.role !== 'ANAESTHETIC_TECHNICIAN' && session?.user.role !== 'ADMIN') {
       router.push('/dashboard');
       return;
     }
