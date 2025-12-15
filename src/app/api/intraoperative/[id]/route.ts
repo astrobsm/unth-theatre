@@ -55,8 +55,8 @@ export async function PUT(
 
     // All clinical staff can update
     const allowedRoles = [
-      'SURGEON', 'ANAESTHETIST', 'NURSE_ANAESTHETIST', 
-      'SCRUB_NURSE', 'CIRCULATING_NURSE', 
+      'SURGEON', 'ANAESTHETIST', 
+      'SCRUB_NURSE', 
       'ADMIN', 'THEATRE_MANAGER'
     ];
 

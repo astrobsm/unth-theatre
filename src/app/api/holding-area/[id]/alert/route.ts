@@ -15,7 +15,7 @@ export async function POST(
     }
 
     // Only holding area nurses can trigger alerts
-    if (session.user.role !== 'HOLDING_AREA_NURSE' && 
+    if (session.user.role !== 'SCRUB_NURSE' && 
         session.user.role !== 'ADMIN' &&
         session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -109,16 +109,16 @@ export async function POST(
       );
     }
 
-    // Notify all theatre coordinators
-    const coordinators = await prisma.user.findMany({
-      where: { role: 'THEATRE_COORDINATOR' }
+    // Notify all theatre managers (coordinators role removed)
+    const managers = await prisma.user.findMany({
+      where: { role: 'THEATRE_MANAGER' }
     });
 
-    for (const coordinator of coordinators) {
+    for (const manager of managers) {
       notifications.push(
         prisma.systemNotification.create({
           data: {
-            userId: coordinator.id,
+            userId: manager.id,
             type: 'HOLDING_AREA_ALERT',
             title: `Holding Area Alert: ${alertType}`,
             message: `Red alert triggered for patient ${assessment.patient.name}. ${description}`,

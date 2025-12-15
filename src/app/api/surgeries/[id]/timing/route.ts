@@ -155,7 +155,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const allowedRoles = ['SURGEON', 'CIRCULATING_NURSE', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
+    const allowedRoles = ['SURGEON', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
     if (!allowedRoles.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

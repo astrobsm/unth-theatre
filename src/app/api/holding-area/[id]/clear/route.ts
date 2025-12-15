@@ -15,7 +15,7 @@ export async function POST(
     }
 
     // Only holding area nurses can clear patients
-    if (session.user.role !== 'HOLDING_AREA_NURSE' && 
+    if (session.user.role !== 'SCRUB_NURSE' && 
         session.user.role !== 'ADMIN' &&
         session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

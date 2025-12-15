@@ -16,7 +16,7 @@ export async function POST(
 
     // Only anesthetists and nurse anesthetists can log medications
     const allowedRoles = [
-      'ANAESTHETIST', 'NURSE_ANAESTHETIST', 
+      'ANAESTHETIST', 
       'ADMIN', 'THEATRE_MANAGER'
     ];
 

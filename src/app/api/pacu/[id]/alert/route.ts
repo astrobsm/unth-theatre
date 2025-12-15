@@ -110,16 +110,16 @@ export async function POST(
       );
     }
 
-    // Notify theatre coordinators
-    const coordinators = await prisma.user.findMany({
-      where: { role: 'THEATRE_COORDINATOR' }
+    // Notify theatre managers
+    const managers = await prisma.user.findMany({
+      where: { role: 'THEATRE_MANAGER' }
     });
 
-    for (const coordinator of coordinators) {
+    for (const manager of managers) {
       notifications.push(
         prisma.systemNotification.create({
           data: {
-            userId: coordinator.id,
+            userId: manager.id,
             type: 'PACU_ALERT',
             title: `PACU Alert: ${alertType}`,
             message: `Red alert in recovery for ${assessment.patient.name}. ${description}`,

@@ -88,13 +88,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Only authorized staff can create assessments
-    if (session.user.role !== 'HOLDING_AREA_NURSE' && 
-        session.user.role !== 'SCRUB_NURSE' &&
-        session.user.role !== 'CIRCULATING_NURSE' &&
-        session.user.role !== 'NURSE_ANAESTHETIST' &&
+    if (session.user.role !== 'SCRUB_NURSE' &&
+        session.user.role !== 'ANAESTHETIST' &&
         session.user.role !== 'ADMIN' &&
-        session.user.role !== 'THEATRE_MANAGER' &&
-        session.user.role !== 'THEATRE_COORDINATOR') {
+        session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: 'Forbidden - Insufficient permissions' }, { status: 403 });
     }
 

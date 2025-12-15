@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
 
     // Surgeons, anesthetists, nurses can create records
     const allowedRoles = [
-      'SURGEON', 'ANAESTHETIST', 'NURSE_ANAESTHETIST', 
-      'SCRUB_NURSE', 'CIRCULATING_NURSE', 
+      'SURGEON', 'ANAESTHETIST', 
+      'SCRUB_NURSE', 
       'ADMIN', 'THEATRE_MANAGER'
     ];
 
