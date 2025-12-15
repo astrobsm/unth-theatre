@@ -29,7 +29,7 @@ export async function POST(
       where: { id },
       include: {
         items: true,
-        technician: true,
+        storeKeeper: true,
       },
     });
 
@@ -111,8 +111,8 @@ export async function POST(
             itemName: faultyItem.itemName,
             faultDescription: faultyItem.faultDescription,
             severity: faultyItem.severity,
-            reportedBy: checkout.technicianName,
-            reportedById: checkout.technicianId,
+            reportedBy: `${checkout.collectorName} (${checkout.collectorRole})`,
+            reportedById: checkout.storeKeeperId,
             theatreId: checkout.theatreId,
             shift: checkout.shift,
             date: checkout.date,
@@ -132,7 +132,7 @@ export async function POST(
       include: {
         items: true,
         faultyAlerts: true,
-        technician: {
+        storeKeeper: {
           select: {
             id: true,
             fullName: true,
