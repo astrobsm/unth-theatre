@@ -140,6 +140,22 @@ export const permissions = {
     update: ['ADMIN', 'THEATRE_MANAGER'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
+
+  // Equipment Checkout (Store Keeper manages for nurses/technicians)
+  equipmentCheckout: {
+    create: ['ADMIN', 'THEATRE_STORE_KEEPER'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'THEATRE_STORE_KEEPER'],
+    update: ['ADMIN', 'THEATRE_STORE_KEEPER'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Equipment Fault Alerts
+  faultAlerts: {
+    create: ['ADMIN', 'THEATRE_STORE_KEEPER'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'BIOMEDICAL_ENGINEER'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'BIOMEDICAL_ENGINEER'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
 } as const;
 
 /**

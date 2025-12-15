@@ -97,8 +97,8 @@ export default function DashboardLayout({
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
 
-  // Add equipment checkout for anaesthetic technicians and admins
-  if (session.user.role === 'ANAESTHETIC_TECHNICIAN' || session.user.role === 'ADMIN') {
+  // Add equipment checkout for store keepers and admins
+  if (session.user.role === 'THEATRE_STORE_KEEPER' || session.user.role === 'ADMIN') {
     menuItems.splice(8, 0, { 
       href: '/dashboard/equipment-checkout', 
       icon: PackageCheck, 

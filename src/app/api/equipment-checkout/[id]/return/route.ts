@@ -83,6 +83,7 @@ export async function POST(
       data: {
         returnTime,
         returnNotes,
+        returnedBy: session.user.name || 'Unknown',
         status: 'RETURNED',
       },
     });

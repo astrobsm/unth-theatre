@@ -15,19 +15,19 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const theatreId = searchParams.get('theatreId');
     const date = searchParams.get('date');
-    const technicianId = searchParams.get('technicianId');
+    const storeKeeperId = searchParams.get('storeKeeperId');
 
     const where: any = {};
     
     if (status) where.status = status;
     if (theatreId) where.theatreId = theatreId;
     if (date) where.date = new Date(date);
-    if (technicianId) where.technicianId = technicianId;
+    if (storeKeeperId) where.storeKeeperId = storeKeeperId;
 
     const checkouts = await prisma.equipmentCheckout.findMany({
       where,
       include: {
-        technician: {
+        storeKeeper: {
           select: {
             id: true,
             fullName: true,
@@ -70,16 +70,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only anaesthetic technicians and admins can checkout equipment
-    if (session.user.role !== 'ANAESTHETIC_TECHNICIAN' && session.user.role !== 'ADMIN') {
+    // Only store keepers and admins can checkout equipment
+    if (session.user.role !== 'THEATRE_STORE_KEEPER' && session.user.role !== 'ADMIN') {
       return NextResponse.json(
-        { error: 'Only anaesthetic technicians and admins can checkout equipment' },
+        { error: 'Only theatre store keepers and admins can checkout equipment' },
         { status: 403 }
       );
     }
 
     const body = await request.json();
-    const { theatreId, shift, date, items, checkoutNotes } = body;
+    const { collectorName, collectorHospitalId, collectorRole, theatreId, shift, date, items, checkoutNotes } = body;
+
+    if (!collectorName || !collectorHospitalId || !collectorRole) {
+      return NextResponse.json(
+        { error: 'Collector name, hospital ID, and role are required' },
+        { status: 400 }
+      );
+    }
 
     if (!theatreId || !shift || !date || !items || items.length === 0) {
       return NextResponse.json(
@@ -91,8 +98,11 @@ export async function POST(request: NextRequest) {
     // Create checkout with items
     const checkout = await prisma.equipmentCheckout.create({
       data: {
-        technicianId: session.user.id,
-        technicianName: session.user.name || 'Unknown',
+        storeKeeperId: session.user.id,
+        storeKeeperName: session.user.name || 'Unknown',
+        collectorName,
+        collectorHospitalId,
+        collectorRole,
         theatreId,
         shift,
         date: new Date(date),
@@ -112,7 +122,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         items: true,
-        technician: {
+        storeKeeper: {
           select: {
             id: true,
             fullName: true,

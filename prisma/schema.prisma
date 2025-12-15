@@ -301,7 +301,7 @@ model User {
   dutyLogs      StaffDutyLog[]
   technicianSetupLogs AnesthesiaSetupLog[] @relation("TechnicianSetupLogs")
   rosterAssignments Roster[]
-  equipmentCheckouts EquipmentCheckout[] @relation("TechnicianCheckouts")
+  storeKeeperCheckouts EquipmentCheckout[] @relation("StoreKeeperCheckouts")
   reportedFaults    EquipmentFaultAlert[] @relation("ReportedFaults")
   
   @@map("users")
@@ -2470,9 +2470,16 @@ enum ItemCondition {
 model EquipmentCheckout {
   id                    String              @id @default(uuid())
   
-  // Technician & Theatre Info
-  technicianId          String
-  technicianName        String
+  // Store Keeper Info (who is logging the checkout)
+  storeKeeperId         String
+  storeKeeperName       String
+  
+  // Collector Info (nurse/technician collecting items)
+  collectorName         String              // Name from hospital ID card
+  collectorHospitalId   String              // Hospital ID number
+  collectorRole         String              // SCRUB_NURSE or ANAESTHETIC_TECHNICIAN
+  
+  // Theatre & Shift Info
   theatreId             String              // Theatre assigned for shift
   shift                 DutyShift
   date                  DateTime
@@ -2484,6 +2491,7 @@ model EquipmentCheckout {
   // Return Details  
   returnTime            DateTime?
   returnNotes           String?
+  returnedBy            String?             // Store keeper who processed return
   status                CheckoutStatus      @default(CHECKED_OUT)
   
   // Items
@@ -2494,7 +2502,7 @@ model EquipmentCheckout {
   updatedAt             DateTime            @updatedAt
   
   // Relations
-  technician            User                @relation("TechnicianCheckouts", fields: [technicianId], references: [id])
+  storeKeeper           User                @relation("StoreKeeperCheckouts", fields: [storeKeeperId], references: [id])
   faultyAlerts          EquipmentFaultAlert[]
   
   @@map("equipment_checkouts")

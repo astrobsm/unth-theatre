@@ -59,6 +59,11 @@ export default function EquipmentCheckoutPage() {
   const [selectedItems, setSelectedItems] = useState<CheckoutItem[]>([]);
   const [checkoutNotes, setCheckoutNotes] = useState('');
   
+  // Collector information (nurse/technician collecting items)
+  const [collectorName, setCollectorName] = useState('');
+  const [collectorHospitalId, setCollectorHospitalId] = useState('');
+  const [collectorRole, setCollectorRole] = useState<'SCRUB_NURSE' | 'ANAESTHETIC_TECHNICIAN'>('SCRUB_NURSE');
+  
   // Return state
   const [selectedCheckout, setSelectedCheckout] = useState<Checkout | null>(null);
   const [returnItems, setReturnItems] = useState<CheckoutItem[]>([]);
@@ -69,7 +74,7 @@ export default function EquipmentCheckoutPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (session?.user.role !== 'ANAESTHETIC_TECHNICIAN' && session?.user.role !== 'ADMIN') {
+    if (session?.user.role !== 'THEATRE_STORE_KEEPER' && session?.user.role !== 'ADMIN') {
       router.push('/dashboard');
       return;
     }
@@ -133,6 +138,11 @@ export default function EquipmentCheckoutPage() {
       return;
     }
 
+    if (!collectorName || !collectorHospitalId) {
+      setMessage('Please provide collector name and hospital ID');
+      return;
+    }
+
     setLoading(true);
     setMessage('');
 
@@ -141,6 +151,9 @@ export default function EquipmentCheckoutPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          collectorName,
+          collectorHospitalId,
+          collectorRole,
           theatreId: selectedTheatre,
           shift: selectedShift,
           date: checkoutDate,
@@ -154,6 +167,8 @@ export default function EquipmentCheckoutPage() {
       if (response.ok) {
         setMessage('✓ Equipment checked out successfully');
         setSelectedItems([]);
+        setCollectorName('');
+        setCollectorHospitalId('');
         setCheckoutNotes('');
         fetchCheckouts();
         setTimeout(() => setActiveTab('return'), 2000);
@@ -331,6 +346,48 @@ export default function EquipmentCheckoutPage() {
             <h2 className="text-xl font-semibold mb-4">Checkout Form</h2>
             
             <form onSubmit={handleCheckout} className="space-y-4">
+              {/* Collector Information Section */}
+              <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                <h3 className="font-semibold text-blue-900">Staff Collecting Items</h3>
+                
+                <div>
+                  <label className="label">Staff Name (From Hospital ID) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={collectorName}
+                    onChange={(e) => setCollectorName(e.target.value)}
+                    className="input-field"
+                    placeholder="Enter full name as on ID card"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Hospital ID Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={collectorHospitalId}
+                    onChange={(e) => setCollectorHospitalId(e.target.value)}
+                    className="input-field"
+                    placeholder="Enter hospital ID number"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Staff Role *</label>
+                  <select
+                    required
+                    value={collectorRole}
+                    onChange={(e) => setCollectorRole(e.target.value as 'SCRUB_NURSE' | 'ANAESTHETIC_TECHNICIAN')}
+                    className="input-field"
+                  >
+                    <option value="SCRUB_NURSE">Scrub Nurse</option>
+                    <option value="ANAESTHETIC_TECHNICIAN">Anaesthetic Technician</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="label">Theatre *</label>
                 <select
