@@ -100,7 +100,7 @@ export default function EquipmentCheckoutPage() {
 
   const fetchCheckouts = async () => {
     try {
-      const response = await fetch(`/api/equipment-checkout?technicianId=${session?.user.id}`);
+      const response = await fetch(`/api/equipment-checkout?storeKeeperId=${session?.user.id}`);
       if (response.ok) {
         const data = await response.json();
         setCheckouts(data.checkouts);
@@ -238,8 +238,8 @@ export default function EquipmentCheckoutPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Equipment Management</h1>
-          <p className="text-gray-600 mt-1">Checkout and return theatre equipment</p>
+          <h1 className="text-3xl font-bold text-gray-900">Equipment Checkout & Return</h1>
+          <p className="text-gray-600 mt-1">Log equipment checkout and returns for nurses and technicians</p>
         </div>
         <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg">
           <Package className="w-5 h-5 text-blue-600" />
