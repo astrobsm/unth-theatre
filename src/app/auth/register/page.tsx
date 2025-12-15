@@ -168,17 +168,14 @@ export default function RegisterPage() {
                 <option value="THEATRE_CHAIRMAN">Theatre Chairman</option>
                 <option value="SURGEON">Surgeon</option>
                 <option value="ANAESTHETIST">Anaesthetist</option>
-                <option value="NURSE_ANAESTHETIST">Nurse Anaesthetist</option>
-                <option value="SCRUB_NURSE">Scrub Nurse</option>
-                <option value="CIRCULATING_NURSE">Circulating Nurse</option>
-                <option value="HOLDING_AREA_NURSE">Holding Area Nurse</option>
+                <option value="SCRUB_NURSE">Scrub Nurse (Scrub/Circulating/Holding Area)</option>
                 <option value="RECOVERY_ROOM_NURSE">Recovery Room Nurse</option>
                 <option value="THEATRE_STORE_KEEPER">Theatre Store Keeper</option>
                 <option value="PORTER">Porter</option>
                 <option value="ANAESTHETIC_TECHNICIAN">Anaesthetic Technician</option>
                 <option value="BIOMEDICAL_ENGINEER">Biomedical Engineer</option>
                 <option value="CLEANER">Cleaner</option>
-                <option value="THEATRE_COORDINATOR">Theatre Coordinator</option>
+                <option value="PROCUREMENT_OFFICER">Procurement Officer</option>
               </select>
             </div>
             

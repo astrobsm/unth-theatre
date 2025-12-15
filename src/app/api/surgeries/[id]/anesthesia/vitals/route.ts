@@ -14,8 +14,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (session.user.role !== 'ANESTHETIST' &&
-        session.user.role !== 'NURSE_ANAESTHETIST' &&
+    if (session.user.role !== 'ANAESTHETIST' &&
         session.user.role !== 'ADMIN' &&
         session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

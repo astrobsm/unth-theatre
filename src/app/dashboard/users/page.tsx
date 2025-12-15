@@ -232,7 +232,7 @@ export default function UsersPage() {
     // Add notes sheet
     const notes = [
       { Note: 'Required Fields:', Value: 'Full Name, Username, Role' },
-      { Note: 'Valid Roles:', Value: 'ADMIN, SYSTEM_ADMINISTRATOR, THEATRE_MANAGER, THEATRE_CHAIRMAN, SURGEON, SCRUB_NURSE, CIRCULATING_NURSE, ANAESTHETIST, ANAESTHETIC_TECHNICIAN, CLEANER, PORTER, VIEWER' },
+      { Note: 'Valid Roles:', Value: 'ADMIN, SYSTEM_ADMINISTRATOR, THEATRE_MANAGER, THEATRE_CHAIRMAN, SURGEON, ANAESTHETIST, SCRUB_NURSE, RECOVERY_ROOM_NURSE, THEATRE_STORE_KEEPER, PORTER, ANAESTHETIC_TECHNICIAN, BIOMEDICAL_ENGINEER, CLEANER, PROCUREMENT_OFFICER' },
       { Note: 'Password:', Value: 'If blank, username will be used as default password' },
       { Note: 'First Login:', Value: 'All users must change password on first login' },
       { Note: 'Status:', Value: 'All uploaded users are auto-approved' },

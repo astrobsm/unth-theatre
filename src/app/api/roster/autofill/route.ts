@@ -59,10 +59,10 @@ export async function GET(request: NextRequest) {
     rosters.forEach((roster) => {
       switch (roster.staffCategory) {
         case 'NURSES':
-          // Assign nurses based on role
+          // Assign nurses based on role (SCRUB_NURSE now handles both scrub and circulating)
           if (roster.user.role === 'SCRUB_NURSE' && !staffSuggestions.scrubNurse) {
             staffSuggestions.scrubNurse = roster.user.id;
-          } else if (roster.user.role === 'CIRCULATING_NURSE' && !staffSuggestions.circulatingNurse) {
+          } else if (roster.user.role === 'SCRUB_NURSE' && !staffSuggestions.circulatingNurse) {
             staffSuggestions.circulatingNurse = roster.user.id;
           }
           break;

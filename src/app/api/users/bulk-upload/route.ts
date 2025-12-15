@@ -41,8 +41,9 @@ export async function POST(request: NextRequest) {
         // Validate role
         const validRoles = [
           'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
-          'SURGEON', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'ANAESTHETIST',
-          'ANAESTHETIC_TECHNICIAN', 'CLEANER', 'PORTER', 'VIEWER'
+          'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
+          'THEATRE_STORE_KEEPER', 'PORTER', 'ANAESTHETIC_TECHNICIAN',
+          'BIOMEDICAL_ENGINEER', 'CLEANER', 'PROCUREMENT_OFFICER'
         ];
 
         if (!validRoles.includes(user.role)) {

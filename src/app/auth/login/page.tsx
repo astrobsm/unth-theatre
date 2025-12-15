@@ -64,11 +64,9 @@ export default function LoginPage() {
         // Role-based navigation
         switch (userRole) {
           case 'ANAESTHETIST':
-          case 'NURSE_ANAESTHETIST':
             router.push('/dashboard/surgeries');
             break;
           case 'SCRUB_NURSE':
-          case 'CIRCULATING_NURSE':
             router.push('/dashboard/surgeries');
             break;
           case 'SURGEON':
@@ -76,9 +74,6 @@ export default function LoginPage() {
             break;
           case 'THEATRE_STORE_KEEPER':
             router.push('/dashboard/inventory');
-            break;
-          case 'HOLDING_AREA_NURSE':
-            router.push('/dashboard/holding-area');
             break;
           case 'RECOVERY_ROOM_NURSE':
             router.push('/dashboard/pacu');

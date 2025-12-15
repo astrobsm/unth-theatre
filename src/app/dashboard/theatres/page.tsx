@@ -111,8 +111,8 @@ export default function TheatresPage() {
         setScrubNurses(data.users || []);
       }
 
-      // Fetch circulating nurses
-      const circulatingResponse = await fetch('/api/users?role=CIRCULATING_NURSE&status=APPROVED');
+      // Fetch scrub nurses for circulating role (now handled by SCRUB_NURSE)
+      const circulatingResponse = await fetch('/api/users?role=SCRUB_NURSE&status=APPROVED');
       if (circulatingResponse.ok) {
         const data = await circulatingResponse.json();
         setCirculatingNurses(data.users || []);

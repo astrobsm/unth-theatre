@@ -74,7 +74,6 @@ export async function POST(
 
     // Only scrub nurses and authorized staff can create count checklists
     if (session.user.role !== 'SCRUB_NURSE' &&
-        session.user.role !== 'CIRCULATING_NURSE' &&
         session.user.role !== 'ADMIN' &&
         session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -183,7 +182,6 @@ export async function PUT(
     }
 
     if (session.user.role !== 'SCRUB_NURSE' &&
-        session.user.role !== 'CIRCULATING_NURSE' &&
         session.user.role !== 'ADMIN' &&
         session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
