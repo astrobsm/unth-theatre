@@ -14,9 +14,9 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only managers and chairmen can resolve alerts
-    if (session.user.role !== 'THEATRE_MANAGER' && session.user.role !== 'THEATRE_CHAIRMAN') {
-      return NextResponse.json({ error: 'Forbidden: Only Theatre Managers and Chairmen can resolve alerts' }, { status: 403 });
+    // Only managers, chairmen, and admins can resolve alerts
+    if (session.user.role !== 'THEATRE_MANAGER' && session.user.role !== 'THEATRE_CHAIRMAN' && session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Only Theatre Managers, Chairmen, and Admins can resolve alerts' }, { status: 403 });
     }
 
     const { id } = params;
