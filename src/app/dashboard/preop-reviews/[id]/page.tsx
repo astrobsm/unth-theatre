@@ -1,0 +1,479 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import Link from 'next/link';
+import { ArrowLeft, Edit, User, Calendar, Activity, Syringe, CheckCircle } from 'lucide-react';
+
+interface PreOpReview {
+  id: string;
+  surgeryId: string;
+  patientName: string;
+  folderNumber: string;
+  scheduledSurgeryDate: string;
+  status: string;
+  currentMedications?: string;
+  allergies?: string;
+  comorbidities?: string;
+  previousAnesthesia?: string;
+  lastOralIntake?: string;
+  fastingStatus?: string;
+  weight?: number;
+  height?: number;
+  bmi?: number;
+  bloodPressure?: string;
+  heartRate?: number;
+  respiratoryRate?: number;
+  temperature?: number;
+  airwayClass?: string;
+  neckMovement?: string;
+  dentition?: string;
+  hemoglobin?: number;
+  plateletCount?: number;
+  ptInr?: number;
+  creatinine?: number;
+  sodium?: number;
+  potassium?: number;
+  bloodGlucose?: number;
+  otherLabResults?: string;
+  asaClass?: string;
+  proposedAnesthesiaType?: string;
+  anestheticPlan?: string;
+  specialConsiderations?: string;
+  riskLevel?: string;
+  riskFactors?: string;
+  reviewNotes?: string;
+  recommendations?: string;
+  anesthetist: { fullName: string };
+  consultantAnesthetist?: { fullName: string };
+  createdAt: string;
+  surgery: {
+    procedureName: string;
+    surgeon: { fullName: string };
+  };
+}
+
+export default function PreOpReviewDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [review, setReview] = useState<PreOpReview | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (params.id) {
+      fetchReview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
+
+  const fetchReview = async () => {
+    try {
+      const response = await fetch(`/api/preop-reviews/${params.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setReview(data);
+      }
+    } catch (error) {
+      console.error('Error fetching review:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'COMPLETED': return 'bg-green-100 text-green-800';
+      case 'APPROVED': return 'bg-blue-100 text-blue-800';
+      case 'IN_PROGRESS': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading review...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!review) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-gray-600">Review not found</p>
+          <Link href="/dashboard/preop-reviews" className="text-indigo-600 hover:underline mt-2 block">
+            Back to Reviews
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const canEdit = ['ADMIN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session?.user?.role || '');
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/preop-reviews"
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Pre-Operative Review Details</h1>
+            <p className="text-gray-600 mt-1">Complete anesthetic assessment</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(review.status)}`}>
+            {review.status}
+          </span>
+          {canEdit && review.status !== 'APPROVED' && (
+            <Link
+              href={`/dashboard/preop-reviews/${review.id}/edit`}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            >
+              <Edit className="w-4 h-4" />
+              Edit
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Patient & Surgery Info */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <User className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-xl font-semibold">Patient Information</h2>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-gray-500">Name</label>
+              <p className="text-gray-900 font-medium">{review.patientName}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Folder Number</label>
+              <p className="text-gray-900">{review.folderNumber}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-xl font-semibold">Surgery Information</h2>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-gray-500">Procedure</label>
+              <p className="text-gray-900 font-medium">{review.surgery.procedureName}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Surgeon</label>
+              <p className="text-gray-900">{review.surgery.surgeon.fullName}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Scheduled Date</label>
+              <p className="text-gray-900">{new Date(review.scheduledSurgeryDate).toLocaleDateString()}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Medical History */}
+      {(review.currentMedications || review.allergies || review.comorbidities || review.previousAnesthesia) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Medical History</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {review.currentMedications && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Current Medications</label>
+                <p className="text-gray-900 mt-1">{review.currentMedications}</p>
+              </div>
+            )}
+            {review.allergies && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Allergies</label>
+                <p className="text-gray-900 mt-1">{review.allergies}</p>
+              </div>
+            )}
+            {review.comorbidities && (
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium text-gray-500">Comorbidities</label>
+                <p className="text-gray-900 mt-1">{review.comorbidities}</p>
+              </div>
+            )}
+            {review.previousAnesthesia && (
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium text-gray-500">Previous Anesthesia History</label>
+                <p className="text-gray-900 mt-1">{review.previousAnesthesia}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fasting Status */}
+      {(review.lastOralIntake || review.fastingStatus) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Fasting Status</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {review.lastOralIntake && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Last Oral Intake</label>
+                <p className="text-gray-900 mt-1">{new Date(review.lastOralIntake).toLocaleString()}</p>
+              </div>
+            )}
+            {review.fastingStatus && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Fasting Status</label>
+                <p className="text-gray-900 mt-1">{review.fastingStatus}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Physical Examination */}
+      {(review.weight || review.height || review.bmi || review.bloodPressure || review.heartRate || review.respiratoryRate || review.temperature) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Physical Examination</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {review.weight && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Weight</label>
+                <p className="text-gray-900 mt-1">{review.weight} kg</p>
+              </div>
+            )}
+            {review.height && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Height</label>
+                <p className="text-gray-900 mt-1">{review.height} cm</p>
+              </div>
+            )}
+            {review.bmi && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">BMI</label>
+                <p className="text-gray-900 mt-1">{review.bmi}</p>
+              </div>
+            )}
+            {review.bloodPressure && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Blood Pressure</label>
+                <p className="text-gray-900 mt-1">{review.bloodPressure}</p>
+              </div>
+            )}
+            {review.heartRate && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Heart Rate</label>
+                <p className="text-gray-900 mt-1">{review.heartRate} bpm</p>
+              </div>
+            )}
+            {review.respiratoryRate && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Respiratory Rate</label>
+                <p className="text-gray-900 mt-1">{review.respiratoryRate} /min</p>
+              </div>
+            )}
+            {review.temperature && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Temperature</label>
+                <p className="text-gray-900 mt-1">{review.temperature}°C</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Airway Assessment */}
+      {(review.airwayClass || review.neckMovement || review.dentition) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Airway Assessment</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {review.airwayClass && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Airway Class</label>
+                <p className="text-gray-900 mt-1">{review.airwayClass}</p>
+              </div>
+            )}
+            {review.neckMovement && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Neck Movement</label>
+                <p className="text-gray-900 mt-1">{review.neckMovement}</p>
+              </div>
+            )}
+            {review.dentition && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Dentition</label>
+                <p className="text-gray-900 mt-1">{review.dentition}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Laboratory Results */}
+      {(review.hemoglobin || review.plateletCount || review.ptInr || review.creatinine || review.sodium || review.potassium || review.bloodGlucose || review.otherLabResults) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Laboratory Results</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {review.hemoglobin && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Hemoglobin</label>
+                <p className="text-gray-900 mt-1">{review.hemoglobin} g/dL</p>
+              </div>
+            )}
+            {review.plateletCount && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Platelet Count</label>
+                <p className="text-gray-900 mt-1">{review.plateletCount} ×10⁹/L</p>
+              </div>
+            )}
+            {review.ptInr && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">PT/INR</label>
+                <p className="text-gray-900 mt-1">{review.ptInr}</p>
+              </div>
+            )}
+            {review.creatinine && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Creatinine</label>
+                <p className="text-gray-900 mt-1">{review.creatinine} mg/dL</p>
+              </div>
+            )}
+            {review.sodium && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Sodium</label>
+                <p className="text-gray-900 mt-1">{review.sodium} mmol/L</p>
+              </div>
+            )}
+            {review.potassium && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Potassium</label>
+                <p className="text-gray-900 mt-1">{review.potassium} mmol/L</p>
+              </div>
+            )}
+            {review.bloodGlucose && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Blood Glucose</label>
+                <p className="text-gray-900 mt-1">{review.bloodGlucose} mg/dL</p>
+              </div>
+            )}
+          </div>
+          {review.otherLabResults && (
+            <div className="mt-4">
+              <label className="text-sm font-medium text-gray-500">Other Lab Results</label>
+              <p className="text-gray-900 mt-1">{review.otherLabResults}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Anesthetic Plan */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Syringe className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-xl font-semibold">Anesthetic Plan</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {review.asaClass && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">ASA Classification</label>
+              <p className="text-gray-900 mt-1">{review.asaClass}</p>
+            </div>
+          )}
+          {review.proposedAnesthesiaType && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">Proposed Anesthesia Type</label>
+              <p className="text-gray-900 mt-1">{review.proposedAnesthesiaType}</p>
+            </div>
+          )}
+        </div>
+        {review.anestheticPlan && (
+          <div className="mt-4">
+            <label className="text-sm font-medium text-gray-500">Anesthetic Plan Details</label>
+            <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.anestheticPlan}</p>
+          </div>
+        )}
+        {review.specialConsiderations && (
+          <div className="mt-4">
+            <label className="text-sm font-medium text-gray-500">Special Considerations</label>
+            <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.specialConsiderations}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Risk Assessment */}
+      {(review.riskLevel || review.riskFactors) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Risk Assessment</h2>
+          {review.riskLevel && (
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-500">Risk Level</label>
+              <p className="text-gray-900 mt-1 font-semibold">{review.riskLevel}</p>
+            </div>
+          )}
+          {review.riskFactors && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">Risk Factors</label>
+              <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.riskFactors}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {(review.reviewNotes || review.recommendations) && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Review Notes & Recommendations</h2>
+          {review.reviewNotes && (
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-500">Review Notes</label>
+              <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.reviewNotes}</p>
+            </div>
+          )}
+          {review.recommendations && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">Recommendations</label>
+              <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.recommendations}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Review Information */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <CheckCircle className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-xl font-semibold">Review Information</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="text-sm font-medium text-gray-500">Reviewed By</label>
+            <p className="text-gray-900 mt-1">{review.anesthetist.fullName}</p>
+          </div>
+          {review.consultantAnesthetist && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">Consultant Anesthetist</label>
+              <p className="text-gray-900 mt-1">{review.consultantAnesthetist.fullName}</p>
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium text-gray-500">Review Date</label>
+            <p className="text-gray-900 mt-1">{new Date(review.createdAt).toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
