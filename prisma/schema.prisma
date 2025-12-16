@@ -17,6 +17,7 @@ enum UserRole {
   THEATRE_CHAIRMAN
   SURGEON
   ANAESTHETIST
+  CONSULTANT_ANAESTHETIST
   SCRUB_NURSE
   RECOVERY_ROOM_NURSE
   THEATRE_STORE_KEEPER
@@ -25,6 +26,10 @@ enum UserRole {
   BIOMEDICAL_ENGINEER
   CLEANER
   PROCUREMENT_OFFICER
+  BLOODBANK_STAFF
+  PHARMACIST
+  CSSD_STAFF
+  POWER_PLANT_OPERATOR
 }
 
 enum UserStatus {
@@ -304,6 +309,39 @@ model User {
   storeKeeperCheckouts EquipmentCheckout[] @relation("StoreKeeperCheckouts")
   reportedFaults    EquipmentFaultAlert[] @relation("ReportedFaults")
   
+  // Pre-Operative Review & Prescription Relations
+  anesthetistReviews PreOperativeAnestheticReview[] @relation("AnesthetistReviews")
+  consultantReviews PreOperativeAnestheticReview[] @relation("ConsultantReviews")
+  prescribedPrescriptions AnestheticPrescription[] @relation("PrescribedBy")
+  approvedPrescriptions AnestheticPrescription[] @relation("ApprovedBy")
+  packedPrescriptions AnestheticPrescription[] @relation("PackedBy")
+  
+  // Blood Request Relations
+  bloodRequestsRequested BloodRequest[] @relation("BloodRequestedBy")
+  bloodRequestsAcknowledged BloodRequest[] @relation("BloodAcknowledgedBy")
+  bloodRequestsPrepared BloodRequest[] @relation("BloodPreparedBy")
+  
+  // Emergency Alert Relations
+  surgeonEmergencyAlerts EmergencySurgeryAlert[] @relation("SurgeonEmergencyAlerts")
+  anesthetistEmergencyAlerts EmergencySurgeryAlert[] @relation("AnesthetistEmergencyAlerts")
+  
+  // CSSD Relations
+  cssdInventoryUpdates CssdInventory[]
+  cssdUsageIssued CssdUsageHistory[] @relation("IssuedBy")
+  cssdUsageReturned CssdUsageHistory[] @relation("ReturnedBy")
+  cssdSterilizationLogs CssdSterilizationLog[]
+  cssdSterilizationVerified CssdSterilizationLog[] @relation("VerifiedBy")
+  cssdReadinessReports CssdReadinessReport[]
+  cssdReadinessApproved CssdReadinessReport[] @relation("ApprovedBy")
+  
+  // Power House Relations
+  powerHouseStatus PowerHouseStatus[]
+  powerFuelConsumption PowerFuelConsumption[]
+  powerMaintenanceLogs PowerMaintenanceLog[]
+  powerMaintenanceSupervised PowerMaintenanceLog[] @relation("Supervisor")
+  powerReadinessReports PowerReadinessReport[]
+  powerReadinessApproved PowerReadinessReport[] @relation("ApprovedBy")
+  
   @@map("users")
 }
 
@@ -490,6 +528,11 @@ model Patient {
   anesthesiaRecords AnesthesiaMonitoringRecord[]
   transportLogs PatientTransportLog[]
   
+  // New Relations for Enhanced Modules
+  preOpReviews    PreOperativeAnestheticReview[] @relation("PatientPreOpReviews")
+  prescriptions   AnestheticPrescription[] @relation("PatientPrescriptions")
+  bloodRequests   BloodRequest[] @relation("PatientBloodRequests")
+  
   @@map("patients")
 }
 
@@ -563,6 +606,13 @@ model Surgery {
   anesthesiaRecord      AnesthesiaMonitoringRecord?
   teamMembers           SurgicalTeamMember[]
   transportLogs         PatientTransportLog[]
+  
+  // New Relations for Enhanced Modules
+  preOpReviews          PreOperativeAnestheticReview[] @relation("PreOpReviews")
+  prescriptions         AnestheticPrescription[] @relation("SurgeryPrescriptions")
+  bloodRequests         BloodRequest[] @relation("SurgeryBloodRequests")
+  emergencyAlerts       EmergencySurgeryAlert[] @relation("EmergencyAlerts")
+  cssdUsageHistory      CssdUsageHistory[]
   
   @@map("surgeries")
 }
@@ -2588,4 +2638,712 @@ model EquipmentFaultAlert {
   reportedByUser        User                @relation("ReportedFaults", fields: [reportedById], references: [id])
   
   @@map("equipment_fault_alerts")
+}
+
+// ===== NEW ENHANCED MODULES =====
+
+// Enums for Pre-Operative Assessment Module
+enum PreOpReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  DISPENSED
+  PACKED
+}
+
+enum MedicationUrgency {
+  ROUTINE
+  URGENT
+  EMERGENCY
+}
+
+enum BloodRequestStatus {
+  REQUESTED
+  ACKNOWLEDGED
+  IN_PREPARATION
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum EmergencyAlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+enum EmergencyAlertPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+}
+
+// Pre-Operative Anesthetic Review Model
+model PreOperativeAnestheticReview {
+  id                        String                @id @default(uuid())
+  
+  // Patient & Surgery Info
+  surgeryId                 String                @unique
+  patientId                 String
+  patientName               String
+  folderNumber              String
+  
+  // Anesthetist Info
+  anesthetistId             String                // Resident/registrar conducting review
+  anesthetistName           String
+  consultantAnesthetistId   String?               // Consultant who will approve
+  consultantName            String?
+  
+  // Review Details
+  reviewDate                DateTime              @default(now())
+  scheduledSurgeryDate      DateTime
+  
+  // Clinical Assessment
+  currentMedications        String?               // JSON array
+  allergies                 String?               // JSON array
+  comorbidities             String?               // JSON array
+  previousAnesthesia        String?
+  lastOralIntake            DateTime?
+  fastingStatus             String?
+  
+  // Physical Examination
+  weight                    Float?
+  height                    Float?
+  bmi                       Float?
+  bloodPressure             String?
+  heartRate                 Int?
+  respiratoryRate           Int?
+  temperature               Float?
+  
+  // Airway Assessment
+  airwayClass               String?               // Mallampati class
+  neckMovement              String?
+  dentition                 String?
+  
+  // Lab Results
+  hemoglobin                Float?
+  plateletCount             Int?
+  ptInr                     Float?
+  creatinine                Float?
+  sodium                    Float?
+  potassium                 Float?
+  bloodGlucose              Float?
+  otherLabResults           String?               // JSON
+  
+  // ASA Classification
+  asaClass                  String?
+  
+  // Anesthetic Plan
+  proposedAnesthesiaType    AnesthesiaType?
+  anestheticPlan            String?               // Detailed plan
+  specialConsiderations     String?
+  
+  // Risk Assessment
+  riskLevel                 String?               // LOW, MODERATE, HIGH
+  riskFactors               String?               // JSON array
+  
+  // Status
+  status                    PreOpReviewStatus     @default(IN_PROGRESS)
+  
+  // Approval
+  approvedAt                DateTime?
+  approvedBy                String?
+  approvalNotes             String?
+  rejectionReason           String?
+  
+  // General Notes
+  reviewNotes               String?
+  recommendations           String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  surgery                   Surgery               @relation("PreOpReviews", fields: [surgeryId], references: [id])
+  patient                   Patient               @relation("PatientPreOpReviews", fields: [patientId], references: [id])
+  anesthetist               User                  @relation("AnesthetistReviews", fields: [anesthetistId], references: [id])
+  consultantAnesthetist     User?                 @relation("ConsultantReviews", fields: [consultantAnesthetistId], references: [id])
+  prescriptions             AnestheticPrescription[]
+  
+  @@map("preoperative_anesthetic_reviews")
+}
+
+// Anesthetic Prescription Model
+model AnestheticPrescription {
+  id                        String                @id @default(uuid())
+  
+  // Link to Pre-Op Review
+  preOpReviewId             String
+  surgeryId                 String
+  patientId                 String
+  patientName               String
+  
+  // Prescriber Info
+  prescribedById            String                // Anesthetist who created prescription
+  prescribedByName          String
+  prescriptionDate          DateTime              @default(now())
+  
+  // Approval Info
+  approvedById              String?               // Consultant anesthetist
+  approvedByName            String?
+  approvedAt                DateTime?
+  rejectionReason           String?
+  
+  // Pharmacist Info
+  packedById                String?               // Pharmacist who packed medications
+  packedByName              String?
+  packedAt                  DateTime?
+  packingNotes              String?
+  
+  // Prescription Details
+  medications               String                // JSON array of medications with doses, routes, timing
+  fluids                    String?               // IV fluids
+  emergencyDrugs            String?               // Emergency medications
+  
+  // Timing
+  scheduledSurgeryDate      DateTime
+  urgency                   MedicationUrgency     @default(ROUTINE)
+  
+  // Status
+  status                    PrescriptionStatus    @default(DRAFT)
+  
+  // Special Instructions
+  specialInstructions       String?
+  allergyAlerts             String?               // Highlighted allergies
+  
+  // Notes
+  prescriptionNotes         String?
+  pharmacistNotes           String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  preOpReview               PreOperativeAnestheticReview @relation(fields: [preOpReviewId], references: [id])
+  surgery                   Surgery               @relation("SurgeryPrescriptions", fields: [surgeryId], references: [id])
+  patient                   Patient               @relation("PatientPrescriptions", fields: [patientId], references: [id])
+  prescribedBy              User                  @relation("PrescribedBy", fields: [prescribedById], references: [id])
+  approvedBy                User?                 @relation("ApprovedBy", fields: [approvedById], references: [id])
+  packedBy                  User?                 @relation("PackedBy", fields: [packedById], references: [id])
+  
+  @@map("anesthetic_prescriptions")
+}
+
+// Blood Request and Alert Model
+model BloodRequest {
+  id                        String                @id @default(uuid())
+  
+  // Patient & Surgery Info
+  surgeryId                 String
+  patientId                 String
+  patientName               String
+  folderNumber              String
+  
+  // Blood Bank Details
+  bloodType                 String                // A+, B-, O+, etc.
+  rhFactor                  String                // Positive, Negative
+  unitsRequested            Int
+  bloodProducts             String                // JSON: Packed cells, FFP, Platelets, etc.
+  
+  // Requesting Info
+  requestedById             String                // Surgeon or Anesthetist
+  requestedByName           String
+  requestedAt               DateTime              @default(now())
+  
+  // Surgery Details
+  scheduledSurgeryDate      DateTime
+  surgeryType               SurgeryType
+  isEmergency               Boolean               @default(false)
+  procedureName             String
+  
+  // Cross-match Info
+  crossMatchRequired        Boolean               @default(true)
+  crossMatchCompleted       Boolean               @default(false)
+  crossMatchCompletedAt     DateTime?
+  
+  // Blood Bank Response
+  acknowledgedById          String?               // Blood bank staff
+  acknowledgedByName        String?
+  acknowledgedAt            DateTime?
+  
+  preparedById              String?
+  preparedByName            String?
+  preparedAt                DateTime?
+  
+  readyAt                   DateTime?
+  deliveredAt               DateTime?
+  
+  // Status
+  status                    BloodRequestStatus    @default(REQUESTED)
+  
+  // Urgency & Priority
+  urgency                   MedicationUrgency     @default(ROUTINE)
+  priorityLevel             Int                   @default(3) // 1-5, 1 being highest
+  
+  // Notes
+  clinicalIndication        String?
+  specialRequirements       String?
+  bloodBankNotes            String?
+  
+  // Cancellation
+  cancelledAt               DateTime?
+  cancellationReason        String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  surgery                   Surgery               @relation("SurgeryBloodRequests", fields: [surgeryId], references: [id])
+  patient                   Patient               @relation("PatientBloodRequests", fields: [patientId], references: [id])
+  requestedBy               User                  @relation("BloodRequestedBy", fields: [requestedById], references: [id])
+  acknowledgedBy            User?                 @relation("BloodAcknowledgedBy", fields: [acknowledgedById], references: [id])
+  preparedBy                User?                 @relation("BloodPreparedBy", fields: [preparedById], references: [id])
+  
+  @@map("blood_requests")
+}
+
+// Emergency Surgery Alert Model
+model EmergencySurgeryAlert {
+  id                        String                @id @default(uuid())
+  
+  // Surgery Info
+  surgeryId                 String
+  patientName               String
+  folderNumber              String
+  age                       Int?
+  gender                    String?
+  
+  // Emergency Details
+  procedureName             String
+  surgicalUnit              String
+  indication                String
+  
+  // Surgeon Info
+  surgeonId                 String
+  surgeonName               String
+  
+  // Timing
+  alertTriggeredAt          DateTime              @default(now())
+  estimatedStartTime        DateTime?
+  actualStartTime           DateTime?
+  
+  // Theatre Assignment
+  theatreId                 String?
+  theatreName               String?
+  
+  // Alert Status
+  status                    EmergencyAlertStatus  @default(ACTIVE)
+  priority                  EmergencyAlertPriority @default(CRITICAL)
+  
+  // Acknowledgments
+  acknowledgedBy            String?               // JSON array of staff who acknowledged
+  managerAcknowledged       Boolean               @default(false)
+  managerAcknowledgedAt     DateTime?
+  
+  anesthetistAcknowledged   Boolean               @default(false)
+  anesthetistAcknowledgedAt DateTime?
+  anesthetistId             String?
+  
+  nurseAcknowledged         Boolean               @default(false)
+  nurseAcknowledgedAt       DateTime?
+  
+  // Display Settings
+  displayOnTv               Boolean               @default(true)
+  tvAcknowledgedAt          DateTime?
+  autoHideAfterMinutes      Int                   @default(60)
+  
+  // Special Requirements
+  bloodRequired             Boolean               @default(false)
+  bloodUnits                Int?
+  specialEquipment          String?               // JSON array
+  
+  // Status Updates
+  allStaffReady             Boolean               @default(false)
+  theatreReady              Boolean               @default(false)
+  patientInTheatre          Boolean               @default(false)
+  
+  // Resolution
+  resolvedAt                DateTime?
+  resolutionNotes           String?
+  
+  // Cancellation
+  cancelledAt               DateTime?
+  cancellationReason        String?
+  
+  // Alert Details
+  alertMessage              String?
+  additionalNotes           String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  surgery                   Surgery               @relation("EmergencyAlerts", fields: [surgeryId], references: [id])
+  surgeon                   User                  @relation("SurgeonEmergencyAlerts", fields: [surgeonId], references: [id])
+  anesthetist               User?                 @relation("AnesthetistEmergencyAlerts", fields: [anesthetistId], references: [id])
+  
+  @@map("emergency_surgery_alerts")
+}
+
+// TV Alert Display Log (for tracking what alerts were shown)
+model TvAlertDisplayLog {
+  id                        String                @id @default(uuid())
+  
+  alertId                   String
+  alertType                 String                // EMERGENCY_SURGERY, EQUIPMENT_FAULT, etc.
+  
+  displayedAt               DateTime              @default(now())
+  dismissedAt               DateTime?
+  
+  displayDurationSeconds    Int?
+  tvLocation                String?               // e.g., "Main Theatre Corridor", "Recovery Room"
+  
+  acknowledgedBy            String?               // Staff who dismissed alert
+  
+  createdAt                 DateTime              @default(now())
+  
+  @@map("tv_alert_display_logs")
+}
+
+
+// =======================
+// CSSD MODULE
+// =======================
+
+enum SterileMaterialStatus {
+  AVAILABLE
+  IN_USE
+  BEING_STERILIZED
+  AWAITING_STERILIZATION
+  QUARANTINED
+  DAMAGED
+}
+
+enum SurgicalPackType {
+  MAJOR_BUNDLE
+  MINOR_BUNDLE
+  INSTRUMENT_SET
+  OPERATING_GOWN
+  DRAPE_SET
+  SPECIALIZED_KIT
+}
+
+model CssdInventory {
+  id                    String                  @id @default(uuid())
+  
+  itemName              String
+  itemCode              String                  @unique
+  packType              SurgicalPackType
+  surgicalUnit          String                  // e.g., General Surgery, Orthopedics, etc.
+  
+  totalQuantity         Int
+  availableQuantity     Int
+  inUseQuantity         Int
+  sterilizingQuantity   Int
+  
+  minimumStockLevel     Int                     @default(5)
+  
+  status                SterileMaterialStatus   @default(AVAILABLE)
+  lastSterilizedDate    DateTime?
+  expiryDate            DateTime?
+  
+  location              String?                 // Storage location in CSSD
+  supplierName          String?
+  
+  notes                 String?
+  
+  updatedById           String
+  updatedBy             User                    @relation(fields: [updatedById], references: [id])
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  usageHistory          CssdUsageHistory[]
+  sterilizationLogs     CssdSterilizationLog[]
+  
+  @@map("cssd_inventory")
+}
+
+model CssdUsageHistory {
+  id                    String                  @id @default(uuid())
+  
+  inventoryId           String
+  inventory             CssdInventory           @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  
+  surgeryId             String?
+  surgery               Surgery?                @relation(fields: [surgeryId], references: [id])
+  
+  quantityIssued        Int
+  quantityReturned      Int?
+  
+  issuedToWard          String?
+  issuedToTheatre       String?
+  
+  issuedById            String
+  issuedBy              User                    @relation("IssuedBy", fields: [issuedById], references: [id])
+  
+  returnedById          String?
+  returnedBy            User?                   @relation("ReturnedBy", fields: [returnedById], references: [id])
+  
+  issuedAt              DateTime                @default(now())
+  returnedAt            DateTime?
+  
+  purpose               String?
+  notes                 String?
+  
+  @@map("cssd_usage_history")
+}
+
+model CssdSterilizationLog {
+  id                    String                  @id @default(uuid())
+  
+  inventoryId           String
+  inventory             CssdInventory           @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  
+  batchNumber           String
+  sterilizationMethod   String                  // e.g., Autoclave, ETO, Plasma
+  
+  quantity              Int
+  
+  startedAt             DateTime
+  completedAt           DateTime?
+  
+  temperature           String?
+  pressure              String?
+  cycleTime             Int?                    // in minutes
+  
+  biologicalIndicator   Boolean                 @default(false)
+  chemicalIndicator     Boolean                 @default(false)
+  
+  operatorId            String
+  operator              User                    @relation(fields: [operatorId], references: [id])
+  
+  verifiedById          String?
+  verifiedBy            User?                   @relation("VerifiedBy", fields: [verifiedById], references: [id])
+  
+  status                String                  // SUCCESSFUL, FAILED, IN_PROGRESS
+  failureReason         String?
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  
+  @@map("cssd_sterilization_logs")
+}
+
+model CssdReadinessReport {
+  id                    String                  @id @default(uuid())
+  
+  reportDate            DateTime                @default(now())
+  shiftType             String                  // MORNING, AFTERNOON, NIGHT
+  
+  // Overall readiness
+  overallStatus         String                  // READY, PARTIALLY_READY, NOT_READY
+  readinessPercentage   Int
+  
+  // Stock levels
+  majorBundlesAvailable Int
+  minorBundlesAvailable Int
+  gownsAvailable        Int
+  
+  // Issues and notes
+  criticalShortages     String?
+  equipmentIssues       String?
+  actionTaken           String?
+  
+  reportedById          String
+  reportedBy            User                    @relation(fields: [reportedById], references: [id])
+  
+  approvedById          String?
+  approvedBy            User?                   @relation("ApprovedBy", fields: [approvedById], references: [id])
+  
+  approvedAt            DateTime?
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("cssd_readiness_reports")
+}
+
+// =======================
+// POWER HOUSE MODULE
+// =======================
+
+enum PowerStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  FAILED
+}
+
+enum PowerSource {
+  MAINS_POWER
+  GENERATOR
+  SOLAR
+  UPS
+}
+
+model PowerHouseStatus {
+  id                    String                  @id @default(uuid())
+  
+  // Current power status
+  currentSource         PowerSource
+  mainsPowerStatus      PowerStatus
+  generatorStatus       PowerStatus
+  solarStatus           PowerStatus
+  upsStatus             PowerStatus
+  
+  // Voltage and frequency
+  mainsVoltage          String?
+  mainsFrequency        String?
+  generatorVoltage      String?
+  generatorFrequency    String?
+  
+  // Fuel levels
+  dieselLevel           Int                     // Percentage 0-100
+  dieselCapacity        Int                     // In liters
+  dieselQuantity        Int                     // Current quantity in liters
+  
+  // Generator details
+  generatorRuntime      Int?                    // Hours
+  generatorLoadPercent  Int?                    // Percentage 0-100
+  
+  // Solar details
+  solarCharge           Int?                    // Percentage 0-100
+  solarOutput           String?                 // e.g., "5.2 kW"
+  
+  // UPS details
+  upsBatteryLevel       Int?                    // Percentage 0-100
+  upsRuntime            Int?                    // Minutes remaining
+  
+  // Issues and alerts
+  criticalAlerts        String?
+  warningAlerts         String?
+  
+  // Operational
+  lastMaintenanceDate   DateTime?
+  nextMaintenanceDate   DateTime?
+  
+  operatorId            String
+  operator              User                    @relation(fields: [operatorId], references: [id])
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  fuelConsumption       PowerFuelConsumption[]
+  maintenanceLogs       PowerMaintenanceLog[]
+  
+  @@map("power_house_status")
+}
+
+model PowerFuelConsumption {
+  id                    String                  @id @default(uuid())
+  
+  statusId              String
+  status                PowerHouseStatus        @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  
+  consumptionDate       DateTime                @default(now())
+  
+  dieselConsumed        Int                     // In liters
+  
+  generatorRunHours     Float
+  
+  averageLoad           Int?                    // Percentage
+  
+  recordedById          String
+  recordedBy            User                    @relation(fields: [recordedById], references: [id])
+  
+  notes                 String?
+  
+  @@map("power_fuel_consumption")
+}
+
+model PowerMaintenanceLog {
+  id                    String                  @id @default(uuid())
+  
+  statusId              String
+  status                PowerHouseStatus        @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  
+  maintenanceType       String                  // ROUTINE, PREVENTIVE, CORRECTIVE, EMERGENCY
+  maintenanceDate       DateTime                @default(now())
+  
+  componentServiced     String
+  workPerformed         String
+  
+  partsReplaced         String?
+  partsCost             Float?
+  
+  technicianId          String
+  technician            User                    @relation(fields: [technicianId], references: [id])
+  
+  supervisorId          String?
+  supervisor            User?                   @relation("Supervisor", fields: [supervisorId], references: [id])
+  
+  nextServiceDate       DateTime?
+  
+  maintenanceStatus     String                  // COMPLETED, PENDING, IN_PROGRESS
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("power_maintenance_logs")
+}
+
+model PowerReadinessReport {
+  id                    String                  @id @default(uuid())
+  
+  reportDate            DateTime                @default(now())
+  shiftType             String                  // MORNING, AFTERNOON, NIGHT
+  
+  // Overall readiness
+  overallStatus         String                  // READY, PARTIALLY_READY, NOT_READY, CRITICAL
+  
+  // Power availability
+  mainsPowerAvailable   Boolean
+  generatorAvailable    Boolean
+  solarAvailable        Boolean
+  upsAvailable          Boolean
+  
+  // Fuel status
+  dieselAvailable       Boolean
+  dieselPercentage      Int
+  estimatedRuntimeHours Int?
+  
+  // Critical information
+  criticalIssues        String?
+  actionTaken           String?
+  
+  reportedById          String
+  reportedBy            User                    @relation(fields: [reportedById], references: [id])
+  
+  approvedById          String?
+  approvedBy            User?                   @relation("ApprovedBy", fields: [approvedById], references: [id])
+  
+  approvedAt            DateTime?
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("power_readiness_reports")
 }

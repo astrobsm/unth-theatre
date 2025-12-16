@@ -9,6 +9,7 @@ export type UserRole =
   | 'THEATRE_CHAIRMAN'
   | 'SURGEON'
   | 'ANAESTHETIST'
+  | 'CONSULTANT_ANAESTHETIST'
   | 'SCRUB_NURSE'
   | 'RECOVERY_ROOM_NURSE'
   | 'THEATRE_STORE_KEEPER'
@@ -16,7 +17,11 @@ export type UserRole =
   | 'ANAESTHETIC_TECHNICIAN'
   | 'BIOMEDICAL_ENGINEER'
   | 'CLEANER'
-  | 'PROCUREMENT_OFFICER';
+  | 'PROCUREMENT_OFFICER'
+  | 'BLOODBANK_STAFF'
+  | 'PHARMACIST'
+  | 'CSSD_STAFF'
+  | 'POWER_PLANT_OPERATOR';
 
 export interface Permission {
   create: UserRole[];
@@ -156,6 +161,54 @@ export const permissions = {
     update: ['ADMIN', 'THEATRE_MANAGER', 'BIOMEDICAL_ENGINEER'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
+
+  // Pre-Operative Anesthetic Review
+  preOpReview: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Anesthetic Prescriptions
+  prescriptions: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Blood Requests
+  bloodRequests: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'BLOODBANK_STAFF'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'BLOODBANK_STAFF'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Emergency Alerts
+  emergencyAlerts: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // CSSD Inventory and Sterilization
+  cssd: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'CSSD_STAFF'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'CSSD_STAFF', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'CSSD_STAFF'],
+    delete: ['ADMIN'],
+  },
+
+  // Power House Monitoring
+  powerHouse: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'POWER_PLANT_OPERATOR'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'POWER_PLANT_OPERATOR', 'BIOMEDICAL_ENGINEER'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'POWER_PLANT_OPERATOR'],
+    delete: ['ADMIN'],
+  },
 } as const;
 
 /**
@@ -185,6 +238,7 @@ export function getRoleName(role: UserRole): string {
     THEATRE_CHAIRMAN: 'Theatre Chairman',
     SURGEON: 'Surgeon',
     ANAESTHETIST: 'Anaesthetist',
+    CONSULTANT_ANAESTHETIST: 'Consultant Anaesthetist',
     SCRUB_NURSE: 'Scrub Nurse',
     RECOVERY_ROOM_NURSE: 'Recovery Room Nurse',
     THEATRE_STORE_KEEPER: 'Theatre Store Keeper',
@@ -193,6 +247,10 @@ export function getRoleName(role: UserRole): string {
     BIOMEDICAL_ENGINEER: 'Biomedical Engineer',
     CLEANER: 'Cleaner',
     PROCUREMENT_OFFICER: 'Procurement Officer',
+    BLOODBANK_STAFF: 'Blood Bank Staff',
+    PHARMACIST: 'Pharmacist',
+    CSSD_STAFF: 'CSSD Staff',
+    POWER_PLANT_OPERATOR: 'Power Plant Operator',
   };
   
   return roleNames[role] || role;
@@ -208,7 +266,8 @@ export function getRoleDashboard(role: UserRole): string {
     THEATRE_MANAGER: '/dashboard',
     THEATRE_CHAIRMAN: '/dashboard',
     SURGEON: '/dashboard/surgeries',
-    ANAESTHETIST: '/dashboard/surgeries',
+    ANAESTHETIST: '/dashboard/preop-reviews',
+    CONSULTANT_ANAESTHETIST: '/dashboard/preop-reviews',
     SCRUB_NURSE: '/dashboard/surgeries',
     RECOVERY_ROOM_NURSE: '/dashboard/pacu',
     THEATRE_STORE_KEEPER: '/dashboard/inventory',
@@ -217,6 +276,10 @@ export function getRoleDashboard(role: UserRole): string {
     BIOMEDICAL_ENGINEER: '/dashboard',
     CLEANER: '/dashboard',
     PROCUREMENT_OFFICER: '/dashboard/inventory',
+    BLOODBANK_STAFF: '/dashboard/blood-bank',
+    PHARMACIST: '/dashboard/prescriptions',
+    CSSD_STAFF: '/dashboard/cssd/inventory',
+    POWER_PLANT_OPERATOR: '/dashboard/power-house/status',
   };
   
   return roleDashboards[role] || '/dashboard';
@@ -236,6 +299,12 @@ export function getVisibleNavItems(role: UserRole): string[] {
     'transfers',
     'theatres',
     'checklists',
+    'preop-reviews',
+    'prescriptions',
+    'blood-bank',
+    'emergency-alerts',
+    'cssd',
+    'power-house',
     'reports',
     'users',
     'alerts',
@@ -247,7 +316,7 @@ export function getVisibleNavItems(role: UserRole): string[] {
   // Define which roles can see which nav items
   const navPermissions: Record<string, UserRole[]> = {
     dashboard: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SYSTEM_ADMINISTRATOR'],
-    surgeries: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'],
+    surgeries: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'],
     patients: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'RECOVERY_ROOM_NURSE'],
     inventory: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE', 'PROCUREMENT_OFFICER'],
     'holding-area': ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'],
@@ -255,6 +324,12 @@ export function getVisibleNavItems(role: UserRole): string[] {
     transfers: ['ADMIN', 'THEATRE_MANAGER', 'PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
     theatres: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
     checklists: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    'preop-reviews': ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'],
+    prescriptions: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'],
+    'blood-bank': ['ADMIN', 'THEATRE_MANAGER', 'BLOODBANK_STAFF', 'SURGEON', 'ANAESTHETIST'],
+    'emergency-alerts': ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
+    cssd: ['ADMIN', 'THEATRE_MANAGER', 'CSSD_STAFF'],
+    'power-house': ['ADMIN', 'THEATRE_MANAGER', 'POWER_PLANT_OPERATOR'],
     reports: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
     users: ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'],
     alerts: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
