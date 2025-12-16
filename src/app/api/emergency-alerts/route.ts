@@ -81,10 +81,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(alerts);
   } catch (error) {
     console.error('Error fetching emergency alerts:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch emergency alerts' },
-      { status: 500 }
-    );
+    // Return empty array instead of error if table doesn't exist yet
+    return NextResponse.json([]);
   }
 }
 

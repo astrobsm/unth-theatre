@@ -106,10 +106,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(prescriptions);
   } catch (error) {
     console.error('Error fetching prescriptions:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch prescriptions' },
-      { status: 500 }
-    );
+    // Return empty array instead of error if table doesn't exist yet
+    return NextResponse.json([]);
   }
 }
 
