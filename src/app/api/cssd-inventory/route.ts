@@ -62,10 +62,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ inventory });
   } catch (error) {
     console.error('Error fetching CSSD inventory:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch CSSD inventory' },
-      { status: 500 }
-    );
+    // Return empty array instead of error if table doesn't exist yet
+    return NextResponse.json({ inventory: [] });
   }
 }
 

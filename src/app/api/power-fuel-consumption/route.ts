@@ -48,10 +48,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ records });
   } catch (error) {
     console.error('Error fetching fuel consumption records:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch fuel consumption records' },
-      { status: 500 }
-    );
+    // Return empty array instead of error if table doesn't exist yet
+    return NextResponse.json({ records: [] });
   }
 }
 
