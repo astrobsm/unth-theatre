@@ -31,6 +31,11 @@ import {
   TrendingUp,
   PackageCheck,
   AlertOctagon,
+  Syringe,
+  Droplet,
+  Zap,
+  Flame,
+  Shield,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -77,6 +82,9 @@ export default function DashboardLayout({
     // 4. Patient Journey - Pre-Op
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
+    { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Preop Reviews', badge: 'NEW' },
+    { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions', badge: 'NEW' },
+    { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank', badge: 'NEW' },
     
     // 5. Operative Phase
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
@@ -87,6 +95,7 @@ export default function DashboardLayout({
     
     // 7. Critical Events & Monitoring
     { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
+    { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts', badge: 'NEW' },
     { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
     
@@ -96,6 +105,24 @@ export default function DashboardLayout({
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
+
+  // Add CSSD menu items for CSSD Staff and Admins
+  if (session.user.role === 'CSSD_STAFF' || session.user.role === 'ADMIN') {
+    menuItems.splice(15, 0, 
+      { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory', badge: 'NEW' },
+      { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization', badge: 'NEW' },
+      { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness', badge: 'NEW' }
+    );
+  }
+
+  // Add Power House menu items for Power Plant Operators and Admins
+  if (session.user.role === 'POWER_PLANT_OPERATOR' || session.user.role === 'ADMIN') {
+    menuItems.splice(15, 0, 
+      { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status', badge: 'NEW' },
+      { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance', badge: 'NEW' },
+      { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness', badge: 'NEW' }
+    );
+  }
 
   // Add equipment checkout for store keepers and admins
   if (session.user.role === 'THEATRE_STORE_KEEPER' || session.user.role === 'ADMIN') {
