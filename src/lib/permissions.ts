@@ -269,6 +269,22 @@ export const permissions = {
     update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
     delete: ['ADMIN'],
   },
+
+  // Oxygen Control Room
+  oxygenControl: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIC_TECHNICIAN'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SURGEON'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIC_TECHNICIAN'],
+    delete: ['ADMIN'],
+  },
+
+  // Oxygen Alerts (Red Alerts)
+  oxygenAlerts: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SURGEON', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIC_TECHNICIAN'],
+    delete: ['ADMIN'],
+  },
 } as const;
 
 /**
@@ -382,6 +398,7 @@ export function getVisibleNavItems(role: UserRole): string[] {
     'investigations',
     'theatre-meals',
     'stock-transfers',
+    'oxygen-control',
   ];
 
   // Define which roles can see which nav items
@@ -414,6 +431,7 @@ export function getVisibleNavItems(role: UserRole): string[] {
     investigations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
     'theatre-meals': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
     'stock-transfers': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
+    'oxygen-control': ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN'],
   };
 
   return allItems.filter(item => {

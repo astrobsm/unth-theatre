@@ -242,6 +242,29 @@ enum InvestigationStatus {
   ABNORMAL
 }
 
+enum OxygenSupplyStatus {
+  EXCELLENT
+  GOOD
+  ADEQUATE
+  LOW
+  CRITICAL
+  DEPLETED
+}
+
+enum OxygenAlertSeverity {
+  WARNING
+  URGENT
+  CRITICAL
+  EMERGENCY
+}
+
+enum OxygenAlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
 enum MortalityLocation {
   PREOPERATIVE
   INTRAOPERATIVE
@@ -421,6 +444,14 @@ model User {
   // Theatre Meal Relations
   theatreMeals TheatreMeal[]
   mealsPrepared TheatreMeal[] @relation("MealPreparer")
+  
+  // Oxygen Control Room Relations
+  oxygenReadinessReports OxygenReadinessReport[]
+  oxygenReportsVerified OxygenReadinessReport[] @relation("OxygenReportVerifier")
+  oxygenAlertsTriggered OxygenAlert[] @relation("OxygenAlertTriggerer")
+  oxygenAlertsAcknowledged OxygenAlert[] @relation("OxygenAlertAcknowledger")
+  oxygenAlertsResponded OxygenAlert[] @relation("OxygenAlertResponder")
+  oxygenAlertsResolved OxygenAlert[] @relation("OxygenAlertResolver")
   
   @@map("users")
 }
@@ -699,6 +730,9 @@ model Surgery {
   
   // Pre-operative Investigation Relations
   investigations        PreoperativeInvestigation[]
+  
+  // Oxygen Alert Relations
+  oxygenAlerts          OxygenAlert[]
   
   @@map("surgeries")
 }
@@ -3775,3 +3809,134 @@ model TheatreMeal {
   @@map("theatre_meals")
 }
 
+// ============================================
+// OXYGEN CONTROL ROOM MODULE
+// ============================================
+
+model OxygenReadinessReport {
+  id                    String                  @id @default(uuid())
+  
+  reportDate            DateTime                @default(now())
+  shiftType             String                  // MORNING, AFTERNOON, NIGHT
+  
+  // Central oxygen supply
+  centralOxygenPressure Float                   // Pressure in PSI
+  centralOxygenStatus   OxygenSupplyStatus
+  cylinderBankLevel     Int                     // Percentage 0-100
+  
+  // Backup systems
+  backupCylindersCount  Int                     @default(0)
+  backupCylindersStatus OxygenSupplyStatus
+  manifoldSystemOk      Boolean                 @default(true)
+  pipelineIntegrityOk   Boolean                 @default(true)
+  
+  // Theatre-specific oxygen availability
+  theatre1OxygenOk      Boolean                 @default(false)
+  theatre1Pressure      Float?                  // Pressure at theatre outlet
+  theatre2OxygenOk      Boolean                 @default(false)
+  theatre2Pressure      Float?
+  theatre3OxygenOk      Boolean                 @default(false)
+  theatre3Pressure      Float?
+  theatre4OxygenOk      Boolean                 @default(false)
+  theatre4Pressure      Float?
+  
+  // Recovery room oxygen
+  recoveryRoomOxygenOk  Boolean                 @default(false)
+  recoveryRoomPressure  Float?
+  
+  // Alarm systems
+  alarmSystemFunctional Boolean                 @default(true)
+  lowPressureAlarmOk    Boolean                 @default(true)
+  highPressureAlarmOk   Boolean                 @default(true)
+  
+  // Shortage prediction
+  predictedShortage     Boolean                 @default(false)
+  shortageEstimatedTime String?                 // E.g., "6 hours", "2 days"
+  shortageReason        String?
+  
+  // Maintenance
+  lastMaintenanceDate   DateTime?
+  nextMaintenanceDate   DateTime?
+  maintenanceRequired   Boolean                 @default(false)
+  maintenanceDetails    String?
+  
+  // Overall status
+  overallReadiness      String                  // READY, PARTIALLY_READY, NOT_READY, CRITICAL
+  criticalIssues        String?
+  
+  actionTaken           String?
+  recommendations       String?
+  notes                 String?
+  
+  // Reporting
+  reportedById          String
+  reportedBy            User                    @relation(fields: [reportedById], references: [id])
+  
+  verifiedById          String?
+  verifiedBy            User?                   @relation("OxygenReportVerifier", fields: [verifiedById], references: [id])
+  verifiedAt            DateTime?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("oxygen_readiness_reports")
+}
+
+model OxygenAlert {
+  id                    String                  @id @default(uuid())
+  
+  alertDate             DateTime                @default(now())
+  alertType             String                  // DEPLETION, LOW_PRESSURE, SYSTEM_FAILURE, CYLINDER_EMPTY
+  severity              OxygenAlertSeverity
+  status                OxygenAlertStatus       @default(ACTIVE)
+  
+  // Location
+  location              String                  // Specific theatre or location
+  affectedTheatres      String?                 // Comma-separated theatre numbers
+  
+  // Alert details
+  currentPressure       Float?                  // Current oxygen pressure
+  normalPressure        Float?                  // Expected normal pressure
+  oxygenLevel           Float?                  // Percentage or volume
+  
+  description           String                  // Detailed description
+  immediateRisk         Boolean                 @default(false)  // Is there an active surgery at risk?
+  activeSurgeryId       String?                 // Link to affected surgery
+  activeSurgery         Surgery?                @relation(fields: [activeSurgeryId], references: [id])
+  
+  // Alert trigger
+  triggeredById         String
+  triggeredBy           User                    @relation("OxygenAlertTriggerer", fields: [triggeredById], references: [id])
+  triggerReason         String                  // Why alert was raised
+  
+  // Response tracking
+  acknowledgedById      String?
+  acknowledgedBy        User?                   @relation("OxygenAlertAcknowledger", fields: [acknowledgedById], references: [id])
+  acknowledgedAt        DateTime?
+  
+  respondedById         String?
+  respondedBy           User?                   @relation("OxygenAlertResponder", fields: [respondedById], references: [id])
+  respondedAt           DateTime?
+  responseAction        String?                 // Action taken
+  
+  resolvedById          String?
+  resolvedBy            User?                   @relation("OxygenAlertResolver", fields: [resolvedById], references: [id])
+  resolvedAt            DateTime?
+  resolutionNotes       String?
+  
+  // Impact assessment
+  surgeriesAffected     Int                     @default(0)
+  patientsAffected      Int                     @default(0)
+  downtime              Int?                    // Minutes of oxygen unavailability
+  
+  // Follow-up
+  preventativeMeasures  String?
+  rootCause             String?
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("oxygen_alerts")
+}
