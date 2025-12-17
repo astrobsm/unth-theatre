@@ -29,11 +29,14 @@ e:\theatre manger\
 
 ## 🎯 Features Implemented
 
+### 🔐 Core System Features
+
 ### ✅ Authentication & Authorization
-- [x] Role-based login (Admin, Manager, Chairman, Surgeon, Nurse)
+- [x] Role-based login (Admin, Manager, Chairman, Surgeon, Nurse, Cafeteria Manager, Laundry Staff, Plumber, Laboratory Staff)
 - [x] User registration with admin approval
 - [x] Secure password hashing
 - [x] Session management
+- [x] 15+ specialized theatre roles
 
 ### ✅ Inventory Management
 - [x] Consumables, Machines, Devices tracking
@@ -97,13 +100,65 @@ e:\theatre manger\
 - [x] Change history
 - [x] User action logs
 
+### ✅ Incident Reporting
+- [x] Theatre incident documentation
+- [x] Accident and safety incident tracking
+- [x] Verification workflow
+- [x] Prevention measures documentation
+- [x] Incident categorization (accident, fight, threatening situation)
+
+### ✅ Laundry Management
+- [x] Daily laundry readiness reporting
+- [x] Linen and surgical drape inventory
+- [x] Theatre-specific laundry allocation
+- [x] Stock level monitoring
+
+### ✅ Water Supply & Plumbing
+- [x] Daily water supply logging
+- [x] Water quality checks
+- [x] Plumbing maintenance records
+- [x] Theatre readiness verification
+- [x] Water pressure and volume tracking
+
+### ✅ Theatre Sub-Stores
+- [x] Individual theatre sub-store management
+- [x] Stock replenishment from main store
+- [x] Scrub nurse inventory control
+- [x] Daily readiness logging
+- [x] End-of-day stock reconciliation
+- [x] Automated reorder alerts
+
+### ✅ Pre-operative Investigations
+- [x] Lab test requisition management
+- [x] Investigation tracking (elective, urgent, emergent)
+- [x] Laboratory staff visibility
+- [x] Patient details integration
+- [x] Results verification before surgery
+- [x] Surgeon and anaesthetist requests
+
+### ✅ Theatre Meal Management
+- [x] Auto-generated daily meal lists
+- [x] Staff attendance-based meal planning
+- [x] Surgical team meal allocation
+- [x] Cafeteria manager dashboard
+- [x] Role-based meal quantity tracking
+
+### 📊 Additional Features
+- [x] Real-time dashboard analytics
+- [x] Comprehensive reporting system
+- [x] Mobile-responsive design
+- [x] Data export capabilities (Excel, PDF)
+- [x] Advanced search and filtering
+- [x] Multi-theatre support
+- [x] Automated notifications and alerts
+
 ## 📦 Database Schema
 
 **PostgreSQL database:** `theatre_db`
 - **Username:** postgres
 - **Password:** natiss_natiss
 
-**11 Main Tables:**
+**18 Main Tables:**
 1. users - System users with role-based access
 2. patients - Patient demographics
 3. inventory_items - Stock management
@@ -115,6 +170,13 @@ e:\theatre manger\
 9. case_cancellations - Cancellation records
 10. maintenance_logs - Equipment maintenance
 11. audit_logs - System activity
+12. incident_reports - Theatre incident documentation
+13. laundry_readiness - Daily laundry inventory and readiness
+14. water_supply_logs - Daily water supply and plumbing records
+15. theatre_sub_stores - Individual theatre sub-store inventory
+16. preoperative_investigations - Lab test requisitions and tracking
+17. theatre_meals - Daily meal allocation for staff and surgical teams
+18. stock_transfers - Main store to sub-store transfers
 
 ## 🚀 Next Steps
 
@@ -226,12 +288,14 @@ npm run db:studio    # Open Prisma Studio (database GUI)
 
 ## ✨ Project Highlights
 
+✅ **Comprehensive** - 15+ modules covering all theatre operations  
 ✅ **Robust** - Complete error handling and validation  
 ✅ **Secure** - Role-based access control with audit logs  
 ✅ **Scalable** - Modern architecture with TypeScript  
 ✅ **User-friendly** - Intuitive interface with Tailwind CSS  
 ✅ **Well-documented** - Comprehensive guides and comments  
 ✅ **Production-ready** - Follows best practices  
+✅ **Multi-department** - Integration across theatre, laboratory, laundry, cafeteria, and facilities  
 
 ---
 

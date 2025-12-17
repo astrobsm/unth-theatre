@@ -21,7 +21,11 @@ export type UserRole =
   | 'BLOODBANK_STAFF'
   | 'PHARMACIST'
   | 'CSSD_STAFF'
-  | 'POWER_PLANT_OPERATOR';
+  | 'POWER_PLANT_OPERATOR'
+  | 'THEATRE_CAFETERIA_MANAGER'
+  | 'LAUNDRY_STAFF'
+  | 'PLUMBER'
+  | 'LABORATORY_STAFF';
 
 export interface Permission {
   create: UserRole[];
@@ -209,6 +213,62 @@ export const permissions = {
     update: ['ADMIN', 'THEATRE_MANAGER', 'POWER_PLANT_OPERATOR'],
     delete: ['ADMIN'],
   },
+
+  // Incident Reporting
+  incidents: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
+    delete: ['ADMIN'],
+  },
+
+  // Laundry Management
+  laundry: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'LAUNDRY_STAFF'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'LAUNDRY_STAFF', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'LAUNDRY_STAFF'],
+    delete: ['ADMIN'],
+  },
+
+  // Water Supply & Plumbing
+  waterSupply: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'PLUMBER'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'PLUMBER', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'PLUMBER'],
+    delete: ['ADMIN'],
+  },
+
+  // Theatre Sub-Stores
+  subStores: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Stock Transfers
+  stockTransfers: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER'],
+    delete: ['ADMIN'],
+  },
+
+  // Pre-operative Investigations
+  investigations: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'LABORATORY_STAFF'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Theatre Meals
+  theatreMeals: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
+    delete: ['ADMIN'],
+  },
 } as const;
 
 /**
@@ -280,6 +340,10 @@ export function getRoleDashboard(role: UserRole): string {
     PHARMACIST: '/dashboard/prescriptions',
     CSSD_STAFF: '/dashboard/cssd/inventory',
     POWER_PLANT_OPERATOR: '/dashboard/power-house/status',
+    THEATRE_CAFETERIA_MANAGER: '/dashboard/theatre-meals',
+    LAUNDRY_STAFF: '/dashboard/laundry',
+    PLUMBER: '/dashboard/water-supply',
+    LABORATORY_STAFF: '/dashboard/investigations',
   };
   
   return roleDashboards[role] || '/dashboard';
@@ -311,6 +375,13 @@ export function getVisibleNavItems(role: UserRole): string[] {
     'cancellations',
     'mortality',
     'theatre-setup',
+    'incidents',
+    'laundry',
+    'water-supply',
+    'sub-stores',
+    'investigations',
+    'theatre-meals',
+    'stock-transfers',
   ];
 
   // Define which roles can see which nav items
@@ -336,6 +407,13 @@ export function getVisibleNavItems(role: UserRole): string[] {
     cancellations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON'],
     mortality: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST'],
     'theatre-setup': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER'],
+    incidents: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_CHAIRMAN'],
+    laundry: ['ADMIN', 'THEATRE_MANAGER', 'LAUNDRY_STAFF'],
+    'water-supply': ['ADMIN', 'THEATRE_MANAGER', 'PLUMBER'],
+    'sub-stores': ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER'],
+    investigations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
+    'theatre-meals': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
+    'stock-transfers': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
   };
 
   return allItems.filter(item => {

@@ -30,6 +30,10 @@ enum UserRole {
   PHARMACIST
   CSSD_STAFF
   POWER_PLANT_OPERATOR
+  THEATRE_CAFETERIA_MANAGER
+  LAUNDRY_STAFF
+  PLUMBER
+  LABORATORY_STAFF
 }
 
 enum UserStatus {
@@ -193,6 +197,51 @@ enum CancellationCategory {
   OTHER
 }
 
+enum IncidentType {
+  ACCIDENT
+  FIGHT
+  THREATENING_SITUATION
+  EQUIPMENT_FAILURE
+  SAFETY_HAZARD
+  FIRE
+  SECURITY_BREACH
+  PATIENT_FALL
+  MEDICATION_ERROR
+  OTHER
+}
+
+enum IncidentSeverity {
+  MINOR
+  MODERATE
+  MAJOR
+  CRITICAL
+}
+
+enum IncidentStatus {
+  REPORTED
+  UNDER_INVESTIGATION
+  VERIFIED
+  ACTION_TAKEN
+  RESOLVED
+  CLOSED
+}
+
+enum InvestigationUrgency {
+  ROUTINE
+  URGENT
+  EMERGENCY
+}
+
+enum InvestigationStatus {
+  REQUESTED
+  SAMPLE_COLLECTED
+  IN_LAB
+  RESULTS_PENDING
+  RESULTS_READY
+  VERIFIED
+  ABNORMAL
+}
+
 enum MortalityLocation {
   PREOPERATIVE
   INTRAOPERATIVE
@@ -341,6 +390,37 @@ model User {
   powerMaintenanceSupervised PowerMaintenanceLog[] @relation("Supervisor")
   powerReadinessReports PowerReadinessReport[]
   powerReadinessApproved PowerReadinessReport[] @relation("ApprovedBy")
+  
+  // Incident Report Relations
+  incidentsReported IncidentReport[] @relation("IncidentReporter")
+  incidentsInvestigated IncidentReport[] @relation("IncidentInvestigator")
+  incidentsVerified IncidentReport[] @relation("IncidentVerifier")
+  
+  // Laundry Relations
+  laundryReadinessReports LaundryReadiness[]
+  
+  // Water Supply Relations
+  waterSupplyLogs WaterSupplyLog[]
+  
+  // Theatre Sub-Store Relations
+  subStoresManaged TheatreSubStore[] @relation("SubStoreManager")
+  subStoresMorningCheck TheatreSubStore[] @relation("MorningCheck")
+  subStoresEndOfDayCheck TheatreSubStore[] @relation("EndOfDayCheck")
+  
+  // Stock Transfer Relations
+  stockTransfersRequested StockTransfer[] @relation("TransferRequester")
+  stockTransfersApproved StockTransfer[] @relation("TransferApprover")
+  stockTransfersIssued StockTransfer[] @relation("TransferIssuer")
+  stockTransfersReceived StockTransfer[] @relation("TransferReceiver")
+  
+  // Pre-operative Investigation Relations
+  investigationsRequested PreoperativeInvestigation[] @relation("InvestigationRequester")
+  samplesCollected PreoperativeInvestigation[] @relation("SampleCollector")
+  resultsVerified PreoperativeInvestigation[] @relation("ResultsVerifier")
+  
+  // Theatre Meal Relations
+  theatreMeals TheatreMeal[]
+  mealsPrepared TheatreMeal[] @relation("MealPreparer")
   
   @@map("users")
 }
@@ -533,6 +613,9 @@ model Patient {
   prescriptions   AnestheticPrescription[] @relation("PatientPrescriptions")
   bloodRequests   BloodRequest[] @relation("PatientBloodRequests")
   
+  // Pre-operative Investigation Relations
+  investigations  PreoperativeInvestigation[]
+  
   @@map("patients")
 }
 
@@ -613,6 +696,9 @@ model Surgery {
   bloodRequests         BloodRequest[] @relation("SurgeryBloodRequests")
   emergencyAlerts       EmergencySurgeryAlert[] @relation("EmergencyAlerts")
   cssdUsageHistory      CssdUsageHistory[]
+  
+  // Pre-operative Investigation Relations
+  investigations        PreoperativeInvestigation[]
   
   @@map("surgeries")
 }
@@ -3347,3 +3433,345 @@ model PowerReadinessReport {
   
   @@map("power_readiness_reports")
 }
+
+// ============================================
+// NEW MODULES - INCIDENT REPORTING, LAUNDRY, WATER, SUB-STORES, INVESTIGATIONS, MEALS
+// ============================================
+
+model IncidentReport {
+  id                    String                  @id @default(uuid())
+  
+  incidentDate          DateTime                @default(now())
+  incidentType          IncidentType
+  severity              IncidentSeverity
+  status                IncidentStatus          @default(REPORTED)
+  
+  location              String                  // Theatre number or specific location
+  description           String                  // Detailed description of incident
+  
+  // People involved
+  reportedById          String
+  reportedBy            User                    @relation("IncidentReporter", fields: [reportedById], references: [id])
+  
+  witnessesPresent      Boolean                 @default(false)
+  witnessNames          String?                 // Comma-separated or JSON
+  
+  // Injuries/Damages
+  injuriesReported      Boolean                 @default(false)
+  injuryDetails         String?
+  damagesReported       Boolean                 @default(false)
+  damageDetails         String?
+  
+  // Investigation
+  investigationRequired Boolean                 @default(true)
+  investigatedById      String?
+  investigatedBy        User?                   @relation("IncidentInvestigator", fields: [investigatedById], references: [id])
+  investigationNotes    String?
+  investigationDate     DateTime?
+  
+  // Verification
+  verifiedById          String?
+  verifiedBy            User?                   @relation("IncidentVerifier", fields: [verifiedById], references: [id])
+  verifiedAt            DateTime?
+  verificationNotes     String?
+  
+  // Prevention measures
+  preventionMeasures    String?                 // Detailed prevention recommendations
+  actionTaken           String?
+  responsiblePerson     String?
+  
+  // Follow-up
+  followUpRequired      Boolean                 @default(false)
+  followUpDate          DateTime?
+  followUpNotes         String?
+  
+  attachments           String?                 // JSON array of file paths
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("incident_reports")
+}
+
+model LaundryReadiness {
+  id                    String                  @id @default(uuid())
+  
+  reportDate            DateTime                @default(now())
+  shiftType             String                  // MORNING, AFTERNOON, NIGHT
+  
+  // Linen inventory
+  surgicalGownsClean    Int                     @default(0)
+  surgicalDrapesClean   Int                     @default(0)
+  patientGownsClean     Int                     @default(0)
+  bedSheetsClean        Int                     @default(0)
+  towelsClean           Int                     @default(0)
+  scrubSuitsClean       Int                     @default(0)
+  
+  // Theatre-specific allocation
+  theatre1Allocated     Boolean                 @default(false)
+  theatre2Allocated     Boolean                 @default(false)
+  theatre3Allocated     Boolean                 @default(false)
+  theatre4Allocated     Boolean                 @default(false)
+  
+  // Overall status
+  overallReadiness      String                  // READY, PARTIALLY_READY, NOT_READY, CRITICAL
+  criticalShortages     String?                 // Items critically low
+  
+  // Collected/Used
+  surgicalGownsUsed     Int                     @default(0)
+  surgicalDrapesUsed    Int                     @default(0)
+  patientGownsUsed      Int                     @default(0)
+  
+  notes                 String?
+  
+  reportedById          String
+  reportedBy            User                    @relation(fields: [reportedById], references: [id])
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("laundry_readiness")
+}
+
+model WaterSupplyLog {
+  id                    String                  @id @default(uuid())
+  
+  logDate               DateTime                @default(now())
+  shiftType             String                  // MORNING, AFTERNOON, NIGHT
+  
+  // Water availability
+  mainWaterSupply       Boolean
+  boreholeActive        Boolean
+  tankWaterLevel        Int                     // Percentage 0-100
+  
+  // Quality checks
+  waterPressure         String                  // LOW, NORMAL, HIGH
+  waterQuality          String                  // CLEAR, CLOUDY, CONTAMINATED
+  chlorineLevelTested   Boolean                 @default(false)
+  chlorineLevel         String?                 // ppm measurement
+  
+  // Theatre-specific supply
+  theatre1WaterOk       Boolean                 @default(false)
+  theatre2WaterOk       Boolean                 @default(false)
+  theatre3WaterOk       Boolean                 @default(false)
+  theatre4WaterOk       Boolean                 @default(false)
+  
+  scrubSinksFunctional  Boolean                 @default(true)
+  
+  // Plumbing issues
+  leaksReported         Boolean                 @default(false)
+  leakLocations         String?
+  
+  blockagesReported     Boolean                 @default(false)
+  blockageLocations     String?
+  
+  maintenanceRequired   Boolean                 @default(false)
+  maintenanceDetails    String?
+  
+  // Overall readiness
+  overallStatus         String                  // READY, PARTIALLY_READY, NOT_READY, CRITICAL
+  
+  actionTaken           String?
+  notes                 String?
+  
+  loggedById            String
+  loggedBy              User                    @relation(fields: [loggedById], references: [id])
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("water_supply_logs")
+}
+
+model TheatreSubStore {
+  id                    String                  @id @default(uuid())
+  
+  theatreNumber         String                  // THEATRE_1, THEATRE_2, etc.
+  itemName              String
+  itemCode              String?
+  category              String                  // CONSUMABLE, DEVICE, MEDICATION, EQUIPMENT
+  
+  currentStock          Int                     @default(0)
+  minimumStock          Int                     @default(10)
+  maximumStock          Int                     @default(100)
+  
+  unit                  String                  // pieces, boxes, vials, etc.
+  
+  // Scrub nurse management
+  managedById           String
+  managedBy             User                    @relation("SubStoreManager", fields: [managedById], references: [id])
+  
+  // Stock status
+  lastRestocked         DateTime?
+  lastUsed              DateTime?
+  
+  stockStatus           String                  // ADEQUATE, LOW, CRITICAL, OUT_OF_STOCK
+  
+  // Readiness tracking
+  morningCheckDone      Boolean                 @default(false)
+  morningCheckById      String?
+  morningCheckBy        User?                   @relation("MorningCheck", fields: [morningCheckById], references: [id])
+  morningCheckDate      DateTime?
+  
+  endOfDayCheckDone     Boolean                 @default(false)
+  endOfDayCheckById     String?
+  endOfDayCheckBy       User?                   @relation("EndOfDayCheck", fields: [endOfDayCheckById], references: [id])
+  endOfDayCheckDate     DateTime?
+  
+  reorderRequested      Boolean                 @default(false)
+  reorderRequestDate    DateTime?
+  
+  stockTransfers        StockTransfer[]
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@unique([theatreNumber, itemName])
+  @@map("theatre_sub_stores")
+}
+
+model StockTransfer {
+  id                    String                  @id @default(uuid())
+  
+  transferDate          DateTime                @default(now())
+  
+  // Source (main store)
+  fromMainStore         Boolean                 @default(true)
+  
+  // Destination (sub-store)
+  toSubStoreId          String
+  toSubStore            TheatreSubStore         @relation(fields: [toSubStoreId], references: [id])
+  
+  itemName              String
+  quantityTransferred   Int
+  unit                  String
+  
+  // Authorization
+  requestedById         String
+  requestedBy           User                    @relation("TransferRequester", fields: [requestedById], references: [id])
+  
+  approvedById          String?
+  approvedBy            User?                   @relation("TransferApprover", fields: [approvedById], references: [id])
+  approvedAt            DateTime?
+  
+  issuedById            String?
+  issuedBy              User?                   @relation("TransferIssuer", fields: [issuedById], references: [id])
+  issuedAt              DateTime?
+  
+  receivedById          String?
+  receivedBy            User?                   @relation("TransferReceiver", fields: [receivedById], references: [id])
+  receivedAt            DateTime?
+  
+  status                String                  // REQUESTED, APPROVED, ISSUED, RECEIVED, CANCELLED
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("stock_transfers")
+}
+
+model PreoperativeInvestigation {
+  id                    String                  @id @default(uuid())
+  
+  // Patient and surgery details
+  surgeryId             String
+  surgery               Surgery                 @relation(fields: [surgeryId], references: [id])
+  
+  patientId             String
+  patient               Patient                 @relation(fields: [patientId], references: [id])
+  
+  // Investigation details
+  testName              String                  // FBC, U&E, Chest X-ray, etc.
+  testCategory          String                  // HEMATOLOGY, BIOCHEMISTRY, RADIOLOGY, MICROBIOLOGY, etc.
+  
+  urgency               InvestigationUrgency
+  status                InvestigationStatus     @default(REQUESTED)
+  
+  // Requester
+  requestedById         String
+  requestedBy           User                    @relation("InvestigationRequester", fields: [requestedById], references: [id])
+  requestedAt           DateTime                @default(now())
+  
+  requestReason         String?                 // Clinical indication
+  
+  // Laboratory processing
+  sampleCollected       Boolean                 @default(false)
+  sampleCollectedAt     DateTime?
+  sampleCollectedById   String?
+  sampleCollectedBy     User?                   @relation("SampleCollector", fields: [sampleCollectedById], references: [id])
+  
+  receivedByLabAt       DateTime?
+  processedByLabAt      DateTime?
+  
+  // Results
+  resultsAvailable      Boolean                 @default(false)
+  resultsAvailableAt    DateTime?
+  resultValue           String?                 // Test result
+  resultUnit            String?
+  referenceRange        String?
+  
+  abnormalResult        Boolean                 @default(false)
+  criticalResult        Boolean                 @default(false)
+  
+  // Verification
+  verifiedById          String?
+  verifiedBy            User?                   @relation("ResultsVerifier", fields: [verifiedById], references: [id])
+  verifiedAt            DateTime?
+  
+  // Report
+  reportAttachment      String?                 // File path or URL
+  
+  labComments           String?
+  clinicalComments      String?
+  
+  // Surgery readiness impact
+  clearedForSurgery     Boolean                 @default(false)
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("preoperative_investigations")
+}
+
+model TheatreMeal {
+  id                    String                  @id @default(uuid())
+  
+  mealDate              DateTime                @default(now())
+  mealType              String                  // BREAKFAST, LUNCH, DINNER, SNACK
+  
+  // Auto-generated from logged-in staff
+  staffMemberName       String
+  staffMemberRole       String
+  staffMemberId         String?
+  staffMember           User?                   @relation(fields: [staffMemberId], references: [id])
+  
+  // Meal status
+  mealRequested         Boolean                 @default(true)
+  mealServed            Boolean                 @default(false)
+  mealServedAt          DateTime?
+  
+  // Special requirements
+  dietaryRestrictions   String?                 // Vegetarian, Halal, Allergies, etc.
+  specialRequest        String?
+  
+  // Cafeteria tracking
+  preparedById          String?
+  preparedBy            User?                   @relation("MealPreparer", fields: [preparedById], references: [id])
+  
+  confirmed             Boolean                 @default(false)
+  confirmedAt           DateTime?
+  
+  notes                 String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("theatre_meals")
+}
+
