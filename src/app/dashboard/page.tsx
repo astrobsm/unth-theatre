@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { 
-  Package, 
-  Calendar, 
-  Users, 
+import {
+  Package,
+  Calendar,
+  Users,
   AlertCircle,
   TrendingUp,
   Activity,
@@ -19,7 +20,28 @@ import {
   BriefcaseMedical,
   ClipboardCheck,
   Sparkles,
+  RefreshCw,
+  BarChart3,
 } from 'lucide-react';
+
+// Dynamic imports for chart components (client-side only)
+const SurgeryTrendChart = dynamic(() => import('@/components/charts/SurgeryTrendChart'), {
+  ssr: false,
+  loading: () => <div className="h-80 flex items-center justify-center">Loading chart...</div>,
+});
+
+const CostBreakdownChart = dynamic(() => import('@/components/charts/CostBreakdownChart'), {
+  ssr: false,
+  loading: () => <div className="h-80 flex items-center justify-center">Loading chart...</div>,
+});
+
+const TheatreUtilizationChart = dynamic(
+  () => import('@/components/charts/TheatreUtilizationChart'),
+  {
+    ssr: false,
+    loading: () => <div className="h-80 flex items-center justify-center">Loading chart...</div>,
+  }
+);
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -28,6 +50,29 @@ interface DashboardStats {
   lowStockItems: number;
   pendingTransfers: number;
   todaySurgeries: number;
+}
+
+interface AnalyticsData {
+  surgeryTrend: {
+    labels: string[];
+    scheduled: number[];
+    completed: number[];
+    cancelled: number[];
+  };
+  costBreakdown: {
+    labels: string[];
+    values: number[];
+  };
+  theatreUtilization: {
+    theatres: string[];
+    utilization: number[];
+  };
+  summary: {
+    totalSurgeries: number;
+    completedSurgeries: number;
+    cancelledSurgeries: number;
+    totalCost: number;
+  };
 }
 
 export default function DashboardPage() {
@@ -40,11 +85,10 @@ export default function DashboardPage() {
     pendingTransfers: 0,
     todaySurgeries: 0,
   });
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchDashboardStats();
-  }, []);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState(30);
 
   const fetchDashboardStats = async () => {
     try {
@@ -67,6 +111,32 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
+
+  const fetchAnalytics = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics/dashboard?days=${timeRange}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAnalytics(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardStats();
+    fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange]);
 
   const statCards = [
     {
@@ -97,32 +167,22 @@ export default function DashboardPage() {
       color: 'bg-gradient-to-br from-red-500 to-red-600',
       link: '/dashboard/inventory',
     },
-    {
-      title: 'Scheduled Surgeries',
-      value: stats.scheduledSurgeries,
-      icon: TrendingUp,
-      color: 'bg-gradient-to-br from-blue-500 to-blue-600',
-      link: '/dashboard/surgeries',
-    },
-    {
-      title: 'Theatre Suites',
-      value: '-',
-      icon: Building2,
-      color: 'bg-gradient-to-br from-purple-500 to-purple-600',
-      link: '/dashboard/theatres',
-    },
   ];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-xl">Loading dashboard...</div>
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="bg-gradient-to-r from-primary-600 to-secondary-600 rounded-2xl p-8 text-white shadow-xl">
         <h1 className="text-4xl font-bold">Dashboard Overview</h1>
         <p className="text-primary-100 mt-2 text-lg">
@@ -131,26 +191,113 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat) => (
-          <div 
-            key={stat.title} 
+          <div
+            key={stat.title}
             onClick={() => router.push(stat.link)}
             className="card hover:scale-105 transition-transform duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                <p className="text-4xl font-bold mt-2 bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
-                  {stat.value}
-                </p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
               </div>
-              <div className={`${stat.color} p-4 rounded-xl shadow-lg`}>
+              <div className={`${stat.color} p-4 rounded-xl`}>
                 <stat.icon className="w-8 h-8 text-white" />
               </div>
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Analytics Section */}
+      <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-3 rounded-lg">
+              <BarChart3 className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Performance Analytics</h2>
+              <p className="text-sm text-gray-600">Visual insights and trends</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(Number(e.target.value))}
+              className="input-field w-40"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+            <button
+              onClick={fetchAnalytics}
+              disabled={analyticsLoading}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${analyticsLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {analyticsLoading ? (
+          <div className="flex items-center justify-center h-80">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading analytics...</p>
+            </div>
+          </div>
+        ) : analytics ? (
+          <>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white rounded-lg p-4 shadow">
+                <p className="text-sm text-gray-600">Total Surgeries</p>
+                <p className="text-2xl font-bold text-blue-600">{analytics.summary.totalSurgeries}</p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow">
+                <p className="text-sm text-gray-600">Completed</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {analytics.summary.completedSurgeries}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow">
+                <p className="text-sm text-gray-600">Cancelled</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {analytics.summary.cancelledSurgeries}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow">
+                <p className="text-sm text-gray-600">Total Cost</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  ₦{analytics.summary.totalCost.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg p-6 shadow">
+                <SurgeryTrendChart data={analytics.surgeryTrend} />
+              </div>
+              <div className="bg-white rounded-lg p-6 shadow">
+                <TheatreUtilizationChart data={analytics.theatreUtilization} />
+              </div>
+            </div>
+
+            {analytics.costBreakdown.labels.length > 0 && (
+              <div className="bg-white rounded-lg p-6 shadow mt-6">
+                <CostBreakdownChart data={analytics.costBreakdown} />
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-center text-gray-600">No analytics data available</p>
+        )}
       </div>
 
       {/* Quick Actions */}
