@@ -39,6 +39,9 @@ export default function UsersPage() {
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
       fetchUsers();
+      // Auto-refresh every 60 seconds for cross-device sync
+      const interval = setInterval(fetchUsers, 60000);
+      return () => clearInterval(interval);
     }
   }, [session]);
 

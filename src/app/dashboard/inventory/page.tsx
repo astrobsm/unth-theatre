@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Plus, Search, Package, AlertTriangle, Upload, Download } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Plus, Search, Package, AlertTriangle, Upload, Download, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import { SYNC_INTERVALS } from '@/lib/sync';
 
 interface InventoryItem {
   id: string;
@@ -21,12 +22,33 @@ export default function InventoryPage() {
   const [filter, setFilter] = useState('ALL');
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
+  // Monitor online/offline status
   useEffect(() => {
-    fetchInventory();
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
   }, []);
 
-  const fetchInventory = async () => {
+  const fetchInventory = useCallback(async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
     try {
       const response = await fetch('/api/inventory');
       if (response.ok) {
@@ -34,9 +56,11 @@ export default function InventoryPage() {
         // Inventory API returns {items: [...]}
         if (data && Array.isArray(data.items)) {
           setItems(data.items);
+          setLastSyncTime(Date.now());
         } else if (Array.isArray(data)) {
           // Fallback: handle if API ever returns array directly
           setItems(data);
+          setLastSyncTime(Date.now());
         } else {
           console.error('API returned non-array data:', data);
           setItems([]);
@@ -46,8 +70,28 @@ export default function InventoryPage() {
       console.error('Failed to fetch inventory:', error);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
-  };
+  }, [isOnline]);
+
+  useEffect(() => {
+    fetchInventory();
+    // Auto-refresh every 60 seconds for cross-device sync
+    const interval = setInterval(fetchInventory, SYNC_INTERVALS.INVENTORY);
+    return () => clearInterval(interval);
+  }, [fetchInventory]);
+
+  // Refetch when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchInventory();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchInventory]);
 
   const filteredItems = Array.isArray(items) ? items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());

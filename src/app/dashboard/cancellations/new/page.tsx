@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { XCircle, AlertCircle } from 'lucide-react';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Surgery {
   id: string;
@@ -214,17 +215,17 @@ export default function NewCancellationPage() {
               />
             </div>
 
-            <div>
-              <label className="label">Detailed Notes *</label>
-              <textarea
-                required
-                rows={6}
-                placeholder="Provide detailed notes about the cancellation, including circumstances, actions taken, and any follow-up required..."
-                value={formData.detailedNotes}
-                onChange={(e) => setFormData({ ...formData, detailedNotes: e.target.value })}
-                className="input-field"
-              />
-            </div>
+            <SmartTextInput
+              label="Detailed Notes *"
+              required={true}
+              rows={6}
+              placeholder="Provide detailed notes about the cancellation, including circumstances, actions taken, and any follow-up required... 🎤 Dictate"
+              value={formData.detailedNotes}
+              onChange={(val) => setFormData({ ...formData, detailedNotes: val })}
+              enableSpeech={true}
+              enableOCR={true}
+              medicalMode={true}
+            />
           </div>
         </div>
 

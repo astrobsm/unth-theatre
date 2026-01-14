@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Patient {
   id: string;
@@ -33,6 +34,7 @@ export default function NewSurgeryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchPatient, setSearchPatient] = useState('');
+  const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
 
   useEffect(() => {
     fetchPatients();
@@ -83,7 +85,7 @@ export default function NewSurgeryPage() {
       needDiathermy: formData.get('needDiathermy') === 'on',
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
-      otherSpecialNeeds: formData.get('otherSpecialNeeds'),
+      otherSpecialNeeds: otherSpecialNeeds,
       teamMembers: teamMembers.filter(tm => tm.name.trim() !== ''), // Only send team members with names
     };
 
@@ -333,12 +335,15 @@ export default function NewSurgeryPage() {
           </div>
 
           <div className="mt-4">
-            <label className="label">Other Special Needs</label>
-            <textarea
-              name="otherSpecialNeeds"
-              className="input-field"
+            <SmartTextInput
+              label="Other Special Needs"
+              value={otherSpecialNeeds}
+              onChange={setOtherSpecialNeeds}
               rows={3}
-              placeholder="Specify any other special requirements..."
+              placeholder="Specify any other special requirements... 🎤 Dictate"
+              enableSpeech={true}
+              enableOCR={true}
+              medicalMode={true}
             />
           </div>
         </div>

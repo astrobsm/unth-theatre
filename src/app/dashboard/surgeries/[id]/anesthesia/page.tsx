@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface AnesthesiaRecord {
   id: string;
@@ -799,12 +800,14 @@ export default function AnesthesiaMonitoringPage() {
                   <span className="font-medium">{label}</span>
                 </label>
                 {(record as any)[key] && (
-                  <textarea
+                  <SmartTextInput
                     value={(record as any)[mgmtKey] || ''}
-                    onChange={(e) => updateRecord({ [mgmtKey]: e.target.value })}
-                    placeholder="Management details..."
-                    className="w-full border rounded px-3 py-2 mt-2"
+                    onChange={(val) => updateRecord({ [mgmtKey]: val })}
+                    placeholder={`${label} management details... 🎤 Dictate or 📷 capture`}
                     rows={2}
+                    enableSpeech={true}
+                    enableOCR={true}
+                    medicalMode={true}
                   />
                 )}
               </div>
@@ -1110,16 +1113,16 @@ export default function AnesthesiaMonitoringPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={medicationData.notes}
-                  onChange={(e) => setMedicationData({...medicationData, notes: e.target.value})}
-                  rows={2}
-                  placeholder="Additional notes..."
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
+              <SmartTextInput
+                label="Notes"
+                value={medicationData.notes}
+                onChange={(val) => setMedicationData({...medicationData, notes: val})}
+                rows={2}
+                placeholder="Additional notes... 🎤 Dictate or 📷 capture"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
             </div>
 
             <div className="mt-6 flex gap-3">

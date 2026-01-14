@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { SYNC_INTERVALS } from '@/lib/sync';
 
 interface Surgery {
   id: string;
@@ -28,6 +29,9 @@ export default function SurgeriesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
   // Role-based action visibility
   const userRole = session?.user?.role;
@@ -38,17 +42,36 @@ export default function SurgeriesPage() {
   const canAccessConsumables = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER'].includes(userRole || '');
   const canAccessBOM = ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
 
+  // Monitor online/offline status
   useEffect(() => {
-    fetchSurgeries();
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
   }, []);
 
-  const fetchSurgeries = async () => {
+  const fetchSurgeries = useCallback(async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
     try {
       const response = await fetch('/api/surgeries');
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) {
           setSurgeries(data);
+          setLastSyncTime(Date.now());
         } else {
           console.error('API returned non-array data:', data);
           setSurgeries([]);
@@ -62,8 +85,28 @@ export default function SurgeriesPage() {
       setSurgeries([]);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
-  };
+  }, [isOnline]);
+
+  useEffect(() => {
+    fetchSurgeries();
+    // Auto-refresh every 30 seconds for cross-device sync
+    const interval = setInterval(fetchSurgeries, SYNC_INTERVALS.SURGERIES);
+    return () => clearInterval(interval);
+  }, [fetchSurgeries]);
+
+  // Refetch when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchSurgeries();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchSurgeries]);
 
   const filteredSurgeries = Array.isArray(surgeries) ? surgeries.filter(surgery => {
     const matchesSearch = 
@@ -96,10 +139,45 @@ export default function SurgeriesPage() {
           <h1 className="text-3xl font-bold text-gray-900">Surgery Scheduling</h1>
           <p className="text-gray-600 mt-1">Manage surgical procedures and bookings</p>
         </div>
-        <Link href="/dashboard/surgeries/new" className="btn-primary flex items-center">
-          <Plus className="w-5 h-5 mr-2" />
-          Book Surgery
-        </Link>
+        <div className="flex items-center gap-4">
+          {/* Sync Status Indicator */}
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+              !isOnline ? 'bg-gray-100 text-gray-600 border-gray-200' :
+              isSyncing ? 'bg-blue-50 text-blue-600 border-blue-200' :
+              'bg-green-50 text-green-600 border-green-200'
+            }`}>
+              {!isOnline ? (
+                <>
+                  <WifiOff className="w-4 h-4" />
+                  <span>Offline</span>
+                </>
+              ) : isSyncing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <Wifi className="w-4 h-4" />
+                  <span>Live (30s)</span>
+                </>
+              )}
+            </div>
+            <button
+              onClick={fetchSurgeries}
+              disabled={isSyncing || !isOnline}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Refresh data"
+            >
+              <RefreshCw className={`w-5 h-5 text-gray-500 ${isSyncing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <Link href="/dashboard/surgeries/new" className="btn-primary flex items-center">
+            <Plus className="w-5 h-5 mr-2" />
+            Book Surgery
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

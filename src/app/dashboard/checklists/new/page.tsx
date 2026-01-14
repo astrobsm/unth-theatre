@@ -10,10 +10,13 @@ import {
   AlertCircle, 
   FileText,
   User,
-  Calendar
+  Calendar,
+  Mic,
+  Camera
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Surgery {
   id: string;
@@ -669,13 +672,16 @@ export default function NewChecklistPage() {
                 </div>
 
                 <div>
-                  <label className="label">Additional Notes</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Any additional observations or concerns..."
+                  <SmartTextInput
+                    label="Additional Notes"
                     value={checklistData.signIn.signInNotes}
-                    onChange={(e) => handleNotesChange('signIn', 'signInNotes', e.target.value)}
-                    className="input-field"
+                    onChange={(value) => handleNotesChange('signIn', 'signInNotes', value)}
+                    placeholder="Any additional observations or concerns... (use voice or camera)"
+                    rows={3}
+                    enableSpeech={true}
+                    enableOCR={true}
+                    medicalMode={true}
+                    helpText="Dictate your observations or photograph notes"
                   />
                 </div>
               </div>
@@ -804,13 +810,16 @@ export default function NewChecklistPage() {
                 </div>
 
                 <div>
-                  <label className="label">Additional Notes</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Any additional observations or concerns..."
+                  <SmartTextInput
+                    label="Additional Notes"
                     value={checklistData.timeOut.timeOutNotes}
-                    onChange={(e) => handleNotesChange('timeOut', 'timeOutNotes', e.target.value)}
-                    className="input-field"
+                    onChange={(value) => handleNotesChange('timeOut', 'timeOutNotes', value)}
+                    placeholder="Any additional observations or concerns... (use voice or camera)"
+                    rows={3}
+                    enableSpeech={true}
+                    enableOCR={true}
+                    medicalMode={true}
+                    helpText="Dictate your observations or photograph notes"
                   />
                 </div>
               </div>
@@ -922,13 +931,16 @@ export default function NewChecklistPage() {
                 </div>
 
                 <div>
-                  <label className="label">Additional Notes</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Any additional observations or concerns..."
+                  <SmartTextInput
+                    label="Additional Notes"
                     value={checklistData.signOut.signOutNotes}
-                    onChange={(e) => handleNotesChange('signOut', 'signOutNotes', e.target.value)}
-                    className="input-field"
+                    onChange={(value) => handleNotesChange('signOut', 'signOutNotes', value)}
+                    placeholder="Any additional observations or concerns... (use voice or camera)"
+                    rows={3}
+                    enableSpeech={true}
+                    enableOCR={true}
+                    medicalMode={true}
+                    helpText="Dictate post-operative notes"
                   />
                 </div>
               </div>

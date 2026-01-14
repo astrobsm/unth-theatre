@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle, Clock, AlertCircle, User, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Surgery {
   id: string;
@@ -416,16 +417,16 @@ export default function WHOChecklistPage() {
               </div>
             </label>
 
-            <div>
-              <label className="label">Additional Notes</label>
-              <textarea
-                value={checklistData.signIn.signInNotes}
-                onChange={(e) => handleNotesChange('signIn', 'signInNotes', e.target.value)}
-                className="input-field"
-                rows={3}
-                placeholder="Any concerns or special considerations..."
-              />
-            </div>
+            <SmartTextInput
+              label="Additional Notes"
+              value={checklistData.signIn.signInNotes}
+              onChange={(val) => handleNotesChange('signIn', 'signInNotes', val)}
+              rows={3}
+              placeholder="Any concerns or special considerations... 🎤 Dictate"
+              enableSpeech={true}
+              enableOCR={true}
+              medicalMode={true}
+            />
           </div>
         </div>
       )}
@@ -520,16 +521,16 @@ export default function WHOChecklistPage() {
               </div>
             </label>
 
-            <div>
-              <label className="label">Additional Notes</label>
-              <textarea
-                value={checklistData.timeOut.timeOutNotes}
-                onChange={(e) => handleNotesChange('timeOut', 'timeOutNotes', e.target.value)}
-                className="input-field"
-                rows={3}
-                placeholder="Any concerns or special considerations..."
-              />
-            </div>
+            <SmartTextInput
+              label="Additional Notes"
+              value={checklistData.timeOut.timeOutNotes}
+              onChange={(val) => handleNotesChange('timeOut', 'timeOutNotes', val)}
+              rows={3}
+              placeholder="Any concerns or special considerations... 🎤 Dictate"
+              enableSpeech={true}
+              enableOCR={true}
+              medicalMode={true}
+            />
           </div>
         </div>
       )}
@@ -611,16 +612,16 @@ export default function WHOChecklistPage() {
               </div>
             </label>
 
-            <div>
-              <label className="label">Additional Notes</label>
-              <textarea
-                value={checklistData.signOut.signOutNotes}
-                onChange={(e) => handleNotesChange('signOut', 'signOutNotes', e.target.value)}
-                className="input-field"
-                rows={3}
-                placeholder="Any concerns or special considerations..."
-              />
-            </div>
+            <SmartTextInput
+              label="Additional Notes"
+              value={checklistData.signOut.signOutNotes}
+              onChange={(val) => handleNotesChange('signOut', 'signOutNotes', val)}
+              rows={3}
+              placeholder="Any concerns or special considerations... 🎤 Dictate"
+              enableSpeech={true}
+              enableOCR={true}
+              medicalMode={true}
+            />
           </div>
         </div>
       )}

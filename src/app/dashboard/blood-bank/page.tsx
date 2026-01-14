@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { 
   Droplet, 
@@ -11,9 +11,13 @@ import {
   AlertCircle,
   Package,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
-
+import { SYNC_INTERVALS } from '@/lib/sync';
+import SmartTextInput from '@/components/SmartTextInput';
 interface BloodRequest {
   id: string;
   patientName: string;
@@ -45,13 +49,33 @@ export default function BloodBankPage() {
   const [newStatus, setNewStatus] = useState<BloodRequest['status']>('PROCESSING');
   const [statusNotes, setStatusNotes] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
+  // Monitor online/offline status
   useEffect(() => {
-    fetchRequests();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-  const fetchRequests = async () => {
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
+  const fetchRequests = useCallback(async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
     try {
       let url = '/api/blood-requests';
       
@@ -66,13 +90,34 @@ export default function BloodBankPage() {
       if (response.ok) {
         const data = await response.json();
         setRequests(data);
+        setLastSyncTime(Date.now());
       }
     } catch (error) {
       console.error('Error fetching blood requests:', error);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
-  };
+  }, [filter, isOnline]);
+
+  useEffect(() => {
+    fetchRequests();
+    // Auto-refresh every 30 seconds for urgent blood requests
+    const interval = setInterval(fetchRequests, SYNC_INTERVALS.BLOOD_BANK);
+    return () => clearInterval(interval);
+  }, [fetchRequests]);
+
+  // Refetch when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchRequests();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchRequests]);
 
   const handleUpdateStatus = async () => {
     if (!selectedRequest) return;
@@ -426,15 +471,15 @@ export default function BloodBankPage() {
               </select>
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status Notes
-              </label>
-              <textarea
+              <SmartTextInput
+                label="Status Notes"
                 value={statusNotes}
-                onChange={(e) => setStatusNotes(e.target.value)}
+                onChange={setStatusNotes}
                 rows={3}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                placeholder="Add any notes about the status update..."
+                placeholder="Add any notes about the status update... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
             <div className="flex gap-3 justify-end">

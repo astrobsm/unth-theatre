@@ -69,6 +69,13 @@ export default function TheatresPage() {
     fetchTheatres();
     fetchDailySummary();
     fetchStaff();
+    // Auto-refresh every 30 seconds for cross-device sync
+    const interval = setInterval(() => {
+      fetchTheatres();
+      fetchDailySummary();
+    }, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   const fetchTheatres = async () => {

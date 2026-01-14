@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import SmartTextInput from '@/components/SmartTextInput';
 
 export default function CssdReadinessPage() {
   const { data: session, status } = useSession();
@@ -257,30 +258,39 @@ export default function CssdReadinessPage() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Issues</label>
-                <textarea
+                <SmartTextInput
+                  label="Issues"
                   value={formData.issues}
-                  onChange={(e) => setFormData({ ...formData, issues: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
+                  onChange={(val) => setFormData({ ...formData, issues: val })}
                   rows={2}
+                  placeholder="Document any issues... 🎤 Dictate"
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
                 />
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Recommended Actions</label>
-                <textarea
+                <SmartTextInput
+                  label="Recommended Actions"
                   value={formData.recommendedActions}
-                  onChange={(e) => setFormData({ ...formData, recommendedActions: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
+                  onChange={(val) => setFormData({ ...formData, recommendedActions: val })}
                   rows={2}
+                  placeholder="Recommended actions... 🎤 Dictate"
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
                 />
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Notes</label>
-                <textarea
+                <SmartTextInput
+                  label="Notes"
                   value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
+                  onChange={(val) => setFormData({ ...formData, notes: val })}
                   rows={2}
+                  placeholder="Additional notes... 🎤 Dictate"
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
                 />
               </div>
               <div className="flex justify-end gap-4 mt-6">

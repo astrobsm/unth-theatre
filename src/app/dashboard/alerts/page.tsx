@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Alert {
   id: string;
@@ -338,16 +339,16 @@ export default function AlertsDashboardPage() {
                   placeholder="e.g., Issue corrected and verified"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
-                <textarea
-                  value={resolutionNotes}
-                  onChange={(e) => setResolutionNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  rows={4}
-                  placeholder="Additional details about resolution..."
-                />
-              </div>
+              <SmartTextInput
+                label="Notes (Optional)"
+                value={resolutionNotes}
+                onChange={setResolutionNotes}
+                rows={4}
+                placeholder="Additional details about resolution... 🎤 Dictate or 📷 capture"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={() => {

@@ -54,6 +54,9 @@ export default function PrescriptionsPage() {
 
   useEffect(() => {
     fetchPrescriptions();
+    // Auto-refresh every 30 seconds for cross-device sync
+    const interval = setInterval(fetchPrescriptions, 30000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 

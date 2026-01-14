@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { SYNC_INTERVALS } from '@/lib/sync';
 
 interface Patient {
   id: string;
@@ -47,12 +49,33 @@ export default function HoldingAreaPage() {
   const [assessments, setAssessments] = useState<HoldingAreaAssessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active'>('active');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
+  // Monitor online/offline status
   useEffect(() => {
-    fetchAssessments();
-  }, [filter]);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-  const fetchAssessments = async () => {
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
+  const fetchAssessments = useCallback(async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
     try {
       const url = filter === 'active' 
         ? '/api/holding-area?active=true'
@@ -63,6 +86,7 @@ export default function HoldingAreaPage() {
         const data = await response.json();
         if (Array.isArray(data)) {
           setAssessments(data);
+          setLastSyncTime(Date.now());
         } else {
           console.error('API returned non-array data:', data);
           setAssessments([]);
@@ -72,8 +96,28 @@ export default function HoldingAreaPage() {
       console.error('Error fetching assessments:', error);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
-  };
+  }, [filter, isOnline]);
+
+  useEffect(() => {
+    fetchAssessments();
+    // Auto-refresh every 15 seconds for critical patient safety monitoring
+    const interval = setInterval(fetchAssessments, SYNC_INTERVALS.HOLDING_AREA);
+    return () => clearInterval(interval);
+  }, [fetchAssessments]);
+
+  // Refetch when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAssessments();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchAssessments]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -117,12 +161,47 @@ export default function HoldingAreaPage() {
             Patient safety verification and theatre clearance
           </p>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/holding-area/new')}
-          className="bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors"
-        >
-          + New Assessment
-        </button>
+        <div className="flex items-center gap-4">
+          {/* Sync Status Indicator */}
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+              !isOnline ? 'bg-gray-100 text-gray-600 border-gray-200' :
+              isSyncing ? 'bg-blue-50 text-blue-600 border-blue-200' :
+              'bg-green-50 text-green-600 border-green-200'
+            }`}>
+              {!isOnline ? (
+                <>
+                  <WifiOff className="w-4 h-4" />
+                  <span>Offline</span>
+                </>
+              ) : isSyncing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <Wifi className="w-4 h-4" />
+                  <span>Live (15s)</span>
+                </>
+              )}
+            </div>
+            <button
+              onClick={fetchAssessments}
+              disabled={isSyncing || !isOnline}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Refresh data"
+            >
+              <RefreshCw className={`w-5 h-5 text-gray-500 ${isSyncing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <button
+            onClick={() => router.push('/dashboard/holding-area/new')}
+            className="bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors"
+          >
+            + New Assessment
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

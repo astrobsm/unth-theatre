@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface VitalSigns {
   id: string;
@@ -1342,31 +1343,27 @@ export default function PACUAssessmentDetailPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Discharge Instructions
-                </label>
-                <textarea
-                  value={dischargeForm.dischargeInstructions}
-                  onChange={(e) => setDischargeForm({...dischargeForm, dischargeInstructions: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  rows={4}
-                  placeholder="Post-operative care instructions, medications, follow-up..."
-                />
-              </div>
+              <SmartTextInput
+                label="Discharge Instructions"
+                value={dischargeForm.dischargeInstructions}
+                onChange={(val) => setDischargeForm({...dischargeForm, dischargeInstructions: val})}
+                placeholder="Post-operative care instructions, medications, follow-up... 🎤 Dictate or 📷 capture"
+                rows={4}
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ward Nurse Handover Notes
-                </label>
-                <textarea
-                  value={dischargeForm.wardNurseHandover}
-                  onChange={(e) => setDischargeForm({...dischargeForm, wardNurseHandover: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  rows={3}
-                  placeholder="Special observations, concerns, care requirements..."
-                />
-              </div>
+              <SmartTextInput
+                label="Ward Nurse Handover Notes"
+                value={dischargeForm.wardNurseHandover}
+                onChange={(val) => setDischargeForm({...dischargeForm, wardNurseHandover: val})}
+                placeholder="Special observations, concerns, care requirements... 🎤 Dictate or 📷 capture"
+                rows={3}
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
 
               <div className="flex gap-4">
                 <button

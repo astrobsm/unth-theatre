@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 export default function NewInventoryPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [description, setDescription] = useState('');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -20,7 +22,7 @@ export default function NewInventoryPage() {
     const data: any = {
       name: formData.get('name'),
       category: formData.get('category'),
-      description: formData.get('description'),
+      description: description,
       unitCostPrice: parseFloat(formData.get('unitCostPrice') as string),
       quantity: parseInt(formData.get('quantity') as string),
       reorderLevel: parseInt(formData.get('reorderLevel') as string),
@@ -248,15 +250,16 @@ export default function NewInventoryPage() {
             </div>
           )}
 
-          <div>
-            <label className="label">Description</label>
-            <textarea
-              name="description"
-              className="input-field"
-              rows={4}
-              placeholder="Enter item description..."
-            />
-          </div>
+          <SmartTextInput
+            label="Description"
+            value={description}
+            onChange={setDescription}
+            rows={4}
+            placeholder="Enter item description... 🎤 Dictate"
+            enableSpeech={true}
+            enableOCR={true}
+            medicalMode={true}
+          />
 
           <div className="flex justify-end gap-4">
             <Link href="/dashboard/inventory" className="btn-secondary">

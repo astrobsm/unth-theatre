@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   AlertTriangle, CheckCircle, Clock, Filter, Search, X, MessageSquare, User
 } from 'lucide-react';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface FaultAlert {
   id: string;
@@ -60,6 +61,10 @@ export default function FaultAlertsPage() {
       return;
     }
     fetchAlerts();
+    // Auto-refresh every 30 seconds for equipment fault monitoring
+    const interval = setInterval(fetchAlerts, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   useEffect(() => {
@@ -433,20 +438,20 @@ export default function FaultAlertsPage() {
               </div>
 
               <form onSubmit={handleResolve} className="space-y-4">
-                <div>
-                  <label className="label">Resolution Notes *</label>
-                  <textarea
-                    required
-                    value={resolutionNotes}
-                    onChange={(e) => setResolutionNotes(e.target.value)}
-                    className="input-field"
-                    rows={5}
-                    placeholder="Describe how the fault was resolved, what actions were taken, etc..."
-                  />
-                  <p className="text-sm text-gray-600 mt-1">
-                    Provide detailed information about the resolution for audit purposes.
-                  </p>
-                </div>
+                <SmartTextInput
+                  label="Resolution Notes *"
+                  required={true}
+                  value={resolutionNotes}
+                  onChange={setResolutionNotes}
+                  rows={5}
+                  placeholder="Describe how the fault was resolved, what actions were taken, etc... 🎤 Dictate"
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                />
+                <p className="text-sm text-gray-600 -mt-2">
+                  Provide detailed information about the resolution for audit purposes.
+                </p>
 
                 <div className="flex gap-3">
                   <button

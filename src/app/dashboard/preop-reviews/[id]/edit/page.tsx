@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Syringe, Activity, Save } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface PreOpReview {
   id: string;

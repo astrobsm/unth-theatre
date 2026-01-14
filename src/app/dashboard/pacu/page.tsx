@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { SYNC_INTERVALS } from '@/lib/sync';
 
 interface PACUAssessment {
   id: string;
@@ -37,12 +39,33 @@ export default function PACUPage() {
   const [assessments, setAssessments] = useState<PACUAssessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active'>('active');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
+  // Monitor online/offline status
   useEffect(() => {
-    fetchAssessments();
-  }, [filter]);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-  const fetchAssessments = async () => {
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
+  const fetchAssessments = useCallback(async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
     try {
       const url = filter === 'active' 
         ? '/api/pacu?active=true'
@@ -53,6 +76,7 @@ export default function PACUPage() {
         const data = await response.json();
         if (Array.isArray(data)) {
           setAssessments(data);
+          setLastSyncTime(Date.now());
         } else {
           console.error('API returned non-array data:', data);
           setAssessments([]);
@@ -62,8 +86,28 @@ export default function PACUPage() {
       console.error('Error fetching PACU assessments:', error);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
-  };
+  }, [filter, isOnline]);
+
+  useEffect(() => {
+    fetchAssessments();
+    // Auto-refresh every 15 seconds for critical patient safety monitoring
+    const interval = setInterval(fetchAssessments, SYNC_INTERVALS.PACU);
+    return () => clearInterval(interval);
+  }, [fetchAssessments]);
+
+  // Refetch when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAssessments();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchAssessments]);
 
   const getDischargeReadinessColor = (readiness: string) => {
     switch (readiness) {

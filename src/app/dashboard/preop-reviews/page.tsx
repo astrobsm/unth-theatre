@@ -45,6 +45,9 @@ export default function PreOpReviewsPage() {
 
   useEffect(() => {
     fetchReviews();
+    // Auto-refresh every 30 seconds for cross-device sync
+    const interval = setInterval(fetchReviews, 30000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, dateFilter]);
 

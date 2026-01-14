@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import SmartTextInput from '@/components/SmartTextInput';
 
 export default function CssdSterilizationPage() {
   const { data: session, status } = useSession();
@@ -279,12 +280,15 @@ export default function CssdSterilizationPage() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Notes</label>
-                <textarea
+                <SmartTextInput
+                  label="Notes"
                   value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
+                  onChange={(val) => setFormData({ ...formData, notes: val })}
                   rows={3}
+                  placeholder="Sterilization notes... 🎤 Dictate"
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
                 />
               </div>
               <div className="flex justify-end gap-4 mt-6">

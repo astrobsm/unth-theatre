@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Heart, Clock, MapPin, AlertCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Surgery {
   id: string;
@@ -29,6 +30,11 @@ export default function NewMortalityPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // SmartTextInput state for dictation
+  const [causeOfDeath, setCauseOfDeath] = useState('');
+  const [contributingFactors, setContributingFactors] = useState('');
+  const [resuscitationDetails, setResuscitationDetails] = useState('');
 
   useEffect(() => {
     fetchSurgeries();
@@ -65,10 +71,10 @@ export default function NewMortalityPage() {
       patientId: selectedSurgery?.patient.id,
       timeOfDeath: formData.get('timeOfDeath'),
       location: formData.get('location'),
-      causeOfDeath: formData.get('causeOfDeath'),
-      contributingFactors: formData.get('contributingFactors'),
+      causeOfDeath: causeOfDeath,
+      contributingFactors: contributingFactors,
       resuscitationAttempted: formData.get('resuscitationAttempted') === 'on',
-      resuscitationDetails: formData.get('resuscitationDetails') || null,
+      resuscitationDetails: resuscitationDetails || null,
     };
 
     try {
@@ -201,23 +207,29 @@ export default function NewMortalityPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="label">Cause of Death *</label>
-              <textarea
-                name="causeOfDeath"
-                required
-                className="input-field"
+              <SmartTextInput
+                label="Cause of Death *"
+                value={causeOfDeath}
+                onChange={setCauseOfDeath}
                 rows={4}
-                placeholder="Describe the primary cause of death..."
+                placeholder="Describe the primary cause of death... 🎤 Dictate or 📷 capture"
+                required={true}
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="label">Contributing Factors</label>
-              <textarea
-                name="contributingFactors"
-                className="input-field"
+              <SmartTextInput
+                label="Contributing Factors"
+                value={contributingFactors}
+                onChange={setContributingFactors}
                 rows={3}
-                placeholder="Any additional factors that contributed to the mortality..."
+                placeholder="Any additional factors that contributed to the mortality... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
           </div>
@@ -240,15 +252,16 @@ export default function NewMortalityPage() {
               <span className="font-medium">Resuscitation was attempted</span>
             </label>
 
-            <div>
-              <label className="label">Resuscitation Details (if applicable)</label>
-              <textarea
-                name="resuscitationDetails"
-                className="input-field"
-                rows={4}
-                placeholder="Describe resuscitation efforts, interventions attempted, duration, etc..."
-              />
-            </div>
+            <SmartTextInput
+              label="Resuscitation Details (if applicable)"
+              value={resuscitationDetails}
+              onChange={setResuscitationDetails}
+              rows={4}
+              placeholder="Describe resuscitation efforts, interventions attempted, duration, etc... 🎤 Dictate"
+              enableSpeech={true}
+              enableOCR={true}
+              medicalMode={true}
+            />
           </div>
         </div>
 

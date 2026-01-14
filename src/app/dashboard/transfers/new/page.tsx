@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Clock, User, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Patient {
   id: string;
@@ -18,6 +19,7 @@ export default function NewTransferPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchPatient, setSearchPatient] = useState('');
+  const [transferNotes, setTransferNotes] = useState('');
 
   useEffect(() => {
     fetchPatients();
@@ -46,7 +48,7 @@ export default function NewTransferPage() {
       patientId: formData.get('patientId'),
       fromLocation: formData.get('fromLocation'),
       toLocation: formData.get('toLocation'),
-      notes: formData.get('notes'),
+      notes: transferNotes,
     };
 
     try {
@@ -169,12 +171,15 @@ export default function NewTransferPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="label">Notes</label>
-              <textarea
-                name="notes"
-                className="input-field"
+              <SmartTextInput
+                label="Notes"
+                value={transferNotes}
+                onChange={setTransferNotes}
                 rows={3}
-                placeholder="Add any relevant notes about this transfer..."
+                placeholder="Add any relevant notes about this transfer... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
           </div>

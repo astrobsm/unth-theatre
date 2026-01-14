@@ -45,6 +45,10 @@ export default function RosterPage() {
   useEffect(() => {
     fetchRosters();
     fetchTheatres();
+    // Auto-refresh every 60 seconds for cross-device sync
+    const interval = setInterval(fetchRosters, 60000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory, selectedDate]);
 
   const fetchRosters = async () => {

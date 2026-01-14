@@ -31,6 +31,9 @@ export default function ChecklistsPage() {
 
   useEffect(() => {
     fetchChecklists();
+    // Auto-refresh every 30 seconds for cross-device sync
+    const interval = setInterval(fetchChecklists, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchChecklists = async () => {

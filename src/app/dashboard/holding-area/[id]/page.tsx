@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Assessment {
   id: string;
@@ -372,12 +373,14 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
               <span>Patient has known allergies</span>
             </label>
             {assessment.hasAllergies && (
-              <textarea
-                placeholder="List allergies..."
+              <SmartTextInput
+                placeholder="List allergies... 🎤 Dictate or 📷 capture"
                 value={assessment.allergyDetails || ''}
-                onChange={(e) => updateAssessment({ allergyDetails: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                onChange={(val) => updateAssessment({ allergyDetails: val })}
                 rows={2}
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             )}
           </div>
@@ -603,16 +606,16 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
                   <option value="MISSING_RESULTS">Missing Results</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
-                <textarea
-                  value={alertDescription}
-                  onChange={(e) => setAlertDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  rows={4}
-                  placeholder="Describe the issue..."
-                />
-              </div>
+              <SmartTextInput
+                label="Description"
+                value={alertDescription}
+                onChange={setAlertDescription}
+                rows={4}
+                placeholder="Describe the issue... 🎤 Dictate or 📷 capture"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={() => setShowAlertDialog(false)}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Heart, User, FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Mortality {
   id: string;
@@ -50,6 +51,11 @@ export default function MortalityAuditPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  
+  // SmartTextInput state for dictation
+  const [findings, setFindings] = useState('');
+  const [recommendations, setRecommendations] = useState('');
+  const [actionsTaken, setActionsTaken] = useState('');
 
   useEffect(() => {
     fetchMortality();
@@ -80,10 +86,10 @@ export default function MortalityAuditPage() {
 
     const data = {
       mortalityId,
-      findings: formData.get('findings'),
+      findings: findings,
       preventability: formData.get('preventability'),
-      recommendations: formData.get('recommendations'),
-      actionsTaken: formData.get('actionsTaken') || null,
+      recommendations: recommendations,
+      actionsTaken: actionsTaken || null,
       followUpRequired: formData.get('followUpRequired') === 'on',
     };
 
@@ -318,37 +324,40 @@ export default function MortalityAuditPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="label">Audit Findings *</label>
-                <textarea
-                  name="findings"
-                  required
-                  className="input-field"
-                  rows={5}
-                  placeholder="Document key findings from the case review, including any deviations from standard care, complications, or systemic issues..."
-                />
-              </div>
+              <SmartTextInput
+                label="Audit Findings *"
+                value={findings}
+                onChange={setFindings}
+                required={true}
+                rows={5}
+                placeholder="Document key findings from the case review, including any deviations from standard care, complications, or systemic issues... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
 
-              <div>
-                <label className="label">Recommendations *</label>
-                <textarea
-                  name="recommendations"
-                  required
-                  className="input-field"
-                  rows={4}
-                  placeholder="Provide recommendations for preventing similar cases in the future, including changes to protocols, training, or resources..."
-                />
-              </div>
+              <SmartTextInput
+                label="Recommendations *"
+                value={recommendations}
+                onChange={setRecommendations}
+                required={true}
+                rows={4}
+                placeholder="Provide recommendations for preventing similar cases in the future, including changes to protocols, training, or resources... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
 
-              <div>
-                <label className="label">Actions Taken (if any)</label>
-                <textarea
-                  name="actionsTaken"
-                  className="input-field"
-                  rows={3}
-                  placeholder="Document any immediate actions already taken in response to this case..."
-                />
-              </div>
+              <SmartTextInput
+                label="Actions Taken (if any)"
+                value={actionsTaken}
+                onChange={setActionsTaken}
+                rows={3}
+                placeholder="Document any immediate actions already taken in response to this case... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
 
               <label className="flex items-center gap-3">
                 <input

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator } from 'lucide-react';
 import Link from 'next/link';
 import { WARDS } from '@/lib/constants';
+import SmartTextInput from '@/components/SmartTextInput';
 
 // Comprehensive Risk Assessment Calculators
 
@@ -57,6 +58,12 @@ export default function NewPatientPage() {
   // Basic Info
   const [age, setAge] = useState(0);
   const [gender, setGender] = useState('');
+  
+  // SmartTextInput state for voice dictation
+  const [comorbidities, setComorbidities] = useState('');
+  const [metabolicStatus, setMetabolicStatus] = useState('');
+  const [otherMedications, setOtherMedications] = useState('');
+  const [assessmentNotes, setAssessmentNotes] = useState('');
 
   // DVT Risk Factors
   const [dvtFactors, setDvtFactors] = useState<DVTRiskFactors>({
@@ -270,20 +277,20 @@ export default function NewPatientPage() {
       onARBs: false,
       arbName: null,
       arbLastDose: null,
-      otherMedications: formData.get('otherMedications') || null,
+      otherMedications: otherMedications || null,
       
       // WHO Operative Fitness Risk Assessment
       whoRiskClass: whoRiskClass || null,
       asaScore: asaScore,
-      comorbidities: formData.get('comorbidities') || null,
+      comorbidities: comorbidities || null,
       cardiovascularStatus: formData.get('cardiovascularStatus') || null,
       respiratoryStatus: formData.get('respiratoryStatus') || null,
-      metabolicStatus: formData.get('metabolicStatus') || null,
+      metabolicStatus: metabolicStatus || null,
       
       // Final Assessment
       finalRiskScore: (dvtScore + bleedingScore + (23 - bradenScore)) / 3,
       fitnessForSurgery: formData.get('fitnessForSurgery'),
-      assessmentNotes: formData.get('assessmentNotes') || null,
+      assessmentNotes: assessmentNotes || null,
       assessedBy: formData.get('assessedBy'),
       assessmentDate: formData.get('assessmentDate') ? new Date(formData.get('assessmentDate') as string) : new Date(),
     };
@@ -1067,12 +1074,15 @@ export default function NewPatientPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="label">Comorbidities</label>
-              <textarea
-                name="comorbidities"
-                className="input-field"
+              <SmartTextInput
+                label="Comorbidities"
+                value={comorbidities}
+                onChange={setComorbidities}
                 rows={3}
-                placeholder="List all existing medical conditions (diabetes, hypertension, etc.)"
+                placeholder="List all existing medical conditions (diabetes, hypertension, etc.) 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
 
@@ -1099,12 +1109,15 @@ export default function NewPatientPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="label">Metabolic Status</label>
-              <textarea
-                name="metabolicStatus"
-                className="input-field"
+              <SmartTextInput
+                label="Metabolic Status"
+                value={metabolicStatus}
+                onChange={setMetabolicStatus}
                 rows={2}
-                placeholder="Diabetes, thyroid disorders, renal/hepatic impairment, etc."
+                placeholder="Diabetes, thyroid disorders, renal/hepatic impairment, etc. 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
           </div>
@@ -1113,11 +1126,15 @@ export default function NewPatientPage() {
         {/* Other Medications */}
         <div className="card">
           <h3 className="font-semibold mb-4">Other Medications</h3>
-          <textarea
-            name="otherMedications"
-            className="input-field"
+          <SmartTextInput
+            value={otherMedications}
+            onChange={setOtherMedications}
             rows={3}
-            placeholder="List any other medications not mentioned above..."
+            placeholder="List any other medications not mentioned above... 🎤 Dictate"
+            enableSpeech={true}
+            enableOCR={true}
+            medicalMode={true}
+          />
           />
         </div>
 
@@ -1148,12 +1165,15 @@ export default function NewPatientPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="label">Assessment Notes</label>
-              <textarea
-                name="assessmentNotes"
-                className="input-field"
+              <SmartTextInput
+                label="Assessment Notes"
+                value={assessmentNotes}
+                onChange={setAssessmentNotes}
                 rows={4}
-                placeholder="Additional notes regarding fitness for surgery, special precautions, recommendations..."
+                placeholder="Additional notes regarding fitness for surgery, special precautions, recommendations... 🎤 Dictate"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
               />
             </div>
 

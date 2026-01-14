@@ -22,6 +22,9 @@ export default function PatientsPage() {
 
   useEffect(() => {
     fetchPatients();
+    // Auto-refresh every 60 seconds for cross-device sync
+    const interval = setInterval(fetchPatients, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchPatients = async () => {

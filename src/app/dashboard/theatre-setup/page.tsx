@@ -52,6 +52,9 @@ export default function TheatreSetupPage() {
 
   useEffect(() => {
     fetchSetups();
+    // Auto-refresh every 60 seconds for cross-device sync
+    const interval = setInterval(fetchSetups, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchSetups = async () => {

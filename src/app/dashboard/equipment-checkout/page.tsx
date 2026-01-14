@@ -8,6 +8,7 @@ import {
   CheckCircle, XCircle, Search, Calendar, Filter
 } from 'lucide-react';
 import { THEATRES } from '@/lib/constants';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface InventoryItem {
   id: string;
@@ -80,6 +81,10 @@ export default function EquipmentCheckoutPage() {
     }
     fetchInventory();
     fetchCheckouts();
+    // Auto-refresh every 30 seconds for cross-device sync
+    const interval = setInterval(fetchCheckouts, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   const fetchInventory = async () => {
@@ -483,16 +488,16 @@ export default function EquipmentCheckoutPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="label">Notes</label>
-                <textarea
-                  value={checkoutNotes}
-                  onChange={(e) => setCheckoutNotes(e.target.value)}
-                  className="input-field"
-                  rows={3}
-                  placeholder="Any additional notes..."
-                />
-              </div>
+              <SmartTextInput
+                label="Notes"
+                value={checkoutNotes}
+                onChange={setCheckoutNotes}
+                rows={3}
+                placeholder="Any additional notes... 🎤 Dictate or 📷 capture"
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
 
               <button
                 type="submit"
@@ -689,16 +694,16 @@ export default function EquipmentCheckoutPage() {
                   </div>
                 )}
 
-                <div>
-                  <label className="label">General Return Notes</label>
-                  <textarea
-                    value={returnNotes}
-                    onChange={(e) => setReturnNotes(e.target.value)}
-                    className="input-field"
-                    rows={3}
-                    placeholder="Any general notes about the return..."
-                  />
-                </div>
+                <SmartTextInput
+                  label="General Return Notes"
+                  value={returnNotes}
+                  onChange={setReturnNotes}
+                  rows={3}
+                  placeholder="Any general notes about the return... 🎤 Dictate"
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                />
 
                 <button
                   type="submit"

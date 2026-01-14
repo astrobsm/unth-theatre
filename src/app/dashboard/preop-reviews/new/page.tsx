@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, AlertCircle, Syringe, Activity } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Camera } from 'lucide-react';
 import Link from 'next/link';
+import SmartTextInput from '@/components/SmartTextInput';
 
 interface Surgery {
   id: string;
@@ -31,6 +32,17 @@ export default function NewPreOpReviewPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
+  // Smart text input states for dictation/OCR fields
+  const [currentMedications, setCurrentMedications] = useState('');
+  const [comorbidities, setComorbidities] = useState('');
+  const [previousAnesthesia, setPreviousAnesthesia] = useState('');
+  const [otherLabResults, setOtherLabResults] = useState('');
+  const [anestheticPlan, setAnestheticPlan] = useState('');
+  const [specialConsiderations, setSpecialConsiderations] = useState('');
+  const [riskFactors, setRiskFactors] = useState('');
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [recommendations, setRecommendations] = useState('');
 
   useEffect(() => {
     fetchScheduledSurgeries();
@@ -226,19 +238,26 @@ export default function NewPreOpReviewPage() {
           <>
             {/* Medical History */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Medical History</h2>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Medications
-                  </label>
-                  <textarea
-                    name="currentMedications"
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="List all current medications with dosages"
-                  />
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Medical History</h2>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Mic className="w-4 h-4" />
+                  <span>Voice & OCR enabled</span>
+                  <Camera className="w-4 h-4" />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <SmartTextInput
+                  label="Current Medications"
+                  value={currentMedications}
+                  onChange={setCurrentMedications}
+                  placeholder="List all current medications with dosages (use voice or camera)"
+                  rows={3}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                  helpText="Say medication names and dosages, or photograph prescription"
+                />
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Allergies
@@ -250,28 +269,27 @@ export default function NewPreOpReviewPage() {
                     placeholder="Drug allergies, food allergies, etc."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Comorbidities
-                  </label>
-                  <textarea
-                    name="comorbidities"
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Diabetes, Hypertension, Cardiac disease, etc."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Previous Anesthesia History
-                  </label>
-                  <textarea
-                    name="previousAnesthesia"
-                    rows={2}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Any complications or issues with previous anesthesia"
-                  />
-                </div>
+                <SmartTextInput
+                  label="Comorbidities"
+                  value={comorbidities}
+                  onChange={setComorbidities}
+                  placeholder="Diabetes, Hypertension, Cardiac disease, etc."
+                  rows={3}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                  helpText="Dictate or scan patient's medical history"
+                />
+                <SmartTextInput
+                  label="Previous Anesthesia History"
+                  value={previousAnesthesia}
+                  onChange={setPreviousAnesthesia}
+                  placeholder="Any complications or issues with previous anesthesia"
+                  rows={2}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                />
               </div>
             </div>
 
@@ -518,14 +536,16 @@ export default function NewPreOpReviewPage() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Other Lab Results
-                </label>
-                <textarea
-                  name="otherLabResults"
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                <SmartTextInput
+                  label="Other Lab Results"
+                  value={otherLabResults}
+                  onChange={setOtherLabResults}
                   placeholder="Additional laboratory findings"
+                  rows={2}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                  helpText="Dictate lab values or photograph lab results"
                 />
               </div>
             </div>
@@ -572,25 +592,28 @@ export default function NewPreOpReviewPage() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Anesthetic Plan Details
-                </label>
-                <textarea
-                  name="anestheticPlan"
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                <SmartTextInput
+                  label="Anesthetic Plan Details"
+                  value={anestheticPlan}
+                  onChange={setAnestheticPlan}
                   placeholder="Detailed anesthetic plan, drug choices, monitoring requirements, etc."
+                  rows={4}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
+                  helpText="Dictate your anesthetic plan with drug choices and monitoring"
                 />
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Special Considerations
-                </label>
-                <textarea
-                  name="specialConsiderations"
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                <SmartTextInput
+                  label="Special Considerations"
+                  value={specialConsiderations}
+                  onChange={setSpecialConsiderations}
                   placeholder="Difficult airway, risk of aspiration, special positioning, etc."
+                  rows={3}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  medicalMode={true}
                 />
               </div>
             </div>
@@ -613,45 +636,52 @@ export default function NewPreOpReviewPage() {
                   <option value="VERY_HIGH">Very High Risk</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Risk Factors
-                </label>
-                <textarea
-                  name="riskFactors"
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Specific risk factors identified"
-                />
-              </div>
+              <SmartTextInput
+                label="Risk Factors"
+                value={riskFactors}
+                onChange={setRiskFactors}
+                placeholder="Specific risk factors identified"
+                rows={3}
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
             </div>
 
             {/* Recommendations */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Review Notes & Recommendations</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Review Notes & Recommendations</h2>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Mic className="w-4 h-4" />
+                  <span>Dictation enabled</span>
+                </div>
+              </div>
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Review Notes
-                  </label>
-                  <textarea
-                    name="reviewNotes"
-                    rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Overall assessment notes"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Recommendations
-                  </label>
-                  <textarea
-                    name="recommendations"
-                    rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Recommendations for optimization, further investigations, or precautions"
-                  />
-                </div>
+                <SmartTextInput
+                  label="Review Notes"
+                  value={reviewNotes}
+                  onChange={setReviewNotes}
+                  placeholder="Overall assessment notes - dictate your findings"
+                  rows={4}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  enableReadBack={true}
+                  medicalMode={true}
+                  helpText="Speak your assessment notes or photograph written notes"
+                />
+                <SmartTextInput
+                  label="Recommendations"
+                  value={recommendations}
+                  onChange={setRecommendations}
+                  placeholder="Recommendations for optimization, further investigations, or precautions"
+                  rows={4}
+                  enableSpeech={true}
+                  enableOCR={true}
+                  enableReadBack={true}
+                  medicalMode={true}
+                  helpText="Dictate recommendations - use read back to verify"
+                />
               </div>
             </div>
 
