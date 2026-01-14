@@ -332,7 +332,7 @@ export default function OxygenControlPage() {
             <div>
               <p className="font-semibold text-yellow-900">No Recent Readiness Report</p>
               <p className="text-sm text-yellow-700 mt-1">
-                Please log today's oxygen readiness status
+                Please log today&apos;s oxygen readiness status
               </p>
             </div>
           </div>

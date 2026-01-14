@@ -1135,7 +1135,6 @@ export default function NewPatientPage() {
             enableOCR={true}
             medicalMode={true}
           />
-          />
         </div>
 
         {/* Final Assessment */}

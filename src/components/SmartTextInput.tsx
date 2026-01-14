@@ -814,7 +814,7 @@ export function SmartTextInput({
       {/* Voice commands help */}
       {isListening && (
         <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
-          <strong>Voice commands:</strong> Say "period", "comma", "new line", "new paragraph" for punctuation
+          <strong>Voice commands:</strong> Say &quot;period&quot;, &quot;comma&quot;, &quot;new line&quot;, &quot;new paragraph&quot; for punctuation
         </div>
       )}
     </div>
