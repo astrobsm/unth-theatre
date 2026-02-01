@@ -225,7 +225,7 @@ export default function NewChecklistPage() {
       ['Folder Number:', selectedSurgery.patient.folderNumber],
       ['Age/Gender:', `${selectedSurgery.patient.age} years / ${selectedSurgery.patient.gender}`],
       ['Procedure:', selectedSurgery.procedureName],
-      ['Surgeon:', selectedSurgery.surgeon.fullName],
+      ['Surgeon:', selectedSurgery.surgeon?.fullName || 'Not assigned'],
       ['Unit:', selectedSurgery.unit],
       ['Date:', new Date(selectedSurgery.scheduledDate).toLocaleDateString('en-GB')],
       ['Completed By:', session?.user?.name || 'N/A'],
@@ -470,7 +470,7 @@ export default function NewChecklistPage() {
                       <p className="text-sm text-gray-700 mt-1">{surgery.procedureName}</p>
                       <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                         <User className="w-3 h-3" />
-                        <span>{surgery.surgeon.fullName}</span>
+                        <span>{surgery.surgeon?.fullName || 'Not assigned'}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                         <Calendar className="w-3 h-3" />

@@ -180,7 +180,7 @@ export default function PreOpReviewDetailPage() {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Surgeon</label>
-              <p className="text-gray-900">{review.surgery.surgeon.fullName}</p>
+              <p className="text-gray-900">{review.surgery.surgeon?.fullName || 'Not assigned'}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Scheduled Date</label>
@@ -460,12 +460,12 @@ export default function PreOpReviewDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="text-sm font-medium text-gray-500">Reviewed By</label>
-            <p className="text-gray-900 mt-1">{review.anesthetist.fullName}</p>
+            <p className="text-gray-900 mt-1">{review.anesthetist?.fullName || 'Not assigned'}</p>
           </div>
           {review.consultantAnesthetist && (
             <div>
               <label className="text-sm font-medium text-gray-500">Consultant Anesthetist</label>
-              <p className="text-gray-900 mt-1">{review.consultantAnesthetist.fullName}</p>
+              <p className="text-gray-900 mt-1">{review.consultantAnesthetist?.fullName || 'Not assigned'}</p>
             </div>
           )}
           <div>

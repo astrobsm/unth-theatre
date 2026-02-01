@@ -234,7 +234,7 @@ export default function PatientDetailPage() {
                 {patient.surgeries.map((surgery) => (
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900">{surgery.procedureName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{surgery.surgeon.fullName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{surgery.surgeon?.fullName || 'Not assigned'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {formatDate(surgery.scheduledDate)} {surgery.scheduledTime}
                     </td>

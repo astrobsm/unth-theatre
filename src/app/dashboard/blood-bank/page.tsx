@@ -432,7 +432,7 @@ export default function BloodBankPage() {
                   <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      <span>Requested by: {request.requestedBy.fullName}</span>
+                      <span>Requested by: {request.requestedBy?.fullName || 'Not assigned'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />

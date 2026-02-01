@@ -36,7 +36,7 @@ export default function RegisterPage() {
           username: formData.username,
           email: formData.email,
           password: formData.password,
-          fullName: formData.fullName,
+          fullName: formData.fullName || 'Not assigned',
           role: formData.role,
         }),
       });
@@ -113,7 +113,7 @@ export default function RegisterPage() {
                 type="text"
                 required
                 className="input-field"
-                value={formData.fullName}
+                value={formData.fullName || 'Not assigned'}
                 onChange={handleChange}
                 disabled={loading}
               />

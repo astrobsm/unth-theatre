@@ -169,7 +169,7 @@ export default function NewMortalityPage() {
                   <p><span className="font-medium">Age:</span> {selectedSurgery.patient.age} years</p>
                   <p><span className="font-medium">Gender:</span> {selectedSurgery.patient.gender}</p>
                   <p><span className="font-medium">Procedure:</span> {selectedSurgery.surgeryType}</p>
-                  <p><span className="font-medium">Surgeon:</span> {selectedSurgery.surgeon.fullName}</p>
+                  <p><span className="font-medium">Surgeon:</span> {selectedSurgery.surgeon?.fullName || 'Not assigned'}</p>
                   <p><span className="font-medium">Date:</span> {new Date(selectedSurgery.scheduledDate).toLocaleDateString()}</p>
                 </div>
               </div>

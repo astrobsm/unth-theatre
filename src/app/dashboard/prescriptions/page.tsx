@@ -369,12 +369,12 @@ export default function PrescriptionsPage() {
                   <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      <span>Prescribed by: {prescription.prescribedBy.fullName}</span>
+                      <span>Prescribed by: {prescription.prescribedBy?.fullName || 'Not assigned'}</span>
                     </div>
                     {prescription.packedBy && (
                       <div className="flex items-center gap-1 text-green-600">
                         <CheckCircle className="h-4 w-4" />
-                        <span>Packed by: {prescription.packedBy.fullName}</span>
+                        <span>Packed by: {prescription.packedBy?.fullName || 'Not assigned'}</span>
                         {prescription.packedAt && (
                           <span className="text-gray-500">
                             on {new Date(prescription.packedAt).toLocaleString()}

@@ -738,7 +738,7 @@ export default function TheatresPage() {
                       <option value="">Select Scrub Nurse</option>
                       {scrubNurses.map((nurse) => (
                         <option key={nurse.id} value={nurse.id}>
-                          {nurse.fullName}
+                          {nurse.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -751,7 +751,7 @@ export default function TheatresPage() {
                       <option value="">Select Circulating Nurse</option>
                       {circulatingNurses.map((nurse) => (
                         <option key={nurse.id} value={nurse.id}>
-                          {nurse.fullName}
+                          {nurse.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -764,7 +764,7 @@ export default function TheatresPage() {
                       <option value="">Select Anaesthetic Technician</option>
                       {anaestheticTechnicians.map((tech) => (
                         <option key={tech.id} value={tech.id}>
-                          {tech.fullName}
+                          {tech.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -777,7 +777,7 @@ export default function TheatresPage() {
                       <option value="">Select Consultant</option>
                       {anaesthetists.map((anaesthetist) => (
                         <option key={anaesthetist.id} value={anaesthetist.id}>
-                          {anaesthetist.fullName}
+                          {anaesthetist.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -790,7 +790,7 @@ export default function TheatresPage() {
                       <option value="">Select Senior Registrar</option>
                       {anaesthetists.map((anaesthetist) => (
                         <option key={anaesthetist.id} value={anaesthetist.id}>
-                          {anaesthetist.fullName}
+                          {anaesthetist.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -803,7 +803,7 @@ export default function TheatresPage() {
                       <option value="">Select Registrar</option>
                       {anaesthetists.map((anaesthetist) => (
                         <option key={anaesthetist.id} value={anaesthetist.id}>
-                          {anaesthetist.fullName}
+                          {anaesthetist.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -816,7 +816,7 @@ export default function TheatresPage() {
                       <option value="">Select Cleaner</option>
                       {cleaners.map((cleaner) => (
                         <option key={cleaner.id} value={cleaner.id}>
-                          {cleaner.fullName}
+                          {cleaner.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>
@@ -829,7 +829,7 @@ export default function TheatresPage() {
                       <option value="">Select Porter</option>
                       {porters.map((porter) => (
                         <option key={porter.id} value={porter.id}>
-                          {porter.fullName}
+                          {porter.fullName || 'Not assigned'}
                         </option>
                       ))}
                     </select>

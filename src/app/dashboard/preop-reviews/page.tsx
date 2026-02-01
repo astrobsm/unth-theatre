@@ -342,10 +342,10 @@ export default function PreOpReviewsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <div className="text-gray-900">{review.anesthetist.fullName}</div>
+                    <div className="text-gray-900">{review.anesthetist?.fullName || 'Not assigned'}</div>
                     {review.consultantAnesthetist && (
                       <div className="text-xs text-gray-500">
-                        Approved by: {review.consultantAnesthetist.fullName}
+                        Approved by: {review.consultantAnesthetist?.fullName || 'Not assigned'}
                       </div>
                     )}
                   </td>

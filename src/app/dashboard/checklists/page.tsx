@@ -197,7 +197,7 @@ export default function ChecklistsPage() {
                         </p>
                         <p className="text-sm text-gray-700">
                           <span className="font-medium">Surgeon:</span>{' '}
-                          {checklist.surgery.surgeon.fullName}
+                          {checklist.surgery?.surgeon?.fullName || 'Not assigned'}
                         </p>
 
                         <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">

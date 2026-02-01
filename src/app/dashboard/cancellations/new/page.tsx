@@ -158,7 +158,7 @@ export default function NewCancellationPage() {
                   </div>
                   <div>
                     <span className="text-gray-600">Surgeon:</span>
-                    <p className="font-medium text-gray-900">{selectedSurgery.surgeon.fullName}</p>
+                    <p className="font-medium text-gray-900">{selectedSurgery.surgeon?.fullName || 'Not assigned'}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Scheduled Date:</span>

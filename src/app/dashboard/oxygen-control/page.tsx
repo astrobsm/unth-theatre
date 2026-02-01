@@ -185,7 +185,7 @@ export default function OxygenControlPage() {
                     </div>
                     <p className="text-gray-700 font-medium">{alert.location}</p>
                     <p className="text-sm text-gray-600 mt-1">
-                      Triggered by {alert.triggeredBy.fullName} ({alert.triggeredBy.role})
+                      Triggered by {alert.triggeredBy?.fullName || 'Not assigned'} ({alert.triggeredBy.role})
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {new Date(alert.alertDate).toLocaleString()}
@@ -312,7 +312,7 @@ export default function OxygenControlPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Reported By:</span>
-                <span className="font-medium">{latestReport.reportedBy.fullName}</span>
+                <span className="font-medium">{latestReport.reportedBy?.fullName || 'Not assigned'}</span>
               </div>
             </div>
             <div className="mt-4 pt-4 border-t">

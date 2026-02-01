@@ -224,7 +224,7 @@ export default function NewPreOpReviewPage() {
                   <span className="font-medium">Age/Gender:</span> {selectedSurgery.patient.age}y, {selectedSurgery.patient.gender}
                 </div>
                 <div>
-                  <span className="font-medium">Surgeon:</span> {selectedSurgery.surgeon.fullName}
+                  <span className="font-medium">Surgeon:</span> {selectedSurgery.surgeon?.fullName || 'Not assigned'}
                 </div>
                 <div className="col-span-2">
                   <span className="font-medium">Procedure:</span> {selectedSurgery.procedureName}

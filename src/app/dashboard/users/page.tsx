@@ -362,7 +362,7 @@ export default function UsersPage() {
                 {pendingUsers.map((user) => (
                   <tr key={user.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {user.fullName}
+                      {user.fullName || 'Not assigned'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {user.username}
@@ -431,7 +431,7 @@ export default function UsersPage() {
               {users.map((user) => (
                 <tr key={user.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {user.fullName}
+                    {user.fullName || 'Not assigned'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {user.username}

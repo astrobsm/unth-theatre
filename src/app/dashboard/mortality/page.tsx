@@ -200,7 +200,7 @@ export default function MortalityPage() {
                           <span className="font-medium">Procedure:</span> {mortality.surgery.surgeryType}
                         </p>
                         <p className="text-sm text-gray-700">
-                          <span className="font-medium">Surgeon:</span> {mortality.surgery.surgeon.fullName}
+                          <span className="font-medium">Surgeon:</span> {mortality.surgery?.surgeon?.fullName || 'Not assigned'}
                         </p>
                       </div>
                     </div>

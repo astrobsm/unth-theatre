@@ -193,7 +193,7 @@ export default function CancellationsPage() {
                         </p>
                         <p className="text-sm text-gray-700">
                           <span className="font-medium">Surgeon:</span>{' '}
-                          {cancellation.surgery.surgeon.fullName}
+                          {cancellation.surgery?.surgeon?.fullName || 'Not assigned'}
                         </p>
                       </div>
                     </div>
@@ -220,7 +220,7 @@ export default function CancellationsPage() {
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <User className="w-4 h-4" />
-                        <span>Cancelled by: {cancellation.cancelledBy.fullName}</span>
+                        <span>Cancelled by: {cancellation.cancelledBy?.fullName || 'Not assigned'}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <FileText className="w-4 h-4" />

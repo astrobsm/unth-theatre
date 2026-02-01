@@ -355,7 +355,7 @@ export default function EmergencyAlertsPage() {
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      <span>Created by: {alert.createdBy.fullName}</span>
+                      <span>Created by: {alert.createdBy?.fullName || 'Not assigned'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />
@@ -364,7 +364,7 @@ export default function EmergencyAlertsPage() {
                   </div>
                   {alert.acknowledgedBy && (
                     <div className="text-blue-600">
-                      Acknowledged by {alert.acknowledgedBy.fullName}
+                      Acknowledged by {alert.acknowledgedBy?.fullName || 'Not assigned'}
                       {alert.acknowledgedAt && ` at ${new Date(alert.acknowledgedAt).toLocaleTimeString()}`}
                     </div>
                   )}

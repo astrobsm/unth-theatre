@@ -460,7 +460,7 @@ export default function PACUAssessmentDetailPage() {
           </div>
           <div>
             <span className="text-gray-600">Surgeon:</span>
-            <p className="font-medium">{assessment.surgery.surgeon.fullName}</p>
+            <p className="font-medium">{assessment.surgery.surgeon?.fullName || 'Not assigned'}</p>
           </div>
           <div>
             <span className="text-gray-600">Age/Gender:</span>
@@ -585,12 +585,12 @@ export default function PACUAssessmentDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Surgeon:</span>
-                <span className="font-medium">{assessment.surgery.surgeon.fullName}</span>
+                <span className="font-medium">{assessment.surgery.surgeon?.fullName || 'Not assigned'}</span>
               </div>
               {assessment.surgery.anesthetist && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Anesthetist:</span>
-                  <span className="font-medium">{assessment.surgery.anesthetist.fullName}</span>
+                  <span className="font-medium">{assessment.surgery.anesthetist?.fullName || 'Not assigned'}</span>
                 </div>
               )}
               <div className="flex justify-between">

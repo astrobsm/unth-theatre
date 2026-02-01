@@ -245,7 +245,7 @@ export default function IncidentsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {incident.reportedBy.fullName}
+                      {incident.reportedBy?.fullName || 'Not assigned'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link
