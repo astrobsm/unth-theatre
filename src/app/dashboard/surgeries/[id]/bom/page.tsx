@@ -122,7 +122,7 @@ export default function SurgeryBOMPage() {
       ['Folder Number:', bom.patient.folderNumber],
       ['Age/Gender:', `${bom.patient.age} years / ${bom.patient.gender}`],
       ['Procedure:', bom.procedureName],
-      ['Surgeon:', bom.surgeon.fullName],
+      ['Surgeon:', bom.surgeon?.fullName || 'Not assigned'],
       ['Unit/Department:', bom.unit],
       ['Surgery Date:', new Date(bom.scheduledDate).toLocaleDateString('en-GB')],
       ['Status:', bom.status],
@@ -382,7 +382,7 @@ export default function SurgeryBOMPage() {
             </div>
             <div>
               <label className="text-sm text-gray-600">Surgeon</label>
-              <p className="font-semibold text-gray-900">{bom.surgeon.fullName}</p>
+              <p className="font-semibold text-gray-900">{bom.surgeon?.fullName || 'Not assigned'}</p>
             </div>
             <div>
               <label className="text-sm text-gray-600">Unit/Department</label>

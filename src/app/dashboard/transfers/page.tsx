@@ -183,7 +183,7 @@ export default function TransfersPage() {
                 <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4" />
-                    <span>Transferred by: <span className="font-medium">{transfer.user.fullName}</span></span>
+                    <span>Transferred by: <span className="font-medium">{transfer.user?.fullName || 'Unknown'}</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4" />

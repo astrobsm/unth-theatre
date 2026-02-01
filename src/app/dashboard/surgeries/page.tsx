@@ -15,7 +15,7 @@ interface Surgery {
   };
   surgeon: {
     fullName: string;
-  };
+  } | null;
   procedureName: string;
   scheduledDate: string;
   scheduledTime: string;
@@ -257,7 +257,7 @@ export default function SurgeriesPage() {
                       <div className="text-sm text-gray-500">{surgery.subspecialty}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {surgery.surgeon.fullName}
+                      {surgery.surgeon?.fullName || 'Not assigned'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">

@@ -122,7 +122,7 @@ export default function TheatreSetupPage() {
       ['Theatre Location:', setup.theatre.location],
       ['Date:', new Date(setup.setupDate).toLocaleDateString('en-GB')],
       ['Collection Time:', setup.collectionTime],
-      ['Nurse:', setup.nurse.fullName],
+      ['Nurse:', setup.nurse?.fullName || 'Not assigned'],
       ['Status:', setup.status],
       ['Geolocation:', setup.location || 'Not recorded'],
     ];
@@ -291,7 +291,7 @@ export default function TheatreSetupPage() {
         new Date(setup.setupDate).toLocaleDateString('en-GB'),
         setup.collectionTime,
         setup.theatre.name,
-        setup.nurse.fullName,
+        setup.nurse?.fullName || 'Not assigned',
         totalItems.toString(),
         setup.status,
       ];
@@ -563,7 +563,7 @@ export default function TheatreSetupPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-900">{setup.nurse.fullName}</span>
+                          <span className="text-sm text-gray-900">{setup.nurse?.fullName || 'Not assigned'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

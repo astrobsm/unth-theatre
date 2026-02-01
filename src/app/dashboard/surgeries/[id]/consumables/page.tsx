@@ -312,7 +312,7 @@ export default function SurgeryConsumablesPage() {
             <p className="text-gray-700">Folder: {surgery.patient.folderNumber}</p>
             <p className="text-gray-700 mt-1">
               <span className="font-semibold">Procedure:</span> {surgery.surgeryType} | 
-              <span className="font-semibold"> Surgeon:</span> {surgery.surgeon.fullName}
+              <span className="font-semibold"> Surgeon:</span> {surgery.surgeon?.fullName || 'Not assigned'}
             </p>
           </div>
         </div>

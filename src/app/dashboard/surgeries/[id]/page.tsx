@@ -261,18 +261,18 @@ export default function SurgeryDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium text-gray-500">Surgeon</label>
-              <p className="text-gray-900 font-medium">{surgery.surgeon.fullName}</p>
+              <p className="text-gray-900 font-medium">{surgery.surgeon?.fullName || 'Not assigned'}</p>
             </div>
             {surgery.anesthetist && (
               <div>
                 <label className="text-sm font-medium text-gray-500">Anesthetist</label>
-                <p className="text-gray-900 font-medium">{surgery.anesthetist.fullName}</p>
+                <p className="text-gray-900 font-medium">{surgery.anesthetist?.fullName || 'Not assigned'}</p>
               </div>
             )}
             {surgery.scrubNurse && (
               <div>
                 <label className="text-sm font-medium text-gray-500">Scrub Nurse</label>
-                <p className="text-gray-900 font-medium">{surgery.scrubNurse.fullName}</p>
+                <p className="text-gray-900 font-medium">{surgery.scrubNurse?.fullName || 'Not assigned'}</p>
               </div>
             )}
           </div>
