@@ -327,6 +327,10 @@ export function getRoleName(role: UserRole): string {
     PHARMACIST: 'Pharmacist',
     CSSD_STAFF: 'CSSD Staff',
     POWER_PLANT_OPERATOR: 'Power Plant Operator',
+    THEATRE_CAFETERIA_MANAGER: 'Theatre Cafeteria Manager',
+    LAUNDRY_STAFF: 'Laundry Staff',
+    PLUMBER: 'Plumber',
+    LABORATORY_STAFF: 'Laboratory Staff',
   };
   
   return roleNames[role] || role;

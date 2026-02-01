@@ -67,82 +67,88 @@ export default function DashboardLayout({
   }
 
   const menuItems = [
-    // 1. Overview
+    // 1. Dashboard
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     
-    // 2. Pre-operative Phase
+    // 2. Patients
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
-    { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
     
-    // 3. Theatre Preparation
-    { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
-    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup', badge: 'NEW' },
-    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness', badge: 'NEW' },
+    // 3. Pre-op Reviews (NEW)
+    { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews', badge: 'NEW' },
     
-    // 4. Patient Journey - Pre-Op
-    { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
-    { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
-    { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Preop Reviews', badge: 'NEW' },
+    // 4. Prescriptions (NEW)
     { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions', badge: 'NEW' },
+    
+    // 5. Blood Bank (NEW)
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank', badge: 'NEW' },
     
-    // 5. Operative Phase
+    // 6. Theatre Allocation
+    { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
+    
+    // 7. Cancellations
+    { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
+    
+    // 8. Theatre Setup
+    { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
+    
+    // 9. Theatre Readiness (NEW)
+    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness', badge: 'NEW' },
+    
+    // 10-12. Power House (NEW) - Added for Power Plant Operators and Admins
+    { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status', badge: 'NEW' },
+    { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance', badge: 'NEW' },
+    { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness', badge: 'NEW' },
+    
+    // 13-15. CSSD (NEW)
+    { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory', badge: 'NEW' },
+    { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization', badge: 'NEW' },
+    { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness', badge: 'NEW' },
+    
+    // 16. Equipment Checkout (NEW)
+    { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout', badge: 'NEW' },
+    
+    // 17. Holding Area
+    { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
+    
+    // 18. Anesthesia Setup (NEW)
+    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup', badge: 'NEW' },
+    
+    // 19. WHO Checklists
+    { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
+    
+    // 20. Surgeries
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
     
-    // 6. Post-operative Phase
+    // 21. PACU (Recovery)
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
+    
+    // 22. Patient Transfers
     { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Patient Transfers' },
     
-    // 7. Critical Events & Monitoring
+    // 23. Alerts
     { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
+    
+    // 24. Fault Alerts (NEW)
+    { href: '/dashboard/fault-alerts', icon: AlertOctagon, label: 'Fault Alerts', badge: 'NEW' },
+    
+    // 25. Emergency Alerts (NEW)
     { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts', badge: 'NEW' },
-    { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
+    
+    // 26. Mortality Registry
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
     
-    // 8. Resources & Management
-    { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
+    // 27. Duty Roster (NEW)
     { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster', badge: 'NEW' },
+    
+    // 28. Staff Effectiveness (NEW)
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
+    
+    // 29. Inventory
+    { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
+    
+    // 30. Reports & Analytics
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
-
-  // Add CSSD menu items for CSSD Staff and Admins
-  if (session.user.role === 'CSSD_STAFF' || session.user.role === 'ADMIN') {
-    menuItems.splice(15, 0, 
-      { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory', badge: 'NEW' },
-      { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization', badge: 'NEW' },
-      { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness', badge: 'NEW' }
-    );
-  }
-
-  // Add Power House menu items for Power Plant Operators and Admins
-  if (session.user.role === 'POWER_PLANT_OPERATOR' || session.user.role === 'ADMIN') {
-    menuItems.splice(15, 0, 
-      { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status', badge: 'NEW' },
-      { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance', badge: 'NEW' },
-      { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness', badge: 'NEW' }
-    );
-  }
-
-  // Add equipment checkout for store keepers and admins
-  if (session.user.role === 'THEATRE_STORE_KEEPER' || session.user.role === 'ADMIN') {
-    menuItems.splice(8, 0, { 
-      href: '/dashboard/equipment-checkout', 
-      icon: PackageCheck, 
-      label: 'Equipment Checkout', 
-      badge: 'NEW' 
-    });
-  }
-
-  // Add fault alerts for managers, chairmen, and admins
-  if (session.user.role === 'THEATRE_MANAGER' || session.user.role === 'THEATRE_CHAIRMAN' || session.user.role === 'ADMIN') {
-    menuItems.splice(14, 0, { 
-      href: '/dashboard/fault-alerts', 
-      icon: AlertOctagon, 
-      label: 'Fault Alerts', 
-      badge: 'NEW' 
-    });
-  }
 
   // Add admin-only menu items
   if (session.user.role === 'ADMIN' || session.user.role === 'SYSTEM_ADMINISTRATOR' || session.user.role === 'THEATRE_MANAGER') {
