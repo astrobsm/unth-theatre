@@ -118,8 +118,8 @@ export default function TheatreSetupPage() {
     doc.setFont('helvetica', 'normal');
 
     const setupInfo = [
-      ['Theatre:', setup.theatre.name],
-      ['Theatre Location:', setup.theatre.location],
+      ['Theatre:', setup.theatre?.name || 'Unknown Theatre'],
+      ['Theatre Location:', setup.theatre?.location || 'Unknown Location'],
       ['Date:', new Date(setup.setupDate).toLocaleDateString('en-GB')],
       ['Collection Time:', setup.collectionTime],
       ['Nurse:', setup.nurse?.fullName || 'Not assigned'],
@@ -246,7 +246,7 @@ export default function TheatreSetupPage() {
     }
 
     // Save
-    const fileName = `TheatreSetup_${setup.theatre.name}_${new Date(setup.setupDate).toISOString().split('T')[0]}.pdf`;
+    const fileName = `TheatreSetup_${setup.theatre?.name || 'Unknown'}_${new Date(setup.setupDate).toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
   };
 
@@ -290,7 +290,7 @@ export default function TheatreSetupPage() {
       return [
         new Date(setup.setupDate).toLocaleDateString('en-GB'),
         setup.collectionTime,
-        setup.theatre.name,
+        setup.theatre?.name || 'Unknown Theatre',
         setup.nurse?.fullName || 'Not assigned',
         totalItems.toString(),
         setup.status,
@@ -556,9 +556,9 @@ export default function TheatreSetupPage() {
                     <tr key={setup.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {setup.theatre.name}
+                          {setup.theatre?.name || 'Unknown Theatre'}
                         </div>
-                        <div className="text-sm text-gray-500">{setup.theatre.location}</div>
+                        <div className="text-sm text-gray-500">{setup.theatre?.location || 'Unknown Location'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">

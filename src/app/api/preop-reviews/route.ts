@@ -43,6 +43,22 @@ const createPreOpReviewSchema = z.object({
   riskFactors: z.string().optional(),
   reviewNotes: z.string().optional(),
   recommendations: z.string().optional(),
+  // Prescription data
+  prescription: z.object({
+    medications: z.array(z.object({
+      id: z.string(),
+      category: z.string(),
+      name: z.string(),
+      dose: z.string(),
+      unit: z.string(),
+      route: z.string(),
+      timing: z.string(),
+      notes: z.string().optional(),
+    })),
+    urgency: z.enum(['ROUTINE', 'URGENT', 'EMERGENCY']),
+    specialInstructions: z.string().optional(),
+    allergyAlerts: z.string().optional(),
+  }).optional(),
 });
 
 // GET - Fetch all pre-op reviews or filtered by surgery
@@ -153,9 +169,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createPreOpReviewSchema.parse(body);
 
+    // Extract prescription data before creating review
+    const { prescription, ...reviewData } = validatedData;
+
     // Check if review already exists for this surgery
     const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
-      where: { surgeryId: validatedData.surgeryId },
+      where: { surgeryId: reviewData.surgeryId },
     });
 
     if (existingReview) {
@@ -168,9 +187,9 @@ export async function POST(request: NextRequest) {
     // Create pre-op review
     const review = await prisma.preOperativeAnestheticReview.create({
       data: {
-        ...validatedData,
-        scheduledSurgeryDate: new Date(validatedData.scheduledSurgeryDate),
-        lastOralIntake: validatedData.lastOralIntake ? new Date(validatedData.lastOralIntake) : null,
+        ...reviewData,
+        scheduledSurgeryDate: new Date(reviewData.scheduledSurgeryDate),
+        lastOralIntake: reviewData.lastOralIntake ? new Date(reviewData.lastOralIntake) : null,
         anesthetistId: session.user.id,
         anesthetistName: session.user.name || '',
         status: 'IN_PROGRESS',
@@ -187,6 +206,26 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Create anesthetic prescription if medications were added
+    if (prescription && prescription.medications.length > 0) {
+      await prisma.anestheticPrescription.create({
+        data: {
+          preOpReviewId: review.id,
+          surgeryId: reviewData.surgeryId,
+          patientId: reviewData.patientId,
+          patientName: reviewData.patientName,
+          prescribedById: session.user.id,
+          prescribedByName: session.user.name || '',
+          scheduledSurgeryDate: new Date(reviewData.scheduledSurgeryDate),
+          medications: JSON.stringify(prescription.medications),
+          urgency: prescription.urgency,
+          specialInstructions: prescription.specialInstructions || null,
+          allergyAlerts: reviewData.allergies || null,
+          status: 'PENDING_APPROVAL', // Awaiting consultant approval
+        },
+      });
+    }
 
     // Create audit log
     await prisma.auditLog.create({

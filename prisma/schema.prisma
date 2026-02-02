@@ -396,6 +396,7 @@ model User {
   // Emergency Alert Relations
   surgeonEmergencyAlerts EmergencySurgeryAlert[] @relation("SurgeonEmergencyAlerts")
   anesthetistEmergencyAlerts EmergencySurgeryAlert[] @relation("AnesthetistEmergencyAlerts")
+  notifications Notification[]
   
   // CSSD Relations
   cssdInventoryUpdates CssdInventory[]
@@ -3051,7 +3052,7 @@ model EmergencySurgeryAlert {
   indication                String
   
   // Surgeon Info
-  surgeonId                 String
+  surgeonId                 String?
   surgeonName               String
   
   // Timing
@@ -3094,6 +3095,10 @@ model EmergencySurgeryAlert {
   theatreReady              Boolean               @default(false)
   patientInTheatre          Boolean               @default(false)
   
+  // Escalation (for alerts not acknowledged within 15 minutes)
+  escalatedAt               DateTime?
+  escalatedToAdmins         Boolean               @default(false)
+  
   // Resolution
   resolvedAt                DateTime?
   resolutionNotes           String?
@@ -3112,10 +3117,27 @@ model EmergencySurgeryAlert {
   
   // Relations
   surgery                   Surgery               @relation("EmergencyAlerts", fields: [surgeryId], references: [id])
-  surgeon                   User                  @relation("SurgeonEmergencyAlerts", fields: [surgeonId], references: [id])
+  surgeon                   User?                 @relation("SurgeonEmergencyAlerts", fields: [surgeonId], references: [id])
   anesthetist               User?                 @relation("AnesthetistEmergencyAlerts", fields: [anesthetistId], references: [id])
   
   @@map("emergency_surgery_alerts")
+}
+
+// User Notifications
+model Notification {
+  id          String    @id @default(uuid())
+  userId      String
+  type        String    // EMERGENCY_ESCALATION, SURGERY_ASSIGNED, etc.
+  title       String
+  message     String
+  link        String?
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+  
+  user        User      @relation(fields: [userId], references: [id])
+  
+  @@map("notifications")
 }
 
 // TV Alert Display Log (for tracking what alerts were shown)

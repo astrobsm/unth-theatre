@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import SmartTextInput from '@/components/SmartTextInput';
+
+type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
 interface Patient {
   id: string;
@@ -35,6 +37,8 @@ export default function NewSurgeryPage() {
   const [error, setError] = useState('');
   const [searchPatient, setSearchPatient] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
+  const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
+  const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
 
   useEffect(() => {
     fetchPatients();
@@ -81,6 +85,7 @@ export default function NewSurgeryPage() {
       procedureName: formData.get('procedureName'),
       scheduledDate: formData.get('scheduledDate'),
       scheduledTime: formData.get('scheduledTime'),
+      surgeryType: surgeryType,
       needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
       needDiathermy: formData.get('needDiathermy') === 'on',
       needStereo: formData.get('needStereo') === 'on',
@@ -257,6 +262,114 @@ export default function NewSurgeryPage() {
                 className="input-field"
                 placeholder="e.g., Laparoscopic Appendectomy"
               />
+            </div>
+
+            {/* Surgery Type Selection */}
+            <div className="md:col-span-2">
+              <label className="label">Surgery Type *</label>
+              <div className="grid grid-cols-3 gap-4 mt-2">
+                <label
+                  className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    surgeryType === 'ELECTIVE'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="surgeryTypeRadio"
+                    value="ELECTIVE"
+                    checked={surgeryType === 'ELECTIVE'}
+                    onChange={() => {
+                      setSurgeryType('ELECTIVE');
+                      setShowEmergencyWarning(false);
+                    }}
+                    className="sr-only"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <CheckCircle className={`w-6 h-6 ${surgeryType === 'ELECTIVE' ? 'text-green-600' : 'text-gray-400'}`} />
+                    <span className={`font-medium ${surgeryType === 'ELECTIVE' ? 'text-green-700' : 'text-gray-600'}`}>
+                      Elective
+                    </span>
+                    <span className="text-xs text-gray-500 text-center">Scheduled in advance</span>
+                  </div>
+                </label>
+
+                <label
+                  className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    surgeryType === 'URGENT'
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="surgeryTypeRadio"
+                    value="URGENT"
+                    checked={surgeryType === 'URGENT'}
+                    onChange={() => {
+                      setSurgeryType('URGENT');
+                      setShowEmergencyWarning(false);
+                    }}
+                    className="sr-only"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <AlertCircle className={`w-6 h-6 ${surgeryType === 'URGENT' ? 'text-orange-600' : 'text-gray-400'}`} />
+                    <span className={`font-medium ${surgeryType === 'URGENT' ? 'text-orange-700' : 'text-gray-600'}`}>
+                      Urgent
+                    </span>
+                    <span className="text-xs text-gray-500 text-center">Within 24-48 hours</span>
+                  </div>
+                </label>
+
+                <label
+                  className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    surgeryType === 'EMERGENCY'
+                      ? 'border-red-500 bg-red-50 ring-2 ring-red-500 ring-offset-2'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="surgeryTypeRadio"
+                    value="EMERGENCY"
+                    checked={surgeryType === 'EMERGENCY'}
+                    onChange={() => {
+                      setSurgeryType('EMERGENCY');
+                      setShowEmergencyWarning(true);
+                    }}
+                    className="sr-only"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <Zap className={`w-6 h-6 ${surgeryType === 'EMERGENCY' ? 'text-red-600 animate-pulse' : 'text-gray-400'}`} />
+                    <span className={`font-medium ${surgeryType === 'EMERGENCY' ? 'text-red-700' : 'text-gray-600'}`}>
+                      Emergency
+                    </span>
+                    <span className="text-xs text-gray-500 text-center">Immediate attention</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Emergency Warning */}
+              {showEmergencyWarning && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-red-800">Emergency Surgery Alert</h4>
+                      <p className="text-sm text-red-700 mt-1">
+                        Submitting this form will trigger an <strong>Emergency Alert</strong> that will:
+                      </p>
+                      <ul className="text-sm text-red-700 mt-2 list-disc list-inside space-y-1">
+                        <li>Display on all theatre TV displays immediately</li>
+                        <li>Announce the emergency details loudly every 2 minutes</li>
+                        <li>Continue until acknowledged by the nurse on emergency duty</li>
+                        <li>Escalate to all admin users if not acknowledged within 15 minutes</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

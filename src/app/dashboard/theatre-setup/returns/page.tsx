@@ -189,7 +189,7 @@ export default function ReturnsPage() {
                       : 'border-gray-200 hover:border-primary-300'
                   }`}
                 >
-                  <h3 className="font-semibold text-gray-900">{setup.theatre.name}</h3>
+                  <h3 className="font-semibold text-gray-900">{setup.theatre?.name || 'Unknown Theatre'}</h3>
                   <p className="text-sm text-gray-600">
                     Date: {new Date(setup.setupDate).toLocaleDateString('en-GB')}
                   </p>

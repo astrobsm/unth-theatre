@@ -13,6 +13,7 @@ const surgerySchema = z.object({
   procedureName: z.string(),
   scheduledDate: z.string(),
   scheduledTime: z.string(),
+  surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
   needBloodTransfusion: z.boolean().default(false),
   needDiathermy: z.boolean().default(false),
   needStereo: z.boolean().default(false),
@@ -84,13 +85,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
 
-    const { teamMembers, ...surgeryData } = validatedData;
+    const { teamMembers, surgeryType, ...surgeryData } = validatedData;
+
+    // Get patient details for emergency alert
+    const patient = await prisma.patient.findUnique({
+      where: { id: validatedData.patientId }
+    });
+
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
 
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
         surgeonName: validatedData.surgeonName,
         surgeonId: null, // No user ID when entering name directly
+        surgeryType: surgeryType,
         scheduledDate: new Date(validatedData.scheduledDate),
         // Create team members if provided
         teamMembers: teamMembers && teamMembers.length > 0 ? {
@@ -127,6 +138,49 @@ export async function POST(request: NextRequest) {
         changes: JSON.stringify(validatedData),
       }
     });
+
+    // If EMERGENCY surgery, create an emergency alert automatically
+    if (surgeryType === 'EMERGENCY') {
+      const escalationDeadline = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+
+      await prisma.emergencySurgeryAlert.create({
+        data: {
+          surgeryId: surgery.id,
+          patientName: patient.name,
+          folderNumber: patient.folderNumber || '',
+          age: patient.age || 0,
+          gender: patient.gender || 'Unknown',
+          procedureName: validatedData.procedureName,
+          surgicalUnit: validatedData.unit,
+          indication: validatedData.indication,
+          surgeonId: null,
+          surgeonName: validatedData.surgeonName,
+          estimatedStartTime: new Date(validatedData.scheduledDate + 'T' + validatedData.scheduledTime),
+          priority: 'CRITICAL',
+          status: 'ACTIVE',
+          displayOnTv: true,
+          bloodRequired: validatedData.needBloodTransfusion,
+          bloodUnits: validatedData.needBloodTransfusion ? 2 : null, // Default 2 units if blood required
+          alertMessage: `EMERGENCY SURGERY: ${validatedData.procedureName} for ${patient.name}`,
+          additionalNotes: `Escalation deadline: ${escalationDeadline.toISOString()}`,
+        }
+      });
+
+      // Log emergency alert creation
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'CREATE_EMERGENCY_ALERT',
+          tableName: 'EmergencySurgeryAlert',
+          recordId: surgery.id,
+          changes: JSON.stringify({ 
+            type: 'AUTO_TRIGGERED',
+            surgeryType: 'EMERGENCY',
+            escalationDeadline: escalationDeadline.toISOString()
+          }),
+        }
+      });
+    }
 
     return NextResponse.json(surgery, { status: 201 });
 

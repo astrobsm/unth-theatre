@@ -65,6 +65,31 @@ export default function EditPreOpReviewPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
+  // Physical examination states for BMI auto-calculation
+  const [weight, setWeight] = useState<number | ''>('');
+  const [height, setHeight] = useState<number | ''>('');
+  const [bmi, setBmi] = useState<number | ''>('');
+
+  // Initialize weight and height from loaded review
+  useEffect(() => {
+    if (review) {
+      setWeight(review.weight ?? '');
+      setHeight(review.height ?? '');
+      setBmi(review.bmi ?? '');
+    }
+  }, [review]);
+
+  // Auto-calculate BMI when weight or height changes
+  useEffect(() => {
+    if (weight && height && height > 0) {
+      const heightInMeters = Number(height) / 100;
+      const calculatedBmi = Number(weight) / (heightInMeters * heightInMeters);
+      setBmi(Math.round(calculatedBmi * 10) / 10);
+    } else {
+      setBmi('');
+    }
+  }, [weight, height]);
 
   useEffect(() => {
     if (params.id) {
@@ -334,7 +359,8 @@ export default function EditPreOpReviewPage() {
                 type="number"
                 step="0.1"
                 name="weight"
-                defaultValue={review.weight || ''}
+                value={weight}
+                onChange={(e) => setWeight(e.target.value ? parseFloat(e.target.value) : '')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -346,20 +372,22 @@ export default function EditPreOpReviewPage() {
                 type="number"
                 step="0.1"
                 name="height"
-                defaultValue={review.height || ''}
+                value={height}
+                onChange={(e) => setHeight(e.target.value ? parseFloat(e.target.value) : '')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                BMI
+                BMI <span className="text-xs text-green-600 font-normal">(auto-calculated)</span>
               </label>
               <input
                 type="number"
                 step="0.1"
                 name="bmi"
-                defaultValue={review.bmi || ''}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                value={bmi}
+                readOnly
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-semibold"
               />
             </div>
             <div>
