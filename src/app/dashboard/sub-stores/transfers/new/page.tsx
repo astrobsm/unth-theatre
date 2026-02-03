@@ -69,10 +69,18 @@ export default function NewTransferPage() {
   const fetchInventoryItems = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/inventory/items?search=${encodeURIComponent(searchTerm)}`);
+      const response = await fetch(`/api/inventory?search=${encodeURIComponent(searchTerm)}`);
       if (response.ok) {
         const data = await response.json();
-        setInventoryItems(data.items || []);
+        // Map inventory items to the expected format
+        const items = (data.items || []).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          unit: item.unit || 'pcs',
+          availableQuantity: item.quantity || 0,
+        }));
+        setInventoryItems(items);
       }
     } catch (error) {
       console.error('Error fetching inventory:', error);

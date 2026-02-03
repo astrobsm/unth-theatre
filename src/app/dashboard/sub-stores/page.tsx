@@ -47,13 +47,12 @@ interface SubStoreItem {
 interface SubStoreSummary {
   totalItems: number;
   totalTheatres: number;
-  lowStockItems: number;
-  criticalItems: number;
+  lowStock: number;
+  critical: number;
   outOfStock: number;
-  adequateItems: number;
-  pendingRestocks: number;
-  todayUsage: number;
-  totalValue: number;
+  adequate: number;
+  expiringSoon: number;
+  expired: number;
 }
 
 export default function SubStoresPage() {
@@ -201,7 +200,7 @@ export default function SubStoresPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-700">Adequate Stock</p>
-                <p className="text-2xl font-bold text-green-800">{summary.adequateItems}</p>
+                <p className="text-2xl font-bold text-green-800">{summary.adequate}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-500" />
             </div>
@@ -210,7 +209,7 @@ export default function SubStoresPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-yellow-700">Low Stock</p>
-                <p className="text-2xl font-bold text-yellow-800">{summary.lowStockItems}</p>
+                <p className="text-2xl font-bold text-yellow-800">{summary.lowStock}</p>
               </div>
               <TrendingDown className="w-8 h-8 text-yellow-500" />
             </div>
@@ -219,7 +218,7 @@ export default function SubStoresPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-orange-700">Critical</p>
-                <p className="text-2xl font-bold text-orange-800">{summary.criticalItems}</p>
+                <p className="text-2xl font-bold text-orange-800">{summary.critical}</p>
               </div>
               <AlertTriangle className="w-8 h-8 text-orange-500" />
             </div>
