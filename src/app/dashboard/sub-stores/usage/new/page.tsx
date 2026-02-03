@@ -104,7 +104,7 @@ export default function NewUsageLogPage() {
       const response = await fetch(`/api/sub-stores?theatre=${selectedTheatre}`);
       if (response.ok) {
         const data = await response.json();
-        setSubStoreItems(data.items || []);
+        setSubStoreItems(data.subStores || []);
       }
     } catch (error) {
       console.error('Error fetching items:', error);
