@@ -235,9 +235,11 @@ export default function EquipmentCheckoutPage() {
     }
   };
 
-  const filteredInventory = inventoryItems.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredInventory = inventoryItems
+    .filter(item => item != null && item.name != null)
+    .filter(item =>
+      item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
   return (
     <div className="space-y-6">

@@ -233,14 +233,18 @@ export default function NewTheatreSetupPage() {
     ));
   };
 
-  const filteredInventoryItems = inventoryItems.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredInventoryItems = inventoryItems
+    .filter(item => item != null && item.name != null)
+    .filter(item =>
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
 
-  const filteredScrubNurses = scrubNurses.filter(nurse =>
-    nurse.name.toLowerCase().includes(scrubNurseName.toLowerCase())
-  );
+  const filteredScrubNurses = scrubNurses
+    .filter(nurse => nurse != null && nurse.name != null)
+    .filter(nurse =>
+      nurse.name.toLowerCase().includes(scrubNurseName.toLowerCase())
+    );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

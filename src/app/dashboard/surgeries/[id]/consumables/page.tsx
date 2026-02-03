@@ -244,10 +244,12 @@ export default function SurgeryConsumablesPage() {
     return { subtotal, markup, total: subtotal + markup };
   };
 
-  const filteredInventory = inventory.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredInventory = inventory
+    .filter((item) => item != null && item.name != null)
+    .filter((item) =>
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
 
   const totals = calculateTotal();
 

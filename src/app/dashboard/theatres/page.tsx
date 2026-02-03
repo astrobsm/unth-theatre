@@ -389,7 +389,7 @@ export default function TheatresPage() {
         <div className="card">
           <h2 className="text-xl font-semibold mb-4">Equipment Summary for {selectedDate}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {dailySummary.equipmentSummary.map((item) => (
+            {dailySummary.equipmentSummary.filter(item => item != null && item.name != null).map((item) => (
               <div
                 key={item.name}
                 className="p-4 bg-gradient-to-br from-primary-50 to-secondary-50 rounded-lg"
@@ -404,7 +404,7 @@ export default function TheatresPage() {
 
       {/* Theatre Allocations */}
       <div className="grid grid-cols-1 gap-6">
-        {dailySummary?.theatres.map((theatre) => (
+        {dailySummary?.theatres.filter(t => t != null && t.name != null).map((theatre) => (
           <div key={theatre.id} className="card">
             <div className="flex justify-between items-start mb-4">
               <div>

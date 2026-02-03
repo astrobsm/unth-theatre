@@ -93,11 +93,13 @@ export default function InventoryPage() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchInventory]);
 
-  const filteredItems = Array.isArray(items) ? items.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filter === 'ALL' || item.category === filter;
-    return matchesSearch && matchesFilter;
-  }) : [];
+  const filteredItems = Array.isArray(items) ? items
+    .filter(item => item != null && item.name != null)
+    .filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFilter = filter === 'ALL' || item.category === filter;
+      return matchesSearch && matchesFilter;
+    }) : [];
 
   const lowStockItems = Array.isArray(items) ? items.filter(item => item.quantity <= item.reorderLevel) : [];
 

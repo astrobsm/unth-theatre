@@ -72,14 +72,16 @@ export default function NewTransferPage() {
       const response = await fetch(`/api/inventory?search=${encodeURIComponent(searchTerm)}`);
       if (response.ok) {
         const data = await response.json();
-        // Map inventory items to the expected format
-        const items = (data.items || []).map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          unit: item.unit || 'pcs',
-          availableQuantity: item.quantity || 0,
-        }));
+        // Map inventory items to the expected format, filtering out null/undefined items
+        const items = (data.items || [])
+          .filter((item: any) => item != null && item.name != null)
+          .map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            unit: item.unit || 'pcs',
+            availableQuantity: item.quantity || 0,
+          }));
         setInventoryItems(items);
       }
     } catch (error) {
