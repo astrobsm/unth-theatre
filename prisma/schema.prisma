@@ -430,6 +430,11 @@ model User {
   subStoresManaged TheatreSubStore[] @relation("SubStoreManager")
   subStoresMorningCheck TheatreSubStore[] @relation("MorningCheck")
   subStoresEndOfDayCheck TheatreSubStore[] @relation("EndOfDayCheck")
+  subStoreUsagesLogged SubStoreUsageLog[] @relation("UsageLoggedBy")
+  subStoreUsagesVerified SubStoreUsageLog[] @relation("UsageVerifiedBy")
+  restockRequestsRequested SubStoreRestockRequest[] @relation("RestockRequester")
+  restockRequestsApproved SubStoreRestockRequest[] @relation("RestockApprover")
+  restockRequestsFulfilled SubStoreRestockRequest[] @relation("RestockFulfiller")
   
   // Stock Transfer Relations
   stockTransfersRequested StockTransfer[] @relation("TransferRequester")
@@ -3643,6 +3648,7 @@ model TheatreSubStore {
   id                    String                  @id @default(uuid())
   
   theatreNumber         String                  // THEATRE_1, THEATRE_2, etc.
+  theatreName           String?                 // Human-readable theatre name
   itemName              String
   itemCode              String?
   category              String                  // CONSUMABLE, DEVICE, MEDICATION, EQUIPMENT
@@ -3652,6 +3658,11 @@ model TheatreSubStore {
   maximumStock          Int                     @default(100)
   
   unit                  String                  // pieces, boxes, vials, etc.
+  unitPrice             Decimal?                @db.Decimal(10, 2)
+  
+  // Item tracking
+  batchNumber           String?
+  expiryDate            DateTime?
   
   // Scrub nurse management
   managedById           String
@@ -3678,6 +3689,7 @@ model TheatreSubStore {
   reorderRequestDate    DateTime?
   
   stockTransfers        StockTransfer[]
+  usageLogs             SubStoreUsageLog[]
   
   notes                 String?
   
@@ -3686,6 +3698,104 @@ model TheatreSubStore {
   
   @@unique([theatreNumber, itemName])
   @@map("theatre_sub_stores")
+}
+
+// Sub-store consumable usage log - tracks items used during surgeries
+model SubStoreUsageLog {
+  id                    String                  @id @default(uuid())
+  
+  // Sub-store item reference
+  subStoreId            String
+  subStore              TheatreSubStore         @relation(fields: [subStoreId], references: [id])
+  
+  // Theatre info
+  theatreNumber         String
+  theatreName           String?
+  
+  // Surgery/Case info
+  surgeryId             String?
+  patientName           String?
+  patientFolderNumber   String?
+  procedureName         String?
+  
+  // Usage details
+  itemName              String
+  quantityUsed          Int
+  quantityReturned      Int                     @default(0)
+  quantityWasted        Int                     @default(0)
+  netQuantityConsumed   Int?                    // Calculated: used - returned
+  
+  // Waste tracking
+  wasteReason           String?
+  
+  // Staff
+  usedById              String
+  usedBy                User                    @relation("UsageLoggedBy", fields: [usedById], references: [id])
+  usedByName            String
+  
+  // Timing
+  usedAt                DateTime                @default(now())
+  returnedAt            DateTime?
+  
+  // Verification
+  verifiedById          String?
+  verifiedBy            User?                   @relation("UsageVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt            DateTime?
+  
+  // Notes
+  usageNotes            String?
+  returnNotes           String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("sub_store_usage_logs")
+}
+
+// Restock requests from scrub nurse to theatre manager
+model SubStoreRestockRequest {
+  id                    String                  @id @default(uuid())
+  
+  // Request reference
+  requestNumber         String                  @unique
+  
+  // Theatre/Store info
+  theatreNumber         String
+  theatreName           String?
+  
+  // Urgency
+  urgency               String                  @default("NORMAL") // LOW, NORMAL, HIGH, CRITICAL
+  
+  // Status
+  status                String                  @default("PENDING") // PENDING, APPROVED, FULFILLED, PARTIALLY_FULFILLED, REJECTED
+  
+  // Requested By (Scrub Nurse)
+  requestedById         String
+  requestedBy           User                    @relation("RestockRequester", fields: [requestedById], references: [id])
+  requestedAt           DateTime                @default(now())
+  requestNotes          String?
+  
+  // Items requested (JSON array)
+  itemsRequested        String                  // JSON: [{itemName, quantity, currentStock, reason}]
+  
+  // Approval (Theatre Manager)
+  approvedById          String?
+  approvedBy            User?                   @relation("RestockApprover", fields: [approvedById], references: [id])
+  approvedAt            DateTime?
+  approvalNotes         String?
+  rejectionReason       String?
+  
+  // Fulfillment
+  fulfilledById         String?
+  fulfilledBy           User?                   @relation("RestockFulfiller", fields: [fulfilledById], references: [id])
+  fulfilledAt           DateTime?
+  itemsFulfilled        String?                 // JSON: [{itemName, quantityFulfilled}]
+  fulfillmentNotes      String?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@map("sub_store_restock_requests")
 }
 
 model StockTransfer {

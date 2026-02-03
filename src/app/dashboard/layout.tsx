@@ -36,6 +36,7 @@ import {
   Zap,
   Flame,
   Shield,
+  Store,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -146,7 +147,10 @@ export default function DashboardLayout({
     // 29. Inventory
     { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
     
-    // 30. Reports & Analytics
+    // 30. Theatre Sub-Stores
+    { href: '/dashboard/sub-stores', icon: Store, label: 'Sub-Stores', badge: 'NEW' },
+    
+    // 31. Reports & Analytics
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
   ];
 
