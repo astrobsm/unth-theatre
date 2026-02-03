@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized', subStores: [], summary: null }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -68,35 +68,6 @@ export async function GET(request: NextRequest) {
             fullName: true,
             staffCode: true,
             role: true,
-          },
-        },
-        morningCheckBy: {
-          select: {
-            id: true,
-            fullName: true,
-          },
-        },
-        endOfDayCheckBy: {
-          select: {
-            id: true,
-            fullName: true,
-          },
-        },
-        stockTransfers: {
-          where: { status: 'RECEIVED' },
-          orderBy: { transferDate: 'desc' },
-          take: 5,
-        },
-        usageLogs: {
-          orderBy: { usedAt: 'desc' },
-          take: 10,
-          include: {
-            usedBy: {
-              select: { id: true, fullName: true },
-            },
-            verifiedBy: {
-              select: { id: true, fullName: true },
-            },
           },
         },
       },
@@ -198,7 +169,23 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching sub-stores:', error);
-    return NextResponse.json({ error: 'Failed to fetch sub-store items', subStores: [] }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to fetch sub-store items', 
+      subStores: [], 
+      summary: {
+        totalItems: 0,
+        totalTheatres: 0,
+        adequate: 0,
+        lowStock: 0,
+        critical: 0,
+        outOfStock: 0,
+        expiringSoon: 0,
+        expired: 0,
+      },
+      groupedByTheatre: null,
+      groupedByCategory: null,
+      filters: { categories: [], theatres: [], stockStatuses: [] }
+    }, { status: 500 });
   }
 }
 
