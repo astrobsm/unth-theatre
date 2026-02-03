@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
     const theatres = Array.from(theatreSet2).sort();
 
     return NextResponse.json({
-      items: subStores,
+      subStores: subStores,
       groupedByTheatre: groupedByTheatre ? Object.values(groupedByTheatre) : null,
       groupedByCategory: groupedByCategory ? Object.values(groupedByCategory) : null,
       summary,
@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching sub-stores:', error);
-    return NextResponse.json({ error: 'Failed to fetch sub-store items', items: [] }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch sub-store items', subStores: [] }, { status: 500 });
   }
 }
 

@@ -33,11 +33,11 @@ interface SubStoreItem {
   stockStatus: string;
   lastRestocked?: string;
   lastUsed?: string;
-  managedBy: {
+  managedBy?: {
     id: string;
     fullName: string;
     staffCode?: string;
-  };
+  } | null;
   morningCheckDone: boolean;
   morningCheckDate?: string;
   endOfDayCheckDone: boolean;
