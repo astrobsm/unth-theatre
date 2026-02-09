@@ -23,9 +23,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const theatreNumber = searchParams.get('theatre');
+    const transferType = searchParams.get('type');
     const fromDate = searchParams.get('fromDate');
     const toDate = searchParams.get('toDate');
-    const transferType = searchParams.get('type'); // 'TO_SUBSTORE' or 'FROM_SUBSTORE'
+    const search = searchParams.get('search');
 
     const where: any = {};
 
@@ -33,10 +34,19 @@ export async function GET(request: NextRequest) {
       where.status = status;
     }
 
+    if (transferType) {
+      where.transferType = transferType;
+    }
+
     if (theatreNumber) {
-      where.toSubStore = {
-        theatreNumber,
-      };
+      where.OR = [
+        { destTheatreNumber: theatreNumber },
+        { sourceTheatreNumber: theatreNumber },
+      ];
+    }
+
+    if (search) {
+      where.itemName = { contains: search, mode: 'insensitive' };
     }
 
     if (fromDate) {
@@ -78,6 +88,7 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             fullName: true,
+            role: true,
           },
         },
         approvedBy: {
@@ -104,14 +115,16 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Group by status for dashboard
+    // Summary statistics
     const summary = {
-      total: transfers.length,
-      pending: transfers.filter(t => t.status === 'PENDING').length,
-      approved: transfers.filter(t => t.status === 'APPROVED').length,
-      inTransit: transfers.filter(t => t.status === 'IN_TRANSIT').length,
-      received: transfers.filter(t => t.status === 'RECEIVED').length,
+      totalTransfers: transfers.length,
+      pendingApproval: transfers.filter(t => t.status === 'REQUESTED').length,
+      pendingIssue: transfers.filter(t => t.status === 'APPROVED').length,
+      pendingReceive: transfers.filter(t => t.status === 'ISSUED').length,
+      completed: transfers.filter(t => t.status === 'RECEIVED').length,
       cancelled: transfers.filter(t => t.status === 'CANCELLED').length,
+      mainToSubstore: transfers.filter(t => t.transferType === 'MAIN_TO_SUBSTORE').length,
+      interSubstore: transfers.filter(t => t.transferType === 'SUBSTORE_TO_SUBSTORE').length,
       todayTransfers: transfers.filter(t => {
         const today = new Date();
         const transferDate = new Date(t.transferDate);
@@ -129,18 +142,34 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Schema for creating stock transfers
-const createTransferSchema = z.object({
-  subStoreId: z.string().min(1, 'Sub-store item is required'),
-  quantity: z.number().min(1, 'Quantity must be at least 1'),
-  batchNumber: z.string().optional(),
-  expiryDate: z.string().optional(),
-  sourceInventoryId: z.string().optional(), // Main store inventory item ID
+// Schema for main store -> sub-store transfer
+const mainStoreTransferSchema = z.object({
+  transferType: z.string().default('MAIN_TO_SUBSTORE'),
+  theatreNumber: z.string().min(1, 'Theatre number is required'),
+  items: z.array(z.object({
+    itemId: z.string().min(1, 'Inventory item ID is required'),
+    itemName: z.string().min(1),
+    quantity: z.number().min(1, 'Quantity must be at least 1'),
+    unit: z.string().optional(),
+  })).min(1, 'At least one item is required'),
   notes: z.string().optional(),
-  transferType: z.enum(['TO_SUBSTORE', 'RETURN_TO_MAIN']).default('TO_SUBSTORE'),
 });
 
-// Create new stock transfer - Theatre Manager transfers from main store to sub-store
+// Schema for inter-substore transfer (between theatres)
+const interSubstoreTransferSchema = z.object({
+  transferType: z.literal('SUBSTORE_TO_SUBSTORE'),
+  sourceTheatreNumber: z.string().min(1, 'Source theatre is required'),
+  destTheatreNumber: z.string().min(1, 'Destination theatre is required'),
+  items: z.array(z.object({
+    sourceSubStoreId: z.string().min(1, 'Source sub-store item ID is required'),
+    itemName: z.string().min(1),
+    quantity: z.number().min(1, 'Quantity must be at least 1'),
+    unit: z.string().optional(),
+  })).min(1, 'At least one item is required'),
+  notes: z.string().optional(),
+});
+
+// Create stock transfer
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -151,109 +180,307 @@ export async function POST(request: NextRequest) {
     const userRole = (session.user as any).role;
     const userId = (session.user as any).id;
 
-    // Only theatre managers, store keepers, and admins can create transfers
-    if (!['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN'].includes(userRole)) {
-      return NextResponse.json({
-        error: 'Insufficient permissions. Only Theatre Manager or Store Keeper can create stock transfers.',
-      }, { status: 403 });
-    }
-
     const body = await request.json();
-    const validatedData = createTransferSchema.parse(body);
+    const transferType = body.transferType || 'MAIN_TO_SUBSTORE';
 
-    // Get the sub-store item
-    const subStoreItem = await prisma.theatreSubStore.findUnique({
-      where: { id: validatedData.subStoreId },
-      include: {
-        managedBy: {
-          select: { id: true, fullName: true },
-        },
-      },
-    });
-
-    if (!subStoreItem) {
-      return NextResponse.json({ error: 'Sub-store item not found' }, { status: 404 });
-    }
-
-    // Check if adding this quantity would exceed maximum stock
-    const newStock = subStoreItem.currentStock + validatedData.quantity;
-    if (newStock > subStoreItem.maximumStock) {
-      return NextResponse.json({
-        error: `Transfer would exceed maximum stock. Current: ${subStoreItem.currentStock}, Maximum: ${subStoreItem.maximumStock}`,
-      }, { status: 400 });
-    }
-
-    // If source inventory is specified, check and deduct from main store
-    if (validatedData.sourceInventoryId) {
-      const sourceInventory = await prisma.inventoryItem.findUnique({
-        where: { id: validatedData.sourceInventoryId },
-      });
-
-      if (!sourceInventory) {
-        return NextResponse.json({ error: 'Source inventory item not found' }, { status: 404 });
+    // =============================================
+    // INTER-SUBSTORE TRANSFER (Theatre -> Theatre)
+    // ONLY Theatre Manager can authorize
+    // =============================================
+    if (transferType === 'SUBSTORE_TO_SUBSTORE') {
+      if (!['THEATRE_MANAGER', 'ADMIN'].includes(userRole)) {
+        return NextResponse.json({
+          error: 'Only the Theatre Manager can authorize transfers between sub-stores.',
+        }, { status: 403 });
       }
 
-      if (sourceInventory.quantity < validatedData.quantity) {
+      const validatedData = interSubstoreTransferSchema.parse(body);
+
+      if (validatedData.sourceTheatreNumber === validatedData.destTheatreNumber) {
         return NextResponse.json({
-          error: `Insufficient stock in main store. Available: ${sourceInventory.quantity}`,
+          error: 'Source and destination theatres must be different.',
         }, { status: 400 });
       }
 
-      // Deduct from main store
-      await prisma.inventoryItem.update({
-        where: { id: validatedData.sourceInventoryId },
-        data: {
-          quantity: {
-            decrement: validatedData.quantity,
+      const results = [];
+      const errors = [];
+
+      for (const item of validatedData.items) {
+        try {
+          // Get source sub-store item
+          const sourceItem = await prisma.theatreSubStore.findUnique({
+            where: { id: item.sourceSubStoreId },
+          });
+
+          if (!sourceItem) {
+            errors.push({ itemName: item.itemName, error: 'Source item not found' });
+            continue;
+          }
+
+          if (sourceItem.theatreNumber !== validatedData.sourceTheatreNumber) {
+            errors.push({ itemName: item.itemName, error: 'Item does not belong to source theatre' });
+            continue;
+          }
+
+          if (sourceItem.currentStock < item.quantity) {
+            errors.push({
+              itemName: item.itemName,
+              error: `Insufficient stock in source theatre. Available: ${sourceItem.currentStock}`,
+            });
+            continue;
+          }
+
+          // Find or create the destination sub-store item
+          let destItem = await prisma.theatreSubStore.findFirst({
+            where: {
+              theatreNumber: validatedData.destTheatreNumber,
+              itemName: sourceItem.itemName,
+            },
+          });
+
+          if (!destItem) {
+            destItem = await prisma.theatreSubStore.create({
+              data: {
+                theatreNumber: validatedData.destTheatreNumber,
+                theatreName: `Theatre ${validatedData.destTheatreNumber.replace('THEATRE_', '')}`,
+                itemName: sourceItem.itemName,
+                itemCode: sourceItem.itemCode,
+                category: sourceItem.category,
+                currentStock: 0,
+                minimumStock: sourceItem.minimumStock,
+                maximumStock: sourceItem.maximumStock,
+                unit: sourceItem.unit,
+                unitPrice: sourceItem.unitPrice,
+                batchNumber: sourceItem.batchNumber,
+                expiryDate: sourceItem.expiryDate,
+                managedById: sourceItem.managedById,
+                stockStatus: 'OUT_OF_STOCK',
+              },
+            });
+          }
+
+          if (destItem.currentStock + item.quantity > destItem.maximumStock) {
+            errors.push({
+              itemName: item.itemName,
+              error: `Would exceed max stock at destination. Current: ${destItem.currentStock}, Max: ${destItem.maximumStock}`,
+            });
+            continue;
+          }
+
+          // Deduct from source sub-store
+          const newSourceStock = sourceItem.currentStock - item.quantity;
+          await prisma.theatreSubStore.update({
+            where: { id: sourceItem.id },
+            data: {
+              currentStock: newSourceStock,
+              stockStatus: calculateStockStatus(newSourceStock, sourceItem.minimumStock),
+            },
+          });
+
+          // Create transfer record (auto-approved by Theatre Manager)
+          const transfer = await prisma.stockTransfer.create({
+            data: {
+              transferType: 'SUBSTORE_TO_SUBSTORE',
+              fromMainStore: false,
+              fromSubStoreId: sourceItem.id,
+              sourceTheatreNumber: validatedData.sourceTheatreNumber,
+              toSubStoreId: destItem.id,
+              destTheatreNumber: validatedData.destTheatreNumber,
+              itemName: sourceItem.itemName,
+              quantityTransferred: item.quantity,
+              unit: sourceItem.unit,
+              requestedById: userId,
+              approvedById: userId,
+              approvedAt: new Date(),
+              status: 'APPROVED',
+              notes: validatedData.notes,
+              transferDate: new Date(),
+            },
+          });
+
+          results.push({
+            transferId: transfer.id,
+            itemName: sourceItem.itemName,
+            quantity: item.quantity,
+            from: validatedData.sourceTheatreNumber,
+            to: validatedData.destTheatreNumber,
+          });
+        } catch (itemError: any) {
+          errors.push({ itemName: item.itemName, error: itemError.message || 'Failed to process' });
+        }
+      }
+
+      // Audit log
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId,
+            action: 'INTER_SUBSTORE_TRANSFER',
+            tableName: 'StockTransfer',
+            recordId: 'BATCH',
+            changes: JSON.stringify({
+              transferType: 'SUBSTORE_TO_SUBSTORE',
+              from: validatedData.sourceTheatreNumber,
+              to: validatedData.destTheatreNumber,
+              itemCount: validatedData.items.length,
+              successCount: results.length,
+              errorCount: errors.length,
+              authorizedBy: (session.user as any).fullName,
+              timestamp: new Date().toISOString(),
+            }),
           },
-        },
-      });
+        });
+      } catch (auditError) {
+        console.error('Failed to create audit log:', auditError);
+      }
+
+      return NextResponse.json({
+        success: errors.length === 0,
+        message: `Transferred ${results.length} item(s) between sub-stores${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
+        results,
+        errors,
+      }, { status: 201 });
     }
 
-    // Create the stock transfer record
-    const transfer = await prisma.stockTransfer.create({
-      data: {
-        toSubStoreId: validatedData.subStoreId,
-        itemName: subStoreItem.itemName,
-        quantityTransferred: validatedData.quantity,
-        unit: subStoreItem.unit || 'units',
-        status: 'REQUESTED',
-        requestedById: userId,
-        transferDate: new Date(),
-        notes: validatedData.notes,
-      },
-      include: {
-        toSubStore: {
-          select: {
-            theatreNumber: true,
-            theatreName: true,
-            itemName: true,
-            category: true,
-            managedBy: {
+    // =============================================
+    // MAIN STORE -> SUB-STORE TRANSFER
+    // Theatre Manager, Store Keeper, or Admin
+    // =============================================
+    if (!['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN'].includes(userRole)) {
+      return NextResponse.json({
+        error: 'Insufficient permissions. Only Theatre Manager or Store Keeper can create stock transfers from main store.',
+      }, { status: 403 });
+    }
+
+    const validatedData = mainStoreTransferSchema.parse(body);
+    const results = [];
+    const errors = [];
+
+    for (const item of validatedData.items) {
+      try {
+        // Verify main store inventory item exists and has sufficient stock
+        const inventoryItem = await prisma.inventoryItem.findUnique({
+          where: { id: item.itemId },
+        });
+
+        if (!inventoryItem) {
+          errors.push({ itemName: item.itemName, error: 'Item not found in main store inventory' });
+          continue;
+        }
+
+        if (inventoryItem.quantity < item.quantity) {
+          errors.push({
+            itemName: item.itemName,
+            error: `Insufficient stock in main store. Available: ${inventoryItem.quantity}, Requested: ${item.quantity}`,
+          });
+          continue;
+        }
+
+        // Find or create the sub-store item for this theatre
+        let subStoreItem = await prisma.theatreSubStore.findFirst({
+          where: {
+            theatreNumber: validatedData.theatreNumber,
+            itemName: inventoryItem.name,
+          },
+        });
+
+        if (!subStoreItem) {
+          subStoreItem = await prisma.theatreSubStore.create({
+            data: {
+              theatreNumber: validatedData.theatreNumber,
+              theatreName: `Theatre ${validatedData.theatreNumber.replace('THEATRE_', '')}`,
+              itemName: inventoryItem.name,
+              itemCode: inventoryItem.batchNumber || undefined,
+              category: inventoryItem.category,
+              currentStock: 0,
+              minimumStock: 10,
+              maximumStock: 100,
+              unit: item.unit || 'pcs',
+              unitPrice: inventoryItem.unitCostPrice,
+              batchNumber: inventoryItem.batchNumber,
+              expiryDate: inventoryItem.expiryDate,
+              managedById: userId,
+              stockStatus: 'OUT_OF_STOCK',
+            },
+          });
+        }
+
+        if (subStoreItem.currentStock + item.quantity > subStoreItem.maximumStock) {
+          errors.push({
+            itemName: item.itemName,
+            error: `Would exceed max stock. Current: ${subStoreItem.currentStock}, Max: ${subStoreItem.maximumStock}, Requested: ${item.quantity}`,
+          });
+          continue;
+        }
+
+        // DEDUCT from main store inventory
+        await prisma.inventoryItem.update({
+          where: { id: item.itemId },
+          data: {
+            quantity: {
+              decrement: item.quantity,
+            },
+          },
+        });
+
+        // Create transfer record
+        const transfer = await prisma.stockTransfer.create({
+          data: {
+            transferType: 'MAIN_TO_SUBSTORE',
+            fromMainStore: true,
+            sourceInventoryId: item.itemId,
+            toSubStoreId: subStoreItem.id,
+            destTheatreNumber: validatedData.theatreNumber,
+            itemName: inventoryItem.name,
+            quantityTransferred: item.quantity,
+            unit: item.unit || subStoreItem.unit,
+            requestedById: userId,
+            status: 'REQUESTED',
+            notes: validatedData.notes,
+            transferDate: new Date(),
+          },
+          include: {
+            toSubStore: {
+              select: {
+                theatreNumber: true,
+                theatreName: true,
+                itemName: true,
+                currentStock: true,
+              },
+            },
+            requestedBy: {
               select: { fullName: true },
             },
           },
-        },
-        requestedBy: {
-          select: { fullName: true },
-        },
-      },
-    });
+        });
 
-    // Create audit log
+        results.push({
+          transferId: transfer.id,
+          itemName: inventoryItem.name,
+          quantity: item.quantity,
+          mainStoreRemaining: inventoryItem.quantity - item.quantity,
+          subStoreCurrentStock: subStoreItem.currentStock,
+        });
+      } catch (itemError: any) {
+        errors.push({ itemName: item.itemName, error: itemError.message || 'Failed to process transfer' });
+      }
+    }
+
+    // Audit log
     try {
       await prisma.auditLog.create({
         data: {
           userId,
-          action: 'CREATE_STOCK_TRANSFER',
+          action: 'MAIN_STORE_TO_SUBSTORE_TRANSFER',
           tableName: 'StockTransfer',
-          recordId: transfer.id,
+          recordId: 'BATCH',
           changes: JSON.stringify({
-            subStoreId: validatedData.subStoreId,
-            theatreNumber: subStoreItem.theatreNumber,
-            itemName: subStoreItem.itemName,
-            quantity: validatedData.quantity,
-            transferredBy: (session.user as any).fullName || (session.user as any).email,
+            transferType: 'MAIN_TO_SUBSTORE',
+            theatreNumber: validatedData.theatreNumber,
+            itemCount: validatedData.items.length,
+            successCount: results.length,
+            errorCount: errors.length,
+            transferredBy: (session.user as any).fullName,
             timestamp: new Date().toISOString(),
           }),
         },
@@ -263,9 +490,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      success: true,
-      message: 'Stock transfer created successfully. Pending confirmation from receiving theatre.',
-      transfer,
+      success: errors.length === 0,
+      message: `Created ${results.length} transfer(s) from main store${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
+      results,
+      errors,
     }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -279,7 +507,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Update transfer status (approve, receive, cancel)
+// Update transfer status (approve, issue, receive, cancel)
 export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -294,9 +522,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Transfer ID and action are required' }, { status: 400 });
     }
 
-    const validActions = ['APPROVE', 'RECEIVE', 'CANCEL', 'IN_TRANSIT'];
+    const validActions = ['APPROVE', 'ISSUE', 'RECEIVE', 'CANCEL'];
     if (!validActions.includes(action)) {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid action. Must be APPROVE, ISSUE, RECEIVE, or CANCEL' }, { status: 400 });
     }
 
     const transfer = await prisma.stockTransfer.findUnique({
@@ -313,47 +541,135 @@ export async function PUT(request: NextRequest) {
     const userRole = (session.user as any).role;
     const userId = (session.user as any).id;
 
-    // Permission checks based on action
-    if (action === 'APPROVE' && !['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN'].includes(userRole)) {
-      return NextResponse.json({ error: 'Only Theatre Manager can approve transfers' }, { status: 403 });
+    // ===== AUTHORIZATION RULES =====
+
+    // APPROVE: ONLY Theatre Manager can approve ANY transfer
+    if (action === 'APPROVE') {
+      if (!['THEATRE_MANAGER', 'ADMIN'].includes(userRole)) {
+        return NextResponse.json({
+          error: 'Only the Theatre Manager can approve stock transfers.',
+        }, { status: 403 });
+      }
+      if (transfer.status !== 'REQUESTED') {
+        return NextResponse.json({ error: 'Transfer must be in REQUESTED status to approve' }, { status: 400 });
+      }
     }
 
-    if (action === 'RECEIVE' && !['SCRUB_NURSE', 'THEATRE_MANAGER', 'ADMIN'].includes(userRole)) {
-      return NextResponse.json({ error: 'Only Scrub Nurse or Theatre Manager can receive transfers' }, { status: 403 });
+    // ISSUE: Theatre Manager or Store Keeper
+    if (action === 'ISSUE') {
+      if (!['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN'].includes(userRole)) {
+        return NextResponse.json({
+          error: 'Only Theatre Manager or Store Keeper can issue transfers.',
+        }, { status: 403 });
+      }
+      if (transfer.status !== 'APPROVED') {
+        return NextResponse.json({ error: 'Transfer must be APPROVED before it can be issued' }, { status: 400 });
+      }
     }
 
-    // Map action to status
-    const statusMap: { [key: string]: string } = {
-      APPROVE: 'APPROVED',
-      RECEIVE: 'RECEIVED',
-      CANCEL: 'CANCELLED',
-      IN_TRANSIT: 'IN_TRANSIT',
-    };
+    // RECEIVE: Scrub Nurse or Theatre Manager
+    if (action === 'RECEIVE') {
+      if (!['SCRUB_NURSE', 'THEATRE_MANAGER', 'ADMIN', 'CIRCULATING_NURSE'].includes(userRole)) {
+        return NextResponse.json({
+          error: 'Only Scrub Nurse, Circulating Nurse, or Theatre Manager can receive transfers.',
+        }, { status: 403 });
+      }
+      if (transfer.status !== 'ISSUED') {
+        return NextResponse.json({ error: 'Transfer must be ISSUED before it can be received' }, { status: 400 });
+      }
+    }
 
-    const updateData: any = {
-      status: statusMap[action],
-    };
+    // CANCEL
+    if (action === 'CANCEL') {
+      if (!['THEATRE_MANAGER', 'ADMIN'].includes(userRole) && transfer.requestedById !== userId) {
+        return NextResponse.json({
+          error: 'Only Theatre Manager or the requester can cancel transfers.',
+        }, { status: 403 });
+      }
+      if (['RECEIVED', 'CANCELLED'].includes(transfer.status)) {
+        return NextResponse.json({ error: 'Cannot cancel a completed or already cancelled transfer' }, { status: 400 });
+      }
+    }
+
+    // ===== PERFORM STATUS UPDATE =====
+    const updateData: any = {};
+
+    switch (action) {
+      case 'APPROVE':
+        updateData.status = 'APPROVED';
+        updateData.approvedById = userId;
+        updateData.approvedAt = new Date();
+        break;
+
+      case 'ISSUE':
+        updateData.status = 'ISSUED';
+        updateData.issuedById = userId;
+        updateData.issuedAt = new Date();
+        break;
+
+      case 'RECEIVE':
+        updateData.status = 'RECEIVED';
+        updateData.receivedById = userId;
+        updateData.receivedAt = new Date();
+
+        // Add stock to destination sub-store on receive
+        const newStock = transfer.toSubStore.currentStock + transfer.quantityTransferred;
+        const newStockStatus = calculateStockStatus(newStock, transfer.toSubStore.minimumStock);
+
+        await prisma.theatreSubStore.update({
+          where: { id: transfer.toSubStoreId },
+          data: {
+            currentStock: newStock,
+            stockStatus: newStockStatus,
+            lastRestocked: new Date(),
+          },
+        });
+        break;
+
+      case 'CANCEL':
+        updateData.status = 'CANCELLED';
+
+        // Restore main store stock if already deducted
+        if (transfer.fromMainStore && transfer.sourceInventoryId) {
+          try {
+            await prisma.inventoryItem.update({
+              where: { id: transfer.sourceInventoryId },
+              data: {
+                quantity: {
+                  increment: transfer.quantityTransferred,
+                },
+              },
+            });
+          } catch (restoreError) {
+            console.error('Failed to restore main store stock on cancel:', restoreError);
+          }
+        }
+
+        // Restore source sub-store stock for inter-substore transfers
+        if (transfer.transferType === 'SUBSTORE_TO_SUBSTORE' && transfer.fromSubStoreId) {
+          try {
+            const sourceSubStore = await prisma.theatreSubStore.findUnique({
+              where: { id: transfer.fromSubStoreId },
+            });
+            if (sourceSubStore) {
+              const restoredStock = sourceSubStore.currentStock + transfer.quantityTransferred;
+              await prisma.theatreSubStore.update({
+                where: { id: transfer.fromSubStoreId },
+                data: {
+                  currentStock: restoredStock,
+                  stockStatus: calculateStockStatus(restoredStock, sourceSubStore.minimumStock),
+                },
+              });
+            }
+          } catch (restoreError) {
+            console.error('Failed to restore source sub-store stock on cancel:', restoreError);
+          }
+        }
+        break;
+    }
 
     if (notes) {
-      updateData.notes = transfer.notes ? `${transfer.notes}\n${notes}` : notes;
-    }
-
-    if (action === 'RECEIVE') {
-      updateData.receivedById = userId;
-      updateData.receivedAt = new Date();
-
-      // Update sub-store stock when received
-      const newStock = transfer.toSubStore.currentStock + transfer.quantityTransferred;
-      const newStockStatus = calculateStockStatus(newStock, transfer.toSubStore.minimumStock);
-
-      await prisma.theatreSubStore.update({
-        where: { id: transfer.toSubStoreId },
-        data: {
-          currentStock: newStock,
-          stockStatus: newStockStatus,
-          lastRestocked: new Date(),
-        },
-      });
+      updateData.notes = transfer.notes ? `${transfer.notes}\n[${action}] ${notes}` : `[${action}] ${notes}`;
     }
 
     const updatedTransfer = await prisma.stockTransfer.update({
@@ -369,10 +685,14 @@ export async function PUT(request: NextRequest) {
             stockStatus: true,
           },
         },
+        requestedBy: { select: { fullName: true } },
+        approvedBy: { select: { fullName: true } },
+        issuedBy: { select: { fullName: true } },
+        receivedBy: { select: { fullName: true } },
       },
     });
 
-    // Create audit log
+    // Audit log
     try {
       await prisma.auditLog.create({
         data: {
@@ -382,9 +702,12 @@ export async function PUT(request: NextRequest) {
           recordId: transferId,
           changes: JSON.stringify({
             action,
+            transferType: transfer.transferType,
             previousStatus: transfer.status,
-            newStatus: statusMap[action],
-            updatedBy: (session.user as any).fullName || (session.user as any).email,
+            newStatus: updateData.status,
+            itemName: transfer.itemName,
+            quantity: transfer.quantityTransferred,
+            actionBy: (session.user as any).fullName,
             timestamp: new Date().toISOString(),
           }),
         },

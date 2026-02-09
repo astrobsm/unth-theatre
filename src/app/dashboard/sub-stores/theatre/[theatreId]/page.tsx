@@ -78,6 +78,7 @@ export default function TheatreSubStorePage() {
     if (theatreId) {
       fetchItems();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theatreId, selectedCategory, selectedStatus, searchTerm]);
 
   const fetchItems = async () => {
@@ -206,6 +207,7 @@ export default function TheatreSubStorePage() {
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="input-field"
+            title="Filter by category"
           >
             <option value="">All Categories</option>
             {categories.map(c => (
@@ -216,6 +218,7 @@ export default function TheatreSubStorePage() {
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="input-field"
+            title="Filter by stock status"
           >
             <option value="">All Status</option>
             {stockStatuses.map(s => (

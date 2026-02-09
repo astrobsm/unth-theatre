@@ -50,4 +50,8 @@ body {
   .logo-large {
     @apply h-20 w-auto object-contain;
   }
+
+  .sidebar-nav {
+    max-height: calc(100vh - 380px);
+  }
 }

@@ -89,6 +89,7 @@ export default function NewUsageLogPage() {
     if (selectedTheatre) {
       fetchSubStoreItems();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTheatre]);
 
   // Search patients
@@ -96,6 +97,7 @@ export default function NewUsageLogPage() {
     if (patientSearch.length >= 2) {
       searchPatients();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientSearch]);
 
   const fetchSubStoreItems = async () => {
@@ -240,6 +242,7 @@ export default function NewUsageLogPage() {
                 setUsageEntries([]);
               }}
               className="input-field"
+              title="Select theatre"
             >
               <option value="">Select Theatre</option>
               {theatres.map(t => (
@@ -262,6 +265,7 @@ export default function NewUsageLogPage() {
                 <button
                   onClick={() => setSelectedPatient(null)}
                   className="p-1 hover:bg-primary-100 rounded"
+                  title="Clear patient selection"
                 >
                   <X className="w-5 h-5 text-primary-600" />
                 </button>
@@ -317,6 +321,7 @@ export default function NewUsageLogPage() {
                       <button
                         onClick={() => removeUsageEntry(entry.itemId)}
                         className="p-1 hover:bg-red-100 rounded text-red-500"
+                        title="Remove item"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -330,6 +335,7 @@ export default function NewUsageLogPage() {
                           value={entry.quantityUsed}
                           onChange={(e) => updateUsageEntry(entry.itemId, 'quantityUsed', parseInt(e.target.value) || 0)}
                           className="input-field"
+                          placeholder="0"
                         />
                       </div>
                       <div>
@@ -340,6 +346,7 @@ export default function NewUsageLogPage() {
                           value={entry.quantityReturned}
                           onChange={(e) => updateUsageEntry(entry.itemId, 'quantityReturned', parseInt(e.target.value) || 0)}
                           className="input-field"
+                          placeholder="0"
                         />
                       </div>
                       <div>
@@ -350,6 +357,7 @@ export default function NewUsageLogPage() {
                           value={entry.quantityWasted}
                           onChange={(e) => updateUsageEntry(entry.itemId, 'quantityWasted', parseInt(e.target.value) || 0)}
                           className="input-field"
+                          placeholder="0"
                         />
                       </div>
                     </div>

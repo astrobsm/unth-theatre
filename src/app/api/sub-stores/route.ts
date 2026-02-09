@@ -205,9 +205,10 @@ const createSubStoreSchema = z.object({
   expiryDate: z.string().optional(),
   managedById: z.string().optional(),
   notes: z.string().optional(),
+  sourceInventoryId: z.string().optional(), // Main store item ID to deduct from
 });
 
-// Create new sub-store item - Theatre Manager transfers from main store
+// Create new sub-store item - Stock MUST come from main store
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userRole = (session.user as any).role;
+    const userId = (session.user as any).id;
     
     // Only theatre managers, store keepers, and admins can create sub-store items
     if (!['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN'].includes(userRole)) {
@@ -226,6 +228,38 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const validatedData = createSubStoreSchema.parse(body);
+
+    // If initial stock > 0, it MUST come from main store deduction
+    if (validatedData.currentStock > 0 && !validatedData.sourceInventoryId) {
+      return NextResponse.json({
+        error: 'Initial stock must be sourced from main store inventory. Please provide sourceInventoryId or use the stock transfer feature.',
+      }, { status: 400 });
+    }
+
+    // Verify and deduct from main store if initial stock is specified
+    if (validatedData.currentStock > 0 && validatedData.sourceInventoryId) {
+      const inventoryItem = await prisma.inventoryItem.findUnique({
+        where: { id: validatedData.sourceInventoryId },
+      });
+
+      if (!inventoryItem) {
+        return NextResponse.json({ error: 'Source inventory item not found in main store' }, { status: 404 });
+      }
+
+      if (inventoryItem.quantity < validatedData.currentStock) {
+        return NextResponse.json({
+          error: `Insufficient stock in main store. Available: ${inventoryItem.quantity}, Requested: ${validatedData.currentStock}`,
+        }, { status: 400 });
+      }
+
+      // Deduct from main store
+      await prisma.inventoryItem.update({
+        where: { id: validatedData.sourceInventoryId },
+        data: {
+          quantity: { decrement: validatedData.currentStock },
+        },
+      });
+    }
 
     // Calculate initial stock status
     const stockStatus = calculateStockStatus(validatedData.currentStock, validatedData.minimumStock);
@@ -240,6 +274,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingItem) {
+      // Restore main store stock if already deducted
+      if (validatedData.currentStock > 0 && validatedData.sourceInventoryId) {
+        await prisma.inventoryItem.update({
+          where: { id: validatedData.sourceInventoryId },
+          data: { quantity: { increment: validatedData.currentStock } },
+        });
+      }
       return NextResponse.json({ 
         error: 'Item already exists in this theatre sub-store. Use stock transfer to add more quantity.' 
       }, { status: 400 });
@@ -259,7 +300,7 @@ export async function POST(request: NextRequest) {
         unitPrice: validatedData.unitPrice,
         batchNumber: validatedData.batchNumber,
         expiryDate: validatedData.expiryDate ? new Date(validatedData.expiryDate) : null,
-        managedById: validatedData.managedById || (session.user as any).id,
+        managedById: validatedData.managedById || userId,
         stockStatus,
         notes: validatedData.notes,
       },
@@ -279,12 +320,14 @@ export async function POST(request: NextRequest) {
     try {
       await prisma.auditLog.create({
         data: {
-          userId: (session.user as any).id,
+          userId,
           action: 'CREATE_SUBSTORE_ITEM',
           tableName: 'TheatreSubStore',
           recordId: subStore.id,
           changes: JSON.stringify({
             ...validatedData,
+            sourceInventoryId: validatedData.sourceInventoryId,
+            mainStoreDeducted: validatedData.currentStock > 0 ? validatedData.currentStock : 0,
             createdBy: (session.user as any).fullName || (session.user as any).email,
             timestamp: new Date().toISOString(),
           }),
@@ -296,7 +339,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Sub-store item created successfully',
+      message: 'Sub-store item created successfully' + (validatedData.currentStock > 0 ? `. ${validatedData.currentStock} units deducted from main store.` : ''),
       item: subStore,
     }, { status: 201 });
   } catch (error) {

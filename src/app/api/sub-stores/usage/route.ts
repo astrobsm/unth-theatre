@@ -270,6 +270,42 @@ export async function POST(request: NextRequest) {
             },
           });
 
+          // Auto-create restock request for bulk usage when stock is low
+          if (newStockStatus === 'LOW' || newStockStatus === 'CRITICAL' || newStockStatus === 'OUT_OF_STOCK') {
+            const existingRequest = await prisma.subStoreRestockRequest.findFirst({
+              where: {
+                theatreNumber: subStoreItem.theatreNumber,
+                status: { in: ['PENDING', 'APPROVED'] },
+                itemsRequested: { contains: subStoreItem.itemName },
+              },
+            });
+            if (!existingRequest) {
+              const restockQty = subStoreItem.maximumStock - Math.max(0, newStock);
+              try {
+                const requestNumber = `RSR-${subStoreItem.theatreNumber}-${Date.now()}-${item.subStoreId.slice(-4)}`;
+                await prisma.subStoreRestockRequest.create({
+                  data: {
+                    requestNumber,
+                    theatreNumber: subStoreItem.theatreNumber,
+                    theatreName: subStoreItem.theatreName,
+                    urgency: newStockStatus === 'OUT_OF_STOCK' ? 'CRITICAL' : newStockStatus === 'CRITICAL' ? 'HIGH' : 'NORMAL',
+                    status: 'PENDING',
+                    requestedById: userId,
+                    requestNotes: `Auto-generated: Stock dropped to ${newStockStatus} after surgery usage (${validatedData.surgeryId || 'bulk usage'})`,
+                    itemsRequested: JSON.stringify([{
+                      itemName: subStoreItem.itemName,
+                      quantity: restockQty,
+                      currentStock: Math.max(0, newStock),
+                      reason: `Stock ${newStockStatus} - needs replenishment from main store`,
+                    }]),
+                  },
+                });
+              } catch (restockError) {
+                console.error('Failed to auto-create restock request:', restockError);
+              }
+            }
+          }
+
           results.push({
             success: true,
             itemName: subStoreItem.itemName,
@@ -409,10 +445,45 @@ export async function POST(request: NextRequest) {
       console.error('Failed to create audit log:', auditError);
     }
 
-    // Check if stock is low and needs restock
+    // Auto-create restock request when stock drops to LOW or CRITICAL
     if (newStockStatus === 'LOW' || newStockStatus === 'CRITICAL' || newStockStatus === 'OUT_OF_STOCK') {
-      // Could trigger notification here for theatre manager
-      console.log(`⚠️ Low stock alert: ${subStoreItem.itemName} in Theatre ${subStoreItem.theatreNumber} - Stock: ${newStock} (${newStockStatus})`);
+      console.log(`⚠️ Low stock alert: ${subStoreItem.itemName} in Theatre ${subStoreItem.theatreNumber} - Stock: ${Math.max(0, newStock)} (${newStockStatus})`);
+
+      // Check if there's already a pending restock request for this theatre
+      const existingRequest = await prisma.subStoreRestockRequest.findFirst({
+        where: {
+          theatreNumber: subStoreItem.theatreNumber,
+          status: { in: ['PENDING', 'APPROVED'] },
+          itemsRequested: { contains: subStoreItem.itemName },
+        },
+      });
+
+      if (!existingRequest) {
+        const restockQty = subStoreItem.maximumStock - Math.max(0, newStock);
+        try {
+          const requestNumber = `RSR-${subStoreItem.theatreNumber}-${Date.now()}`;
+          await prisma.subStoreRestockRequest.create({
+            data: {
+              requestNumber,
+              theatreNumber: subStoreItem.theatreNumber,
+              theatreName: subStoreItem.theatreName,
+              urgency: newStockStatus === 'OUT_OF_STOCK' ? 'CRITICAL' : newStockStatus === 'CRITICAL' ? 'HIGH' : 'NORMAL',
+              status: 'PENDING',
+              requestedById: userId,
+              requestNotes: `Auto-generated: Stock dropped to ${newStockStatus} after surgery usage (${validatedData.surgeryId || 'unspecified surgery'})`,
+              itemsRequested: JSON.stringify([{
+                itemName: subStoreItem.itemName,
+                quantity: restockQty,
+                currentStock: Math.max(0, newStock),
+                reason: `Stock ${newStockStatus} - needs replenishment from main store`,
+              }]),
+            },
+          });
+          console.log(`📦 Auto-restock request created for ${subStoreItem.itemName} - Qty: ${restockQty}`);
+        } catch (restockError) {
+          console.error('Failed to auto-create restock request:', restockError);
+        }
+      }
     }
 
     return NextResponse.json({

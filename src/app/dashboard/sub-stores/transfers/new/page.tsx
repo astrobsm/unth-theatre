@@ -60,12 +60,6 @@ export default function NewTransferPage() {
     { value: 'THEATRE_13', label: 'Theatre 13 - Minor Procedures' },
   ];
 
-  useEffect(() => {
-    if (searchTerm.length >= 2) {
-      fetchInventoryItems();
-    }
-  }, [searchTerm]);
-
   const fetchInventoryItems = async () => {
     try {
       setLoading(true);
@@ -90,6 +84,13 @@ export default function NewTransferPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (searchTerm.length >= 2) {
+      fetchInventoryItems();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   const addTransferEntry = (item: InventoryItem) => {
     if (!selectedTheatre) {
@@ -146,6 +147,7 @@ export default function NewTransferPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          transferType: 'MAIN_TO_SUBSTORE',
           theatreNumber: selectedTheatre,
           items: transferEntries.map(e => ({
             itemId: e.itemId,
@@ -224,6 +226,7 @@ export default function NewTransferPage() {
               value={selectedTheatre}
               onChange={(e) => setSelectedTheatre(e.target.value)}
               className="input-field"
+              title="Select target theatre"
             >
               <option value="">Select a theatre...</option>
               {theatres.map(t => (
@@ -315,6 +318,7 @@ export default function NewTransferPage() {
                     <button
                       onClick={() => removeEntry(index)}
                       className="text-red-600 hover:text-red-800"
+                      title="Remove item"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -328,6 +332,7 @@ export default function NewTransferPage() {
                       min={1}
                       max={entry.currentStock}
                       className="input-field w-24"
+                      placeholder="1"
                     />
                     <span className="text-sm text-gray-600">{entry.unit}</span>
                   </div>

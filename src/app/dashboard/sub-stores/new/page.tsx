@@ -180,6 +180,7 @@ export default function NewSubStoreItemPage() {
             onChange={handleChange}
             required
             className="input-field"
+            title="Select theatre for this item"
           >
             <option value="">Select Theatre</option>
             {theatres.map(t => (
@@ -226,6 +227,7 @@ export default function NewSubStoreItemPage() {
                 onChange={handleChange}
                 required
                 className="input-field"
+                title="Select item category"
               >
                 {categories.map(c => (
                   <option key={c.value} value={c.value}>{c.label}</option>
@@ -240,6 +242,7 @@ export default function NewSubStoreItemPage() {
                 onChange={handleChange}
                 required
                 className="input-field"
+                title="Select unit of measure"
               >
                 {units.map(u => (
                   <option key={u} value={u}>{u}</option>
@@ -262,6 +265,7 @@ export default function NewSubStoreItemPage() {
                 onChange={handleChange}
                 min="0"
                 className="input-field"
+                placeholder="0"
               />
             </div>
             <div>
@@ -273,6 +277,7 @@ export default function NewSubStoreItemPage() {
                 onChange={handleChange}
                 min="1"
                 className="input-field"
+                placeholder="10"
               />
             </div>
             <div>
@@ -284,6 +289,7 @@ export default function NewSubStoreItemPage() {
                 onChange={handleChange}
                 min="1"
                 className="input-field"
+                placeholder="100"
               />
             </div>
           </div>
@@ -303,6 +309,7 @@ export default function NewSubStoreItemPage() {
                 min="0"
                 step="0.01"
                 className="input-field"
+                placeholder="0.00"
               />
             </div>
             <div>
@@ -313,6 +320,7 @@ export default function NewSubStoreItemPage() {
                 value={formData.batchNumber}
                 onChange={handleChange}
                 className="input-field"
+                placeholder="e.g., BN-2025-001"
               />
             </div>
             <div>
@@ -323,6 +331,7 @@ export default function NewSubStoreItemPage() {
                 value={formData.expiryDate}
                 onChange={handleChange}
                 className="input-field"
+                placeholder="Select expiry date"
               />
             </div>
             <div>
@@ -332,6 +341,7 @@ export default function NewSubStoreItemPage() {
                 value={formData.managedById}
                 onChange={handleChange}
                 className="input-field"
+                title="Select staff to manage this item"
               >
                 <option value="">Select Staff (Optional)</option>
                 {users.map(u => (

@@ -69,6 +69,7 @@ export default function SubStoreUsagePage() {
 
   useEffect(() => {
     fetchUsageLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTheatre, selectedStatus, dateFrom, dateTo, searchTerm]);
 
   const fetchUsageLogs = async () => {
@@ -179,6 +180,7 @@ export default function SubStoreUsagePage() {
             value={selectedTheatre}
             onChange={(e) => setSelectedTheatre(e.target.value)}
             className="input-field"
+            title="Filter by theatre"
           >
             <option value="">All Theatres</option>
             {theatres.map(t => (
@@ -189,6 +191,7 @@ export default function SubStoreUsagePage() {
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="input-field"
+            title="Filter by usage status"
           >
             <option value="">All Status</option>
             <option value="USED">Used</option>

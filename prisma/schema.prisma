@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -1361,10 +1362,34 @@ model SystemNotification {
   actionUrl         String?
   relatedEntityType String?           // "Equipment", "Surgery", "Fault", etc.
   relatedEntityId   String?
+  // Timeline tracking fields
+  scheduledAt       DateTime?         // When event is scheduled (surgery time, maintenance due, etc.)
+  deadlineAt        DateTime?         // Deadline for action (approval, expiry)
+  reminderSentAt    DateTime?         // Track when reminder was sent
+  isTimelineCritical Boolean          @default(false) // Flag for approaching deadlines
   createdAt         DateTime          @default(now())
   readAt            DateTime?
   
+  @@index([userId, isRead])
+  @@index([type])
+  @@index([scheduledAt])
+  @@index([deadlineAt])
+  @@index([createdAt])
   @@map("system_notifications")
+}
+
+model PushSubscription {
+  id              String    @id @default(uuid())
+  userId          String
+  endpoint        String    @unique
+  p256dh          String    // Browser push key
+  auth            String    // Browser push auth
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model PreoperativeSafetyCheck {
@@ -3803,12 +3828,19 @@ model StockTransfer {
   
   transferDate          DateTime                @default(now())
   
-  // Source (main store)
+  // Transfer type
+  transferType          String                  @default("MAIN_TO_SUBSTORE") // MAIN_TO_SUBSTORE, SUBSTORE_TO_SUBSTORE
+  
+  // Source (main store or another sub-store)
   fromMainStore         Boolean                 @default(true)
+  sourceInventoryId     String?                 // Main store inventory item ID (when from main store)
+  fromSubStoreId        String?                 // Source sub-store ID (for inter-substore transfers)
+  sourceTheatreNumber   String?                 // Source theatre number (for inter-substore transfers)
   
   // Destination (sub-store)
   toSubStoreId          String
   toSubStore            TheatreSubStore         @relation(fields: [toSubStoreId], references: [id])
+  destTheatreNumber     String?                 // Destination theatre number
   
   itemName              String
   quantityTransferred   Int

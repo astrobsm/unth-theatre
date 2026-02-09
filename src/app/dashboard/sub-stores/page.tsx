@@ -76,6 +76,7 @@ export default function SubStoresPage() {
 
   useEffect(() => {
     fetchSubStores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTheatre, selectedCategory, selectedStatus, searchTerm, groupBy]);
 
   const fetchSubStores = async () => {
@@ -252,6 +253,7 @@ export default function SubStoresPage() {
             value={selectedTheatre}
             onChange={(e) => setSelectedTheatre(e.target.value)}
             className="input-field"
+            title="Filter by theatre"
           >
             <option value="">All Theatres</option>
             {theatres.map(t => (
@@ -262,6 +264,7 @@ export default function SubStoresPage() {
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="input-field"
+            title="Filter by category"
           >
             <option value="">All Categories</option>
             {categories.map(c => (
@@ -272,6 +275,7 @@ export default function SubStoresPage() {
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="input-field"
+            title="Filter by stock status"
           >
             <option value="">All Status</option>
             {stockStatuses.map(s => (
@@ -282,6 +286,7 @@ export default function SubStoresPage() {
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as 'theatre' | 'category')}
             className="input-field"
+            title="Group items by"
           >
             <option value="theatre">Group by Theatre</option>
             <option value="category">Group by Category</option>
@@ -400,7 +405,7 @@ export default function SubStoresPage() {
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <Link
-                              href={`/dashboard/sub-stores/${item.id}/use`}
+                              href={`/dashboard/sub-stores/usage/new?item=${item.id}`}
                               className="text-primary-600 hover:text-primary-800 text-sm font-medium"
                             >
                               Log Use
@@ -470,7 +475,7 @@ export default function SubStoresPage() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <Link
-                            href={`/dashboard/sub-stores/${item.id}/use`}
+                            href={`/dashboard/sub-stores/usage/new?item=${item.id}`}
                             className="text-primary-600 hover:text-primary-800 text-sm font-medium"
                           >
                             Log Use

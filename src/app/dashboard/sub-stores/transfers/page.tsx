@@ -21,15 +21,19 @@ import {
 interface Transfer {
   id: string;
   transferDate: string;
+  transferType: string;
   toSubStore: {
     id: string;
     theatreNumber: string;
     itemName: string;
   };
+  sourceTheatreNumber?: string;
+  destTheatreNumber?: string;
   itemName: string;
   quantityTransferred: number;
   unit: string;
   status: string;
+  fromMainStore: boolean;
   requestedBy: {
     id: string;
     fullName: string;
@@ -59,6 +63,8 @@ interface TransferSummary {
   pendingReceive: number;
   completed: number;
   cancelled: number;
+  mainToSubstore: number;
+  interSubstore: number;
 }
 
 export default function TransfersPage() {
@@ -79,6 +85,7 @@ export default function TransfersPage() {
 
   useEffect(() => {
     fetchTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTheatre, selectedStatus, searchTerm]);
 
   const fetchTransfers = async () => {
@@ -119,16 +126,19 @@ export default function TransfersPage() {
     }
   };
 
-  const handleStatusUpdate = async (transferId: string, newStatus: string) => {
+  const handleStatusUpdate = async (transferId: string, action: string) => {
     try {
-      const response = await fetch(`/api/sub-stores/transfers/${transferId}`, {
-        method: 'PATCH',
+      const response = await fetch('/api/sub-stores/transfers', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify({ transferId, action })
       });
 
       if (response.ok) {
         fetchTransfers();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to update transfer');
       }
     } catch (error) {
       console.error('Error updating transfer:', error);
@@ -149,7 +159,7 @@ export default function TransfersPage() {
               Stock Transfers
             </h1>
             <p className="text-gray-600 mt-1">
-              Manage transfers from main store to theatre sub-stores
+              Manage transfers from main store &amp; between theatre sub-stores
             </p>
           </div>
         </div>
@@ -211,6 +221,7 @@ export default function TransfersPage() {
             value={selectedTheatre}
             onChange={(e) => setSelectedTheatre(e.target.value)}
             className="input-field w-auto"
+            title="Filter by theatre"
           >
             <option value="">All Theatres</option>
             {theatres.map(t => (
@@ -221,6 +232,7 @@ export default function TransfersPage() {
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="input-field w-auto"
+            title="Filter by status"
           >
             <option value="">All Statuses</option>
             {statuses.map(s => (
@@ -255,8 +267,9 @@ export default function TransfersPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Theatre</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Route</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested By</th>
@@ -270,10 +283,25 @@ export default function TransfersPage() {
                       {new Date(transfer.transferDate).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
+                      {transfer.transferType === 'SUBSTORE_TO_SUBSTORE' ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800 flex items-center gap-1 w-fit">
+                          <ArrowRight className="w-3 h-3" />Inter-Store
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs rounded-full bg-teal-100 text-teal-800 flex items-center gap-1 w-fit">
+                          <Store className="w-3 h-3" />Main Store
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{transfer.itemName}</div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {transfer.toSubStore?.theatreNumber?.replace('_', ' ')}
+                      {transfer.transferType === 'SUBSTORE_TO_SUBSTORE' ? (
+                        <span>{transfer.sourceTheatreNumber?.replace('_', ' ')} → {transfer.destTheatreNumber?.replace('_', ' ')}</span>
+                      ) : (
+                        <span>Main Store → {transfer.destTheatreNumber?.replace('_', ' ') || transfer.toSubStore?.theatreNumber?.replace('_', ' ')}</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {transfer.quantityTransferred} {transfer.unit}
@@ -289,14 +317,14 @@ export default function TransfersPage() {
                         {transfer.status === 'REQUESTED' && (
                           <>
                             <button
-                              onClick={() => handleStatusUpdate(transfer.id, 'APPROVED')}
+                              onClick={() => handleStatusUpdate(transfer.id, 'APPROVE')}
                               className="text-green-600 hover:text-green-800"
-                              title="Approve"
+                              title="Approve (Theatre Manager only)"
                             >
                               <CheckCircle className="w-5 h-5" />
                             </button>
                             <button
-                              onClick={() => handleStatusUpdate(transfer.id, 'CANCELLED')}
+                              onClick={() => handleStatusUpdate(transfer.id, 'CANCEL')}
                               className="text-red-600 hover:text-red-800"
                               title="Cancel"
                             >
@@ -306,7 +334,7 @@ export default function TransfersPage() {
                         )}
                         {transfer.status === 'APPROVED' && (
                           <button
-                            onClick={() => handleStatusUpdate(transfer.id, 'ISSUED')}
+                            onClick={() => handleStatusUpdate(transfer.id, 'ISSUE')}
                             className="text-blue-600 hover:text-blue-800"
                             title="Mark as Issued"
                           >
@@ -315,9 +343,9 @@ export default function TransfersPage() {
                         )}
                         {transfer.status === 'ISSUED' && (
                           <button
-                            onClick={() => handleStatusUpdate(transfer.id, 'RECEIVED')}
+                            onClick={() => handleStatusUpdate(transfer.id, 'RECEIVE')}
                             className="text-green-600 hover:text-green-800"
-                            title="Mark as Received"
+                            title="Confirm Receipt"
                           >
                             <Store className="w-5 h-5" />
                           </button>

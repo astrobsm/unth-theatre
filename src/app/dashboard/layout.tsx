@@ -182,7 +182,7 @@ export default function DashboardLayout({
             <p className="text-xs text-primary-200 mt-1 text-center">UNTH Ituku Ozalla</p>
           </div>
 
-          <nav className="mt-6 pb-48 overflow-y-auto" style={{maxHeight: 'calc(100vh - 380px)'}}>
+          <nav className="mt-6 pb-48 overflow-y-auto sidebar-nav">
             {menuItems.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
               return (
