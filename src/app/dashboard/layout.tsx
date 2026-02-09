@@ -4,6 +4,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import OfflineIndicator from '@/components/OfflineIndicator';
 import {
   LayoutDashboard,
   Package,
@@ -256,6 +257,7 @@ export default function DashboardLayout({
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              <OfflineIndicator />
               <span className="px-4 py-2 bg-primary-100 text-primary-800 rounded-full text-sm font-semibold">
                 {session.user.role.replace(/_/g, ' ')}
               </span>
