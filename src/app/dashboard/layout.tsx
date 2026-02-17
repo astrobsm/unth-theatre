@@ -38,6 +38,7 @@ import {
   Flame,
   Shield,
   Store,
+  Ambulance,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -121,6 +122,9 @@ export default function DashboardLayout({
     // 20. Surgeries
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
     
+    // 20b. Emergency Surgery Booking (NEW) — prominent position
+    { href: '/dashboard/emergency-booking', icon: Ambulance, label: 'Emergency Booking', badge: 'NEW' },
+    
     // 21. PACU (Recovery)
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
     
@@ -156,9 +160,32 @@ export default function DashboardLayout({
   ];
 
   // Add admin-only menu items
-  if (session.user.role === 'ADMIN' || session.user.role === 'SYSTEM_ADMINISTRATOR' || session.user.role === 'THEATRE_MANAGER') {
+  const adminRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'];
+  if (adminRoles.includes(session.user.role)) {
     menuItems.push({ href: '/dashboard/users', icon: Settings, label: 'User Management' });
   }
+
+  // Role-based menu filtering — show only relevant items per role
+  // Roles NOT listed here see ALL menu items (e.g. ADMIN, SURGEON, ANESTHETIST, NURSE, etc.)
+  const roleMenuMap: Record<string, string[]> = {
+    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/emergency-booking'],
+    LAUNDRY_SUPERVISOR: ['/dashboard', '/dashboard/laundry-supervisor'],
+    CSSD_SUPERVISOR: ['/dashboard', '/dashboard/cssd-supervisor', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness'],
+    OXYGEN_UNIT_SUPERVISOR: ['/dashboard', '/dashboard/oxygen-supervisor', '/dashboard/oxygen-control'],
+    WORKS_SUPERVISOR: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/fault-alerts'],
+    LAUNDRY_STAFF: ['/dashboard', '/dashboard/laundry-supervisor'],
+    CSSD_STAFF: ['/dashboard', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness'],
+    POWER_PLANT_OPERATOR: ['/dashboard', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness'],
+    BLOODBANK_STAFF: ['/dashboard', '/dashboard/blood-bank', '/dashboard/emergency-booking'],
+    PLUMBER: ['/dashboard', '/dashboard/works-supervisor'],
+    PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/emergency-booking'],
+    CLEANER: ['/dashboard'],
+  };
+
+  const allowedPaths = roleMenuMap[session.user.role];
+  const filteredMenuItems = allowedPaths
+    ? menuItems.filter(item => allowedPaths.some(p => item.href === p || item.href.startsWith(p + '/')))
+    : menuItems;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -184,7 +211,7 @@ export default function DashboardLayout({
           </div>
 
           <nav className="mt-6 pb-48 overflow-y-auto sidebar-nav">
-            {menuItems.map((item) => {
+            {filteredMenuItems.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
               return (
                 <Link

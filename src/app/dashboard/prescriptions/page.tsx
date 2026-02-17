@@ -11,7 +11,10 @@ import {
   Calendar,
   User,
   Eye,
-  Check
+  Check,
+  AlertTriangle,
+  XCircle,
+  RefreshCw
 } from 'lucide-react';
 
 interface Medication {
@@ -20,6 +23,15 @@ interface Medication {
   route: string;
   frequency: string;
   timing: string;
+}
+
+interface MedicationPackingItem {
+  drugName: string;
+  isPacked: boolean;
+  isOutOfStock: boolean;
+  substituteAvailable: boolean;
+  substituteDrugName: string;
+  pharmacistNote: string;
 }
 
 interface Prescription {
@@ -33,6 +45,11 @@ interface Prescription {
   specialInstructions?: string;
   urgency: 'ROUTINE' | 'URGENT' | 'EMERGENCY';
   status: string;
+  isLateArrival?: boolean;
+  lateArrivalFlaggedAt?: string;
+  hasOutOfStockItems?: boolean;
+  outOfStockItems?: string;
+  medicationPackingStatus?: string;
   prescribedBy: { fullName: string };
   approvedBy?: { fullName: string };
   packedBy?: { fullName: string };
@@ -51,6 +68,7 @@ export default function PrescriptionsPage() {
   const [showPackModal, setShowPackModal] = useState(false);
   const [packingNotes, setPackingNotes] = useState('');
   const [packing, setPacking] = useState(false);
+  const [medicationItems, setMedicationItems] = useState<MedicationPackingItem[]>([]);
 
   useEffect(() => {
     fetchPrescriptions();
@@ -73,10 +91,10 @@ export default function PrescriptionsPage() {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        // Filter approved and not yet packed prescriptions for needsPacking
         if (filter === 'needsPacking') {
           setPrescriptions(data.filter((p: Prescription) => 
-            p.status === 'APPROVED' && !p.packedAt
+            ['APPROVED', 'PARTIALLY_PACKED', 'LATE_ARRIVAL'].includes(p.status) && 
+            p.status !== 'PACKED'
           ));
         } else {
           setPrescriptions(data);
@@ -105,16 +123,21 @@ export default function PrescriptionsPage() {
       const response = await fetch(`/api/prescriptions/${selectedPrescription.id}/pack`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packingNotes }),
+        body: JSON.stringify({ 
+          packingNotes,
+          medicationPackingStatus: medicationItems,
+        }),
       });
 
       if (response.ok) {
         setShowPackModal(false);
         setPackingNotes('');
         setSelectedPrescription(null);
+        setMedicationItems([]);
         fetchPrescriptions();
       } else {
-        alert('Failed to mark prescription as packed');
+        const err = await response.json();
+        alert(err.error || 'Failed to mark prescription as packed');
       }
     } catch (error) {
       console.error('Error packing prescription:', error);
@@ -122,6 +145,40 @@ export default function PrescriptionsPage() {
     } finally {
       setPacking(false);
     }
+  };
+
+  const openPackModal = (prescription: Prescription) => {
+    setSelectedPrescription(prescription);
+    // Initialize per-medication tracking from existing medications
+    const meds = parseMedications(prescription.medications);
+    const existing = prescription.medicationPackingStatus 
+      ? (() => { try { return JSON.parse(prescription.medicationPackingStatus); } catch { return []; } })()
+      : [];
+    
+    setMedicationItems(meds.map(med => {
+      const ex = existing.find((e: MedicationPackingItem) => e.drugName === med.name);
+      return {
+        drugName: med.name,
+        isPacked: ex?.isPacked || false,
+        isOutOfStock: ex?.isOutOfStock || false,
+        substituteAvailable: ex?.substituteAvailable || false,
+        substituteDrugName: ex?.substituteDrugName || '',
+        pharmacistNote: ex?.pharmacistNote || '',
+      };
+    }));
+    setShowPackModal(true);
+  };
+
+  const toggleMedPacked = (index: number) => {
+    setMedicationItems(prev => prev.map((item, i) => 
+      i === index ? { ...item, isPacked: !item.isPacked, isOutOfStock: !item.isPacked ? false : item.isOutOfStock } : item
+    ));
+  };
+
+  const toggleMedOutOfStock = (index: number) => {
+    setMedicationItems(prev => prev.map((item, i) => 
+      i === index ? { ...item, isOutOfStock: !item.isOutOfStock, isPacked: !item.isOutOfStock ? false : item.isPacked } : item
+    ));
   };
 
   const getUrgencyColor = (urgency: string) => {
@@ -271,7 +328,24 @@ export default function PrescriptionsPage() {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getUrgencyColor(prescription.urgency)}`}>
                           {prescription.urgency}
                         </span>
-                        {prescription.packedAt && (
+                        {prescription.isLateArrival && (
+                          <span className="bg-yellow-100 text-yellow-800 border border-yellow-300 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Late Arrival
+                          </span>
+                        )}
+                        {prescription.hasOutOfStockItems && (
+                          <span className="bg-red-100 text-red-800 border border-red-300 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                            <XCircle className="h-3 w-3" />
+                            Out of Stock
+                          </span>
+                        )}
+                        {prescription.status === 'PARTIALLY_PACKED' && (
+                          <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded-full text-xs font-medium">
+                            Partially Packed
+                          </span>
+                        )}
+                        {prescription.packedAt && prescription.status === 'PACKED' && (
                           <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
                             ✓ Packed
                           </span>
@@ -293,16 +367,13 @@ export default function PrescriptionsPage() {
                         {prescription.surgery.procedureName}
                       </p>
                     </div>
-                    {!prescription.packedAt && (
+                    {(!prescription.packedAt || prescription.status === 'PARTIALLY_PACKED') && (
                       <button
-                        onClick={() => {
-                          setSelectedPrescription(prescription);
-                          setShowPackModal(true);
-                        }}
+                        onClick={() => openPackModal(prescription)}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
                       >
                         <Check className="h-5 w-5" />
-                        Mark as Packed
+                        {prescription.status === 'PARTIALLY_PACKED' ? 'Update Packing' : 'Pack Drugs'}
                       </button>
                     )}
                   </div>
@@ -390,14 +461,117 @@ export default function PrescriptionsPage() {
         </div>
       )}
 
-      {/* Pack Modal */}
+      {/* Pack Modal with Per-Medication Tracking */}
       {showPackModal && selectedPrescription && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Mark Prescription as Packed</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-2">Pack Prescription</h3>
             <p className="text-gray-600 mb-4">
-              Confirm that all medications have been prepared for {selectedPrescription.patientName}
+              Patient: <strong>{selectedPrescription.patientName}</strong> | 
+              Surgery: {selectedPrescription.surgery?.procedureName}
             </p>
+
+            {selectedPrescription.isLateArrival && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 mb-4 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-yellow-600" />
+                <span className="text-sm text-yellow-800 font-medium">
+                  This prescription arrived LATE (after 6 PM deadline). Please prioritize packing.
+                </span>
+              </div>
+            )}
+
+            {/* Per-Medication Packing Checklist */}
+            <div className="mb-4">
+              <h4 className="font-medium text-gray-900 mb-3">Medication Checklist:</h4>
+              <div className="space-y-3">
+                {medicationItems.map((item, idx) => (
+                  <div key={idx} className={`border rounded-lg p-3 ${
+                    item.isOutOfStock ? 'border-red-300 bg-red-50' : 
+                    item.isPacked ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-gray-900">{item.drugName}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleMedPacked(idx)}
+                          className={`px-3 py-1 rounded text-xs font-medium ${
+                            item.isPacked 
+                              ? 'bg-green-600 text-white' 
+                              : 'bg-gray-100 text-gray-600 hover:bg-green-100'
+                          }`}
+                        >
+                          {item.isPacked ? '✓ Packed' : 'Mark Packed'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleMedOutOfStock(idx)}
+                          className={`px-3 py-1 rounded text-xs font-medium ${
+                            item.isOutOfStock 
+                              ? 'bg-red-600 text-white' 
+                              : 'bg-gray-100 text-gray-600 hover:bg-red-100'
+                          }`}
+                        >
+                          {item.isOutOfStock ? '✗ Out of Stock' : 'Out of Stock'}
+                        </button>
+                      </div>
+                    </div>
+                    {item.isOutOfStock && (
+                      <div className="mt-2 space-y-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={item.substituteAvailable}
+                            onChange={() => {
+                              setMedicationItems(prev => prev.map((m, i) => 
+                                i === idx ? { ...m, substituteAvailable: !m.substituteAvailable } : m
+                              ));
+                            }}
+                            className="rounded"
+                          />
+                          Substitute available
+                        </label>
+                        {item.substituteAvailable && (
+                          <input
+                            type="text"
+                            placeholder="Substitute drug name"
+                            value={item.substituteDrugName}
+                            onChange={(e) => {
+                              setMedicationItems(prev => prev.map((m, i) => 
+                                i === idx ? { ...m, substituteDrugName: e.target.value } : m
+                              ));
+                            }}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                        )}
+                        <input
+                          type="text"
+                          placeholder="Pharmacist note for this drug..."
+                          value={item.pharmacistNote}
+                          onChange={(e) => {
+                            setMedicationItems(prev => prev.map((m, i) => 
+                              i === idx ? { ...m, pharmacistNote: e.target.value } : m
+                            ));
+                          }}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Out-of-stock summary */}
+            {medicationItems.some(m => m.isOutOfStock) && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <p className="text-sm font-medium text-red-900 flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4" />
+                  Out-of-stock drugs will be flagged and the surgeon &amp; anesthetist will be notified automatically.
+                </p>
+              </div>
+            )}
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Packing Notes (Optional)
@@ -405,17 +579,33 @@ export default function PrescriptionsPage() {
               <textarea
                 value={packingNotes}
                 onChange={(e) => setPackingNotes(e.target.value)}
-                rows={3}
+                rows={2}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                placeholder="Add any notes about the packing process..."
+                placeholder="Add any notes..."
               />
             </div>
+
+            {/* Progress indicator */}
+            <div className="mb-4 bg-gray-50 rounded-lg p-3">
+              <div className="flex justify-between text-sm mb-1">
+                <span>Packing Progress</span>
+                <span>{medicationItems.filter(m => m.isPacked || m.isOutOfStock).length} / {medicationItems.length}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full transition-all"
+                  style={{ width: `${medicationItems.length > 0 ? (medicationItems.filter(m => m.isPacked || m.isOutOfStock).length / medicationItems.length) * 100 : 0}%` }}
+                ></div>
+              </div>
+            </div>
+
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => {
                   setShowPackModal(false);
                   setPackingNotes('');
                   setSelectedPrescription(null);
+                  setMedicationItems([]);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={packing}
@@ -425,17 +615,17 @@ export default function PrescriptionsPage() {
               <button
                 onClick={handlePackPrescription}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-                disabled={packing}
+                disabled={packing || medicationItems.every(m => !m.isPacked && !m.isOutOfStock)}
               >
                 {packing ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Packing...
+                    Saving...
                   </>
                 ) : (
                   <>
                     <Check className="h-5 w-5" />
-                    Confirm Packed
+                    Confirm Packing
                   </>
                 )}
               </button>

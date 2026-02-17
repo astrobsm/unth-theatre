@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getCachedData } from '@/lib/offlineStore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [newPasswordValue, setNewPasswordValue] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [userId, setUserId] = useState('');
+  const [isOffline, setIsOffline] = useState(false);
   
   // Quick duty logging states
   const [showDutyPanel, setShowDutyPanel] = useState(false);
@@ -23,10 +25,67 @@ export default function LoginPage() {
   const [dutyLoading, setDutyLoading] = useState(false);
   const [dutyMessage, setDutyMessage] = useState('');
 
+  // Offline auto-login: if offline and session is cached, redirect to dashboard
+  useEffect(() => {
+    const checkOfflineLogin = async () => {
+      const offline = !navigator.onLine;
+      setIsOffline(offline);
+
+      if (offline) {
+        try {
+          const cached = await getCachedData<{ user: { role: string } }>('session');
+          if (cached?.data?.user) {
+            const role = cached.data.user.role;
+            // Navigate based on cached role
+            switch (role) {
+              case 'ANAESTHETIST':
+              case 'SCRUB_NURSE':
+              case 'SURGEON':
+                router.push('/dashboard/surgeries');
+                break;
+              case 'THEATRE_STORE_KEEPER':
+                router.push('/dashboard/inventory');
+                break;
+              case 'RECOVERY_ROOM_NURSE':
+                router.push('/dashboard/pacu');
+                break;
+              default:
+                router.push('/dashboard');
+            }
+          }
+        } catch {
+          // No cached session
+        }
+      }
+    };
+
+    checkOfflineLogin();
+
+    window.addEventListener('online', () => setIsOffline(false));
+    window.addEventListener('offline', () => setIsOffline(true));
+    return () => {
+      window.removeEventListener('online', () => setIsOffline(false));
+      window.removeEventListener('offline', () => setIsOffline(true));
+    };
+  }, [router]);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    // If offline, try cached session
+    if (!navigator.onLine) {
+      try {
+        const cached = await getCachedData<{ user: { role: string } }>('session');
+        if (cached?.data?.user) {
+          router.push('/dashboard');
+          return;
+        }
+      } catch {}
+      setError('You are offline and no cached session is available. Please connect to the internet.');
+      setLoading(false);
+      return;
+    }
 
     try {
       const result = await signIn('credentials', {
@@ -64,6 +123,7 @@ export default function LoginPage() {
         // Role-based navigation
         switch (userRole) {
           case 'ANAESTHETIST':
+          case 'CONSULTANT_ANAESTHETIST':
             router.push('/dashboard/surgeries');
             break;
           case 'SCRUB_NURSE':
@@ -77,6 +137,30 @@ export default function LoginPage() {
             break;
           case 'RECOVERY_ROOM_NURSE':
             router.push('/dashboard/pacu');
+            break;
+          case 'PHARMACIST':
+            router.push('/dashboard/pharmacy');
+            break;
+          case 'CHIEF_MEDICAL_DIRECTOR':
+            router.push('/dashboard/cmd');
+            break;
+          case 'CMAC':
+            router.push('/dashboard/cmac');
+            break;
+          case 'DC_MAC':
+            router.push('/dashboard/dc-mac');
+            break;
+          case 'LAUNDRY_SUPERVISOR':
+            router.push('/dashboard/laundry');
+            break;
+          case 'CSSD_SUPERVISOR':
+            router.push('/dashboard/cssd-supervisor');
+            break;
+          case 'OXYGEN_UNIT_SUPERVISOR':
+            router.push('/dashboard/oxygen-supervisor');
+            break;
+          case 'WORKS_SUPERVISOR':
+            router.push('/dashboard/works');
             break;
           case 'THEATRE_MANAGER':
           case 'THEATRE_CHAIRMAN':
@@ -140,6 +224,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-secondary-50 to-primary-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-2xl border border-primary-100">
         <div className="text-center">
+          {/* Offline Banner */}
+          {isOffline && (
+            <div className="mb-4 bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">
+              <strong>You are offline.</strong> If you have previously logged in, you will be redirected automatically.
+              Otherwise, please connect to the internet to sign in.
+            </div>
+          )}
+
           {/* Logo */}
           <div className="flex justify-center mb-6">
             <img 

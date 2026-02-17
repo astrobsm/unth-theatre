@@ -6,6 +6,15 @@ import { z } from 'zod';
 
 const packPrescriptionSchema = z.object({
   packingNotes: z.string().optional(),
+  pharmacistNotes: z.string().optional(),
+  medicationPackingStatus: z.array(z.object({
+    drugName: z.string(),
+    isPacked: z.boolean(),
+    isOutOfStock: z.boolean().default(false),
+    substituteAvailable: z.boolean().default(false),
+    substituteDrugName: z.string().optional(),
+    pharmacistNote: z.string().optional(),
+  })).optional(),
 });
 
 export async function POST(
@@ -42,25 +51,55 @@ export async function POST(
       );
     }
 
-    if (existingPrescription.status !== 'APPROVED') {
+    if (existingPrescription.status !== 'APPROVED' && existingPrescription.status !== 'PARTIALLY_PACKED' && existingPrescription.status !== 'LATE_ARRIVAL') {
       return NextResponse.json(
-        { error: 'Only approved prescriptions can be packed' },
+        { error: 'Only approved or late-arrival prescriptions can be packed' },
         { status: 400 }
       );
     }
+
+    // Determine packing status based on per-medication tracking
+    const medStatuses = validatedData.medicationPackingStatus || [];
+    const hasOutOfStock = medStatuses.some(m => m.isOutOfStock);
+    const allPacked = medStatuses.length > 0 && medStatuses.every(m => m.isPacked || m.isOutOfStock);
+    const anyPacked = medStatuses.some(m => m.isPacked);
+    
+    let newStatus: string;
+    if (hasOutOfStock && allPacked) {
+      newStatus = 'PARTIALLY_PACKED';
+    } else if (allPacked) {
+      newStatus = 'PACKED';
+    } else if (anyPacked) {
+      newStatus = 'PARTIALLY_PACKED';
+    } else {
+      newStatus = 'PACKED'; // Default when no per-med tracking
+    }
+
+    const outOfStockItems = medStatuses.filter(m => m.isOutOfStock).map(m => m.drugName);
 
     // Update prescription as packed
     const updatedPrescription = await prisma.anestheticPrescription.update({
       where: { id: params.id },
       data: {
-        status: 'PACKED',
+        status: newStatus as any,
         packedById: session.user.id,
         packedByName: session.user.name,
         packedAt: new Date(),
         packingNotes: validatedData.packingNotes,
+        pharmacistNotes: validatedData.pharmacistNotes,
+        medicationPackingStatus: medStatuses.length > 0 ? JSON.stringify(medStatuses) : undefined,
+        hasOutOfStockItems: hasOutOfStock,
+        outOfStockItems: outOfStockItems.length > 0 ? JSON.stringify(outOfStockItems) : null,
+        outOfStockNotifiedAt: hasOutOfStock ? new Date() : null,
       },
       include: {
-        surgery: true,
+        surgery: {
+          select: {
+            id: true,
+            procedureName: true,
+            surgeonId: true,
+          },
+        },
         patient: true,
         prescribedBy: {
           select: {
@@ -97,9 +136,57 @@ export async function POST(
           packedBy: session.user.name,
           packedAt: new Date(),
           notes: validatedData.packingNotes,
+          outOfStockItems,
+          status: newStatus,
         }),
       },
     });
+
+    // If there are out-of-stock items, notify the surgeon and anesthetist
+    if (hasOutOfStock && updatedPrescription.surgery) {
+      const notifyUserIds: string[] = [];
+      
+      // Notify the prescribing anesthetist
+      if (updatedPrescription.prescribedBy?.id) {
+        notifyUserIds.push(updatedPrescription.prescribedBy.id);
+      }
+      
+      // Notify the approving consultant
+      if (updatedPrescription.approvedBy?.id) {
+        notifyUserIds.push(updatedPrescription.approvedBy.id);
+      }
+      
+      // Notify the surgeon
+      if (updatedPrescription.surgery.surgeonId) {
+        notifyUserIds.push(updatedPrescription.surgery.surgeonId);
+      }
+
+      const uniqueIds = [...new Set(notifyUserIds)];
+      const outOfStockMsg = outOfStockItems.join(', ');
+
+      await prisma.notification.createMany({
+        data: uniqueIds.map(uid => ({
+          userId: uid,
+          type: 'OUT_OF_STOCK_DRUGS',
+          title: 'Out of Stock Medications',
+          message: `The following drugs for patient ${updatedPrescription.patientName} are out of stock: ${outOfStockMsg}. Surgery: ${updatedPrescription.surgery?.procedureName || 'N/A'}`,
+          link: `/dashboard/prescriptions`,
+        })),
+      });
+    }
+
+    // Notify surgeon that drugs have been packed
+    if (newStatus === 'PACKED' && updatedPrescription.surgery?.surgeonId) {
+      await prisma.notification.create({
+        data: {
+          userId: updatedPrescription.surgery.surgeonId,
+          type: 'DRUGS_PACKED',
+          title: 'Medications Packed',
+          message: `All medications for patient ${updatedPrescription.patientName} have been packed and are ready for surgery: ${updatedPrescription.surgery.procedureName || 'N/A'}`,
+          link: `/dashboard/prescriptions`,
+        },
+      });
+    }
 
     return NextResponse.json(updatedPrescription);
   } catch (error) {

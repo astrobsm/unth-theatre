@@ -16,6 +16,13 @@ enum UserRole {
   SYSTEM_ADMINISTRATOR
   THEATRE_MANAGER
   THEATRE_CHAIRMAN
+  CHIEF_MEDICAL_DIRECTOR
+  CMAC
+  DC_MAC
+  LAUNDRY_SUPERVISOR
+  CSSD_SUPERVISOR
+  OXYGEN_UNIT_SUPERVISOR
+  WORKS_SUPERVISOR
   SURGEON
   ANAESTHETIST
   CONSULTANT_ANAESTHETIST
@@ -399,6 +406,10 @@ model User {
   anesthetistEmergencyAlerts EmergencySurgeryAlert[] @relation("AnesthetistEmergencyAlerts")
   notifications Notification[]
   
+  // Emergency Booking Relations
+  emergencyBookingsAsSurgeon EmergencySurgeryBooking[] @relation("EmergencyBookingSurgeon")
+  emergencyBookingsAsAnesthetist EmergencySurgeryBooking[] @relation("EmergencyBookingAnesthetist")
+  
   // CSSD Relations
   cssdInventoryUpdates CssdInventory[]
   cssdUsageIssued CssdUsageHistory[] @relation("IssuedBy")
@@ -740,6 +751,9 @@ model Surgery {
   
   // Oxygen Alert Relations
   oxygenAlerts          OxygenAlert[]
+  
+  // Emergency Booking Relation
+  emergencyBooking      EmergencySurgeryBooking? @relation("EmergencyBookingSurgery")
   
   @@map("surgeries")
 }
@@ -2808,6 +2822,8 @@ enum PrescriptionStatus {
   REJECTED
   DISPENSED
   PACKED
+  PARTIALLY_PACKED
+  LATE_ARRIVAL
 }
 
 enum MedicationUrgency {
@@ -2972,6 +2988,19 @@ model AnestheticPrescription {
   specialInstructions       String?
   allergyAlerts             String?               // Highlighted allergies
   
+  // Late Arrival Tracking
+  isLateArrival             Boolean               @default(false)
+  lateArrivalFlaggedAt      DateTime?
+  approvalDeadline          DateTime?             // Default: 6 PM day before surgery
+  
+  // Out-of-Stock Tracking
+  outOfStockItems           String?               // JSON: items that are out of stock
+  hasOutOfStockItems        Boolean               @default(false)
+  outOfStockNotifiedAt      DateTime?
+  
+  // Individual medication packing status
+  medicationPackingStatus   String?               // JSON: per-medication packed/not-packed/out-of-stock
+  
   // Notes
   prescriptionNotes         String?
   pharmacistNotes           String?
@@ -2987,8 +3016,122 @@ model AnestheticPrescription {
   prescribedBy              User                  @relation("PrescribedBy", fields: [prescribedById], references: [id])
   approvedBy                User?                 @relation("ApprovedBy", fields: [approvedById], references: [id])
   packedBy                  User?                 @relation("PackedBy", fields: [packedById], references: [id])
+  prescriptionItems         PrescriptionMedicationItem[]
   
   @@map("anesthetic_prescriptions")
+}
+
+// Individual medication tracking within a prescription
+model PrescriptionMedicationItem {
+  id                        String                @id @default(uuid())
+  prescriptionId            String
+  
+  // Drug Details
+  drugName                  String
+  dosage                    String
+  route                     String                // IV, IM, PO, etc.
+  frequency                 String?
+  timing                    String?               // Pre-op, Intra-op, Post-op
+  quantity                  Int                   @default(1)
+  
+  // Packing Status
+  isPacked                  Boolean               @default(false)
+  packedAt                  DateTime?
+  isOutOfStock              Boolean               @default(false)
+  outOfStockFlaggedAt       DateTime?
+  substituteAvailable       Boolean               @default(false)
+  substituteDrugName        String?
+  
+  // Notes
+  pharmacistNote            String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  
+  @@map("prescription_medication_items")
+}
+
+// Emergency Surgery Booking
+model EmergencySurgeryBooking {
+  id                        String                @id @default(uuid())
+  
+  // Patient Info
+  patientName               String
+  folderNumber              String
+  age                       Int?
+  gender                    String?
+  ward                      String?
+  diagnosis                 String
+  
+  // Surgery Details
+  procedureName             String
+  surgicalUnit              String
+  indication                String                // Why emergency
+  surgeonId                 String
+  surgeonName               String
+  anesthetistId             String?
+  anesthetistName           String?
+  
+  // Timing
+  requestedAt               DateTime              @default(now())
+  requiredByTime            DateTime?             // When surgery must start
+  estimatedDuration         Int?                  // Minutes
+  
+  // Theatre Assignment
+  theatreId                 String?
+  theatreName               String?
+  
+  // Priority & Classification
+  priority                  EmergencyAlertPriority @default(CRITICAL)
+  classification            String?               // Life-threatening, Limb-threatening, etc.
+  
+  // Requirements
+  bloodRequired             Boolean               @default(false)
+  bloodType                 String?
+  bloodUnits                Int?
+  specialEquipment          String?               // JSON array
+  specialRequirements       String?
+  
+  // Booking Status
+  status                    EmergencyBookingStatus @default(SUBMITTED)
+  
+  // Linked records (created after approval)
+  surgeryId                 String?               @unique
+  emergencyAlertId          String?
+  
+  // Approval
+  approvedById              String?
+  approvedByName            String?
+  approvedAt                DateTime?
+  rejectionReason           String?
+  
+  // Notifications sent
+  alertsSentAt              DateTime?
+  notifiedRoles             String?               // JSON array of roles notified
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  surgeon                   User                  @relation("EmergencyBookingSurgeon", fields: [surgeonId], references: [id])
+  anesthetist               User?                 @relation("EmergencyBookingAnesthetist", fields: [anesthetistId], references: [id])
+  surgery                   Surgery?              @relation("EmergencyBookingSurgery", fields: [surgeryId], references: [id])
+  
+  @@map("emergency_surgery_bookings")
+}
+
+enum EmergencyBookingStatus {
+  SUBMITTED
+  APPROVED
+  THEATRE_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 // Blood Request and Alert Model

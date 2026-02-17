@@ -54,6 +54,19 @@ export async function POST(
       );
     }
 
+    // Check late arrival: if approved after 6 PM the day before surgery
+    let isLateArrival = false;
+    if (validatedData.approved && existingPrescription.scheduledSurgeryDate) {
+      const surgeryDate = new Date(existingPrescription.scheduledSurgeryDate);
+      const deadline = new Date(surgeryDate);
+      deadline.setDate(deadline.getDate() - 1);
+      deadline.setHours(18, 0, 0, 0); // 6 PM day before
+      
+      if (new Date() > deadline) {
+        isLateArrival = true;
+      }
+    }
+
     // Update prescription with approval
     const updatedPrescription = await prisma.anestheticPrescription.update({
       where: { id: params.id },
@@ -63,6 +76,14 @@ export async function POST(
         approvedByName: validatedData.approved ? session.user.name : null,
         approvedAt: validatedData.approved ? new Date() : null,
         rejectionReason: validatedData.approved ? null : validatedData.rejectionReason,
+        isLateArrival: isLateArrival,
+        lateArrivalFlaggedAt: isLateArrival ? new Date() : null,
+        approvalDeadline: existingPrescription.scheduledSurgeryDate ? (() => {
+          const d = new Date(existingPrescription.scheduledSurgeryDate);
+          d.setDate(d.getDate() - 1);
+          d.setHours(18, 0, 0, 0);
+          return d;
+        })() : null,
       },
       include: {
         surgery: true,

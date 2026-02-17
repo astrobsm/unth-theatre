@@ -22,7 +22,10 @@ import {
   Sparkles,
   RefreshCw,
   BarChart3,
+  WifiOff,
 } from 'lucide-react';
+import { useOfflineData } from '@/lib/useOfflineData';
+import { useOfflineContext } from '@/components/OfflineProvider';
 
 // Dynamic imports for chart components (client-side only)
 const SurgeryTrendChart = dynamic(() => import('@/components/charts/SurgeryTrendChart'), {
@@ -77,92 +80,80 @@ interface AnalyticsData {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalSurgeries: 0,
-    scheduledSurgeries: 0,
-    totalPatients: 0,
-    lowStockItems: 0,
-    pendingTransfers: 0,
-    todaySurgeries: 0,
-  });
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const { isOnline } = useOfflineContext();
   const [timeRange, setTimeRange] = useState(30);
 
-  const fetchDashboardStats = async () => {
-    try {
-      const response = await fetch('/api/dashboard/stats');
-      if (response.ok) {
-        const data = await response.json();
-        // Validate that we got a proper stats object, not an error
-        if (data && typeof data === 'object' && !data.error && typeof data.totalSurgeries === 'number') {
-          setStats(data);
-        } else {
-          console.error('Invalid dashboard stats response:', data);
-          // Keep default stats (zeros) if response is invalid
-        }
-      } else {
-        console.error('Failed to fetch dashboard stats, status:', response.status);
+  // Offline-aware data fetching — automatically falls back to IndexedDB when offline
+  const {
+    data: stats,
+    loading,
+    isCached: statsCached,
+    isOffline: statsOffline,
+    refetch: refetchStats,
+  } = useOfflineData<DashboardStats>('/api/dashboard/stats', {
+    cacheKey: 'dashboard-stats',
+    cacheTtl: 60 * 60 * 1000, // 1 hour
+    fallback: {
+      totalSurgeries: 0,
+      scheduledSurgeries: 0,
+      totalPatients: 0,
+      lowStockItems: 0,
+      pendingTransfers: 0,
+      todaySurgeries: 0,
+    },
+    transform: (data: unknown) => {
+      const d = data as Record<string, unknown>;
+      if (d && typeof d === 'object' && !d.error && typeof d.totalSurgeries === 'number') {
+        return d as unknown as DashboardStats;
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return {
+        totalSurgeries: 0,
+        scheduledSurgeries: 0,
+        totalPatients: 0,
+        lowStockItems: 0,
+        pendingTransfers: 0,
+        todaySurgeries: 0,
+      };
+    },
+    refetchInterval: 60000, // Refresh every minute when online
+  });
 
-  const fetchAnalytics = async () => {
-    setAnalyticsLoading(true);
-    try {
-      const response = await fetch(`/api/analytics/dashboard?days=${timeRange}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAnalytics(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error);
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardStats();
-    fetchAnalytics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    fetchAnalytics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeRange]);
+  const {
+    data: analytics,
+    loading: analyticsLoading,
+    isCached: analyticsCached,
+    refetch: refetchAnalytics,
+  } = useOfflineData<AnalyticsData>(`/api/analytics/dashboard?days=${timeRange}`, {
+    cacheKey: `analytics-dashboard-${timeRange}`,
+    cacheTtl: 30 * 60 * 1000,
+    deps: [timeRange],
+  });
 
   const statCards = [
     {
       title: 'Total Surgeries',
-      value: stats.totalSurgeries,
+      value: stats?.totalSurgeries ?? 0,
       icon: Calendar,
       color: 'bg-gradient-to-br from-primary-500 to-primary-600',
       link: '/dashboard/surgeries',
     },
     {
       title: 'Scheduled Today',
-      value: stats.todaySurgeries,
+      value: stats?.todaySurgeries ?? 0,
       icon: Activity,
       color: 'bg-gradient-to-br from-secondary-500 to-secondary-600',
       link: '/dashboard/surgeries',
     },
     {
       title: 'Total Patients',
-      value: stats.totalPatients,
+      value: stats?.totalPatients ?? 0,
       icon: Users,
       color: 'bg-gradient-to-br from-accent-500 to-accent-600',
       link: '/dashboard/patients',
     },
     {
       title: 'Low Stock Items',
-      value: stats.lowStockItems,
+      value: stats?.lowStockItems ?? 0,
       icon: AlertCircle,
       color: 'bg-gradient-to-br from-red-500 to-red-600',
       link: '/dashboard/inventory',
@@ -182,6 +173,25 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Offline Banner */}
+      {(statsOffline || !isOnline) && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-center gap-3">
+          <WifiOff className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">You are viewing offline data</p>
+            <p className="text-xs text-amber-600">Data shown below is from your last successful sync. Changes will sync when you reconnect.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Cached data indicator */}
+      {statsCached && isOnline && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center gap-2 text-xs text-blue-700">
+          <RefreshCw className="w-3 h-3" />
+          <span>Showing cached data — refreshing in background</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-primary-600 to-secondary-600 rounded-2xl p-8 text-white shadow-xl">
         <h1 className="text-4xl font-bold">Dashboard Overview</h1>
@@ -234,7 +244,7 @@ export default function DashboardPage() {
               <option value={90}>Last 90 days</option>
             </select>
             <button
-              onClick={fetchAnalytics}
+              onClick={() => refetchAnalytics()}
               disabled={analyticsLoading}
               className="btn-secondary flex items-center gap-2"
             >
@@ -257,39 +267,43 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-white rounded-lg p-4 shadow">
                 <p className="text-sm text-gray-600">Total Surgeries</p>
-                <p className="text-2xl font-bold text-blue-600">{analytics.summary.totalSurgeries}</p>
+                <p className="text-2xl font-bold text-blue-600">{analytics?.summary?.totalSurgeries ?? 0}</p>
               </div>
               <div className="bg-white rounded-lg p-4 shadow">
                 <p className="text-sm text-gray-600">Completed</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {analytics.summary.completedSurgeries}
+                  {analytics?.summary?.completedSurgeries ?? 0}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4 shadow">
                 <p className="text-sm text-gray-600">Cancelled</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {analytics.summary.cancelledSurgeries}
+                  {analytics?.summary?.cancelledSurgeries ?? 0}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4 shadow">
                 <p className="text-sm text-gray-600">Total Cost</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  ₦{analytics.summary.totalCost.toLocaleString()}
+                  ₦{(analytics?.summary?.totalCost ?? 0).toLocaleString()}
                 </p>
               </div>
             </div>
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg p-6 shadow">
-                <SurgeryTrendChart data={analytics.surgeryTrend} />
-              </div>
-              <div className="bg-white rounded-lg p-6 shadow">
-                <TheatreUtilizationChart data={analytics.theatreUtilization} />
-              </div>
+              {analytics?.surgeryTrend && (
+                <div className="bg-white rounded-lg p-6 shadow">
+                  <SurgeryTrendChart data={analytics.surgeryTrend} />
+                </div>
+              )}
+              {analytics?.theatreUtilization && (
+                <div className="bg-white rounded-lg p-6 shadow">
+                  <TheatreUtilizationChart data={analytics.theatreUtilization} />
+                </div>
+              )}
             </div>
 
-            {analytics.costBreakdown.labels.length > 0 && (
+            {analytics?.costBreakdown?.labels?.length > 0 && (
               <div className="bg-white rounded-lg p-6 shadow mt-6">
                 <CostBreakdownChart data={analytics.costBreakdown} />
               </div>
