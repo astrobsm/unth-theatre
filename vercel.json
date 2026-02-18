@@ -1,5 +1,31 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/deadline-checker?action=check-reminders",
+      "schedule": "45-59 16 * * 1-6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-reminders",
+      "schedule": "0-59 17 * * 1-6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-deadlines",
+      "schedule": "0 18 * * 1-6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-reminders",
+      "schedule": "45 7 * * 1-6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-reminders",
+      "schedule": "0-14 8 * * 1-6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-deadlines",
+      "schedule": "15 8 * * 1-6"
+    }
+  ]
 }

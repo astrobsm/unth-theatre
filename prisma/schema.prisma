@@ -471,6 +471,10 @@ model User {
   oxygenAlertsResponded OxygenAlert[] @relation("OxygenAlertResponder")
   oxygenAlertsResolved OxygenAlert[] @relation("OxygenAlertResolver")
   
+  // Disciplinary Query Relations
+  disciplinaryQueriesReceived DisciplinaryQuery[] @relation("QueryRecipient")
+  disciplinaryQueriesIssued DisciplinaryQuery[] @relation("QueryIssuer")
+  
   @@map("users")
 }
 
@@ -4246,4 +4250,58 @@ model OxygenAlert {
   updatedAt             DateTime                @updatedAt
   
   @@map("oxygen_alerts")
+}
+
+// ============================================
+// DISCIPLINARY QUERY SYSTEM
+// Auto-generated queries for deadline non-compliance
+// ============================================
+
+enum DisciplinaryQueryStatus {
+  ISSUED
+  ACKNOWLEDGED
+  RESPONDED
+  ESCALATED
+  RESOLVED
+  DISMISSED
+}
+
+enum DisciplinaryQueryType {
+  READINESS_LATE
+  THEATRE_SETUP_LATE
+  DUTY_ABANDONMENT
+  PROTOCOL_VIOLATION
+  OTHER
+}
+
+model DisciplinaryQuery {
+  id                    String                   @id @default(uuid())
+  referenceNumber       String                   @unique
+  recipientId           String
+  recipientName         String
+  recipientRole         String
+  recipientUnit         String
+  queryType             DisciplinaryQueryType
+  subject               String
+  description           String
+  deadlineTime          DateTime
+  deadlineType          String
+  evidence              String?
+  status                DisciplinaryQueryStatus  @default(ISSUED)
+  recipientResponse     String?
+  respondedAt           DateTime?
+  escalatedTo           String?
+  escalatedAt           DateTime?
+  escalationReason      String?
+  resolvedAt            DateTime?
+  resolution            String?
+  issuedById            String?
+  issuedByName          String                   @default("Office of the Chief Medical Director")
+  issuedByTitle         String                   @default("University of Nigeria Teaching Hospital, Ituku Ozalla")
+  recipient             User                     @relation("QueryRecipient", fields: [recipientId], references: [id])
+  issuedBy              User?                    @relation("QueryIssuer", fields: [issuedById], references: [id])
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  
+  @@map("disciplinary_queries")
 }

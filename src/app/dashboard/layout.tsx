@@ -39,6 +39,8 @@ import {
   Shield,
   Store,
   Ambulance,
+  FileWarning,
+  Wrench,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -157,29 +159,33 @@ export default function DashboardLayout({
     
     // 31. Reports & Analytics
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
+    
+    // 32. Settings (sync, updates, etc.)
+    { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
   // Add admin-only menu items
   const adminRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'];
   if (adminRoles.includes(session.user.role)) {
     menuItems.push({ href: '/dashboard/users', icon: Settings, label: 'User Management' });
+    menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
   }
 
   // Role-based menu filtering — show only relevant items per role
   // Roles NOT listed here see ALL menu items (e.g. ADMIN, SURGEON, ANESTHETIST, NURSE, etc.)
   const roleMenuMap: Record<string, string[]> = {
-    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/emergency-booking'],
-    LAUNDRY_SUPERVISOR: ['/dashboard', '/dashboard/laundry-supervisor'],
-    CSSD_SUPERVISOR: ['/dashboard', '/dashboard/cssd-supervisor', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness'],
-    OXYGEN_UNIT_SUPERVISOR: ['/dashboard', '/dashboard/oxygen-supervisor', '/dashboard/oxygen-control'],
-    WORKS_SUPERVISOR: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/fault-alerts'],
-    LAUNDRY_STAFF: ['/dashboard', '/dashboard/laundry-supervisor'],
-    CSSD_STAFF: ['/dashboard', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness'],
-    POWER_PLANT_OPERATOR: ['/dashboard', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness'],
-    BLOODBANK_STAFF: ['/dashboard', '/dashboard/blood-bank', '/dashboard/emergency-booking'],
-    PLUMBER: ['/dashboard', '/dashboard/works-supervisor'],
-    PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/emergency-booking'],
-    CLEANER: ['/dashboard'],
+    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/emergency-booking', '/dashboard/settings'],
+    LAUNDRY_SUPERVISOR: ['/dashboard', '/dashboard/laundry-supervisor', '/dashboard/settings'],
+    CSSD_SUPERVISOR: ['/dashboard', '/dashboard/cssd-supervisor', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
+    OXYGEN_UNIT_SUPERVISOR: ['/dashboard', '/dashboard/oxygen-supervisor', '/dashboard/oxygen-control', '/dashboard/settings'],
+    WORKS_SUPERVISOR: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/fault-alerts', '/dashboard/settings'],
+    LAUNDRY_STAFF: ['/dashboard', '/dashboard/laundry-supervisor', '/dashboard/settings'],
+    CSSD_STAFF: ['/dashboard', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
+    POWER_PLANT_OPERATOR: ['/dashboard', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/settings'],
+    BLOODBANK_STAFF: ['/dashboard', '/dashboard/blood-bank', '/dashboard/emergency-booking', '/dashboard/settings'],
+    PLUMBER: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/settings'],
+    PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/emergency-booking', '/dashboard/settings'],
+    CLEANER: ['/dashboard', '/dashboard/settings'],
   };
 
   const allowedPaths = roleMenuMap[session.user.role];
