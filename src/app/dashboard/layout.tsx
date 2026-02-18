@@ -73,6 +73,9 @@ export default function DashboardLayout({
     // 1. Dashboard
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     
+    // 1b. Emergency Surgery Booking (NEW) — TOP PRIORITY VISIBILITY
+    { href: '/dashboard/emergency-booking', icon: Ambulance, label: '🚨 Emergency Booking', badge: 'URGENT' },
+    
     // 2. Patients
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
     
@@ -121,9 +124,6 @@ export default function DashboardLayout({
     
     // 20. Surgeries
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
-    
-    // 20b. Emergency Surgery Booking (NEW) — prominent position
-    { href: '/dashboard/emergency-booking', icon: Ambulance, label: 'Emergency Booking', badge: 'NEW' },
     
     // 21. PACU (Recovery)
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
