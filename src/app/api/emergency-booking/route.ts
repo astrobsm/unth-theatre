@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
         data: {
           name: validatedData.patientName,
           folderNumber: validatedData.folderNumber,
-          age: validatedData.age,
+          age: validatedData.age ?? 0,
           gender: validatedData.gender || 'Unknown',
           ward: validatedData.ward || 'Emergency',
           diagnosis: validatedData.diagnosis,
