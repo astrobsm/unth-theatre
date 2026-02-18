@@ -161,7 +161,7 @@ export async function POST(
         notifyUserIds.push(updatedPrescription.surgery.surgeonId);
       }
 
-      const uniqueIds = [...new Set(notifyUserIds)];
+      const uniqueIds = Array.from(new Set(notifyUserIds));
       const outOfStockMsg = outOfStockItems.join(', ');
 
       await prisma.notification.createMany({
