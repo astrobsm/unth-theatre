@@ -190,24 +190,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a surgery record
+    const scheduledDate = validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : new Date();
+    const scheduledTime = scheduledDate.toTimeString().slice(0, 5); // "HH:MM"
     const surgery = await prisma.surgery.create({
       data: {
         patientId: patient.id,
-        patientName: validatedData.patientName,
-        folderNumber: validatedData.folderNumber,
         procedureName: validatedData.procedureName,
-        surgicalUnit: validatedData.surgicalUnit,
+        subspecialty: validatedData.surgicalUnit,
+        unit: validatedData.surgicalUnit,
+        indication: validatedData.indication,
         surgeonId: surgeonId,
         surgeonName: surgeonName,
         anesthetistId: validatedData.anesthetistId || null,
-        anesthetistName: validatedData.anesthetistName || null,
-        scheduledDate: validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : new Date(),
-        scheduledStartTime: validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : new Date(),
+        scheduledDate: scheduledDate,
+        scheduledTime: scheduledTime,
         surgeryType: 'EMERGENCY',
         status: 'SCHEDULED',
-        theatreId: validatedData.theatreId || null,
-        theatreName: validatedData.theatreName || null,
-        estimatedDuration: validatedData.estimatedDuration || 120,
+        needBloodTransfusion: validatedData.bloodRequired || false,
+        otherSpecialNeeds: validatedData.specialEquipment || null,
+        remarks: validatedData.specialRequirements || null,
       },
     });
 
