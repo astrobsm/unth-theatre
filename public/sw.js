@@ -1,29 +1,20 @@
 // ============================================================
-// Operative Resource Manager - Service Worker v3
+// Operative Resource Manager - Service Worker v4
 // FULL Offline-First PWA with aggressive caching
 // ============================================================
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
 const OFFLINE_PAGE = '/offline.html';
 
-// Static assets to pre-cache on install
+// Static assets to pre-cache on install (ONLY truly static, no auth required)
 const PRECACHE_ASSETS = [
   '/',
   '/offline.html',
   '/logo.png',
   '/manifest.json',
-  '/dashboard',
-  '/dashboard/emergency-booking',
-  '/dashboard/cmd',
-  '/dashboard/cmac',
-  '/dashboard/dc-mac',
-  '/dashboard/laundry-supervisor',
-  '/dashboard/cssd-supervisor',
-  '/dashboard/oxygen-supervisor',
-  '/dashboard/works-supervisor',
 ];
 
 // API routes to eagerly cache for offline data access
@@ -49,17 +40,29 @@ const CRITICAL_API_ROUTES = [
 ];
 
 // ============================================================
-// INSTALL - Pre-cache static assets + critical pages
+// INSTALL - Pre-cache static assets (resilient per-asset caching)
 // ============================================================
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    Promise.all([
-      caches.open(STATIC_CACHE).then((cache) =>
-        cache.addAll(PRECACHE_ASSETS).catch((err) => {
-          console.log('[SW] Some precache assets unavailable, continuing...', err);
+    caches.open(STATIC_CACHE).then(async (cache) => {
+      // Cache each asset individually so one failure doesn't block the rest
+      const results = await Promise.allSettled(
+        PRECACHE_ASSETS.map(async (url) => {
+          try {
+            const response = await fetch(url, { credentials: 'omit' });
+            if (response.ok) {
+              await cache.put(url, response);
+              return url;
+            }
+          } catch (e) {
+            console.log('[SW] Failed to precache:', url, e);
+          }
+          return null;
         })
-      ),
-    ]).then(() => self.skipWaiting())
+      );
+      const cached = results.filter(r => r.status === 'fulfilled' && r.value).length;
+      console.log(`[SW v4] Precached ${cached}/${PRECACHE_ASSETS.length} assets`);
+    }).then(() => self.skipWaiting())
   );
 });
 
@@ -73,10 +76,14 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(
         keys
           .filter((key) => !currentCaches.includes(key))
-          .map((key) => caches.delete(key))
+          .map((key) => {
+            console.log('[SW v4] Deleting old cache:', key);
+            return caches.delete(key);
+          })
       ))
       .then(() => self.clients.claim())
       .then(() => {
+        console.log('[SW v4] Activated and claimed clients');
         // Eagerly cache critical API data after activation
         caches.open(DATA_CACHE).then((cache) => {
           CRITICAL_API_ROUTES.forEach((route) => {
