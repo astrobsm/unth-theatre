@@ -13,7 +13,6 @@ const OFFLINE_DATA_ENDPOINTS = [
   { key: 'patients', url: '/api/patients', ttl: 30 * 60 * 1000 },
   { key: 'inventory', url: '/api/inventory', ttl: 30 * 60 * 1000 },
   { key: 'theatres', url: '/api/theatres', ttl: 60 * 60 * 1000 },
-  { key: 'equipment', url: '/api/equipment', ttl: 60 * 60 * 1000 },
   { key: 'sub-stores', url: '/api/sub-stores', ttl: 30 * 60 * 1000 },
   { key: 'roster', url: '/api/roster', ttl: 60 * 60 * 1000 },
   { key: 'transfers', url: '/api/transfers', ttl: 30 * 60 * 1000 },

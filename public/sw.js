@@ -33,7 +33,6 @@ const CRITICAL_API_ROUTES = [
   '/api/patients',
   '/api/inventory',
   '/api/theatres',
-  '/api/equipment',
   '/api/sub-stores',
   '/api/roster',
   '/api/checklists',
