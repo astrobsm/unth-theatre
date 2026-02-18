@@ -185,7 +185,6 @@ export async function POST(request: NextRequest) {
           age: validatedData.age ?? 0,
           gender: validatedData.gender || 'Unknown',
           ward: validatedData.ward || 'Emergency',
-          diagnosis: validatedData.diagnosis,
         },
       });
     }
