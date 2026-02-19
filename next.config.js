@@ -1,6 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Compress responses
+  compress: true,
+  // Optimize images
+  images: {
+    formats: ['image/avif', 'image/webp'],
+  },
+  // Minimize JS output
+  swcMinify: true,
+  experimental: {
+    // Optimize package imports to reduce bundle size (tree-shakes barrel exports)
+    optimizePackageImports: ['lucide-react', 'date-fns', 'recharts'],
+  },
   async headers() {
     return [
       {

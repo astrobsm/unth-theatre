@@ -74,8 +74,9 @@ export interface OfflineDataStatus {
 }
 
 /**
- * Pre-fetch all critical data and store in IndexedDB for offline use
- * Called once on login and periodically in the background
+ * Pre-fetch critical data and store in IndexedDB for offline use.
+ * LAZY: skips endpoints whose cache is still fresh.
+ * BATCHED: fetches 3 at a time to avoid request storms.
  */
 export async function prefetchAllOfflineData(
   onProgress?: (done: number, total: number) => void
@@ -83,20 +84,40 @@ export async function prefetchAllOfflineData(
   const total = OFFLINE_DATA_ENDPOINTS.length;
   let cached = 0;
   const failed: string[] = [];
+  const BATCH_SIZE = 3;
 
-  for (const endpoint of OFFLINE_DATA_ENDPOINTS) {
-    try {
-      const response = await fetch(endpoint.url);
-      if (response.ok) {
-        const data = await response.json();
-        await setCachedData(endpoint.key, data, endpoint.ttl);
+  // Filter to only endpoints that need refreshing
+  const staleEndpoints: typeof OFFLINE_DATA_ENDPOINTS = [];
+  for (const ep of OFFLINE_DATA_ENDPOINTS) {
+    const existing = await getCachedData(ep.key);
+    if (!existing || existing.isStale) {
+      staleEndpoints.push(ep);
+    } else {
+      cached++; // already fresh
+    }
+  }
+
+  // Fetch stale endpoints in small parallel batches
+  for (let i = 0; i < staleEndpoints.length; i += BATCH_SIZE) {
+    const batch = staleEndpoints.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (endpoint) => {
+        const response = await fetch(endpoint.url);
+        if (response.ok) {
+          const data = await response.json();
+          await setCachedData(endpoint.key, data, endpoint.ttl);
+          return true;
+        }
+        return false;
+      })
+    );
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j];
+      if (r.status === 'fulfilled' && r.value) {
         cached++;
       } else {
-        failed.push(endpoint.key);
+        failed.push(batch[j].key);
       }
-    } catch {
-      // Skip failed endpoints — they may need auth or the server is down
-      failed.push(endpoint.key);
     }
     onProgress?.(cached + failed.length, total);
   }
@@ -116,15 +137,37 @@ export async function prefetchAllOfflineData(
 }
 
 /**
- * Pre-cache app shell pages so navigation works offline
+ * Pre-cache app shell pages so navigation works offline.
+ * Uses requestIdleCallback to avoid blocking the main thread.
+ * Only sends a small batch at a time.
  */
 export function precacheAppShell(): void {
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+
+  const sendBatch = (routes: string[]) => {
+    navigator.serviceWorker.controller?.postMessage({
       type: 'PRECACHE_APP_SHELL',
-      payload: { routes: APP_SHELL_ROUTES },
+      payload: { routes },
     });
-  }
+  };
+
+  // Send in batches of 5 with idle delays between
+  const BATCH = 5;
+  let idx = 0;
+  const scheduleNext = () => {
+    if (idx >= APP_SHELL_ROUTES.length) return;
+    const batch = APP_SHELL_ROUTES.slice(idx, idx + BATCH);
+    idx += BATCH;
+    sendBatch(batch);
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => setTimeout(scheduleNext, 2000));
+    } else {
+      setTimeout(scheduleNext, 3000);
+    }
+  };
+
+  // Start after 15 seconds so initial page load is unblocked
+  setTimeout(scheduleNext, 15000);
 }
 
 /**

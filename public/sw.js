@@ -84,17 +84,31 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim())
       .then(() => {
         console.log('[SW v4] Activated and claimed clients');
-        // Eagerly cache critical API data after activation
-        caches.open(DATA_CACHE).then((cache) => {
-          CRITICAL_API_ROUTES.forEach((route) => {
-            fetch(route).then((response) => {
-              if (response.ok) cache.put(route, response);
-            }).catch(() => {});
-          });
-        });
+        // Lazy-cache API data: wait 20s then fetch 3 at a time
+        setTimeout(() => {
+          lazyCacheApiRoutes();
+        }, 20000);
       })
   );
 });
+
+// Lazy API route caching — 3 at a time with 2s gaps
+async function lazyCacheApiRoutes() {
+  const cache = await caches.open(DATA_CACHE);
+  const BATCH = 3;
+  for (let i = 0; i < CRITICAL_API_ROUTES.length; i += BATCH) {
+    const batch = CRITICAL_API_ROUTES.slice(i, i + BATCH);
+    await Promise.allSettled(
+      batch.map((route) =>
+        fetch(route)
+          .then((res) => { if (res.ok) cache.put(route, res); })
+          .catch(() => {})
+      )
+    );
+    // Small delay between batches
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
 
 // ============================================================
 // FETCH - Strategy router with full offline support

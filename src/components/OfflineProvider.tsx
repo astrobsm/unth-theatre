@@ -145,14 +145,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isSyncing]);
 
-  // Initial prefetch on mount (with slight delay to not block UI)
+  // Initial prefetch — deferred to avoid blocking initial render
   useEffect(() => {
     if (prefetchedRef.current) return;
     prefetchedRef.current = true;
 
+    // Wait 10 seconds so the page renders and becomes interactive first
     const timer = setTimeout(() => {
       runPrefetch();
-    }, 2000);
+    }, 10000);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,13 +188,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     return () => navigator.serviceWorker?.removeEventListener('message', handler);
   }, []);
 
-  // Periodic data refresh (every 15 minutes while online)
+  // Periodic data refresh (every 30 minutes while online)
   useEffect(() => {
     if (!isOnline) return;
 
     const interval = setInterval(() => {
       runPrefetch();
-    }, 15 * 60 * 1000);
+    }, 30 * 60 * 1000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
