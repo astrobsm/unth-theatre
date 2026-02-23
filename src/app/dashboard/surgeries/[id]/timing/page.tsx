@@ -60,28 +60,33 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
   const [saving, setSaving] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
-  useEffect(() => {
-    fetchTiming();
-  }, [params.id]);
-
-  const fetchTiming = async () => {
+  const fetchTiming = async (signal?: AbortSignal) => {
     try {
-      const response = await fetch(`/api/surgeries/${params.id}/timing`);
+      const response = await fetch(`/api/surgeries/${params.id}/timing`, { signal });
       if (response.ok) {
         const data = await response.json();
         setTiming(data);
         setInitialized(true);
       } else if (response.status === 404) {
+        // No timing record yet - this is expected
         setInitialized(false);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.error('Error fetching timing:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchTiming(controller.signal);
+    return () => controller.abort();
+  }, [params.id]);
+
   const initializeTiming = async () => {
+    if (saving || initialized) return;
     setSaving(true);
     try {
       const response = await fetch(`/api/surgeries/${params.id}/timing`, {

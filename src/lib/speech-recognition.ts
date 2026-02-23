@@ -228,6 +228,10 @@ export class SpeechRecognitionService {
     };
 
     this.recognition.onerror = (event: any) => {
+      // 'aborted' is expected when calling abort() during cleanup - suppress it
+      if (event.error === 'aborted') {
+        return;
+      }
       console.error('Speech recognition error:', event.error);
       this.options.onError?.(event.error);
       
