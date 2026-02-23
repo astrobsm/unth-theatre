@@ -475,6 +475,14 @@ model User {
   disciplinaryQueriesReceived DisciplinaryQuery[] @relation("QueryRecipient")
   disciplinaryQueriesIssued DisciplinaryQuery[] @relation("QueryIssuer")
   
+  // Emergency Team Availability Relations
+  emergencyTeamAvailability EmergencyTeamAvailability[]
+  
+  // Emergency Pre-Anaesthetic Review Relations
+  emergencyPreAnaestheticReviews EmergencyPreAnaestheticReview[] @relation("EmergencyReviewer")
+  emergencyPreAnaestheticApprovals EmergencyPreAnaestheticReview[] @relation("EmergencyReviewApprover")
+  emergencyPrescriptionsPacked EmergencyPrescription[] @relation("EmergencyPrescriptionPacker")
+  
   @@map("users")
 }
 
@@ -3125,6 +3133,9 @@ model EmergencySurgeryBooking {
   surgeon                   User                  @relation("EmergencyBookingSurgeon", fields: [surgeonId], references: [id])
   anesthetist               User?                 @relation("EmergencyBookingAnesthetist", fields: [anesthetistId], references: [id])
   surgery                   Surgery?              @relation("EmergencyBookingSurgery", fields: [surgeryId], references: [id])
+  teamAvailability          EmergencyTeamAvailability[]
+  preAnaestheticReviews     EmergencyPreAnaestheticReview[]
+  emergencyPrescriptions    EmergencyPrescription[]
   
   @@map("emergency_surgery_bookings")
 }
@@ -4304,4 +4315,203 @@ model DisciplinaryQuery {
   updatedAt             DateTime                 @updatedAt
   
   @@map("disciplinary_queries")
+}
+
+// ========================
+// Emergency Team Availability
+// ========================
+
+enum EmergencyTeamRole {
+  SURGEON
+  ANAESTHETIST
+  SCRUB_NURSE
+  CIRCULATING_NURSE
+  ANAESTHETIC_TECHNICIAN
+  PORTER
+  RECOVERY_ROOM_NURSE
+  THEATRE_STORE_KEEPER
+  BIOMEDICAL_ENGINEER
+  CLEANER
+  BLOODBANK_STAFF
+  PHARMACIST
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  EN_ROUTE
+  ARRIVED
+  UNAVAILABLE
+  ON_ANOTHER_CASE
+}
+
+model EmergencyTeamAvailability {
+  id                    String              @id @default(uuid())
+  emergencyBookingId    String
+  userId                String
+  userName              String
+  teamRole              EmergencyTeamRole
+  status                AvailabilityStatus  @default(AVAILABLE)
+  
+  // Geo-location
+  latitude              Float?
+  longitude             Float?
+  locationTimestamp     DateTime?
+  estimatedArrivalMin   Int?                // Estimated minutes to arrive
+  distanceKm            Float?              // Calculated distance to hospital
+  
+  // Timestamps
+  respondedAt           DateTime            @default(now())
+  arrivedAt             DateTime?
+  
+  // Notes
+  notes                 String?
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  emergencyBooking      EmergencySurgeryBooking @relation(fields: [emergencyBookingId], references: [id])
+  user                  User                @relation(fields: [userId], references: [id])
+  
+  @@unique([emergencyBookingId, userId])
+  @@index([emergencyBookingId, teamRole])
+  @@map("emergency_team_availability")
+}
+
+// ========================
+// Emergency Pre-Anaesthetic Review & Prescription
+// ========================
+
+enum EmergencyReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+}
+
+enum EmergencyPrescriptionStatus {
+  DRAFT
+  SUBMITTED
+  PHARMACIST_VIEWED
+  PACKING
+  PACKED
+  DISPENSED
+  OUT_OF_STOCK_FLAGGED
+}
+
+model EmergencyPreAnaestheticReview {
+  id                    String                    @id @default(uuid())
+  emergencyBookingId    String
+  surgeryId             String?
+  patientName           String
+  folderNumber          String
+  
+  // Reviewer
+  reviewerId            String
+  reviewerName          String
+  
+  // Assessment
+  airwayAssessment      String?             // Mallampati, Neck mobility, etc.
+  asaClassification     String?             // ASA I-VI
+  allergies             String?
+  currentMedications    String?
+  pastMedicalHistory    String?
+  lastMealTime          DateTime?           // Fasting status for emergency
+  
+  // Vitals
+  bloodPressure         String?
+  heartRate             Int?
+  oxygenSaturation      Float?
+  temperature           Float?
+  weight                Float?
+  height                Float?
+  bmi                   Float?
+  
+  // Emergency-Specific
+  estimatedBloodLoss    String?
+  coagulationStatus     String?
+  hemoglobinLevel       Float?
+  crossMatchStatus      String?
+  ivAccess              String?             // Details of IV lines
+  patientNPOStatus      String?             // NPO status for emergency
+  
+  // Anaesthetic Plan
+  anaestheticPlan       String?             // General, Regional, Combined, etc.
+  specialConsiderations String?
+  riskAssessment        String?
+  consentObtained       Boolean             @default(false)
+  consentNotes          String?
+  
+  // Approval (by a consultant)
+  approvedById          String?
+  approvedByName        String?
+  approvedAt            DateTime?
+  
+  // Status
+  status                EmergencyReviewStatus @default(PENDING)
+  isEmergency           Boolean             @default(true)
+  
+  // Audit
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  emergencyBooking      EmergencySurgeryBooking @relation(fields: [emergencyBookingId], references: [id])
+  reviewer              User                @relation("EmergencyReviewer", fields: [reviewerId], references: [id])
+  approvedBy            User?               @relation("EmergencyReviewApprover", fields: [approvedById], references: [id])
+  prescriptions         EmergencyPrescription[]
+  
+  @@map("emergency_pre_anaesthetic_reviews")
+}
+
+model EmergencyPrescription {
+  id                    String                      @id @default(uuid())
+  reviewId              String
+  emergencyBookingId    String
+  patientName           String
+  folderNumber          String
+  
+  // Prescriber info (carried from review)
+  prescribedByName      String
+  
+  // Medications
+  medications           String                      // JSON: [{name, dose, route, frequency, timing, isEmergency}]
+  fluids                String?                     // JSON: IV fluids
+  emergencyDrugs        String?                     // JSON: emergency drugs
+  
+  // Allergy Alerts (for pharmacist)
+  allergyAlerts         String?
+  specialInstructions   String?
+  
+  // Urgency Flag
+  isEmergency           Boolean                     @default(true)
+  urgencyNote           String?                     @default("EMERGENCY - IMMEDIATE DISPENSING REQUIRED")
+  
+  // Pharmacist tracking
+  viewedByPharmacist    Boolean                     @default(false)
+  viewedAt              DateTime?
+  
+  packedById            String?
+  packedByName          String?
+  packedAt              DateTime?
+  packingNotes          String?
+  
+  // Out-of-stock
+  outOfStockItems       String?                     // JSON: items out of stock
+  hasOutOfStockItems    Boolean                     @default(false)
+  
+  // Status
+  status                EmergencyPrescriptionStatus @default(DRAFT)
+  
+  // Audit
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  
+  // Relations
+  review                EmergencyPreAnaestheticReview @relation(fields: [reviewId], references: [id])
+  emergencyBooking      EmergencySurgeryBooking     @relation(fields: [emergencyBookingId], references: [id])
+  packedBy              User?                       @relation("EmergencyPrescriptionPacker", fields: [packedById], references: [id])
+  
+  @@map("emergency_prescriptions")
 }
