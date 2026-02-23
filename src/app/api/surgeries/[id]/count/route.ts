@@ -47,10 +47,7 @@ export async function GET(
       }
     });
 
-    if (!countChecklist) {
-      return NextResponse.json({ error: 'Count checklist not found' }, { status: 404 });
-    }
-
+    // Return null with 200 when no record exists yet (avoids browser console 404 noise)
     return NextResponse.json(countChecklist);
   } catch (error) {
     console.error('Error fetching surgical count checklist:', error);

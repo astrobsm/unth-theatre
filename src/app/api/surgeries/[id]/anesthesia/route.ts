@@ -51,10 +51,7 @@ export async function GET(
       }
     });
 
-    if (!anesthesiaRecord) {
-      return NextResponse.json({ error: 'Anesthesia record not found' }, { status: 404 });
-    }
-
+    // Return null with 200 when no record exists yet (avoids browser console 404 noise)
     return NextResponse.json(anesthesiaRecord);
   } catch (error) {
     console.error('Error fetching anesthesia record:', error);

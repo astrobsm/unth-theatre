@@ -146,10 +146,12 @@ export default function AnesthesiaMonitoringPage() {
       const response = await fetch(`/api/surgeries/${surgeryId}/anesthesia`);
       if (response.ok) {
         const data = await response.json();
-        setRecord(data);
-        fetchMedications();
-      } else if (response.status === 404) {
-        setRecord(null);
+        if (data) {
+          setRecord(data);
+          fetchMedications();
+        } else {
+          setRecord(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching anesthesia record:', error);

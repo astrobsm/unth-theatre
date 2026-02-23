@@ -37,10 +37,7 @@ export async function GET(
       }
     });
 
-    if (!timing) {
-      return NextResponse.json({ error: 'Timing record not found' }, { status: 404 });
-    }
-
+    // Return null with 200 when no record exists yet (avoids browser console 404 noise)
     return NextResponse.json(timing);
   } catch (error) {
     console.error('Error fetching surgical timing:', error);

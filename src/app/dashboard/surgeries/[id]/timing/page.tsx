@@ -65,11 +65,13 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
       const response = await fetch(`/api/surgeries/${params.id}/timing`, { signal });
       if (response.ok) {
         const data = await response.json();
-        setTiming(data);
-        setInitialized(true);
-      } else if (response.status === 404) {
-        // No timing record yet - this is expected
-        setInitialized(false);
+        if (data) {
+          setTiming(data);
+          setInitialized(true);
+        } else {
+          // No timing record yet
+          setInitialized(false);
+        }
       }
     } catch (error: any) {
       if (error?.name === 'AbortError') return;

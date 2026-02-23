@@ -106,10 +106,7 @@ export default function SurgicalCountPage({ params }: { params: { id: string } }
       const response = await fetch(`/api/surgeries/${params.id}/count`);
       if (response.ok) {
         const data = await response.json();
-        setCount(data);
-      } else if (response.status === 404) {
-        // Count checklist doesn't exist yet
-        setCount(null);
+        setCount(data); // null when no record exists yet
       }
     } catch (error) {
       console.error('Error fetching count:', error);

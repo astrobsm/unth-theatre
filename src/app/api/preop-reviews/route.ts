@@ -158,10 +158,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is an anesthetist
-    if (!['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role)) {
+    // Check if user is an anesthetist or admin
+    if (!['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only anesthetists can create pre-op reviews' },
+        { error: 'Only anesthetists and administrators can create pre-op reviews' },
         { status: 403 }
       );
     }
