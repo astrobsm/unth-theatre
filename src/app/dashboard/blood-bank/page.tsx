@@ -24,14 +24,14 @@ interface BloodRequest {
   patientName: string;
   bloodType: string;
   bloodProducts: string;
-  unitsRequired: number;
+  unitsRequested: number;
   urgency: 'ROUTINE' | 'URGENT' | 'EMERGENCY';
   crossmatchRequired: boolean;
   specialRequirements?: string;
   clinicalIndication: string;
-  status: 'PENDING' | 'PROCESSING' | 'READY' | 'ISSUED' | 'CANCELLED';
+  status: 'REQUESTED' | 'ACKNOWLEDGED' | 'IN_PREPARATION' | 'READY' | 'DELIVERED' | 'CANCELLED';
   estimatedTimeNeeded: string;
-  requestedBy: { fullName: true };
+  requestedBy: { fullName: string };
   surgery: {
     procedureName: string;
     scheduledDate: string;
@@ -47,7 +47,7 @@ export default function BloodBankPage() {
   const [filter, setFilter] = useState<'today' | 'urgent' | 'all'>('today');
   const [selectedRequest, setSelectedRequest] = useState<BloodRequest | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [newStatus, setNewStatus] = useState<BloodRequest['status']>('PROCESSING');
+  const [newStatus, setNewStatus] = useState<BloodRequest['status']>('IN_PREPARATION');
   const [statusNotes, setStatusNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -126,11 +126,11 @@ export default function BloodBankPage() {
     setUpdating(true);
     try {
       const response = await fetch(`/api/blood-requests/${selectedRequest.id}/status`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           status: newStatus,
-          notes: statusNotes 
+          bloodBankNotes: statusNotes 
         }),
       });
 
@@ -163,12 +163,16 @@ export default function BloodBankPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'REQUESTED':
+        return 'bg-orange-100 text-orange-800';
+      case 'ACKNOWLEDGED':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'IN_PREPARATION':
+        return 'bg-blue-100 text-blue-800';
       case 'READY':
         return 'bg-green-100 text-green-800';
-      case 'PROCESSING':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'ISSUED':
-        return 'bg-blue-100 text-blue-800';
+      case 'DELIVERED':
+        return 'bg-purple-100 text-purple-800';
       case 'CANCELLED':
         return 'bg-gray-100 text-gray-800';
       default:
@@ -263,7 +267,7 @@ export default function BloodBankPage() {
             <div>
               <p className="text-sm text-gray-600">Pending</p>
               <p className="text-2xl font-bold">
-                {requests.filter(r => r.status === 'PENDING').length}
+                {requests.filter(r => r.status === 'REQUESTED').length}
               </p>
             </div>
             <AlertTriangle className="h-8 w-8 text-orange-600" />
@@ -272,9 +276,9 @@ export default function BloodBankPage() {
         <div className="bg-white p-4 rounded-lg shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Processing</p>
+              <p className="text-sm text-gray-600">In Preparation</p>
               <p className="text-2xl font-bold">
-                {requests.filter(r => r.status === 'PROCESSING').length}
+                {requests.filter(r => r.status === 'ACKNOWLEDGED' || r.status === 'IN_PREPARATION').length}
               </p>
             </div>
             <TrendingUp className="h-8 w-8 text-blue-600" />
@@ -296,7 +300,7 @@ export default function BloodBankPage() {
             <div>
               <p className="text-sm text-gray-600">Total Units</p>
               <p className="text-2xl font-bold">
-                {requests.reduce((sum, r) => sum + r.unitsRequired, 0)}
+                {requests.reduce((sum, r) => sum + (r.unitsRequested || 0), 0)}
               </p>
             </div>
             <Package className="h-8 w-8 text-purple-600" />
@@ -387,7 +391,7 @@ export default function BloodBankPage() {
                     </div>
                     <div className="bg-blue-50 rounded-lg p-3">
                       <p className="text-sm text-gray-600">Units Required</p>
-                      <p className="text-xl font-bold text-blue-700">{request.unitsRequired} units</p>
+                      <p className="text-xl font-bold text-blue-700">{request.unitsRequested} units</p>
                     </div>
                   </div>
 
@@ -464,10 +468,10 @@ export default function BloodBankPage() {
                 onChange={(e) => setNewStatus(e.target.value as BloodRequest['status'])}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
               >
-                <option value="PENDING">Pending</option>
-                <option value="PROCESSING">Processing</option>
+                <option value="ACKNOWLEDGED">Acknowledged</option>
+                <option value="IN_PREPARATION">In Preparation</option>
                 <option value="READY">Ready for Collection</option>
-                <option value="ISSUED">Issued</option>
+                <option value="DELIVERED">Delivered</option>
                 <option value="CANCELLED">Cancelled</option>
               </select>
             </div>

@@ -132,10 +132,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user can request blood (surgeon or anesthetist)
-    if (!['SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER'].includes(session.user.role)) {
+    // Check if user can request blood (surgeon, anesthetist, or admin)
+    if (!['SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only surgeons or anesthetists can request blood' },
+        { error: 'Only surgeons, anesthetists, or admins can request blood' },
         { status: 403 }
       );
     }

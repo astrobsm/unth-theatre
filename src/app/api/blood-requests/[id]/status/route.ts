@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 const updateBloodStatusSchema = z.object({
-  status: z.enum(['IN_PREPARATION', 'READY', 'DELIVERED', 'CANCELLED']),
+  status: z.enum(['ACKNOWLEDGED', 'IN_PREPARATION', 'READY', 'DELIVERED', 'CANCELLED']),
   crossMatchCompleted: z.boolean().optional(),
   bloodBankNotes: z.string().optional(),
   cancellationReason: z.string().optional(),
@@ -22,10 +22,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is blood bank staff
-    if (!['BLOODBANK_STAFF'].includes(session.user.role)) {
+    // Check if user is blood bank staff or admin
+    if (!['BLOODBANK_STAFF', 'ADMIN', 'THEATRE_MANAGER'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only blood bank staff can update blood requests' },
+        { error: 'Only blood bank staff or admins can update blood requests' },
         { status: 403 }
       );
     }
