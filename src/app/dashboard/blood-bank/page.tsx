@@ -17,7 +17,8 @@ import {
   WifiOff
 } from 'lucide-react';
 import { SYNC_INTERVALS } from '@/lib/sync';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 interface BloodRequest {
   id: string;
   patientName: string;

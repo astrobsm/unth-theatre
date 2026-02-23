@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface VitalSigns {
   id: string;
@@ -369,7 +370,7 @@ export default function PACUAssessmentDetailPage() {
       const response = await fetch(`/api/pacu/${params.id}/discharge-pdf`);
       if (response.ok) {
         const data = await response.json();
-        const pdf = generatePatientDischargePDF(data);
+        const pdf = await generatePatientDischargePDF(data);
         pdf.save(`Discharge_${assessment?.patient.folderNumber}_${new Date().toISOString().split('T')[0]}.pdf`);
       } else {
         alert('Failed to generate discharge document');

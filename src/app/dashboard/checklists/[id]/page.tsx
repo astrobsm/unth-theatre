@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle, Clock, AlertCircle, User, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface Surgery {
   id: string;

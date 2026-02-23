@@ -25,7 +25,7 @@ export default function ReportsPage() {
       const response = await fetch(`/api/analytics/weekly?weekStart=${weekStart}&weekEnd=${weekEnd}`);
       if (response.ok) {
         const data = await response.json();
-        const pdf = generateWeeklyPDF({
+        const pdf = await generateWeeklyPDF({
           weekStart,
           weekEnd,
           ...data,
@@ -54,7 +54,7 @@ export default function ReportsPage() {
       const response = await fetch(`/api/analytics/monthly?month=${month}`);
       if (response.ok) {
         const data = await response.json();
-        const pdf = generateMonthlyPDF({
+        const pdf = await generateMonthlyPDF({
           month,
           ...data,
         });

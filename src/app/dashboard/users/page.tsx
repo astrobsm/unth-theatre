@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// XLSX loaded dynamically when needed (export/import actions)
 
 interface User {
   id: string;
@@ -172,6 +172,7 @@ export default function UsersPage() {
 
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
@@ -213,7 +214,7 @@ export default function UsersPage() {
     }
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const template = [
       {
         'Full Name': 'John Doe',
@@ -228,6 +229,7 @@ export default function UsersPage() {
       },
     ];
 
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet(template);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Users Template');

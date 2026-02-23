@@ -11,8 +11,7 @@ import {
   Filter,
 } from 'lucide-react';
 import Link from 'next/link';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jsPDF loaded dynamically when user clicks download/export
 
 interface BOMAnalytics {
   totalSurgeries: number;
@@ -73,9 +72,11 @@ export default function BOMAnalyticsPage() {
     }
   };
 
-  const exportReport = () => {
+  const exportReport = async () => {
     if (!analytics) return;
 
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
 

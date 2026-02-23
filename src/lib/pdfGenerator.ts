@@ -1,5 +1,22 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jsPDF and autoTable are loaded dynamically to keep them out of the initial bundle
+let _jsPDF: typeof import('jspdf').default | null = null;
+let _autoTable: typeof import('jspdf-autotable').default | null = null;
+
+async function getJsPDF() {
+  if (!_jsPDF) {
+    const mod = await import('jspdf');
+    _jsPDF = mod.default;
+  }
+  return _jsPDF;
+}
+
+async function getAutoTable() {
+  if (!_autoTable) {
+    const mod = await import('jspdf-autotable');
+    _autoTable = mod.default;
+  }
+  return _autoTable;
+}
 
 interface WeeklySummary {
   weekStart: string;
@@ -41,7 +58,9 @@ interface MonthlySummary {
   }>;
 }
 
-export function generateWeeklyPDF(data: WeeklySummary) {
+export async function generateWeeklyPDF(data: WeeklySummary) {
+  const jsPDF = await getJsPDF();
+  const autoTable = await getAutoTable();
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -146,7 +165,9 @@ export function generateWeeklyPDF(data: WeeklySummary) {
   return doc;
 }
 
-export function generateMonthlyPDF(data: MonthlySummary) {
+export async function generateMonthlyPDF(data: MonthlySummary) {
+  const jsPDF = await getJsPDF();
+  const autoTable = await getAutoTable();
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -324,7 +345,9 @@ interface PatientDischargeData {
   }>;
 }
 
-export function generatePatientDischargePDF(data: PatientDischargeData) {
+export async function generatePatientDischargePDF(data: PatientDischargeData) {
+  const jsPDF = await getJsPDF();
+  const autoTable = await getAutoTable();
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   let currentY = 0;

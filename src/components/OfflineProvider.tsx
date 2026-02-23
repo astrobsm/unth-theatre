@@ -66,23 +66,31 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const prefetchedRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout>();
 
-  // Register service worker and install global fetch interceptor on mount
+  // Register service worker and install global fetch interceptor AFTER first paint
   useEffect(() => {
-    // Install global fetch interceptor so ALL API calls get offline fallback
-    installFetchInterceptor();
+    // Defer heavy offline setup so the page renders instantly
+    const raf = requestAnimationFrame(() => {
+      const timer = setTimeout(() => {
+        // Install global fetch interceptor so ALL API calls get offline fallback
+        installFetchInterceptor();
 
-    registerServiceWorker().then((reg) => {
-      if (reg) {
-        setSwRegistered(true);
-        // Pre-cache app shell pages
-        precacheAppShell();
-      }
+        registerServiceWorker().then((reg) => {
+          if (reg) {
+            setSwRegistered(true);
+            // Pre-cache app shell pages — run after a further delay
+            setTimeout(() => {
+              precacheAppShell();
+              registerPeriodicSync();
+            }, 5000);
+          }
+        });
+      }, 2000); // 2s delay to let the main UI become interactive first
+
+      return () => clearTimeout(timer);
     });
 
-    // Register periodic background sync
-    registerPeriodicSync();
-
     return () => {
+      cancelAnimationFrame(raf);
       uninstallFetchInterceptor();
     };
   }, []);

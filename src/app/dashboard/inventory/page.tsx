@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Search, Package, AlertTriangle, Upload, Download, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
+// XLSX loaded dynamically when needed (export/import actions)
 import { SYNC_INTERVALS } from '@/lib/sync';
 
 interface InventoryItem {
@@ -112,6 +112,7 @@ export default function InventoryPage() {
 
     try {
       const data = await file.arrayBuffer();
+      const XLSX = (await import('xlsx')).default || await import('xlsx');
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
@@ -158,7 +159,7 @@ export default function InventoryPage() {
     }
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     // Create sample data
     const sampleData = [
       {
@@ -251,6 +252,7 @@ export default function InventoryPage() {
       ['- Last Maintenance Date (YYYY-MM-DD)'],
     ];
 
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     
     // Add sample data sheet

@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { ArrowLeft, ArrowRight, Clock, User, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import SmartTextInput from '@/components/SmartTextInput';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface Patient {
   id: string;

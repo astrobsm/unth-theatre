@@ -15,8 +15,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jsPDF loaded dynamically when user clicks download/export
 
 interface SurgeryBOM {
   id: string;
@@ -73,9 +72,11 @@ export default function SurgeryBOMPage() {
     }
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     if (!bom) return;
 
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
 

@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator } from 'lucide-react';
 import Link from 'next/link';
 import { WARDS } from '@/lib/constants';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 // Comprehensive Risk Assessment Calculators
 

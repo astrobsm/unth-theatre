@@ -5,7 +5,8 @@ import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Syringe, Activity, Save } from 'lucide-react';
 import Link from 'next/link';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface PreOpReview {
   id: string;

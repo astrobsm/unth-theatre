@@ -8,7 +8,8 @@ import {
   CheckCircle, XCircle, Search, Calendar, Filter
 } from 'lucide-react';
 import { THEATRES } from '@/lib/constants';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface InventoryItem {
   id: string;

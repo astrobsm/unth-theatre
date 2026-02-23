@@ -15,8 +15,7 @@ import {
   Download,
   FileText
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jsPDF loaded dynamically when user clicks download/export
 
 interface TheatreSetup {
   id: string;
@@ -76,7 +75,9 @@ export default function TheatreSetupPage() {
     }
   };
 
-  const exportToPDF = (setup: TheatreSetup) => {
+  const exportToPDF = async (setup: TheatreSetup) => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
 
@@ -250,7 +251,9 @@ export default function TheatreSetupPage() {
     doc.save(fileName);
   };
 
-  const exportAllToPDF = () => {
+  const exportAllToPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
 

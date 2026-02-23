@@ -21,7 +21,7 @@ export default function ExportButton<T extends Record<string, any>>({
   className = '',
   columnMapping,
 }: ExportButtonProps<T>) {
-  const handleExport = (exportFormat: 'excel' | 'csv') => {
+  const handleExport = async (exportFormat: 'excel' | 'csv') => {
     if (!data || data.length === 0) {
       notify.error('No data to export');
       return;
@@ -44,9 +44,9 @@ export default function ExportButton<T extends Record<string, any>>({
 
     let success = false;
     if (exportFormat === 'excel') {
-      success = exportToExcel(dataToExport, fullFilename);
+      success = await exportToExcel(dataToExport, fullFilename);
     } else {
-      success = exportToCSV(dataToExport, fullFilename);
+      success = await exportToCSV(dataToExport, fullFilename);
     }
 
     if (success) {

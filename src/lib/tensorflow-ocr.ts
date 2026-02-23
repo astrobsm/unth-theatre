@@ -7,10 +7,17 @@
  * - Image preprocessing and text extraction
  */
 
-import * as tf from '@tensorflow/tfjs';
+// Dynamic import — @tensorflow/tfjs is ~4 MB; loaded only when actually used
+let _tf: typeof import('@tensorflow/tfjs') | null = null;
+async function getTF() {
+  if (!_tf) {
+    _tf = await import('@tensorflow/tfjs');
+  }
+  return _tf;
+}
 
 // TensorFlow model cache
-let ocrModel: tf.LayersModel | null = null;
+let ocrModel: any | null = null;
 let isModelLoading = false;
 
 /**
@@ -18,6 +25,7 @@ let isModelLoading = false;
  */
 export async function initializeTensorFlow(): Promise<boolean> {
   try {
+    const tf = await getTF();
     // Try WebGL backend first for better performance
     await tf.setBackend('webgl');
     await tf.ready();
@@ -26,6 +34,7 @@ export async function initializeTensorFlow(): Promise<boolean> {
   } catch (error) {
     console.warn('WebGL not available, falling back to CPU backend');
     try {
+      const tf = await getTF();
       await tf.setBackend('cpu');
       await tf.ready();
       return true;
@@ -41,7 +50,8 @@ export async function initializeTensorFlow(): Promise<boolean> {
  */
 export async function preprocessImage(
   imageData: ImageData | HTMLImageElement | HTMLCanvasElement
-): Promise<tf.Tensor4D> {
+): Promise<any> {
+  const tf = await getTF();
   return tf.tidy(() => {
     // Convert to tensor
     let tensor = tf.browser.fromPixels(imageData);
@@ -58,12 +68,12 @@ export async function preprocessImage(
     
     // Resize to standard size (for model input)
     const resizedTensor = tf.image.resizeBilinear(
-      enhancedTensor as tf.Tensor3D,
+      enhancedTensor as any,
       [224, 224]
     );
     
     // Add batch dimension
-    return resizedTensor.expandDims(0) as tf.Tensor4D;
+    return resizedTensor.expandDims(0);
   });
 }
 
@@ -190,6 +200,7 @@ export function applyImageEnhancements(
 export async function detectTextRegions(
   imageData: ImageData
 ): Promise<{ x: number; y: number; width: number; height: number }[]> {
+  const tf = await getTF();
   return tf.tidy(() => {
     const tensor = tf.browser.fromPixels(imageData, 1);
     
@@ -197,9 +208,9 @@ export async function detectTextRegions(
     const sobelX = tf.tensor2d([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]);
     const sobelY = tf.tensor2d([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]);
     
-    const input4d = tensor.expandDims(0).expandDims(-1) as tf.Tensor4D;
-    const kernelX = sobelX.expandDims(-1).expandDims(-1) as tf.Tensor4D;
-    const kernelY = sobelY.expandDims(-1).expandDims(-1) as tf.Tensor4D;
+    const input4d = tensor.expandDims(0).expandDims(-1) as any;
+    const kernelX = sobelX.expandDims(-1).expandDims(-1) as any;
+    const kernelY = sobelY.expandDims(-1).expandDims(-1) as any;
     
     const edgesX = tf.conv2d(input4d, kernelX, 1, 'same');
     const edgesY = tf.conv2d(input4d, kernelY, 1, 'same');
@@ -218,7 +229,8 @@ export async function detectTextRegions(
 /**
  * Memory cleanup for TensorFlow tensors
  */
-export function cleanupTensors(): void {
+export async function cleanupTensors(): Promise<void> {
+  const tf = await getTF();
   tf.disposeVariables();
   console.log('TensorFlow memory cleaned. Tensors in memory:', tf.memory().numTensors);
 }
@@ -226,7 +238,8 @@ export function cleanupTensors(): void {
 /**
  * Get TensorFlow memory stats
  */
-export function getMemoryStats(): { numTensors: number; numBytes: number } {
+export async function getMemoryStats(): Promise<{ numTensors: number; numBytes: number }> {
+  const tf = await getTF();
   const memory = tf.memory();
   return {
     numTensors: memory.numTensors,

@@ -19,7 +19,12 @@ import {
   Trash2,
   RotateCcw
 } from 'lucide-react';
-import { createWorker, Worker } from 'tesseract.js';
+// Dynamic import — tesseract.js is ~10 MB; loaded only when user triggers OCR
+type TesseractWorker = import('tesseract.js').Worker;
+const createWorkerLazy = async () => {
+  const { createWorker } = await import('tesseract.js');
+  return createWorker;
+};
 import { SpeechRecognitionService, createSpeechRecognition } from '@/lib/speech-recognition';
 import { applyImageEnhancements, initializeTensorFlow } from '@/lib/tensorflow-ocr';
 import { 
@@ -107,7 +112,7 @@ export function SmartTextInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const speechServiceRef = useRef<SpeechRecognitionService | null>(null);
-  const ocrWorkerRef = useRef<Worker | null>(null);
+  const ocrWorkerRef = useRef<TesseractWorker | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize TensorFlow
@@ -165,7 +170,8 @@ export function SmartTextInput({
       if (enableOCR && !ocrWorkerRef.current) {
         try {
           // Create worker with enhanced settings for handwriting recognition
-          const worker = await createWorker('eng', 1, {
+          const createWorkerFn = await createWorkerLazy();
+          const worker = await createWorkerFn('eng', 1, {
             logger: (m) => {
               if (m.status === 'recognizing text') {
                 // Don't override our multi-pass progress

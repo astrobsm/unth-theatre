@@ -14,9 +14,14 @@ import {
   Mic,
   Camera
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import SmartTextInput from '@/components/SmartTextInput';
+// jsPDF loaded dynamically when user clicks download/export
+import dynamic from 'next/dynamic';
+
+// SmartTextInput contains tesseract.js (~10MB) - lazy load it
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), {
+  ssr: false,
+  loading: () => <div className="h-24 bg-gray-100 rounded-lg animate-pulse" />,
+});
 
 interface Surgery {
   id: string;
@@ -186,12 +191,14 @@ export default function NewChecklistPage() {
     }
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     if (!selectedSurgery) {
       alert('Please select a surgery first');
       return;
     }
 
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
     let yPos = 20;

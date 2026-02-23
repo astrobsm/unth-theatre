@@ -1,14 +1,15 @@
-import * as XLSX from 'xlsx';
+// XLSX is loaded dynamically to keep it out of the initial bundle (~1MB)
 
 /**
  * Export data to Excel file
  */
-export function exportToExcel<T extends Record<string, any>>(
+export async function exportToExcel<T extends Record<string, any>>(
   data: T[],
   filename: string,
   sheetName: string = 'Sheet1'
 ) {
   try {
+    const XLSX = await import('xlsx');
     // Create workbook and worksheet
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -38,11 +39,12 @@ export function exportToExcel<T extends Record<string, any>>(
 /**
  * Export data to CSV file
  */
-export function exportToCSV<T extends Record<string, any>>(
+export async function exportToCSV<T extends Record<string, any>>(
   data: T[],
   filename: string
 ) {
   try {
+    const XLSX = await import('xlsx');
     // Create worksheet from data
     const worksheet = XLSX.utils.json_to_sheet(data);
     
@@ -71,11 +73,12 @@ export function exportToCSV<T extends Record<string, any>>(
 /**
  * Export multiple sheets to Excel
  */
-export function exportMultiSheetExcel(
+export async function exportMultiSheetExcel(
   sheets: Array<{ name: string; data: any[] }>,
   filename: string
 ) {
   try {
+    const XLSX = await import('xlsx');
     const workbook = XLSX.utils.book_new();
 
     sheets.forEach(({ name, data }) => {
@@ -96,7 +99,7 @@ export function exportMultiSheetExcel(
       XLSX.utils.book_append_sheet(workbook, worksheet, name);
     });
 
-    XLSX.writeFile(workbook, `${filename}.xlsx`);
+    XLSX.writeFile(workbook, `${filename}.xlsx` as string);
     return true;
   } catch (error) {
     console.error('Error exporting multi-sheet Excel:', error);
@@ -123,7 +126,7 @@ export function formatDataForExport<T extends Record<string, any>>(
 /**
  * Export data with custom formatting
  */
-export function exportWithFormat<T extends Record<string, any>>(
+export async function exportWithFormat<T extends Record<string, any>>(
   data: T[],
   columnMapping: Record<keyof T, string>,
   filename: string,
@@ -132,17 +135,18 @@ export function exportWithFormat<T extends Record<string, any>>(
   const formattedData = formatDataForExport(data, columnMapping);
   
   if (format === 'excel') {
-    return exportToExcel(formattedData, filename);
+    return await exportToExcel(formattedData, filename);
   } else {
-    return exportToCSV(formattedData, filename);
+    return await exportToCSV(formattedData, filename);
   }
 }
 
 /**
  * Export table data from DOM
  */
-export function exportTableToExcel(tableId: string, filename: string) {
+export async function exportTableToExcel(tableId: string, filename: string) {
   try {
+    const XLSX = await import('xlsx');
     const table = document.getElementById(tableId);
     if (!table) {
       throw new Error(`Table with id "${tableId}" not found`);

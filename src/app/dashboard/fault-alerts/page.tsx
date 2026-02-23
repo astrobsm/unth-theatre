@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import {
   AlertTriangle, CheckCircle, Clock, Filter, Search, X, MessageSquare, User
 } from 'lucide-react';
-import SmartTextInput from '@/components/SmartTextInput';
+import dynamic from 'next/dynamic';
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface FaultAlert {
   id: string;

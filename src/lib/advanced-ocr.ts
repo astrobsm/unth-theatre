@@ -10,7 +10,14 @@
  * - Handwriting-specific optimizations
  */
 
-import * as tf from '@tensorflow/tfjs';
+// Dynamic import — @tensorflow/tfjs is ~4 MB; loaded only when actually used
+let _tf: typeof import('@tensorflow/tfjs') | null = null;
+async function getTF() {
+  if (!_tf) {
+    _tf = await import('@tensorflow/tfjs');
+  }
+  return _tf;
+}
 
 // Configuration for maximum OCR accuracy
 export const OCR_CONFIG = {

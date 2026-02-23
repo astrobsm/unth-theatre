@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// XLSX loaded dynamically when needed (export/import actions)
 import { THEATRES } from '@/lib/constants';
 
 interface Roster {
@@ -94,6 +94,7 @@ export default function RosterPage() {
 
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
@@ -150,7 +151,7 @@ export default function RosterPage() {
     }
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const template = [
       {
         Name: 'John Doe',
@@ -161,6 +162,7 @@ export default function RosterPage() {
       },
     ];
 
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet(template);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Roster Template');
