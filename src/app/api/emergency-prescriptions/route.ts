@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         review: {
           select: {
             id: true,
-            allergyAlerts: true,
+            allergies: true,
             anaestheticPlan: true,
             reviewerName: true,
           },

@@ -41,6 +41,8 @@ import {
   Ambulance,
   FileWarning,
   Wrench,
+  Phone,
+  ClipboardPlus,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -75,95 +77,59 @@ export default function DashboardLayout({
   }
 
   const menuItems = [
-    // 1. Dashboard
+    // === OVERVIEW ===
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    
-    // 1b. Emergency Surgery Booking (NEW) — TOP PRIORITY VISIBILITY
     { href: '/dashboard/emergency-booking', icon: Ambulance, label: '🚨 Emergency Booking', badge: 'URGENT' },
-    
-    // 2. Patients
+
+    // === PATIENT REGISTRATION & SCHEDULING ===
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
-    
-    // 3. Pre-op Reviews (NEW)
-    { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews', badge: 'NEW' },
-    
-    // 4. Prescriptions (NEW)
-    { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions', badge: 'NEW' },
-    
-    // 5. Blood Bank (NEW)
-    { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank', badge: 'NEW' },
-    
-    // 6. Theatre Allocation
-    { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
-    
-    // 7. Cancellations
-    { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
-    
-    // 8. Theatre Setup
-    { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
-    
-    // 9. Theatre Readiness (NEW)
-    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness', badge: 'NEW' },
-    
-    // 10-12. Power House (NEW) - Added for Power Plant Operators and Admins
-    { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status', badge: 'NEW' },
-    { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance', badge: 'NEW' },
-    { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness', badge: 'NEW' },
-    
-    // 13-15. CSSD (NEW)
-    { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory', badge: 'NEW' },
-    { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization', badge: 'NEW' },
-    { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness', badge: 'NEW' },
-    
-    // 16. Equipment Checkout (NEW)
-    { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout', badge: 'NEW' },
-    
-    // 17. Holding Area
-    { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
-    
-    // 18. Anesthesia Setup (NEW)
-    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup', badge: 'NEW' },
-    
-    // 19. WHO Checklists
-    { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
-    
-    // 20. Surgeries
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
-    
-    // 21. PACU (Recovery)
+    { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
+
+    // === PRE-OPERATIVE (Night Before & Morning Of) ===
+    { href: '/dashboard/pre-operative-visit', icon: ClipboardPlus, label: 'Pre-Op Visit', badge: 'NEW' },
+    { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
+    { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions' },
+    { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
+    { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
+
+    // === DAY-OF-SURGERY LOGISTICS ===
+    { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster' },
+    { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
+    { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
+    { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
+    { href: '/dashboard/call-for-patient', icon: Phone, label: 'Call for Patient', badge: 'NEW' },
+
+    // === INTRA-OPERATIVE ===
+    { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
+    { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
+    { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
+
+    // === POST-OPERATIVE ===
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
-    
-    // 22. Patient Transfers
     { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Patient Transfers' },
-    
-    // 23. Alerts
+
+    // === FACILITY & SUPPORT SERVICES ===
+    { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status' },
+    { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance' },
+    { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness' },
+    { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory' },
+    { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization' },
+    { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness' },
+
+    // === ALERTS & SAFETY ===
     { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
-    
-    // 24. Fault Alerts (NEW)
-    { href: '/dashboard/fault-alerts', icon: AlertOctagon, label: 'Fault Alerts', badge: 'NEW' },
-    
-    // 25. Emergency Alerts (NEW)
-    { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts', badge: 'NEW' },
-    
-    // 26. Mortality Registry
+    { href: '/dashboard/fault-alerts', icon: AlertOctagon, label: 'Fault Alerts' },
+    { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts' },
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
-    
-    // 27. Duty Roster (NEW)
-    { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster', badge: 'NEW' },
-    
-    // 28. Staff Effectiveness (NEW)
-    { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness', badge: 'NEW' },
-    
-    // 29. Inventory
+
+    // === INVENTORY & SUPPLIES ===
     { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
-    
-    // 30. Theatre Sub-Stores
-    { href: '/dashboard/sub-stores', icon: Store, label: 'Sub-Stores', badge: 'NEW' },
-    
-    // 31. Reports & Analytics
+    { href: '/dashboard/sub-stores', icon: Store, label: 'Sub-Stores' },
+
+    // === REPORTS & ADMINISTRATION ===
+    { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
-    
-    // 32. Settings (sync, updates, etc.)
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
@@ -187,7 +153,7 @@ export default function DashboardLayout({
     POWER_PLANT_OPERATOR: ['/dashboard', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/settings'],
     BLOODBANK_STAFF: ['/dashboard', '/dashboard/blood-bank', '/dashboard/emergency-booking', '/dashboard/settings'],
     PLUMBER: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/settings'],
-    PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/emergency-booking', '/dashboard/settings'],
+    PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/call-for-patient', '/dashboard/emergency-booking', '/dashboard/settings'],
     CLEANER: ['/dashboard', '/dashboard/settings'],
   };
 

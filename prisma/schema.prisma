@@ -483,6 +483,13 @@ model User {
   emergencyPreAnaestheticApprovals EmergencyPreAnaestheticReview[] @relation("EmergencyReviewApprover")
   emergencyPrescriptionsPacked EmergencyPrescription[] @relation("EmergencyPrescriptionPacker")
   
+  // Call for Patient Relations
+  callUpsInvited PatientCallUp[] @relation("CallUpInviter")
+  callUpsRejected PatientCallUp[] @relation("CallUpRejecter")
+  
+  // Pre-Operative Visit Relations
+  preOperativeVisits PreOperativeVisit[] @relation("PreOpVisitor")
+  
   @@map("users")
 }
 
@@ -766,6 +773,12 @@ model Surgery {
   
   // Emergency Booking Relation
   emergencyBooking      EmergencySurgeryBooking? @relation("EmergencyBookingSurgery")
+  
+  // Call for Patient Relations
+  patientCallUps        PatientCallUp[]
+  
+  // Pre-Operative Visit Relations
+  preOperativeVisits    PreOperativeVisit[]
   
   @@map("surgeries")
 }
@@ -4514,4 +4527,205 @@ model EmergencyPrescription {
   packedBy              User?                       @relation("EmergencyPrescriptionPacker", fields: [packedById], references: [id])
   
   @@map("emergency_prescriptions")
+}
+
+// ==========================================
+// CALL FOR PATIENT MODULE
+// ==========================================
+
+enum CallUpStatus {
+  INVITED
+  REJECTED
+  PATIENT_EN_ROUTE
+  PATIENT_ARRIVED
+  CANCELLED
+}
+
+model PatientCallUp {
+  id                    String          @id @default(uuid())
+  
+  // Surgery reference
+  surgeryId             String
+  surgery               Surgery         @relation(fields: [surgeryId], references: [id])
+  
+  // Patient info (denormalized for call-up note)
+  patientName           String
+  folderNumber          String
+  ward                  String?
+  age                   Int?
+  gender                String?
+  diagnosis             String?
+  procedureName         String
+  surgicalUnit          String
+  
+  // Theatre info
+  theatreName           String
+  theatreId             String?
+  
+  // Assigned staff (from roster/allocation for the theatre)
+  assignedNurseName     String?
+  assignedNurseId       String?
+  assignedPorterName    String?
+  assignedPorterId      String?
+  
+  // Surgeon info
+  surgeonName           String
+  
+  // Status
+  status                CallUpStatus    @default(INVITED)
+  
+  // Invite
+  invitedAt             DateTime        @default(now())
+  invitedById           String
+  invitedBy             User            @relation("CallUpInviter", fields: [invitedById], references: [id])
+  invitedByName         String
+  
+  // Reject (if rejected)
+  rejectedAt            DateTime?
+  rejectedById          String?
+  rejectedBy            User?           @relation("CallUpRejecter", fields: [rejectedById], references: [id])
+  rejectedByName        String?
+  rejectionReason       String?
+  
+  // Patient arrival tracking
+  patientEnRouteAt      DateTime?
+  patientArrivedAt      DateTime?
+  
+  // Call-up note reference number
+  callUpNoteNumber      String          @unique @default(uuid())
+  
+  // Audit
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  @@index([surgeryId])
+  @@index([status])
+  @@index([invitedAt])
+  @@map("patient_call_ups")
+}
+
+// ==========================================
+// PRE-OPERATIVE VISIT MODULE
+// ==========================================
+
+enum PreOpVisitStatus {
+  PENDING
+  VISITED
+  CLEARED
+  NOT_CLEARED
+  DEFERRED
+}
+
+enum PaymentStatus {
+  NOT_PAID
+  PARTIALLY_PAID
+  FULLY_PAID
+  WAIVED
+  UNKNOWN
+}
+
+enum ConsentStatus {
+  NOT_OBTAINED
+  OBTAINED
+  REFUSED
+  PENDING
+}
+
+enum NPOStatus {
+  NPO_COMPLIANT
+  NOT_FASTING
+  UNKNOWN
+  PARTIALLY_COMPLIANT
+}
+
+enum EmotionalReadiness {
+  READY
+  ANXIOUS
+  VERY_ANXIOUS
+  REFUSED
+  NEEDS_COUNSELLING
+  UNKNOWN
+}
+
+model PreOperativeVisit {
+  id                    String            @id @default(uuid())
+  
+  // Surgery reference
+  surgeryId             String
+  surgery               Surgery           @relation(fields: [surgeryId], references: [id])
+  
+  // Patient info (denormalized for display)
+  patientName           String
+  folderNumber          String
+  ward                  String?
+  age                   Int?
+  gender                String?
+  
+  // Booked surgery details
+  procedureName         String
+  surgicalUnit          String
+  scheduledDate         DateTime
+  scheduledTime         String
+  surgeonName           String
+  
+  // Visit details
+  visitDate             DateTime          @default(now())
+  visitedById           String
+  visitedBy             User              @relation("PreOpVisitor", fields: [visitedById], references: [id])
+  visitedByName         String
+  
+  // Assessment fields
+  patientAvailableInWard  Boolean         @default(false)
+  patientLocationNotes    String?         // If patient not in ward
+  
+  surgicalFeePaymentStatus PaymentStatus  @default(UNKNOWN)
+  paymentNotes            String?
+  
+  consentStatus           ConsentStatus   @default(PENDING)
+  consentNotes            String?
+  
+  surgicalItemsAvailable  Boolean         @default(false)
+  itemsAvailabilityNotes  String?         // List of missing items
+  
+  preAnaestheticReviewDone Boolean        @default(false)
+  preAnaestheticNotes     String?
+  
+  npoStatus               NPOStatus      @default(UNKNOWN)
+  npoNotes                String?
+  lastMealTime            String?
+  
+  investigationsComplete  Boolean         @default(false)
+  investigationNotes      String?         // Pending/abnormal results
+  pendingInvestigations   String?         // JSON list of pending investigations
+  
+  patientEmotionalReadiness EmotionalReadiness @default(UNKNOWN)
+  emotionalReadinessNotes String?
+  
+  // Blood readiness
+  bloodReady              Boolean         @default(false)
+  bloodNotes              String?
+  
+  // IV line
+  ivLineSecured           Boolean         @default(false)
+  ivLineNotes             String?
+  
+  // Skin preparation
+  skinPrepDone            Boolean         @default(false)
+  skinPrepNotes           String?
+  
+  // Overall status
+  overallStatus           PreOpVisitStatus @default(PENDING)
+  overallNotes            String?         @db.Text
+  
+  // Signature / confirmation
+  nurseSignature          String?
+  
+  // Audit
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  
+  @@index([surgeryId])
+  @@index([visitDate])
+  @@index([overallStatus])
+  @@map("pre_operative_visits")
 }
