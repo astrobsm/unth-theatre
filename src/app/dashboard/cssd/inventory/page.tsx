@@ -273,13 +273,13 @@ export default function CssdInventoryPage() {
                     onChange={(e) => setFormData({ ...formData, packType: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2"
                   >
-                    <option value="">None</option>
-                    <option value="BASIC_SURGICAL_PACK">Basic Surgical Pack</option>
-                    <option value="ORTHOPEDIC_PACK">Orthopedic Pack</option>
-                    <option value="LAPAROTOMY_PACK">Laparotomy Pack</option>
-                    <option value="CAESAREAN_SECTION_PACK">Caesarean Section Pack</option>
-                    <option value="PEDIATRIC_PACK">Pediatric Pack</option>
-                    <option value="CUSTOM_PACK">Custom Pack</option>
+                    <option value="">Select Pack Type</option>
+                    <option value="MAJOR_BUNDLE">Major Bundle</option>
+                    <option value="MINOR_BUNDLE">Minor Bundle</option>
+                    <option value="INSTRUMENT_SET">Instrument Set</option>
+                    <option value="OPERATING_GOWN">Operating Gown</option>
+                    <option value="DRAPE_SET">Drape Set</option>
+                    <option value="SPECIALIZED_KIT">Specialized Kit</option>
                   </select>
                 </div>
                 <div>

@@ -85,18 +85,27 @@ export async function POST(request: NextRequest) {
       itemCode,
       packType,
       surgicalUnit,
+      materialType,
       totalQuantity,
+      quantity,
       minimumStockLevel,
+      minimumQuantity,
       expiryDate,
       location,
       supplierName,
       notes,
     } = body;
 
+    // Accept form field aliases: materialType→surgicalUnit, quantity→totalQuantity
+    const resolvedSurgicalUnit = surgicalUnit || materialType;
+    const resolvedTotalQuantity = totalQuantity ?? quantity;
+    const resolvedMinStock = minimumStockLevel ?? minimumQuantity ?? 5;
+    const resolvedPackType = packType || 'MAJOR_BUNDLE';
+
     // Validate required fields
-    if (!itemName || !itemCode || !packType || !surgicalUnit || totalQuantity == null) {
+    if (!itemName || !itemCode || !resolvedSurgicalUnit || resolvedTotalQuantity == null) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: itemName, itemCode, materialType/surgicalUnit, and quantity are required' },
         { status: 400 }
       );
     }
@@ -105,13 +114,13 @@ export async function POST(request: NextRequest) {
       data: {
         itemName,
         itemCode,
-        packType,
-        surgicalUnit,
-        totalQuantity,
-        availableQuantity: totalQuantity,
+        packType: resolvedPackType,
+        surgicalUnit: resolvedSurgicalUnit,
+        totalQuantity: resolvedTotalQuantity,
+        availableQuantity: resolvedTotalQuantity,
         inUseQuantity: 0,
         sterilizingQuantity: 0,
-        minimumStockLevel: minimumStockLevel || 5,
+        minimumStockLevel: resolvedMinStock,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         location: location || null,
         supplierName: supplierName || null,
