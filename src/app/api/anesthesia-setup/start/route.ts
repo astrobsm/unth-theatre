@@ -22,10 +22,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is an anaesthetic technician
-    if (session.user.role !== 'ANAESTHETIC_TECHNICIAN') {
+    // Check if user is an anaesthetic technician or admin
+    if (!['ANAESTHETIC_TECHNICIAN', 'ADMIN', 'THEATRE_MANAGER'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only anaesthetic technicians can log setup' },
+        { error: 'Only anaesthetic technicians and administrators can log setup' },
         { status: 403 }
       );
     }

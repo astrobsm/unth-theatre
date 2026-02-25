@@ -701,6 +701,7 @@ model Surgery {
   procedureName         String
   scheduledDate         DateTime
   scheduledTime         String
+  estimatedDuration     Int                     @default(60) // Estimated duration in minutes
   status                SurgeryStatus           @default(SCHEDULED)
   surgeryType           SurgeryType             @default(ELECTIVE)
   readinessStatus       SurgeryReadinessStatus  @default(PENDING_CHECKS)

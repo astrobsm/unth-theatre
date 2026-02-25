@@ -35,6 +35,9 @@ function mapUserRoleToTeamRole(userRole: string): string | null {
     'CLEANER': 'CLEANER',
     'BLOODBANK_STAFF': 'BLOODBANK_STAFF',
     'PHARMACIST': 'PHARMACIST',
+    'ADMIN': 'SURGEON',
+    'THEATRE_MANAGER': 'SURGEON',
+    'SYSTEM_ADMINISTRATOR': 'SURGEON',
   };
   return mapping[userRole] || null;
 }

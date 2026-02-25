@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (porter.role !== 'PORTER') {
+    if (porter.role !== 'PORTER' && porter.role !== 'ADMIN' && porter.role !== 'THEATRE_MANAGER') {
       return NextResponse.json(
-        { error: 'Only porters can log transport duties' },
+        { error: 'Only porters and administrators can log transport duties' },
         { status: 403 }
       );
     }

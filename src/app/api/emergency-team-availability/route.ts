@@ -17,6 +17,9 @@ const TEAM_ROLE_MAP: Record<string, string> = {
   CLEANER: 'CLEANER',
   BLOODBANK_STAFF: 'BLOODBANK_STAFF',
   PHARMACIST: 'PHARMACIST',
+  ADMIN: 'SURGEON', // Admin can respond as any role — default to SURGEON for tracking
+  THEATRE_MANAGER: 'SURGEON',
+  SYSTEM_ADMINISTRATOR: 'SURGEON',
 };
 
 const respondSchema = z.object({

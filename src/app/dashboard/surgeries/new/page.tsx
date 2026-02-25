@@ -86,6 +86,7 @@ export default function NewSurgeryPage() {
       procedureName: formData.get('procedureName'),
       scheduledDate: formData.get('scheduledDate'),
       scheduledTime: formData.get('scheduledTime'),
+      estimatedDuration: parseInt(formData.get('estimatedDuration') as string) || 60,
       surgeryType: surgeryType,
       needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
       needDiathermy: formData.get('needDiathermy') === 'on',
@@ -402,6 +403,21 @@ export default function NewSurgeryPage() {
                 required
                 className="input-field"
               />
+            </div>
+
+            <div>
+              <label className="label">Estimated Duration (minutes) *</label>
+              <input
+                type="number"
+                name="estimatedDuration"
+                required
+                min="1"
+                max="720"
+                defaultValue="60"
+                className="input-field"
+                placeholder="e.g. 90"
+              />
+              <p className="text-xs text-gray-500 mt-1">Total estimated duration of the surgery in minutes. Used to validate daily theatre capacity (8 AM - 5 PM).</p>
             </div>
           </div>
         </div>

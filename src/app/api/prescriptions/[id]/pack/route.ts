@@ -28,10 +28,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is a pharmacist
-    if (!['PHARMACIST'].includes(session.user.role)) {
+    // Check if user is a pharmacist or admin
+    if (!['PHARMACIST', 'ADMIN', 'THEATRE_MANAGER'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only pharmacists can pack prescriptions' },
+        { error: 'Only pharmacists and administrators can pack prescriptions' },
         { status: 403 }
       );
     }

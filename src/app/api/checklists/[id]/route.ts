@@ -94,7 +94,7 @@ export async function DELETE(
     }
 
     // Check user role - only admin can delete
-    if (session.user.role !== 'Admin') {
+    if (session.user.role !== 'ADMIN' && session.user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

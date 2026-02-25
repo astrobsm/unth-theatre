@@ -19,10 +19,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is blood bank staff
-    if (!['BLOODBANK_STAFF'].includes(session.user.role)) {
+    // Check if user is blood bank staff or admin
+    if (!['BLOODBANK_STAFF', 'ADMIN', 'THEATRE_MANAGER'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only blood bank staff can acknowledge requests' },
+        { error: 'Only blood bank staff and administrators can acknowledge requests' },
         { status: 403 }
       );
     }

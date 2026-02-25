@@ -13,6 +13,7 @@ const surgerySchema = z.object({
   procedureName: z.string(),
   scheduledDate: z.string(),
   scheduledTime: z.string(),
+  estimatedDuration: z.number().int().min(1, 'Estimated duration must be at least 1 minute').default(60),
   surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
   needBloodTransfusion: z.boolean().default(false),
   needDiathermy: z.boolean().default(false),
@@ -94,6 +95,68 @@ export async function POST(request: NextRequest) {
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    // === 5 PM Cutoff Validation for Elective and Urgent cases ===
+    if (surgeryType === 'ELECTIVE' || surgeryType === 'URGENT') {
+      const scheduledDate = new Date(validatedData.scheduledDate);
+      // Get start of day and end of theatre time (5 PM)
+      const dayStart = new Date(scheduledDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(scheduledDate);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      // Fetch all existing elective and urgent surgeries for this unit on the same day
+      const existingSurgeries = await prisma.surgery.findMany({
+        where: {
+          unit: validatedData.unit,
+          scheduledDate: {
+            gte: dayStart,
+            lte: dayEnd,
+          },
+          surgeryType: {
+            in: ['ELECTIVE', 'URGENT'],
+          },
+          status: {
+            notIn: ['CANCELLED'],
+          },
+        },
+        select: {
+          scheduledTime: true,
+          estimatedDuration: true,
+        },
+      });
+
+      // Calculate cumulative end time
+      // Theatre day starts at 8:00 AM (configurable)
+      const THEATRE_START_HOUR = 8; // 8:00 AM
+      const THEATRE_END_HOUR = 17;  // 5:00 PM
+      const THEATRE_END_MINUTES = THEATRE_END_HOUR * 60; // 1020 minutes from midnight
+
+      // Sum up all existing surgery durations
+      let totalExistingDurationMinutes = 0;
+      for (const s of existingSurgeries) {
+        totalExistingDurationMinutes += (s.estimatedDuration || 60);
+      }
+
+      // Add the new surgery's duration
+      const newTotalDuration = totalExistingDurationMinutes + (validatedData.estimatedDuration || 60);
+
+      // Calculate earliest start time (first surgery of the day)
+      // The cumulative end time = theatre start + total duration
+      const cumulativeEndMinutes = (THEATRE_START_HOUR * 60) + newTotalDuration;
+
+      if (cumulativeEndMinutes > THEATRE_END_MINUTES) {
+        const hoursOver = Math.floor(cumulativeEndMinutes / 60);
+        const minsOver = cumulativeEndMinutes % 60;
+        const estimatedEndTime = `${hoursOver.toString().padStart(2, '0')}:${minsOver.toString().padStart(2, '0')}`;
+        return NextResponse.json(
+          {
+            error: `Booking rejected: The cumulative duration of elective/urgent surgeries for ${validatedData.unit} on this date would exceed the 5:00 PM theatre cutoff time. Estimated end time: ${estimatedEndTime}. Total scheduled: ${newTotalDuration} minutes. Please reschedule to another day or reduce the number of cases.`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const surgery = await prisma.surgery.create({

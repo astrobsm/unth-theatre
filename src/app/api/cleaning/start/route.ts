@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (user.role !== 'CLEANER') {
+    if (user.role !== 'CLEANER' && user.role !== 'ADMIN' && user.role !== 'THEATRE_MANAGER') {
       return NextResponse.json(
-        { error: 'Only cleaners can log cleaning duties' },
+        { error: 'Only cleaners and administrators can log cleaning duties' },
         { status: 403 }
       );
     }

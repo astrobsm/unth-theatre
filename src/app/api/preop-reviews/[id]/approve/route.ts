@@ -21,10 +21,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is an anesthetist (consultant level)
-    if (!['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role)) {
+    // Check if user is an anesthetist (consultant level) or admin
+    if (!['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'].includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only consultant anesthetists can approve reviews' },
+        { error: 'Only consultant anesthetists and administrators can approve reviews' },
         { status: 403 }
       );
     }
