@@ -15,7 +15,9 @@ import {
   Eye,
   Edit,
   Filter,
-  ThumbsUp
+  ThumbsUp,
+  Syringe,
+  Trash2
 } from 'lucide-react';
 
 interface PreOpReview {
@@ -133,6 +135,32 @@ export default function PreOpReviewsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Dynamic prescription form state for rejection
+  const [medications, setMedications] = useState<Array<{
+    drugName: string; dosage: string; route: string; frequency: string; timing: string; quantity: number;
+  }>>([{ drugName: '', dosage: '', route: 'IV', frequency: '', timing: 'PRE_OP', quantity: 1 }]);
+  const [fluids, setFluids] = useState('');
+  const [emergencyDrugs, setEmergencyDrugs] = useState('');
+  const [rxUrgency, setRxUrgency] = useState<'ROUTINE' | 'URGENT' | 'EMERGENCY'>('ROUTINE');
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [prescriptionNotes, setPrescriptionNotes] = useState('');
+
+  const addMedication = () => {
+    setMedications([...medications, { drugName: '', dosage: '', route: 'IV', frequency: '', timing: 'PRE_OP', quantity: 1 }]);
+  };
+
+  const removeMedication = (index: number) => {
+    if (medications.length > 1) {
+      setMedications(medications.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateMedication = (index: number, field: string, value: string | number) => {
+    const updated = [...medications];
+    (updated[index] as any)[field] = value;
+    setMedications(updated);
+  };
+
   const handleApprove = async () => {
     if (!approvingId) return;
     setSubmitting(true);
@@ -165,7 +193,12 @@ export default function PreOpReviewsPage() {
   const handleReject = async () => {
     if (!approvingId) return;
     if (!rejectionReason.trim()) {
-      toast.error('Please provide a reason for sending back the review');
+      toast.error('Please provide a reason for rejecting the review');
+      return;
+    }
+    const validMeds = medications.filter(m => m.drugName.trim() && m.dosage.trim());
+    if (validMeds.length === 0) {
+      toast.error('Please add at least one medication with drug name and dosage');
       return;
     }
     setSubmitting(true);
@@ -176,20 +209,33 @@ export default function PreOpReviewsPage() {
         body: JSON.stringify({
           approved: false,
           rejectionReason: rejectionReason,
+          correctedPrescription: {
+            medications: validMeds,
+            fluids: fluids || undefined,
+            emergencyDrugs: emergencyDrugs || undefined,
+            urgency: rxUrgency,
+            specialInstructions: specialInstructions || undefined,
+            prescriptionNotes: prescriptionNotes || undefined,
+          },
         }),
       });
       if (response.ok) {
-        toast.success('Review sent back for revision');
+        toast.success('Corrected prescription submitted! It is now available for pharmacist packing.');
         setShowRejectModal(false);
         setRejectionReason('');
         setApprovingId(null);
+        setMedications([{ drugName: '', dosage: '', route: 'IV', frequency: '', timing: 'PRE_OP', quantity: 1 }]);
+        setFluids('');
+        setEmergencyDrugs('');
+        setSpecialInstructions('');
+        setPrescriptionNotes('');
         fetchReviews();
       } else {
         const data = await response.json();
-        toast.error(data.error || 'Failed to reject review');
+        toast.error(data.error || 'Failed to submit corrected prescription');
       }
     } catch (error) {
-      toast.error('Failed to reject review');
+      toast.error('Failed to submit corrected prescription');
     } finally {
       setSubmitting(false);
     }
@@ -515,17 +561,19 @@ export default function PreOpReviewsPage() {
         </div>
       )}
 
-      {/* Reject Modal */}
+      {/* Reject Modal with Corrected Prescription Form */}
       {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 overflow-y-auto py-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl mx-4 my-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
               <XCircle className="w-5 h-5 text-red-600" />
-              Send Back for Revision
+              Reject &amp; Provide Corrected Prescription
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              This will send the review back to the reviewing anaesthetist for corrections.
+              Reject the original review and write the correct prescription below. Once submitted, this prescription will be <strong>automatically approved</strong> and visible to pharmacists for packing.
             </p>
+
+            {/* Rejection Reason */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Reason for Rejection <span className="text-red-500">*</span>
@@ -534,12 +582,186 @@ export default function PreOpReviewsPage() {
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                rows={3}
-                placeholder="Provide the reason for sending back this review..."
+                rows={2}
+                placeholder="Why is the original prescription being rejected..."
                 required
               />
             </div>
-            <div className="flex justify-end gap-3">
+
+            {/* Corrected Medications */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-gray-900 flex items-center gap-1">
+                  <Syringe className="w-4 h-4 text-indigo-600" />
+                  Corrected Medications <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={addMedication}
+                  className="flex items-center gap-1 text-sm bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Drug
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {medications.map((med, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-500">Medication #{index + 1}</span>
+                      {medications.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeMedication(index)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Drug Name *</label>
+                        <input
+                          type="text"
+                          value={med.drugName}
+                          onChange={(e) => updateMedication(index, 'drugName', e.target.value)}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          placeholder="e.g. Propofol"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Dosage *</label>
+                        <input
+                          type="text"
+                          value={med.dosage}
+                          onChange={(e) => updateMedication(index, 'dosage', e.target.value)}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          placeholder="e.g. 200mg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Route *</label>
+                        <select
+                          value={med.route}
+                          onChange={(e) => updateMedication(index, 'route', e.target.value)}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                        >
+                          <option value="IV">IV (Intravenous)</option>
+                          <option value="IM">IM (Intramuscular)</option>
+                          <option value="PO">PO (Oral)</option>
+                          <option value="SC">SC (Subcutaneous)</option>
+                          <option value="PR">PR (Rectal)</option>
+                          <option value="SL">SL (Sublingual)</option>
+                          <option value="INH">INH (Inhalation)</option>
+                          <option value="TOP">TOP (Topical)</option>
+                          <option value="ETT">ETT (Endotracheal)</option>
+                          <option value="EPIDURAL">Epidural</option>
+                          <option value="SPINAL">Spinal</option>
+                          <option value="NERVE_BLOCK">Nerve Block</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Frequency</label>
+                        <input
+                          type="text"
+                          value={med.frequency}
+                          onChange={(e) => updateMedication(index, 'frequency', e.target.value)}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          placeholder="e.g. Once, Q6H, PRN"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Timing</label>
+                        <select
+                          value={med.timing}
+                          onChange={(e) => updateMedication(index, 'timing', e.target.value)}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                        >
+                          <option value="PRE_OP">Pre-Operative</option>
+                          <option value="INTRA_OP">Intra-Operative</option>
+                          <option value="POST_OP">Post-Operative</option>
+                          <option value="INDUCTION">At Induction</option>
+                          <option value="MAINTENANCE">Maintenance</option>
+                          <option value="EMERGENCE">Emergence</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Quantity</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={med.quantity}
+                          onChange={(e) => updateMedication(index, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Additional Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">IV Fluids</label>
+                <input
+                  type="text"
+                  value={fluids}
+                  onChange={(e) => setFluids(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  placeholder="e.g. Normal Saline 1L, Ringer's Lactate 500ml"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Drugs</label>
+                <input
+                  type="text"
+                  value={emergencyDrugs}
+                  onChange={(e) => setEmergencyDrugs(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  placeholder="e.g. Atropine 0.5mg, Adrenaline 1mg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Urgency</label>
+                <select
+                  value={rxUrgency}
+                  onChange={(e) => setRxUrgency(e.target.value as any)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                >
+                  <option value="ROUTINE">Routine</option>
+                  <option value="URGENT">Urgent</option>
+                  <option value="EMERGENCY">Emergency</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Special Instructions</label>
+                <input
+                  type="text"
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  placeholder="Any special instructions for the pharmacist..."
+                />
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Prescription Notes</label>
+              <textarea
+                value={prescriptionNotes}
+                onChange={(e) => setPrescriptionNotes(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                rows={2}
+                placeholder="Additional notes about this prescription..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 border-t pt-4">
               <button
                 onClick={() => { setShowRejectModal(false); setRejectionReason(''); setApprovingId(null); }}
                 className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
@@ -549,15 +771,15 @@ export default function PreOpReviewsPage() {
               </button>
               <button
                 onClick={handleReject}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
+                className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
                 disabled={submitting}
               >
                 {submitting ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 ) : (
-                  <XCircle className="w-4 h-4" />
+                  <Syringe className="w-4 h-4" />
                 )}
-                Send Back
+                Reject &amp; Submit Corrected Prescription
               </button>
             </div>
           </div>

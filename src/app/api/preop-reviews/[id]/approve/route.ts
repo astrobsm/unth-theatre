@@ -4,10 +4,28 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+const medicationItemSchema = z.object({
+  drugName: z.string().min(1, 'Drug name is required'),
+  dosage: z.string().min(1, 'Dosage is required'),
+  route: z.string().min(1, 'Route is required'),
+  frequency: z.string().optional(),
+  timing: z.string().optional(),
+  quantity: z.number().int().min(1).default(1),
+});
+
 const approveReviewSchema = z.object({
   approvalNotes: z.string().optional(),
   rejectionReason: z.string().optional(),
   approved: z.boolean(),
+  // When rejecting, consultant can provide a corrected prescription
+  correctedPrescription: z.object({
+    medications: z.array(medicationItemSchema).min(1, 'At least one medication is required'),
+    fluids: z.string().optional(),
+    emergencyDrugs: z.string().optional(),
+    urgency: z.enum(['ROUTINE', 'URGENT', 'EMERGENCY']).default('ROUTINE'),
+    specialInstructions: z.string().optional(),
+    prescriptionNotes: z.string().optional(),
+  }).optional(),
 });
 
 export async function POST(
@@ -35,6 +53,10 @@ export async function POST(
     // Check if review exists
     const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
       where: { id: params.id },
+      include: {
+        surgery: true,
+        patient: true,
+      },
     });
 
     if (!existingReview) {
@@ -51,7 +73,111 @@ export async function POST(
       );
     }
 
-    // Update review with approval
+    // If rejecting with a corrected prescription, create the prescription and mark review as APPROVED
+    if (!validatedData.approved && validatedData.correctedPrescription) {
+      const rx = validatedData.correctedPrescription;
+
+      // Mark review as APPROVED (consultant is overriding with corrected prescription)
+      const updatedReview = await prisma.preOperativeAnestheticReview.update({
+        where: { id: params.id },
+        data: {
+          status: 'APPROVED',
+          approvedBy: session.user.id,
+          approvedAt: new Date(),
+          approvalNotes: validatedData.approvalNotes || null,
+          rejectionReason: validatedData.rejectionReason,
+          consultantAnesthetistId: session.user.id,
+          consultantName: session.user.name,
+        },
+        include: {
+          surgery: true,
+          patient: true,
+          anesthetist: {
+            select: { id: true, fullName: true, role: true },
+          },
+          consultantAnesthetist: {
+            select: { id: true, fullName: true, role: true },
+          },
+        },
+      });
+
+      // Create the corrected prescription as APPROVED so pharmacist can see it for packing
+      const prescription = await prisma.anestheticPrescription.create({
+        data: {
+          preOpReviewId: params.id,
+          surgeryId: existingReview.surgeryId,
+          patientId: existingReview.patientId,
+          patientName: existingReview.patientName,
+          prescribedById: session.user.id,
+          prescribedByName: session.user.name || '',
+          medications: JSON.stringify(rx.medications),
+          fluids: rx.fluids || null,
+          emergencyDrugs: rx.emergencyDrugs || null,
+          scheduledSurgeryDate: existingReview.scheduledSurgeryDate,
+          urgency: rx.urgency || 'ROUTINE',
+          specialInstructions: rx.specialInstructions || null,
+          allergyAlerts: existingReview.allergies || null,
+          prescriptionNotes: rx.prescriptionNotes || null,
+          // Auto-approve since the consultant is creating it directly
+          status: 'APPROVED',
+          approvedById: session.user.id,
+          approvedByName: session.user.name || '',
+          approvedAt: new Date(),
+        },
+      });
+
+      // Create individual medication items for tracking
+      if (rx.medications.length > 0) {
+        await prisma.prescriptionMedicationItem.createMany({
+          data: rx.medications.map((med) => ({
+            prescriptionId: prescription.id,
+            drugName: med.drugName,
+            dosage: med.dosage,
+            route: med.route,
+            frequency: med.frequency || null,
+            timing: med.timing || null,
+            quantity: med.quantity || 1,
+          })),
+        });
+      }
+
+      // Create audit logs
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'REJECT_WITH_CORRECTED_PRESCRIPTION',
+          tableName: 'PreOperativeAnestheticReview',
+          recordId: updatedReview.id,
+          changes: JSON.stringify({
+            rejectionReason: validatedData.rejectionReason,
+            correctedPrescriptionId: prescription.id,
+            medicationCount: rx.medications.length,
+          }),
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'CREATE_CORRECTED_PRESCRIPTION',
+          tableName: 'AnestheticPrescription',
+          recordId: prescription.id,
+          changes: JSON.stringify({
+            sourceReviewId: params.id,
+            medications: rx.medications,
+            status: 'APPROVED',
+          }),
+        },
+      });
+
+      return NextResponse.json({
+        ...updatedReview,
+        correctedPrescription: prescription,
+        message: 'Review rejected with corrected prescription. Prescription is now available for pharmacist packing.',
+      });
+    }
+
+    // Standard approve/reject without corrected prescription
     const updatedReview = await prisma.preOperativeAnestheticReview.update({
       where: { id: params.id },
       data: {
