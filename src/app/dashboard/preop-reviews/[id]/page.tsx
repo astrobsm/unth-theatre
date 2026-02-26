@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { ArrowLeft, Edit, User, Calendar, Activity, Syringe, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Edit, User, Calendar, Activity, Syringe, CheckCircle, XCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface PreOpReview {
   id: string;
@@ -60,6 +61,11 @@ export default function PreOpReviewDetailPage() {
   const { data: session } = useSession();
   const [review, setReview] = useState<PreOpReview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -82,6 +88,66 @@ export default function PreOpReviewDetailPage() {
     }
   };
 
+  const handleApprove = async () => {
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/preop-reviews/${params.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: true,
+          approvalNotes: approvalNotes || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Review approved successfully! Prescriptions are now available for packing.');
+        setShowApprovalModal(false);
+        setApprovalNotes('');
+        fetchReview();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to approve review');
+      }
+    } catch (error) {
+      toast.error('Failed to approve review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectionReason.trim()) {
+      toast.error('Please provide a reason for sending back the review');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/preop-reviews/${params.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: false,
+          rejectionReason: rejectionReason,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Review sent back for revision');
+        setShowRejectModal(false);
+        setRejectionReason('');
+        fetchReview();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to send back review');
+      }
+    } catch (error) {
+      toast.error('Failed to send back review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'COMPLETED': return 'bg-green-100 text-green-800';
@@ -90,6 +156,10 @@ export default function PreOpReviewDetailPage() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // Roles that can approve reviews
+  const canApprove = ['ADMIN', 'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER'].includes(session?.user?.role || '');
+  const canEdit = ['ADMIN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session?.user?.role || '');
 
   if (loading) {
     return (
@@ -115,8 +185,6 @@ export default function PreOpReviewDetailPage() {
     );
   }
 
-  const canEdit = ['ADMIN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session?.user?.role || '');
-
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -135,7 +203,7 @@ export default function PreOpReviewDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(review.status)}`}>
-            {review.status}
+            {review.status.replace('_', ' ')}
           </span>
           {canEdit && review.status !== 'APPROVED' && (
             <Link
@@ -148,6 +216,156 @@ export default function PreOpReviewDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Approval Action Bar - shown to consultants/admin when review is not yet approved */}
+      {canApprove && review.status !== 'APPROVED' && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5" />
+                Consultant Approval Required
+              </h3>
+              <p className="text-amber-700 text-sm mt-1">
+                Review this pre-operative assessment and approve it to make prescriptions available for packing.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowRejectModal(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition"
+              >
+                <ThumbsDown className="w-4 h-4" />
+                Send Back
+              </button>
+              <button
+                onClick={() => setShowApprovalModal(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition"
+              >
+                <ThumbsUp className="w-4 h-4" />
+                Approve Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approved banner */}
+      {review.status === 'APPROVED' && (
+        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <span className="text-green-800 font-semibold">
+              This review has been approved.
+            </span>
+            {review.consultantAnesthetist && (
+              <span className="text-green-700 text-sm">
+                Approved by: {review.consultantAnesthetist.fullName}
+              </span>
+            )}
+          </div>
+          <p className="text-green-700 text-sm mt-1">
+            Prescriptions from this review are now available for packing.
+          </p>
+        </div>
+      )}
+
+      {/* Approve Modal */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <ThumbsUp className="w-5 h-5 text-green-600" />
+              Approve Pre-Operative Review
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Approving this review will mark the associated prescriptions as ready for packing.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Approval Notes (optional)
+              </label>
+              <textarea
+                value={approvalNotes}
+                onChange={(e) => setApprovalNotes(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Add any notes for the approval..."
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowApprovalModal(false); setApprovalNotes(''); }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApprove}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <ThumbsUp className="w-4 h-4" />
+                )}
+                Confirm Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <ThumbsDown className="w-5 h-5 text-red-600" />
+              Send Back for Revision
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              This will send the review back to the reviewing anaesthetist for corrections.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reason for Rejection <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Provide the reason for sending back this review..."
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowRejectModal(false); setRejectionReason(''); }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <ThumbsDown className="w-4 h-4" />
+                )}
+                Send Back
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Patient & Surgery Info */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

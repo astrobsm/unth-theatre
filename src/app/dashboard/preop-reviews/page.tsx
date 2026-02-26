@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -13,7 +14,8 @@ import {
   Plus,
   Eye,
   Edit,
-  Filter
+  Filter,
+  ThumbsUp
 } from 'lucide-react';
 
 interface PreOpReview {
@@ -122,7 +124,76 @@ export default function PreOpReviewsPage() {
     }
   };
 
-  const isConsultant = session?.user?.role === 'CONSULTANT_ANAESTHETIST';
+  const canApprove = ['ADMIN', 'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER', 'ANAESTHETIST', 'SYSTEM_ADMINISTRATOR'].includes(session?.user?.role || '');
+
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleApprove = async () => {
+    if (!approvingId) return;
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/preop-reviews/${approvingId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: true,
+          approvalNotes: approvalNotes || undefined,
+        }),
+      });
+      if (response.ok) {
+        toast.success('Review approved! Prescriptions are now available for packing.');
+        setShowApprovalModal(false);
+        setApprovalNotes('');
+        setApprovingId(null);
+        fetchReviews();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to approve review');
+      }
+    } catch (error) {
+      toast.error('Failed to approve review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!approvingId) return;
+    if (!rejectionReason.trim()) {
+      toast.error('Please provide a reason for sending back the review');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/preop-reviews/${approvingId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: false,
+          rejectionReason: rejectionReason,
+        }),
+      });
+      if (response.ok) {
+        toast.success('Review sent back for revision');
+        setShowRejectModal(false);
+        setRejectionReason('');
+        setApprovingId(null);
+        fetchReviews();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to reject review');
+      }
+    } catch (error) {
+      toast.error('Failed to reject review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -367,12 +438,129 @@ export default function PreOpReviewsPage() {
                           <Edit className="h-5 w-5" />
                         </button>
                       )}
+                      {canApprove && review.status !== 'APPROVED' && (
+                        <>
+                          <button
+                            onClick={() => { setApprovingId(review.id); setShowApprovalModal(true); }}
+                            className="text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100 px-2 py-1 rounded flex items-center gap-1"
+                            title="Approve Review"
+                          >
+                            <ThumbsUp className="h-4 w-4" />
+                            <span className="text-xs font-medium">Approve</span>
+                          </button>
+                          <button
+                            onClick={() => { setApprovingId(review.id); setShowRejectModal(true); }}
+                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-2 py-1 rounded flex items-center gap-1"
+                            title="Send Back for Revision"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            <span className="text-xs font-medium">Reject</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Approve Modal */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <ThumbsUp className="w-5 h-5 text-green-600" />
+              Approve Pre-Operative Review
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Approving this review will mark the associated prescriptions as ready for packing.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Approval Notes (optional)
+              </label>
+              <textarea
+                value={approvalNotes}
+                onChange={(e) => setApprovalNotes(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Add any notes for the approval..."
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowApprovalModal(false); setApprovalNotes(''); setApprovingId(null); }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApprove}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <ThumbsUp className="w-4 h-4" />
+                )}
+                Confirm Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-600" />
+              Send Back for Revision
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              This will send the review back to the reviewing anaesthetist for corrections.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reason for Rejection <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Provide the reason for sending back this review..."
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowRejectModal(false); setRejectionReason(''); setApprovingId(null); }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <XCircle className="w-4 h-4" />
+                )}
+                Send Back
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
