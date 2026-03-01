@@ -490,6 +490,18 @@ model User {
   // Pre-Operative Visit Relations
   preOperativeVisits PreOperativeVisit[] @relation("PreOpVisitor")
   
+  // Medication Tracking Relations
+  medsCollected MedicationCollection[] @relation("MedicationCollector")
+  medsDispensed MedicationCollection[] @relation("MedicationDispenser")
+  reconciliationsPerformed MedicationReconciliation[] @relation("ReconciliationUser")
+  medsReturned MedicationReturn[] @relation("MedicationReturner")
+  medsReceived MedicationReturn[] @relation("MedicationReceiver")
+  additionalMedRequestsMade AdditionalMedicationRequest[] @relation("AdditionalMedRequester")
+  additionalMedRequestsAcknowledged AdditionalMedicationRequest[] @relation("AdditionalMedAcknowledger")
+  additionalMedRequestsPacked AdditionalMedicationRequest[] @relation("AdditionalMedPacker")
+  medQueriesReceived MedicationNonReturnQuery[] @relation("QueriedUser")
+  medQueriesIssued MedicationNonReturnQuery[] @relation("QueryIssuer")
+  
   @@map("users")
 }
 
@@ -780,6 +792,14 @@ model Surgery {
   
   // Pre-Operative Visit Relations
   preOperativeVisits    PreOperativeVisit[]
+  
+  // Medication Tracking Relations
+  medicationCollections MedicationCollection[] @relation("SurgeryMedicationCollections")
+  medicationUsageRecords MedicationUsageRecord[] @relation("SurgeryMedicationUsage")
+  medicationReconciliation MedicationReconciliation? @relation("SurgeryReconciliation")
+  medicationReturns     MedicationReturn[] @relation("SurgeryMedicationReturns")
+  additionalMedRequests AdditionalMedicationRequest[] @relation("SurgeryAdditionalMedRequests")
+  medicationQueries     MedicationNonReturnQuery[] @relation("SurgeryMedicationQueries")
   
   @@map("surgeries")
 }
@@ -2850,6 +2870,11 @@ enum PrescriptionStatus {
   PACKED
   PARTIALLY_PACKED
   LATE_ARRIVAL
+  COLLECTED            // Anaesthetist has collected medications from pharmacy
+  IN_USE               // Medications are being used in surgery
+  RECONCILED           // Post-surgery reconciliation complete
+  RETURNED             // Unused medications returned to pharmacy
+  QUERY_ISSUED         // Non-return query issued to anaesthetist
 }
 
 enum MedicationUrgency {
@@ -3043,6 +3068,14 @@ model AnestheticPrescription {
   approvedBy                User?                 @relation("ApprovedBy", fields: [approvedById], references: [id])
   packedBy                  User?                 @relation("PackedBy", fields: [packedById], references: [id])
   prescriptionItems         PrescriptionMedicationItem[]
+  
+  // Medication Tracking Relations
+  medicationCollections     MedicationCollection[]
+  medicationUsageRecords    MedicationUsageRecord[]
+  medicationReconciliation  MedicationReconciliation?
+  medicationReturns         MedicationReturn[]
+  additionalMedRequests     AdditionalMedicationRequest[]
+  nonReturnQueries          MedicationNonReturnQuery[]
   
   @@map("anesthetic_prescriptions")
 }
@@ -4729,4 +4762,310 @@ model PreOperativeVisit {
   @@index([visitDate])
   @@index([overallStatus])
   @@map("pre_operative_visits")
+}
+
+// ==================== MEDICATION TRACKING & RECONCILIATION ====================
+
+// Track when anaesthetist collects medications from pharmacy
+model MedicationCollection {
+  id                        String                @id @default(uuid())
+  prescriptionId            String
+  surgeryId                 String
+  
+  // Collection Info
+  collectedById             String                // Anaesthetist who collected
+  collectedByName           String
+  collectedAt               DateTime              @default(now())
+  
+  // Dispensing pharmacist
+  dispensedById             String                // Pharmacist who dispensed
+  dispensedByName           String
+  
+  // Items collected (JSON: array of { drugName, dosage, quantityDispensed })
+  itemsCollected            String                // JSON
+  
+  // Signature
+  anaesthetistSignature     Boolean               @default(false)
+  pharmacistSignature       Boolean               @default(false)
+  
+  notes                     String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  surgery                   Surgery               @relation("SurgeryMedicationCollections", fields: [surgeryId], references: [id])
+  collectedBy               User                  @relation("MedicationCollector", fields: [collectedById], references: [id])
+  dispensedBy               User                  @relation("MedicationDispenser", fields: [dispensedById], references: [id])
+  
+  @@map("medication_collections")
+}
+
+// Track individual drug usage during surgery (linked to anesthesia chart)
+model MedicationUsageRecord {
+  id                        String                @id @default(uuid())
+  prescriptionId            String
+  surgeryId                 String
+  
+  // Drug details
+  drugName                  String
+  dosage                    String
+  route                     String
+  
+  // Quantity tracking
+  quantityDispensed         Int                   // How many units were given to anaesthetist
+  quantityAdministered      Int                   @default(0)  // How many used during surgery
+  quantityWasted            Int                   @default(0)  // Broken/contaminated
+  quantityRemaining         Int                   @default(0)  // Must be returned
+  
+  // Administration log (JSON array of { time, amount, administeredBy, notes })
+  administrationLog         String?               // JSON
+  
+  // Status
+  isFullyUsed               Boolean               @default(false)
+  isReturnRequired          Boolean               @default(false)
+  isReturned                Boolean               @default(false)
+  returnedAt                DateTime?
+  returnedQuantity          Int?
+  
+  // Administered by
+  administeredById          String?
+  administeredByName        String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  surgery                   Surgery               @relation("SurgeryMedicationUsage", fields: [surgeryId], references: [id])
+  
+  @@map("medication_usage_records")
+}
+
+// Post-surgery medication reconciliation
+model MedicationReconciliation {
+  id                        String                @id @default(uuid())
+  prescriptionId            String                @unique
+  surgeryId                 String                @unique
+  
+  // Reconciliation Details
+  reconciledById            String                // Usually anaesthetist or admin
+  reconciledByName          String
+  reconciledAt              DateTime              @default(now())
+  
+  // Summary
+  totalDrugsDispensed       Int
+  totalDrugsUsed            Int
+  totalDrugsToReturn        Int
+  totalDrugsReturned        Int                   @default(0)
+  totalDrugsWasted          Int                   @default(0)
+  
+  // Reconciliation items (JSON: array of { drugName, dispensed, used, remaining, returned, status })
+  reconciliationItems       String                // JSON
+  
+  // Status
+  status                    ReconciliationStatus  @default(PENDING_RETURN)
+  
+  // Return tracking
+  returnDeadline            DateTime?             // Deadline for returning medications
+  returnReminder1Sent       Boolean               @default(false)
+  returnReminder2Sent       Boolean               @default(false)
+  queryIssuedAt             DateTime?
+  queryReason               String?
+  queryResolvedAt           DateTime?
+  queryResolution           String?
+  
+  notes                     String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  surgery                   Surgery               @relation("SurgeryReconciliation", fields: [surgeryId], references: [id])
+  reconciledBy              User                  @relation("ReconciliationUser", fields: [reconciledById], references: [id])
+  medicationReturns         MedicationReturn[]
+  nonReturnQueries          MedicationNonReturnQuery[]
+  
+  @@map("medication_reconciliations")
+}
+
+// Track medication returns to pharmacy
+model MedicationReturn {
+  id                        String                @id @default(uuid())
+  reconciliationId          String
+  prescriptionId            String
+  surgeryId                 String
+  
+  // Return details
+  returnedById              String                // Anaesthetist returning
+  returnedByName            String
+  returnedAt                DateTime              @default(now())
+  
+  // Received by pharmacist
+  receivedById              String                // Pharmacist receiving
+  receivedByName            String
+  receivedAt                DateTime?
+  
+  // Items returned (JSON: array of { drugName, quantityReturned, condition, pharmacistNotes })
+  itemsReturned             String                // JSON
+  
+  // Pharmacist verification
+  pharmacistVerified        Boolean               @default(false)
+  pharmacistNotes           String?
+  
+  // Discrepancies
+  hasDiscrepancy            Boolean               @default(false)
+  discrepancyNotes          String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  reconciliation            MedicationReconciliation @relation(fields: [reconciliationId], references: [id])
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  surgery                   Surgery               @relation("SurgeryMedicationReturns", fields: [surgeryId], references: [id])
+  returnedBy                User                  @relation("MedicationReturner", fields: [returnedById], references: [id])
+  receivedBy                User                  @relation("MedicationReceiver", fields: [receivedById], references: [id])
+  
+  @@map("medication_returns")
+}
+
+// Additional medication requests during surgery (emergency top-up)
+model AdditionalMedicationRequest {
+  id                        String                @id @default(uuid())
+  prescriptionId            String                // Original prescription
+  surgeryId                 String
+  
+  // Requested by anaesthetist
+  requestedById             String
+  requestedByName           String
+  requestedAt               DateTime              @default(now())
+  
+  // Medications requested (JSON: array of { drugName, dosage, route, quantity, reason })
+  medicationsRequested      String                // JSON
+  
+  // Urgency
+  urgency                   MedicationUrgency     @default(EMERGENCY)
+  reason                    String                // Clinical reason for additional meds
+  
+  // Status
+  status                    AdditionalMedRequestStatus @default(PENDING)
+  
+  // Pharmacist response
+  acknowledgedById          String?
+  acknowledgedByName        String?
+  acknowledgedAt            DateTime?
+  
+  // Packing
+  packedById                String?
+  packedByName              String?
+  packedAt                  DateTime?
+  
+  // Collection
+  collectedAt               DateTime?
+  collectedByName           String?
+  
+  // Alert
+  alertSentAt               DateTime?
+  walkieTalkieNotified      Boolean               @default(false)
+  
+  notes                     String?
+  pharmacistNotes           String?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  surgery                   Surgery               @relation("SurgeryAdditionalMedRequests", fields: [surgeryId], references: [id])
+  requestedBy               User                  @relation("AdditionalMedRequester", fields: [requestedById], references: [id])
+  acknowledgedBy            User?                 @relation("AdditionalMedAcknowledger", fields: [acknowledgedById], references: [id])
+  packedBy                  User?                 @relation("AdditionalMedPacker", fields: [packedById], references: [id])
+  
+  @@map("additional_medication_requests")
+}
+
+// Non-return query tracking
+model MedicationNonReturnQuery {
+  id                        String                @id @default(uuid())
+  reconciliationId          String
+  prescriptionId            String
+  surgeryId                 String
+  
+  // Query target
+  queriedUserId             String                // Anaesthetist who hasn't returned meds
+  queriedUserName           String
+  
+  // Query details
+  issuedById                String                // Admin/pharmacist who raised query
+  issuedByName              String
+  issuedAt                  DateTime              @default(now())
+  
+  // Items not returned (JSON: array of { drugName, quantityExpected, quantityReturned, deficit })
+  unreturvedItems           String                // JSON
+  
+  // Deadlines
+  responseDeadline          DateTime
+  
+  // Response
+  status                    QueryStatus           @default(PENDING)
+  responseText              String?               // Anaesthetist's response/explanation
+  respondedAt               DateTime?
+  
+  // Resolution
+  resolvedById              String?
+  resolvedByName            String?
+  resolvedAt                DateTime?
+  resolution                String?               // "RETURNED", "JUSTIFIED_USAGE", "ESCALATED", "WRITTEN_OFF"
+  
+  // Escalation
+  isEscalated               Boolean               @default(false)
+  escalatedTo               String?               // HOD, CMD, etc.
+  escalatedAt               DateTime?
+  
+  // Audit
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  
+  // Relations
+  reconciliation            MedicationReconciliation @relation(fields: [reconciliationId], references: [id])
+  prescription              AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+  surgery                   Surgery               @relation("SurgeryMedicationQueries", fields: [surgeryId], references: [id])
+  queriedUser               User                  @relation("QueriedUser", fields: [queriedUserId], references: [id])
+  issuedBy                  User                  @relation("QueryIssuer", fields: [issuedById], references: [id])
+  
+  @@map("medication_non_return_queries")
+}
+
+enum ReconciliationStatus {
+  PENDING_RETURN
+  PARTIALLY_RETURNED
+  FULLY_RETURNED
+  QUERY_ISSUED
+  QUERY_RESOLVED
+  CLOSED
+}
+
+enum AdditionalMedRequestStatus {
+  PENDING
+  ACKNOWLEDGED
+  PACKING
+  PACKED
+  COLLECTED
+  CANCELLED
+}
+
+enum QueryStatus {
+  PENDING
+  RESPONDED
+  UNDER_REVIEW
+  RESOLVED
+  ESCALATED
 }

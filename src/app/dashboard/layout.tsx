@@ -43,6 +43,7 @@ import {
   Wrench,
   Phone,
   ClipboardPlus,
+  Pill,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -104,6 +105,7 @@ export default function DashboardLayout({
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
+    { href: '/dashboard/medication-tracking', icon: Pill, label: 'Med Tracking', badge: 'NEW' },
 
     // === POST-OPERATIVE ===
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
@@ -143,7 +145,7 @@ export default function DashboardLayout({
   // Role-based menu filtering — show only relevant items per role
   // Roles NOT listed here see ALL menu items (e.g. ADMIN, SURGEON, ANESTHETIST, NURSE, etc.)
   const roleMenuMap: Record<string, string[]> = {
-    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/emergency-booking', '/dashboard/settings'],
+    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/medication-tracking', '/dashboard/emergency-booking', '/dashboard/settings'],
     LAUNDRY_SUPERVISOR: ['/dashboard', '/dashboard/laundry-supervisor', '/dashboard/settings'],
     CSSD_SUPERVISOR: ['/dashboard', '/dashboard/cssd-supervisor', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
     OXYGEN_UNIT_SUPERVISOR: ['/dashboard', '/dashboard/oxygen-supervisor', '/dashboard/oxygen-control', '/dashboard/settings'],
