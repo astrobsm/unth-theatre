@@ -44,6 +44,7 @@ import {
   Phone,
   ClipboardPlus,
   Pill,
+  MonitorPlay,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -132,6 +133,7 @@ export default function DashboardLayout({
     // === REPORTS & ADMINISTRATION ===
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
+    { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
