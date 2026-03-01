@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     let totalReturned = 0;
 
     for (const returnItem of data.itemsReturned) {
-      const usageRecord = usageRecords.find((r) => r.drugName === returnItem.drugName);
+      const usageRecord = usageRecords.find((r: any) => r.drugName === returnItem.drugName);
       if (usageRecord) {
         if (returnItem.quantityReturned !== usageRecord.quantityRemaining) {
           hasDiscrepancy = true;
@@ -89,8 +89,8 @@ export async function POST(request: NextRequest) {
 
     // Update reconciliation
     const allReturned = usageRecords
-      .filter((r) => r.isReturnRequired)
-      .every((r) => {
+      .filter((r: any) => r.isReturnRequired)
+      .every((r: any) => {
         const returnItem = data.itemsReturned.find((ri) => ri.drugName === r.drugName);
         return returnItem && returnItem.quantityReturned >= r.quantityRemaining;
       });
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     if (hasDiscrepancy) {
       const unreturvedItems = data.itemsReturned
         .map((ri) => {
-          const usageRecord = usageRecords.find((r) => r.drugName === ri.drugName);
+          const usageRecord = usageRecords.find((r: any) => r.drugName === ri.drugName);
           if (usageRecord && ri.quantityReturned < usageRecord.quantityRemaining) {
             return {
               drugName: ri.drugName,

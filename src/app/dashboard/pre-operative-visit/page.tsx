@@ -270,6 +270,7 @@ export default function PreOperativeVisitPage() {
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                title="Surgery date"
               />
             </div>
             <button
@@ -289,7 +290,7 @@ export default function PreOperativeVisitPage() {
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           {error}
-          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700">
+          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700" title="Dismiss error">
             <XCircle className="w-4 h-4" />
           </button>
         </div>
@@ -311,6 +312,7 @@ export default function PreOperativeVisitPage() {
             <button
               onClick={() => { setSelectedSurgery(null); resetForm(); }}
               className="text-gray-400 hover:text-gray-600"
+              title="Close assessment form"
             >
               <XCircle className="w-6 h-6" />
             </button>
@@ -359,6 +361,7 @@ export default function PreOperativeVisitPage() {
                 value={formData.surgicalFeePaymentStatus}
                 onChange={(e) => setFormData(p => ({ ...p, surgicalFeePaymentStatus: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                title="Surgical fee payment status"
               >
                 {PAYMENT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -373,6 +376,7 @@ export default function PreOperativeVisitPage() {
                 value={formData.consentStatus}
                 onChange={(e) => setFormData(p => ({ ...p, consentStatus: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                title="Consent status"
               >
                 {CONSENT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -425,6 +429,7 @@ export default function PreOperativeVisitPage() {
                 value={formData.npoStatus}
                 onChange={(e) => setFormData(p => ({ ...p, npoStatus: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                title="NPO status"
               >
                 {NPO_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -474,6 +479,7 @@ export default function PreOperativeVisitPage() {
                 value={formData.patientEmotionalReadiness}
                 onChange={(e) => setFormData(p => ({ ...p, patientEmotionalReadiness: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                title="Patient emotional readiness"
               >
                 {EMOTIONAL_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>

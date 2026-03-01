@@ -278,6 +278,7 @@ export default function PreOpReviewsPage() {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="border border-gray-300 rounded-md px-3 py-2"
+                title="Filter by status"
               >
                 <option value="ALL">All Status</option>
                 <option value="PENDING">Pending</option>
@@ -295,6 +296,7 @@ export default function PreOpReviewsPage() {
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
                 className="border border-gray-300 rounded-md px-3 py-2"
+                title="Filter by surgery date"
               />
             </div>
           </div>
@@ -648,6 +650,7 @@ export default function PreOpReviewsPage() {
                           value={med.route}
                           onChange={(e) => updateMedication(index, 'route', e.target.value)}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          title="Medication route"
                         >
                           <option value="IV">IV (Intravenous)</option>
                           <option value="IM">IM (Intramuscular)</option>
@@ -679,6 +682,7 @@ export default function PreOpReviewsPage() {
                           value={med.timing}
                           onChange={(e) => updateMedication(index, 'timing', e.target.value)}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          title="Medication timing"
                         >
                           <option value="PRE_OP">Pre-Operative</option>
                           <option value="INTRA_OP">Intra-Operative</option>
@@ -696,6 +700,7 @@ export default function PreOpReviewsPage() {
                           value={med.quantity}
                           onChange={(e) => updateMedication(index, 'quantity', parseInt(e.target.value) || 1)}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          title="Medication quantity"
                         />
                       </div>
                     </div>
@@ -732,6 +737,7 @@ export default function PreOpReviewsPage() {
                   value={rxUrgency}
                   onChange={(e) => setRxUrgency(e.target.value as any)}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  title="Prescription urgency"
                 >
                   <option value="ROUTINE">Routine</option>
                   <option value="URGENT">Urgent</option>

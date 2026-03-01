@@ -1077,6 +1077,7 @@ export default function MedicationTrackingPage() {
                   <button
                     onClick={() => setAdminQty(Math.max(1, adminQty - 1))}
                     className="p-1 border rounded hover:bg-gray-100"
+                    title="Decrease quantity"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
@@ -1087,10 +1088,12 @@ export default function MedicationTrackingPage() {
                     className="w-20 text-center border rounded p-2"
                     min={1}
                     max={administerModal.record.quantityRemaining}
+                    title="Quantity to administer"
                   />
                   <button
                     onClick={() => setAdminQty(Math.min(administerModal.record.quantityRemaining, adminQty + 1))}
                     className="p-1 border rounded hover:bg-gray-100"
+                    title="Increase quantity"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -1145,6 +1148,7 @@ export default function MedicationTrackingPage() {
                   value={additionalUrgency}
                   onChange={(e) => setAdditionalUrgency(e.target.value as any)}
                   className="w-full border rounded p-2 mt-1"
+                  title="Urgency level"
                 >
                   <option value="EMERGENCY">🚨 EMERGENCY</option>
                   <option value="URGENT">⚠️ URGENT</option>
@@ -1191,6 +1195,7 @@ export default function MedicationTrackingPage() {
                     <select
                       className="col-span-2 border rounded p-1.5 text-sm"
                       value={med.route}
+                      title="Medication route"
                       onChange={(e) => {
                         const next = [...additionalMeds];
                         next[idx].route = e.target.value;
@@ -1231,6 +1236,7 @@ export default function MedicationTrackingPage() {
                       onClick={() => setAdditionalMeds(additionalMeds.filter((_, i) => i !== idx))}
                       className="col-span-1 text-red-500 hover:text-red-700 text-center"
                       disabled={additionalMeds.length <= 1}
+                      title="Remove medication"
                     >
                       <XCircle className="w-4 h-4 mx-auto" />
                     </button>
@@ -1307,6 +1313,7 @@ export default function MedicationTrackingPage() {
                       className="col-span-2 border rounded p-1.5 text-sm"
                       type="number"
                       value={item.quantityReturned}
+                      title="Quantity returned"
                       onChange={(e) => {
                         const next = [...returnItems];
                         next[idx].quantityReturned = parseInt(e.target.value) || 0;
@@ -1317,6 +1324,7 @@ export default function MedicationTrackingPage() {
                     <select
                       className="col-span-3 border rounded p-1.5 text-sm"
                       value={item.condition}
+                      title="Return condition"
                       onChange={(e) => {
                         const next = [...returnItems];
                         next[idx].condition = e.target.value;

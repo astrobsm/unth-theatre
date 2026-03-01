@@ -1105,6 +1105,7 @@ export default function NewPreOpReviewPage() {
                               type="button"
                               onClick={() => removeMedication(med.id)}
                               className="text-red-500 hover:text-red-700"
+                              title="Remove medication"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

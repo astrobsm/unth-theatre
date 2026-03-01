@@ -178,7 +178,7 @@ export default function NewSurgeryPage() {
                 onChange={(e) => setSearchPatient(e.target.value)}
                 className="input-field mb-2"
               />
-              <select name="patientId" required className="input-field">
+              <select name="patientId" required className="input-field" title="Select Patient">
                 <option value="">Select Patient</option>
                 {filteredPatients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
@@ -391,6 +391,7 @@ export default function NewSurgeryPage() {
                 name="scheduledDate"
                 required
                 className="input-field"
+                title="Surgery date"
                 min={new Date().toISOString().split('T')[0]}
               />
             </div>
@@ -402,6 +403,7 @@ export default function NewSurgeryPage() {
                 name="scheduledTime"
                 required
                 className="input-field"
+                title="Surgery time"
               />
             </div>
 
@@ -520,6 +522,7 @@ export default function NewSurgeryPage() {
                           type="button"
                           onClick={() => removeTeamMember(index)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded"
+                          title="Remove team member"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -561,6 +564,7 @@ export default function NewSurgeryPage() {
                           type="button"
                           onClick={() => removeTeamMember(index)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded"
+                          title="Remove team member"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -602,6 +606,7 @@ export default function NewSurgeryPage() {
                           type="button"
                           onClick={() => removeTeamMember(index)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded"
+                          title="Remove team member"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -643,6 +648,7 @@ export default function NewSurgeryPage() {
                           type="button"
                           onClick={() => removeTeamMember(index)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded"
+                          title="Remove team member"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>

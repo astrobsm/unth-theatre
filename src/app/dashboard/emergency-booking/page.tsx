@@ -546,6 +546,7 @@ export default function EmergencyBookingPage() {
                         <button
                           onClick={() => fetchTeamAvailability(booking.id)}
                           className="text-blue-600 hover:text-blue-800"
+                          title="Refresh team availability"
                         >
                           <RefreshCw className="h-4 w-4" />
                         </button>
@@ -800,6 +801,7 @@ export default function EmergencyBookingPage() {
                   value={reviewForm.airwayAssessment}
                   onChange={e => setReviewForm(f => ({ ...f, airwayAssessment: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm"
+                  title="Airway Assessment"
                 >
                   <option value="">Select...</option>
                   <option>Mallampati I</option>
@@ -817,6 +819,7 @@ export default function EmergencyBookingPage() {
                   value={reviewForm.asaClassification}
                   onChange={e => setReviewForm(f => ({ ...f, asaClassification: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm"
+                  title="ASA Classification"
                 >
                   <option value="">Select...</option>
                   <option>ASA I - Normal healthy</option>
@@ -882,6 +885,7 @@ export default function EmergencyBookingPage() {
                   value={reviewForm.patientNPOStatus}
                   onChange={e => setReviewForm(f => ({ ...f, patientNPOStatus: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm"
+                  title="NPO / Fasting Status"
                 >
                   <option value="">Select...</option>
                   <option>NPO &gt; 8 hours</option>
@@ -910,6 +914,7 @@ export default function EmergencyBookingPage() {
                   value={reviewForm.crossMatchStatus}
                   onChange={e => setReviewForm(f => ({ ...f, crossMatchStatus: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm"
+                  title="Cross-Match Status"
                 >
                   <option value="">Select...</option>
                   <option>Completed - Compatible</option>
@@ -938,6 +943,7 @@ export default function EmergencyBookingPage() {
                   value={reviewForm.anaestheticPlan}
                   onChange={e => setReviewForm(f => ({ ...f, anaestheticPlan: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm"
+                  title="Anaesthetic Plan"
                 >
                   <option value="">Select plan...</option>
                   <option>General Anaesthesia - ETT</option>

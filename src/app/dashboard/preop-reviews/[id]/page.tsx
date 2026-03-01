@@ -450,6 +450,7 @@ export default function PreOpReviewDetailPage() {
                           value={med.route}
                           onChange={(e) => updateMedication(index, 'route', e.target.value)}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          title="Medication route"
                         >
                           <option value="IV">IV (Intravenous)</option>
                           <option value="IM">IM (Intramuscular)</option>
@@ -481,6 +482,7 @@ export default function PreOpReviewDetailPage() {
                           value={med.timing}
                           onChange={(e) => updateMedication(index, 'timing', e.target.value)}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          title="Medication timing"
                         >
                           <option value="PRE_OP">Pre-Operative</option>
                           <option value="INTRA_OP">Intra-Operative</option>
@@ -498,6 +500,7 @@ export default function PreOpReviewDetailPage() {
                           value={med.quantity}
                           onChange={(e) => updateMedication(index, 'quantity', parseInt(e.target.value) || 1)}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          title="Medication quantity"
                         />
                       </div>
                     </div>
@@ -534,6 +537,7 @@ export default function PreOpReviewDetailPage() {
                   value={rxUrgency}
                   onChange={(e) => setRxUrgency(e.target.value as any)}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  title="Prescription urgency"
                 >
                   <option value="ROUTINE">Routine</option>
                   <option value="URGENT">Urgent</option>

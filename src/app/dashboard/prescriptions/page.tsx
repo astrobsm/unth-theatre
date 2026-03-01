@@ -591,9 +591,13 @@ export default function PrescriptionsPage() {
                 <span>Packing Progress</span>
                 <span>{medicationItems.filter(m => m.isPacked || m.isOutOfStock).length} / {medicationItems.length}</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div 
                   className="bg-green-500 h-2 rounded-full transition-all"
+                  role="progressbar"
+                  aria-valuenow={medicationItems.length > 0 ? Math.round((medicationItems.filter(m => m.isPacked || m.isOutOfStock).length / medicationItems.length) * 100) : 0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
                   style={{ width: `${medicationItems.length > 0 ? (medicationItems.filter(m => m.isPacked || m.isOutOfStock).length / medicationItems.length) * 100 : 0}%` }}
                 ></div>
               </div>

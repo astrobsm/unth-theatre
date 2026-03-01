@@ -158,11 +158,11 @@ export async function GET(request: NextRequest) {
 
     // Calculate summary
     const summary = {
-      totalDispensed: usageRecords.reduce((sum, r) => sum + r.quantityDispensed, 0),
-      totalAdministered: usageRecords.reduce((sum, r) => sum + r.quantityAdministered, 0),
-      totalWasted: usageRecords.reduce((sum, r) => sum + r.quantityWasted, 0),
-      totalRemaining: usageRecords.reduce((sum, r) => sum + r.quantityRemaining, 0),
-      itemsRequiringReturn: usageRecords.filter((r) => r.isReturnRequired && !r.isReturned).length,
+      totalDispensed: usageRecords.reduce((sum: number, r: any) => sum + r.quantityDispensed, 0),
+      totalAdministered: usageRecords.reduce((sum: number, r: any) => sum + r.quantityAdministered, 0),
+      totalWasted: usageRecords.reduce((sum: number, r: any) => sum + r.quantityWasted, 0),
+      totalRemaining: usageRecords.reduce((sum: number, r: any) => sum + r.quantityRemaining, 0),
+      itemsRequiringReturn: usageRecords.filter((r: any) => r.isReturnRequired && !r.isReturned).length,
     };
 
     return NextResponse.json({ usageRecords, summary });

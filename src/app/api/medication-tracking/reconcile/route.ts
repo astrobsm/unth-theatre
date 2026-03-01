@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Build reconciliation items
-    const reconciliationItems = usageRecords.map((r) => ({
+    const reconciliationItems = usageRecords.map((r: any) => ({
       drugName: r.drugName,
       dosage: r.dosage,
       route: r.route,
@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
       status: r.quantityRemaining > 0 ? 'PENDING_RETURN' : 'FULLY_USED',
     }));
 
-    const totalDispensed = usageRecords.reduce((sum, r) => sum + r.quantityDispensed, 0);
-    const totalUsed = usageRecords.reduce((sum, r) => sum + r.quantityAdministered, 0);
-    const totalToReturn = usageRecords.reduce((sum, r) => sum + r.quantityRemaining, 0);
-    const totalWasted = usageRecords.reduce((sum, r) => sum + r.quantityWasted, 0);
+    const totalDispensed = usageRecords.reduce((sum: number, r: any) => sum + r.quantityDispensed, 0);
+    const totalUsed = usageRecords.reduce((sum: number, r: any) => sum + r.quantityAdministered, 0);
+    const totalToReturn = usageRecords.reduce((sum: number, r: any) => sum + r.quantityRemaining, 0);
+    const totalWasted = usageRecords.reduce((sum: number, r: any) => sum + r.quantityWasted, 0);
 
     // Set return deadline: 2 hours after reconciliation
     const returnDeadline = new Date();
