@@ -182,10 +182,10 @@ export default function CancellationsPage() {
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {cancellation.surgery.patient.name}
+                          {cancellation.surgery?.patient?.name || 'Unknown Patient'}
                         </h3>
                         <p className="text-sm text-gray-600">
-                          {cancellation.surgery.patient.folderNumber}
+                          {cancellation.surgery?.patient?.folderNumber || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-700 mt-1">
                           <span className="font-medium">Procedure:</span>{' '}

@@ -109,9 +109,11 @@ export default function SurgeriesPage() {
   }, [fetchSurgeries]);
 
   const filteredSurgeries = Array.isArray(surgeries) ? surgeries.filter(surgery => {
+    const patientName = surgery.patient?.name || '';
+    const folderNumber = surgery.patient?.folderNumber || '';
     const matchesSearch = 
-      surgery.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      surgery.patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       surgery.procedureName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || surgery.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -246,10 +248,10 @@ export default function SurgeriesPage() {
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {surgery.patient.name}
+                        {surgery.patient?.name || 'Unknown Patient'}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {surgery.patient.folderNumber}
+                        {surgery.patient?.folderNumber || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4">

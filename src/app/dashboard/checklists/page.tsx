@@ -186,10 +186,10 @@ export default function ChecklistsPage() {
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {checklist.surgery.patient.name}
+                          {checklist.surgery?.patient?.name || 'Unknown Patient'}
                         </h3>
                         <p className="text-sm text-gray-600">
-                          {checklist.surgery.patient.folderNumber}
+                          {checklist.surgery?.patient?.folderNumber || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-700 mt-1">
                           <span className="font-medium">Procedure:</span>{' '}
