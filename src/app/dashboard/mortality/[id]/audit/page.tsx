@@ -190,9 +190,9 @@ export default function MortalityAuditPage() {
             <Heart className="w-8 h-8 text-red-600" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-gray-900">{mortality.patient.name}</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{mortality.patient?.name || 'Unknown Patient'}</h2>
             <p className="text-gray-700">
-              {mortality.patient.folderNumber} | {mortality.patient.age} years | {mortality.patient.gender}
+              {mortality.patient?.folderNumber || 'N/A'} | {mortality.patient?.age || 'N/A'} years | {mortality.patient?.gender || 'N/A'}
             </p>
           </div>
         </div>

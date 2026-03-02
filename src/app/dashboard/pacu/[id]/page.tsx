@@ -412,7 +412,7 @@ export default function PACUAssessmentDetailPage() {
             PACU Recovery Monitoring
           </h1>
           <p className="text-gray-600 mt-1">
-            {assessment.patient.name} - {assessment.patient.folderNumber}
+            {assessment.patient?.name || 'Unknown Patient'} - {assessment.patient?.folderNumber || 'N/A'}
           </p>
         </div>
         
@@ -465,11 +465,11 @@ export default function PACUAssessmentDetailPage() {
           </div>
           <div>
             <span className="text-gray-600">Age/Gender:</span>
-            <p className="font-medium">{assessment.patient.age}y / {assessment.patient.gender}</p>
+            <p className="font-medium">{assessment.patient?.age || 'N/A'}y / {assessment.patient?.gender || 'N/A'}</p>
           </div>
           <div>
             <span className="text-gray-600">Ward:</span>
-            <p className="font-medium">{assessment.patient.ward}</p>
+            <p className="font-medium">{assessment.patient?.ward || 'N/A'}</p>
           </div>
         </div>
       </div>
@@ -566,19 +566,19 @@ export default function PACUAssessmentDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Name:</span>
-                <span className="font-medium">{assessment.patient.name}</span>
+                <span className="font-medium">{assessment.patient?.name || 'Unknown Patient'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Folder Number:</span>
-                <span className="font-medium">{assessment.patient.folderNumber}</span>
+                <span className="font-medium">{assessment.patient?.folderNumber || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Age/Gender:</span>
-                <span className="font-medium">{assessment.patient.age}y / {assessment.patient.gender}</span>
+                <span className="font-medium">{assessment.patient?.age || 'N/A'}y / {assessment.patient?.gender || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Ward:</span>
-                <span className="font-medium">{assessment.patient.ward}</span>
+                <span className="font-medium">{assessment.patient?.ward || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Procedure:</span>

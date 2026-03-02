@@ -473,7 +473,7 @@ export default function AnesthesiaMonitoringPage() {
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mt-4">WHO Anesthesia Monitoring Record</h1>
         <p className="text-gray-600 mt-2">
-          {record.surgery.procedureName} - {record.surgery.patient.name} ({record.surgery.patient.age}y, {record.surgery.patient.gender})
+          {record.surgery.procedureName} - {record.surgery?.patient?.name || 'Unknown Patient'} ({record.surgery?.patient?.age || 'N/A'}y, {record.surgery?.patient?.gender || 'N/A'})
         </p>
       </div>
 

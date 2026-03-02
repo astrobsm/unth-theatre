@@ -100,8 +100,8 @@ export default function NewMortalityPage() {
 
   const filteredSurgeries = surgeries.filter(
     (surgery) =>
-      surgery.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      surgery.patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      surgery.patient?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      surgery.patient?.folderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       surgery.surgeryType.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -156,7 +156,7 @@ export default function NewMortalityPage() {
                 <option value="">Select Surgery</option>
                 {filteredSurgeries.map((surgery) => (
                   <option key={surgery.id} value={surgery.id}>
-                    {surgery.patient.name} ({surgery.patient.folderNumber}) - {surgery.surgeryType} - {new Date(surgery.scheduledDate).toLocaleDateString()}
+                    {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'}) - {surgery.surgeryType} - {new Date(surgery.scheduledDate).toLocaleDateString()}
                   </option>
                 ))}
               </select>
@@ -164,11 +164,11 @@ export default function NewMortalityPage() {
 
             {selectedSurgery && (
               <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg">
-                <h3 className="font-semibold text-lg mb-2">{selectedSurgery.patient.name}</h3>
+                <h3 className="font-semibold text-lg mb-2">{selectedSurgery.patient?.name || 'Unknown Patient'}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700">
-                  <p><span className="font-medium">Folder Number:</span> {selectedSurgery.patient.folderNumber}</p>
-                  <p><span className="font-medium">Age:</span> {selectedSurgery.patient.age} years</p>
-                  <p><span className="font-medium">Gender:</span> {selectedSurgery.patient.gender}</p>
+                  <p><span className="font-medium">Folder Number:</span> {selectedSurgery.patient?.folderNumber || 'N/A'}</p>
+                  <p><span className="font-medium">Age:</span> {selectedSurgery.patient?.age || 'N/A'} years</p>
+                  <p><span className="font-medium">Gender:</span> {selectedSurgery.patient?.gender || 'N/A'}</p>
                   <p><span className="font-medium">Procedure:</span> {selectedSurgery.surgeryType}</p>
                   <p><span className="font-medium">Surgeon:</span> {selectedSurgery.surgeon?.fullName || 'Not assigned'}</p>
                   <p><span className="font-medium">Date:</span> {new Date(selectedSurgery.scheduledDate).toLocaleDateString()}</p>

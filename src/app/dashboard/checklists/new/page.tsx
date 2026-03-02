@@ -127,8 +127,8 @@ export default function NewChecklistPage() {
 
   const filteredSurgeries = surgeries.filter(
     (s) =>
-      s.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.patient?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.patient?.folderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.procedureName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -228,9 +228,9 @@ export default function NewChecklistPage() {
     doc.setFont('helvetica', 'normal');
     
     const patientInfo = [
-      ['Patient Name:', selectedSurgery.patient.name],
-      ['Folder Number:', selectedSurgery.patient.folderNumber],
-      ['Age/Gender:', `${selectedSurgery.patient.age} years / ${selectedSurgery.patient.gender}`],
+      ['Patient Name:', selectedSurgery.patient?.name || 'Unknown'],
+      ['Folder Number:', selectedSurgery.patient?.folderNumber || 'N/A'],
+      ['Age/Gender:', `${selectedSurgery.patient?.age || 'N/A'} years / ${selectedSurgery.patient?.gender || 'N/A'}`],
       ['Procedure:', selectedSurgery.procedureName],
       ['Surgeon:', selectedSurgery.surgeon?.fullName || 'Not assigned'],
       ['Unit:', selectedSurgery.unit],
@@ -394,7 +394,7 @@ export default function NewChecklistPage() {
     }
 
     // Save PDF
-    const fileName = `WHO_Checklist_${selectedSurgery.patient.folderNumber}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const fileName = `WHO_Checklist_${selectedSurgery.patient?.folderNumber || 'unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
   };
 
@@ -472,8 +472,8 @@ export default function NewChecklistPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{surgery.patient.name}</h3>
-                      <p className="text-sm text-gray-600">{surgery.patient.folderNumber}</p>
+                      <h3 className="font-semibold text-gray-900">{surgery.patient?.name || 'Unknown Patient'}</h3>
+                      <p className="text-sm text-gray-600">{surgery.patient?.folderNumber || 'N/A'}</p>
                       <p className="text-sm text-gray-700 mt-1">{surgery.procedureName}</p>
                       <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                         <User className="w-3 h-3" />

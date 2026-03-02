@@ -119,9 +119,9 @@ export default function SurgeryBOMPage() {
     doc.setFont('helvetica', 'normal');
 
     const patientInfo = [
-      ['Patient Name:', bom.patient.name],
-      ['Folder Number:', bom.patient.folderNumber],
-      ['Age/Gender:', `${bom.patient.age} years / ${bom.patient.gender}`],
+      ['Patient Name:', bom.patient?.name || 'Unknown'],
+      ['Folder Number:', bom.patient?.folderNumber || 'N/A'],
+      ['Age/Gender:', `${bom.patient?.age || 'N/A'} years / ${bom.patient?.gender || 'N/A'}`],
       ['Procedure:', bom.procedureName],
       ['Surgeon:', bom.surgeon?.fullName || 'Not assigned'],
       ['Unit/Department:', bom.unit],
@@ -149,8 +149,8 @@ export default function SurgeryBOMPage() {
 
     const tableData = bom.items.map((item, index) => [
       (index + 1).toString(),
-      item.item.name,
-      item.item.category,
+      item.item?.name || 'Unknown Item',
+      item.item?.category || 'Uncategorized',
       item.quantity.toString(),
       `₦${item.unitCost.toLocaleString()}`,
       `₦${item.totalCost.toLocaleString()}`,
@@ -355,16 +355,16 @@ export default function SurgeryBOMPage() {
           <div className="space-y-3">
             <div>
               <label className="text-sm text-gray-600">Patient Name</label>
-              <p className="font-semibold text-gray-900">{bom.patient.name}</p>
+              <p className="font-semibold text-gray-900">{bom.patient?.name || 'Unknown Patient'}</p>
             </div>
             <div>
               <label className="text-sm text-gray-600">Folder Number</label>
-              <p className="font-semibold text-gray-900">{bom.patient.folderNumber}</p>
+              <p className="font-semibold text-gray-900">{bom.patient?.folderNumber || 'N/A'}</p>
             </div>
             <div>
               <label className="text-sm text-gray-600">Age / Gender</label>
               <p className="font-semibold text-gray-900">
-                {bom.patient.age} years / {bom.patient.gender}
+                {bom.patient?.age || 'N/A'} years / {bom.patient?.gender || 'N/A'}
               </p>
             </div>
             <div>
@@ -490,12 +490,12 @@ export default function SurgeryBOMPage() {
                   <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
                   <td className="px-4 py-3">
                     <div className="text-sm font-medium text-gray-900">
-                      {item.item.name}
+                      {item.item?.name || 'Unknown Item'}
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">
-                      {item.item.category}
+                      {item.item?.category || 'Uncategorized'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -575,7 +575,7 @@ export default function SurgeryBOMPage() {
         <div className="space-y-3">
           {Object.entries(
             bom.items.reduce((acc, item) => {
-              const category = item.item.category;
+              const category = item.item?.category || 'Uncategorized';
               if (!acc[category]) {
                 acc[category] = { count: 0, total: 0 };
               }

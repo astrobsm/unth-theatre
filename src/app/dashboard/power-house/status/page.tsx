@@ -208,7 +208,7 @@ export default function PowerHouseStatusPage() {
             )}
 
             <div className="mt-4 text-xs text-gray-500">
-              Last updated: {new Date(currentStatus.timestamp).toLocaleString()} by {currentStatus.recordedBy.name}
+              Last updated: {new Date(currentStatus.timestamp).toLocaleString()} by {currentStatus.recordedBy?.name || 'Unknown'}
             </div>
           </div>
         </div>
@@ -255,7 +255,7 @@ export default function PowerHouseStatusPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {status.recordedBy.name}
+                  {status.recordedBy?.name || 'Unknown'}
                 </td>
               </tr>
             ))}

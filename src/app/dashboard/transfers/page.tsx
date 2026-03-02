@@ -86,8 +86,8 @@ export default function TransfersPage() {
       transfer.fromLocation === filterLocation || 
       transfer.toLocation === filterLocation;
     const matchesPatient = !filterPatient || 
-      transfer.patient.name.toLowerCase().includes(filterPatient.toLowerCase()) ||
-      transfer.patient.folderNumber.toLowerCase().includes(filterPatient.toLowerCase());
+      transfer.patient?.name?.toLowerCase().includes(filterPatient.toLowerCase()) ||
+      transfer.patient?.folderNumber?.toLowerCase().includes(filterPatient.toLowerCase()) || false;
     return matchesLocation && matchesPatient;
   }) : [];
 
@@ -164,8 +164,8 @@ export default function TransfersPage() {
                       <User className="w-6 h-6 text-primary-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg text-gray-900">{transfer.patient.name}</h3>
-                      <p className="text-sm text-gray-600">Folder: {transfer.patient.folderNumber}</p>
+                      <h3 className="font-semibold text-lg text-gray-900">{transfer.patient?.name || 'Unknown Patient'}</h3>
+                      <p className="text-sm text-gray-600">Folder: {transfer.patient?.folderNumber || 'N/A'}</p>
                     </div>
                   </div>
                   

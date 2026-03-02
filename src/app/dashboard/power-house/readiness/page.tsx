@@ -222,7 +222,7 @@ export default function PowerReadinessPage() {
                     {report.overallReadinessStatus}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.reportedBy.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.reportedBy?.name || 'Unknown'}</td>
               </tr>
             ))}
           </tbody>

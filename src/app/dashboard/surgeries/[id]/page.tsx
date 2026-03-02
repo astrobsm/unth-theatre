@@ -185,22 +185,22 @@ export default function SurgeryDetailPage() {
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium text-gray-500">Name</label>
-              <p className="text-gray-900 font-medium">{surgery.patient.name}</p>
+              <p className="text-gray-900 font-medium">{surgery.patient?.name || 'Unknown Patient'}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-500">Folder Number</label>
-                <p className="text-gray-900">{surgery.patient.folderNumber}</p>
+                <p className="text-gray-900">{surgery.patient?.folderNumber || 'N/A'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Age</label>
-                <p className="text-gray-900">{surgery.patient.age} years</p>
+                <p className="text-gray-900">{surgery.patient?.age || 'N/A'} years</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-500">Gender</label>
-                <p className="text-gray-900">{surgery.patient.gender}</p>
+                <p className="text-gray-900">{surgery.patient?.gender || 'N/A'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Ward</label>

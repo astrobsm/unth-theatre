@@ -114,10 +114,10 @@ export default function SurgeryConsumablesPage() {
         
         // Convert to inventory format for the dropdown
         const inventoryFromSetup = allItems.map((item: TheatreSetupItem) => ({
-          id: item.inventoryItem.id,
-          name: item.inventoryItem.name,
-          category: item.inventoryItem.category,
-          unitCostPrice: item.inventoryItem.unitCostPrice,
+          id: item.inventoryItem?.id,
+          name: item.inventoryItem?.name || 'Unknown Item',
+          category: item.inventoryItem?.category,
+          unitCostPrice: item.inventoryItem?.unitCostPrice || 0,
           quantityAvailable: item.quantityTaken,
         }));
         
@@ -310,8 +310,8 @@ export default function SurgeryConsumablesPage() {
             <Package className="w-8 h-8 text-primary-600" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-gray-900">{surgery.patient.name}</h2>
-            <p className="text-gray-700">Folder: {surgery.patient.folderNumber}</p>
+            <h2 className="text-2xl font-bold text-gray-900">{surgery.patient?.name || 'Unknown Patient'}</h2>
+            <p className="text-gray-700">Folder: {surgery.patient?.folderNumber || 'N/A'}</p>
             <p className="text-gray-700 mt-1">
               <span className="font-semibold">Procedure:</span> {surgery.surgeryType} | 
               <span className="font-semibold"> Surgeon:</span> {surgery.surgeon?.fullName || 'Not assigned'}
@@ -337,11 +337,11 @@ export default function SurgeryConsumablesPage() {
               <tbody>
                 {existingConsumables.map((item) => (
                   <tr key={item.id} className="border-b border-gray-100">
-                    <td className="py-3">{item.inventoryItem.name}</td>
+                    <td className="py-3">{item.inventoryItem?.name || 'Unknown'}</td>
                     <td className="py-3">{item.quantity}</td>
-                    <td className="py-3 text-right">₦{item.inventoryItem.unitCostPrice.toLocaleString()}</td>
+                    <td className="py-3 text-right">₦{(item.inventoryItem?.unitCostPrice || 0).toLocaleString()}</td>
                     <td className="py-3 text-right font-semibold">
-                      ₦{(item.inventoryItem.unitCostPrice * item.quantity).toLocaleString()}
+                      ₦{((item.inventoryItem?.unitCostPrice || 0) * item.quantity).toLocaleString()}
                     </td>
                   </tr>
                 ))}

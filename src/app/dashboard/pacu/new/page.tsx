@@ -155,7 +155,7 @@ export default function NewPACUAssessment() {
             <option value="">-- Select a surgery --</option>
             {surgeries.map((surgery) => (
               <option key={surgery.id} value={surgery.id}>
-                {surgery.patient.name} ({surgery.patient.folderNumber}) - {surgery.procedureName} -{' '}
+                {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'}) - {surgery.procedureName} -{' '}
                 {new Date(surgery.scheduledDate).toLocaleDateString()}
               </option>
             ))}

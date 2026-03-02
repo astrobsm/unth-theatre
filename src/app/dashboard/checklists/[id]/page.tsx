@@ -284,8 +284,8 @@ export default function WHOChecklistPage() {
             <User className="w-8 h-8 text-primary-600" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-gray-900">{surgery.patient.name}</h2>
-            <p className="text-gray-700">Folder: {surgery.patient.folderNumber} | {surgery.patient.age} years | {surgery.patient.gender}</p>
+            <h2 className="text-2xl font-bold text-gray-900">{surgery.patient?.name || 'Unknown Patient'}</h2>
+            <p className="text-gray-700">Folder: {surgery.patient?.folderNumber || 'N/A'} | {surgery.patient?.age || 'N/A'} years | {surgery.patient?.gender || 'N/A'}</p>
             <p className="text-gray-700 mt-1">
               <span className="font-semibold">Procedure:</span> {surgery.surgeryType} | 
               <span className="font-semibold"> Surgeon:</span> {surgery.surgeon?.fullName || 'Not assigned'}

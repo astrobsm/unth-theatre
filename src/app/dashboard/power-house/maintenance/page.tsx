@@ -150,7 +150,7 @@ export default function PowerMaintenancePage() {
                     {log.maintenanceStatus}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.technician.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.technician?.name || 'Unknown'}</td>
               </tr>
             ))}
           </tbody>

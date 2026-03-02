@@ -447,7 +447,7 @@ export default function BOMAnalyticsPage() {
                 <tr key={surgery.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <span className="text-sm font-medium text-gray-900">
-                      {surgery.patient.name}
+                      {surgery.patient?.name || 'Unknown Patient'}
                     </span>
                   </td>
                   <td className="px-4 py-3">

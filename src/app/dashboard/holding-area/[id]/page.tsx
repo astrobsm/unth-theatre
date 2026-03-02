@@ -209,7 +209,7 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
               Holding Area Assessment
             </h1>
             <p className="text-gray-600">
-              {assessment.patient.name} • {assessment.patient.folderNumber}
+              {assessment.patient?.name || 'Unknown Patient'} • {assessment.patient?.folderNumber || 'N/A'}
             </p>
           </div>
           <div className="flex gap-2">

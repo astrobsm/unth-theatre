@@ -194,7 +194,7 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
         </button>
         <h1 className="text-3xl font-bold text-gray-900">Surgical Timing</h1>
         <p className="text-gray-600 mt-2">
-          {timing?.surgery.patient.name} ({timing?.surgery.patient.folderNumber}) - {timing?.surgery.procedureName}
+          {timing?.surgery?.patient?.name || 'Unknown Patient'} ({timing?.surgery?.patient?.folderNumber || 'N/A'}) - {timing?.surgery?.procedureName}
         </p>
       </div>
 

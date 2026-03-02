@@ -243,13 +243,13 @@ export default function EditPreOpReviewPage() {
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="font-medium">Patient:</span> {review.surgery.patient.name}
+              <span className="font-medium">Patient:</span> {review.surgery?.patient?.name || 'Unknown Patient'}
             </div>
             <div>
               <span className="font-medium">Folder:</span> {review.folderNumber}
             </div>
             <div>
-              <span className="font-medium">Age/Gender:</span> {review.surgery.patient.age}y, {review.surgery.patient.gender}
+              <span className="font-medium">Age/Gender:</span> {review.surgery?.patient?.age || 'N/A'}y, {review.surgery?.patient?.gender || 'N/A'}
             </div>
             <div>
               <span className="font-medium">Surgeon:</span> {review.surgery.surgeon?.fullName || 'Not assigned'}

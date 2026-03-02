@@ -363,9 +363,9 @@ export default function NewPreOpReviewPage() {
     
     const payload = {
       surgeryId: selectedSurgeryId,
-      patientId: selectedSurgery.patient.id,
-      patientName: selectedSurgery.patient.name,
-      folderNumber: selectedSurgery.patient.folderNumber,
+      patientId: selectedSurgery.patient?.id,
+      patientName: selectedSurgery.patient?.name || 'Unknown Patient',
+      folderNumber: selectedSurgery.patient?.folderNumber || 'N/A',
       scheduledSurgeryDate: selectedSurgery.scheduledDate,
       currentMedications: formData.get('currentMedications'),
       allergies: formData.get('allergies'),
@@ -482,7 +482,7 @@ export default function NewPreOpReviewPage() {
               <option value="">-- Select a surgery --</option>
               {surgeries.map((surgery) => (
                 <option key={surgery.id} value={surgery.id}>
-                  {surgery.patient.name} ({surgery.patient.folderNumber}) - {surgery.procedureName} -{' '}
+                  {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'}) - {surgery.procedureName} -{' '}
                   {new Date(surgery.scheduledDate).toLocaleDateString()}
                 </option>
               ))}
@@ -498,13 +498,13 @@ export default function NewPreOpReviewPage() {
             <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium">Patient:</span> {selectedSurgery.patient.name}
+                  <span className="font-medium">Patient:</span> {selectedSurgery.patient?.name || 'Unknown Patient'}
                 </div>
                 <div>
-                  <span className="font-medium">Folder:</span> {selectedSurgery.patient.folderNumber}
+                  <span className="font-medium">Folder:</span> {selectedSurgery.patient?.folderNumber || 'N/A'}
                 </div>
                 <div>
-                  <span className="font-medium">Age/Gender:</span> {selectedSurgery.patient.age}y, {selectedSurgery.patient.gender}
+                  <span className="font-medium">Age/Gender:</span> {selectedSurgery.patient?.age || 'N/A'}y, {selectedSurgery.patient?.gender || 'N/A'}
                 </div>
                 <div>
                   <span className="font-medium">Surgeon:</span> {selectedSurgery.surgeon?.fullName || 'Not assigned'}

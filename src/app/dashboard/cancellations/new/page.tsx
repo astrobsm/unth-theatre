@@ -46,8 +46,8 @@ export default function NewCancellationPage() {
     } else {
       const filtered = surgeries.filter(
         (s) =>
-          s.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          s.patient?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          s.patient?.folderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           s.procedureName.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredSurgeries(filtered);
@@ -134,7 +134,7 @@ export default function NewCancellationPage() {
                 <option value="">Select a surgery to cancel</option>
                 {filteredSurgeries.map((surgery) => (
                   <option key={surgery.id} value={surgery.id}>
-                    {surgery.patient.name} ({surgery.patient.folderNumber}) - {surgery.procedureName} -{' '}
+                    {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'}) - {surgery.procedureName} -{' '}
                     {new Date(surgery.scheduledDate).toLocaleDateString('en-GB')}
                   </option>
                 ))}
@@ -147,11 +147,11 @@ export default function NewCancellationPage() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-gray-600">Patient:</span>
-                    <p className="font-medium text-gray-900">{selectedSurgery.patient.name}</p>
+                    <p className="font-medium text-gray-900">{selectedSurgery.patient?.name || 'Unknown Patient'}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Folder Number:</span>
-                    <p className="font-medium text-gray-900">{selectedSurgery.patient.folderNumber}</p>
+                    <p className="font-medium text-gray-900">{selectedSurgery.patient?.folderNumber || 'N/A'}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Procedure:</span>

@@ -192,9 +192,9 @@ export default function MortalityPage() {
                         <Heart className="w-6 h-6 text-red-600" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">{mortality.patient.name}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">{mortality.patient?.name || 'Unknown Patient'}</h3>
                         <p className="text-sm text-gray-600">
-                          {mortality.patient.folderNumber} | {mortality.patient.age} years | {mortality.patient.gender}
+                          {mortality.patient?.folderNumber || 'N/A'} | {mortality.patient?.age || 'N/A'} years | {mortality.patient?.gender || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-700 mt-1">
                           <span className="font-medium">Procedure:</span> {mortality.surgery.surgeryType}

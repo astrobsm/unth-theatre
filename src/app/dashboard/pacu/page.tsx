@@ -219,10 +219,10 @@ export default function PACUPage() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="font-bold text-lg text-gray-900">
-                    {assessment.patient.name}
+                    {assessment.patient?.name || 'Unknown Patient'}
                   </h3>
                   <p className="text-sm text-gray-600">
-                    {assessment.patient.folderNumber} • {assessment.patient.age}y • {assessment.patient.gender}
+                    {assessment.patient?.folderNumber || 'N/A'} • {assessment.patient?.age || 'N/A'}y • {assessment.patient?.gender || 'N/A'}
                   </p>
                 </div>
                 {assessment.redAlertTriggered && (
@@ -241,10 +241,10 @@ export default function PACUPage() {
 
               {/* Surgery Details */}
               <div className="mb-4 text-sm">
-                <p className="font-medium text-gray-900">{assessment.surgery.procedureName}</p>
-                <p className="text-gray-600">Surgeon: {assessment.surgery.surgeon.name}</p>
-                {assessment.surgery.anesthetist && (
-                  <p className="text-gray-600">Anesthetist: {assessment.surgery.anesthetist.name}</p>
+                <p className="font-medium text-gray-900">{assessment.surgery?.procedureName}</p>
+                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.name || 'N/A'}</p>
+                {assessment.surgery?.anesthetist && (
+                  <p className="text-gray-600">Anesthetist: {assessment.surgery?.anesthetist?.name || 'N/A'}</p>
                 )}
               </div>
 
