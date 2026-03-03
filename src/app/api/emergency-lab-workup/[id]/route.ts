@@ -161,10 +161,12 @@ export async function PATCH(
 
         const test = await prisma.emergencyLabTest.findUnique({
           where: { id: testId },
+          include: { emergencyLabRequest: { select: { requestedAt: true } } },
         });
 
-        const turnaround = test?.requestedAt
-          ? Math.round((new Date().getTime() - new Date(test.requestedAt || 0).getTime()) / 60000)
+        const requestedAt = test?.emergencyLabRequest?.requestedAt;
+        const turnaround = requestedAt
+          ? Math.round((new Date().getTime() - new Date(requestedAt).getTime()) / 60000)
           : null;
 
         await prisma.emergencyLabTest.update({

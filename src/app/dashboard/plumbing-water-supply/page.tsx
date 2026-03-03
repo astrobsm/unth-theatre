@@ -129,12 +129,15 @@ const AREA_STATUS_EMOJI: Record<string, string> = {
 };
 
 const FAULT_CATEGORIES = [
-  { value: 'LEAKING_PIPE', label: 'Leaking Pipe' },
-  { value: 'BLOCKED_DRAIN', label: 'Blocked Drain' },
-  { value: 'NO_WATER', label: 'No Water Supply' },
+  { value: 'LEAK', label: 'Leak' },
+  { value: 'BLOCKAGE', label: 'Blockage' },
+  { value: 'BURST_PIPE', label: 'Burst Pipe' },
   { value: 'LOW_PRESSURE', label: 'Low Water Pressure' },
+  { value: 'NO_WATER', label: 'No Water Supply' },
+  { value: 'HOT_WATER_ISSUE', label: 'Hot Water Problem' },
+  { value: 'DRAINAGE', label: 'Drainage Issue' },
   { value: 'SEWAGE', label: 'Sewage Issue' },
-  { value: 'HOT_WATER', label: 'Hot Water Problem' },
+  { value: 'FIXTURE_DAMAGE', label: 'Fixture Damage' },
   { value: 'VALVE_ISSUE', label: 'Valve Issue' },
   { value: 'TANK_ISSUE', label: 'Tank Issue' },
   { value: 'PUMP_FAILURE', label: 'Pump Failure' },
@@ -242,7 +245,7 @@ export default function PlumbingWaterSupplyPage() {
       if (res.ok) {
         setShowFaultForm(false);
         setFaultData({
-          title: '', description: '', category: 'LEAKING_PIPE', priority: 'MEDIUM',
+          title: '', description: '', category: 'LEAK', priority: 'MEDIUM',
           location: '', floor: '', building: 'Main Theatre Complex',
           affectsTheatreOps: false, theatresAffected: [], notes: '',
         });

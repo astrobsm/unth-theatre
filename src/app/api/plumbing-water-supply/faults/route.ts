@@ -9,8 +9,9 @@ const createFaultSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
   category: z.enum([
-    'LEAKING_PIPE', 'BLOCKED_DRAIN', 'NO_WATER', 'LOW_PRESSURE',
-    'SEWAGE', 'HOT_WATER', 'VALVE_ISSUE', 'TANK_ISSUE', 'PUMP_FAILURE', 'OTHER'
+    'LEAK', 'BLOCKAGE', 'BURST_PIPE', 'LOW_PRESSURE', 'NO_WATER',
+    'HOT_WATER_ISSUE', 'DRAINAGE', 'SEWAGE', 'FIXTURE_DAMAGE',
+    'VALVE_ISSUE', 'TANK_ISSUE', 'PUMP_FAILURE', 'OTHER'
   ]),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
   location: z.string().min(1, 'Location is required'),

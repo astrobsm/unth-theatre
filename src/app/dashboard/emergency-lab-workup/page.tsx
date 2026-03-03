@@ -27,6 +27,7 @@ interface LabTest {
   sampleCollectedBy: { fullName: string } | null;
   receivedAtLabAt: string | null;
   receivedByLab: { fullName: string } | null;
+  processingStartedAt: string | null;
   resultValue: string | null;
   resultUnit: string | null;
   referenceRange: string | null;
@@ -64,6 +65,7 @@ interface LabRequest {
 
 interface VoiceNotification {
   id: string;
+  isVoiceNotification: boolean;
   voiceMessage: string;
   pushTitle: string;
   pushMessage: string;
