@@ -502,6 +502,20 @@ model User {
   medQueriesReceived MedicationNonReturnQuery[] @relation("QueriedUser")
   medQueriesIssued MedicationNonReturnQuery[] @relation("QueryIssuer")
   
+  // Emergency Lab Workup Relations
+  emergencyLabRequests EmergencyLabRequest[] @relation("EmergencyLabRequester")
+  labSamplesCollected EmergencyLabTest[] @relation("LabSampleCollector")
+  labSamplesReceived EmergencyLabTest[] @relation("LabSampleReceiver")
+  labResultsEntered EmergencyLabTest[] @relation("LabResultEnterer")
+  labResultsVerified EmergencyLabTest[] @relation("LabResultVerifier")
+  
+  // Plumbing & Water Supply Relations
+  plumbingFaultsReported PlumbingFault[] @relation("PlumbingFaultReporter")
+  plumbingFaultsAssigned PlumbingFault[] @relation("PlumbingFaultAssignee")
+  plumbingFaultsAcknowledged PlumbingFault[] @relation("PlumbingFaultAcknowledger")
+  plumbingFaultsResolved PlumbingFault[] @relation("PlumbingFaultResolver")
+  plumbingWaterStatuses PlumbingWaterStatus[] @relation("PlumbingStatusLogger")
+  
   @@map("users")
 }
 
@@ -800,6 +814,9 @@ model Surgery {
   medicationReturns     MedicationReturn[] @relation("SurgeryMedicationReturns")
   additionalMedRequests AdditionalMedicationRequest[] @relation("SurgeryAdditionalMedRequests")
   medicationQueries     MedicationNonReturnQuery[] @relation("SurgeryMedicationQueries")
+  
+  // Emergency Lab Workup Relations
+  emergencyLabRequests  EmergencyLabRequest[] @relation("EmergencyLabWorkupSurgery")
   
   @@map("surgeries")
 }
@@ -3183,6 +3200,7 @@ model EmergencySurgeryBooking {
   teamAvailability          EmergencyTeamAvailability[]
   preAnaestheticReviews     EmergencyPreAnaestheticReview[]
   emergencyPrescriptions    EmergencyPrescription[]
+  emergencyLabRequests      EmergencyLabRequest[] @relation("EmergencyLabRequests")
   
   @@map("emergency_surgery_bookings")
 }
@@ -5068,4 +5086,357 @@ enum QueryStatus {
   UNDER_REVIEW
   RESOLVED
   ESCALATED
+}
+
+// =============================================
+// EMERGENCY LAB WORKUP MODULE
+// =============================================
+
+enum EmergencyLabRequestStatus {
+  REQUESTED
+  NOTIFIED
+  SAMPLE_COLLECTION_DISPATCHED
+  SAMPLE_COLLECTED
+  SAMPLE_RECEIVED_AT_LAB
+  PROCESSING
+  RESULTS_READY
+  RESULTS_VERIFIED
+  RESULTS_VIEWED
+  CANCELLED
+}
+
+enum EmergencyLabPriority {
+  CRITICAL
+  URGENT
+  ROUTINE
+}
+
+enum EmergencyLabTestCategory {
+  HEMATOLOGY
+  BIOCHEMISTRY
+  COAGULATION
+  BLOOD_GAS
+  CROSS_MATCH
+  URINALYSIS
+  MICROBIOLOGY
+  SEROLOGY
+  RADIOLOGY
+  ECG
+  OTHER
+}
+
+model EmergencyLabRequest {
+  id                    String                    @id @default(uuid())
+  
+  // Link to emergency booking / surgery
+  emergencyBookingId    String?
+  emergencyBooking      EmergencySurgeryBooking?  @relation("EmergencyLabRequests", fields: [emergencyBookingId], references: [id])
+  surgeryId             String?
+  surgery               Surgery?                  @relation("EmergencyLabWorkupSurgery", fields: [surgeryId], references: [id])
+  
+  // Patient Info
+  patientName           String
+  folderNumber          String
+  age                   Int?
+  gender                String?
+  ward                  String?
+  diagnosis             String?
+  
+  // Requesting details
+  requestedById         String
+  requestedBy           User                      @relation("EmergencyLabRequester", fields: [requestedById], references: [id])
+  requestedByName       String
+  requestedAt           DateTime                  @default(now())
+  
+  // Priority
+  priority              EmergencyLabPriority      @default(CRITICAL)
+  clinicalIndication    String                    // Why the investigation is needed
+  
+  // Status
+  status                EmergencyLabRequestStatus @default(REQUESTED)
+  
+  // Voice/Push Notification
+  voiceNotificationSent Boolean                   @default(false)
+  voiceNotificationSentAt DateTime?
+  pushNotificationSent  Boolean                   @default(false)
+  pushNotificationSentAt DateTime?
+  
+  // Notes
+  specialInstructions   String?
+  notes                 String?
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  
+  // Relations
+  labTests              EmergencyLabTest[]
+  labNotifications      EmergencyLabNotification[]
+  
+  @@index([emergencyBookingId])
+  @@index([surgeryId])
+  @@index([status])
+  @@index([priority])
+  @@map("emergency_lab_requests")
+}
+
+model EmergencyLabTest {
+  id                    String                    @id @default(uuid())
+  
+  emergencyLabRequestId String
+  emergencyLabRequest   EmergencyLabRequest       @relation(fields: [emergencyLabRequestId], references: [id], onDelete: Cascade)
+  
+  // Test details
+  testName              String                    // FBC, U&E, PT/INR, ABG, etc.
+  testCategory          EmergencyLabTestCategory
+  
+  // Sample Collection
+  sampleCollected       Boolean                   @default(false)
+  sampleCollectedAt     DateTime?
+  sampleCollectedById   String?
+  sampleCollectedBy     User?                     @relation("LabSampleCollector", fields: [sampleCollectedById], references: [id])
+  sampleType            String?                   // Blood, Urine, Swab, etc.
+  sampleBarcode         String?
+  
+  // Lab Processing
+  receivedAtLabAt       DateTime?
+  receivedByLabId       String?
+  receivedByLab         User?                     @relation("LabSampleReceiver", fields: [receivedByLabId], references: [id])
+  processingStartedAt   DateTime?
+  
+  // Results
+  status                EmergencyLabRequestStatus @default(REQUESTED)
+  resultValue           String?                   // The actual result
+  resultUnit            String?                   // mg/dL, mmol/L, etc.
+  referenceRange        String?                   // Normal range
+  abnormalResult        Boolean                   @default(false)
+  criticalResult        Boolean                   @default(false)
+  resultNotes           String?                   // Lab scientist comments
+  resultAttachment      String?                   // URL or path to result document
+  
+  // Result entry
+  resultEnteredById     String?
+  resultEnteredBy       User?                     @relation("LabResultEnterer", fields: [resultEnteredById], references: [id])
+  resultEnteredAt       DateTime?
+  
+  // Verification
+  resultVerifiedById    String?
+  resultVerifiedBy      User?                     @relation("LabResultVerifier", fields: [resultVerifiedById], references: [id])
+  resultVerifiedAt      DateTime?
+  
+  // Viewed by surgeon/anaesthetist
+  viewedBySurgeon       Boolean                   @default(false)
+  viewedBySurgeonAt     DateTime?
+  viewedByAnaesthetist  Boolean                   @default(false)
+  viewedByAnaesthetistAt DateTime?
+  
+  // Turnaround time tracking
+  turnaroundMinutes     Int?                      // Total time from request to result
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  
+  @@index([emergencyLabRequestId])
+  @@index([status])
+  @@map("emergency_lab_tests")
+}
+
+model EmergencyLabNotification {
+  id                    String                    @id @default(uuid())
+  
+  emergencyLabRequestId String
+  emergencyLabRequest   EmergencyLabRequest       @relation(fields: [emergencyLabRequestId], references: [id], onDelete: Cascade)
+  
+  // Notification details
+  recipientId           String?
+  recipientRole         String                    // LABORATORY_STAFF, SURGEON, ANAESTHETIST, etc.
+  notificationType      String                    // SAMPLE_COLLECT, SAMPLE_RECEIVED, RESULTS_READY, CRITICAL_RESULT
+  
+  // Voice notification
+  isVoiceNotification   Boolean                   @default(false)
+  voiceMessage          String?
+  voicePlayed           Boolean                   @default(false)
+  voicePlayedAt         DateTime?
+  
+  // Push notification
+  isPushNotification    Boolean                   @default(true)
+  pushTitle             String?
+  pushMessage           String?
+  pushDelivered         Boolean                   @default(false)
+  pushDeliveredAt       DateTime?
+  
+  // Acknowledgement
+  acknowledged          Boolean                   @default(false)
+  acknowledgedAt        DateTime?
+  acknowledgedById      String?
+  
+  sentAt                DateTime                  @default(now())
+  
+  @@index([emergencyLabRequestId])
+  @@index([recipientId])
+  @@map("emergency_lab_notifications")
+}
+
+// =============================================
+// PLUMBING & WATER SUPPLY MODULE
+// =============================================
+
+enum PlumbingFaultStatus {
+  REPORTED
+  ACKNOWLEDGED
+  ASSIGNED
+  IN_PROGRESS
+  PARTS_ORDERED
+  RESOLVED
+  CLOSED
+}
+
+enum PlumbingFaultPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum PlumbingFaultCategory {
+  LEAK
+  BLOCKAGE
+  BURST_PIPE
+  LOW_PRESSURE
+  NO_WATER
+  HOT_WATER_ISSUE
+  DRAINAGE
+  SEWAGE
+  FIXTURE_DAMAGE
+  VALVE_ISSUE
+  TANK_ISSUE
+  PUMP_FAILURE
+  OTHER
+}
+
+model PlumbingFault {
+  id                    String                    @id @default(uuid())
+  
+  // Fault details
+  title                 String
+  description           String
+  category              PlumbingFaultCategory
+  priority              PlumbingFaultPriority     @default(MEDIUM)
+  status                PlumbingFaultStatus       @default(REPORTED)
+  
+  // Location
+  location              String                    // Theatre 1, Scrub Area, PACU, etc.
+  floor                 String?
+  building              String?
+  
+  // Reporting
+  reportedById          String
+  reportedBy            User                      @relation("PlumbingFaultReporter", fields: [reportedById], references: [id])
+  reportedByName        String
+  reportedAt            DateTime                  @default(now())
+  
+  // Photo evidence
+  photoUrl              String?
+  photoUrls             String?                   // JSON array of image URLs
+  
+  // Assignment
+  assignedToId          String?
+  assignedTo            User?                     @relation("PlumbingFaultAssignee", fields: [assignedToId], references: [id])
+  assignedToName        String?
+  assignedAt            DateTime?
+  
+  // Acknowledgement
+  acknowledgedById      String?
+  acknowledgedBy        User?                     @relation("PlumbingFaultAcknowledger", fields: [acknowledgedById], references: [id])
+  acknowledgedAt        DateTime?
+  
+  // Resolution
+  resolvedById          String?
+  resolvedBy            User?                     @relation("PlumbingFaultResolver", fields: [resolvedById], references: [id])
+  resolvedByName        String?
+  resolvedAt            DateTime?
+  resolutionNotes       String?
+  partsUsed             String?                   // JSON array
+  
+  // Impact
+  affectsTheatreOps     Boolean                   @default(false)
+  theatresAffected      String?                   // JSON array of theatre IDs
+  
+  // Escalation
+  isEscalated           Boolean                   @default(false)
+  escalatedAt           DateTime?
+  escalatedTo           String?
+  
+  // Cost tracking
+  estimatedCost         Decimal?                  @db.Decimal(10, 2)
+  actualCost            Decimal?                  @db.Decimal(10, 2)
+  
+  notes                 String?
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@map("plumbing_faults")
+}
+
+model PlumbingWaterStatus {
+  id                    String                    @id @default(uuid())
+  
+  // Status date and shift
+  statusDate            DateTime                  @default(now())
+  shiftType             String                    // MORNING, AFTERNOON, NIGHT
+  
+  // Main water supply
+  municipalWaterAvailable Boolean                 @default(false)
+  boreholeOperational   Boolean                   @default(false)
+  overheadTankLevel     Int                       @default(0)  // Percentage 0-100
+  groundTankLevel       Int                       @default(0)  // Percentage 0-100
+  
+  // Pump status
+  mainPumpOperational   Boolean                   @default(true)
+  backupPumpOperational Boolean                   @default(true)
+  boosterPumpOperational Boolean                  @default(true)
+  
+  // Pressure readings
+  mainLinePressure      String                    // LOW, NORMAL, HIGH
+  theatreLinePressure   String                    // LOW, NORMAL, HIGH
+  
+  // Hot water system
+  hotWaterAvailable     Boolean                   @default(true)
+  hotWaterTemperature   String?                   // Celsius reading
+  boilerOperational     Boolean                   @default(true)
+  
+  // Theatre-specific status
+  theatre1Status        String                    @default("OK")  // OK, LOW_PRESSURE, NO_WATER, LEAK
+  theatre2Status        String                    @default("OK")
+  theatre3Status        String                    @default("OK")
+  theatre4Status        String                    @default("OK")
+  scrubAreaStatus       String                    @default("OK")
+  recoveryAreaStatus    String                    @default("OK")
+  sterilizationAreaStatus String                  @default("OK")
+  
+  // Drainage
+  drainageFlowing       Boolean                   @default(true)
+  drainageIssues        String?
+  
+  // Overall
+  overallStatus         String                    // OPERATIONAL, DEGRADED, CRITICAL, OFFLINE
+  
+  // Logged by
+  loggedById            String
+  loggedBy              User                      @relation("PlumbingStatusLogger", fields: [loggedById], references: [id])
+  loggedByName          String
+  
+  actionRequired        String?
+  actionTaken           String?
+  notes                 String?
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  
+  @@index([statusDate])
+  @@index([overallStatus])
+  @@map("plumbing_water_status")
 }

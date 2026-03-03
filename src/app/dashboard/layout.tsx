@@ -45,6 +45,8 @@ import {
   ClipboardPlus,
   Pill,
   MonitorPlay,
+  FlaskConical,
+  Waves,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -112,7 +114,11 @@ export default function DashboardLayout({
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
     { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Patient Transfers' },
 
+    // === EMERGENCY LAB & INVESTIGATIONS ===
+    { href: '/dashboard/emergency-lab-workup', icon: FlaskConical, label: 'Emergency Lab Workup', badge: 'NEW' },
+
     // === FACILITY & SUPPORT SERVICES ===
+    { href: '/dashboard/plumbing-water-supply', icon: Waves, label: 'Plumbing & Water', badge: 'NEW' },
     { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status' },
     { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance' },
     { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness' },
@@ -156,7 +162,8 @@ export default function DashboardLayout({
     CSSD_STAFF: ['/dashboard', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
     POWER_PLANT_OPERATOR: ['/dashboard', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/settings'],
     BLOODBANK_STAFF: ['/dashboard', '/dashboard/blood-bank', '/dashboard/emergency-booking', '/dashboard/settings'],
-    PLUMBER: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/settings'],
+    LABORATORY_STAFF: ['/dashboard', '/dashboard/emergency-lab-workup', '/dashboard/emergency-booking', '/dashboard/settings'],
+    PLUMBER: ['/dashboard', '/dashboard/plumbing-water-supply', '/dashboard/works-supervisor', '/dashboard/fault-alerts', '/dashboard/settings'],
     PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/call-for-patient', '/dashboard/emergency-booking', '/dashboard/settings'],
     CLEANER: ['/dashboard', '/dashboard/settings'],
   };
