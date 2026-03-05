@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Camera, Plus, Trash2, Pill } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -238,20 +238,11 @@ export default function NewPreOpReviewPage() {
   const [error, setError] = useState('');
   
   // Smart text input states for dictation/OCR fields
-  const [currentMedications, setCurrentMedications] = useState('');
-  const [comorbidities, setComorbidities] = useState('');
-  const [previousAnesthesia, setPreviousAnesthesia] = useState('');
-  const [otherLabResults, setOtherLabResults] = useState('');
   const [anestheticPlan, setAnestheticPlan] = useState('');
   const [specialConsiderations, setSpecialConsiderations] = useState('');
   const [riskFactors, setRiskFactors] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
   const [recommendations, setRecommendations] = useState('');
-
-  // Physical examination states for BMI auto-calculation
-  const [weight, setWeight] = useState<number | ''>('');
-  const [height, setHeight] = useState<number | ''>('');
-  const [bmi, setBmi] = useState<number | ''>('');
 
   // Anesthetic Prescription states
   const [prescribedMedications, setPrescribedMedications] = useState<PrescribedMedication[]>([]);
@@ -309,17 +300,6 @@ export default function NewPreOpReviewPage() {
     setPrescribedMedications(prescribedMedications.filter(med => med.id !== id));
   };
 
-  // Auto-calculate BMI when weight or height changes
-  useEffect(() => {
-    if (weight && height && height > 0) {
-      const heightInMeters = Number(height) / 100;
-      const calculatedBmi = Number(weight) / (heightInMeters * heightInMeters);
-      setBmi(Math.round(calculatedBmi * 10) / 10); // Round to 1 decimal place
-    } else {
-      setBmi('');
-    }
-  }, [weight, height]);
-
   useEffect(() => {
     fetchScheduledSurgeries();
   }, []);
@@ -367,36 +347,19 @@ export default function NewPreOpReviewPage() {
       patientName: selectedSurgery.patient?.name || 'Unknown Patient',
       folderNumber: selectedSurgery.patient?.folderNumber || 'N/A',
       scheduledSurgeryDate: selectedSurgery.scheduledDate,
-      currentMedications: formData.get('currentMedications'),
-      allergies: formData.get('allergies'),
-      comorbidities: formData.get('comorbidities'),
-      previousAnesthesia: formData.get('previousAnesthesia'),
-      lastOralIntake: formData.get('lastOralIntake'),
-      fastingStatus: formData.get('fastingStatus'),
-      weight: formData.get('weight') ? parseFloat(formData.get('weight') as string) : undefined,
-      height: formData.get('height') ? parseFloat(formData.get('height') as string) : undefined,
-      bmi: formData.get('bmi') ? parseFloat(formData.get('bmi') as string) : undefined,
-      bloodPressure: formData.get('bloodPressure'),
-      heartRate: formData.get('heartRate') ? parseInt(formData.get('heartRate') as string) : undefined,
-      respiratoryRate: formData.get('respiratoryRate') ? parseInt(formData.get('respiratoryRate') as string) : undefined,
-      temperature: formData.get('temperature') ? parseFloat(formData.get('temperature') as string) : undefined,
+      // ASA & Airway
+      asaClass: formData.get('asaClass'),
       airwayClass: formData.get('airwayClass'),
       neckMovement: formData.get('neckMovement'),
       dentition: formData.get('dentition'),
-      hemoglobin: formData.get('hemoglobin') ? parseFloat(formData.get('hemoglobin') as string) : undefined,
-      plateletCount: formData.get('plateletCount') ? parseFloat(formData.get('plateletCount') as string) : undefined,
-      ptInr: formData.get('ptInr') ? parseFloat(formData.get('ptInr') as string) : undefined,
-      creatinine: formData.get('creatinine') ? parseFloat(formData.get('creatinine') as string) : undefined,
-      sodium: formData.get('sodium') ? parseFloat(formData.get('sodium') as string) : undefined,
-      potassium: formData.get('potassium') ? parseFloat(formData.get('potassium') as string) : undefined,
-      bloodGlucose: formData.get('bloodGlucose') ? parseFloat(formData.get('bloodGlucose') as string) : undefined,
-      otherLabResults: formData.get('otherLabResults'),
-      asaClass: formData.get('asaClass'),
+      // Anesthetic Plan
       proposedAnesthesiaType: formData.get('proposedAnesthesiaType'),
       anestheticPlan: formData.get('anestheticPlan'),
       specialConsiderations: formData.get('specialConsiderations'),
+      // Risk Assessment
       riskLevel: formData.get('riskLevel'),
       riskFactors: formData.get('riskFactors'),
+      // Review Notes
       reviewNotes: formData.get('reviewNotes'),
       recommendations: formData.get('recommendations'),
       // Anesthetic Prescription data
@@ -404,7 +367,6 @@ export default function NewPreOpReviewPage() {
         medications: prescribedMedications,
         urgency: prescriptionUrgency,
         specialInstructions: prescriptionSpecialInstructions,
-        allergyAlerts: formData.get('allergies'),
       } : undefined,
     };
 
@@ -519,199 +481,115 @@ export default function NewPreOpReviewPage() {
 
         {selectedSurgeryId && (
           <>
-            {/* Medical History */}
+            {/* Review Notes & Recommendations */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Medical History</h2>
+                <h2 className="text-xl font-semibold">Review Notes & Recommendations</h2>
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Mic className="w-4 h-4" />
-                  <span>Voice & OCR enabled</span>
-                  <Camera className="w-4 h-4" />
+                  <span>Dictation enabled</span>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-4">
                 <SmartTextInput
-                  label="Current Medications"
-                  value={currentMedications}
-                  onChange={setCurrentMedications}
-                  placeholder="List all current medications with dosages (use voice or camera)"
-                  rows={3}
+                  label="Review Notes"
+                  value={reviewNotes}
+                  onChange={setReviewNotes}
+                  placeholder="Overall assessment notes - dictate your findings"
+                  rows={4}
                   enableSpeech={true}
                   enableOCR={true}
+                  enableReadBack={true}
                   medicalMode={true}
-                  helpText="Say medication names and dosages, or photograph prescription"
-                />
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Allergies
-                  </label>
-                  <input
-                    type="text"
-                    name="allergies"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Drug allergies, food allergies, etc."
-                  />
-                </div>
-                <SmartTextInput
-                  label="Comorbidities"
-                  value={comorbidities}
-                  onChange={setComorbidities}
-                  placeholder="Diabetes, Hypertension, Cardiac disease, etc."
-                  rows={3}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  medicalMode={true}
-                  helpText="Dictate or scan patient's medical history"
+                  helpText="Speak your assessment notes or photograph written notes"
                 />
                 <SmartTextInput
-                  label="Previous Anesthesia History"
-                  value={previousAnesthesia}
-                  onChange={setPreviousAnesthesia}
-                  placeholder="Any complications or issues with previous anesthesia"
-                  rows={2}
+                  label="Recommendations"
+                  value={recommendations}
+                  onChange={setRecommendations}
+                  placeholder="Recommendations for optimization, further investigations, or precautions"
+                  rows={4}
                   enableSpeech={true}
                   enableOCR={true}
+                  enableReadBack={true}
                   medicalMode={true}
+                  helpText="Dictate recommendations - use read back to verify"
                 />
               </div>
             </div>
 
-            {/* Fasting Status */}
+            {/* Risk Assessment */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Fasting Status</h2>
+              <div className="flex items-center gap-3 mb-4">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+                <h2 className="text-xl font-semibold">Risk Assessment</h2>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Risk Level
+                </label>
+                <select
+                  name="riskLevel"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select risk level</option>
+                  <option value="LOW">Low Risk</option>
+                  <option value="MODERATE">Moderate Risk</option>
+                  <option value="HIGH">High Risk</option>
+                  <option value="VERY_HIGH">Very High Risk</option>
+                </select>
+              </div>
+              <SmartTextInput
+                label="Risk Factors"
+                value={riskFactors}
+                onChange={setRiskFactors}
+                placeholder="Specific risk factors identified"
+                rows={3}
+                enableSpeech={true}
+                enableOCR={true}
+                medicalMode={true}
+              />
+            </div>
+
+            {/* ASA Classification & Mallampati */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Activity className="w-6 h-6 text-blue-600" />
+                <h2 className="text-xl font-semibold">ASA Classification & Mallampati</h2>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Last Oral Intake
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="lastOralIntake"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fasting Status
+                    ASA Classification *
                   </label>
                   <select
-                    name="fastingStatus"
+                    name="asaClass"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    required
                   >
-                    <option value="">Select status</option>
-                    <option value="ADEQUATE">Adequate (6+ hours)</option>
-                    <option value="BORDERLINE">Borderline (4-6 hours)</option>
-                    <option value="INADEQUATE">Inadequate (&lt;4 hours)</option>
+                    <option value="">Select ASA class</option>
+                    <option value="ASA_I">ASA I - Normal healthy patient</option>
+                    <option value="ASA_II">ASA II - Mild systemic disease</option>
+                    <option value="ASA_III">ASA III - Severe systemic disease</option>
+                    <option value="ASA_IV">ASA IV - Severe disease, constant threat to life</option>
+                    <option value="ASA_V">ASA V - Moribund patient</option>
+                    <option value="ASA_VI">ASA VI - Brain-dead organ donor</option>
                   </select>
                 </div>
-              </div>
-            </div>
-
-            {/* Physical Examination */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Physical Examination</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Weight (kg)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="weight"
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value ? parseFloat(e.target.value) : '')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Height (cm)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="height"
-                    value={height}
-                    onChange={(e) => setHeight(e.target.value ? parseFloat(e.target.value) : '')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    BMI <span className="text-xs text-green-600 font-normal">(auto-calculated)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="bmi"
-                    value={bmi}
-                    readOnly
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Blood Pressure
-                  </label>
-                  <input
-                    type="text"
-                    name="bloodPressure"
-                    placeholder="e.g., 120/80"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Heart Rate (bpm)
-                  </label>
-                  <input
-                    type="number"
-                    name="heartRate"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Respiratory Rate
-                  </label>
-                  <input
-                    type="number"
-                    name="respiratoryRate"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Temperature (°C)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="temperature"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Airway Assessment */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Airway Assessment</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Airway Class (Mallampati)
+                    Mallampati Class *
                   </label>
                   <select
                     name="airwayClass"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    required
                   >
-                    <option value="">Select class</option>
-                    <option value="CLASS_I">Class I</option>
-                    <option value="CLASS_II">Class II</option>
-                    <option value="CLASS_III">Class III</option>
-                    <option value="CLASS_IV">Class IV</option>
+                    <option value="">Select Mallampati class</option>
+                    <option value="CLASS_I">Class I - Soft palate, fauces, uvula, pillars visible</option>
+                    <option value="CLASS_II">Class II - Soft palate, fauces, uvula visible</option>
+                    <option value="CLASS_III">Class III - Soft palate, base of uvula visible</option>
+                    <option value="CLASS_IV">Class IV - Hard palate only visible</option>
                   </select>
                 </div>
                 <div>
@@ -742,145 +620,33 @@ export default function NewPreOpReviewPage() {
               </div>
             </div>
 
-            {/* Laboratory Results */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Laboratory Results</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Hemoglobin (g/dL)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="hemoglobin"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Platelet Count (×10⁹/L)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="plateletCount"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    PT/INR
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="ptInr"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Creatinine (mg/dL)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="creatinine"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sodium (mmol/L)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="sodium"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Potassium (mmol/L)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="potassium"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Blood Glucose (mg/dL)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="bloodGlucose"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-              <div className="mt-4">
-                <SmartTextInput
-                  label="Other Lab Results"
-                  value={otherLabResults}
-                  onChange={setOtherLabResults}
-                  placeholder="Additional laboratory findings"
-                  rows={2}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  medicalMode={true}
-                  helpText="Dictate lab values or photograph lab results"
-                />
-              </div>
-            </div>
-
             {/* Anesthetic Plan */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center gap-3 mb-4">
                 <Syringe className="w-6 h-6 text-indigo-600" />
                 <h2 className="text-xl font-semibold">Anesthetic Plan</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ASA Classification
-                  </label>
-                  <select
-                    name="asaClass"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select ASA class</option>
-                    <option value="ASA_I">ASA I - Normal healthy patient</option>
-                    <option value="ASA_II">ASA II - Mild systemic disease</option>
-                    <option value="ASA_III">ASA III - Severe systemic disease</option>
-                    <option value="ASA_IV">ASA IV - Severe disease, constant threat to life</option>
-                    <option value="ASA_V">ASA V - Moribund patient</option>
-                    <option value="ASA_VI">ASA VI - Brain-dead organ donor</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Proposed Anesthesia Type
-                  </label>
-                  <select
-                    name="proposedAnesthesiaType"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select type</option>
-                    <option value="GENERAL">General Anesthesia</option>
-                    <option value="SPINAL">Spinal Anesthesia</option>
-                    <option value="LOCAL">Local Anesthesia</option>
-                    <option value="REGIONAL">Regional Anesthesia</option>
-                    <option value="SEDATION">Sedation</option>
-                  </select>
-                </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Proposed Anesthesia Type *
+                </label>
+                <select
+                  name="proposedAnesthesiaType"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">Select type</option>
+                  <option value="GENERAL">General Anesthesia</option>
+                  <option value="SPINAL">Spinal Anesthesia</option>
+                  <option value="EPIDURAL">Epidural Anesthesia</option>
+                  <option value="COMBINED_SPINAL_EPIDURAL">Combined Spinal-Epidural</option>
+                  <option value="LOCAL">Local Anesthesia</option>
+                  <option value="REGIONAL">Regional Anesthesia (Nerve Block)</option>
+                  <option value="SEDATION">Sedation</option>
+                  <option value="GENERAL_WITH_REGIONAL">General + Regional</option>
+                </select>
               </div>
-              <div className="mt-4">
+              <div className="space-y-4">
                 <SmartTextInput
                   label="Anesthetic Plan Details"
                   value={anestheticPlan}
@@ -892,8 +658,6 @@ export default function NewPreOpReviewPage() {
                   medicalMode={true}
                   helpText="Dictate your anesthetic plan with drug choices and monitoring"
                 />
-              </div>
-              <div className="mt-4">
                 <SmartTextInput
                   label="Special Considerations"
                   value={specialConsiderations}
@@ -1146,73 +910,6 @@ export default function NewPreOpReviewPage() {
                   </p>
                 </div>
               )}
-            </div>
-
-            {/* Risk Assessment */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">Risk Assessment</h2>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Risk Level
-                </label>
-                <select
-                  name="riskLevel"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Select risk level</option>
-                  <option value="LOW">Low Risk</option>
-                  <option value="MODERATE">Moderate Risk</option>
-                  <option value="HIGH">High Risk</option>
-                  <option value="VERY_HIGH">Very High Risk</option>
-                </select>
-              </div>
-              <SmartTextInput
-                label="Risk Factors"
-                value={riskFactors}
-                onChange={setRiskFactors}
-                placeholder="Specific risk factors identified"
-                rows={3}
-                enableSpeech={true}
-                enableOCR={true}
-                medicalMode={true}
-              />
-            </div>
-
-            {/* Recommendations */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Review Notes & Recommendations</h2>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Mic className="w-4 h-4" />
-                  <span>Dictation enabled</span>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <SmartTextInput
-                  label="Review Notes"
-                  value={reviewNotes}
-                  onChange={setReviewNotes}
-                  placeholder="Overall assessment notes - dictate your findings"
-                  rows={4}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  enableReadBack={true}
-                  medicalMode={true}
-                  helpText="Speak your assessment notes or photograph written notes"
-                />
-                <SmartTextInput
-                  label="Recommendations"
-                  value={recommendations}
-                  onChange={setRecommendations}
-                  placeholder="Recommendations for optimization, further investigations, or precautions"
-                  rows={4}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  enableReadBack={true}
-                  medicalMode={true}
-                  helpText="Dictate recommendations - use read back to verify"
-                />
-              </div>
             </div>
 
             {/* Submit Button */}
