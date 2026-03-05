@@ -31,27 +31,74 @@ export interface SyncMeta {
 }
 
 // ============================================================
-// DB Connection
+// DB Connection (with graceful degradation)
 // ============================================================
+let dbUnavailable = false; // cache failure so we stop retrying
+let cachedDB: IDBDatabase | null = null;
+
+/** Returns true if IndexedDB is available in the current environment */
+export function isIndexedDBAvailable(): boolean {
+  if (dbUnavailable) return false;
+  if (typeof window === 'undefined') return false;
+  if (typeof indexedDB === 'undefined') {
+    dbUnavailable = true;
+    return false;
+  }
+  return true;
+}
+
 function openDB(): Promise<IDBDatabase> {
+  // Fast-fail if we already know DB is unavailable
+  if (dbUnavailable) return Promise.reject(new Error('IndexedDB unavailable'));
+
+  // Reuse existing connection if still open
+  if (cachedDB) {
+    try {
+      // Verify the connection is still alive by checking name
+      if (cachedDB.name) return Promise.resolve(cachedDB);
+    } catch {
+      cachedDB = null;
+    }
+  }
+
+  if (!isIndexedDBAvailable()) {
+    return Promise.reject(new Error('IndexedDB unavailable'));
+  }
+
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    try {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains('offlineQueue')) {
-        db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
-      }
-      if (!db.objectStoreNames.contains('cachedData')) {
-        db.createObjectStore('cachedData', { keyPath: 'key' });
-      }
-      if (!db.objectStoreNames.contains('syncMeta')) {
-        db.createObjectStore('syncMeta', { keyPath: 'key' });
-      }
-    };
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains('offlineQueue')) {
+          db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains('cachedData')) {
+          db.createObjectStore('cachedData', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('syncMeta')) {
+          db.createObjectStore('syncMeta', { keyPath: 'key' });
+        }
+      };
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        cachedDB = request.result;
+        // Clear cached ref if connection closes
+        cachedDB.onclose = () => { cachedDB = null; };
+        resolve(cachedDB);
+      };
+
+      request.onerror = () => {
+        console.warn('[offlineStore] IndexedDB open failed, disabling offline storage:', request.error?.message);
+        dbUnavailable = true;
+        reject(request.error);
+      };
+    } catch (err) {
+      console.warn('[offlineStore] IndexedDB not available:', err);
+      dbUnavailable = true;
+      reject(err);
+    }
   });
 }
 
@@ -60,6 +107,7 @@ function openDB(): Promise<IDBDatabase> {
 // ============================================================
 
 export async function addToOfflineQueue(item: Omit<OfflineQueueItem, 'id' | 'timestamp' | 'retryCount'>): Promise<number> {
+  if (!isIndexedDBAvailable()) return -1;
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('offlineQueue', 'readwrite');
@@ -75,6 +123,7 @@ export async function addToOfflineQueue(item: Omit<OfflineQueueItem, 'id' | 'tim
 }
 
 export async function getOfflineQueue(): Promise<OfflineQueueItem[]> {
+  if (!isIndexedDBAvailable()) return [];
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('offlineQueue', 'readonly');
@@ -86,6 +135,7 @@ export async function getOfflineQueue(): Promise<OfflineQueueItem[]> {
 }
 
 export async function getOfflineQueueCount(): Promise<number> {
+  if (!isIndexedDBAvailable()) return 0;
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('offlineQueue', 'readonly');
@@ -97,6 +147,7 @@ export async function getOfflineQueueCount(): Promise<number> {
 }
 
 export async function removeFromOfflineQueue(id: number): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('offlineQueue', 'readwrite');
@@ -108,6 +159,7 @@ export async function removeFromOfflineQueue(id: number): Promise<void> {
 }
 
 export async function clearOfflineQueue(): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('offlineQueue', 'readwrite');
@@ -123,6 +175,7 @@ export async function clearOfflineQueue(): Promise<void> {
 // ============================================================
 
 export async function setCachedData(key: string, data: unknown, ttlMs: number = 30 * 60 * 1000): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('cachedData', 'readwrite');
@@ -139,6 +192,7 @@ export async function setCachedData(key: string, data: unknown, ttlMs: number = 
 }
 
 export async function getCachedData<T = unknown>(key: string): Promise<{ data: T; isStale: boolean; cachedAt: number } | null> {
+  if (!isIndexedDBAvailable()) return null;
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('cachedData', 'readonly');
@@ -161,6 +215,7 @@ export async function getCachedData<T = unknown>(key: string): Promise<{ data: T
 }
 
 export async function removeCachedData(key: string): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('cachedData', 'readwrite');
@@ -171,6 +226,7 @@ export async function removeCachedData(key: string): Promise<void> {
 }
 
 export async function clearExpiredCache(): Promise<number> {
+  if (!isIndexedDBAvailable()) return 0;
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('cachedData', 'readwrite');
@@ -197,6 +253,7 @@ export async function clearExpiredCache(): Promise<number> {
 // ============================================================
 
 export async function setSyncMeta(key: string, value: unknown): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('syncMeta', 'readwrite');
@@ -207,6 +264,7 @@ export async function setSyncMeta(key: string, value: unknown): Promise<void> {
 }
 
 export async function getSyncMeta<T = unknown>(key: string): Promise<T | null> {
+  if (!isIndexedDBAvailable()) return null;
   const db = await openDB();
   return new Promise((resolve) => {
     const tx = db.transaction('syncMeta', 'readonly');

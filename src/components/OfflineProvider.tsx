@@ -9,7 +9,7 @@ import {
   type OfflineDataStatus,
 } from '@/lib/offlineDataManager';
 import { registerServiceWorker } from '@/lib/pwa';
-import { getOfflineQueueCount, processOfflineQueue } from '@/lib/offlineStore';
+import { getOfflineQueueCount, processOfflineQueue, isIndexedDBAvailable } from '@/lib/offlineStore';
 import { installFetchInterceptor, uninstallFetchInterceptor } from '@/lib/globalFetchInterceptor';
 
 // ============================================================
@@ -64,6 +64,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [swRegistered, setSwRegistered] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const prefetchedRef = useRef(false);
+  const prefetchingRef = useRef(false);
+  const syncingRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout>();
 
   // Register service worker and install global fetch interceptor AFTER first paint
@@ -83,6 +85,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
               registerPeriodicSync();
             }, 5000);
           }
+        }).catch(() => {
+          // SW registration failed — silently continue without offline support
         });
       }, 2000); // 2s delay to let the main UI become interactive first
 
@@ -121,7 +125,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
   // Prefetch all data once when component mounts and user is authenticated
   const runPrefetch = useCallback(async () => {
-    if (isPrefetching) return;
+    // Use ref for guard to avoid re-render dependency
+    if (prefetchingRef.current) return;
+    if (!isIndexedDBAvailable()) return;
+    prefetchingRef.current = true;
     setIsPrefetching(true);
 
     try {
@@ -133,25 +140,30 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       setPrefetchStatus(status);
       setIsFullyCached(status.isFullyCached);
     } catch (err) {
-      console.error('[OfflineProvider] Prefetch error:', err);
+      // Log once, don't spam console
+      console.warn('[OfflineProvider] Prefetch error:', (err as Error)?.message || err);
     } finally {
+      prefetchingRef.current = false;
       setIsPrefetching(false);
     }
-  }, [isPrefetching]);
+  }, []);
 
   // Sync pending mutations
   const syncPendingMutations = useCallback(async () => {
-    if (isSyncing || !navigator.onLine) return;
+    if (syncingRef.current || !navigator.onLine) return;
+    if (!isIndexedDBAvailable()) return;
+    syncingRef.current = true;
     setIsSyncing(true);
     try {
       const result = await processOfflineQueue();
       setPendingSyncCount(result.remaining);
     } catch {
-      // Sync failed
+      // Sync failed — silently continue
     } finally {
+      syncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [isSyncing]);
+  }, []);
 
   // Initial prefetch — deferred to avoid blocking initial render
   useEffect(() => {
@@ -167,13 +179,17 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll pending sync count
+  // Poll pending sync count (only if IndexedDB is available)
   useEffect(() => {
+    if (!isIndexedDBAvailable()) return;
+
     const checkPending = async () => {
       try {
         const count = await getOfflineQueueCount();
         setPendingSyncCount(count);
-      } catch {}
+      } catch {
+        // IndexedDB unavailable — stop polling
+      }
     };
 
     checkPending();
@@ -186,9 +202,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for SW sync-complete messages
   useEffect(() => {
+    if (!isIndexedDBAvailable()) return;
+
     const handler = (event: MessageEvent) => {
       if (event.data?.type === 'SYNC_COMPLETE') {
-        getOfflineQueueCount().then(setPendingSyncCount);
+        getOfflineQueueCount().then(setPendingSyncCount).catch(() => {});
       }
     };
 
