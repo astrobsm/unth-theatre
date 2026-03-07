@@ -23,6 +23,14 @@ import {
   RefreshCw,
   BarChart3,
   WifiOff,
+  Siren,
+  AlertTriangle,
+  AlertOctagon,
+  FlaskConical,
+  Phone,
+  Droplet,
+  ShieldAlert,
+  Zap,
 } from 'lucide-react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
@@ -198,6 +206,138 @@ export default function DashboardPage() {
         <p className="text-primary-100 mt-2 text-lg">
           Theatre management system for University of Nigeria Teaching Hospital Ituku Ozalla
         </p>
+      </div>
+
+      {/* 🚨 Emergency Alert Quick Access */}
+      <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+        {/* Animated pulse background */}
+        <div className="absolute inset-0 bg-red-400 opacity-10 animate-pulse rounded-2xl" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+              <Siren className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white">🚨 Emergency Alert Quick Access</h2>
+              <p className="text-red-100 text-sm">Rapid navigation to all emergency, alert, and critical modules</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {/* Emergency Booking */}
+            <Link
+              href="/dashboard/emergency-booking"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-red-700/50 p-3 rounded-lg group-hover:bg-red-700/70 transition">
+                <AlertOctagon className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Emergency Booking</span>
+              <span className="text-[10px] bg-red-900/50 px-2 py-0.5 rounded-full font-bold">URGENT</span>
+            </Link>
+
+            {/* Emergency Lab Workup */}
+            <Link
+              href="/dashboard/emergency-lab-workup"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-purple-700/50 p-3 rounded-lg group-hover:bg-purple-700/70 transition">
+                <FlaskConical className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Emergency Lab Workup</span>
+              <span className="text-[10px] bg-purple-900/50 px-2 py-0.5 rounded-full font-bold">LAB</span>
+            </Link>
+
+            {/* Emergency Alerts */}
+            <Link
+              href="/dashboard/emergency-alerts"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-orange-700/50 p-3 rounded-lg group-hover:bg-orange-700/70 transition">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Emergency Alerts</span>
+              <span className="text-[10px] bg-orange-900/50 px-2 py-0.5 rounded-full font-bold">CRITICAL</span>
+            </Link>
+
+            {/* Alerts */}
+            <Link
+              href="/dashboard/alerts"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-yellow-700/50 p-3 rounded-lg group-hover:bg-yellow-700/70 transition">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Alerts</span>
+            </Link>
+
+            {/* Fault Alerts */}
+            <Link
+              href="/dashboard/fault-alerts"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-amber-700/50 p-3 rounded-lg group-hover:bg-amber-700/70 transition">
+                <AlertOctagon className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Fault Alerts</span>
+            </Link>
+
+            {/* Blood Bank */}
+            <Link
+              href="/dashboard/blood-bank"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-rose-700/50 p-3 rounded-lg group-hover:bg-rose-700/70 transition">
+                <Droplet className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Blood Bank</span>
+            </Link>
+
+            {/* Mortality Registry */}
+            <Link
+              href="/dashboard/mortality"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-gray-700/50 p-3 rounded-lg group-hover:bg-gray-700/70 transition">
+                <Heart className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Mortality Registry</span>
+            </Link>
+
+            {/* Cancellations */}
+            <Link
+              href="/dashboard/cancellations"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-pink-700/50 p-3 rounded-lg group-hover:bg-pink-700/70 transition">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Cancellations</span>
+            </Link>
+
+            {/* Call for Patient */}
+            <Link
+              href="/dashboard/call-for-patient"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-teal-700/50 p-3 rounded-lg group-hover:bg-teal-700/70 transition">
+                <Phone className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Call for Patient</span>
+            </Link>
+
+            {/* Power Status */}
+            <Link
+              href="/dashboard/power-house/status"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-yellow-600/50 p-3 rounded-lg group-hover:bg-yellow-600/70 transition">
+                <Zap className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Power Status</span>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
