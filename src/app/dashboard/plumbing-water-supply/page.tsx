@@ -172,7 +172,7 @@ export default function PlumbingWaterSupplyPage() {
 
   // New fault form
   const [faultData, setFaultData] = useState({
-    title: '', description: '', category: 'LEAKING_PIPE', priority: 'MEDIUM',
+    title: '', description: '', category: 'LEAK', priority: 'MEDIUM',
     location: '', floor: '', building: 'Main Theatre Complex',
     affectsTheatreOps: false, theatresAffected: [] as string[], notes: '',
   });
