@@ -31,6 +31,7 @@ import {
   Droplet,
   ShieldAlert,
   Zap,
+  Monitor,
 } from 'lucide-react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
@@ -335,6 +336,19 @@ export default function DashboardPage() {
                 <Zap className="w-6 h-6" />
               </div>
               <span className="text-xs font-semibold text-center leading-tight">Power Status</span>
+            </Link>
+
+            {/* TV Kiosk Display */}
+            <Link
+              href="/emergency-display"
+              target="_blank"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-cyan-700/50 p-3 rounded-lg group-hover:bg-cyan-700/70 transition">
+                <Monitor className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">TV Display</span>
+              <span className="text-[10px] bg-cyan-900/50 px-2 py-0.5 rounded-full font-bold">KIOSK</span>
             </Link>
           </div>
         </div>
