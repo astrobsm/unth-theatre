@@ -37,117 +37,101 @@ interface EmergencyItem {
 }
 
 // ==================== AUDIO ALERT ENGINE ====================
-// Generates alarm sounds via Web Audio API — NO browser TTS dependency
+// Uses Speech Synthesis to announce "EMERGENCY SURGERY ALERT" 3 times every 5 minutes
 class AudioAlertEngine {
-  private ctx: AudioContext | null = null;
   private enabled = false;
   private alarmInterval: NodeJS.Timeout | null = null;
+  private speaking = false;
 
   init() {
-    if (!this.ctx) {
-      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
     this.enabled = true;
+    // Prime speech synthesis so it's ready
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
   }
 
   isEnabled() { return this.enabled; }
 
   disable() {
     this.enabled = false;
+    this.speaking = false;
     this.stopContinuousAlarm();
-  }
-
-  // Critical: Rapid triple-tone siren
-  playCriticalAlarm() {
-    if (!this.enabled || !this.ctx) return;
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
-
-    // Three descending siren sweeps
-    for (let i = 0; i < 3; i++) {
-      const offset = i * 0.6;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sawtooth';
-      // Sweep from 1200 Hz down to 600 Hz
-      osc.frequency.setValueAtTime(1200, now + offset);
-      osc.frequency.linearRampToValueAtTime(600, now + offset + 0.4);
-      gain.gain.setValueAtTime(0.4, now + offset);
-      gain.gain.setValueAtTime(0.4, now + offset + 0.35);
-      gain.gain.linearRampToValueAtTime(0, now + offset + 0.5);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.5);
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
   }
 
-  // High: Double tone alert
-  playHighAlarm() {
-    if (!this.enabled || !this.ctx) return;
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
+  // Speak "EMERGENCY SURGERY ALERT" 3 consecutive times
+  playVoiceAlert() {
+    if (!this.enabled || this.speaking) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
 
-    for (let i = 0; i < 2; i++) {
-      const offset = i * 0.5;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(880, now + offset);
-      gain.gain.setValueAtTime(0.3, now + offset);
-      gain.gain.setValueAtTime(0, now + offset + 0.2);
-      gain.gain.setValueAtTime(0.3, now + offset + 0.25);
-      gain.gain.setValueAtTime(0, now + offset + 0.4);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.45);
-    }
+    this.speaking = true;
+    window.speechSynthesis.cancel();
+
+    let count = 0;
+    const total = 3;
+
+    const speakOnce = () => {
+      if (count >= total || !this.enabled) {
+        this.speaking = false;
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance('EMERGENCY SURGERY ALERT');
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      utterance.lang = 'en-US';
+
+      // Try to pick a clear English voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        v.lang.startsWith('en') && (v.name.includes('Female') || v.name.includes('Google') || v.name.includes('Microsoft'))
+      ) || voices.find(v => v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+
+      utterance.onend = () => {
+        count++;
+        // Short pause between repetitions
+        setTimeout(() => speakOnce(), 600);
+      };
+
+      utterance.onerror = () => {
+        count++;
+        setTimeout(() => speakOnce(), 600);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    speakOnce();
   }
 
-  // Medium: Single attention tone
-  playMediumAlarm() {
-    if (!this.enabled || !this.ctx) return;
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(660, now);
-    osc.frequency.linearRampToValueAtTime(880, now + 0.3);
-    gain.gain.setValueAtTime(0.25, now);
-    gain.gain.linearRampToValueAtTime(0, now + 0.5);
-    osc.start(now);
-    osc.stop(now + 0.55);
+  playForPriority(_priority: string) {
+    this.playVoiceAlert();
   }
 
-  playForPriority(priority: string) {
-    switch (priority) {
-      case 'CRITICAL': this.playCriticalAlarm(); break;
-      case 'HIGH': this.playHighAlarm(); break;
-      default: this.playMediumAlarm(); break;
-    }
-  }
-
-  // Continuous alarm loop for active emergencies — plays every N seconds
-  startContinuousAlarm(priority: string, intervalSec = 30) {
+  // Continuous voice alert loop — speaks 3x every 5 minutes (300 seconds)
+  startContinuousAlarm(_priority: string, _intervalSec = 300) {
     this.stopContinuousAlarm();
-    this.playForPriority(priority);
+    // Play immediately
+    this.playVoiceAlert();
+    // Then repeat every 5 minutes
     this.alarmInterval = setInterval(() => {
-      this.playForPriority(priority);
-    }, intervalSec * 1000);
+      this.playVoiceAlert();
+    }, 300_000); // 5 minutes
   }
 
   stopContinuousAlarm() {
     if (this.alarmInterval) {
       clearInterval(this.alarmInterval);
       this.alarmInterval = null;
+    }
+    this.speaking = false;
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
   }
 }
@@ -340,16 +324,8 @@ export default function EmergencyDisplayPage() {
       return;
     }
 
-    const hasCritical = emergencies.some(e => e.priority === 'CRITICAL');
-    const hasHigh = emergencies.some(e => e.priority === 'HIGH');
-
-    if (hasCritical) {
-      audioRef.current?.startContinuousAlarm('CRITICAL', 30);
-    } else if (hasHigh) {
-      audioRef.current?.startContinuousAlarm('HIGH', 60);
-    } else {
-      audioRef.current?.stopContinuousAlarm();
-    }
+    // Voice alert: "EMERGENCY SURGERY ALERT" x3, every 5 minutes while emergencies exist
+    audioRef.current?.startContinuousAlarm('ALL', 300);
 
     return () => {
       audioRef.current?.stopContinuousAlarm();
