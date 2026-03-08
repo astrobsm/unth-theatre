@@ -37,17 +37,25 @@ interface EmergencyItem {
 }
 
 // ==================== AUDIO ALERT ENGINE ====================
-// Uses Speech Synthesis to announce "EMERGENCY SURGERY ALERT" 3 times every 5 minutes
+// ==================== AUDIO ALERT ENGINE ====================
+// Plays pre-recorded audio file — NOT browser TTS dependent
+// Audio: "EMERGENCY SURGERY ALERT" spoken 3 consecutive times
+// File: /audio/emergency-alert.wav (generated offline, same on every device)
 class AudioAlertEngine {
   private enabled = false;
   private alarmInterval: NodeJS.Timeout | null = null;
-  private speaking = false;
+  private playing = false;
+  private audio: HTMLAudioElement | null = null;
 
   init() {
     this.enabled = true;
-    // Prime speech synthesis so it's ready
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    // Pre-load the audio file so it's ready to play instantly
+    if (typeof window !== 'undefined') {
+      this.audio = new Audio('/audio/emergency-alert.wav');
+      this.audio.preload = 'auto';
+      this.audio.volume = 1.0;
+      // Trigger a load
+      this.audio.load();
     }
   }
 
@@ -55,65 +63,39 @@ class AudioAlertEngine {
 
   disable() {
     this.enabled = false;
-    this.speaking = false;
+    this.playing = false;
     this.stopContinuousAlarm();
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.currentTime = 0;
     }
   }
 
-  // Speak "EMERGENCY SURGERY ALERT" 3 consecutive times
+  // Play the pre-recorded "EMERGENCY SURGERY ALERT" x3 audio file
   playVoiceAlert() {
-    if (!this.enabled || this.speaking) return;
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!this.enabled || this.playing || !this.audio) return;
 
-    this.speaking = true;
-    window.speechSynthesis.cancel();
+    this.playing = true;
+    this.audio.currentTime = 0;
+    this.audio.play()
+      .then(() => {
+        // Audio started playing
+      })
+      .catch((err) => {
+        console.warn('Audio playback blocked:', err);
+        this.playing = false;
+      });
 
-    let count = 0;
-    const total = 3;
-
-    const speakOnce = () => {
-      if (count >= total || !this.enabled) {
-        this.speaking = false;
-        return;
-      }
-
-      const utterance = new SpeechSynthesisUtterance('EMERGENCY SURGERY ALERT');
-      utterance.rate = 0.9;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-      utterance.lang = 'en-US';
-
-      // Try to pick a clear English voice
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(v =>
-        v.lang.startsWith('en') && (v.name.includes('Female') || v.name.includes('Google') || v.name.includes('Microsoft'))
-      ) || voices.find(v => v.lang.startsWith('en'));
-      if (preferred) utterance.voice = preferred;
-
-      utterance.onend = () => {
-        count++;
-        // Short pause between repetitions
-        setTimeout(() => speakOnce(), 600);
-      };
-
-      utterance.onerror = () => {
-        count++;
-        setTimeout(() => speakOnce(), 600);
-      };
-
-      window.speechSynthesis.speak(utterance);
+    this.audio.onended = () => {
+      this.playing = false;
     };
-
-    speakOnce();
   }
 
   playForPriority(_priority: string) {
     this.playVoiceAlert();
   }
 
-  // Continuous voice alert loop — speaks 3x every 5 minutes (300 seconds)
+  // Continuous alert loop — plays every 5 minutes (300 seconds)
   startContinuousAlarm(_priority: string, _intervalSec = 300) {
     this.stopContinuousAlarm();
     // Play immediately
@@ -129,9 +111,10 @@ class AudioAlertEngine {
       clearInterval(this.alarmInterval);
       this.alarmInterval = null;
     }
-    this.speaking = false;
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    this.playing = false;
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.currentTime = 0;
     }
   }
 }
