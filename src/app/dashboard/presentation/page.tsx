@@ -244,6 +244,46 @@ export default function PresentationPage() {
   const [auto, setAuto] = useState(false);
   const total = data.length;
 
+  const downloadPdf = useCallback(() => {
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow popups to download the PDF.'); return; }
+
+    const slideHtml = data.map((sl, idx) => {
+      const t = themes[sl.bg] || themes.navy;
+      const isEdgeSlide = idx === 0 || idx === data.length - 1;
+      const bulletsHtml = sl.bullets.length > 0
+        ? `<ul style="list-style:none;padding:0;margin:0;columns:${sl.bullets.length > 6 ? 2 : 1};column-gap:40px;">
+            ${sl.bullets.map(b => `<li style="font-size:16px;color:${t.text};margin-bottom:10px;padding-left:24px;position:relative;line-height:1.5;break-inside:avoid;">
+              <span style="position:absolute;left:0;top:5px;width:12px;height:12px;border-radius:50%;background:${t.accent};opacity:0.8;"></span>${b}
+            </li>`).join('')}
+          </ul>`
+        : '';
+      const logoHtml = idx === 0
+        ? `<div style="display:flex;justify-content:center;margin-top:24px;">
+            <div style="width:80px;height:80px;border-radius:50%;border:3px solid #87CEEB;background:#fff;display:flex;align-items:center;justify-content:center;">
+              <img src="${window.location.origin}/logo.png" width="64" height="64" style="object-fit:contain;" />
+            </div>
+          </div>`
+        : '';
+      return `<div style="page-break-after:always;width:100%;height:100vh;box-sizing:border-box;background:${t.background};display:flex;flex-direction:column;justify-content:center;padding:50px 60px;position:relative;font-family:Georgia,serif;overflow:hidden;">
+        <div style="position:absolute;bottom:20px;left:30px;display:flex;align-items:center;gap:8px;opacity:0.7;">
+          <img src="${window.location.origin}/logo.png" width="28" height="28" style="object-fit:contain;border-radius:50%;" />
+          <span style="font-size:11px;color:${t.text};">UNTH Theatre Management System</span>
+        </div>
+        <div style="position:absolute;bottom:20px;right:30px;font-size:13px;color:${t.text};opacity:0.6;">${idx + 1} / ${data.length}</div>
+        <h1 style="font-size:${isEdgeSlide ? 40 : 32}px;color:${t.text};margin:0 0 8px;line-height:1.2;white-space:pre-line;text-align:${isEdgeSlide ? 'center' : 'left'};">${sl.title}</h1>
+        <p style="font-size:18px;color:${t.sub};margin:0 0 24px;line-height:1.4;white-space:pre-line;text-align:${isEdgeSlide ? 'center' : 'left'};">${sl.subtitle}</p>
+        ${bulletsHtml}${logoHtml}
+      </div>`;
+    }).join('');
+
+    w.document.write(`<!DOCTYPE html><html><head><title>UNTH Theatre Presentation</title>
+      <style>@page{size:landscape;margin:0;}*{margin:0;padding:0;}body{margin:0;padding:0;}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style>
+    </head><body>${slideHtml}</body></html>`);
+    w.document.close();
+    setTimeout(() => { w.print(); }, 500);
+  }, [data]);
+
   const goTo = useCallback((n: number) => {
     if (n < 0 || n >= total || n === current) return;
     setAnim('morph-out');
@@ -304,6 +344,7 @@ export default function PresentationPage() {
             <span style={{ fontSize: 16, fontWeight: 'bold' }}>UNTH Theatre Presentation</span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={downloadPdf} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: '#87CEEB', color: '#001f3f', cursor: 'pointer', fontFamily: 'Georgia, serif', fontWeight: 'bold' }}>📥 Download PDF</button>
             <button onClick={() => setEditing(current)} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: 'transparent', color: '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>Edit</button>
             <button onClick={() => setAuto(!auto)} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: auto ? '#87CEEB' : 'transparent', color: auto ? '#001f3f' : '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>{auto ? 'Pause' : 'Auto'}</button>
             <button onClick={() => setFull(!full)} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: 'transparent', color: '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>{full ? 'Exit' : 'Fullscreen'}</button>
