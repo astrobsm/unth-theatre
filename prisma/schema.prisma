@@ -5440,3 +5440,127 @@ model PlumbingWaterStatus {
   @@index([overallStatus])
   @@map("plumbing_water_status")
 }
+
+// ============================================
+// ANONYMOUS REPORTING — NO USER TRACKING
+// ============================================
+
+enum AnonymousTipCategory {
+  MISCONDUCT
+  DAMAGE
+  LIGHTS_AC_LEFT_ON
+  WASTE_OF_RESOURCES
+  POLICY_VIOLATION
+  UNSAFE_PRACTICE
+  HARASSMENT
+  NEGLIGENCE
+  OTHER
+}
+
+enum SecurityReportCategory {
+  THEFT
+  SUSPICIOUS_ACTIVITY
+  UNAUTHORIZED_ACCESS
+  VANDALISM
+  THREATENING_BEHAVIOR
+  MISSING_EQUIPMENT
+  DRUG_DIVERSION
+  TRESPASSING
+  OTHER
+}
+
+enum AnonymousReportStatus {
+  NEW
+  UNDER_REVIEW
+  INVESTIGATING
+  ACTION_TAKEN
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model AnonymousTip {
+  id                    String                  @id @default(uuid())
+  
+  // NO user references — fully anonymous
+  category              AnonymousTipCategory
+  priority              ReportPriority          @default(MEDIUM)
+  status                AnonymousReportStatus   @default(NEW)
+  
+  location              String                  // Where the incident/issue was observed
+  dateObserved          DateTime                @default(now()) // When it was observed
+  description           String                  // Detailed anonymous description
+  
+  // Media evidence (photo/video as base64 data URL)
+  mediaUrl              String?                 @db.Text // base64 data URL of uploaded image/video
+  mediaType             String?                 // "image" or "video"
+  mediaLocation         String?                 // Where the photo/video was taken
+  
+  // Optional details
+  frequencyOfOccurrence String?                 // e.g. "Daily", "Every night", "One-time"
+  suggestedAction       String?                 // What the reporter thinks should be done
+  
+  // Admin response (filled by admin reviewing the tip)
+  adminNotes            String?
+  actionTaken           String?
+  resolvedAt            DateTime?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@index([category])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@map("anonymous_tips")
+}
+
+model SecurityReport {
+  id                    String                  @id @default(uuid())
+  
+  // NO user references — fully anonymous
+  category              SecurityReportCategory
+  priority              ReportPriority          @default(HIGH)
+  status                AnonymousReportStatus   @default(NEW)
+  
+  location              String                  // Where the security concern was observed
+  dateObserved          DateTime                @default(now())
+  description           String                  // Detailed description of security concern
+  
+  // Suspect details (optional, anonymous)
+  suspectDescription    String?                 // Physical description if relevant
+  personsInvolved       String?                 // Number or vague description, no names required
+  
+  // Evidence
+  evidenceDescription   String?                 // Description of any evidence
+  
+  // Media evidence (photo/video as base64 data URL)
+  mediaUrl              String?                 @db.Text // base64 data URL of uploaded image/video
+  mediaType             String?                 // "image" or "video"
+  mediaLocation         String?                 // Where the photo/video was taken
+  
+  // Urgency
+  isOngoing             Boolean                 @default(false) // Is this still happening?
+  immediateRiskToLife   Boolean                 @default(false) // Immediate danger?
+  
+  // Admin response
+  adminNotes            String?
+  actionTaken           String?
+  resolvedAt            DateTime?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  @@index([category])
+  @@index([status])
+  @@index([priority])
+  @@index([isOngoing])
+  @@index([createdAt])
+  @@map("security_reports")
+}
