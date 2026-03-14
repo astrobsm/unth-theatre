@@ -3,14 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
-// Allow larger body for media uploads (up to 6MB)
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '6mb',
-    },
-  },
-};
+// App Router route segment config
+export const dynamic = 'force-dynamic';
 
 // POST — submit anonymous tip (NO authentication required)
 export async function POST(request: NextRequest) {
