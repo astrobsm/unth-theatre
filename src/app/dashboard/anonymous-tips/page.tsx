@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Eye,
@@ -63,7 +63,7 @@ export default function AnonymousTipsPage() {
     category: '',
     priority: 'MEDIUM',
     location: '',
-    dateObserved: new Date().toISOString().slice(0, 16),
+    dateObserved: '',
     description: '',
     frequencyOfOccurrence: '',
     suggestedAction: '',
@@ -71,6 +71,10 @@ export default function AnonymousTipsPage() {
     mediaType: '',
     mediaLocation: '',
   });
+
+  useEffect(() => {
+    setForm(f => ({ ...f, dateObserved: new Date().toISOString().slice(0, 16) }));
+  }, []);
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -164,7 +168,7 @@ export default function AnonymousTipsPage() {
           </div>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => { setSubmitted(false); setForm({ category: '', priority: 'MEDIUM', location: '', dateObserved: new Date().toISOString().slice(0, 16), description: '', frequencyOfOccurrence: '', suggestedAction: '', mediaUrl: '', mediaType: '', mediaLocation: '' }); removeMedia(); }}
+              onClick={() => { setSubmitted(false); setForm({ category: '', priority: 'MEDIUM', location: '', dateObserved: new Date().toISOString().slice(0, 16), description: '', frequencyOfOccurrence: '', suggestedAction: '', mediaUrl: '', mediaType: '', mediaLocation: '' }); removeMedia?.(); }}
               className="btn-primary"
             >
               Submit Another Report

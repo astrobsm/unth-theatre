@@ -37,25 +37,19 @@ interface EmergencyItem {
 }
 
 // ==================== AUDIO ALERT ENGINE ====================
-// ==================== AUDIO ALERT ENGINE ====================
-// Plays pre-recorded audio file — NOT browser TTS dependent
-// Audio: "EMERGENCY SURGERY ALERT" spoken 3 consecutive times
-// File: /audio/emergency-alert.wav (generated offline, same on every device)
+// Pleasant, professional hospital notification chime using Web Audio API
+// Three-tone ascending chime followed by voice announcement
+// Priority-aware: CRITICAL = firm tone, HIGH = moderate, MEDIUM = gentle
 class AudioAlertEngine {
   private enabled = false;
   private alarmInterval: NodeJS.Timeout | null = null;
   private playing = false;
-  private audio: HTMLAudioElement | null = null;
+  private audioCtx: AudioContext | null = null;
 
   init() {
     this.enabled = true;
-    // Pre-load the audio file so it's ready to play instantly
     if (typeof window !== 'undefined') {
-      this.audio = new Audio('/audio/emergency-alert.wav');
-      this.audio.preload = 'auto';
-      this.audio.volume = 1.0;
-      // Trigger a load
-      this.audio.load();
+      this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
   }
 
@@ -65,45 +59,128 @@ class AudioAlertEngine {
     this.enabled = false;
     this.playing = false;
     this.stopContinuousAlarm();
-    if (this.audio) {
-      this.audio.pause();
-      this.audio.currentTime = 0;
+    if (typeof window !== 'undefined') {
+      window.speechSynthesis.cancel();
     }
   }
 
-  // Play the pre-recorded "EMERGENCY SURGERY ALERT" x3 audio file
-  playVoiceAlert() {
-    if (!this.enabled || this.playing || !this.audio) return;
+  // Play a single clean tone at given frequency and duration
+  private playTone(freq: number, startTime: number, duration: number, volume: number) {
+    if (!this.audioCtx) return;
+    const osc = this.audioCtx.createOscillator();
+    const gain = this.audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, startTime);
+    // Smooth envelope: quick attack, sustain, gentle fade
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(volume, startTime + 0.05);
+    gain.gain.setValueAtTime(volume, startTime + duration - 0.15);
+    gain.gain.linearRampToValueAtTime(0, startTime + duration);
+    osc.connect(gain);
+    gain.connect(this.audioCtx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  }
 
+  // Play a pleasant 3-tone ascending chime (hospital notification style)
+  private playChime(priority: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.audioCtx) { resolve(); return; }
+      // Resume audio context if suspended (browser policy)
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+
+      const now = this.audioCtx.currentTime;
+      let tones: [number, number, number][];   // [freq, duration, volume]
+      let gap: number;
+
+      switch (priority) {
+        case 'CRITICAL':
+          // Firm but pleasant: C5 → E5 → G5 → C6 (major arpeggio, brighter)
+          tones = [[523, 0.3, 0.35], [659, 0.3, 0.35], [784, 0.3, 0.35], [1047, 0.5, 0.3]];
+          gap = 0.15;
+          break;
+        case 'HIGH':
+          // Moderate: C5 → E5 → G5 (major triad)
+          tones = [[523, 0.35, 0.3], [659, 0.35, 0.3], [784, 0.5, 0.28]];
+          gap = 0.18;
+          break;
+        default:
+          // Gentle: E5 → G5 → B5 (open, warm)
+          tones = [[659, 0.4, 0.25], [784, 0.4, 0.25], [988, 0.55, 0.22]];
+          gap = 0.22;
+          break;
+      }
+
+      let t = now + 0.05;
+      for (const [freq, dur, vol] of tones) {
+        this.playTone(freq, t, dur, vol);
+        t += dur + gap;
+      }
+
+      // Total chime duration
+      const totalDuration = (t - now) * 1000 + 200;
+      setTimeout(resolve, totalDuration);
+    });
+  }
+
+  // Speak the announcement using Speech Synthesis
+  private speakAnnouncement(priority: string) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+
+    const priorityLabel = priority === 'CRITICAL' ? 'critical' : priority === 'HIGH' ? 'high priority' : '';
+    const message = priorityLabel
+      ? `Attention please. ${priorityLabel} emergency surgery has been booked. Preparatory process commencing.`
+      : `Attention please. Emergency surgery has been booked. Preparatory process commencing.`;
+
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.1;
+    utterance.volume = 1.0;
+    utterance.lang = 'en-US';
+
+    // Prefer a female English voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+      v.lang.startsWith('en') && /female|zira|samantha|karen|fiona|hazel/i.test(v.name)
+    ) || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utterance.voice = preferred;
+
+    utterance.onend = () => { this.playing = false; };
+    utterance.onerror = () => { this.playing = false; };
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Full alert sequence: chime → short pause → voice announcement
+  async playVoiceAlert(priority = 'HIGH') {
+    if (!this.enabled || this.playing) return;
     this.playing = true;
-    this.audio.currentTime = 0;
-    this.audio.play()
-      .then(() => {
-        // Audio started playing
-      })
-      .catch((err) => {
-        console.warn('Audio playback blocked:', err);
-        this.playing = false;
-      });
 
-    this.audio.onended = () => {
+    try {
+      await this.playChime(priority);
+      // Brief pause between chime and voice
+      await new Promise(r => setTimeout(r, 400));
+      this.speakAnnouncement(priority);
+    } catch {
       this.playing = false;
-    };
+    }
   }
 
-  playForPriority(_priority: string) {
-    this.playVoiceAlert();
+  playForPriority(priority: string) {
+    this.playVoiceAlert(priority);
   }
 
-  // Continuous alert loop — plays every 5 minutes (300 seconds)
-  startContinuousAlarm(_priority: string, _intervalSec = 300) {
+  // Continuous alert loop — plays every 5 minutes while emergencies exist
+  startContinuousAlarm(priority: string, _intervalSec = 300) {
     this.stopContinuousAlarm();
     // Play immediately
-    this.playVoiceAlert();
+    this.playVoiceAlert(priority);
     // Then repeat every 5 minutes
     this.alarmInterval = setInterval(() => {
-      this.playVoiceAlert();
-    }, 300_000); // 5 minutes
+      this.playVoiceAlert(priority);
+    }, 300_000);
   }
 
   stopContinuousAlarm() {
@@ -112,9 +189,8 @@ class AudioAlertEngine {
       this.alarmInterval = null;
     }
     this.playing = false;
-    if (this.audio) {
-      this.audio.pause();
-      this.audio.currentTime = 0;
+    if (typeof window !== 'undefined') {
+      window.speechSynthesis.cancel();
     }
   }
 }
@@ -123,7 +199,7 @@ class AudioAlertEngine {
 export default function EmergencyDisplayPage() {
   const [emergencies, setEmergencies] = useState<EmergencyItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'polling'>('connecting');
@@ -266,8 +342,9 @@ export default function EmergencyDisplayPage() {
     };
   }, [connectSSE, startPolling]);
 
-  // Clock
+  // Clock — set initial time on client only to avoid hydration mismatch
   useEffect(() => {
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
@@ -307,8 +384,12 @@ export default function EmergencyDisplayPage() {
       return;
     }
 
-    // Voice alert: "EMERGENCY SURGERY ALERT" x3, every 5 minutes while emergencies exist
-    audioRef.current?.startContinuousAlarm('ALL', 300);
+    // Pleasant chime + voice announcement, every 5 minutes while emergencies exist
+    const highestPrio = emergencies.reduce((best, e) => {
+      const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+      return (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best;
+    }, emergencies[0]);
+    audioRef.current?.startContinuousAlarm(highestPrio.priority, 300);
 
     return () => {
       audioRef.current?.stopContinuousAlarm();
@@ -425,10 +506,10 @@ export default function EmergencyDisplayPage() {
           {/* Clock */}
           <div className="text-right">
             <div className="text-2xl font-bold font-mono text-white">
-              {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+              {currentTime ? currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'}
             </div>
             <div className="text-xs text-gray-400">
-              {currentTime.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+              {currentTime ? currentTime.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert,
@@ -64,7 +64,7 @@ export default function SecurityReportsPage() {
     category: '',
     priority: 'HIGH',
     location: '',
-    dateObserved: new Date().toISOString().slice(0, 16),
+    dateObserved: '',
     description: '',
     suspectDescription: '',
     personsInvolved: '',
@@ -75,6 +75,10 @@ export default function SecurityReportsPage() {
     mediaType: '',
     mediaLocation: '',
   });
+
+  useEffect(() => {
+    setForm(f => ({ ...f, dateObserved: new Date().toISOString().slice(0, 16) }));
+  }, []);
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -174,7 +178,7 @@ export default function SecurityReportsPage() {
           )}
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => { setSubmitted(false); setForm({ category: '', priority: 'HIGH', location: '', dateObserved: new Date().toISOString().slice(0, 16), description: '', suspectDescription: '', personsInvolved: '', evidenceDescription: '', isOngoing: false, immediateRiskToLife: false, mediaUrl: '', mediaType: '', mediaLocation: '' }); removeMedia(); }}
+              onClick={() => { setSubmitted(false); setForm({ category: '', priority: 'HIGH', location: '', dateObserved: new Date().toISOString().slice(0, 16), description: '', suspectDescription: '', personsInvolved: '', evidenceDescription: '', isOngoing: false, immediateRiskToLife: false, mediaUrl: '', mediaType: '', mediaLocation: '' }); removeMedia?.(); }}
               className="btn-primary"
             >
               Submit Another Report
