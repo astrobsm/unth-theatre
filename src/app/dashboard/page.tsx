@@ -32,6 +32,9 @@ import {
   ShieldAlert,
   Zap,
   Monitor,
+  MessageSquareWarning,
+  Eye,
+  ShieldCheck,
 } from 'lucide-react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
@@ -349,6 +352,54 @@ export default function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-center leading-tight">TV Display</span>
               <span className="text-[10px] bg-cyan-900/50 px-2 py-0.5 rounded-full font-bold">KIOSK</span>
+            </Link>
+
+            {/* Anonymous Tips */}
+            <Link
+              href="/dashboard/anonymous-tips"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-indigo-700/50 p-3 rounded-lg group-hover:bg-indigo-700/70 transition">
+                <MessageSquareWarning className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Anonymous Tips</span>
+              <span className="text-[10px] bg-indigo-900/50 px-2 py-0.5 rounded-full font-bold">REPORT</span>
+            </Link>
+
+            {/* Security Reports */}
+            <Link
+              href="/dashboard/security-reports"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-red-800/50 p-3 rounded-lg group-hover:bg-red-800/70 transition">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Security Reports</span>
+              <span className="text-[10px] bg-red-900/50 px-2 py-0.5 rounded-full font-bold">SECURITY</span>
+            </Link>
+
+            {/* Review Tips (Admin) */}
+            <Link
+              href="/dashboard/anonymous-tips/view"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-violet-700/50 p-3 rounded-lg group-hover:bg-violet-700/70 transition">
+                <Eye className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Review Tips</span>
+              <span className="text-[10px] bg-violet-900/50 px-2 py-0.5 rounded-full font-bold">ADMIN</span>
+            </Link>
+
+            {/* Review Security (Admin) */}
+            <Link
+              href="/dashboard/security-reports/view"
+              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
+            >
+              <div className="bg-rose-800/50 p-3 rounded-lg group-hover:bg-rose-800/70 transition">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-semibold text-center leading-tight">Review Security</span>
+              <span className="text-[10px] bg-rose-900/50 px-2 py-0.5 rounded-full font-bold">ADMIN</span>
             </Link>
           </div>
         </div>

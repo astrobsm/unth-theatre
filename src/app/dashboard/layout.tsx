@@ -47,6 +47,9 @@ import {
   MonitorPlay,
   FlaskConical,
   Waves,
+  MessageSquareWarning,
+  ShieldAlert,
+  Eye,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -131,6 +134,8 @@ export default function DashboardLayout({
     { href: '/dashboard/fault-alerts', icon: AlertOctagon, label: 'Fault Alerts' },
     { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts' },
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
+    { href: '/dashboard/anonymous-tips', icon: MessageSquareWarning, label: 'Anonymous Tips', badge: 'NEW' },
+    { href: '/dashboard/security-reports', icon: ShieldAlert, label: 'Security Reports', badge: 'NEW' },
 
     // === INVENTORY & SUPPLIES ===
     { href: '/dashboard/inventory', icon: Package, label: 'Inventory' },
@@ -148,6 +153,8 @@ export default function DashboardLayout({
   if (adminRoles.includes(session.user.role)) {
     menuItems.push({ href: '/dashboard/users', icon: Settings, label: 'User Management' });
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
+    menuItems.push({ href: '/dashboard/anonymous-tips/view', icon: Eye, label: 'Review Tips', badge: 'ADMIN' });
+    menuItems.push({ href: '/dashboard/security-reports/view', icon: Eye, label: 'Review Security', badge: 'ADMIN' });
   }
 
   // Role-based menu filtering — show only relevant items per role
