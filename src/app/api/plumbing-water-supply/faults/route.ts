@@ -102,69 +102,77 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Notify plumbing/works staff
-    const plumbingStaff = await prisma.user.findMany({
-      where: {
-        role: { in: ['PLUMBER', 'WORKS_SUPERVISOR'] },
-        status: 'APPROVED',
-      },
-      select: { id: true },
-    });
-
-    const notifPromises = plumbingStaff.map(staff =>
-      prisma.notification.create({
-        data: {
-          userId: staff.id,
-          type: 'PLUMBING_FAULT',
-          title: `🔧 ${data.priority} Plumbing Fault: ${data.title}`,
-          message: `${data.category.replace(/_/g, ' ')} at ${data.location}. ${data.description}. ${data.affectsTheatreOps ? '⚠️ AFFECTS THEATRE OPERATIONS' : ''}`,
-          link: '/dashboard/plumbing-water-supply',
-        },
-      })
-    );
-
-    // If critical and affects theatre ops, also notify management  
-    if (data.priority === 'CRITICAL' || data.affectsTheatreOps) {
-      const mgmt = await prisma.user.findMany({
+    // Notify plumbing/works staff (non-blocking)
+    try {
+      const plumbingStaff = await prisma.user.findMany({
         where: {
-          role: { in: ['THEATRE_MANAGER', 'ADMIN', 'CHIEF_MEDICAL_DIRECTOR'] },
+          role: { in: ['PLUMBER', 'WORKS_SUPERVISOR'] },
           status: 'APPROVED',
         },
         select: { id: true },
       });
 
-      const mgmtNotifs = mgmt.map(m =>
+      const notifPromises = plumbingStaff.map(staff =>
         prisma.notification.create({
           data: {
-            userId: m.id,
-            type: 'PLUMBING_CRITICAL',
-            title: `🚨 CRITICAL Plumbing Fault: ${data.title}`,
-            message: `${data.category.replace(/_/g, ' ')} at ${data.location}. ${data.affectsTheatreOps ? 'Theatre operations affected!' : ''} ${data.description}`,
+            userId: staff.id,
+            type: 'PLUMBING_FAULT',
+            title: `🔧 ${data.priority} Plumbing Fault: ${data.title}`,
+            message: `${data.category.replace(/_/g, ' ')} at ${data.location}. ${data.description}. ${data.affectsTheatreOps ? '⚠️ AFFECTS THEATRE OPERATIONS' : ''}`,
             link: '/dashboard/plumbing-water-supply',
           },
         })
       );
-      notifPromises.push(...mgmtNotifs);
+
+      // If critical and affects theatre ops, also notify management  
+      if (data.priority === 'CRITICAL' || data.affectsTheatreOps) {
+        const mgmt = await prisma.user.findMany({
+          where: {
+            role: { in: ['THEATRE_MANAGER', 'ADMIN', 'CHIEF_MEDICAL_DIRECTOR'] },
+            status: 'APPROVED',
+          },
+          select: { id: true },
+        });
+
+        const mgmtNotifs = mgmt.map(m =>
+          prisma.notification.create({
+            data: {
+              userId: m.id,
+              type: 'PLUMBING_CRITICAL',
+              title: `🚨 CRITICAL Plumbing Fault: ${data.title}`,
+              message: `${data.category.replace(/_/g, ' ')} at ${data.location}. ${data.affectsTheatreOps ? 'Theatre operations affected!' : ''} ${data.description}`,
+              link: '/dashboard/plumbing-water-supply',
+            },
+          })
+        );
+        notifPromises.push(...mgmtNotifs);
+      }
+
+      await Promise.all(notifPromises);
+    } catch (notifError) {
+      console.error('Error sending plumbing fault notifications:', notifError);
     }
 
-    await Promise.all(notifPromises);
-
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'CREATE',
-        tableName: 'PlumbingFault',
-        recordId: fault.id,
-        changes: JSON.stringify({
-          title: data.title,
-          category: data.category,
-          priority: data.priority,
-          location: data.location,
-          affectsTheatreOps: data.affectsTheatreOps,
-        }),
-      },
-    });
+    // Audit log (non-blocking)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'CREATE',
+          tableName: 'PlumbingFault',
+          recordId: fault.id,
+          changes: JSON.stringify({
+            title: data.title,
+            category: data.category,
+            priority: data.priority,
+            location: data.location,
+            affectsTheatreOps: data.affectsTheatreOps,
+          }),
+        },
+      });
+    } catch (auditError) {
+      console.error('Error creating audit log for plumbing fault:', auditError);
+    }
 
     return NextResponse.json(fault, { status: 201 });
   } catch (error) {
@@ -172,6 +180,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Validation error', details: error.errors }, { status: 400 });
     }
     console.error('Error creating plumbing fault:', error);
-    return NextResponse.json({ error: 'Failed to report plumbing fault' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to report plumbing fault';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

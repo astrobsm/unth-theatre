@@ -4,8 +4,8 @@ const nextConfig = {
   compress: true,
   // Power on SWC minification
   swcMinify: true,
-  // Standalone output for smaller deployments
-  output: 'standalone',
+  // Standalone output for smaller deployments (production only — causes chunk issues in dev)
+  ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' } : {}),
   // Optimize images
   images: {
     formats: ['image/avif', 'image/webp'],

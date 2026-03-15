@@ -250,9 +250,13 @@ export default function PlumbingWaterSupplyPage() {
           affectsTheatreOps: false, theatresAffected: [], notes: '',
         });
         fetchData();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Server error' }));
+        alert(err.error || 'Failed to report fault. Please try again.');
       }
     } catch (error) {
       console.error('Error reporting fault:', error);
+      alert('Network error. Please check your connection and try again.');
     }
   };
 

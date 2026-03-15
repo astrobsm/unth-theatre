@@ -45,22 +45,42 @@ class AudioAlertEngine {
   private alarmInterval: NodeJS.Timeout | null = null;
   private playing = false;
   private audioCtx: AudioContext | null = null;
+  private lastPlayTime = 0; // cooldown to prevent rapid re-triggers
+  private static COOLDOWN_MS = 15_000; // minimum 15s between announcements
 
   init() {
     this.enabled = true;
     if (typeof window !== 'undefined') {
       this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Preload audio element during user gesture so browser allows playback
+      if (!this.audioElement) {
+        this.audioElement = new Audio('/audio/announcement-default.mp3');
+        this.audioElement.volume = 1.0;
+        this.audioElement.load();
+        // Unlock audio on iOS/Chrome by playing a silent blip
+        this.audioElement.play().then(() => {
+          this.audioElement!.pause();
+          this.audioElement!.currentTime = 0;
+          console.log('[AudioEngine] Audio element unlocked');
+        }).catch(() => {
+          console.log('[AudioEngine] Audio unlock deferred');
+        });
+      }
     }
   }
 
   isEnabled() { return this.enabled; }
+  isPlaying() { return this.playing; }
+  hasAlarmRunning() { return this.alarmInterval !== null; }
 
   disable() {
     this.enabled = false;
     this.playing = false;
     this.stopContinuousAlarm();
-    if (typeof window !== 'undefined') {
-      window.speechSynthesis.cancel();
+    // Stop any playing audio element
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.currentTime = 0;
     }
   }
 
@@ -125,44 +145,99 @@ class AudioAlertEngine {
     });
   }
 
-  // Speak the announcement using Speech Synthesis
-  private speakAnnouncement(priority: string) {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
+  // Play pre-recorded voice announcement MP3.
+  // Place your recordings in /public/audio/:
+  //   announcement-critical.mp3  — for CRITICAL priority
+  //   announcement-high.mp3      — for HIGH priority
+  //   announcement-default.mp3   — fallback for all priorities
+  // If a priority-specific file doesn't exist, falls back to announcement-default.mp3
+  private audioElement: HTMLAudioElement | null = null;
 
-    const priorityLabel = priority === 'CRITICAL' ? 'critical' : priority === 'HIGH' ? 'high priority' : '';
-    const message = priorityLabel
-      ? `Attention please. ${priorityLabel} emergency surgery has been booked. Preparatory process commencing.`
-      : `Attention please. Emergency surgery has been booked. Preparatory process commencing.`;
+  private playAnnouncement(priority: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined') {
+        this.playing = false;
+        resolve();
+        return;
+      }
 
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.rate = 0.95;
-    utterance.pitch = 1.1;
-    utterance.volume = 1.0;
-    utterance.lang = 'en-US';
+      // Pick the best matching audio file for this priority
+      const priorityFile = priority === 'CRITICAL'
+        ? '/audio/announcement-critical.mp3'
+        : priority === 'HIGH'
+        ? '/audio/announcement-high.mp3'
+        : '/audio/announcement-default.mp3';
 
-    // Prefer a female English voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v =>
-      v.lang.startsWith('en') && /female|zira|samantha|karen|fiona|hazel/i.test(v.name)
-    ) || voices.find(v => v.lang.startsWith('en'));
-    if (preferred) utterance.voice = preferred;
+      const fallbackFile = '/audio/announcement-default.mp3';
 
-    utterance.onend = () => { this.playing = false; };
-    utterance.onerror = () => { this.playing = false; };
-    window.speechSynthesis.speak(utterance);
+      // Reuse preloaded audio element (created during init user gesture)
+      if (!this.audioElement) {
+        this.audioElement = new Audio(fallbackFile);
+        this.audioElement.volume = 1.0;
+      }
+
+      const audio = this.audioElement;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = priorityFile;
+      audio.volume = 1.0;
+
+      const cleanup = () => {
+        this.playing = false;
+        resolve();
+      };
+
+      // Safety timeout: 3 minutes max
+      const safetyTimeout = setTimeout(cleanup, 180000);
+
+      audio.onended = () => { clearTimeout(safetyTimeout); cleanup(); };
+      audio.onerror = (e) => {
+        console.error('[AudioEngine] Audio error:', e);
+        // If priority-specific file not found, try fallback
+        if (audio.src !== new URL(fallbackFile, window.location.origin).href) {
+          console.log('[AudioEngine] Trying fallback:', fallbackFile);
+          audio.src = fallbackFile;
+          audio.play().catch((err) => { console.error('[AudioEngine] Fallback play failed:', err); clearTimeout(safetyTimeout); cleanup(); });
+        } else {
+          clearTimeout(safetyTimeout);
+          cleanup();
+        }
+      };
+
+      console.log('[AudioEngine] Playing:', priorityFile);
+      audio.play().then(() => {
+        console.log('[AudioEngine] Playback started');
+      }).catch((err) => {
+        console.error('[AudioEngine] Play failed:', err);
+        // If priority file fails, try fallback
+        if (audio.src !== new URL(fallbackFile, window.location.origin).href) {
+          console.log('[AudioEngine] Trying fallback:', fallbackFile);
+          audio.src = fallbackFile;
+          audio.play().catch((err2) => { console.error('[AudioEngine] Fallback play failed:', err2); clearTimeout(safetyTimeout); cleanup(); });
+        } else {
+          clearTimeout(safetyTimeout);
+          cleanup();
+        }
+      });
+    });
   }
 
-  // Full alert sequence: chime → short pause → voice announcement
+  // Full alert sequence: chime → short pause → recorded voice announcement
   async playVoiceAlert(priority = 'HIGH') {
     if (!this.enabled || this.playing) return;
+
+    // Enforce cooldown — prevent rapid re-triggers from polling/SSE updates
+    const now = Date.now();
+    if (now - this.lastPlayTime < AudioAlertEngine.COOLDOWN_MS) return;
+
     this.playing = true;
+    this.lastPlayTime = now;
 
     try {
       await this.playChime(priority);
       // Brief pause between chime and voice
       await new Promise(r => setTimeout(r, 400));
-      this.speakAnnouncement(priority);
+      await this.playAnnouncement(priority);
     } catch {
       this.playing = false;
     }
@@ -173,8 +248,12 @@ class AudioAlertEngine {
   }
 
   // Continuous alert loop — plays every 5 minutes while emergencies exist
-  startContinuousAlarm(priority: string, _intervalSec = 300) {
-    this.stopContinuousAlarm();
+  // Safe to call multiple times; will not restart if already running
+  startContinuousAlarm(priority: string) {
+    // If alarm is already running, don't restart it
+    // This prevents SSE/polling updates from re-triggering the alarm loop
+    if (this.alarmInterval) return;
+
     // Play immediately
     this.playVoiceAlert(priority);
     // Then repeat every 5 minutes
@@ -189,8 +268,9 @@ class AudioAlertEngine {
       this.alarmInterval = null;
     }
     this.playing = false;
-    if (typeof window !== 'undefined') {
-      window.speechSynthesis.cancel();
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.currentTime = 0;
     }
   }
 }
@@ -252,12 +332,16 @@ export default function EmergencyDisplayPage() {
     const newlyAdded = items.filter(e => !prevIds.has(e.id));
 
     if (newlyAdded.length > 0 && audioRef.current?.isEnabled()) {
-      // Play alarm for highest priority new emergency
-      const highestPriority = newlyAdded.reduce((best, e) => {
-        const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
-        return (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best;
-      }, newlyAdded[0]);
-      audioRef.current.playForPriority(highestPriority.priority);
+      // Only play one-shot alert if no continuous alarm is already running
+      // The continuous alarm handles ongoing notifications;
+      // this handles genuinely new emergencies arriving between alarm cycles
+      if (!audioRef.current.hasAlarmRunning()) {
+        const highestPriority = newlyAdded.reduce((best, e) => {
+          const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+          return (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best;
+        }, newlyAdded[0]);
+        audioRef.current.playForPriority(highestPriority.priority);
+      }
     }
 
     previousIdsRef.current = newIds;
@@ -377,24 +461,35 @@ export default function EmergencyDisplayPage() {
     }
   }, [currentIndex, emergencies.length]);
 
-  // Continuous alarm for CRITICAL items every 30 seconds
+  // Continuous alarm — start once when emergencies appear, stop when cleared.
+  // Uses emergencies.length instead of full array to avoid restarting on every SSE update.
+  const hasEmergencies = emergencies.length > 0;
+  const highestPriorityRef = useRef<string>('MEDIUM');
+
+  // Track highest priority without triggering effect re-runs
   useEffect(() => {
-    if (!audioEnabled || emergencies.length === 0) {
+    if (emergencies.length > 0) {
+      const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+      const highest = emergencies.reduce((best, e) =>
+        (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best
+      , emergencies[0]);
+      highestPriorityRef.current = highest.priority;
+    }
+  }, [emergencies]);
+
+  useEffect(() => {
+    if (!audioEnabled || !hasEmergencies) {
       audioRef.current?.stopContinuousAlarm();
       return;
     }
 
-    // Pleasant chime + voice announcement, every 5 minutes while emergencies exist
-    const highestPrio = emergencies.reduce((best, e) => {
-      const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
-      return (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best;
-    }, emergencies[0]);
-    audioRef.current?.startContinuousAlarm(highestPrio.priority, 300);
+    // Start alarm only if not already running — startContinuousAlarm is now idempotent
+    audioRef.current?.startContinuousAlarm(highestPriorityRef.current);
 
     return () => {
       audioRef.current?.stopContinuousAlarm();
     };
-  }, [audioEnabled, emergencies]);
+  }, [audioEnabled, hasEmergencies]);
 
   // Fullscreen change listener
   useEffect(() => {
@@ -487,6 +582,23 @@ export default function EmergencyDisplayPage() {
           >
             {audioEnabled ? '🔊 AUDIO ON' : '🔇 TAP FOR AUDIO'}
           </button>
+
+          {/* Test Audio button — plays announcement immediately */}
+          {audioEnabled && (
+            <button
+              onClick={() => {
+                if (audioRef.current) {
+                  // Reset cooldown so test always works
+                  (audioRef.current as any).lastPlayTime = 0;
+                  (audioRef.current as any).playing = false;
+                  audioRef.current.playVoiceAlert('HIGH');
+                }
+              }}
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-bold text-sm"
+            >
+              🔔 TEST AUDIO
+            </button>
+          )}
 
           {/* Fullscreen toggle */}
           <button

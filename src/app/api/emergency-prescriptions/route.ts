@@ -87,9 +87,9 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(prescriptions);
-  } catch (error) {
-    console.error('Error fetching emergency prescriptions:', error);
-    return NextResponse.json([], { status: 200 });
+  } catch (error: any) {
+    console.error('Error fetching emergency prescriptions:', error?.message || error);
+    return NextResponse.json({ error: 'Failed to fetch emergency prescriptions', details: error?.message }, { status: 500 });
   }
 }
 

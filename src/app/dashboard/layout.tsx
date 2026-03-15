@@ -50,6 +50,7 @@ import {
   MessageSquareWarning,
   ShieldAlert,
   Eye,
+  Volume2,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -96,6 +97,7 @@ export default function DashboardLayout({
     // === PRE-OPERATIVE (Night Before & Morning Of) ===
     { href: '/dashboard/pre-operative-visit', icon: ClipboardPlus, label: 'Pre-Op Visit', badge: 'NEW' },
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
+    { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Rx Approvals', badge: 'NEW' },
     { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions' },
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
@@ -142,6 +144,7 @@ export default function DashboardLayout({
     { href: '/dashboard/sub-stores', icon: Store, label: 'Sub-Stores' },
 
     // === REPORTS & ADMINISTRATION ===
+    { href: '/dashboard/announcements', icon: Volume2, label: 'Announcements', badge: 'NEW' },
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
@@ -160,7 +163,7 @@ export default function DashboardLayout({
   // Role-based menu filtering — show only relevant items per role
   // Roles NOT listed here see ALL menu items (e.g. ADMIN, SURGEON, ANESTHETIST, NURSE, etc.)
   const roleMenuMap: Record<string, string[]> = {
-    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/medication-tracking', '/dashboard/emergency-booking', '/dashboard/settings'],
+    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/prescription-approvals', '/dashboard/medication-tracking', '/dashboard/emergency-booking', '/dashboard/settings'],
     LAUNDRY_SUPERVISOR: ['/dashboard', '/dashboard/laundry-supervisor', '/dashboard/settings'],
     CSSD_SUPERVISOR: ['/dashboard', '/dashboard/cssd-supervisor', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
     OXYGEN_UNIT_SUPERVISOR: ['/dashboard', '/dashboard/oxygen-supervisor', '/dashboard/oxygen-control', '/dashboard/settings'],

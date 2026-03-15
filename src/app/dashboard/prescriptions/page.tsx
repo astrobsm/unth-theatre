@@ -14,15 +14,19 @@ import {
   Check,
   AlertTriangle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Siren
 } from 'lucide-react';
 
 interface Medication {
   name: string;
   dose: string;
   route: string;
-  frequency: string;
-  timing: string;
+  frequency?: string;
+  timing?: string;
+  category?: string;
+  status?: string;
+  notes?: string;
 }
 
 interface MedicationPackingItem {
@@ -57,6 +61,16 @@ interface Prescription {
   surgery: {
     procedureName: string;
   };
+  // Emergency-specific fields
+  isEmergencyRx?: boolean;
+  folderNumber?: string;
+  urgencyNote?: string;
+  emergencyBooking?: {
+    procedureName: string;
+    priority: string;
+    surgicalUnit: string;
+    requiredByTime?: string;
+  };
 }
 
 export default function PrescriptionsPage() {
@@ -80,26 +94,95 @@ export default function PrescriptionsPage() {
 
   const fetchPrescriptions = async () => {
     try {
-      let url = '/api/prescriptions';
-      
+      // Fetch both regular and emergency prescriptions in parallel
+      let regularUrl = '/api/prescriptions';
       if (filter === 'needsPacking') {
-        url += '?needsPacking=true';
+        regularUrl += '?needsPacking=true';
       } else if (filter === 'packed') {
-        url += '?status=PACKED';
+        regularUrl += '?status=PACKED';
       }
 
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
+      const [regularRes, emergencyRes] = await Promise.all([
+        fetch(regularUrl),
+        fetch('/api/emergency-prescriptions'),
+      ]);
+
+      let regularData: Prescription[] = [];
+      if (regularRes.ok) {
+        const data = await regularRes.json();
+        regularData = Array.isArray(data) ? data : [];
         if (filter === 'needsPacking') {
-          setPrescriptions(data.filter((p: Prescription) => 
+          regularData = regularData.filter((p: Prescription) => 
             ['APPROVED', 'PARTIALLY_PACKED', 'LATE_ARRIVAL'].includes(p.status) && 
             p.status !== 'PACKED'
-          ));
-        } else {
-          setPrescriptions(data);
+          );
         }
       }
+
+      // Normalize emergency prescriptions to match Prescription interface
+      let emergencyData: Prescription[] = [];
+      try {
+        const eData = await emergencyRes.json();
+        const emergencyList = Array.isArray(eData) ? eData : [];
+        emergencyData = emergencyList.map((ep: any) => {
+          // Map emergency status to something the pack logic understands
+          const mappedStatus = ep.status === 'SUBMITTED' || ep.status === 'PHARMACIST_VIEWED'
+            ? 'APPROVED'  // Needs packing
+            : ep.status === 'PACKING' ? 'PARTIALLY_PACKED'
+            : ep.status === 'PACKED' || ep.status === 'DISPENSED' ? 'PACKED'
+            : ep.status;
+
+          return {
+            id: ep.id,
+            patientName: ep.patientName || ep.emergencyBooking?.patientName || 'Unknown',
+            scheduledSurgeryDate: ep.emergencyBooking?.requiredByTime || ep.createdAt,
+            medications: ep.medications || '[]',
+            fluids: ep.fluids,
+            emergencyDrugs: ep.emergencyDrugs,
+            allergyAlerts: ep.allergyAlerts || ep.review?.allergies,
+            specialInstructions: ep.specialInstructions,
+            urgency: 'EMERGENCY' as const,
+            status: mappedStatus,
+            isLateArrival: false,
+            hasOutOfStockItems: ep.hasOutOfStockItems || false,
+            outOfStockItems: ep.outOfStockItems,
+            medicationPackingStatus: undefined,
+            prescribedBy: { fullName: ep.prescribedByName || ep.review?.reviewerName || 'Unknown' },
+            approvedBy: undefined,
+            packedBy: ep.packedBy ? { fullName: ep.packedBy.fullName } : undefined,
+            packedAt: ep.packedAt,
+            surgery: {
+              procedureName: ep.emergencyBooking?.procedureName || 'Emergency Surgery',
+            },
+            isEmergencyRx: true,
+            folderNumber: ep.folderNumber,
+            urgencyNote: ep.urgencyNote,
+            emergencyBooking: ep.emergencyBooking,
+          } as Prescription;
+        });
+
+        // Apply the same filter to emergency prescriptions
+        if (filter === 'needsPacking') {
+          emergencyData = emergencyData.filter(p => 
+            ['APPROVED', 'PARTIALLY_PACKED'].includes(p.status)
+          );
+        } else if (filter === 'packed') {
+          emergencyData = emergencyData.filter(p => p.status === 'PACKED');
+        }
+      } catch (eErr) {
+        console.error('Error processing emergency prescriptions:', eErr);
+      }
+
+      // Merge and sort: emergencies first, then by date
+      const merged = [...emergencyData, ...regularData].sort((a, b) => {
+        // Emergency first
+        if (a.urgency === 'EMERGENCY' && b.urgency !== 'EMERGENCY') return -1;
+        if (b.urgency === 'EMERGENCY' && a.urgency !== 'EMERGENCY') return 1;
+        // Then by date
+        return new Date(a.scheduledSurgeryDate).getTime() - new Date(b.scheduledSurgeryDate).getTime();
+      });
+
+      setPrescriptions(merged);
     } catch (error) {
       console.error('Error fetching prescriptions:', error);
     } finally {
@@ -120,14 +203,31 @@ export default function PrescriptionsPage() {
 
     setPacking(true);
     try {
-      const response = await fetch(`/api/prescriptions/${selectedPrescription.id}/pack`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          packingNotes,
-          medicationPackingStatus: medicationItems,
-        }),
-      });
+      // Use different API for emergency vs regular prescriptions
+      let response;
+      if ((selectedPrescription as any).isEmergencyRx) {
+        response = await fetch('/api/emergency-prescriptions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prescriptionId: selectedPrescription.id,
+            status: medicationItems.every(m => m.isPacked || m.isOutOfStock) ? 'PACKED' : 'PACKING',
+            packingNotes,
+            outOfStockItems: medicationItems.some(m => m.isOutOfStock)
+              ? JSON.stringify(medicationItems.filter(m => m.isOutOfStock).map(m => m.drugName))
+              : undefined,
+          }),
+        });
+      } else {
+        response = await fetch(`/api/prescriptions/${selectedPrescription.id}/pack`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            packingNotes,
+            medicationPackingStatus: medicationItems,
+          }),
+        });
+      }
 
       if (response.ok) {
         setShowPackModal(false);
@@ -208,7 +308,7 @@ export default function PrescriptionsPage() {
           Anesthetic Prescriptions
         </h1>
         <p className="text-gray-600 mt-2">
-          Pack and prepare medications for upcoming surgeries
+          Pack and prepare medications for upcoming surgeries (includes emergency prescriptions)
         </p>
       </div>
 
@@ -316,8 +416,20 @@ export default function PrescriptionsPage() {
             const hoursUntilSurgery = timeUntilSurgery(prescription.scheduledSurgeryDate);
 
             return (
-              <div key={prescription.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div key={prescription.id} className={`bg-white rounded-lg shadow-sm overflow-hidden ${
+                (prescription as any).isEmergencyRx ? 'ring-2 ring-red-400' : ''
+              }`}>
                 <div className="p-6">
+                  {/* Emergency Banner */}
+                  {(prescription as any).isEmergencyRx && (
+                    <div className="bg-red-600 text-white px-3 py-1.5 -mx-6 -mt-6 mb-4 flex items-center gap-2 text-sm font-medium">
+                      <Siren className="h-4 w-4" />
+                      EMERGENCY PRESCRIPTION — IMMEDIATE DISPENSING REQUIRED
+                      {(prescription as any).folderNumber && (
+                        <span className="ml-auto text-red-200">Folder: {(prescription as any).folderNumber}</span>
+                      )}
+                    </div>
+                  )}
                   {/* Header */}
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
@@ -367,7 +479,7 @@ export default function PrescriptionsPage() {
                         {prescription.surgery.procedureName}
                       </p>
                     </div>
-                    {(!prescription.packedAt || prescription.status === 'PARTIALLY_PACKED') && (
+                    {(['APPROVED', 'PARTIALLY_PACKED', 'LATE_ARRIVAL'].includes(prescription.status)) && !prescription.packedAt && (
                       <button
                         onClick={() => openPackModal(prescription)}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -375,6 +487,11 @@ export default function PrescriptionsPage() {
                         <Check className="h-5 w-5" />
                         {prescription.status === 'PARTIALLY_PACKED' ? 'Update Packing' : 'Pack Drugs'}
                       </button>
+                    )}
+                    {prescription.status === 'PENDING_APPROVAL' && (
+                      <span className="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Awaiting Approval
+                      </span>
                     )}
                   </div>
 
@@ -402,7 +519,8 @@ export default function PrescriptionsPage() {
                               <Pill className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
                               <div>
                                 <span className="font-medium">{med.name}</span> - {med.dose} {med.route}
-                                <span className="text-gray-600"> ({med.timing})</span>
+                                <span className="text-gray-600"> ({med.timing || med.frequency || ''})</span>
+                                {med.category && <span className="text-xs ml-1 bg-blue-50 text-blue-700 px-1 rounded">{med.category}</span>}
                               </div>
                             </div>
                           ))}

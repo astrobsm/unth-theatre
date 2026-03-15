@@ -1,14 +1,171 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
   User, Building2, Siren, Phone, Calendar, MapPin, Navigation,
-  Stethoscope, Pill, ChevronDown, ChevronUp, Activity
+  Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2
 } from 'lucide-react';
+
+// ==================== BNF DRUG DIRECTORY ====================
+interface DrugEntry { name: string; unit: string; commonDoses: string[]; }
+interface PrescribedMedication {
+  id: string;
+  drugName: string;
+  dose: string;
+  unit: string;
+  route: string;
+  frequency: string;
+  category: string;
+  status: 'PRESCRIBED' | 'USED' | 'HARMONIZED' | 'RETURNED';
+  notes: string;
+}
+
+const BNF_DIRECTORY: Record<string, DrugEntry[]> = {
+  'Induction Agents': [
+    { name: 'Propofol', unit: 'mg', commonDoses: ['50', '100', '150', '200'] },
+    { name: 'Thiopental (Pentothal)', unit: 'mg', commonDoses: ['200', '300', '400', '500'] },
+    { name: 'Ketamine', unit: 'mg', commonDoses: ['25', '50', '100', '150', '200'] },
+    { name: 'Etomidate', unit: 'mg', commonDoses: ['10', '20', '30'] },
+  ],
+  'Opioid Analgesics': [
+    { name: 'Fentanyl', unit: 'mcg', commonDoses: ['25', '50', '100', '150', '200'] },
+    { name: 'Morphine', unit: 'mg', commonDoses: ['2', '5', '10', '15', '20'] },
+    { name: 'Pethidine (Meperidine)', unit: 'mg', commonDoses: ['25', '50', '75', '100'] },
+    { name: 'Remifentanil', unit: 'mcg/kg/min', commonDoses: ['0.05', '0.1', '0.25', '0.5'] },
+    { name: 'Sufentanil', unit: 'mcg', commonDoses: ['5', '10', '25', '50'] },
+    { name: 'Tramadol', unit: 'mg', commonDoses: ['50', '100'] },
+    { name: 'Pentazocine', unit: 'mg', commonDoses: ['15', '30'] },
+  ],
+  'Neuromuscular Blocking Agents': [
+    { name: 'Succinylcholine (Suxamethonium)', unit: 'mg', commonDoses: ['50', '100', '150'] },
+    { name: 'Rocuronium', unit: 'mg', commonDoses: ['30', '50', '60', '100'] },
+    { name: 'Atracurium', unit: 'mg', commonDoses: ['25', '30', '50'] },
+    { name: 'Vecuronium', unit: 'mg', commonDoses: ['4', '6', '8', '10'] },
+    { name: 'Cisatracurium', unit: 'mg', commonDoses: ['10', '15', '20'] },
+    { name: 'Pancuronium', unit: 'mg', commonDoses: ['4', '6', '8'] },
+  ],
+  'Reversal Agents': [
+    { name: 'Neostigmine', unit: 'mg', commonDoses: ['1', '2.5', '5'] },
+    { name: 'Sugammadex', unit: 'mg', commonDoses: ['100', '200', '400'] },
+    { name: 'Atropine', unit: 'mg', commonDoses: ['0.3', '0.6', '1.2'] },
+    { name: 'Glycopyrrolate', unit: 'mg', commonDoses: ['0.2', '0.4', '0.6'] },
+    { name: 'Flumazenil', unit: 'mg', commonDoses: ['0.1', '0.2', '0.5'] },
+    { name: 'Naloxone', unit: 'mg', commonDoses: ['0.1', '0.2', '0.4'] },
+  ],
+  'Local Anesthetics': [
+    { name: 'Lidocaine (Lignocaine)', unit: 'mg', commonDoses: ['40', '80', '100', '200', '400'] },
+    { name: 'Bupivacaine', unit: 'mg', commonDoses: ['10', '15', '25', '50', '75'] },
+    { name: 'Ropivacaine', unit: 'mg', commonDoses: ['50', '75', '100', '150'] },
+    { name: 'Levobupivacaine', unit: 'mg', commonDoses: ['25', '50', '75'] },
+  ],
+  'Sedatives & Anxiolytics': [
+    { name: 'Midazolam', unit: 'mg', commonDoses: ['1', '2', '3', '5'] },
+    { name: 'Diazepam', unit: 'mg', commonDoses: ['2.5', '5', '10'] },
+    { name: 'Dexmedetomidine', unit: 'mcg', commonDoses: ['25', '50', '100'] },
+  ],
+  'Antiemetics': [
+    { name: 'Ondansetron', unit: 'mg', commonDoses: ['4', '8'] },
+    { name: 'Metoclopramide', unit: 'mg', commonDoses: ['10'] },
+    { name: 'Dexamethasone', unit: 'mg', commonDoses: ['4', '8'] },
+    { name: 'Promethazine', unit: 'mg', commonDoses: ['12.5', '25'] },
+  ],
+  'Cardiovascular Drugs': [
+    { name: 'Ephedrine', unit: 'mg', commonDoses: ['3', '6', '9', '12'] },
+    { name: 'Phenylephrine', unit: 'mcg', commonDoses: ['50', '100', '200'] },
+    { name: 'Adrenaline (Epinephrine)', unit: 'mcg', commonDoses: ['10', '50', '100', '1000'] },
+    { name: 'Noradrenaline (Norepinephrine)', unit: 'mcg', commonDoses: ['4', '8', '16'] },
+    { name: 'Dobutamine', unit: 'mcg/kg/min', commonDoses: ['2.5', '5', '10'] },
+    { name: 'Dopamine', unit: 'mcg/kg/min', commonDoses: ['2', '5', '10', '15'] },
+    { name: 'Esmolol', unit: 'mg', commonDoses: ['10', '20', '50'] },
+    { name: 'Labetalol', unit: 'mg', commonDoses: ['5', '10', '20'] },
+    { name: 'Hydralazine', unit: 'mg', commonDoses: ['5', '10', '20'] },
+    { name: 'Calcium Chloride', unit: 'mg', commonDoses: ['500', '1000'] },
+    { name: 'Calcium Gluconate', unit: 'mg', commonDoses: ['500', '1000', '2000'] },
+    { name: 'Magnesium Sulphate', unit: 'g', commonDoses: ['1', '2', '4'] },
+    { name: 'Amiodarone', unit: 'mg', commonDoses: ['150', '300'] },
+    { name: 'Adenosine', unit: 'mg', commonDoses: ['6', '12'] },
+  ],
+  'Analgesics & Anti-inflammatory': [
+    { name: 'Paracetamol (IV)', unit: 'mg', commonDoses: ['500', '1000'] },
+    { name: 'Ketorolac', unit: 'mg', commonDoses: ['15', '30'] },
+    { name: 'Diclofenac', unit: 'mg', commonDoses: ['50', '75'] },
+    { name: 'Ibuprofen', unit: 'mg', commonDoses: ['200', '400', '600'] },
+  ],
+  'Corticosteroids': [
+    { name: 'Dexamethasone', unit: 'mg', commonDoses: ['4', '8', '12'] },
+    { name: 'Hydrocortisone', unit: 'mg', commonDoses: ['50', '100', '200'] },
+    { name: 'Methylprednisolone', unit: 'mg', commonDoses: ['40', '125', '500'] },
+  ],
+  'Antibiotics (Prophylactic)': [
+    { name: 'Cefazolin', unit: 'g', commonDoses: ['1', '2'] },
+    { name: 'Ceftriaxone', unit: 'g', commonDoses: ['1', '2'] },
+    { name: 'Metronidazole', unit: 'mg', commonDoses: ['500'] },
+    { name: 'Gentamicin', unit: 'mg', commonDoses: ['80', '160', '240'] },
+    { name: 'Vancomycin', unit: 'mg', commonDoses: ['500', '1000'] },
+    { name: 'Ciprofloxacin', unit: 'mg', commonDoses: ['200', '400'] },
+  ],
+  'Anticoagulants': [
+    { name: 'Heparin', unit: 'units', commonDoses: ['2500', '5000', '10000'] },
+    { name: 'Enoxaparin', unit: 'mg', commonDoses: ['20', '40', '60', '80'] },
+    { name: 'Protamine', unit: 'mg', commonDoses: ['10', '25', '50'] },
+    { name: 'Tranexamic Acid', unit: 'mg', commonDoses: ['500', '1000'] },
+  ],
+  'IV Fluids': [
+    { name: 'Normal Saline 0.9%', unit: 'ml', commonDoses: ['500', '1000'] },
+    { name: 'Ringers Lactate', unit: 'ml', commonDoses: ['500', '1000'] },
+    { name: 'Dextrose 5%', unit: 'ml', commonDoses: ['500', '1000'] },
+    { name: 'Dextrose 10%', unit: 'ml', commonDoses: ['500'] },
+    { name: 'Dextrose 50%', unit: 'ml', commonDoses: ['50'] },
+    { name: 'Colloid (Gelofusine)', unit: 'ml', commonDoses: ['500', '1000'] },
+    { name: 'Albumin 5%', unit: 'ml', commonDoses: ['250', '500'] },
+    { name: 'Mannitol 20%', unit: 'ml', commonDoses: ['100', '250', '500'] },
+    { name: 'Sodium Bicarbonate 8.4%', unit: 'ml', commonDoses: ['50', '100'] },
+  ],
+  'Emergency Drugs': [
+    { name: 'Adrenaline 1:1000', unit: 'ml', commonDoses: ['0.5', '1'] },
+    { name: 'Adrenaline 1:10000', unit: 'ml', commonDoses: ['1', '5', '10'] },
+    { name: 'Atropine', unit: 'mg', commonDoses: ['0.5', '1'] },
+    { name: 'Dantrolene', unit: 'mg', commonDoses: ['20', '40'] },
+    { name: 'Lipid Emulsion 20%', unit: 'ml', commonDoses: ['100', '250', '500'] },
+    { name: 'Aminophylline', unit: 'mg', commonDoses: ['250', '500'] },
+  ],
+  'Miscellaneous': [
+    { name: 'Oxytocin', unit: 'units', commonDoses: ['5', '10', '20'] },
+    { name: 'Carboprost (Hemabate)', unit: 'mcg', commonDoses: ['250'] },
+    { name: 'Misoprostol', unit: 'mcg', commonDoses: ['400', '600', '800'] },
+    { name: 'Insulin Regular', unit: 'units', commonDoses: ['5', '10', '20'] },
+    { name: 'Furosemide', unit: 'mg', commonDoses: ['20', '40', '80'] },
+    { name: 'Phenytoin', unit: 'mg', commonDoses: ['100', '250', '500'] },
+    { name: 'Levetiracetam', unit: 'mg', commonDoses: ['500', '1000'] },
+  ],
+};
+
+// Flatten the directory for search
+const ALL_DRUGS: (DrugEntry & { category: string })[] = Object.entries(BNF_DIRECTORY).flatMap(
+  ([cat, drugs]) => drugs.map(d => ({ ...d, category: cat }))
+);
+
+const PRESCRIPTION_ROUTES = [
+  'IV Push', 'IV Infusion', 'IM', 'SC', 'Intrathecal', 'Epidural',
+  'Nebulized', 'Topical', 'Inhalation', 'PO', 'Per Rectum', 'Sublingual',
+];
+
+const FREQUENCIES = [
+  'STAT', 'Once only', 'BD (twice daily)', 'TDS (three times daily)',
+  'QDS (four times daily)', '6 hourly', '8 hourly', '12 hourly',
+  'PRN (as needed)', 'Continuous infusion',
+];
+
+const MED_STATUS_COLORS: Record<string, string> = {
+  PRESCRIBED: 'bg-blue-100 text-blue-700',
+  USED: 'bg-green-100 text-green-700',
+  HARMONIZED: 'bg-purple-100 text-purple-700',
+  RETURNED: 'bg-amber-100 text-amber-700',
+};
 
 interface EmergencyBooking {
   id: string;
@@ -122,6 +279,70 @@ export default function EmergencyBookingPage() {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewBooking, setReviewBooking] = useState<EmergencyBooking | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Structured prescription state
+  const [prescribedMeds, setPrescribedMeds] = useState<PrescribedMedication[]>([]);
+  const [drugSearch, setDrugSearch] = useState('');
+  const [drugResults, setDrugResults] = useState<(DrugEntry & { category: string })[]>([]);
+  const [selectedDrug, setSelectedDrug] = useState<(DrugEntry & { category: string }) | null>(null);
+  const [addDose, setAddDose] = useState('');
+  const [addRoute, setAddRoute] = useState('IV Push');
+  const [addFrequency, setAddFrequency] = useState('STAT');
+  const [addNotes, setAddNotes] = useState('');
+  const [showDrugDropdown, setShowDrugDropdown] = useState(false);
+  const drugSearchRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (drugSearchRef.current && !drugSearchRef.current.contains(e.target as Node)) {
+        setShowDrugDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // BNF drug search
+  useEffect(() => {
+    if (drugSearch.length < 2) { setDrugResults([]); return; }
+    const q = drugSearch.toLowerCase();
+    const matches = ALL_DRUGS.filter(d =>
+      d.name.toLowerCase().includes(q) || d.category.toLowerCase().includes(q)
+    ).slice(0, 15);
+    setDrugResults(matches);
+    setShowDrugDropdown(matches.length > 0);
+  }, [drugSearch]);
+
+  const addMedication = () => {
+    if (!selectedDrug || !addDose) return;
+    const med: PrescribedMedication = {
+      id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+      drugName: selectedDrug.name,
+      dose: addDose,
+      unit: selectedDrug.unit,
+      route: addRoute,
+      frequency: addFrequency,
+      category: selectedDrug.category,
+      status: 'PRESCRIBED',
+      notes: addNotes,
+    };
+    setPrescribedMeds(prev => [...prev, med]);
+    setSelectedDrug(null);
+    setDrugSearch('');
+    setAddDose('');
+    setAddRoute('IV Push');
+    setAddFrequency('STAT');
+    setAddNotes('');
+  };
+
+  const removeMedication = (id: string) => {
+    setPrescribedMeds(prev => prev.filter(m => m.id !== id));
+  };
+
+  const updateMedStatus = (id: string, status: PrescribedMedication['status']) => {
+    setPrescribedMeds(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+  };
 
   // Review form state
   const [reviewForm, setReviewForm] = useState({
@@ -264,24 +485,24 @@ export default function EmergencyBookingPage() {
         if (val === '' || val === false) return;
         if (['heartRate', 'oxygenSaturation', 'temperature', 'weight', 'height', 'hemoglobinLevel'].includes(key)) {
           payload[key] = parseFloat(val as string);
-        } else {
+        } else if (key !== 'medications') {
           payload[key] = val;
         }
       });
 
-      // If medications are provided, format as JSON
-      if (reviewForm.medications) {
-        try {
-          JSON.parse(reviewForm.medications);
-        } catch {
-          // If not valid JSON, wrap as simple array
-          payload.medications = JSON.stringify(
-            reviewForm.medications.split('\n').filter(Boolean).map(line => {
-              const parts = line.split(' - ');
-              return { name: parts[0]?.trim(), dose: parts[1]?.trim() || '', route: parts[2]?.trim() || 'IV' };
-            })
-          );
-        }
+      // Serialize structured medications
+      if (prescribedMeds.length > 0) {
+        payload.medications = JSON.stringify(
+          prescribedMeds.map(m => ({
+            name: m.drugName,
+            dose: `${m.dose}${m.unit}`,
+            route: m.route,
+            frequency: m.frequency,
+            category: m.category,
+            status: m.status,
+            notes: m.notes,
+          }))
+        );
       }
 
       const res = await fetch('/api/emergency-pre-anaesthetic', {
@@ -304,6 +525,7 @@ export default function EmergencyBookingPage() {
           consentObtained: false, consentNotes: '',
           medications: '', fluids: '', emergencyDrugs: '', specialInstructions: '',
         });
+        setPrescribedMeds([]);
         if (expandedBooking) fetchReviews(expandedBooking);
         alert('Pre-anaesthetic review submitted. Emergency prescription sent to pharmacy.');
       } else {
@@ -978,26 +1200,210 @@ export default function EmergencyBookingPage() {
                   <Pill className="h-5 w-5" />
                   Emergency Prescription (visible to Pharmacy immediately)
                 </h4>
-                <p className="text-xs text-gray-500 mb-3">
-                  Enter medications one per line: Drug Name - Dose - Route (e.g., &quot;Atropine - 0.5mg - IV&quot;)
+                <p className="text-xs text-gray-500 mb-2">
+                  Search the BNF directory to add medications one at a time. Track status: Prescribed → Used / Harmonized / Returned.
                 </p>
-                <textarea
-                  rows={4}
-                  value={reviewForm.medications}
-                  onChange={e => setReviewForm(f => ({ ...f, medications: e.target.value }))}
-                  className="w-full border border-orange-300 rounded-lg p-2 text-sm bg-orange-50"
-                  placeholder="Atropine - 0.5mg - IV&#10;Propofol - 200mg - IV&#10;Succinylcholine - 100mg - IV&#10;Morphine - 10mg - IV"
-                />
+
+                {/* Drug Search & Add Row */}
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-3">
+                  {/* Row 1: Drug search */}
+                  <div className="relative mb-2" ref={drugSearchRef}>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={selectedDrug ? selectedDrug.name : drugSearch}
+                        onChange={e => {
+                          setDrugSearch(e.target.value);
+                          setSelectedDrug(null);
+                        }}
+                        onFocus={() => { if (drugResults.length > 0) setShowDrugDropdown(true); }}
+                        placeholder="Search drug name (e.g. Atropine, Propofol, Morphine)..."
+                        className="w-full pl-9 pr-3 py-2 border border-orange-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
+                      />
+                    </div>
+                    {showDrugDropdown && drugResults.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+                        {drugResults.map((drug, idx) => (
+                          <button
+                            key={`${drug.category}-${drug.name}-${idx}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedDrug(drug);
+                              setDrugSearch(drug.name);
+                              setShowDrugDropdown(false);
+                              setAddDose(drug.commonDoses[0] || '');
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-50 last:border-0"
+                          >
+                            <div className="font-medium text-sm text-gray-900">{drug.name}</div>
+                            <div className="text-xs text-gray-500">
+                              {drug.category} · {drug.unit} · Doses: {drug.commonDoses.join(', ')}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Row 2: Dose, Route, Frequency */}
+                  {selectedDrug && (
+                    <>
+                      <div className="grid grid-cols-3 gap-2 mb-2">
+                        {/* Dose with suggestions */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Dose ({selectedDrug.unit})</label>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={addDose}
+                              onChange={e => setAddDose(e.target.value)}
+                              placeholder="Dose"
+                              className="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm"
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {selectedDrug.commonDoses.map(d => (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => setAddDose(d)}
+                                className={`px-2 py-0.5 text-xs rounded-full border transition ${
+                                  addDose === d
+                                    ? 'bg-orange-600 text-white border-orange-600'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-orange-400'
+                                }`}
+                              >
+                                {d}{selectedDrug.unit}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Route */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Route</label>
+                          <select
+                            value={addRoute}
+                            onChange={e => setAddRoute(e.target.value)}
+                            title="Route of administration"
+                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          >
+                            {PRESCRIPTION_ROUTES.map(r => <option key={r}>{r}</option>)}
+                          </select>
+                        </div>
+
+                        {/* Frequency */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
+                          <select
+                            value={addFrequency}
+                            onChange={e => setAddFrequency(e.target.value)}
+                            title="Frequency"
+                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                          >
+                            {FREQUENCIES.map(f => <option key={f}>{f}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Optional notes */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={addNotes}
+                          onChange={e => setAddNotes(e.target.value)}
+                          placeholder="Special instructions for this drug (optional)"
+                          className="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={addMedication}
+                          disabled={!addDose}
+                          className="px-4 py-1.5 bg-orange-600 text-white rounded font-medium text-sm hover:bg-orange-700 disabled:opacity-40 flex items-center gap-1"
+                        >
+                          <Plus className="h-4 w-4" /> Add
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Prescribed Medications List */}
+                {prescribedMeds.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden mb-3">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">#</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Drug</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Dose</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Route</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Freq</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Status</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prescribedMeds.map((med, idx) => (
+                          <tr key={med.id} className="border-t border-gray-100 hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
+                            <td className="px-3 py-2">
+                              <div className="font-medium">{med.drugName}</div>
+                              <div className="text-xs text-gray-400">{med.category}</div>
+                              {med.notes && <div className="text-xs text-orange-600 italic">{med.notes}</div>}
+                            </td>
+                            <td className="px-3 py-2">{med.dose}{med.unit}</td>
+                            <td className="px-3 py-2">{med.route}</td>
+                            <td className="px-3 py-2 text-xs">{med.frequency}</td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={med.status}
+                                onChange={e => updateMedStatus(med.id, e.target.value as PrescribedMedication['status'])}
+                                title="Medication status"
+                                className={`text-xs font-medium px-2 py-1 rounded-full border-0 ${MED_STATUS_COLORS[med.status]}`}
+                              >
+                                <option value="PRESCRIBED">Prescribed</option>
+                                <option value="USED">Used</option>
+                                <option value="HARMONIZED">Harmonized</option>
+                                <option value="RETURNED">Returned</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2">
+                              <button type="button" onClick={() => removeMedication(med.id)}
+                                title="Remove medication"
+                                className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {/* Summary */}
+                    <div className="bg-gray-50 px-3 py-2 flex gap-4 text-xs border-t">
+                      <span className="text-gray-500">Total: <strong>{prescribedMeds.length}</strong></span>
+                      {(['PRESCRIBED', 'USED', 'HARMONIZED', 'RETURNED'] as const).map(s => {
+                        const count = prescribedMeds.filter(m => m.status === s).length;
+                        return count > 0 ? (
+                          <span key={s} className={`px-2 py-0.5 rounded-full ${MED_STATUS_COLORS[s]}`}>
+                            {s}: {count}
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* IV Fluids (now redundant if added via BNF, but kept for quick notes) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">IV Fluids</label>
-                <input type="text" placeholder="e.g. Normal Saline 1L, Ringer's Lactate 1L" value={reviewForm.fluids}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Additional IV Fluid Notes</label>
+                <input type="text" placeholder="e.g. Run NS at 100ml/hr" value={reviewForm.fluids}
                   onChange={e => setReviewForm(f => ({ ...f, fluids: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Drugs</label>
-                <input type="text" placeholder="e.g. Adrenaline 1mg, Atropine 0.6mg" value={reviewForm.emergencyDrugs}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Emergency Drug Notes</label>
+                <input type="text" placeholder="e.g. Draw up Adrenaline in syringes" value={reviewForm.emergencyDrugs}
                   onChange={e => setReviewForm(f => ({ ...f, emergencyDrugs: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm" />
               </div>

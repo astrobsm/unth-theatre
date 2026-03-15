@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:watch": "node dev-server.js",
     "build": "prisma generate && prisma db push && next build",
     "build:local": "prisma generate && prisma db push --accept-data-loss && next build",
     "start": "next start",
