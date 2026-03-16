@@ -50,6 +50,12 @@ export async function PATCH(
       bloodBankNotes: validatedData.bloodBankNotes,
     };
 
+    if (validatedData.status === 'ACKNOWLEDGED') {
+      updateData.acknowledgedById = session.user.id;
+      updateData.acknowledgedByName = session.user.name;
+      updateData.acknowledgedAt = new Date();
+    }
+
     if (validatedData.status === 'IN_PREPARATION') {
       updateData.preparedById = session.user.id;
       updateData.preparedByName = session.user.name;

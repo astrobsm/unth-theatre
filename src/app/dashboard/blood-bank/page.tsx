@@ -374,7 +374,7 @@ export default function BloodBankPage() {
                     <button
                       onClick={() => {
                         setSelectedRequest(request);
-                        setNewStatus(request.status);
+                        setNewStatus(request.status === 'REQUESTED' ? 'ACKNOWLEDGED' : request.status);
                         setShowStatusModal(true);
                       }}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
