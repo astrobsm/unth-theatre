@@ -71,7 +71,7 @@ export async function PATCH(
       updateData.status = 'ACKNOWLEDGED';
       updateData.acknowledgedAt = new Date();
       updateData.receivingNurseId = session.user.id;
-      updateData.receivingNurseName = session.user.fullName || session.user.name;
+      updateData.receivingNurseName = session.user.name || 'Unknown';
       updateData.receiverNotes = receiverNotes || null;
       auditAction = 'ACKNOWLEDGED';
     } else if (action === 'complete') {
@@ -112,7 +112,7 @@ export async function PATCH(
         handoverId: handover.id,
         action: auditAction,
         performedById: session.user.id,
-        performedByName: session.user.fullName || session.user.name || 'Unknown',
+        performedByName: session.user.name || 'Unknown',
         details: JSON.stringify({ action, ...updateData }),
       },
     });

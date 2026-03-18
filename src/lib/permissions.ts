@@ -7,6 +7,13 @@ export type UserRole =
   | 'SYSTEM_ADMINISTRATOR'
   | 'THEATRE_MANAGER'
   | 'THEATRE_CHAIRMAN'
+  | 'CHIEF_MEDICAL_DIRECTOR'
+  | 'CMAC'
+  | 'DC_MAC'
+  | 'LAUNDRY_SUPERVISOR'
+  | 'CSSD_SUPERVISOR'
+  | 'OXYGEN_UNIT_SUPERVISOR'
+  | 'WORKS_SUPERVISOR'
   | 'SURGEON'
   | 'ANAESTHETIST'
   | 'CONSULTANT_ANAESTHETIST'
@@ -328,6 +335,13 @@ export function getRoleName(role: UserRole): string {
     SYSTEM_ADMINISTRATOR: 'System Administrator',
     THEATRE_MANAGER: 'Theatre Manager',
     THEATRE_CHAIRMAN: 'Theatre Chairman',
+    CHIEF_MEDICAL_DIRECTOR: 'Chief Medical Director',
+    CMAC: 'CMAC',
+    DC_MAC: 'DC MAC',
+    LAUNDRY_SUPERVISOR: 'Laundry Supervisor',
+    CSSD_SUPERVISOR: 'CSSD Supervisor',
+    OXYGEN_UNIT_SUPERVISOR: 'Oxygen Unit Supervisor',
+    WORKS_SUPERVISOR: 'Works Supervisor',
     SURGEON: 'Surgeon',
     ANAESTHETIST: 'Anaesthetist',
     CONSULTANT_ANAESTHETIST: 'Consultant Anaesthetist',
@@ -361,6 +375,13 @@ export function getRoleDashboard(role: UserRole): string {
     SYSTEM_ADMINISTRATOR: '/dashboard',
     THEATRE_MANAGER: '/dashboard',
     THEATRE_CHAIRMAN: '/dashboard',
+    CHIEF_MEDICAL_DIRECTOR: '/dashboard',
+    CMAC: '/dashboard',
+    DC_MAC: '/dashboard',
+    LAUNDRY_SUPERVISOR: '/dashboard/laundry',
+    CSSD_SUPERVISOR: '/dashboard/cssd/inventory',
+    OXYGEN_UNIT_SUPERVISOR: '/dashboard/oxygen-control',
+    WORKS_SUPERVISOR: '/dashboard',
     SURGEON: '/dashboard/surgeries',
     ANAESTHETIST: '/dashboard/preop-reviews',
     CONSULTANT_ANAESTHETIST: '/dashboard/preop-reviews',
