@@ -61,6 +61,9 @@ export async function GET(request: NextRequest) {
         requestedBy: {
           select: { id: true, fullName: true, role: true, phoneNumber: true },
         },
+        acknowledgedBy: {
+          select: { id: true, fullName: true, role: true },
+        },
         emergencyBooking: {
           select: { id: true, procedureName: true, priority: true, status: true },
         },

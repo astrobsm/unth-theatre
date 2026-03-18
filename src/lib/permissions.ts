@@ -191,6 +191,14 @@ export const permissions = {
   },
 
   // Emergency Alerts
+  // Nurse Handover
+  nurseHandover: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
   emergencyAlerts: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
     read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
@@ -258,6 +266,14 @@ export const permissions = {
   investigations: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
     read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'LABORATORY_STAFF'],
+    delete: ['ADMIN', 'THEATRE_MANAGER'],
+  },
+
+  // Emergency Lab Workup
+  emergencyLabWorkup: {
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LABORATORY_STAFF', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'LABORATORY_STAFF'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -363,7 +379,7 @@ export function getRoleDashboard(role: UserRole): string {
     THEATRE_CAFETERIA_MANAGER: '/dashboard/theatre-meals',
     LAUNDRY_STAFF: '/dashboard/laundry',
     PLUMBER: '/dashboard/water-supply',
-    LABORATORY_STAFF: '/dashboard/investigations',
+    LABORATORY_STAFF: '/dashboard/emergency-lab-workup',
   };
   
   return roleDashboards[role] || '/dashboard';
@@ -400,6 +416,7 @@ export function getVisibleNavItems(role: UserRole): string[] {
     'water-supply',
     'sub-stores',
     'investigations',
+    'emergency-lab-workup',
     'theatre-meals',
     'stock-transfers',
     'oxygen-control',
@@ -433,6 +450,7 @@ export function getVisibleNavItems(role: UserRole): string[] {
     'water-supply': ['ADMIN', 'THEATRE_MANAGER', 'PLUMBER'],
     'sub-stores': ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER'],
     investigations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
+    'emergency-lab-workup': ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LABORATORY_STAFF', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
     'theatre-meals': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
     'stock-transfers': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
     'oxygen-control': ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN'],

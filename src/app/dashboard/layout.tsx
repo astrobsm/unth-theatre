@@ -115,6 +115,9 @@ export default function DashboardLayout({
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
     { href: '/dashboard/medication-tracking', icon: Pill, label: 'Med Tracking', badge: 'NEW' },
 
+    // === HANDOVER ===
+    { href: '/dashboard/nurse-handover', icon: ClipboardPlus, label: 'Nurse Handover', badge: 'WHO' },
+
     // === POST-OPERATIVE ===
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
     { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Patient Transfers' },

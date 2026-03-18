@@ -82,16 +82,16 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!statusId || !maintenanceType || !componentServiced || !workPerformed) {
+    if (!maintenanceType || !componentServiced || !workPerformed) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: maintenanceType, componentServiced, workPerformed' },
         { status: 400 }
       );
     }
 
     const maintenanceLog = await prisma.powerMaintenanceLog.create({
       data: {
-        statusId,
+        statusId: statusId || null,
         maintenanceType,
         maintenanceDate: maintenanceDate ? new Date(maintenanceDate) : new Date(),
         componentServiced,

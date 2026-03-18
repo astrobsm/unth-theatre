@@ -298,6 +298,316 @@ export async function PATCH(
         return NextResponse.json({ message: 'Results viewed' });
       }
 
+      // Lab scientist acknowledges request
+      case 'ACKNOWLEDGE': {
+        await prisma.emergencyLabRequest.update({
+          where: { id: params.id },
+          data: {
+            status: 'ACKNOWLEDGED',
+            acknowledgedById: session.user.id,
+            acknowledgedAt: new Date(),
+          },
+        });
+
+        // Notify requesting clinician
+        const labReqAck = await prisma.emergencyLabRequest.findUnique({
+          where: { id: params.id },
+          select: { 
+            requestedById: true, patientName: true, folderNumber: true, priority: true,
+            surgery: { select: { surgeonId: true, anesthetistId: true } },
+            emergencyBooking: { select: { surgeonId: true, anesthetistId: true } },
+          },
+        });
+
+        if (labReqAck) {
+          const notifyIds = new Set<string>();
+          notifyIds.add(labReqAck.requestedById);
+          if (labReqAck.surgery?.surgeonId) notifyIds.add(labReqAck.surgery.surgeonId);
+          if (labReqAck.surgery?.anesthetistId) notifyIds.add(labReqAck.surgery.anesthetistId);
+          if (labReqAck.emergencyBooking?.surgeonId) notifyIds.add(labReqAck.emergencyBooking.surgeonId);
+          if (labReqAck.emergencyBooking?.anesthetistId) notifyIds.add(labReqAck.emergencyBooking.anesthetistId);
+
+          await Promise.all(
+            Array.from(notifyIds).map(userId =>
+              prisma.notification.create({
+                data: {
+                  userId,
+                  type: 'EMERGENCY_LAB_WORKUP',
+                  title: `✅ Lab Acknowledged: ${labReqAck.patientName}`,
+                  message: `Lab has acknowledged emergency workup for ${labReqAck.patientName} (${labReqAck.folderNumber}). Sample collection in progress.`,
+                  link: '/dashboard/emergency-lab-workup',
+                },
+              })
+            )
+          );
+        }
+
+        // Audit log
+        await prisma.auditLog.create({
+          data: {
+            userId: session.user.id,
+            action: 'UPDATE',
+            tableName: 'EmergencyLabRequest',
+            recordId: params.id,
+            changes: JSON.stringify({ action: 'ACKNOWLEDGE', acknowledgedBy: session.user.name }),
+          },
+        });
+
+        return NextResponse.json({ message: 'Request acknowledged by lab' });
+      }
+
+      // Lab scientist acknowledges + collects all samples at once
+      case 'ACKNOWLEDGE_AND_COLLECT_ALL': {
+        await prisma.emergencyLabRequest.update({
+          where: { id: params.id },
+          data: {
+            status: 'SAMPLE_COLLECTED',
+            acknowledgedById: session.user.id,
+            acknowledgedAt: new Date(),
+          },
+        });
+
+        await prisma.emergencyLabTest.updateMany({
+          where: { emergencyLabRequestId: params.id },
+          data: {
+            sampleCollected: true,
+            sampleCollectedAt: new Date(),
+            sampleCollectedById: session.user.id,
+            status: 'SAMPLE_COLLECTED',
+          },
+        });
+
+        return NextResponse.json({ message: 'All samples acknowledged and collected' });
+      }
+
+      // Receive all samples at lab
+      case 'RECEIVE_ALL_SAMPLES': {
+        await prisma.emergencyLabTest.updateMany({
+          where: { emergencyLabRequestId: params.id },
+          data: {
+            receivedAtLabAt: new Date(),
+            receivedByLabId: session.user.id,
+            status: 'SAMPLE_RECEIVED_AT_LAB',
+          },
+        });
+
+        await prisma.emergencyLabRequest.update({
+          where: { id: params.id },
+          data: { status: 'SAMPLE_RECEIVED_AT_LAB' },
+        });
+
+        return NextResponse.json({ message: 'All samples received at lab' });
+      }
+
+      // Start processing all tests
+      case 'START_PROCESSING_ALL': {
+        await prisma.emergencyLabTest.updateMany({
+          where: { emergencyLabRequestId: params.id, resultValue: null },
+          data: {
+            processingStartedAt: new Date(),
+            status: 'PROCESSING',
+          },
+        });
+
+        await prisma.emergencyLabRequest.update({
+          where: { id: params.id },
+          data: { status: 'PROCESSING' },
+        });
+
+        return NextResponse.json({ message: 'Processing started for all tests' });
+      }
+
+      // Verify results (senior lab scientist)
+      case 'VERIFY_RESULTS': {
+        if (!testId) {
+          return NextResponse.json({ error: 'testId is required' }, { status: 400 });
+        }
+
+        await prisma.emergencyLabTest.update({
+          where: { id: testId },
+          data: {
+            resultVerifiedById: session.user.id,
+            resultVerifiedAt: new Date(),
+            status: 'RESULTS_VERIFIED',
+          },
+        });
+
+        // Check if all verified
+        const allTestsVerify = await prisma.emergencyLabTest.findMany({
+          where: { emergencyLabRequestId: params.id },
+        });
+        const allVerified = allTestsVerify.every(t =>
+          t.id === testId ? true : t.resultVerifiedById !== null
+        );
+        if (allVerified) {
+          await prisma.emergencyLabRequest.update({
+            where: { id: params.id },
+            data: { status: 'RESULTS_VERIFIED' },
+          });
+        }
+
+        // Notify requesting clinician
+        const labReqVerify = await prisma.emergencyLabRequest.findUnique({
+          where: { id: params.id },
+          select: {
+            requestedById: true, patientName: true, folderNumber: true,
+            surgery: { select: { surgeonId: true, anesthetistId: true } },
+            emergencyBooking: { select: { surgeonId: true, anesthetistId: true } },
+          },
+        });
+
+        if (labReqVerify) {
+          const notifyIds = new Set<string>();
+          notifyIds.add(labReqVerify.requestedById);
+          if (labReqVerify.surgery?.surgeonId) notifyIds.add(labReqVerify.surgery.surgeonId);
+          if (labReqVerify.surgery?.anesthetistId) notifyIds.add(labReqVerify.surgery.anesthetistId);
+          if (labReqVerify.emergencyBooking?.surgeonId) notifyIds.add(labReqVerify.emergencyBooking.surgeonId);
+          if (labReqVerify.emergencyBooking?.anesthetistId) notifyIds.add(labReqVerify.emergencyBooking.anesthetistId);
+
+          const testInfo = allTestsVerify.find(t => t.id === testId);
+          await Promise.all(
+            Array.from(notifyIds).map(userId =>
+              prisma.notification.create({
+                data: {
+                  userId,
+                  type: 'EMERGENCY_LAB_RESULT',
+                  title: `🔬 Results Verified: ${testInfo?.testName || 'Lab Test'}`,
+                  message: `Verified lab result for ${labReqVerify.patientName} (${labReqVerify.folderNumber}): ${testInfo?.testName} = ${testInfo?.resultValue} ${testInfo?.resultUnit || ''}`,
+                  link: '/dashboard/emergency-lab-workup',
+                },
+              })
+            )
+          );
+
+          // Voice notification for critical verified results
+          if (testInfo?.criticalResult) {
+            await Promise.all(
+              Array.from(notifyIds).map(userId =>
+                prisma.emergencyLabNotification.create({
+                  data: {
+                    emergencyLabRequestId: params.id,
+                    recipientId: userId,
+                    recipientRole: 'CLINICIAN',
+                    notificationType: 'CRITICAL_RESULT_VERIFIED',
+                    isVoiceNotification: true,
+                    voiceMessage: `VERIFIED CRITICAL RESULT for ${labReqVerify.patientName}. Test: ${testInfo.testName}. Value: ${testInfo.resultValue}. This result has been verified. Immediate clinical action required!`,
+                    isPushNotification: true,
+                    pushTitle: '🚨 VERIFIED CRITICAL RESULT',
+                    pushMessage: `${labReqVerify.patientName}: ${testInfo.testName} = ${testInfo.resultValue} - CRITICAL (Verified)`,
+                  },
+                })
+              )
+            );
+          }
+        }
+
+        return NextResponse.json({ message: 'Results verified' });
+      }
+
+      // Bulk enter results for multiple tests
+      case 'BULK_ENTER_RESULTS': {
+        const { results } = data;
+        if (!results || !Array.isArray(results) || results.length === 0) {
+          return NextResponse.json({ error: 'results array is required' }, { status: 400 });
+        }
+
+        const labReqBulk = await prisma.emergencyLabRequest.findUnique({
+          where: { id: params.id },
+          select: { 
+            requestedAt: true, patientName: true, folderNumber: true, requestedById: true,
+            surgery: { select: { surgeonId: true, anesthetistId: true } },
+            emergencyBooking: { select: { surgeonId: true, anesthetistId: true } },
+          },
+        });
+
+        const requestedAt = labReqBulk?.requestedAt;
+        let hasCritical = false;
+
+        for (const result of results) {
+          const turnaround = requestedAt
+            ? Math.round((new Date().getTime() - new Date(requestedAt).getTime()) / 60000)
+            : null;
+
+          await prisma.emergencyLabTest.update({
+            where: { id: result.testId },
+            data: {
+              resultValue: result.resultValue,
+              resultUnit: result.resultUnit || null,
+              referenceRange: result.referenceRange || null,
+              abnormalResult: result.abnormalResult || false,
+              criticalResult: result.criticalResult || false,
+              resultNotes: result.resultNotes || null,
+              resultEnteredById: session.user.id,
+              resultEnteredAt: new Date(),
+              status: 'RESULTS_READY',
+              turnaroundMinutes: turnaround,
+            },
+          });
+
+          if (result.criticalResult) hasCritical = true;
+        }
+
+        // Check if all results are in
+        const allTestsBulk = await prisma.emergencyLabTest.findMany({
+          where: { emergencyLabRequestId: params.id },
+        });
+        const allReady = allTestsBulk.every(t => t.resultValue !== null);
+        if (allReady) {
+          await prisma.emergencyLabRequest.update({
+            where: { id: params.id },
+            data: { status: 'RESULTS_READY' },
+          });
+        }
+
+        // Notify clinicians
+        if (labReqBulk) {
+          const notifyIds = new Set<string>();
+          notifyIds.add(labReqBulk.requestedById);
+          if (labReqBulk.surgery?.surgeonId) notifyIds.add(labReqBulk.surgery.surgeonId);
+          if (labReqBulk.surgery?.anesthetistId) notifyIds.add(labReqBulk.surgery.anesthetistId);
+          if (labReqBulk.emergencyBooking?.surgeonId) notifyIds.add(labReqBulk.emergencyBooking.surgeonId);
+          if (labReqBulk.emergencyBooking?.anesthetistId) notifyIds.add(labReqBulk.emergencyBooking.anesthetistId);
+
+          const emoji = hasCritical ? '🚨' : '🔬';
+          await Promise.all(
+            Array.from(notifyIds).map(userId =>
+              prisma.notification.create({
+                data: {
+                  userId,
+                  type: 'EMERGENCY_LAB_RESULT',
+                  title: `${emoji} ${results.length} Lab Results Ready`,
+                  message: `${results.length} investigation results are now available for ${labReqBulk.patientName} (${labReqBulk.folderNumber}).${hasCritical ? ' CRITICAL VALUES DETECTED!' : ''}`,
+                  link: '/dashboard/emergency-lab-workup',
+                },
+              })
+            )
+          );
+
+          // Voice for critical
+          if (hasCritical) {
+            await Promise.all(
+              Array.from(notifyIds).map(userId =>
+                prisma.emergencyLabNotification.create({
+                  data: {
+                    emergencyLabRequestId: params.id,
+                    recipientId: userId,
+                    recipientRole: 'CLINICIAN',
+                    notificationType: 'CRITICAL_RESULT',
+                    isVoiceNotification: true,
+                    voiceMessage: `CRITICAL LAB RESULTS for patient ${labReqBulk.patientName}. ${results.length} results uploaded with critical values detected. Immediate action required!`,
+                    isPushNotification: true,
+                    pushTitle: '🚨 CRITICAL LAB RESULTS',
+                    pushMessage: `${labReqBulk.patientName}: ${results.length} results with CRITICAL values!`,
+                  },
+                })
+              )
+            );
+          }
+        }
+
+        return NextResponse.json({ message: `${results.length} results entered and clinical team notified` });
+      }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }

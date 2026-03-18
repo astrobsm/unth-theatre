@@ -507,6 +507,7 @@ model User {
   
   // Emergency Lab Workup Relations
   emergencyLabRequests EmergencyLabRequest[] @relation("EmergencyLabRequester")
+  emergencyLabAcknowledged EmergencyLabRequest[] @relation("EmergencyLabAcknowledger")
   labSamplesCollected EmergencyLabTest[] @relation("LabSampleCollector")
   labSamplesReceived EmergencyLabTest[] @relation("LabSampleReceiver")
   labResultsEntered EmergencyLabTest[] @relation("LabResultEnterer")
@@ -518,6 +519,11 @@ model User {
   plumbingFaultsAcknowledged PlumbingFault[] @relation("PlumbingFaultAcknowledger")
   plumbingFaultsResolved PlumbingFault[] @relation("PlumbingFaultResolver")
   plumbingWaterStatuses PlumbingWaterStatus[] @relation("PlumbingStatusLogger")
+  
+  // Nurse Handover Relations
+  handoversGiven NurseHandover[] @relation("HandingOverNurse")
+  handoversReceived NurseHandover[] @relation("ReceivingNurse")
+  handoversWitnessed NurseHandover[] @relation("WitnessNurse")
   
   @@map("users")
 }
@@ -713,6 +719,9 @@ model Patient {
   // Pre-operative Investigation Relations
   investigations  PreoperativeInvestigation[]
   
+  // Nurse Handover Relations
+  nurseHandovers  NurseHandover[] @relation("HandoverPatient")
+  
   @@map("patients")
 }
 
@@ -820,6 +829,9 @@ model Surgery {
   
   // Emergency Lab Workup Relations
   emergencyLabRequests  EmergencyLabRequest[] @relation("EmergencyLabWorkupSurgery")
+  
+  // Nurse Handover Relations
+  nurseHandovers        NurseHandover[] @relation("HandoverSurgery")
   
   @@map("surgeries")
 }
@@ -3676,8 +3688,8 @@ model PowerFuelConsumption {
 model PowerMaintenanceLog {
   id                    String                  @id @default(uuid())
   
-  statusId              String
-  status                PowerHouseStatus        @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  statusId              String?
+  status                PowerHouseStatus?       @relation(fields: [statusId], references: [id], onDelete: Cascade)
   
   maintenanceType       String                  // ROUTINE, PREVENTIVE, CORRECTIVE, EMERGENCY
   maintenanceDate       DateTime                @default(now())
@@ -5098,6 +5110,7 @@ enum QueryStatus {
 enum EmergencyLabRequestStatus {
   REQUESTED
   NOTIFIED
+  ACKNOWLEDGED
   SAMPLE_COLLECTION_DISPATCHED
   SAMPLE_COLLECTED
   SAMPLE_RECEIVED_AT_LAB
@@ -5163,6 +5176,11 @@ model EmergencyLabRequest {
   voiceNotificationSentAt DateTime?
   pushNotificationSent  Boolean                   @default(false)
   pushNotificationSentAt DateTime?
+  
+  // Lab Acknowledgement
+  acknowledgedById      String?
+  acknowledgedBy        User?                     @relation("EmergencyLabAcknowledger", fields: [acknowledgedById], references: [id])
+  acknowledgedAt        DateTime?
   
   // Notes
   specialInstructions   String?
@@ -5645,4 +5663,251 @@ model AnnouncementPlayback {
   @@index([announcementId])
   @@index([playedAt])
   @@map("announcement_playbacks")
+}
+
+// ============================================================
+// THEATRE NURSES STRUCTURED HANDOVER (WHO International Standard)
+// SBAR + WHO Surgical Safety Checklist Handover Protocol
+// ============================================================
+
+enum HandoverPhase {
+  SHIFT_HANDOVER        // Nurse-to-nurse shift handover
+  INTRA_OP_HANDOVER     // During surgery team change
+  POST_OP_HANDOVER      // Theatre to PACU/Recovery handover
+  THEATRE_TO_WARD       // Recovery to ward handover
+}
+
+enum HandoverStatus {
+  DRAFT
+  IN_PROGRESS
+  PENDING_ACKNOWLEDGEMENT
+  ACKNOWLEDGED
+  COMPLETED
+  DISPUTED
+}
+
+model NurseHandover {
+  id                      String          @id @default(uuid())
+  handoverPhase           HandoverPhase
+  status                  HandoverStatus  @default(DRAFT)
+  
+  // === LINK TO SURGERY / PATIENT / THEATRE ===
+  surgeryId               String?
+  patientId               String?
+  theatreId               String?
+  theatreName             String?         // Denormalized for display
+  
+  // === WHO SBAR STRUCTURE ===                
+  // S - SITUATION
+  patientName             String?
+  patientFolderNumber     String?
+  patientAge              Int?
+  patientGender           String?
+  patientWard             String?
+  procedurePerformed      String?
+  surgeonName             String?
+  anesthetistName         String?
+  anesthesiaType          String?         // GA, Spinal, Local, Regional, Sedation
+  surgeryStartTime        DateTime?
+  surgeryEndTime          DateTime?
+  
+  // B - BACKGROUND
+  diagnosis               String?
+  relevantHistory         String?         // Comorbidities, allergies, medications
+  allergies               String?
+  preOpInvestigations     String?         // Key lab results, imaging
+  asaGrade                String?         // ASA Classification I-VI
+  
+  // A - ASSESSMENT (Intra-operative Events)
+  estimatedBloodLoss      String?
+  fluidGiven              String?         // Type and volume
+  bloodProductsGiven      String?         // Units, type
+  urineOutput             String?
+  vitalSignsSummary       String?         // BP, HR, SpO2, Temp at handover
+  lastBP                  String?
+  lastHR                  String?
+  lastSpO2                String?
+  lastTemp                String?
+  painScore               Int?            // 0-10
+  consciousnessLevel      String?         // FULLY_AWAKE, DROWSY, SEDATED, etc.
+  airwayStatus            String?         // PATENT, MAINTAINED, INTUBATED, etc.
+  
+  // Intra-operative Concerns
+  intraOpComplications    String?         // Any complications during surgery
+  unexpectedEvents        String?
+  implantsUsed            String?
+  
+  // === WHO SURGICAL SAFETY (Sign Out Items) ===
+  instrumentCountCorrect  Boolean?
+  spongeCountCorrect      Boolean?
+  needleCountCorrect      Boolean?
+  sharpsCountCorrect      Boolean?
+  countDiscrepancy        String?         // Details if any count is incorrect
+  specimenCollected       Boolean?
+  specimenLabel           String?         // Specimen details
+  specimenSentToLab       Boolean?
+  equipmentProblems       Boolean?
+  equipmentProblemDetails String?
+  
+  // === DRAINS / LINES / DEVICES ===
+  drainsInSitu            Boolean         @default(false)
+  drainDetails            String?         // Type, location, output
+  catheterInSitu          Boolean         @default(false)
+  catheterDetails         String?
+  ivLinesInSitu           Boolean         @default(false)
+  ivLineDetails           String?         // Type, site, fluid running
+  ngTubeInSitu            Boolean         @default(false)
+  ngTubeDetails           String?
+  woundDressing           String?         // Type of dressing applied
+  
+  // R - RECOMMENDATION
+  postOpOrders            String?         // Medications, monitoring frequency
+  oxygenRequirement       String?         // O2 therapy type and flow rate
+  ivFluidOrders           String?         // Ongoing IV fluid plan
+  painManagementPlan      String?
+  antibioticPlan          String?
+  dvtProphylaxis          String?         // Enoxaparin, TED stockings, etc.
+  dietaryInstructions     String?         // NBM duration, clear fluids, etc.
+  mobilityInstructions    String?
+  monitoringFrequency     String?         // e.g., "q15min x 1hr, then q30min x 2hr"
+  investigationsOrdered   String?         // Post-op bloods, imaging
+  followUpPlan            String?         // When to review, when to escalate
+  escalationCriteria      String?         // When to call surgeon/anesthetist
+  
+  // === THEATRE PREPARATION STATUS ===
+  theatreAssigned         Boolean?
+  instrumentSetPrepared   Boolean?
+  sterilityConfirmed      Boolean?
+  equipmentChecked        Boolean?
+  implantsAvailable       Boolean?
+  
+  // === ANAESTHESIA & SAFETY ===
+  consentObtained         Boolean?
+  preOpChecklistCompleted Boolean?
+  bloodAvailability       Boolean?
+  fastingStatus           Boolean?
+  fastingDetails          String?         // Duration, last intake time
+  
+  // === NURSING TASKS COMPLETED/PENDING ===
+  ivLineSecured           Boolean?
+  medicationsAdministered Boolean?
+  medicationDetails       String?         // What was given, time, dose
+  skinPreparation         Boolean?
+  skinPrepDetails         String?         // Area, method
+  documentationComplete   Boolean?
+  documentationNotes      String?
+  
+  // === SPECIAL NOTES / ALERTS ===
+  infectionRisk           Boolean         @default(false)
+  infectionRiskDetails    String?
+  highRiskPatient         Boolean         @default(false)
+  highRiskDetails         String?
+  specialPositioning      Boolean         @default(false)
+  positioningDetails      String?
+  equipmentConcerns       Boolean         @default(false)
+  equipmentConcernDetails String?
+  specialAlerts           String?         // Any other critical alerts
+  
+  // === PHOTO INTEGRATION ===
+  woundImages             String[]        // Array of image URLs
+  
+  // === VOICE NOTES ===
+  voiceNoteUrl            String?         // URL to voice recording
+  
+  // === SUPERVISOR VISIBILITY ===
+  supervisorReviewed      Boolean         @default(false)
+  supervisorReviewedById  String?
+  supervisorReviewedAt    DateTime?
+  supervisorNotes         String?
+  
+  // === PERFORMANCE TRACKING ===
+  shiftStartTime          DateTime?       // When the shift started
+  shiftEndTime            DateTime?       // When the shift ended
+  handoverDurationMinutes Int?            // Auto-calculated
+  delayMinutes            Int?            // Any delay in starting
+  delayCause              String?         // Reason for delay
+  
+  // === SHIFT HANDOVER SPECIFIC ===
+  pendingTasks            String?         // Tasks not yet completed
+  outstandingOrders       String?
+  upcomingSurgeries       String?         // Remaining cases for the list
+  staffingConcerns        String?
+  equipmentIssues         String?         // Faulty equipment, missing items
+  theatreCleanliness      String?         // Cleaning status
+  
+  // === NURSE IDENTITIES ===
+  handingOverNurseId      String
+  handingOverNurseName    String
+  receivingNurseId        String?
+  receivingNurseName      String?
+  
+  // Witness (for critical handovers)
+  witnessNurseId          String?
+  witnessNurseName        String?
+  
+  // === TIMESTAMPS ===
+  handoverStartedAt       DateTime        @default(now())
+  handoverCompletedAt     DateTime?
+  acknowledgedAt          DateTime?
+  
+  // === ACKNOWLEDGEMENT ===
+  receiverNotes           String?         // Receiving nurse's questions/notes
+  issuesRaised            Boolean         @default(false)
+  issueDetails            String?
+  
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  
+  // === RELATIONS ===
+  surgery                 Surgery?        @relation("HandoverSurgery", fields: [surgeryId], references: [id])
+  patient                 Patient?        @relation("HandoverPatient", fields: [patientId], references: [id])
+  handingOverNurse        User            @relation("HandingOverNurse", fields: [handingOverNurseId], references: [id])
+  receivingNurse          User?           @relation("ReceivingNurse", fields: [receivingNurseId], references: [id])
+  witnessNurse            User?           @relation("WitnessNurse", fields: [witnessNurseId], references: [id])
+  checklistItems          HandoverChecklistItem[]
+  auditTrail              HandoverAuditLog[]
+  
+  @@index([handoverPhase])
+  @@index([status])
+  @@index([surgeryId])
+  @@index([patientId])
+  @@index([handingOverNurseId])
+  @@index([receivingNurseId])
+  @@index([handoverStartedAt])
+  @@index([createdAt])
+  @@map("nurse_handovers")
+}
+
+model HandoverChecklistItem {
+  id                String    @id @default(uuid())
+  handoverId        String
+  category          String    // PATIENT_ID, PROCEDURE, COUNTS, DRAINS, MEDS, SAFETY, etc.
+  itemLabel         String    // The checklist question/item text
+  isChecked         Boolean   @default(false)
+  notes             String?
+  checkedById       String?
+  checkedByName     String?
+  checkedAt         DateTime?
+  
+  handover          NurseHandover @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  
+  @@index([handoverId])
+  @@index([category])
+  @@map("handover_checklist_items")
+}
+
+model HandoverAuditLog {
+  id                String    @id @default(uuid())
+  handoverId        String
+  action            String    // CREATED, UPDATED, SUBMITTED, ACKNOWLEDGED, DISPUTED, COMPLETED
+  performedById     String
+  performedByName   String
+  details           String?   // JSON of what changed
+  timestamp         DateTime  @default(now())
+  
+  handover          NurseHandover @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  
+  @@index([handoverId])
+  @@index([timestamp])
+  @@map("handover_audit_logs")
 }
