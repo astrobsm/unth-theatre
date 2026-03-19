@@ -42,11 +42,12 @@ export const THEATRES = [
 export type Ward = typeof WARDS[number];
 export type Theatre = typeof THEATRES[number];
 
-// UNTH Ituku Ozalla, Enugu - precise facility coordinates
+// University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla
+// Nkanu West Local Government Area, Enugu State, Nigeria
 export const FACILITY_COORDS = {
-  latitude: 6.3942,
-  longitude: 7.5064,
-  name: 'UNTH Ituku Ozalla, Enugu',
+  latitude: 6.4041,
+  longitude: 7.5199,
+  name: 'UNTH Ituku-Ozalla, Nkanu West LGA, Enugu',
 } as const;
 
 // Haversine distance calculation (returns km)
