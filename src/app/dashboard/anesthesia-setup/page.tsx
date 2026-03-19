@@ -74,10 +74,21 @@ export default function AnesthesiaSetupPage() {
       const response = await fetch('/api/theatres');
       if (response.ok) {
         const data = await response.json();
-        setTheatres(data.theatres || []);
+        // API returns array directly or { theatres: [...] }
+        const list = Array.isArray(data) ? data : (data.theatres || []);
+        if (list.length > 0) {
+          setTheatres(list);
+        } else {
+          // Fallback to constants if no theatres in DB
+          setTheatres(THEATRES.map((name) => ({ id: name, name })));
+        }
+      } else {
+        // Fallback on error
+        setTheatres(THEATRES.map((name) => ({ id: name, name })));
       }
     } catch (error) {
       console.error('Error fetching theatres:', error);
+      setTheatres(THEATRES.map((name) => ({ id: name, name })));
     }
   };
 
@@ -291,9 +302,9 @@ export default function AnesthesiaSetupPage() {
                 onChange={(e) => setSelectedTheatre(e.target.value)}
               >
                 <option value="">-- Select Theatre --</option>
-                {THEATRES.map((theatre) => (
-                  <option key={theatre} value={theatre}>
-                    {theatre}
+                {theatres.map((theatre) => (
+                  <option key={theatre.id} value={theatre.id}>
+                    {theatre.name}
                   </option>
                 ))}
               </select>

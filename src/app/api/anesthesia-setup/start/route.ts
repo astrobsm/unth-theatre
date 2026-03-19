@@ -51,17 +51,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get theatre details
-    const theatre = await prisma.theatreSuite.findUnique({
-      where: { id: validatedData.theatreId },
-      select: { id: true, name: true },
-    });
+    // Get theatre details - support lookup by UUID or by name
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(validatedData.theatreId);
+    let theatre = isUUID
+      ? await prisma.theatreSuite.findUnique({
+          where: { id: validatedData.theatreId },
+          select: { id: true, name: true },
+        })
+      : await prisma.theatreSuite.findUnique({
+          where: { name: validatedData.theatreId },
+          select: { id: true, name: true },
+        });
 
+    // Auto-create theatre if it doesn't exist (seeding from constants list)
     if (!theatre) {
-      return NextResponse.json(
-        { error: 'Theatre not found' },
-        { status: 404 }
-      );
+      theatre = await prisma.theatreSuite.create({
+        data: {
+          name: validatedData.theatreId,
+          location: 'UNTH Theatre Complex',
+        },
+        select: { id: true, name: true },
+      });
     }
 
     // Create setup log
