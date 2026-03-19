@@ -5,15 +5,25 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'THEATRE_MANAGER')) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const role = searchParams.get('role');
+    const status = searchParams.get('status');
+
+    // Build filter
+    const where: Record<string, unknown> = {};
+    if (role) where.role = role;
+    if (status) where.status = status;
+
     const users = await prisma.user.findMany({
+      where,
       select: {
         id: true,
         username: true,
@@ -25,7 +35,7 @@ export async function GET() {
         approvedBy: true,
         approvedAt: true,
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { fullName: 'asc' }
     });
 
     return NextResponse.json(users);

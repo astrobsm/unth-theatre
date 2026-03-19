@@ -118,42 +118,51 @@ export default function TheatresPage() {
       const scrubResponse = await fetch('/api/users?role=SCRUB_NURSE&status=APPROVED');
       if (scrubResponse.ok) {
         const data = await scrubResponse.json();
-        setScrubNurses(data.users || []);
+        setScrubNurses(Array.isArray(data) ? data : data.users || []);
       }
 
-      // Fetch scrub nurses for circulating role (now handled by SCRUB_NURSE)
+      // Fetch circulating nurses (also scrub nurses who can circulate)
       const circulatingResponse = await fetch('/api/users?role=SCRUB_NURSE&status=APPROVED');
       if (circulatingResponse.ok) {
         const data = await circulatingResponse.json();
-        setCirculatingNurses(data.users || []);
+        setCirculatingNurses(Array.isArray(data) ? data : data.users || []);
       }
 
       // Fetch anaesthetic technicians
       const techResponse = await fetch('/api/users?role=ANAESTHETIC_TECHNICIAN&status=APPROVED');
       if (techResponse.ok) {
         const data = await techResponse.json();
-        setAnaestheticTechnicians(data.users || []);
+        setAnaestheticTechnicians(Array.isArray(data) ? data : data.users || []);
       }
 
       // Fetch anaesthetists (all types)
       const anaesthetistResponse = await fetch('/api/users?role=ANAESTHETIST&status=APPROVED');
       if (anaesthetistResponse.ok) {
         const data = await anaesthetistResponse.json();
-        setAnaesthetists(data.users || []);
+        const allAnaesthetists = Array.isArray(data) ? data : data.users || [];
+        // Also fetch consultant anaesthetists
+        const consultantResponse = await fetch('/api/users?role=CONSULTANT_ANAESTHETIST&status=APPROVED');
+        if (consultantResponse.ok) {
+          const consultantData = await consultantResponse.json();
+          const consultants = Array.isArray(consultantData) ? consultantData : consultantData.users || [];
+          setAnaesthetists([...allAnaesthetists, ...consultants]);
+        } else {
+          setAnaesthetists(allAnaesthetists);
+        }
       }
 
       // Fetch cleaners
       const cleanerResponse = await fetch('/api/users?role=CLEANER&status=APPROVED');
       if (cleanerResponse.ok) {
         const data = await cleanerResponse.json();
-        setCleaners(data.users || []);
+        setCleaners(Array.isArray(data) ? data : data.users || []);
       }
 
       // Fetch porters
       const porterResponse = await fetch('/api/users?role=PORTER&status=APPROVED');
       if (porterResponse.ok) {
         const data = await porterResponse.json();
-        setPorters(data.users || []);
+        setPorters(Array.isArray(data) ? data : data.users || []);
       }
     } catch (error) {
       console.error('Failed to fetch staff:', error);
