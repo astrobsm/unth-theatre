@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const endOfDaySchema = z.object({
   setupLogId: z.string().min(1, 'Setup log ID is required'),
   endOfDayNotes: z.string().optional(),
