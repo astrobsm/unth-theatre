@@ -105,6 +105,7 @@ export default function RosterPage() {
         date: row.Date || row.date || '',
         theatre: row.Theatre || row.theatre || '',
         shift: row.Shift || row.shift || row.Duty || row.duty || '',
+        seniorityLevel: row['Seniority Level'] || row.seniorityLevel || row.SeniorityLevel || row.Level || row.level || '',
         notes: row.Notes || row.notes || '',
       }));
 
@@ -151,22 +152,58 @@ export default function RosterPage() {
     }
   };
 
-  const downloadTemplate = async () => {
-    const template = [
-      {
-        Name: 'John Doe',
-        Date: '2025-12-15',
-        Theatre: 'Main Theatre 1',
-        Shift: 'MORNING',
-        Notes: 'Optional notes',
-      },
-    ];
-
+  const downloadTemplate = async (category?: string) => {
     const XLSX = await import('xlsx');
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Roster Template');
-    XLSX.writeFile(wb, 'roster_template.xlsx');
+    
+    if (category === 'ANAESTHETISTS') {
+      // Special template for anaesthetists with seniority level columns
+      const template = [
+        {
+          Name: 'Dr. John Doe',
+          'Seniority Level': 'CONSULTANT',
+          Date: '2025-12-15',
+          Theatre: 'THEATRE 1 (VAMED)',
+          Shift: 'MORNING',
+          Notes: 'Optional notes',
+        },
+        {
+          Name: 'Dr. Jane Smith',
+          'Seniority Level': 'SENIOR_REGISTRAR',
+          Date: '2025-12-15',
+          Theatre: 'THEATRE 1 (VAMED)',
+          Shift: 'MORNING',
+          Notes: '',
+        },
+        {
+          Name: 'Dr. Mike Johnson',
+          'Seniority Level': 'REGISTRAR',
+          Date: '2025-12-15',
+          Theatre: 'THEATRE 1 (VAMED)',
+          Shift: 'CALL',
+          Notes: '',
+        },
+      ];
+      const ws = XLSX.utils.json_to_sheet(template);
+      // Set column widths
+      ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 20 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Anaesthetist Roster');
+      XLSX.writeFile(wb, 'anaesthetist_roster_template.xlsx');
+    } else {
+      const template = [
+        {
+          Name: 'John Doe',
+          Date: '2025-12-15',
+          Theatre: 'THEATRE 1 (VAMED)',
+          Shift: 'MORNING',
+          Notes: 'Optional notes',
+        },
+      ];
+      const ws = XLSX.utils.json_to_sheet(template);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Roster Template');
+      XLSX.writeFile(wb, 'roster_template.xlsx');
+    }
   };
 
   const getShiftBadge = (shift: string) => {
@@ -199,10 +236,16 @@ export default function RosterPage() {
           <h1 className="text-3xl font-bold text-gray-900">Duty Roster Management</h1>
           <p className="text-gray-600 mt-2">Upload and manage staff duty rosters</p>
         </div>
-        <button onClick={downloadTemplate} className="btn-secondary">
-          <Download className="w-5 h-5 mr-2" />
-          Download Template
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => downloadTemplate()} className="btn-secondary">
+            <Download className="w-5 h-5 mr-2" />
+            General Template
+          </button>
+          <button onClick={() => downloadTemplate('ANAESTHETISTS')} className="btn-secondary">
+            <Download className="w-5 h-5 mr-2" />
+            Anaesthetist Template
+          </button>
+        </div>
       </div>
 
       {/* Upload Section */}

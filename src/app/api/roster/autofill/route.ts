@@ -44,51 +44,50 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Organize staff by category
+    // Organize staff by category — only auto-fill anaesthetists and anaesthetic technicians
     const staffSuggestions: Record<string, string | null> = {
-      scrubNurse: null,
-      circulatingNurse: null,
       anaestheticTechnician: null,
       anaesthetistConsultant: null,
       anaesthetistSeniorRegistrar: null,
       anaesthetistRegistrar: null,
-      cleaner: null,
-      porter: null,
+    };
+
+    const staffDetails: Record<string, { id: string; name: string; role: string } | null> = {
+      anaestheticTechnician: null,
+      anaesthetistConsultant: null,
+      anaesthetistSeniorRegistrar: null,
+      anaesthetistRegistrar: null,
     };
 
     rosters.forEach((roster) => {
       switch (roster.staffCategory) {
-        case 'NURSES':
-          // Assign nurses based on role (SCRUB_NURSE now handles both scrub and circulating)
-          if (roster.user.role === 'SCRUB_NURSE' && !staffSuggestions.scrubNurse) {
-            staffSuggestions.scrubNurse = roster.user.id;
-          } else if (roster.user.role === 'SCRUB_NURSE' && !staffSuggestions.circulatingNurse) {
-            staffSuggestions.circulatingNurse = roster.user.id;
-          }
-          break;
-        
         case 'ANAESTHETISTS':
-          // Assign anaesthetists based on role
-          if (roster.user.role === 'ANAESTHETIST' && !staffSuggestions.anaesthetistConsultant) {
+          // Use seniorityLevel to distinguish consultant/senior registrar/registrar
+          if (roster.seniorityLevel === 'CONSULTANT' && !staffSuggestions.anaesthetistConsultant) {
             staffSuggestions.anaesthetistConsultant = roster.user.id;
+            staffDetails.anaesthetistConsultant = { id: roster.user.id, name: roster.user.fullName, role: 'Consultant' };
+          } else if (roster.seniorityLevel === 'SENIOR_REGISTRAR' && !staffSuggestions.anaesthetistSeniorRegistrar) {
+            staffSuggestions.anaesthetistSeniorRegistrar = roster.user.id;
+            staffDetails.anaesthetistSeniorRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Senior Registrar' };
+          } else if (roster.seniorityLevel === 'REGISTRAR' && !staffSuggestions.anaesthetistRegistrar) {
+            staffSuggestions.anaesthetistRegistrar = roster.user.id;
+            staffDetails.anaesthetistRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Registrar' };
+          } else if (!roster.seniorityLevel) {
+            // Legacy data without seniorityLevel — fall back to role-based assignment
+            if (roster.user.role === 'CONSULTANT_ANAESTHETIST' && !staffSuggestions.anaesthetistConsultant) {
+              staffSuggestions.anaesthetistConsultant = roster.user.id;
+              staffDetails.anaesthetistConsultant = { id: roster.user.id, name: roster.user.fullName, role: 'Consultant' };
+            } else if (!staffSuggestions.anaesthetistRegistrar) {
+              staffSuggestions.anaesthetistRegistrar = roster.user.id;
+              staffDetails.anaesthetistRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Registrar' };
+            }
           }
           break;
         
         case 'ANAESTHETIC_TECHNICIANS':
           if (!staffSuggestions.anaestheticTechnician) {
             staffSuggestions.anaestheticTechnician = roster.user.id;
-          }
-          break;
-        
-        case 'CLEANERS':
-          if (!staffSuggestions.cleaner) {
-            staffSuggestions.cleaner = roster.user.id;
-          }
-          break;
-        
-        case 'PORTERS':
-          if (!staffSuggestions.porter) {
-            staffSuggestions.porter = roster.user.id;
+            staffDetails.anaestheticTechnician = { id: roster.user.id, name: roster.user.fullName, role: 'Anaesthetic Technician' };
           }
           break;
       }
@@ -96,6 +95,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       staffSuggestions,
+      staffDetails,
       rostersFound: rosters.length,
     });
   } catch (error) {

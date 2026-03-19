@@ -4,6 +4,21 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { THEATRES } from '@/lib/constants';
 
+interface StaffAssignments {
+  scrubNurse: string | null;
+  circulatingNurse: string | null;
+  anaestheticTechnician: string | null;
+  anaesthetistConsultant: string | null;
+  anaesthetistSeniorRegistrar: string | null;
+  anaesthetistRegistrar: string | null;
+  cleaner: string | null;
+  porter: string | null;
+  shift: string | null;
+  surgicalUnit: string | null;
+  startTime: string | null;
+  endTime: string | null;
+}
+
 interface TheatreStatus {
   theatreId: string;
   theatreName: string;
@@ -19,10 +34,14 @@ interface TheatreStatus {
   locationAddress: string | null;
   latitude: number | null;
   longitude: number | null;
+  locationAccuracy: number | null;
+  distanceFromFacility: number | null;
   malfunctioningEquipment: number;
   blockingIssues: string | null;
   setupNotes: string | null;
   durationMinutes: number | null;
+  staffAssignments: StaffAssignments | null;
+  totalAllocations: number;
 }
 
 interface Statistics {
@@ -94,9 +113,25 @@ export default function TheatreReadinessDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <h1 className="text-3xl font-bold text-gray-900">Theatre Readiness Status</h1>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
+          <button
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            className={`px-3 py-1.5 text-sm rounded-lg font-medium ${selectedDate === new Date().toISOString().split('T')[0] ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => {
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              setSelectedDate(tomorrow.toISOString().split('T')[0]);
+            }}
+            className={`px-3 py-1.5 text-sm rounded-lg font-medium ${(() => { const t = new Date(); t.setDate(t.getDate() + 1); return selectedDate === t.toISOString().split('T')[0]; })() ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            Tomorrow
+          </button>
           <input
             type="date"
             value={selectedDate}
@@ -189,11 +224,29 @@ export default function TheatreReadinessDashboard() {
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">📍 Location:</span>
                   <span className="text-xs">{theatre.locationName || 'N/A'}</span>
+                  {theatre.locationAccuracy && (
+                    <span className="text-xs text-gray-500">(±{theatre.locationAccuracy}m)</span>
+                  )}
                 </div>
 
                 {theatre.locationAddress && (
                   <div className="text-xs text-gray-600 italic">
                     {theatre.locationAddress}
+                  </div>
+                )}
+
+                {theatre.distanceFromFacility != null && (
+                  <div className={`text-xs font-medium mt-1 px-2 py-1 rounded ${
+                    theatre.distanceFromFacility < 1
+                      ? 'bg-green-100 text-green-800'
+                      : theatre.distanceFromFacility < 5
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                  }`}>
+                    📏 {theatre.distanceFromFacility < 1
+                      ? `${Math.round(theatre.distanceFromFacility * 1000)}m from UNTH`
+                      : `${theatre.distanceFromFacility}km from UNTH`}
+                    {theatre.distanceFromFacility >= 5 && ' ⚠️ Far from facility'}
                   </div>
                 )}
 
@@ -236,6 +289,87 @@ export default function TheatreReadinessDashboard() {
               <div className="text-center py-4 text-gray-500">
                 <div className="text-3xl mb-2">⭕</div>
                 <div className="text-sm">No setup logged yet</div>
+              </div>
+            )}
+
+            {/* Staff Assignments for the Day */}
+            {theatre.staffAssignments ? (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <h4 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-1">
+                  👥 Staff Assignments
+                  {theatre.staffAssignments.shift && (
+                    <span className="ml-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                      {theatre.staffAssignments.shift}
+                    </span>
+                  )}
+                </h4>
+                {theatre.staffAssignments.surgicalUnit && (
+                  <div className="text-xs mb-2 text-purple-700 font-medium bg-purple-50 px-2 py-1 rounded">
+                    🏥 {theatre.staffAssignments.surgicalUnit}
+                  </div>
+                )}
+                {theatre.staffAssignments.startTime && theatre.staffAssignments.endTime && (
+                  <div className="text-xs mb-2 text-gray-600">
+                    🕐 {new Date(theatre.staffAssignments.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - {new Date(theatre.staffAssignments.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-1 text-xs">
+                  {theatre.staffAssignments.scrubNurse && (
+                    <div className="flex justify-between bg-blue-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Scrub Nurse:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.scrubNurse}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.circulatingNurse && (
+                    <div className="flex justify-between bg-blue-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Circulating Nurse:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.circulatingNurse}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.anaestheticTechnician && (
+                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Anaesthetic Tech:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaestheticTechnician}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.anaesthetistConsultant && (
+                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Consultant:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistConsultant}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.anaesthetistSeniorRegistrar && (
+                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Senior Registrar:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistSeniorRegistrar}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.anaesthetistRegistrar && (
+                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Registrar:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistRegistrar}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.cleaner && (
+                    <div className="flex justify-between bg-gray-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Cleaner:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.cleaner}</span>
+                    </div>
+                  )}
+                  {theatre.staffAssignments.porter && (
+                    <div className="flex justify-between bg-gray-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">Porter:</span>
+                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.porter}</span>
+                    </div>
+                  )}
+                  {!theatre.staffAssignments.scrubNurse && !theatre.staffAssignments.circulatingNurse && !theatre.staffAssignments.anaestheticTechnician && !theatre.staffAssignments.anaesthetistConsultant && !theatre.staffAssignments.cleaner && !theatre.staffAssignments.porter && (
+                    <div className="text-gray-500 text-center py-1">No staff assigned yet</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 pt-3 border-t border-gray-200 text-center text-xs text-gray-400">
+                No allocation for this date
               </div>
             )}
           </div>

@@ -534,6 +534,7 @@ model Roster {
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   staffName        String        // Name from Excel upload
   staffCategory    StaffCategory // NURSES, ANAESTHETISTS, PORTERS, CLEANERS, ANAESTHETIC_TECHNICIANS
+  seniorityLevel   String?       // For ANAESTHETISTS: CONSULTANT, SENIOR_REGISTRAR, REGISTRAR
   date             DateTime      @db.Date
   theatreId        String?
   theatre          TheatreSuite? @relation(fields: [theatreId], references: [id], onDelete: SetNull)
@@ -2660,6 +2661,8 @@ model AnesthesiaSetupLog {
   longitude             Float
   locationName          String              // Reverse geocoded place name
   locationAddress       String?             // Full address
+  locationAccuracy      Float?              // GPS accuracy in meters
+  distanceFromFacility  Float?              // Distance from UNTH in km
   
   // Readiness Checklist
   gasSupplyChecked      Boolean             @default(false)

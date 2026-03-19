@@ -13,6 +13,8 @@ const startSetupSchema = z.object({
   longitude: z.number().min(-180).max(180),
   locationName: z.string().min(1, 'Location name is required'),
   locationAddress: z.string().optional(),
+  locationAccuracy: z.number().optional(),
+  distanceFromFacility: z.number().optional(),
   setupDate: z.string(), // ISO date string
 });
 
@@ -88,6 +90,8 @@ export async function POST(request: NextRequest) {
         longitude: validatedData.longitude,
         locationName: validatedData.locationName,
         locationAddress: validatedData.locationAddress,
+        locationAccuracy: validatedData.locationAccuracy,
+        distanceFromFacility: validatedData.distanceFromFacility,
         status: 'IN_PROGRESS',
       },
     });

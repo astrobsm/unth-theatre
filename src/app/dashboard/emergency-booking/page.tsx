@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
   User, Building2, Siren, Phone, Calendar, MapPin, Navigation,
@@ -435,9 +436,7 @@ export default function EmergencyBookingPage() {
           longitude = pos.coords.longitude;
 
           // Rough ETA: assume 40km/h average speed in Enugu
-          const hospitalLat = 6.4025;
-          const hospitalLng = 7.5103;
-          const dist = haversineDistance(latitude, longitude, hospitalLat, hospitalLng);
+          const dist = haversineDistanceKm(latitude, longitude, FACILITY_COORDS.latitude, FACILITY_COORDS.longitude);
           estimatedArrivalMin = Math.max(5, Math.round((dist / 40) * 60));
         } catch {
           // Geo-location denied — proceed without it
@@ -1449,14 +1448,3 @@ export default function EmergencyBookingPage() {
   );
 }
 
-// Haversine distance helper
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return Math.round(2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10;
-}

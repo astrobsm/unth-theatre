@@ -53,9 +53,51 @@ export async function GET(request: NextRequest) {
       orderBy: { setupStartTime: 'desc' },
     });
 
+    // Get allocations for the date with staff assignments
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const allocations = await prisma.theatreAllocation.findMany({
+      where: {
+        date: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      include: {
+        scrubNurse: { select: { id: true, fullName: true, role: true } },
+        circulatingNurse: { select: { id: true, fullName: true, role: true } },
+        anaestheticTechnician: { select: { id: true, fullName: true, role: true } },
+        anaesthetistConsultant: { select: { id: true, fullName: true, role: true } },
+        anaesthetistSeniorRegistrar: { select: { id: true, fullName: true, role: true } },
+        anaesthetistRegistrar: { select: { id: true, fullName: true, role: true } },
+        cleaner: { select: { id: true, fullName: true, role: true } },
+        porter: { select: { id: true, fullName: true, role: true } },
+      },
+    });
+
     // Create theatre status map
     const theatreStatus = theatres.map(theatre => {
       const setupLog = setupLogs.find(log => log.theatreId === theatre.id);
+      const theatreAllocations = allocations.filter(a => a.theatreId === theatre.id);
+
+      // Aggregate staff from allocations
+      const staffAssignments = theatreAllocations.length > 0 ? {
+        scrubNurse: theatreAllocations[0].scrubNurse?.fullName || null,
+        circulatingNurse: theatreAllocations[0].circulatingNurse?.fullName || null,
+        anaestheticTechnician: theatreAllocations[0].anaestheticTechnician?.fullName || null,
+        anaesthetistConsultant: theatreAllocations[0].anaesthetistConsultant?.fullName || null,
+        anaesthetistSeniorRegistrar: theatreAllocations[0].anaesthetistSeniorRegistrar?.fullName || null,
+        anaesthetistRegistrar: theatreAllocations[0].anaesthetistRegistrar?.fullName || null,
+        cleaner: theatreAllocations[0].cleaner?.fullName || null,
+        porter: theatreAllocations[0].porter?.fullName || null,
+        shift: theatreAllocations[0].shift || null,
+        surgicalUnit: theatreAllocations[0].surgicalUnit || null,
+        startTime: theatreAllocations[0].startTime || null,
+        endTime: theatreAllocations[0].endTime || null,
+      } : null;
 
       return {
         theatreId: theatre.id,
@@ -72,10 +114,14 @@ export async function GET(request: NextRequest) {
         locationAddress: setupLog?.locationAddress || null,
         latitude: setupLog?.latitude || null,
         longitude: setupLog?.longitude || null,
+        locationAccuracy: setupLog?.locationAccuracy || null,
+        distanceFromFacility: setupLog?.distanceFromFacility || null,
         malfunctioningEquipment: setupLog?.equipmentChecks.length || 0,
         blockingIssues: setupLog?.blockingIssues || null,
         setupNotes: setupLog?.setupNotes || null,
         durationMinutes: setupLog?.durationMinutes || null,
+        staffAssignments,
+        totalAllocations: theatreAllocations.length,
       };
     });
 

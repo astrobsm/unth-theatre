@@ -89,12 +89,22 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        // Validate seniorityLevel for ANAESTHETISTS
+        let seniorityLevel: string | null = null;
+        if (staffCategory === 'ANAESTHETISTS') {
+          const level = roster.seniorityLevel?.toUpperCase?.() || '';
+          if (['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR'].includes(level)) {
+            seniorityLevel = level;
+          }
+        }
+
         // Create roster entry
         const created = await prisma.roster.create({
           data: {
             userId: user.id,
             staffName: roster.name,
             staffCategory,
+            seniorityLevel,
             date: new Date(roster.date),
             theatreId: theatre?.id || null,
             shift: roster.shift,

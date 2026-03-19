@@ -56,6 +56,9 @@ export default function TheatresPage() {
   const [allocationType, setAllocationType] = useState<string>('SURGERY');
   const [selectedShift, setSelectedShift] = useState<string>('MORNING');
   const [autofilledStaff, setAutofilledStaff] = useState<any>(null);
+  const [allocationDate, setAllocationDate] = useState(
+    new Date().toISOString().split('T')[0]
+  );
   
   // Staff lists
   const [scrubNurses, setScrubNurses] = useState<User[]>([]);
@@ -164,13 +167,15 @@ export default function TheatresPage() {
         const data = await response.json();
         setAutofilledStaff(data.staffSuggestions);
         
-        // Auto-fill the form if we have staff suggestions
+        // Auto-fill ONLY anaesthetist and technician fields from roster
         if (data.staffSuggestions) {
           setTimeout(() => {
-            Object.keys(data.staffSuggestions).forEach((key) => {
+            const autoFields = ['anaestheticTechnicianId', 'anaesthetistConsultantId', 'anaesthetistSeniorRegistrarId', 'anaesthetistRegistrarId'];
+            autoFields.forEach((fieldName) => {
+              const key = fieldName.replace('Id', '');
               const value = data.staffSuggestions[key];
               if (value) {
-                const element = document.querySelector(`[name="${key}Id"]`) as HTMLSelectElement;
+                const element = document.querySelector(`[name="${fieldName}"]`) as HTMLSelectElement;
                 if (element) {
                   element.value = value;
                 }
@@ -224,8 +229,9 @@ export default function TheatresPage() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    const startTime = new Date(`${selectedDate}T${formData.get('startTime')}`);
-    const endTime = new Date(`${selectedDate}T${formData.get('endTime')}`);
+    const dateToUse = allocationDate;
+    const startTime = new Date(`${dateToUse}T${formData.get('startTime')}`);
+    const endTime = new Date(`${dateToUse}T${formData.get('endTime')}`);
     
     const allocationData: any = {
       theatreId: formData.get('theatreId'),
@@ -233,7 +239,7 @@ export default function TheatresPage() {
       shift: formData.get('shift'),
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
-      date: new Date(selectedDate).toISOString(),
+      date: new Date(dateToUse).toISOString(),
       notes: formData.get('notes'),
       equipment: (formData.get('equipment') as string)
         .split(',')
@@ -550,7 +556,26 @@ export default function TheatresPage() {
             <div className="sticky top-0 bg-white z-10 px-6 pt-6 pb-4 border-b">
               <h2 className="text-2xl font-bold">Add Theatre Allocation</h2>
             </div>
-            <form onSubmit={handleAddAllocation} className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+            <form id="allocation-form" onSubmit={handleAddAllocation} className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+              {/* Allocation Date - allows planning days ahead */}
+              <div>
+                <label className="label">Allocation Date *</label>
+                <input
+                  type="date"
+                  value={allocationDate}
+                  onChange={(e) => {
+                    setAllocationDate(e.target.value);
+                    const theatreSelect = document.querySelector('[name="theatreId"]') as HTMLSelectElement;
+                    if (theatreSelect?.value && selectedShift) {
+                      fetchRosterSuggestions(theatreSelect.value, e.target.value, selectedShift);
+                    }
+                  }}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="input-field"
+                />
+                <p className="text-xs text-gray-500 mt-1">You can create allocations for today or future dates</p>
+              </div>
+
               <div>
                 <label className="label">Theatre Suite</label>
                 <select 
@@ -558,8 +583,8 @@ export default function TheatresPage() {
                   required 
                   className="input-field"
                   onChange={(e) => {
-                    if (e.target.value && selectedDate && selectedShift) {
-                      fetchRosterSuggestions(e.target.value, selectedDate, selectedShift);
+                    if (e.target.value && allocationDate && selectedShift) {
+                      fetchRosterSuggestions(e.target.value, allocationDate, selectedShift);
                     }
                   }}
                 >
@@ -582,8 +607,8 @@ export default function TheatresPage() {
                   onChange={(e) => {
                     setSelectedShift(e.target.value);
                     const theatreSelect = document.querySelector('[name="theatreId"]') as HTMLSelectElement;
-                    if (theatreSelect?.value && selectedDate) {
-                      fetchRosterSuggestions(theatreSelect.value, selectedDate, e.target.value);
+                    if (theatreSelect?.value && allocationDate) {
+                      fetchRosterSuggestions(theatreSelect.value, allocationDate, e.target.value);
                     }
                   }}
                 >
@@ -723,116 +748,130 @@ export default function TheatresPage() {
               <div className="border-t pt-4 mt-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Staff Assignments
-                  {autofilledStaff && (
-                    <span className="ml-2 text-sm text-green-600 font-normal">
-                      (Auto-filled from roster)
-                    </span>
-                  )}
                 </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
-                  {/* Scrub Nurse */}
-                  <div>
-                    <label className="label">Scrub Nurse</label>
-                    <select name="scrubNurseId" className="input-field">
-                      <option value="">Select Scrub Nurse</option>
-                      {scrubNurses.map((nurse) => (
-                        <option key={nurse.id} value={nurse.id}>
-                          {nurse.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Manual Selection - Scrub Nurse, Circulating Nurse, Cleaner, Porter */}
+                <div className="mb-4">
+                  <p className="text-sm font-medium text-blue-700 mb-2 flex items-center gap-1">
+                    <span>👤</span> Select Manually from Staff Database
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Scrub Nurse */}
+                    <div>
+                      <label className="label">Scrub Nurse</label>
+                      <select name="scrubNurseId" className="input-field">
+                        <option value="">Select Scrub Nurse</option>
+                        {scrubNurses.map((nurse) => (
+                          <option key={nurse.id} value={nurse.id}>
+                            {nurse.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Circulating Nurse */}
-                  <div>
-                    <label className="label">Circulating Nurse</label>
-                    <select name="circulatingNurseId" className="input-field">
-                      <option value="">Select Circulating Nurse</option>
-                      {circulatingNurses.map((nurse) => (
-                        <option key={nurse.id} value={nurse.id}>
-                          {nurse.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {/* Circulating Nurse */}
+                    <div>
+                      <label className="label">Circulating Nurse</label>
+                      <select name="circulatingNurseId" className="input-field">
+                        <option value="">Select Circulating Nurse</option>
+                        {circulatingNurses.map((nurse) => (
+                          <option key={nurse.id} value={nurse.id}>
+                            {nurse.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Anaesthetic Technician */}
-                  <div>
-                    <label className="label">Anaesthetic Technician</label>
-                    <select name="anaestheticTechnicianId" className="input-field">
-                      <option value="">Select Anaesthetic Technician</option>
-                      {anaestheticTechnicians.map((tech) => (
-                        <option key={tech.id} value={tech.id}>
-                          {tech.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {/* Cleaner */}
+                    <div>
+                      <label className="label">Cleaner</label>
+                      <select name="cleanerId" className="input-field">
+                        <option value="">Select Cleaner</option>
+                        {cleaners.map((cleaner) => (
+                          <option key={cleaner.id} value={cleaner.id}>
+                            {cleaner.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Anaesthetist - Consultant */}
-                  <div>
-                    <label className="label">Anaesthetist (Consultant)</label>
-                    <select name="anaesthetistConsultantId" className="input-field">
-                      <option value="">Select Consultant</option>
-                      {anaesthetists.map((anaesthetist) => (
-                        <option key={anaesthetist.id} value={anaesthetist.id}>
-                          {anaesthetist.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Porter */}
+                    <div>
+                      <label className="label">Porter</label>
+                      <select name="porterId" className="input-field">
+                        <option value="">Select Porter</option>
+                        {porters.map((porter) => (
+                          <option key={porter.id} value={porter.id}>
+                            {porter.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
+                </div>
 
-                  {/* Anaesthetist - Senior Registrar */}
-                  <div>
-                    <label className="label">Anaesthetist (Senior Registrar)</label>
-                    <select name="anaesthetistSeniorRegistrarId" className="input-field">
-                      <option value="">Select Senior Registrar</option>
-                      {anaesthetists.map((anaesthetist) => (
-                        <option key={anaesthetist.id} value={anaesthetist.id}>
-                          {anaesthetist.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Auto-filled from Roster - Anaesthetists and Technician */}
+                <div>
+                  <p className="text-sm font-medium text-green-700 mb-2 flex items-center gap-1">
+                    <span>🔄</span> Auto-filled from Roster
+                    {autofilledStaff && (
+                      <span className="ml-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                        Roster matched
+                      </span>
+                    )}
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Anaesthetic Technician */}
+                    <div>
+                      <label className="label">Anaesthetic Technician</label>
+                      <select name="anaestheticTechnicianId" className="input-field bg-green-50">
+                        <option value="">Select Anaesthetic Technician</option>
+                        {anaestheticTechnicians.map((tech) => (
+                          <option key={tech.id} value={tech.id}>
+                            {tech.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Anaesthetist - Registrar */}
-                  <div>
-                    <label className="label">Anaesthetist (Registrar)</label>
-                    <select name="anaesthetistRegistrarId" className="input-field">
-                      <option value="">Select Registrar</option>
-                      {anaesthetists.map((anaesthetist) => (
-                        <option key={anaesthetist.id} value={anaesthetist.id}>
-                          {anaesthetist.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {/* Anaesthetist - Consultant */}
+                    <div>
+                      <label className="label">Anaesthetist (Consultant)</label>
+                      <select name="anaesthetistConsultantId" className="input-field bg-green-50">
+                        <option value="">Select Consultant</option>
+                        {anaesthetists.map((anaesthetist) => (
+                          <option key={anaesthetist.id} value={anaesthetist.id}>
+                            {anaesthetist.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Cleaner */}
-                  <div>
-                    <label className="label">Cleaner</label>
-                    <select name="cleanerId" className="input-field">
-                      <option value="">Select Cleaner</option>
-                      {cleaners.map((cleaner) => (
-                        <option key={cleaner.id} value={cleaner.id}>
-                          {cleaner.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {/* Anaesthetist - Senior Registrar */}
+                    <div>
+                      <label className="label">Anaesthetist (Senior Registrar)</label>
+                      <select name="anaesthetistSeniorRegistrarId" className="input-field bg-green-50">
+                        <option value="">Select Senior Registrar</option>
+                        {anaesthetists.map((anaesthetist) => (
+                          <option key={anaesthetist.id} value={anaesthetist.id}>
+                            {anaesthetist.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {/* Porter */}
-                  <div>
-                    <label className="label">Porter</label>
-                    <select name="porterId" className="input-field">
-                      <option value="">Select Porter</option>
-                      {porters.map((porter) => (
-                        <option key={porter.id} value={porter.id}>
-                          {porter.fullName || 'Not assigned'}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Anaesthetist - Registrar */}
+                    <div>
+                      <label className="label">Anaesthetist (Registrar)</label>
+                      <select name="anaesthetistRegistrarId" className="input-field bg-green-50">
+                        <option value="">Select Registrar</option>
+                        {anaesthetists.map((anaesthetist) => (
+                          <option key={anaesthetist.id} value={anaesthetist.id}>
+                            {anaesthetist.fullName || 'Not assigned'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>

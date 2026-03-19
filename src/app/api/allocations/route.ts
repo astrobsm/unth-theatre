@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 
 const allocationSchema = z.object({
-  theatreId: z.string().uuid("Invalid theatre ID"),
+  theatreId: z.string().min(1, "Theatre ID is required"),
   surgeryId: z.string().uuid().optional(),
   allocationType: z.enum(["SURGERY", "MAINTENANCE", "EMERGENCY", "RESERVED"]),
   startTime: z.string().datetime(),
@@ -78,10 +78,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = allocationSchema.parse(body);
 
+    // Resolve theatre by UUID or name
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(validatedData.theatreId);
+    let theatre = isUUID
+      ? await prisma.theatreSuite.findUnique({ where: { id: validatedData.theatreId } })
+      : await prisma.theatreSuite.findUnique({ where: { name: validatedData.theatreId } });
+
+    if (!theatre) {
+      // Auto-create theatre from constants
+      theatre = await prisma.theatreSuite.create({
+        data: { name: validatedData.theatreId, location: 'UNTH Theatre Complex' },
+      });
+    }
+
+    const resolvedTheatreId = theatre.id;
+
     // Check for conflicts
     const conflicts = await prisma.theatreAllocation.findMany({
       where: {
-        theatreId: validatedData.theatreId,
+        theatreId: resolvedTheatreId,
         date: new Date(validatedData.date),
         OR: [
           {
@@ -109,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     const allocation = await prisma.theatreAllocation.create({
       data: {
-        theatreId: validatedData.theatreId,
+        theatreId: resolvedTheatreId,
         surgeryId: validatedData.surgeryId,
         allocationType: validatedData.allocationType,
         startTime: new Date(validatedData.startTime),
@@ -147,7 +162,7 @@ export async function POST(request: NextRequest) {
 
     // Update theatre status
     await prisma.theatreSuite.update({
-      where: { id: validatedData.theatreId },
+      where: { id: resolvedTheatreId },
       data: { status: "OCCUPIED" },
     });
 

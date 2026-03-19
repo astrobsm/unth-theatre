@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { THEATRES } from '@/lib/constants';
+import { THEATRES, FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
 
 interface Theatre {
   id: string;
@@ -92,46 +92,103 @@ export default function AnesthesiaSetupPage() {
     }
   };
 
-  const requestLocation = (): Promise<{ latitude: number; longitude: number; locationName: string; locationAddress: string }> => {
+  const requestLocation = (): Promise<{ latitude: number; longitude: number; locationName: string; locationAddress: string; accuracy: number; distanceFromFacility: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('Geolocation is not supported by your browser'));
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const latitude = position.coords.latitude;
-          const longitude = position.coords.longitude;
+      let bestPosition: GeolocationPosition | null = null;
+      let attempts = 0;
+      const maxAttempts = 5;
+      const maxWaitMs = 12000;
 
-          // Reverse geocode to get place name
-          try {
-            const geocodeResponse = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
-            );
-            
-            if (geocodeResponse.ok) {
-              const geocodeData = await geocodeResponse.json();
-              const locationName = geocodeData.display_name.split(',')[0] || geocodeData.address.building || geocodeData.address.hospital || 'Unknown Location';
-              const locationAddress = geocodeData.display_name;
+      const finalize = async (watchId: number) => {
+        navigator.geolocation.clearWatch(watchId);
+        if (!bestPosition) {
+          reject(new Error('Could not obtain GPS location. Please enable location services and try again.'));
+          return;
+        }
 
-              resolve({ latitude, longitude, locationName, locationAddress });
-            } else {
-              reject(new Error('Failed to get location name'));
-            }
-          } catch (error) {
-            reject(error);
+        const latitude = bestPosition.coords.latitude;
+        const longitude = bestPosition.coords.longitude;
+        const accuracy = Math.round(bestPosition.coords.accuracy);
+        const distanceFromFacility = haversineDistanceKm(
+          latitude, longitude,
+          FACILITY_COORDS.latitude, FACILITY_COORDS.longitude
+        );
+
+        // Reverse geocode with OpenStreetMap Nominatim
+        try {
+          const geocodeResponse = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+            { headers: { 'User-Agent': 'UNTH-Theatre-App/1.0' } }
+          );
+
+          if (geocodeResponse.ok) {
+            const geocodeData = await geocodeResponse.json();
+            const addr = geocodeData.address || {};
+            const locationName = addr.building || addr.hospital || addr.amenity || addr.road ||
+              geocodeData.display_name?.split(',')[0] || 'Unknown Location';
+            const locationAddress = geocodeData.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
+            resolve({ latitude, longitude, locationName, locationAddress, accuracy, distanceFromFacility });
+          } else {
+            resolve({
+              latitude, longitude,
+              locationName: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+              locationAddress: `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`,
+              accuracy, distanceFromFacility,
+            });
+          }
+        } catch {
+          resolve({
+            latitude, longitude,
+            locationName: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+            locationAddress: `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`,
+            accuracy, distanceFromFacility,
+          });
+        }
+      };
+
+      // Use watchPosition to get progressively more accurate readings
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          attempts++;
+          if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+            bestPosition = position;
+            setMessage(`📍 Refining GPS... accuracy: ${Math.round(position.coords.accuracy)}m (reading ${attempts}/${maxAttempts})`);
+          }
+          // Stop early if we have excellent accuracy (<30m) or enough attempts
+          if (position.coords.accuracy < 30 || attempts >= maxAttempts) {
+            finalize(watchId);
           }
         },
         (error) => {
-          reject(new Error('Location permission denied. Location is required to log setup.'));
+          if (!bestPosition) {
+            navigator.geolocation.clearWatch(watchId);
+            const msg = error.code === 1
+              ? 'Location permission denied. Location is required to log setup.'
+              : error.code === 2
+                ? 'Location unavailable. Please check your GPS/location settings.'
+                : 'Location request timed out. Please try again.';
+            reject(new Error(msg));
+          }
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 15000,
           maximumAge: 0,
         }
       );
+
+      // Safety timeout — use best reading so far
+      setTimeout(() => {
+        if (bestPosition) {
+          finalize(watchId);
+        }
+      }, maxWaitMs);
     });
   };
 
@@ -146,7 +203,7 @@ export default function AnesthesiaSetupPage() {
 
     try {
       const location = await requestLocation();
-      setMessage('Location captured. Starting setup...');
+      setMessage(`📍 Location: ${location.locationName} (±${location.accuracy}m, ${location.distanceFromFacility}km from UNTH)`);
 
       const response = await fetch('/api/anesthesia-setup/start', {
         method: 'POST',
@@ -157,6 +214,8 @@ export default function AnesthesiaSetupPage() {
           longitude: location.longitude,
           locationName: location.locationName,
           locationAddress: location.locationAddress,
+          locationAccuracy: location.accuracy,
+          distanceFromFacility: location.distanceFromFacility,
           setupDate: new Date().toISOString().split('T')[0],
         }),
       });

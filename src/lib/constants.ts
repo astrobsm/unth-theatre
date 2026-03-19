@@ -41,3 +41,26 @@ export const THEATRES = [
 
 export type Ward = typeof WARDS[number];
 export type Theatre = typeof THEATRES[number];
+
+// UNTH Ituku Ozalla, Enugu - precise facility coordinates
+export const FACILITY_COORDS = {
+  latitude: 6.3942,
+  longitude: 7.5064,
+  name: 'UNTH Ituku Ozalla, Enugu',
+} as const;
+
+// Haversine distance calculation (returns km)
+export function haversineDistanceKm(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number,
+): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return Math.round(2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
+}
