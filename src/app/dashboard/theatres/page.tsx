@@ -845,9 +845,9 @@ export default function TheatresPage() {
 
                     {/* Anaesthetist - Consultant */}
                     <div>
-                      <label className="label">Anaesthetist (Consultant)</label>
+                      <label className="label">Consultant Anaesthetist</label>
                       <select name="anaesthetistConsultantId" className="input-field bg-green-50">
-                        <option value="">Select Consultant</option>
+                        <option value="">Select Consultant Anaesthetist</option>
                         {anaesthetists.map((anaesthetist) => (
                           <option key={anaesthetist.id} value={anaesthetist.id}>
                             {anaesthetist.fullName || 'Not assigned'}
@@ -858,9 +858,9 @@ export default function TheatresPage() {
 
                     {/* Anaesthetist - Senior Registrar */}
                     <div>
-                      <label className="label">Anaesthetist (Senior Registrar)</label>
+                      <label className="label">Senior Registrar Anaesthesia</label>
                       <select name="anaesthetistSeniorRegistrarId" className="input-field bg-green-50">
-                        <option value="">Select Senior Registrar</option>
+                        <option value="">Select Senior Registrar Anaesthesia</option>
                         {anaesthetists.map((anaesthetist) => (
                           <option key={anaesthetist.id} value={anaesthetist.id}>
                             {anaesthetist.fullName || 'Not assigned'}
@@ -871,9 +871,9 @@ export default function TheatresPage() {
 
                     {/* Anaesthetist - Registrar */}
                     <div>
-                      <label className="label">Anaesthetist (Registrar)</label>
+                      <label className="label">Registrar Anaesthesia</label>
                       <select name="anaesthetistRegistrarId" className="input-field bg-green-50">
-                        <option value="">Select Registrar</option>
+                        <option value="">Select Registrar Anaesthesia</option>
                         {anaesthetists.map((anaesthetist) => (
                           <option key={anaesthetist.id} value={anaesthetist.id}>
                             {anaesthetist.fullName || 'Not assigned'}

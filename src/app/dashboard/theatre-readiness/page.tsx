@@ -328,25 +328,25 @@ export default function TheatreReadinessDashboard() {
                   )}
                   {theatre.staffAssignments.anaestheticTechnician && (
                     <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Anaesthetic Tech:</span>
+                      <span className="text-gray-600">Anaesthetic Technician:</span>
                       <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaestheticTechnician}</span>
                     </div>
                   )}
                   {theatre.staffAssignments.anaesthetistConsultant && (
                     <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Consultant:</span>
+                      <span className="text-gray-600">Consultant Anaesthetist:</span>
                       <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistConsultant}</span>
                     </div>
                   )}
                   {theatre.staffAssignments.anaesthetistSeniorRegistrar && (
                     <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Senior Registrar:</span>
+                      <span className="text-gray-600">Senior Registrar Anaesthesia:</span>
                       <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistSeniorRegistrar}</span>
                     </div>
                   )}
                   {theatre.staffAssignments.anaesthetistRegistrar && (
                     <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Registrar:</span>
+                      <span className="text-gray-600">Registrar Anaesthesia:</span>
                       <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistRegistrar}</span>
                     </div>
                   )}
