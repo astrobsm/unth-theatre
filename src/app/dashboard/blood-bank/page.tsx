@@ -74,8 +74,6 @@ export default function BloodBankPage() {
   }, []);
 
   const fetchRequests = useCallback(async () => {
-    if (!isOnline) return;
-    
     setIsSyncing(true);
     try {
       let url = '/api/blood-requests';
@@ -99,7 +97,7 @@ export default function BloodBankPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [filter, isOnline]);
+  }, [filter]);
 
   useEffect(() => {
     fetchRequests();

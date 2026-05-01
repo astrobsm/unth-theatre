@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 
+export const dynamic = 'force-dynamic';
+
 const allocationSchema = z.object({
   theatreId: z.string().min(1, "Theatre ID is required"),
   surgeryId: z.string().uuid().optional(),

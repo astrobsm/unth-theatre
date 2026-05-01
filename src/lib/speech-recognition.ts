@@ -189,6 +189,11 @@ export interface SpeechRecognitionOptions {
 export class SpeechRecognitionService {
   private recognition: SpeechRecognition | null = null;
   private isListening: boolean = false;
+  /** Tracks whether the user explicitly wants the mic on (separate from current engine state). */
+  private userWantsListening: boolean = false;
+  /** Consecutive recoverable errors. Caps auto-restart to avoid console spam loops. */
+  private consecutiveErrors: number = 0;
+  private static readonly MAX_CONSECUTIVE_ERRORS = 3;
   private options: SpeechRecognitionOptions;
   private restartTimeout: NodeJS.Timeout | null = null;
 
@@ -228,28 +233,64 @@ export class SpeechRecognitionService {
     };
 
     this.recognition.onerror = (event: any) => {
+      const errorType: string = event.error;
+
       // 'aborted' is expected when calling abort() during cleanup - suppress it
-      if (event.error === 'aborted') {
+      if (errorType === 'aborted') {
         return;
       }
-      console.error('Speech recognition error:', event.error);
-      this.options.onError?.(event.error);
-      
-      if (this.options.autoRestart && this.isListening) {
+
+      // 'no-speech' is benign — engine just didn't detect speech in the window.
+      // Don't surface it as an error; just let auto-restart re-arm silently.
+      if (errorType === 'no-speech') {
+        return;
+      }
+
+      // Permission errors are terminal — stop trying.
+      if (errorType === 'not-allowed' || errorType === 'service-not-allowed') {
+        this.userWantsListening = false;
+        this.options.onError?.('Microphone permission denied. Please allow mic access in your browser.');
+        return;
+      }
+
+      // 'network' = browser STT backend (Google for Chromium) unreachable.
+      // Don't auto-restart — it just spams the console. Surface a clear message.
+      if (errorType === 'network') {
+        this.consecutiveErrors++;
+        if (this.consecutiveErrors >= SpeechRecognitionService.MAX_CONSECUTIVE_ERRORS) {
+          this.userWantsListening = false;
+          this.options.onError?.(
+            navigator.onLine
+              ? 'Voice service unreachable. Check your network or firewall.'
+              : 'Voice input requires an internet connection.'
+          );
+          return;
+        }
+        this.options.onError?.('Voice service temporarily unavailable, retrying...');
+        // Fall through to retry with backoff
+      } else {
+        // Other errors: log + report once, but allow restart
+        console.warn('Speech recognition error:', errorType);
+        this.options.onError?.(errorType);
+      }
+
+      if (this.options.autoRestart && this.userWantsListening) {
         this.scheduleRestart();
       }
     };
 
     this.recognition.onstart = () => {
       this.isListening = true;
+      this.consecutiveErrors = 0; // reset on successful start
       this.options.onStart?.();
     };
 
     this.recognition.onend = () => {
       this.isListening = false;
       this.options.onEnd?.();
-      
-      if (this.options.autoRestart && this.isListening) {
+
+      // Only auto-restart if the USER still wants to listen (not because we just stopped them).
+      if (this.options.autoRestart && this.userWantsListening) {
         this.scheduleRestart();
       }
     };
@@ -303,12 +344,20 @@ export class SpeechRecognitionService {
     if (this.restartTimeout) {
       clearTimeout(this.restartTimeout);
     }
-    
+
+    // Exponential backoff: 1s, 2s, 4s based on consecutive errors
+    const delay = Math.min(1000 * Math.pow(2, this.consecutiveErrors), 4000);
+
     this.restartTimeout = setTimeout(() => {
-      if (this.isListening) {
-        this.start();
+      // Re-check user intent at restart time — they may have toggled off in the meantime
+      if (this.userWantsListening && !this.isListening) {
+        try {
+          this.recognition?.start();
+        } catch {
+          // start() throws if already started — safe to ignore
+        }
       }
-    }, 1000);
+    }, delay);
   }
 
   public start(): void {
@@ -316,34 +365,51 @@ export class SpeechRecognitionService {
       this.initializeRecognition();
     }
 
+    // Pre-flight check: Web Speech API requires network in Chromium
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.options.onError?.('Voice input requires an internet connection.');
+      return;
+    }
+
+    this.userWantsListening = true;
+    this.consecutiveErrors = 0;
+
     if (this.recognition && !this.isListening) {
       try {
         this.recognition.start();
       } catch (error) {
-        console.error('Failed to start speech recognition:', error);
+        // start() throws if already in progress — fine
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!msg.includes('already started')) {
+          console.warn('Failed to start speech recognition:', msg);
+        }
       }
     }
   }
 
   public stop(): void {
+    this.userWantsListening = false;
     if (this.restartTimeout) {
       clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
     }
-    
+
     if (this.recognition && this.isListening) {
       this.isListening = false;
-      this.recognition.stop();
+      try { this.recognition.stop(); } catch {}
     }
   }
 
   public abort(): void {
+    this.userWantsListening = false;
     if (this.restartTimeout) {
       clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
     }
-    
+
     if (this.recognition) {
       this.isListening = false;
-      this.recognition.abort();
+      try { this.recognition.abort(); } catch {}
     }
   }
 

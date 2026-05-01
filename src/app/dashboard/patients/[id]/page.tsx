@@ -91,6 +91,8 @@ export default function PatientDetailPage() {
     if (patientId) {
       fetchPatient();
     }
+    // Re-fetch only when patientId route param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId]);
 
   const fetchPatient = async () => {

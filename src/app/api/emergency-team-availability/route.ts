@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const TEAM_ROLE_MAP: Record<string, string> = {
   SURGEON: 'SURGEON',
   ANAESTHETIST: 'ANAESTHETIST',

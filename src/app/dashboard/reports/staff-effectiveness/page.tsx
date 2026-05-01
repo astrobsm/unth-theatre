@@ -65,6 +65,8 @@ export default function StaffEffectivenessPage() {
 
   useEffect(() => {
     fetchAnalytics();
+    // Re-fetch when date range changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   const fetchAnalytics = async () => {

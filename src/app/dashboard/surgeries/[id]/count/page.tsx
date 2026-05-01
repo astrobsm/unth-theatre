@@ -99,6 +99,8 @@ export default function SurgicalCountPage({ params }: { params: { id: string } }
 
   useEffect(() => {
     fetchCount();
+    // Re-fetch only when route id changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const fetchCount = async () => {

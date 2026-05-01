@@ -21,6 +21,7 @@ export async function GET() {
       scheduledSurgeries,
       totalPatients,
       todaySurgeries,
+      pendingTransfers,
     ] = await Promise.all([
       prisma.surgery.count(),
       prisma.surgery.count({
@@ -30,6 +31,14 @@ export async function GET() {
       prisma.surgery.count({
         where: {
           scheduledDate: {
+            gte: today,
+            lt: tomorrow
+          }
+        }
+      }),
+      prisma.patientTransfer.count({
+        where: {
+          transferTime: {
             gte: today,
             lt: tomorrow
           }
@@ -53,7 +62,7 @@ export async function GET() {
       totalPatients,
       lowStockItems,
       todaySurgeries,
-      pendingTransfers: 0,
+      pendingTransfers,
     });
 
   } catch (error) {

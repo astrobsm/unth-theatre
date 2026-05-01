@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+export const dynamic = 'force-dynamic';
+
 const mortalitySchema = z.object({
   surgeryId: z.string(),
   patientId: z.string(),
@@ -40,7 +42,9 @@ export async function GET(request: NextRequest) {
           }
         },
         surgery: {
-          include: {
+          select: {
+            procedureName: true,
+            surgeryType: true,
             surgeon: {
               select: {
                 fullName: true,
@@ -52,11 +56,14 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             auditDate: true,
+            reviewedBy: true,
             findings: true,
             preventability: true,
             recommendations: true,
+            actionsTaken: true,
             followUpRequired: true,
             completedAt: true,
+            createdAt: true,
           }
         }
       },

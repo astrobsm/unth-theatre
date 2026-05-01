@@ -453,7 +453,7 @@ export default function NewSurgeryPage() {
                 name="needStereo"
                 className="w-5 h-5 text-primary-600 rounded"
               />
-              <span className="text-gray-700">Stereo Required</span>
+              <span className="text-gray-700">Stirrups Required</span>
             </label>
 
             <label className="flex items-center space-x-3 cursor-pointer">

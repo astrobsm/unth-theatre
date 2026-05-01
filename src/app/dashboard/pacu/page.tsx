@@ -23,8 +23,8 @@ interface PACUAssessment {
   surgery: {
     id: string;
     procedureName: string;
-    surgeon: { name: string };
-    anesthetist?: { name: string };
+    surgeon: { fullName: string };
+    anesthetist?: { fullName: string };
   };
   vitalSigns: any[];
   redAlerts: any[];
@@ -63,7 +63,6 @@ export default function PACUPage() {
   }, []);
 
   const fetchAssessments = useCallback(async () => {
-    if (!isOnline) return;
     
     setIsSyncing(true);
     try {
@@ -88,7 +87,7 @@ export default function PACUPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [filter, isOnline]);
+  }, [filter]);
 
   useEffect(() => {
     fetchAssessments();
@@ -242,9 +241,9 @@ export default function PACUPage() {
               {/* Surgery Details */}
               <div className="mb-4 text-sm">
                 <p className="font-medium text-gray-900">{assessment.surgery?.procedureName}</p>
-                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.name || 'N/A'}</p>
+                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.fullName || 'N/A'}</p>
                 {assessment.surgery?.anesthetist && (
-                  <p className="text-gray-600">Anesthetist: {assessment.surgery?.anesthetist?.name || 'N/A'}</p>
+                  <p className="text-gray-600">Anesthetist: {assessment.surgery?.anesthetist?.fullName || 'N/A'}</p>
                 )}
               </div>
 

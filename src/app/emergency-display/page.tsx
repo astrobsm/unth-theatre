@@ -36,6 +36,39 @@ interface EmergencyItem {
   createdAt: string;
 }
 
+// ==================== OFFLINE EMERGENCY DATA CACHE ====================
+const EMERGENCY_CACHE_KEY = 'orm-emergency-cache';
+const EMERGENCY_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function cacheEmergencyData(items: EmergencyItem[]) {
+  try {
+    localStorage.setItem(EMERGENCY_CACHE_KEY, JSON.stringify({
+      items,
+      timestamp: Date.now(),
+    }));
+  } catch { /* localStorage full or unavailable */ }
+}
+
+function getCachedEmergencyData(): { items: EmergencyItem[]; timestamp: number } | null {
+  try {
+    const raw = localStorage.getItem(EMERGENCY_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.timestamp > EMERGENCY_CACHE_TTL) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function formatDataAge(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m ago`;
+}
+
 // ==================== AUDIO ALERT ENGINE ====================
 // Pleasant, professional hospital notification chime using Web Audio API
 // Three-tone ascending chime followed by voice announcement
@@ -103,46 +136,50 @@ class AudioAlertEngine {
   }
 
   // Play a pleasant 3-tone ascending chime (hospital notification style)
-  private playChime(priority: string): Promise<void> {
-    return new Promise((resolve) => {
-      if (!this.audioCtx) { resolve(); return; }
-      // Resume audio context if suspended (browser policy)
-      if (this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume();
-      }
+  // FIXED: Properly awaits AudioContext resume to prevent chime/voice desynchronization
+  private async playChime(priority: string): Promise<void> {
+    if (!this.audioCtx) return;
 
-      const now = this.audioCtx.currentTime;
-      let tones: [number, number, number][];   // [freq, duration, volume]
-      let gap: number;
+    // CRITICAL FIX: Must await resume() before scheduling oscillators.
+    // Without this, oscillators are scheduled against a frozen clock,
+    // causing the chime and voice announcement to play out of sync.
+    if (this.audioCtx.state === 'suspended') {
+      try { await this.audioCtx.resume(); } catch { return; }
+    }
 
-      switch (priority) {
-        case 'CRITICAL':
-          // Firm but pleasant: C5 → E5 → G5 → C6 (major arpeggio, brighter)
-          tones = [[523, 0.3, 0.35], [659, 0.3, 0.35], [784, 0.3, 0.35], [1047, 0.5, 0.3]];
-          gap = 0.15;
-          break;
-        case 'HIGH':
-          // Moderate: C5 → E5 → G5 (major triad)
-          tones = [[523, 0.35, 0.3], [659, 0.35, 0.3], [784, 0.5, 0.28]];
-          gap = 0.18;
-          break;
-        default:
-          // Gentle: E5 → G5 → B5 (open, warm)
-          tones = [[659, 0.4, 0.25], [784, 0.4, 0.25], [988, 0.55, 0.22]];
-          gap = 0.22;
-          break;
-      }
+    const now = this.audioCtx.currentTime;
+    let tones: [number, number, number][];   // [freq, duration, volume]
+    let gap: number;
 
-      let t = now + 0.05;
-      for (const [freq, dur, vol] of tones) {
-        this.playTone(freq, t, dur, vol);
-        t += dur + gap;
-      }
+    switch (priority) {
+      case 'CRITICAL':
+        // Firm but pleasant: C5 → E5 → G5 → C6 (major arpeggio, brighter)
+        tones = [[523, 0.3, 0.35], [659, 0.3, 0.35], [784, 0.3, 0.35], [1047, 0.5, 0.3]];
+        gap = 0.15;
+        break;
+      case 'HIGH':
+        // Moderate: C5 → E5 → G5 (major triad)
+        tones = [[523, 0.35, 0.3], [659, 0.35, 0.3], [784, 0.5, 0.28]];
+        gap = 0.18;
+        break;
+      default:
+        // Gentle: E5 → G5 → B5 (open, warm)
+        tones = [[659, 0.4, 0.25], [784, 0.4, 0.25], [988, 0.55, 0.22]];
+        gap = 0.22;
+        break;
+    }
 
-      // Total chime duration
-      const totalDuration = (t - now) * 1000 + 200;
-      setTimeout(resolve, totalDuration);
-    });
+    let t = now + 0.05;
+    for (const [freq, dur, vol] of tones) {
+      this.playTone(freq, t, dur, vol);
+      t += dur + gap;
+    }
+
+    // Wait precisely for the last tone to finish playing
+    // (t includes a trailing gap after the last tone — subtract it)
+    const lastToneEndTime = t - gap;
+    const remainingMs = Math.max(0, (lastToneEndTime - this.audioCtx.currentTime) * 1000) + 80;
+    await new Promise(r => setTimeout(r, remainingMs));
   }
 
   // Play pre-recorded voice announcement MP3.
@@ -151,7 +188,39 @@ class AudioAlertEngine {
   //   announcement-high.mp3      — for HIGH priority
   //   announcement-default.mp3   — fallback for all priorities
   // If a priority-specific file doesn't exist, falls back to announcement-default.mp3
+  // If all audio files fail (offline/not cached), falls back to Speech Synthesis API
   private audioElement: HTMLAudioElement | null = null;
+
+  // Speech Synthesis fallback — works fully offline on most platforms
+  private playSpeechFallback(priority: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        resolve();
+        return;
+      }
+      try {
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const label = priority === 'CRITICAL' ? 'Critical' : priority === 'HIGH' ? 'High priority' : 'Medium priority';
+        const utterance = new SpeechSynthesisUtterance(
+          `Attention. ${label} emergency surgery alert. All teams report immediately.`
+        );
+        utterance.rate = 0.9;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        utterance.lang = 'en-US';
+        const voices = synth.getVoices();
+        const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+          || voices.find(v => v.lang.startsWith('en-'));
+        if (preferred) utterance.voice = preferred;
+        const timeout = setTimeout(() => { synth.cancel(); resolve(); }, 15000);
+        utterance.onend = () => { clearTimeout(timeout); resolve(); };
+        utterance.onerror = () => { clearTimeout(timeout); resolve(); };
+        synth.speak(utterance);
+        console.log('[AudioEngine] Speech synthesis fallback');
+      } catch { resolve(); }
+    });
+  }
 
   private playAnnouncement(priority: string): Promise<void> {
     return new Promise((resolve) => {
@@ -187,20 +256,24 @@ class AudioAlertEngine {
         resolve();
       };
 
+      // When all audio files fail (offline), fall back to speech synthesis
+      const speechThenCleanup = () => {
+        this.playSpeechFallback(priority).then(cleanup);
+      };
+
       // Safety timeout: 3 minutes max
       const safetyTimeout = setTimeout(cleanup, 180000);
 
       audio.onended = () => { clearTimeout(safetyTimeout); cleanup(); };
       audio.onerror = (e) => {
         console.error('[AudioEngine] Audio error:', e);
-        // If priority-specific file not found, try fallback
         if (audio.src !== new URL(fallbackFile, window.location.origin).href) {
           console.log('[AudioEngine] Trying fallback:', fallbackFile);
           audio.src = fallbackFile;
-          audio.play().catch((err) => { console.error('[AudioEngine] Fallback play failed:', err); clearTimeout(safetyTimeout); cleanup(); });
+          audio.play().catch(() => { clearTimeout(safetyTimeout); speechThenCleanup(); });
         } else {
           clearTimeout(safetyTimeout);
-          cleanup();
+          speechThenCleanup();
         }
       };
 
@@ -209,14 +282,13 @@ class AudioAlertEngine {
         console.log('[AudioEngine] Playback started');
       }).catch((err) => {
         console.error('[AudioEngine] Play failed:', err);
-        // If priority file fails, try fallback
         if (audio.src !== new URL(fallbackFile, window.location.origin).href) {
           console.log('[AudioEngine] Trying fallback:', fallbackFile);
           audio.src = fallbackFile;
-          audio.play().catch((err2) => { console.error('[AudioEngine] Fallback play failed:', err2); clearTimeout(safetyTimeout); cleanup(); });
+          audio.play().catch(() => { clearTimeout(safetyTimeout); speechThenCleanup(); });
         } else {
           clearTimeout(safetyTimeout);
-          cleanup();
+          speechThenCleanup();
         }
       });
     });
@@ -235,8 +307,8 @@ class AudioAlertEngine {
 
     try {
       await this.playChime(priority);
-      // Brief pause between chime and voice
-      await new Promise(r => setTimeout(r, 400));
+      // Brief pause between chime and voice — tight coupling for synchronized alert
+      await new Promise(r => setTimeout(r, 250));
       await this.playAnnouncement(priority);
     } catch {
       this.playing = false;
@@ -284,6 +356,8 @@ export default function EmergencyDisplayPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'polling'>('connecting');
   const [slideTransition, setSlideTransition] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [lastDataUpdate, setLastDataUpdate] = useState<number>(0);
 
   const audioRef = useRef<AudioAlertEngine | null>(null);
   const previousIdsRef = useRef<Set<string>>(new Set());
@@ -346,6 +420,11 @@ export default function EmergencyDisplayPage() {
 
     previousIdsRef.current = newIds;
     setEmergencies(items);
+    // Cache emergency data for offline access
+    if (items.length > 0) {
+      cacheEmergencyData(items);
+      setLastDataUpdate(Date.now());
+    }
   }, []);
 
   // Connect to SSE stream
@@ -360,6 +439,7 @@ export default function EmergencyDisplayPage() {
 
     es.addEventListener('connected', () => {
       setConnectionStatus('connected');
+      setIsOffline(false);
     });
 
     es.addEventListener('emergencies', (event) => {
@@ -369,6 +449,8 @@ export default function EmergencyDisplayPage() {
         ...(data.bookings || []),
       ];
       processEmergencies(allItems);
+      setIsOffline(false);
+      setLastDataUpdate(Date.now());
     });
 
     es.addEventListener('reconnect', () => {
@@ -380,6 +462,7 @@ export default function EmergencyDisplayPage() {
     es.addEventListener('error', () => {
       es.close();
       setConnectionStatus('polling');
+      setIsOffline(!navigator.onLine);
       // Fall back to polling
       startPolling();
     });
@@ -387,11 +470,14 @@ export default function EmergencyDisplayPage() {
     es.onerror = () => {
       es.close();
       setConnectionStatus('polling');
+      setIsOffline(!navigator.onLine);
       startPolling();
     };
+    // startPolling is defined below; deliberately omitted from deps to avoid circular re-creation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processEmergencies]);
 
-  // Fallback polling
+  // Fallback polling — with offline cache support
   const startPolling = useCallback(() => {
     const pollFn = async () => {
       try {
@@ -399,9 +485,17 @@ export default function EmergencyDisplayPage() {
         if (res.ok) {
           const data = await res.json();
           processEmergencies(data.emergencies || []);
+          setIsOffline(false);
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        console.error('[EmergencyDisplay] Poll failed (offline?):', err);
+        setIsOffline(true);
+        // Offline fallback: load last cached emergency data
+        const cached = getCachedEmergencyData();
+        if (cached && cached.items.length > 0) {
+          processEmergencies(cached.items);
+          setLastDataUpdate(cached.timestamp);
+        }
       }
     };
 
@@ -425,6 +519,49 @@ export default function EmergencyDisplayPage() {
       eventSourceRef.current?.close();
     };
   }, [connectSSE, startPolling]);
+
+  // Track browser online/offline status and load cached data when offline
+  useEffect(() => {
+    setIsOffline(!navigator.onLine);
+
+    // If starting offline, immediately load cached emergency data
+    if (!navigator.onLine) {
+      const cached = getCachedEmergencyData();
+      if (cached && cached.items.length > 0) {
+        setEmergencies(cached.items);
+        setLastDataUpdate(cached.timestamp);
+        setConnectionStatus('polling');
+      }
+    }
+
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  // Listen for emergency push notifications from the service worker
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'EMERGENCY_PUSH' && audioRef.current?.isEnabled()) {
+        // Reset cooldown so push-triggered alerts always play
+        (audioRef.current as any).lastPlayTime = 0;
+        (audioRef.current as any).playing = false;
+        audioRef.current.playVoiceAlert(event.data.priority || 'HIGH');
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
 
   // Clock — set initial time on client only to avoid hydration mismatch
   useEffect(() => {
@@ -564,10 +701,19 @@ export default function EmergencyDisplayPage() {
       {/* ===== TOP BAR ===== */}
       <div className="flex items-center justify-between px-6 py-3 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b-2 border-red-600">
         <div className="flex items-center gap-4">
-          <div className={`h-4 w-4 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'polling' ? 'bg-yellow-500' : 'bg-red-500'} animate-pulse`} />
+          <div className={`h-4 w-4 rounded-full ${
+            isOffline ? 'bg-red-600 animate-pulse' :
+            connectionStatus === 'connected' ? 'bg-green-500' :
+            connectionStatus === 'polling' ? 'bg-yellow-500' : 'bg-red-500'
+          } animate-pulse`} />
           <span className="text-lg font-bold tracking-widest text-red-500 uppercase">
             🏥 UNTH Emergency Theatre Display
           </span>
+          {isOffline && (
+            <span className="px-3 py-1 bg-red-900/60 border border-red-500/50 rounded-full text-sm text-red-300 animate-pulse font-semibold">
+              📡 OFFLINE {lastDataUpdate > 0 && `• Data: ${formatDataAge(lastDataUpdate)}`}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-6">
@@ -632,12 +778,18 @@ export default function EmergencyDisplayPage() {
         // No emergencies — idle screen
         <div className="flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-120px)]">
           <div className="text-center">
-            <div className="text-[120px] mb-6 opacity-30">🏥</div>
-            <h1 className="text-5xl font-bold text-gray-500 mb-4">No Active Emergencies</h1>
-            <p className="text-2xl text-gray-600">All systems operational</p>
+            <div className="text-[120px] mb-6 opacity-30">{isOffline ? '📡' : '🏥'}</div>
+            <h1 className="text-5xl font-bold text-gray-500 mb-4">
+              {isOffline ? 'Offline Mode — No Cached Emergencies' : 'No Active Emergencies'}
+            </h1>
+            <p className="text-2xl text-gray-600">
+              {isOffline ? 'Will reconnect and resume monitoring when online' : 'All systems operational'}
+            </p>
             <div className="mt-8 flex items-center gap-3 justify-center text-gray-600">
-              <div className="h-3 w-3 bg-green-600 rounded-full animate-pulse" />
-              <span className="text-lg">Monitoring for new emergency bookings...</span>
+              <div className={`h-3 w-3 ${isOffline ? 'bg-red-600' : 'bg-green-600'} rounded-full animate-pulse`} />
+              <span className="text-lg">
+                {isOffline ? 'Waiting for network connection...' : 'Monitoring for new emergency bookings...'}
+              </span>
             </div>
           </div>
         </div>

@@ -25,6 +25,8 @@ const OFFLINE_DATA_ENDPOINTS = [
   { key: 'theatre-meals', url: '/api/theatre-meals', ttl: 60 * 60 * 1000 },
   { key: 'users', url: '/api/users', ttl: 60 * 60 * 1000 },
   { key: 'emergency-booking', url: '/api/emergency-booking', ttl: 15 * 60 * 1000 },
+  { key: 'emergency-display', url: '/api/emergency-display', ttl: 5 * 60 * 1000 },
+  { key: 'emergency-alerts', url: '/api/emergency-alerts', ttl: 15 * 60 * 1000 },
 ];
 
 // Dashboard routes to pre-cache as HTML for offline navigation
@@ -56,6 +58,7 @@ const APP_SHELL_ROUTES = [
   '/dashboard/emergency-alerts',
   '/dashboard/emergency-booking',
   '/dashboard/emergency-booking/new',
+  '/emergency-display',
   '/dashboard/cmd',
   '/dashboard/cmac',
   '/dashboard/dc-mac',

@@ -37,6 +37,13 @@ const ADMIN_USERS: AdminConfig[] = [
     email: 'douglas@unth.edu.ng',
     staffCode: 'UNTH/ADM/002',
   },
+  {
+    username: 'ngozi.mba',
+    password: 'changeme123',
+    fullName: 'Ngozi Mba',
+    email: 'ngozi.mba@unth.edu.ng',
+    staffCode: 'UNTH/ADM/003',
+  },
 ];
 
 async function ensureAdminExists() {

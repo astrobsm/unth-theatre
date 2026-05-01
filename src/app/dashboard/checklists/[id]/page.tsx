@@ -93,6 +93,8 @@ export default function WHOChecklistPage() {
   useEffect(() => {
     fetchSurgery();
     fetchChecklist();
+    // Re-fetch only when surgeryId route param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surgeryId]);
 
   const fetchSurgery = async () => {

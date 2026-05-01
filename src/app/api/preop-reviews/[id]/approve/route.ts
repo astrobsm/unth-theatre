@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const medicationItemSchema = z.object({
   drugName: z.string().min(1, 'Drug name is required'),
   dosage: z.string().min(1, 'Dosage is required'),

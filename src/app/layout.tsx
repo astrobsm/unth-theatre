@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -14,7 +14,6 @@ export const metadata: Metadata = {
     icon: '/logo.png',
     apple: '/logo.png',
   },
-  themeColor: '#1e40af',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -23,12 +22,14 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#1e40af',
 };
 
 export default function RootLayout({

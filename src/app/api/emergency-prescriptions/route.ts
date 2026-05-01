@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const updateStatusSchema = z.object({
   prescriptionId: z.string(),
   status: z.enum(['PHARMACIST_VIEWED', 'PACKING', 'PACKED', 'DISPENSED', 'OUT_OF_STOCK_FLAGGED']),

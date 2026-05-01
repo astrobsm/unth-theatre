@@ -735,26 +735,38 @@ export default function NewPatientPage() {
           )}
         </div>
 
-        {/* Pressure Sore Risk (Braden Scale) */}
+        {/* Pressure Sore Risk (Braden Scale) - optional for patients < 15 years */}
         <div className="card">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Shield className="w-6 h-6 text-purple-600" />
-              <h2 className="text-xl font-semibold">Pressure Sore Risk (Braden Scale)</h2>
+              <h2 className="text-xl font-semibold">
+                Pressure Sore Risk (Braden Scale)
+                {age > 0 && age < 15 && (
+                  <span className="ml-2 text-xs font-normal text-gray-500">(Optional for patients under 15)</span>
+                )}
+              </h2>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-purple-600">{bradenScore} points</div>
-              <div className={`text-sm font-medium ${
-                bradenScore <= 9 ? 'text-red-600' : 
-                bradenScore <= 12 ? 'text-orange-600' :
-                bradenScore <= 14 ? 'text-yellow-600' :
-                bradenScore <= 18 ? 'text-blue-600' : 'text-green-600'
-              }`}>
-                {pressureSoreRisk}
+            {!(age > 0 && age < 15) && (
+              <div className="text-right">
+                <div className="text-2xl font-bold text-purple-600">{bradenScore} points</div>
+                <div className={`text-sm font-medium ${
+                  bradenScore <= 9 ? 'text-red-600' : 
+                  bradenScore <= 12 ? 'text-orange-600' :
+                  bradenScore <= 14 ? 'text-yellow-600' :
+                  bradenScore <= 18 ? 'text-blue-600' : 'text-green-600'
+                }`}>
+                  {pressureSoreRisk}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
+          {age > 0 && age < 15 ? (
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-900">
+              The Braden Scale is validated for adults. This assessment is optional for patients under 15 years of age. Use a paediatric-specific tool (e.g. Braden Q) when clinically indicated.
+            </div>
+          ) : (
           <div className="space-y-6">
             {/* Sensory Perception */}
             <div>
@@ -929,6 +941,7 @@ export default function NewPatientPage() {
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Nutritional Assessment with BMI */}

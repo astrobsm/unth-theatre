@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { PreOpVisitStatus } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 // GET: Fetch pre-operative visits (by date, surgeryId, or status)
 export async function GET(request: NextRequest) {
   try {

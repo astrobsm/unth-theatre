@@ -46,8 +46,6 @@ export default function InventoryPage() {
   }, []);
 
   const fetchInventory = useCallback(async () => {
-    if (!isOnline) return;
-    
     setIsSyncing(true);
     try {
       const response = await fetch('/api/inventory');
@@ -72,7 +70,7 @@ export default function InventoryPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [isOnline]);
+  }, []);
 
   useEffect(() => {
     fetchInventory();

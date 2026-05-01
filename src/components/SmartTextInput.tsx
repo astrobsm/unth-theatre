@@ -114,6 +114,12 @@ export function SmartTextInput({
   const speechServiceRef = useRef<SpeechRecognitionService | null>(null);
   const ocrWorkerRef = useRef<TesseractWorker | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Keep refs to the latest value/onChange so the speech service callbacks
+  // always see fresh state without re-initialising the service on every keystroke.
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   // Initialize TensorFlow
   useEffect(() => {
@@ -127,7 +133,8 @@ export function SmartTextInput({
     }
   }, [enableOCR, tfInitialized]);
 
-  // Initialize speech recognition
+  // Initialize speech recognition (only when language/medicalMode/enableSpeech change,
+  // NOT on every keystroke — we use refs to read the latest value/onChange instead).
   useEffect(() => {
     if (enableSpeech && SpeechRecognitionService.isSupported()) {
       speechServiceRef.current = createSpeechRecognition({
@@ -137,22 +144,20 @@ export function SmartTextInput({
         medicalMode,
         onResult: (transcript, isFinal, conf) => {
           if (isFinal) {
-            // Add final transcript to value
-            const newValue = value + (value ? ' ' : '') + transcript;
-            onChange(newValue);
+            const current = valueRef.current;
+            const newValue = current + (current ? ' ' : '') + transcript;
+            onChangeRef.current(newValue);
             setInterimTranscript('');
             setConfidence(conf);
-            
-            // Add to history for undo
-            setHistory(prev => [...prev, value]);
+            setHistory(prev => [...prev, current]);
           } else {
             setInterimTranscript(transcript);
           }
         },
         onError: (err) => {
-          setErrorMessage(`Speech error: ${err}`);
+          setErrorMessage(err.length > 60 ? err : `Speech: ${err}`);
           setIsListening(false);
-          setTimeout(() => setErrorMessage(null), 3000);
+          setTimeout(() => setErrorMessage(null), 4000);
         },
         onStart: () => setIsListening(true),
         onEnd: () => setIsListening(false),
@@ -162,7 +167,7 @@ export function SmartTextInput({
     return () => {
       speechServiceRef.current?.abort();
     };
-  }, [enableSpeech, selectedLanguage, medicalMode, value, onChange]);
+  }, [enableSpeech, selectedLanguage, medicalMode]);
 
   // Initialize OCR worker with optimized settings for handwriting
   useEffect(() => {

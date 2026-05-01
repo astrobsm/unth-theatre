@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 // GET single emergency alert by ID
 export async function GET(
   request: NextRequest,

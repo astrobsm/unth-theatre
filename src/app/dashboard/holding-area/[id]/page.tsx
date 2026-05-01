@@ -92,6 +92,8 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
 
   useEffect(() => {
     fetchAssessment();
+    // Re-fetch only when route id changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const fetchAssessment = async () => {

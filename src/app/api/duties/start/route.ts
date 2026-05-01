@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const startDutySchema = z.object({
   staffCode: z.string().min(1, 'Staff code is required'),
   dutyType: z.enum([

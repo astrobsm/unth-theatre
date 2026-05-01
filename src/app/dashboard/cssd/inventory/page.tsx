@@ -8,17 +8,18 @@ interface InventoryItem {
   id: string;
   itemName: string;
   itemCode: string;
-  materialType: string;
-  packType: string | null;
-  quantity: number;
-  minimumQuantity: number;
+  packType: string;
+  surgicalUnit: string;
+  totalQuantity: number;
+  availableQuantity: number;
+  minimumStockLevel: number;
   status: string;
   expiryDate: string | null;
-  location: string;
+  location: string | null;
   notes: string | null;
   createdAt: string;
-  recordedBy: {
-    name: string;
+  updatedBy: {
+    fullName: string;
     staffCode: string;
   };
 }
@@ -48,6 +49,8 @@ export default function CssdInventoryPage() {
     } else if (status === 'authenticated') {
       fetchInventory();
     }
+    // Re-fetch when auth status or filter changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, router, filter]);
 
   const fetchInventory = async () => {
@@ -194,11 +197,11 @@ export default function CssdInventoryPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.itemCode}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {item.materialType.replace('_', ' ')}
+                  {(item.packType || item.surgicalUnit || '').replace(/_/g, ' ')}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{item.quantity}</div>
-                  <div className="text-xs text-gray-500">Min: {item.minimumQuantity}</div>
+                  <div className="text-sm text-gray-900">{item.availableQuantity} / {item.totalQuantity}</div>
+                  <div className="text-xs text-gray-500">Min: {item.minimumStockLevel}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(item.status)}`}>

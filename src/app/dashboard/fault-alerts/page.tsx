@@ -70,6 +70,8 @@ export default function FaultAlertsPage() {
 
   useEffect(() => {
     applyFilters();
+    // applyFilters reads its inputs from listed deps; safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alerts, statusFilter, severityFilter, searchTerm]);
 
   const fetchAlerts = async () => {

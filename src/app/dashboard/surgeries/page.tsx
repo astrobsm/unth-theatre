@@ -62,8 +62,6 @@ export default function SurgeriesPage() {
   }, []);
 
   const fetchSurgeries = useCallback(async () => {
-    if (!isOnline) return;
-    
     setIsSyncing(true);
     try {
       const response = await fetch('/api/surgeries');
@@ -87,7 +85,7 @@ export default function SurgeriesPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [isOnline]);
+  }, []);
 
   useEffect(() => {
     fetchSurgeries();

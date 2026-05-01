@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * READINESS DEADLINE CHECKER — Called by Vercel Cron or client-side scheduler
  * 

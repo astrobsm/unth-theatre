@@ -67,6 +67,8 @@ export default function SurgeryDetailPage() {
     if (surgeryId) {
       fetchSurgery();
     }
+    // Re-fetch only when surgeryId route param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surgeryId]);
 
   const fetchSurgery = async () => {

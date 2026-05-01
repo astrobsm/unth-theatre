@@ -20,7 +20,7 @@ interface Surgery {
   scheduledDate: string;
   scheduledTime: string;
   surgeon: {
-    name: string;
+    fullName: string;
   };
 }
 
@@ -73,7 +73,6 @@ export default function HoldingAreaPage() {
   }, []);
 
   const fetchAssessments = useCallback(async () => {
-    if (!isOnline) return;
     
     setIsSyncing(true);
     try {
@@ -98,7 +97,7 @@ export default function HoldingAreaPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [filter, isOnline]);
+  }, [filter]);
 
   useEffect(() => {
     fetchAssessments();
@@ -268,7 +267,7 @@ export default function HoldingAreaPage() {
               {/* Surgery Details */}
               <div className="mb-4 text-sm">
                 <p className="font-medium text-gray-900">{assessment.surgery?.procedureName}</p>
-                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.name || 'N/A'}</p>
+                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.fullName || 'N/A'}</p>
                 <p className="text-gray-600">
                   Scheduled: {new Date(assessment.surgery.scheduledDate).toLocaleDateString()} at {assessment.surgery.scheduledTime}
                 </p>

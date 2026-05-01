@@ -73,6 +73,8 @@ export default function SurgeryConsumablesPage() {
   useEffect(() => {
     fetchSurgery();
     fetchExistingConsumables();
+    // Re-fetch only when surgeryId route param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surgeryId]);
 
   const fetchSurgery = async () => {

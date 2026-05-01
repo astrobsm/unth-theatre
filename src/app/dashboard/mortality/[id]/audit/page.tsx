@@ -22,24 +22,24 @@ interface Mortality {
     gender: string;
   };
   surgery: {
+    procedureName: string;
     surgeryType: string;
     scheduledDate: string;
     surgeon: {
       fullName: string;
     };
   };
-  audits: {
+  audit: {
     id: string;
     findings: string;
-    preventability: string;
-    recommendations: string;
+    preventability: string | null;
+    recommendations: string | null;
     actionsTaken: string | null;
     followUpRequired: boolean;
-    reviewedBy: {
-      fullName: string;
-    };
+    reviewedBy: string;
+    auditDate: string;
     createdAt: string;
-  }[];
+  } | null;
 }
 
 export default function MortalityAuditPage() {
@@ -60,6 +60,8 @@ export default function MortalityAuditPage() {
 
   useEffect(() => {
     fetchMortality();
+    // Re-fetch only when mortalityId route param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mortalityId]);
 
   const fetchMortality = async () => {
@@ -69,7 +71,7 @@ export default function MortalityAuditPage() {
         const data = await response.json();
         const mortalityData = Array.isArray(data) ? data.find((m: Mortality) => m.id === mortalityId) : data;
         setMortality(mortalityData);
-        setShowForm(mortalityData?.audits.length === 0);
+        setShowForm(!mortalityData?.audit);
       }
     } catch (error) {
       console.error('Failed to fetch mortality:', error);
@@ -200,7 +202,7 @@ export default function MortalityAuditPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div>
             <p className="text-sm font-semibold text-gray-700">Procedure</p>
-            <p className="text-gray-900">{mortality.surgery.surgeryType}</p>
+            <p className="text-gray-900">{mortality.surgery?.procedureName || 'N/A'}</p>
           </div>
           <div>
             <p className="text-sm font-semibold text-gray-700">Surgeon</p>
@@ -238,41 +240,47 @@ export default function MortalityAuditPage() {
         )}
       </div>
 
-      {/* Existing Audits */}
-      {mortality.audits.length > 0 && (
+      {/* Existing Audit */}
+      {mortality.audit && (
         <div className="card">
           <h2 className="text-xl font-semibold mb-4">Audit History</h2>
           <div className="space-y-4">
-            {mortality.audits.map((audit) => (
+            {(() => {
+              const audit = mortality.audit;
+              return (
               <div key={audit.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <User className="w-5 h-5 text-gray-600" />
-                    <span className="font-semibold">{audit.reviewedBy?.fullName || 'Not assigned'}</span>
+                    <span className="font-semibold">{audit.reviewedBy || 'Not assigned'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Clock className="w-4 h-4" />
-                    {formatDateTime(audit.createdAt)}
+                    {formatDateTime(audit.auditDate || audit.createdAt)}
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-700">Preventability Assessment</p>
-                    <span className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${getPreventabilityColor(audit.preventability)}`}>
-                      {audit.preventability.replace(/_/g, ' ')}
-                    </span>
-                  </div>
+                  {audit.preventability && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Preventability Assessment</p>
+                      <span className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${getPreventabilityColor(audit.preventability)}`}>
+                        {audit.preventability.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                  )}
 
                   <div>
                     <p className="text-sm font-semibold text-gray-700">Findings</p>
                     <p className="text-gray-900 mt-1">{audit.findings}</p>
                   </div>
 
-                  <div>
-                    <p className="text-sm font-semibold text-gray-700">Recommendations</p>
-                    <p className="text-gray-900 mt-1">{audit.recommendations}</p>
-                  </div>
+                  {audit.recommendations && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Recommendations</p>
+                      <p className="text-gray-900 mt-1">{audit.recommendations}</p>
+                    </div>
+                  )}
 
                   {audit.actionsTaken && (
                     <div>
@@ -288,7 +296,8 @@ export default function MortalityAuditPage() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })()}
           </div>
 
           {!showForm && (

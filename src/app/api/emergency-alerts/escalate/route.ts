@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 // POST - Check and escalate unacknowledged emergency alerts after 15 minutes
 // This endpoint can be called by a cron job or the display page
 export async function POST(request: NextRequest) {

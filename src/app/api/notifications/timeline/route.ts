@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/notifications/timeline - Get approaching events and deadlines
 export async function GET(request: NextRequest) {
   try {

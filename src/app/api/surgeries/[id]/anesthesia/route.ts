@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/apiMiddleware';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 // GET - Get anesthesia monitoring record for a surgery
 export async function GET(
   request: NextRequest,

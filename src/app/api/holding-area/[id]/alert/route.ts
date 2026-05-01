@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 // POST - Trigger red alert for holding area assessment
 export async function POST(
   request: NextRequest,

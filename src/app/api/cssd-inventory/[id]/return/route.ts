@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 // POST /api/cssd-inventory/[id]/return - Return used materials for reprocessing
 export async function POST(
   request: NextRequest,

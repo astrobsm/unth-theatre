@@ -56,6 +56,8 @@ export default function SurgeryBOMPage() {
 
   useEffect(() => {
     fetchBOM();
+    // Re-fetch only when surgeryId route param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surgeryId]);
 
   const fetchBOM = async () => {

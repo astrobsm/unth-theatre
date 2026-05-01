@@ -52,6 +52,8 @@ export default function BOMAnalyticsPage() {
 
   useEffect(() => {
     fetchAnalytics();
+    // Re-fetch when date range or unit filter changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, selectedUnit]);
 
   const fetchAnalytics = async () => {

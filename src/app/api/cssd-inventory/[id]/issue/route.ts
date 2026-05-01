@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 // POST /api/cssd-inventory/[id]/issue - Issue sterile materials for surgery
 export async function POST(
   request: NextRequest,

@@ -67,6 +67,28 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60,
+  },
+  // Explicit cookie config so production (HTTPS) and dev behave deterministically.
+  // Using __Secure- prefix in production hardens the cookie; relying on the default
+  // can cause subtle mismatches between sign-in and getServerSession in some setups.
+  cookies: {
+    sessionToken: {
+      name:
+        process.env.NODE_ENV === "production"
+          ? "__Secure-next-auth.session-token"
+          : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: false,
 };

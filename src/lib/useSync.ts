@@ -186,6 +186,8 @@ export function useSync<T = any>(
         abortControllerRef.current.abort();
       }
     };
+    // refetch is a stable useCallback; dependencies is a generic-hook spread by design
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, ...dependencies]);
 
   // Setup auto-refresh interval
@@ -265,10 +267,12 @@ export function useSyncEntity<T = any>(
 
   const update = useCallback(async (body: any) => {
     return syncResult.mutate('PUT', body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncResult.mutate]);
 
   const remove = useCallback(async () => {
     return syncResult.mutate('DELETE');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncResult.mutate]);
 
   return {
@@ -289,6 +293,7 @@ export function useSyncList<T = any>(
 
   const create = useCallback(async (body: any) => {
     return syncResult.mutate('POST', body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncResult.mutate]);
 
   return {

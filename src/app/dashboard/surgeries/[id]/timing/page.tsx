@@ -85,6 +85,8 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
     const controller = new AbortController();
     fetchTiming(controller.signal);
     return () => controller.abort();
+    // Re-fetch only when route id changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const initializeTiming = async () => {

@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const updateBloodStatusSchema = z.object({
   status: z.enum(['ACKNOWLEDGED', 'IN_PREPARATION', 'READY', 'DELIVERED', 'CANCELLED']),
   crossMatchCompleted: z.boolean().optional(),

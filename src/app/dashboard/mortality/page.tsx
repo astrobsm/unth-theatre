@@ -17,15 +17,16 @@ interface Mortality {
     gender: string;
   };
   surgery: {
+    procedureName: string;
     surgeryType: string;
     surgeon: {
       fullName: string;
     };
   };
-  audits: {
+  audit: {
     id: string;
-    preventability: string;
-  }[];
+    preventability: string | null;
+  } | null;
   createdAt: string;
 }
 
@@ -96,7 +97,7 @@ export default function MortalityPage() {
     preoperative: Array.isArray(mortalities) ? mortalities.filter((m) => m.location === 'PREOPERATIVE').length : 0,
     intraoperative: Array.isArray(mortalities) ? mortalities.filter((m) => m.location === 'INTRAOPERATIVE').length : 0,
     postoperative: Array.isArray(mortalities) ? mortalities.filter((m) => m.location.startsWith('POSTOPERATIVE')).length : 0,
-    audited: Array.isArray(mortalities) ? mortalities.filter((m) => m.audits.length > 0).length : 0,
+    audited: Array.isArray(mortalities) ? mortalities.filter((m) => !!m.audit).length : 0,
   };
 
   return (
@@ -197,7 +198,7 @@ export default function MortalityPage() {
                           {mortality.patient?.folderNumber || 'N/A'} | {mortality.patient?.age || 'N/A'} years | {mortality.patient?.gender || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-700 mt-1">
-                          <span className="font-medium">Procedure:</span> {mortality.surgery.surgeryType}
+                          <span className="font-medium">Procedure:</span> {mortality.surgery?.procedureName || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-700">
                           <span className="font-medium">Surgeon:</span> {mortality.surgery?.surgeon?.fullName || 'Not assigned'}
@@ -222,7 +223,7 @@ export default function MortalityPage() {
                       </span>
                     )}
 
-                    {mortality.audits.length > 0 ? (
+                    {mortality.audit ? (
                       <Link
                         href={`/dashboard/mortality/${mortality.id}/audit`}
                         className="px-4 py-2 rounded-lg text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200 transition-colors text-center"

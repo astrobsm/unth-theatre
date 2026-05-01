@@ -1,9 +1,10 @@
 // ============================================================
-// Operative Resource Manager - Service Worker v4
+// Operative Resource Manager - Service Worker v5
 // FULL Offline-First PWA with aggressive caching
+// Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v6';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -15,6 +16,10 @@ const PRECACHE_ASSETS = [
   '/offline.html',
   '/logo.png',
   '/manifest.json',
+  '/audio/announcement-default.mp3',
+  '/audio/announcement-critical.mp3',
+  '/audio/announcement-high.mp3',
+  '/audio/emergency-alert.wav',
 ];
 
 // API routes to eagerly cache for offline data access
@@ -37,6 +42,8 @@ const CRITICAL_API_ROUTES = [
   '/api/water-supply',
   '/api/theatre-meals',
   '/api/emergency-booking',
+  '/api/emergency-display',
+  '/api/emergency-alerts',
 ];
 
 // ============================================================
@@ -61,7 +68,7 @@ self.addEventListener('install', (event) => {
         })
       );
       const cached = results.filter(r => r.status === 'fulfilled' && r.value).length;
-      console.log(`[SW v4] Precached ${cached}/${PRECACHE_ASSETS.length} assets`);
+      console.log(`[SW v5] Precached ${cached}/${PRECACHE_ASSETS.length} assets`);
     }).then(() => self.skipWaiting())
   );
 });
@@ -77,13 +84,13 @@ self.addEventListener('activate', (event) => {
         keys
           .filter((key) => !currentCaches.includes(key))
           .map((key) => {
-            console.log('[SW v4] Deleting old cache:', key);
+            console.log('[SW v5] Deleting old cache:', key);
             return caches.delete(key);
           })
       ))
       .then(() => self.clients.claim())
       .then(() => {
-        console.log('[SW v4] Activated and claimed clients');
+        console.log('[SW v5] Activated and claimed clients');
         // Lazy-cache API data: wait 20s then fetch 3 at a time
         setTimeout(() => {
           lazyCacheApiRoutes();
@@ -92,7 +99,9 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Lazy API route caching — 3 at a time with 2s gaps
+// Lazy API route caching — 3 at a time with 2s gaps.
+// IMPORTANT: include credentials so session-protected endpoints are cached
+// (otherwise we just cache 401 responses, which then poison offline reads).
 async function lazyCacheApiRoutes() {
   const cache = await caches.open(DATA_CACHE);
   const BATCH = 3;
@@ -100,8 +109,13 @@ async function lazyCacheApiRoutes() {
     const batch = CRITICAL_API_ROUTES.slice(i, i + BATCH);
     await Promise.allSettled(
       batch.map((route) =>
-        fetch(route)
-          .then((res) => { if (res.ok) cache.put(route, res); })
+        fetch(route, { credentials: 'include' })
+          .then((res) => {
+            // Only cache 2xx responses — never poison the offline store with 401/403
+            if (res.ok && res.status >= 200 && res.status < 300) {
+              cache.put(route, res);
+            }
+          })
           .catch(() => {})
       )
     );
@@ -131,6 +145,13 @@ self.addEventListener('fetch', (event) => {
   // Auth session endpoint: network-first with aggressive cache
   if (url.pathname === '/api/auth/session') {
     event.respondWith(networkFirstSession(request));
+    return;
+  }
+
+  // Emergency display data: network-first with aggressive caching + IndexedDB
+  // This ensures emergency data is always available offline
+  if (url.pathname === '/api/emergency-display' || url.pathname === '/api/emergency-alerts') {
+    event.respondWith(networkFirstEmergency(request));
     return;
   }
 
@@ -168,6 +189,54 @@ self.addEventListener('fetch', (event) => {
 // ============================================================
 // CACHING STRATEGIES
 // ============================================================
+
+// Emergency data: aggressive dual-cache (Cache API + IndexedDB) for offline display
+// Emergency alerts are critical — always try to serve the freshest possible data
+async function networkFirstEmergency(request) {
+  const cache = await caches.open(DATA_CACHE);
+  const url = new URL(request.url);
+  const cacheKey = url.pathname;
+
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok) {
+      // Cache in both Cache API and IndexedDB for maximum offline durability
+      cache.put(request, networkResponse.clone());
+      try {
+        const data = await networkResponse.clone().json();
+        storeInIndexedDB('cachedData', cacheKey, data);
+      } catch (e) {}
+    }
+    return networkResponse;
+  } catch (err) {
+    // Network failed — serve from cache
+    const cached = await cache.match(request);
+    if (cached) {
+      const headers = new Headers(cached.headers);
+      headers.set('X-ORM-Cache', 'true');
+      headers.set('X-ORM-Offline', 'true');
+      headers.set('X-ORM-Emergency', 'true');
+      return new Response(cached.body, { status: cached.status, headers });
+    }
+    // IndexedDB as last resort
+    const idbData = await getFromIndexedDB('cachedData', cacheKey);
+    if (idbData) {
+      return new Response(JSON.stringify(idbData), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-ORM-Cache': 'true',
+          'X-ORM-Offline': 'true',
+          'X-ORM-Emergency': 'true',
+        },
+      });
+    }
+    return new Response(JSON.stringify({ error: 'Offline', offline: true, emergencies: [] }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json', 'X-ORM-Offline': 'true' },
+    });
+  }
+}
 
 // Auth session: cache aggressively so app works offline
 async function networkFirstSession(request) {
@@ -326,7 +395,7 @@ async function staleWhileRevalidate(request) {
 }
 
 function isStaticAsset(url) {
-  return /\.(png|jpg|jpeg|svg|gif|ico|css|js|woff2?|ttf|eot|webp|avif|map)(\?.*)?$/.test(url);
+  return /\.(png|jpg|jpeg|svg|gif|ico|css|js|woff2?|ttf|eot|webp|avif|map|mp3|wav|ogg|webm|aac)(\?.*)?$/.test(url);
 }
 
 // ============================================================
@@ -483,7 +552,7 @@ function idbGetAll(store) {
 }
 
 // ============================================================
-// PUSH NOTIFICATIONS
+// PUSH NOTIFICATIONS (with Emergency Surgery priority support)
 // ============================================================
 self.addEventListener('push', (event) => {
   let data = { title: 'ORM Notification', body: 'New update available', url: '/dashboard' };
@@ -494,22 +563,47 @@ self.addEventListener('push', (event) => {
     if (event.data) data.body = event.data.text();
   }
 
+  // Emergency surgery alerts get special treatment
+  const isEmergency = data.tag === 'emergency-surgery' || data.priority === 'CRITICAL' || data.priority === 'URGENT';
+
   const options = {
     body: data.body,
     icon: '/logo.png',
     badge: '/logo.png',
-    vibrate: [100, 50, 100],
-    data: { url: data.url || '/dashboard', dateOfArrival: Date.now() },
-    actions: [
-      { action: 'view', title: 'View' },
-      { action: 'dismiss', title: 'Dismiss' },
-    ],
-    tag: data.tag || 'orm-notification',
+    vibrate: isEmergency ? [200, 100, 200, 100, 200, 100, 400] : [100, 50, 100],
+    data: { url: data.url || (isEmergency ? '/emergency-display' : '/dashboard'), dateOfArrival: Date.now(), isEmergency },
+    actions: isEmergency
+      ? [
+          { action: 'view', title: '\ud83d\udea8 View Emergency' },
+          { action: 'acknowledge', title: '\u2705 Acknowledge' },
+        ]
+      : [
+          { action: 'view', title: 'View' },
+          { action: 'dismiss', title: 'Dismiss' },
+        ],
+    tag: data.tag || (isEmergency ? 'emergency-surgery' : 'orm-notification'),
     renotify: true,
-    requireInteraction: data.priority === 'URGENT' || data.priority === 'HIGH',
+    requireInteraction: isEmergency || data.priority === 'URGENT' || data.priority === 'HIGH',
+    urgency: isEmergency ? 'very-low' : undefined, // Hint to show even in DND
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+      .then(() => {
+        // For emergencies, also notify all connected clients to trigger audio
+        if (isEmergency) {
+          return self.clients.matchAll({ type: 'window' }).then((clients) => {
+            clients.forEach((client) => {
+              client.postMessage({
+                type: 'EMERGENCY_PUSH',
+                priority: data.priority || 'HIGH',
+                timestamp: Date.now(),
+              });
+            });
+          });
+        }
+      })
+  );
 });
 
 // Notification click
@@ -517,7 +611,11 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'dismiss') return;
 
-  const url = event.notification.data?.url || '/dashboard';
+  const isEmergency = event.notification.data?.isEmergency;
+  const url = event.action === 'acknowledge'
+    ? '/dashboard/emergency-alerts'
+    : event.notification.data?.url || (isEmergency ? '/emergency-display' : '/dashboard');
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clients) => {

@@ -136,6 +136,8 @@ export default function PACUAssessmentDetailPage() {
     // Auto-refresh every 30 seconds for vital signs
     const interval = setInterval(fetchAssessment, 30000);
     return () => clearInterval(interval);
+    // Re-fetch only when route id changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const fetchAssessment = async () => {
