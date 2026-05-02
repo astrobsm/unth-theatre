@@ -17,6 +17,7 @@ const DEPARTMENTS = [
   'Surgery (Plastic / Reconstructive)',
   'Surgery (ENT)',
   'Surgery (Ophthalmic)',
+  'Surgery (Urology)',
   'Obstetrics & Gynaecology',
   'Recovery / PACU',
   'CSSD / Sterile Services',
