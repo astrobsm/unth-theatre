@@ -1,24 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import { ONBOARDING_ROLES, prefixForRole } from '@/lib/onboarding-roles';
 
-const ROLES: { value: string; label: string }[] = [
-  { value: 'SURGEON',                  label: 'Surgeon' },
-  { value: 'ANAESTHETIST',             label: 'Anaesthetist' },
-  { value: 'SCRUB_NURSE',              label: 'Scrub Nurse' },
-  { value: 'RECOVERY_ROOM_NURSE',      label: 'Recovery Room Nurse' },
-  { value: 'ANAESTHETIC_TECHNICIAN',   label: 'Anaesthetic Technician' },
-  { value: 'THEATRE_STORE_KEEPER',     label: 'Theatre Store Keeper' },
-  { value: 'BIOMEDICAL_ENGINEER',      label: 'Biomedical Engineer' },
-  { value: 'PROCUREMENT_OFFICER',      label: 'Procurement Officer' },
-  { value: 'PORTER',                   label: 'Porter' },
-  { value: 'CLEANER',                  label: 'Cleaner' },
-  { value: 'THEATRE_MANAGER',          label: 'Theatre Manager' },
-  { value: 'THEATRE_CHAIRMAN',         label: 'Theatre Chairman' },
-  { value: 'SYSTEM_ADMINISTRATOR',     label: 'System Administrator' },
-  { value: 'ADMIN',                    label: 'Admin' },
-];
+const ROLES = ONBOARDING_ROLES;
 
 const DEPARTMENTS = [
   'Theatre / Operating Rooms',
@@ -62,11 +48,13 @@ type FormState = {
   staffCode: string;
   staffId: string;
   notes: string;
+  isContractStaff: boolean;
 };
 
 const EMPTY: FormState = {
   title: '', fullName: '', username: '', email: '', role: '',
   phoneNumber: '', department: '', staffCode: '', staffId: '', notes: '',
+  isContractStaff: false,
 };
 
 export default function StaffOnboardingPage() {
@@ -75,9 +63,31 @@ export default function StaffOnboardingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [staffCodeLoading, setStaffCodeLoading] = useState(false);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setData(prev => ({ ...prev, [k]: v }));
+
+  // Auto-generate staff code whenever the role changes (the user can still edit it)
+  useEffect(() => {
+    if (!data.role) return;
+    const prefix = prefixForRole(data.role);
+    if (!prefix) return;
+    // Don't override if user has already typed a code with the correct prefix manually
+    if (data.staffCode && data.staffCode.startsWith(prefix)) return;
+    let cancelled = false;
+    setStaffCodeLoading(true);
+    fetch(`/api/onboarding/staff-code?role=${encodeURIComponent(data.role)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (cancelled || !json?.code) return;
+        setData(prev => ({ ...prev, staffCode: json.code }));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setStaffCodeLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.role]);
 
   const validate = (): boolean => {
     const errs: Partial<Record<keyof FormState, string>> = {};
@@ -90,9 +100,8 @@ export default function StaffOnboardingPage() {
       errs.email = 'Looks invalid';
     if (data.phoneNumber && !PHONE_RE.test(data.phoneNumber.trim()))
       errs.phoneNumber = 'Use 11 digits starting with 0, or +234XXXXXXXXXX';
-    const isCleanerOrPorter = data.role === 'CLEANER' || data.role === 'PORTER';
-    if (isCleanerOrPorter && !data.staffCode.trim())
-      errs.staffCode = `Staff Code is required for ${data.role === 'CLEANER' ? 'Cleaners' : 'Porters'}`;
+    if (!data.isContractStaff && !data.staffId.trim())
+      errs.staffId = 'Staff ID is required (tick "Contract staff" if you have none)';
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -117,6 +126,7 @@ export default function StaffOnboardingPage() {
           phoneNumber: data.phoneNumber.trim(),
           staffCode: data.staffCode.trim(),
           staffId: data.staffId.trim(),
+          isContractStaff: data.isContractStaff,
         }),
       });
       const json = await res.json();
@@ -259,26 +269,69 @@ export default function StaffOnboardingPage() {
             <SectionHeader>Identifiers</SectionHeader>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <Field label="Staff Code" error={fieldErrors.staffCode}
-                hint="Required for Cleaners (e.g. CLN001) and Porters (e.g. PRT001). Optional for others.">
+              <Field
+                label="Staff Code (auto-generated)"
+                error={fieldErrors.staffCode}
+                hint={
+                  data.role
+                    ? staffCodeLoading
+                      ? 'Generating next available code…'
+                      : 'Auto-generated from your selected role. You don\u2019t need to change this.'
+                    : 'Pick a role above and a code will be generated automatically.'
+                }
+              >
                 <input
-                  className={inputCls}
+                  className={inputCls + ' bg-gray-50 font-mono tracking-wider'}
                   value={data.staffCode}
-                  onChange={e => set('staffCode', e.target.value.toUpperCase())}
-                  placeholder="e.g. CLN001"
-                  maxLength={60}
+                  readOnly
+                  placeholder="— select role first —"
+                  aria-readonly="true"
                 />
               </Field>
-              <Field label="Staff ID" hint="Hospital employee number (optional)">
+              <Field
+                label={data.isContractStaff ? 'Staff ID' : 'Staff ID *'}
+                error={fieldErrors.staffId}
+                hint={
+                  data.isContractStaff
+                    ? 'Not required for contract staff.'
+                    : 'Hospital employee number — required for permanent staff.'
+                }
+              >
                 <input
-                  className={inputCls}
+                  className={inputCls + (data.isContractStaff ? ' bg-gray-50' : '')}
                   value={data.staffId}
                   onChange={e => set('staffId', e.target.value)}
                   placeholder="e.g. EMP001234"
+                  required={!data.isContractStaff}
+                  disabled={data.isContractStaff}
                   maxLength={60}
                 />
               </Field>
             </div>
+
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 w-4 h-4 text-amber-600"
+                checked={data.isContractStaff}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setData(prev => ({
+                    ...prev,
+                    isContractStaff: checked,
+                    staffId: checked ? '' : prev.staffId,
+                  }));
+                }}
+              />
+              <div>
+                <span className="block text-sm font-medium text-amber-900">
+                  I am a contract staff (no hospital Staff ID)
+                </span>
+                <span className="block text-xs text-amber-700 mt-0.5">
+                  Tick this only if you do not yet have a permanent UNTH employee number.
+                </span>
+              </div>
+            </label>
 
             <SectionHeader>Contact</SectionHeader>
 

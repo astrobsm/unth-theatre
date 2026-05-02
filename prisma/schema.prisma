@@ -41,6 +41,9 @@ enum UserRole {
   THEATRE_CAFETERIA_MANAGER
   LAUNDRY_STAFF
   PLUMBER
+  PLUMBING_SUPERVISOR
+  WATER_SUPPLY_SUPERVISOR
+  EMERGENCY_LAB_SCIENTIST
   LABORATORY_STAFF
 }
 
@@ -544,6 +547,7 @@ model OnboardingSubmission {
   staffId       String?
   title         String?   // Dr / Mr / Mrs / Prof / etc.
   notes         String?
+  isContractStaff Boolean @default(false) // Contract staff are exempt from Staff ID requirement
   status        String    @default("PENDING") // PENDING | IMPORTED | REJECTED
   importedAt    DateTime?
   importedBy    String?

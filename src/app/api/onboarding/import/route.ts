@@ -3,17 +3,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { ROLE_VALUES } from '@/lib/onboarding-roles';
 
 export const dynamic = 'force-dynamic';
 
 const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'];
 
-const VALID_ROLES = [
-  'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
-  'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
-  'THEATRE_STORE_KEEPER', 'PORTER', 'ANAESTHETIC_TECHNICIAN',
-  'BIOMEDICAL_ENGINEER', 'CLEANER', 'PROCUREMENT_OFFICER',
-];
+const VALID_ROLES = ROLE_VALUES;
 
 // POST /api/onboarding/import   body: { ids?: string[] }   (omit ids => all PENDING)
 export async function POST(request: NextRequest) {
