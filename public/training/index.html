@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UNTH ORM — Staff Training Deck</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+  <style>
+    :root {
+      --unth-blue: #0b3b6f;
+      --unth-gold: #c8a44b;
+      --unth-red:  #c0392b;
+      --unth-green:#1e8449;
+      --unth-grey: #4a5568;
+    }
+    .reveal { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .reveal h1, .reveal h2, .reveal h3, .reveal h4 { color: var(--unth-blue); text-transform:none; letter-spacing:0; font-weight:700; }
+    .reveal h1 { font-size: 2.4em; }
+    .reveal h2 { font-size: 1.7em; }
+    .reveal h3 { font-size: 1.25em; }
+    .reveal section { text-align: left; }
+    .reveal section.center { text-align: center; }
+    .reveal ul, .reveal ol { margin-left: 1em; }
+    .reveal li { margin: 0.35em 0; line-height:1.4; }
+    .reveal .badge { display:inline-block; padding:4px 12px; border-radius:14px; font-size:0.7em; font-weight:700; margin-right:6px; vertical-align:middle; }
+    .b-blue   { background:#e6efff; color:var(--unth-blue);  border:1px solid var(--unth-blue); }
+    .b-green  { background:#e6f7ee; color:var(--unth-green); border:1px solid var(--unth-green); }
+    .b-red    { background:#fce6e3; color:var(--unth-red);   border:1px solid var(--unth-red); }
+    .b-gold   { background:#fdf6e3; color:var(--unth-gold);  border:1px solid var(--unth-gold); }
+    .b-grey   { background:#edf0f3; color:var(--unth-grey);  border:1px solid var(--unth-grey); }
+    .reveal .card { background:#f7f9fc; border-left:6px solid var(--unth-blue); padding:14px 18px; border-radius:6px; margin: 8px 0; }
+    .reveal .card.warn   { border-left-color: var(--unth-red);   background:#fff5f4; }
+    .reveal .card.good   { border-left-color: var(--unth-green); background:#f1faf4; }
+    .reveal .card.tip    { border-left-color: var(--unth-gold);  background:#fdf9ef; }
+    .reveal .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .reveal .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .reveal table { font-size:0.75em; width:100%; }
+    .reveal th { background:var(--unth-blue); color:#fff; padding:6px 10px; text-align:left; }
+    .reveal td { padding:6px 10px; border-bottom:1px solid #e2e8f0; vertical-align:top; }
+    .reveal kbd { background:#e2e8f0; padding:2px 8px; border-radius:4px; font-family:Consolas,monospace; font-size:0.85em; }
+    .reveal .footer-note { position:absolute; bottom:8px; left:0; right:0; text-align:center; font-size:0.6em; color:#718096; }
+    .reveal .step { background:var(--unth-blue); color:#fff; border-radius:50%; display:inline-block; width:30px; height:30px; line-height:30px; text-align:center; font-weight:700; margin-right:10px; }
+    .role-cover { background: linear-gradient(135deg, var(--unth-blue), #1e6bb8); color:#fff; padding:60px 40px; border-radius:12px; }
+    .role-cover h1, .role-cover h2 { color:#fff; }
+    .reveal .icon { font-size:1.4em; margin-right:8px; }
+    .reveal .pill { display:inline-block; padding:6px 14px; background:var(--unth-blue); color:#fff; border-radius:20px; font-size:0.7em; margin:2px; }
+    .reveal .small { font-size:0.78em; color:var(--unth-grey); }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================================================ -->
+<!-- COVER + COMMON INTRO                                          -->
+<!-- ============================================================ -->
+<section class="center">
+  <h1>🏥 UNTH Operative Resource Manager</h1>
+  <h3>Staff Training & Responsibilities</h3>
+  <p class="small">University of Nigeria Teaching Hospital • Ituku Ozalla</p>
+  <div style="margin-top:30px;">
+    <span class="pill">Surgeons</span>
+    <span class="pill">Anaesthetists</span>
+    <span class="pill">Nurses</span>
+    <span class="pill">Porters</span>
+    <span class="pill">Cleaners</span>
+    <span class="pill">CSSD / Biomedical</span>
+    <span class="pill">Administrators</span>
+  </div>
+  <p class="small" style="margin-top:40px;">Press <kbd>→</kbd> to advance • <kbd>↓</kbd> for role-specific slides • <kbd>ESC</kbd> for overview</p>
+</section>
+
+<section>
+  <h2>Why this app exists</h2>
+  <div class="card good">
+    The <b>Operative Resource Manager (ORM)</b> replaces paper books, WhatsApp chats and verbal handovers with one
+    auditable, real-time system that follows every patient from booking to discharge.
+  </div>
+  <div class="grid">
+    <div class="card">⏱ <b>Faster</b> patient flow — fewer cancellations</div>
+    <div class="card">🔒 <b>Safer</b> — WHO checklist, swab counts, allergy alerts</div>
+    <div class="card">📊 <b>Transparent</b> — every action logged with name + timestamp</div>
+    <div class="card">⚖ <b>Accountable</b> — disciplinary queries are evidence-based</div>
+  </div>
+</section>
+
+<section>
+  <h2>How everyone logs in</h2>
+  <ol>
+    <li>Open <kbd>https://unth-theatre-mai.vercel.app</kbd> on any phone, tablet or PC</li>
+    <li>Click <b>Sign Up</b> → enter your full name, staff code and role</li>
+    <li>Wait for <b>Admin approval</b> (you will receive an alert)</li>
+    <li>Log in with your username + password — change password on first login</li>
+    <li>The app installs as a PWA — tap <b>Add to Home Screen</b> for one-tap access</li>
+  </ol>
+  <div class="card tip">📶 <b>Works offline.</b> Anything you submit while offline is queued and syncs the moment you reconnect — never re-enter data.</div>
+</section>
+
+<section>
+  <h2>Universal rules — apply to everyone</h2>
+  <ul>
+    <li>🆔 <b>Never share your login.</b> Every action is signed by your account.</li>
+    <li>⏰ <b>Start & End Duty</b> on time. Late starts and missed end-of-duty are tracked.</li>
+    <li>📝 Document <b>at the point of care</b>, not at end-of-shift. Memory is not evidence.</li>
+    <li>🚨 Acknowledge alerts within <b>2 minutes</b> of receipt.</li>
+    <li>🧹 Leave the system tidy: complete checklists, clear holding-area entries, return equipment.</li>
+  </ul>
+  <div class="card warn">❌ <b>Disciplinary triggers:</b> falsified entries • shared passwords • ignored alerts • incomplete WHO checklists • un-returned equipment.</div>
+</section>
+
+<section>
+  <h2>Disciplinary process — fair & evidence-based</h2>
+  <div class="grid">
+    <div class="card"><b>1. Auto-flag</b><br/>System detects breach (e.g. missed checklist, ignored alert).</div>
+    <div class="card"><b>2. Query issued</b><br/>Disciplinary Query appears on your dashboard with full audit trail.</div>
+    <div class="card"><b>3. Respond</b><br/>You have <b>48 hours</b> to respond inside the app. Attach evidence.</div>
+    <div class="card"><b>4. Review</b><br/>HOD / Admin reviews response. Outcome is logged. No verbal disputes.</div>
+  </div>
+  <p class="small">Every query, response and outcome is permanent and exportable.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 1: SURGEONS                                              -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>🔪 Surgeons</h1>
+      <h3>Consultants • Senior Registrars • Registrars • House Officers</h3>
+      <p style="opacity:0.85;">12 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your daily ORM workflow</h2>
+    <ol>
+      <li><b>Start Duty</b> → confirms you are on-site & on-call</li>
+      <li>Review <b>Booked Surgeries</b> for the day</li>
+      <li>Complete <b>Pre-op Review</b> for each of your patients</li>
+      <li>Sign in to <b>WHO Sign-In Checklist</b> before incision</li>
+      <li>Document <b>Time Out</b> & <b>Sign Out</b> after surgery</li>
+      <li>Update <b>Operation Notes</b> immediately post-op</li>
+      <li><b>End Duty</b> at handover</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Booking a surgery — what only YOU can do</h2>
+    <ul>
+      <li><b>Surgeries → New Surgery</b></li>
+      <li>Confirm: patient ID, diagnosis, planned procedure, urgency, special needs (Diathermy / Stirrups / Montrell mattress / Blood)</li>
+      <li>Add full <b>Surgical Team</b>: Consultants → Senior Registrars → Registrars → HOs</li>
+      <li>Specify required <b>blood units</b> if anticipating bleeding > 500 ml</li>
+    </ul>
+    <div class="card warn">⚠️ Booking <b>without</b> blood request when transfusion is likely is a query offence.</div>
+  </section>
+
+  <section>
+    <h2>Pre-op review responsibilities</h2>
+    <div class="grid">
+      <div class="card">✓ Confirm consent signed & witnessed</div>
+      <div class="card">✓ Mark surgical site (where applicable)</div>
+      <div class="card">✓ Review labs & imaging</div>
+      <div class="card">✓ Document fitness for surgery</div>
+      <div class="card">✓ Verify NPO status</div>
+      <div class="card">✓ Patient identification band present</div>
+    </div>
+    <p class="small">Use the <b>🎤 Dictate</b> button — voice-to-text is enabled on every form.</p>
+  </section>
+
+  <section>
+    <h2>WHO Surgical Safety Checklist — non-negotiable</h2>
+    <ul>
+      <li><b>Sign-In</b> (before anaesthesia) — patient ID, site, consent, anaesthetic safety check</li>
+      <li><b>Time-Out</b> (before incision) — team introductions, antibiotic prophylaxis confirmed, critical events anticipated</li>
+      <li><b>Sign-Out</b> (before patient leaves theatre) — procedure recorded, swab/instrument count confirmed, specimens labelled</li>
+    </ul>
+    <div class="card warn">❌ <b>No checklist = no incision.</b> Skipping or back-dating any phase is grounds for immediate query.</div>
+  </section>
+
+  <section>
+    <h2>Cancellations</h2>
+    <ul>
+      <li>Cancel only via <b>Cancellations module</b> — never verbally</li>
+      <li>State <b>category</b>: Patient-related • Surgical • Anaesthetic • Logistic • Equipment</li>
+      <li>Provide <b>specific reason</b>, not "see notes"</li>
+      <li>If cancellation is preventable, system flags it for monthly audit</li>
+    </ul>
+    <div class="card tip">💡 Cancellation patterns are reviewed monthly by the Theatre Manager.</div>
+  </section>
+
+  <section>
+    <h2>Mortality registry</h2>
+    <ol>
+      <li>Any intra-op or 24h post-op death must be entered within <b>4 hours</b></li>
+      <li>Initial entry: patient ID, time, immediate cause</li>
+      <li>Within <b>72 hours</b>: complete the audit form (M&M)</li>
+      <li>Findings auto-pulled into monthly mortality meeting</li>
+    </ol>
+    <div class="card warn">Failure to log within 4 hours triggers automatic disciplinary query to the consultant in charge.</div>
+  </section>
+
+  <section>
+    <h2>Operation notes & post-op orders</h2>
+    <ul>
+      <li>Operation note within <b>30 minutes</b> of skin closure</li>
+      <li>Include: indication, findings, procedure, blood loss, specimens, complications, post-op plan</li>
+      <li>Prescriptions go through <b>Rx Approvals</b> — pharmacy will not dispense without your e-signature</li>
+      <li>Hand over to PACU nurse <b>in person + in app</b></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Emergency surgeries</h2>
+    <ol>
+      <li>Use <b>🚨 Emergency Booking</b> from the sidebar</li>
+      <li>System auto-pages on-call team via <b>Team Availability</b> module</li>
+      <li>Pre-anaesthetic review can be condensed but never skipped</li>
+      <li>Lab workup tracked via <b>Emergency Lab Workup</b></li>
+    </ol>
+    <div class="card good">✅ Emergency response time is logged and benchmarked — it protects you, not punishes you.</div>
+  </section>
+
+  <section>
+    <h2>Benefits to YOU as a surgeon</h2>
+    <div class="grid">
+      <div class="card good">🧠 No more lost paper notes — search any case in seconds</div>
+      <div class="card good">📈 Auto-generated logbook for FMCS / FWACS revalidation</div>
+      <div class="card good">📊 Personal cancellation, complication & turnaround stats</div>
+      <div class="card good">⚖ Evidence-based defence against unfair complaints</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What gets you queried</h2>
+    <table>
+      <tr><th>Action</th><th>Severity</th></tr>
+      <tr><td>Skipping any WHO checklist phase</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Late or missing operation note (>2h)</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Mortality not logged within 4h</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Booking without anaesthetic review</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Generic cancellation reasons ("see notes")</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Forgot to End Duty</td><td><span class="badge b-grey">Minor</span></td></tr>
+    </table>
+  </section>
+
+  <section class="center">
+    <h2>Surgeons — Quick Card</h2>
+    <p>Start Duty • Pre-op Review • WHO Sign-In • Time-Out • Sign-Out • Op Note • End Duty</p>
+    <p class="small">Document at the point of care. The app is your colleague, not your enemy.</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 2: ANAESTHETISTS                                         -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>💉 Anaesthetists</h1>
+      <h3>Consultants • Senior Registrars • Registrars • Technicians</h3>
+      <p style="opacity:0.85;">12 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your daily ORM workflow</h2>
+    <ol>
+      <li><b>Start Duty</b> → check duty roster & theatre allocation</li>
+      <li>Review <b>Pre-op Reviews</b> assigned to you</li>
+      <li>Complete <b>Anaesthesia Setup</b> for your theatre</li>
+      <li>Run <b>Intra-op Charting</b> (vitals, drugs, fluids, events)</li>
+      <li>Hand over to <b>PACU</b> with vitals & instructions</li>
+      <li><b>End Duty</b> at handover</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Pre-anaesthetic assessment</h2>
+    <ul>
+      <li>Open patient → <b>Pre-op Review</b> → "Anaesthetic Review" tab</li>
+      <li>Document: airway grade, ASA, allergies, comorbidities, prior anaesthetic history</li>
+      <li>Confirm fasting, consent, premedication</li>
+      <li>For <b>under-15s</b>, the Braden Scale is now <b>optional</b> — use Braden Q if clinically indicated</li>
+    </ul>
+    <div class="card warn">No surgery can proceed until your e-signature appears on the pre-op review.</div>
+  </section>
+
+  <section>
+    <h2>Anaesthesia Setup module</h2>
+    <ul>
+      <li>Confirm machine check (suction, O₂, agents, circuits)</li>
+      <li>Drug tray prepared & labelled</li>
+      <li>Emergency drugs available (atropine, ephedrine, adrenaline, suxamethonium)</li>
+      <li>Difficult airway cart accessible if needed</li>
+      <li>Oxygen status — check the <b>Power Status / O₂ Readiness</b> board before any case</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Intra-operative charting</h2>
+    <div class="grid">
+      <div class="card">📊 Vitals every <b>5 min</b> auto-prompted</div>
+      <div class="card">💊 Each drug logged with dose, time, route</div>
+      <div class="card">💧 Fluids in / blood / output recorded live</div>
+      <div class="card">⚠️ Critical events logged with timestamp</div>
+    </div>
+    <p class="small">Use voice dictation when hands are sterile — works on any field.</p>
+  </section>
+
+  <section>
+    <h2>Medication tracking</h2>
+    <ol>
+      <li><b>Med Tracking</b> module shows every controlled drug you collect</li>
+      <li>Log <b>usage</b> immediately after administration</li>
+      <li>Log <b>returns</b> at end of case</li>
+      <li>Reconcile at end of duty — discrepancies trigger query</li>
+    </ol>
+    <div class="card warn">Unaccounted controlled drugs = automatic disciplinary action + pharmacy audit.</div>
+  </section>
+
+  <section>
+    <h2>PACU handover</h2>
+    <ul>
+      <li>Open <b>PACU</b> module → New Recovery Entry</li>
+      <li>Provide: anaesthetic technique, drugs given, fluid balance, blood loss</li>
+      <li>Specify <b>discharge criteria</b> (Aldrete score)</li>
+      <li>Stay until handover signed by recovery nurse</li>
+    </ul>
+    <div class="card tip">PACU vitals can trigger alerts — you'll be paged if your patient deteriorates.</div>
+  </section>
+
+  <section>
+    <h2>Equipment checkout</h2>
+    <ul>
+      <li>Borrow video laryngoscope, BIS, US machine via <b>Equipment Checkout</b></li>
+      <li>Return same day — over-due items flag your name on the dashboard</li>
+      <li>Report faults via <b>Fault Alerts</b> → Biomedical team auto-notified</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Emergency response</h2>
+    <ol>
+      <li>For paged emergencies, accept on <b>Emergency Alerts</b></li>
+      <li>Response time is logged from page → acceptance → arrival</li>
+      <li>Pre-anaesthetic review can be in <b>Emergency Pre-Anaesthetic</b> shortened form</li>
+      <li>Blood requests: <b>Blood Bank</b> module — mark URGENT</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Blood transfusion safety</h2>
+    <ul>
+      <li>All requests via <b>Blood Bank</b> — verbal requests not honoured</li>
+      <li>Acknowledge receipt with <b>two-person check</b> (anaesthetist + nurse)</li>
+      <li>Adverse reactions: log via <b>Incidents</b> within 1 hour</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Benefits to YOU as anaesthetist</h2>
+    <div class="grid">
+      <div class="card good">⏱ Auto-built anaesthetic chart — no more handwriting</div>
+      <div class="card good">📈 Personal case-mix logbook for SAQ / FRCA</div>
+      <div class="card good">🛡 Evidence trail protects you in adverse events</div>
+      <div class="card good">📋 PACU handover documented & timed</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What gets you queried</h2>
+    <table>
+      <tr><th>Action</th><th>Severity</th></tr>
+      <tr><td>No pre-anaesthetic review on record</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Controlled-drug discrepancy</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Vitals not charted intra-op</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Slow emergency response (>15 min)</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Equipment overdue >24h</td><td><span class="badge b-grey">Minor</span></td></tr>
+    </table>
+  </section>
+
+  <section class="center">
+    <h2>Anaesthetists — Quick Card</h2>
+    <p>Start Duty • Pre-op Review • Setup • Intra-op Chart • PACU Handover • Med Reconcile • End Duty</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 3: NURSES                                                -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>👩‍⚕️ Theatre Nurses</h1>
+      <h3>Scrub • Circulating • Recovery</h3>
+      <p style="opacity:0.85;">12 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your daily ORM workflow</h2>
+    <ol>
+      <li><b>Start Duty</b> → confirms you on-shift</li>
+      <li>Check <b>Theatre Allocation</b> & <b>Roster</b></li>
+      <li><b>Theatre Setup</b> & <b>Theatre Readiness</b> confirmed</li>
+      <li>Receive patient — <b>Holding Area</b> check-in</li>
+      <li>Run WHO checklist with team</li>
+      <li>Swab / instrument <b>Count</b> in & out</li>
+      <li><b>Nurse Handover</b> at end of shift</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Theatre Setup & Readiness</h2>
+    <ul>
+      <li>Setup module lists all instruments / consumables for the case</li>
+      <li>Tick off as you lay out — missing items raise <b>Setup Request</b> automatically</li>
+      <li>Mark theatre as <b>Ready</b> only when sterilisation, suction, light & monitor confirmed</li>
+    </ul>
+    <div class="card warn">Marking ready when not ready = patient brought into unsafe theatre = major query.</div>
+  </section>
+
+  <section>
+    <h2>Holding Area</h2>
+    <ol>
+      <li>Patient arrives → scan/enter ID into <b>Holding Area</b></li>
+      <li>Verify: identity, consent, site mark, NPO, allergies, premed</li>
+      <li>Note any concerns → escalate via <b>Holding Area Alert</b></li>
+      <li>Move to theatre only after surgeon + anaesthetist confirmation</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Swab & instrument counts</h2>
+    <ul>
+      <li>Use <b>Surgeries → Count</b> module</li>
+      <li>Three counts: initial, before closure, final</li>
+      <li>Both scrub and circulator e-sign</li>
+      <li>Discrepancy locks the closure phase until resolved</li>
+    </ul>
+    <div class="card warn">A retained item where count was marked correct = automatic incident + investigation.</div>
+  </section>
+
+  <section>
+    <h2>Consumables & BOM</h2>
+    <ul>
+      <li>Log every implant, suture, blade, etc. into <b>Consumables</b></li>
+      <li>Bill of Materials auto-generated from your entries → goes to billing</li>
+      <li>Inventory auto-decremented — keeps the store accurate</li>
+    </ul>
+    <p class="small">Under-recording consumables understates the case → patient is under-billed → hospital revenue lost.</p>
+  </section>
+
+  <section>
+    <h2>Equipment Checkout</h2>
+    <ul>
+      <li>Any equipment leaving theatre must be checked out in app</li>
+      <li>Returns checked back in same day</li>
+      <li>Faults reported via <b>Fault Alerts</b> immediately</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>PACU (Recovery)</h2>
+    <ol>
+      <li>Receive handover from anaesthetist <b>in app + verbal</b></li>
+      <li>Vitals every 15 min — auto-prompts</li>
+      <li>Score with Aldrete — discharge only when ≥ 9</li>
+      <li>Trigger alerts if vitals deteriorate</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Nurse Handover at shift change</h2>
+    <ul>
+      <li>Open <b>Nurse Handover</b> → for each active patient</li>
+      <li>Capture: condition, drains, drugs due, alerts, family communications</li>
+      <li>Receiving nurse e-signs to accept</li>
+      <li>System tracks any patient handed over with no signature</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Cleaning & turnover</h2>
+    <ol>
+      <li>End of case → <b>Cleaning → Start</b></li>
+      <li>Cleaner / nurse confirms surfaces, floor, lights wiped</li>
+      <li><b>Cleaning → End</b> releases theatre to next case</li>
+    </ol>
+    <p class="small">Turnover times are tracked — fastest theatres get recognition.</p>
+  </section>
+
+  <section>
+    <h2>Benefits to YOU as nurse</h2>
+    <div class="grid">
+      <div class="card good">📋 No more endless paper checklists</div>
+      <div class="card good">🛡 Documented count protects you legally</div>
+      <div class="card good">⏰ Auto-handover so nothing is forgotten</div>
+      <div class="card good">📈 Personal case-load report for promotion review</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What gets you queried</h2>
+    <table>
+      <tr><th>Action</th><th>Severity</th></tr>
+      <tr><td>Falsified count</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Marked theatre ready when not ready</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Patient handed over without e-sign</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Consumables not logged</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Equipment returned late</td><td><span class="badge b-grey">Minor</span></td></tr>
+    </table>
+  </section>
+
+  <section class="center">
+    <h2>Nurses — Quick Card</h2>
+    <p>Start Duty • Setup • Holding Area • Count • Consumables • Handover • End Duty</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 4: PORTERS                                               -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>🚪 Porters</h1>
+      <h3>Patient transport & theatre logistics</h3>
+      <p style="opacity:0.85;">10 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your daily ORM workflow</h2>
+    <ol>
+      <li><b>Start Duty</b> at the start of your shift</li>
+      <li>Check <b>Roster</b> for your theatre allocation</li>
+      <li>Watch the <b>Call for Patient</b> board</li>
+      <li>Log every transport with <b>Transport → Start / End</b></li>
+      <li><b>End Duty</b> at handover</li>
+    </ol>
+    <p class="small">If you do not Start Duty, the system thinks you are absent and may auto-page a relief porter.</p>
+  </section>
+
+  <section>
+    <h2>How patient transport works</h2>
+    <ol>
+      <li>Anaesthetist or scrub nurse triggers <b>"Call for Patient"</b></li>
+      <li>You see the alert on your phone within 5 seconds</li>
+      <li>Tap <b>Accept</b> — this stops auto-paging others</li>
+      <li>Go to ward, identify patient, verify ID band</li>
+      <li>Tap <b>Transport → Start</b> when leaving the ward</li>
+      <li>Tap <b>Transport → End</b> on arrival in holding area</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Patient identity check — your responsibility</h2>
+    <div class="card warn">⚠️ Wrong patient brought to theatre = catastrophic event.</div>
+    <ul>
+      <li>Verify: <b>Name + Hospital number</b> on ID band</li>
+      <li>Cross-check with the call entry on your phone</li>
+      <li>Confirm <b>operation site</b> mark is present where applicable</li>
+      <li>Ask the ward nurse to e-sign the release in the app</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Theatre meals & supplies</h2>
+    <ul>
+      <li>Use <b>Theatre Meals</b> module to log food deliveries to the lounge</li>
+      <li>Stock movements (linen, gases, scrubs) — log via <b>Sub-Stores → Transfers</b></li>
+      <li>Never move equipment without an entry — security audits this</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Patient transfers between theatres / wards</h2>
+    <ol>
+      <li>Use <b>Patient Transfers</b> module</li>
+      <li>Source location → destination → reason</li>
+      <li>E-sign on departure & arrival</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Reporting faults & hazards</h2>
+    <ul>
+      <li>Broken trolley, faulty lift, spills → <b>Fault Alerts</b></li>
+      <li>Power failure on your route → <b>Power Status</b> note</li>
+      <li>Plumbing leak → <b>Plumbing & Water</b> module</li>
+    </ul>
+    <div class="card good">Reporting hazards protects patients <b>and</b> you — never punished for raising them.</div>
+  </section>
+
+  <section>
+    <h2>Emergency response</h2>
+    <ol>
+      <li>Emergency calls take <b>priority</b> over routine transport</li>
+      <li>You'll get a 🚨 alert with patient location</li>
+      <li>Accept and respond within <b>3 minutes</b></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Benefits to YOU as porter</h2>
+    <div class="grid">
+      <div class="card good">📱 No more chasing nurses for instructions</div>
+      <div class="card good">📊 Your transport record proves you were busy</div>
+      <div class="card good">⏰ End-of-month report — recognition for top performers</div>
+      <div class="card good">🛡 Identity verification protects you from blame</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What gets you queried</h2>
+    <table>
+      <tr><th>Action</th><th>Severity</th></tr>
+      <tr><td>Wrong patient transported</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Ignored Call for Patient (>10 min)</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Did not Start Duty</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>No identity check logged</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Equipment moved without entry</td><td><span class="badge b-grey">Minor</span></td></tr>
+    </table>
+  </section>
+
+  <section class="center">
+    <h2>Porters — Quick Card</h2>
+    <p>Start Duty • Watch Calls • Verify ID • Transport Start/End • Report Faults • End Duty</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 5: CLEANERS                                              -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>🧹 Cleaners & Housekeeping</h1>
+      <h3>Theatre turnover • Infection control</h3>
+      <p style="opacity:0.85;">10 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your daily ORM workflow</h2>
+    <ol>
+      <li><b>Start Duty</b> at the start of your shift</li>
+      <li>Watch <b>Cleaning → Start</b> alerts (one per finished case)</li>
+      <li>Complete cleaning → <b>Cleaning → End</b></li>
+      <li>Report any biohazards / spillages immediately</li>
+      <li><b>End Duty</b> at handover</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>The cleaning cycle</h2>
+    <ol>
+      <li>Surgeon signs out → app sends a <b>"Cleaning Required"</b> alert to your phone</li>
+      <li>Tap <b>Accept</b> → enter theatre with PPE</li>
+      <li>Follow the <b>theatre turnover checklist</b> shown in the app:
+        <ul>
+          <li>Sharps cleared</li>
+          <li>Linen bagged</li>
+          <li>Surfaces wiped (operating table, lights, machines)</li>
+          <li>Floor mopped</li>
+          <li>Bin liners changed</li>
+        </ul>
+      </li>
+      <li>Tap <b>Cleaning → End</b> — theatre auto-marked available</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Why timing matters</h2>
+    <div class="card good">Faster, <b>thorough</b> turnover means more patients treated each day.</div>
+    <ul>
+      <li>Average target: 20 min for a clean case, 35 min for a contaminated case</li>
+      <li>Times are visible to your supervisor — consistently fast cleaners get recognition</li>
+      <li>Skipped checklist items reset the timer — quality over speed always wins</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Biohazards & spillages</h2>
+    <ul>
+      <li>Log via <b>Incidents</b> module — describe exposure (blood, body fluid)</li>
+      <li>Use the spill kit immediately</li>
+      <li>If you sustain a needle-stick or splash → <b>Incidents → Self-injury</b> within 1 hour</li>
+    </ul>
+    <div class="card warn">Hiding an exposure puts you at health risk — reporting is protected, not punished.</div>
+  </section>
+
+  <section>
+    <h2>Linen & laundry</h2>
+    <ul>
+      <li>Log dirty linen pickups via <b>Laundry</b> module</li>
+      <li>Confirm clean linen receipt</li>
+      <li>Discrepancies are queried by stores</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Reporting faults</h2>
+    <ul>
+      <li>Broken mop bucket, leaking tap, faulty bin → <b>Fault Alerts</b></li>
+      <li>Empty soap / sanitiser dispensers → same module</li>
+      <li>Plumbing → <b>Plumbing & Water</b></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Infection control checklist</h2>
+    <div class="grid">
+      <div class="card">PPE worn</div>
+      <div class="card">Hand hygiene before & after</div>
+      <div class="card">Colour-coded mops respected</div>
+      <div class="card">Disinfectant correctly diluted</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Benefits to YOU as cleaner</h2>
+    <ul>
+      <li>📈 Your cleaning record demonstrates your contribution</li>
+      <li>🏆 Top cleaners are publicly recognised each month</li>
+      <li>🛡 Documented turnover protects you if a case becomes infected</li>
+      <li>📱 No more arguments over "did you clean theatre 3?" — the app proves it</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What gets you queried</h2>
+    <table>
+      <tr><th>Action</th><th>Severity</th></tr>
+      <tr><td>Marked End-of-Cleaning without doing it</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Did not Start Duty</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Did not respond to Cleaning alert (>15 min)</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Unreported spillage</td><td><span class="badge b-red">Major</span></td></tr>
+    </table>
+  </section>
+
+  <section class="center">
+    <h2>Cleaners — Quick Card</h2>
+    <p>Start Duty • Accept Alert • Follow Checklist • End Cleaning • Report Faults • End Duty</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 6: CSSD / BIOMEDICAL / STORES                            -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>🧪 CSSD • Biomedical • Stores</h1>
+      <h3>Sterilisation • Equipment • Inventory</h3>
+      <p style="opacity:0.85;">10 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>CSSD workflow</h2>
+    <ol>
+      <li><b>Start Duty</b></li>
+      <li>Receive used instruments via <b>CSSD Inventory → Return</b></li>
+      <li>Process via <b>CSSD Sterilization</b> — log cycle, autoclave, indicator results</li>
+      <li>Mark sets as <b>Ready</b> in <b>CSSD Readiness</b></li>
+      <li>Issue to theatre via <b>CSSD Inventory → Issue</b></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Sterilisation log integrity</h2>
+    <ul>
+      <li>Every cycle: load contents, temperature, time, indicator outcome</li>
+      <li>Failed indicator → set quarantined → cannot be issued</li>
+      <li>Audit logs are retained for <b>5 years</b> — required for ISO compliance</li>
+    </ul>
+    <div class="card warn">Issuing an unsterile set is a sentinel event. The cycle log is your defence.</div>
+  </section>
+
+  <section>
+    <h2>Biomedical engineers</h2>
+    <ul>
+      <li>Watch <b>Fault Alerts</b> for equipment in your scope</li>
+      <li>Acknowledge → log diagnosis → log resolution</li>
+      <li>Schedule preventive maintenance via inventory item maintenance interval</li>
+      <li>Decommission obsolete equipment via <b>Inventory → Edit</b> (status: RETIRED)</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Power, water, oxygen monitoring</h2>
+    <ul>
+      <li><b>Power Status</b> — log generator runs, fuel consumption</li>
+      <li><b>Power Maintenance</b> — schedule and log servicing</li>
+      <li><b>Power Readiness</b> — daily readiness check</li>
+      <li><b>Plumbing & Water</b> — log faults and supply</li>
+      <li><b>Oxygen Control</b> — alerts auto-fire when O₂ levels dip</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Inventory & sub-stores</h2>
+    <ol>
+      <li><b>Inventory</b> module — central store master list</li>
+      <li><b>Sub-Stores</b> — per-theatre / per-department stock</li>
+      <li>Bulk uploads via Excel — see <i>Bulk Upload Guide</i></li>
+      <li>Reorder levels trigger automatic alerts to procurement</li>
+      <li>Expiry dates flag yellow at 90 days, red at 30 days</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Stock transfers</h2>
+    <ul>
+      <li><b>Stock Transfers</b> for moving items between sub-stores</li>
+      <li>Both sender and receiver e-sign</li>
+      <li>Discrepancies logged for monthly reconciliation</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Equipment checkout audit</h2>
+    <ul>
+      <li>Daily review of <b>Equipment Checkout</b></li>
+      <li>Items overdue >24h → page user</li>
+      <li>Items overdue >7 days → escalate to HOD</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Benefits to YOU as CSSD/Biomedical/Stores</h2>
+    <div class="grid">
+      <div class="card good">📊 Live inventory — no more end-of-month surprises</div>
+      <div class="card good">🛡 Sterilisation logs protect you legally</div>
+      <div class="card good">🔧 Maintenance schedule auto-generated</div>
+      <div class="card good">📈 Fault resolution time tracked — proves your impact</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What gets you queried</h2>
+    <table>
+      <tr><th>Action</th><th>Severity</th></tr>
+      <tr><td>Issued unsterile set</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Falsified sterilisation log</td><td><span class="badge b-red">Major</span></td></tr>
+      <tr><td>Stock transfer with no e-sign</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Fault alert ignored >2h</td><td><span class="badge b-gold">Moderate</span></td></tr>
+      <tr><td>Expired stock not removed</td><td><span class="badge b-gold">Moderate</span></td></tr>
+    </table>
+  </section>
+
+  <section class="center">
+    <h2>CSSD / Biomedical / Stores — Quick Card</h2>
+    <p>Receive • Sterilise • Log Cycle • Mark Ready • Issue • Maintain • Audit</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- ROLE 7: ADMINISTRATORS / THEATRE MANAGER                      -->
+<!-- ============================================================ -->
+<section>
+  <section class="center">
+    <div class="role-cover">
+      <h1>🛡 Administrators</h1>
+      <h3>Theatre Manager • HODs • System Admins</h3>
+      <p style="opacity:0.85;">10 slides — press ↓</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your overview tools</h2>
+    <ul>
+      <li><b>Dashboard</b> — live theatre status, today's surgeries, alerts</li>
+      <li><b>Reports & Analytics</b> — daily / weekly / monthly summaries</li>
+      <li><b>Staff Effectiveness</b> — individual & team performance</li>
+      <li><b>Mortality Registry</b> — M&M data ready for committee</li>
+      <li><b>Disciplinary Queries</b> — open & resolved cases</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>User management</h2>
+    <ol>
+      <li><b>User Management</b> → review pending sign-ups</li>
+      <li>Approve, set role, set staff code</li>
+      <li>Reject with reason if unauthorised</li>
+      <li>Reset password on request via <b>Auth → Reset Password</b></li>
+    </ol>
+    <div class="card warn">Approving a user with the wrong role is a security incident — verify identity first.</div>
+  </section>
+
+  <section>
+    <h2>Roster management</h2>
+    <ul>
+      <li>Upload weekly roster via Excel — separate templates for nurses, anaesthetists, porters, cleaners, technicians</li>
+      <li>Auto-allocates staff to theatres + shifts</li>
+      <li>Last-minute swaps logged with reason</li>
+      <li>Absence patterns flagged automatically</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Handling disciplinary queries</h2>
+    <ol>
+      <li>Open <b>Disciplinary Queries</b> module</li>
+      <li>Review the auto-evidence (timestamps, before/after states)</li>
+      <li>Read staff response (within 48h)</li>
+      <li>Decide: Dismissed • Verbal Warning • Written Warning • HOD Referral</li>
+      <li>Outcome saved permanently — visible to staff</li>
+    </ol>
+    <div class="card good">Decisions are auditable — protects both staff and management from bias claims.</div>
+  </section>
+
+  <section>
+    <h2>Anonymous tips & security reports</h2>
+    <ul>
+      <li><b>Anonymous Tips</b> — staff can report concerns confidentially</li>
+      <li><b>Security Reports</b> — incidents, breaches, theft</li>
+      <li>Both visible only to ADMIN role</li>
+      <li>Investigate within <b>5 working days</b></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Announcements</h2>
+    <ul>
+      <li>Push messages to all staff or selected groups</li>
+      <li>Audio playback option for theatre PA</li>
+      <li>Use sparingly — overuse desensitises staff to alerts</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Reports for committees</h2>
+    <div class="grid">
+      <div class="card">📊 Monthly turnover by theatre</div>
+      <div class="card">⏱ Cancellation analysis (cause, owner)</div>
+      <div class="card">💀 Mortality & morbidity (auto)</div>
+      <div class="card">📦 Inventory burn rate & expiries</div>
+      <div class="card">⚡ Power reliability summary</div>
+      <div class="card">🩸 Blood usage patterns</div>
+    </div>
+    <p class="small">All exportable as PDF for the CMD presentation.</p>
+  </section>
+
+  <section>
+    <h2>System hygiene checklist (weekly)</h2>
+    <ul>
+      <li>Approve / reject pending users</li>
+      <li>Review ignored alerts (last 7d)</li>
+      <li>Check expiring stock</li>
+      <li>Review open disciplinary queries (no case > 14 days)</li>
+      <li>Backup database (Supabase auto-snapshots — verify)</li>
+    </ul>
+  </section>
+
+  <section class="center">
+    <h2>Administrators — Quick Card</h2>
+    <p>Approve Users • Manage Roster • Review Queries • Investigate Tips • Publish Reports</p>
+  </section>
+</section>
+
+<!-- ============================================================ -->
+<!-- CLOSING                                                       -->
+<!-- ============================================================ -->
+<section>
+  <h2>Voice & offline tips for everyone</h2>
+  <div class="grid">
+    <div class="card">🎤 <b>Tap the mic</b> on any field — speak naturally, then edit. Best in a quiet area.</div>
+    <div class="card">📶 <b>Offline?</b> Keep using the app. A small badge appears; data syncs when online.</div>
+    <div class="card">📲 <b>Install</b> the app on your home screen for fast access (Add to Home Screen).</div>
+    <div class="card">🔄 <b>Pull-to-refresh</b> if a list looks stale.</div>
+  </div>
+</section>
+
+<section class="center">
+  <h1>The app is your colleague</h1>
+  <p>It documents what you did so no one can dispute it.<br/>
+  It alerts you so you never miss a duty.<br/>
+  It backs you when things go wrong.</p>
+  <p style="margin-top:30px;"><b>Use it consistently → no queries → smoother work → better patient outcomes.</b></p>
+</section>
+
+<section class="center">
+  <h2>Questions?</h2>
+  <p>Theatre Manager — UNTH Ituku Ozalla</p>
+  <p class="small">Refer to USER_GUIDE.md & STAFF_CODE_GUIDE.md for written reference.</p>
+  <p class="small" style="margin-top:30px;">© UNTH Operative Resource Manager — Training Deck v1</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    width: 1280,
+    height: 800,
+    margin: 0.05,
+    controls: true,
+    progress: true,
+    keyboard: true,
+    overview: true,
+    touch: true
+  });
+</script>
+</body>
+</html>
