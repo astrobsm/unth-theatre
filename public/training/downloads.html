@@ -80,8 +80,7 @@
     .status { font-size: 0.8em; color: var(--unth-grey); min-height: 1em; }
     .legend { background:#fffbe6; border:1px solid #f6e58d; border-radius: 10px; padding: 12px 16px; font-size: 0.86em; color: #6c5b06; margin-top: 24px; }
     .legend code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
-    /* Hidden printable region (used by html2pdf) */
-    .pdf-stage { position: fixed; top: 0; left: -10000px; width: 297mm; }
+    /* (PDF rendering is now done in pure JS via jsPDF — no DOM stage needed.) */
     .pdf-page {
       width: 297mm; height: 210mm; padding: 14mm 18mm; box-sizing: border-box;
       background: #fff; color: #1a202c; page-break-after: always; position: relative;
@@ -146,19 +145,19 @@
     <b>How it works:</b> The MP3 voiceover is synthesised entirely in your browser using an offline text-to-speech engine
     (<code>meSpeak.js</code> + <code>lamejs</code>) — no server, no API keys, no internet required after page load.
     The <b>▶ Play preview</b> uses your device's natural voice via the Web Speech API for higher quality.
-    PDFs are generated client-side with <code>html2pdf.js</code> (jsPDF + html2canvas).
+    PDFs are generated client-side with <code>jsPDF</code> as <strong>real, searchable, vector text</strong> (small files, perfectly crisp).
     All downloads are watermarked with the UNTH ORM brand.
   </div>
 
 </main>
 
-<div id="pdfStage" class="pdf-stage" aria-hidden="true"></div>
 <div id="toast" class="toast"></div>
 
 <!-- Libraries (CDN) -->
 <script src="./vendor/mespeak/mespeak.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+<!-- jsPDF: native vector PDF generation (searchable text, small files, perfectly crisp) -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 
@@ -174,7 +173,6 @@ const grid  = document.getElementById('cardGrid');
 const engineStatus = document.getElementById('engineStatus');
 const voiceSelect = document.getElementById('voiceSelect');
 const zipAllBtn = document.getElementById('zipAll');
-const pdfStage = document.getElementById('pdfStage');
 const toastEl = document.getElementById('toast');
 
 let mespeakReady = false;
@@ -431,54 +429,163 @@ async function buildRoleMp3Offline(role, onProgress) {
   return pcmToMp3(merged, sampleRate, 64);
 }
 
-/* -------- Build PDF for role -------- */
-function buildRolePdfHtml(role) {
-  const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
-  const watermark = `<img src="/unth-orm-logo.png" crossorigin="anonymous" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:160mm; height:160mm; object-fit:contain; opacity:0.06; pointer-events:none;" />`;
-  const cover = `
-    <div class="pdf-page pdf-cover">
-      <div class="pdf-band" style="background:${role.accent}"></div>
-      ${watermark}
-      <img src="/unth-orm-logo.png" crossorigin="anonymous" style="width:50mm;height:50mm;object-fit:contain;margin:8mm auto 6mm;display:block;" />
-      <span class="badge">UNTH Operative Resource Manager</span>
-      <h1 style="color:${role.accent}">${role.title}</h1>
-      <div class="sub">Training & Responsibilities Handbook</div>
-      <div class="org">
-        University of Nigeria Teaching Hospital · Ituku Ozalla<br/>
-        Audience: ${role.audience}<br/>
-        Issued: ${today}
-      </div>
-      <div class="pdf-foot"><span>UNTH ORM</span><span>Cover</span></div>
-    </div>`;
-  const slides = role.slides.map((s, idx) => `
-    <div class="pdf-page">
-      <div class="pdf-band" style="background:${role.accent}"></div>
-      ${watermark}
-      <h2 style="color:${role.accent}">${escapeHtml(s.title)}</h2>
-      <h3>Slide ${idx+1} of ${role.slides.length}</h3>
-      <ul>${s.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>
-      <div class="narr"><b>Speaker notes / narration:</b><br/>${escapeHtml(s.narration)}</div>
-      <div class="pdf-foot"><span>UNTH ORM · ${escapeHtml(role.title)}</span><span>${idx+1} / ${role.slides.length}</span></div>
-    </div>`).join('');
-  return cover + slides;
-}
+/* -------- Build PDF for role (native jsPDF vector rendering) -------- */
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Cache logo as data-URL once for jsPDF.addImage
+let _logoDataUrl = null;
+async function getLogoDataUrl() {
+  if (_logoDataUrl) return _logoDataUrl;
+  try {
+    const res = await fetch('/unth-orm-logo.png', { cache: 'force-cache' });
+    const blob = await res.blob();
+    _logoDataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+  } catch (e) { console.warn('[PDF] logo fetch failed', e); _logoDataUrl = null; }
+  return _logoDataUrl;
+}
+
+// Convert hex "#rrggbb" to [r,g,b]
+function hexToRgb(h) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h || '#1e3a8a');
+  if (!m) return [30,58,138];
+  const n = parseInt(m[1], 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+
 async function buildRolePdfBlob(role) {
-  pdfStage.innerHTML = buildRolePdfHtml(role);
-  const opt = {
-    margin: 0,
-    filename: `UNTH-ORM-Training-${role.id}.pdf`,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-    pagebreak: { mode: ['css', 'legacy'] }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape', compress: true });
+  const pageW = 297, pageH = 210;
+  const marginX = 18, marginTop = 22, marginBottom = 18;
+  const contentW = pageW - marginX * 2;
+  const accent = hexToRgb(role.accent);
+  const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
+  const logo = await getLogoDataUrl();
+
+  // Helpers
+  const drawHeaderBand = () => {
+    doc.setFillColor(accent[0], accent[1], accent[2]);
+    doc.rect(0, 0, pageW, 8, 'F');
   };
-  const blob = await html2pdf().set(opt).from(pdfStage).outputPdf('blob');
-  pdfStage.innerHTML = '';
-  return blob;
+  const drawWatermark = () => {
+    if (!logo) return;
+    // 65% page-width centered, very faint
+    const w = 160, h = 160;
+    const prevAlpha = doc.GState ? doc.GState({ opacity: 0.06 }) : null;
+    if (prevAlpha) doc.setGState(prevAlpha);
+    try { doc.addImage(logo, 'PNG', (pageW - w) / 2, (pageH - h) / 2, w, h, undefined, 'FAST'); } catch(e) {}
+    if (doc.GState) doc.setGState(doc.GState({ opacity: 1 }));
+  };
+  const drawFooter = (left, right) => {
+    doc.setDrawColor(220);
+    doc.setLineWidth(0.2);
+    doc.line(marginX, pageH - marginBottom + 4, pageW - marginX, pageH - marginBottom + 4);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(140);
+    doc.text(left, marginX, pageH - marginBottom + 9);
+    doc.text(right, pageW - marginX, pageH - marginBottom + 9, { align: 'right' });
+  };
+
+  // ===== COVER PAGE =====
+  drawHeaderBand();
+  drawWatermark();
+  if (logo) doc.addImage(logo, 'PNG', (pageW - 50) / 2, 28, 50, 50, undefined, 'FAST');
+  // Badge
+  doc.setFillColor(212, 175, 55); // gold
+  doc.roundedRect((pageW - 90) / 2, 86, 90, 9, 4.5, 4.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text('UNTH OPERATIVE RESOURCE MANAGER', pageW / 2, 92.4, { align: 'center' });
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(28);
+  doc.setTextColor(accent[0], accent[1], accent[2]);
+  const titleLines = doc.splitTextToSize(role.title, contentW);
+  doc.text(titleLines, pageW / 2, 112, { align: 'center' });
+  // Subtitle
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(15);
+  doc.setTextColor(90);
+  doc.text('Training & Responsibilities Handbook', pageW / 2, 128, { align: 'center' });
+  // Org block
+  doc.setFontSize(11);
+  doc.setTextColor(110);
+  doc.text('University of Nigeria Teaching Hospital  ·  Ituku Ozalla', pageW / 2, 156, { align: 'center' });
+  doc.text(`Audience: ${role.audience}`, pageW / 2, 163, { align: 'center' });
+  doc.text(`Issued: ${today}`, pageW / 2, 170, { align: 'center' });
+  drawFooter('UNTH ORM', 'Cover');
+
+  // ===== SLIDE PAGES =====
+  role.slides.forEach((s, idx) => {
+    doc.addPage();
+    drawHeaderBand();
+    drawWatermark();
+    // Slide title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(accent[0], accent[1], accent[2]);
+    const titleLines = doc.splitTextToSize(s.title, contentW);
+    let y = marginTop;
+    doc.text(titleLines, marginX, y);
+    y += titleLines.length * 8 + 2;
+    // Slide counter
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(`Slide ${idx + 1} of ${role.slides.length}`, marginX, y);
+    y += 8;
+    // Bullets
+    doc.setFontSize(13);
+    doc.setTextColor(40, 50, 70);
+    s.bullets.forEach(b => {
+      const lines = doc.splitTextToSize(`\u2022  ${b}`, contentW - 4);
+      // Page-break check
+      if (y + lines.length * 6 > pageH - marginBottom - 32) {
+        drawFooter(`UNTH ORM · ${role.title}`, `${idx + 1} / ${role.slides.length}`);
+        doc.addPage(); drawHeaderBand(); drawWatermark();
+        y = marginTop;
+      }
+      doc.text(lines, marginX + 2, y);
+      y += lines.length * 6 + 1;
+    });
+    // Narration callout box
+    y += 6;
+    const narrationLines = doc.splitTextToSize(s.narration, contentW - 12);
+    const boxH = narrationLines.length * 5 + 14;
+    if (y + boxH > pageH - marginBottom - 8) {
+      drawFooter(`UNTH ORM · ${role.title}`, `${idx + 1} / ${role.slides.length}`);
+      doc.addPage(); drawHeaderBand(); drawWatermark();
+      y = marginTop;
+    }
+    doc.setFillColor(247, 249, 252);
+    doc.roundedRect(marginX, y, contentW, boxH, 2, 2, 'F');
+    doc.setFillColor(212, 175, 55);
+    doc.rect(marginX, y, 1.5, boxH, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(accent[0], accent[1], accent[2]);
+    doc.text('Speaker notes / narration', marginX + 6, y + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(70);
+    doc.text(narrationLines, marginX + 6, y + 12);
+    drawFooter(`UNTH ORM · ${role.title}`, `${idx + 1} / ${role.slides.length}`);
+  });
+
+  // PDF metadata
+  doc.setProperties({
+    title: `UNTH ORM Training — ${role.title}`,
+    subject: 'Training & Responsibilities Handbook',
+    author: 'UNTH Operative Resource Manager',
+    keywords: 'UNTH, ORM, training, theatre, perioperative',
+    creator: 'UNTH ORM v1'
+  });
+
+  return doc.output('blob');
 }
 
 /* -------- Render UI cards -------- */
