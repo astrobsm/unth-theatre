@@ -13,7 +13,7 @@ function clean(value: unknown, max = 200): string {
 }
 
 async function generateStaffCode(prefix: string): Promise<string> {
-  const [userCodes, submissionCodes] = await Promise.all([
+  const [userResult, submissionResult] = await Promise.allSettled([
     prisma.user.findMany({
       where: { staffCode: { startsWith: prefix } },
       select: { staffCode: true },
@@ -23,6 +23,9 @@ async function generateStaffCode(prefix: string): Promise<string> {
       select: { staffCode: true },
     }),
   ]);
+  const userCodes = userResult.status === 'fulfilled' ? userResult.value : [];
+  const submissionCodes =
+    submissionResult.status === 'fulfilled' ? submissionResult.value : [];
   const re = new RegExp(`^${prefix}(\\d+)$`);
   const numbers = [...userCodes, ...submissionCodes]
     .map(r => (r.staffCode || '').match(re))
