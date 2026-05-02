@@ -153,6 +153,7 @@ export default function DashboardLayout({
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
+    { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 

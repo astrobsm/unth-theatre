@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UNTH ORM — Training Downloads (MP3 + PDF)</title>
+  <style>
+    :root {
+      --unth-blue: #0b3b6f;
+      --unth-blue-2: #1e6bb8;
+      --unth-gold: #c8a44b;
+      --unth-red:  #c0392b;
+      --unth-green:#1e8449;
+      --unth-grey: #4a5568;
+      --bg: #f5f7fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+      background: var(--bg);
+      color: #1a202c;
+      line-height: 1.5;
+    }
+    header.page {
+      background: linear-gradient(135deg, var(--unth-blue), var(--unth-blue-2));
+      color: #fff;
+      padding: 40px 24px 70px;
+      text-align: center;
+    }
+    header.page h1 { margin: 0 0 8px; font-size: 2.2em; }
+    header.page p  { margin: 4px 0; opacity: 0.92; }
+    .container { max-width: 1180px; margin: -40px auto 60px; padding: 0 20px; }
+    .toolbar {
+      background: #fff; border-radius: 12px; padding: 18px 22px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+    }
+    .toolbar .left { display: flex; flex-wrap:wrap; gap: 8px; align-items: center; }
+    .toolbar .right { display: flex; gap: 10px; flex-wrap:wrap; }
+    .pill { background: #edf2f7; color: var(--unth-blue); padding: 6px 12px; border-radius: 16px; font-size: 0.8em; font-weight: 600; }
+    .voice-select { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 0.9em; min-width: 250px; background: #fff; }
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 22px; margin-top: 28px;
+    }
+    .card {
+      background: #fff; border-radius: 14px; padding: 22px 22px 18px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+      border-top: 6px solid var(--unth-blue);
+      display: flex; flex-direction: column; gap: 12px;
+      position: relative;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.10); }
+    .card h2 { margin: 0; font-size: 1.4em; color: var(--unth-blue); }
+    .card .audience { font-size: 0.85em; color: var(--unth-grey); }
+    .card .meta { font-size: 0.8em; color: var(--unth-grey); }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+    .btn {
+      appearance: none; border: none; cursor: pointer;
+      padding: 10px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9em;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      transition: filter 0.15s ease, transform 0.05s ease;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-play { background: #e6efff; color: var(--unth-blue); border: 1px solid var(--unth-blue); }
+    .btn-stop { background: #fee2e2; color: var(--unth-red); border: 1px solid var(--unth-red); }
+    .btn-mp3  { background: var(--unth-green); color: #fff; }
+    .btn-pdf  { background: var(--unth-red);   color: #fff; }
+    .btn-zip  { background: var(--unth-blue);  color: #fff; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .progress {
+      height: 6px; background: #edf2f7; border-radius: 4px; overflow: hidden; display: none;
+    }
+    .progress.active { display: block; }
+    .progress > div { height: 100%; width: 0%; background: var(--unth-blue); transition: width 0.2s ease; }
+    .status { font-size: 0.8em; color: var(--unth-grey); min-height: 1em; }
+    .legend { background:#fffbe6; border:1px solid #f6e58d; border-radius: 10px; padding: 12px 16px; font-size: 0.86em; color: #6c5b06; margin-top: 24px; }
+    .legend code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    /* Hidden printable region (used by html2pdf) */
+    .pdf-stage { position: fixed; top: 0; left: -10000px; width: 297mm; }
+    .pdf-page {
+      width: 297mm; height: 210mm; padding: 14mm 18mm; box-sizing: border-box;
+      background: #fff; color: #1a202c; page-break-after: always; position: relative;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    .pdf-page .pdf-band { position: absolute; top: 0; left: 0; right: 0; height: 8mm; background: var(--unth-blue); }
+    .pdf-page .pdf-foot { position: absolute; bottom: 7mm; left: 18mm; right: 18mm; display: flex; justify-content: space-between; font-size: 9pt; color: #888; border-top: 1px solid #e2e8f0; padding-top: 4mm; }
+    .pdf-page h1 { color: var(--unth-blue); margin-top: 14mm; font-size: 26pt; }
+    .pdf-page h2 { color: var(--unth-blue); margin-top: 14mm; font-size: 22pt; }
+    .pdf-page h3 { color: #555; font-weight: 500; font-size: 13pt; margin: 4mm 0 8mm; }
+    .pdf-page ul { font-size: 14pt; line-height: 1.6; padding-left: 8mm; }
+    .pdf-page li { margin: 3mm 0; }
+    .pdf-page .narr {
+      margin-top: 10mm; padding: 5mm 6mm; background: #f7f9fc; border-left: 4px solid var(--unth-gold);
+      font-size: 10.5pt; color: #444; line-height: 1.5; border-radius: 2mm;
+    }
+    .pdf-page .narr b { color: var(--unth-blue); }
+    .pdf-cover { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding-top:0;}
+    .pdf-cover .badge { display:inline-block; background:var(--unth-gold); color:#fff; font-weight:700; padding:4px 14px; border-radius:14px; font-size:11pt; margin-bottom:8mm; }
+    .pdf-cover h1 { font-size:36pt; margin: 0; }
+    .pdf-cover .sub { font-size:16pt; color:var(--unth-grey); margin-top:6mm; }
+    .pdf-cover .org { margin-top:18mm; font-size:11pt; color:#666; }
+    a.back { display: inline-block; margin: 10px 0 18px; color: #fff; text-decoration: none; opacity: 0.9; font-weight: 600; }
+    a.back:hover { opacity: 1; text-decoration: underline; }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a202c; color: #fff; padding: 10px 18px; border-radius: 8px; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 9999; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<header class="page">
+  <a class="back" href="./index.html">← Back to Slide Deck</a>
+  <h1>📥 Training Downloads</h1>
+  <p>Per-role MP3 voiceovers and PDF handouts — works offline, ready to share on WhatsApp or email</p>
+</header>
+
+<main class="container">
+
+  <div class="toolbar">
+    <div class="left">
+      <span class="pill">7 role decks</span>
+      <span class="pill" id="engineStatus">Loading TTS engine…</span>
+    </div>
+    <div class="right">
+      <select id="voiceSelect" class="voice-select" title="Voice for in-browser playback">
+        <option>Loading voices…</option>
+      </select>
+      <button id="zipAll" class="btn btn-zip" disabled>📦 Download ALL (ZIP: MP3 + PDF)</button>
+    </div>
+  </div>
+
+  <div class="grid" id="cardGrid"></div>
+
+  <div class="legend">
+    <b>How it works:</b> The MP3 voiceover is synthesised entirely in your browser using an offline text-to-speech engine
+    (<code>meSpeak.js</code> + <code>lamejs</code>) — no server, no API keys, no internet required after page load.
+    The <b>▶ Play preview</b> uses your device's natural voice via the Web Speech API for higher quality.
+    PDFs are generated client-side with <code>html2pdf.js</code> (jsPDF + html2canvas).
+    All downloads are watermarked with the UNTH ORM brand.
+  </div>
+
+</main>
+
+<div id="pdfStage" class="pdf-stage" aria-hidden="true"></div>
+<div id="toast" class="toast"></div>
+
+<!-- Libraries (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/mespeak@2.0.10/mespeak.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+
+<script src="./data.js"></script>
+
+<script>
+/* ================================================================== */
+/* UNTH ORM — Training Downloads logic                                  */
+/* ================================================================== */
+
+const ROLES = window.TRAINING_DATA || [];
+const grid  = document.getElementById('cardGrid');
+const engineStatus = document.getElementById('engineStatus');
+const voiceSelect = document.getElementById('voiceSelect');
+const zipAllBtn = document.getElementById('zipAll');
+const pdfStage = document.getElementById('pdfStage');
+const toastEl = document.getElementById('toast');
+
+let mespeakReady = false;
+let mespeakLoading = null;
+const MESPEAK_BASE = 'https://cdn.jsdelivr.net/npm/mespeak@2.0.10/';
+
+function toast(msg, ms=2200) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'), ms);
+}
+
+/* -------- Lazy-load meSpeak voice + config (only when first MP3 needed) -------- */
+function ensureMespeak() {
+  if (mespeakReady) return Promise.resolve();
+  if (mespeakLoading) return mespeakLoading;
+  engineStatus.textContent = 'Loading offline TTS engine…';
+  mespeakLoading = new Promise((resolve, reject) => {
+    try {
+      meSpeak.loadConfig(MESPEAK_BASE + 'src/mespeak_config.json');
+      meSpeak.loadVoice(MESPEAK_BASE + 'voices/en/en-us.json', (success, msg) => {
+        if (!success) {
+          // fallback to plain en
+          meSpeak.loadVoice(MESPEAK_BASE + 'voices/en/en.json', (s2, m2) => {
+            if (!s2) { engineStatus.textContent = 'TTS load failed'; return reject(new Error(m2 || 'voice load failed')); }
+            mespeakReady = true; engineStatus.textContent = 'Offline TTS ready (en)'; resolve();
+          });
+          return;
+        }
+        mespeakReady = true; engineStatus.textContent = 'Offline TTS ready (en-US)';
+        resolve();
+      });
+    } catch (e) { engineStatus.textContent = 'TTS unavailable'; reject(e); }
+  });
+  return mespeakLoading;
+}
+
+/* -------- Web Speech API voice picker (for live playback) -------- */
+function refreshVoices() {
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  voiceSelect.innerHTML = '';
+  if (!voices.length) {
+    voiceSelect.innerHTML = '<option>(No English voice available)</option>';
+    return;
+  }
+  voices.forEach((v,i)=>{
+    const opt = document.createElement('option');
+    opt.value = v.name; opt.textContent = `${v.name} — ${v.lang}${v.default?' (default)':''}`;
+    voiceSelect.appendChild(opt);
+  });
+  // Prefer a high-quality voice if present
+  const preferred = voices.find(v => /Natural|Neural|Aria|Guy|Jenny|Google UK English Female|Microsoft/.test(v.name));
+  if (preferred) voiceSelect.value = preferred.name;
+}
+if ('speechSynthesis' in window) {
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices;
+} else {
+  voiceSelect.innerHTML = '<option>SpeechSynthesis not supported</option>';
+}
+
+/* -------- Live playback using SpeechSynthesis (best quality) -------- */
+let activeUtterances = [];
+function stopPlayback() {
+  window.speechSynthesis.cancel();
+  activeUtterances = [];
+}
+function playRole(role, btn) {
+  if (!('speechSynthesis' in window)) { toast('SpeechSynthesis not supported'); return; }
+  stopPlayback();
+  const voices = window.speechSynthesis.getVoices();
+  const chosen = voices.find(v=>v.name===voiceSelect.value);
+  const text = role.slides.map(s => `${s.title}. ${s.narration}`).join('  ');
+  // Chunk by sentences (some browsers cap at 200 chars per utterance)
+  const chunks = text.match(/[^.!?]+[.!?]+/g) || [text];
+  btn.textContent = '⏹ Stop';
+  btn.classList.remove('btn-play'); btn.classList.add('btn-stop');
+  let idx = 0;
+  function next() {
+    if (idx >= chunks.length) {
+      btn.textContent = '▶ Play preview';
+      btn.classList.remove('btn-stop'); btn.classList.add('btn-play');
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(chunks[idx].trim());
+    if (chosen) u.voice = chosen;
+    u.rate = 0.95; u.pitch = 1.0;
+    u.onend = () => { idx++; next(); };
+    u.onerror = () => { idx++; next(); };
+    activeUtterances.push(u);
+    window.speechSynthesis.speak(u);
+  }
+  next();
+  // Wire toggle
+  btn.onclick = () => {
+    stopPlayback();
+    btn.textContent = '▶ Play preview';
+    btn.classList.remove('btn-stop'); btn.classList.add('btn-play');
+    btn.onclick = () => playRole(role, btn);
+  };
+}
+
+/* -------- WAV → MP3 helpers -------- */
+function parseWav(arrayBuffer) {
+  const dv = new DataView(arrayBuffer);
+  // Verify RIFF/WAVE
+  if (dv.getUint32(0, false) !== 0x52494646) throw new Error('Not a RIFF file');
+  // Find 'fmt ' and 'data' chunks
+  let offset = 12, fmt = null, data = null;
+  while (offset < dv.byteLength - 8) {
+    const id = dv.getUint32(offset, false);
+    const size = dv.getUint32(offset + 4, true);
+    if (id === 0x666d7420) { // 'fmt '
+      fmt = {
+        audioFormat: dv.getUint16(offset + 8, true),
+        numChannels: dv.getUint16(offset + 10, true),
+        sampleRate:  dv.getUint32(offset + 12, true),
+        bitsPerSample: dv.getUint16(offset + 22, true)
+      };
+    } else if (id === 0x64617461) { // 'data'
+      data = { start: offset + 8, length: size };
+      break;
+    }
+    offset += 8 + size + (size % 2);
+  }
+  if (!fmt || !data) throw new Error('Malformed WAV');
+  if (fmt.bitsPerSample !== 16) throw new Error('Only 16-bit WAV supported');
+  const samples = new Int16Array(arrayBuffer, data.start, data.length / 2);
+  return { fmt, samples };
+}
+
+function pcmToMp3(samples, sampleRate, kbps=64) {
+  const encoder = new lamejs.Mp3Encoder(1, sampleRate, kbps);
+  const blockSize = 1152;
+  const mp3Chunks = [];
+  for (let i = 0; i < samples.length; i += blockSize) {
+    const chunk = samples.subarray(i, i + blockSize);
+    const enc = encoder.encodeBuffer(chunk);
+    if (enc.length) mp3Chunks.push(enc);
+  }
+  const flush = encoder.flush();
+  if (flush.length) mp3Chunks.push(flush);
+  return new Blob(mp3Chunks, { type: 'audio/mpeg' });
+}
+
+/* -------- Speak one chunk via meSpeak → returns Int16Array PCM -------- */
+function mespeakSynth(text, opts={}) {
+  return new Promise((resolve, reject) => {
+    try {
+      const ab = meSpeak.speak(text, {
+        amplitude: 100,
+        speed: 165,
+        pitch: 50,
+        wordgap: 1,
+        variant: opts.variant || 'm3',
+        rawdata: 'ArrayBuffer'
+      });
+      if (!ab) return reject(new Error('meSpeak returned no data'));
+      // meSpeak returns synchronously when rawdata is set, but be defensive
+      Promise.resolve(ab).then(buf => resolve(parseWav(buf))).catch(reject);
+    } catch (e) { reject(e); }
+  });
+}
+
+/* -------- Build full role MP3 (concat slide narrations) -------- */
+async function buildRoleMp3(role, onProgress) {
+  await ensureMespeak();
+  const segments = [];
+  let sampleRate = 22050;
+  for (let i = 0; i < role.slides.length; i++) {
+    const slide = role.slides[i];
+    const text = `${slide.title}. ${slide.narration}`;
+    // Split overly-long narrations into <= 200-char chunks for engine stability
+    const sentences = (text.match(/[^.!?]+[.!?]+/g) || [text]).map(s => s.trim()).filter(Boolean);
+    const slidePcm = [];
+    for (const sent of sentences) {
+      const { fmt, samples } = await mespeakSynth(sent);
+      sampleRate = fmt.sampleRate;
+      slidePcm.push(samples);
+      // 200ms silence after each sentence
+      slidePcm.push(new Int16Array(Math.floor(sampleRate * 0.18)));
+    }
+    // 700ms silence between slides
+    slidePcm.push(new Int16Array(Math.floor(sampleRate * 0.7)));
+    segments.push(...slidePcm);
+    onProgress && onProgress((i+1) / role.slides.length);
+  }
+  // Concatenate all PCM
+  const total = segments.reduce((s, a) => s + a.length, 0);
+  const merged = new Int16Array(total);
+  let off = 0;
+  for (const seg of segments) { merged.set(seg, off); off += seg.length; }
+  return pcmToMp3(merged, sampleRate, 64);
+}
+
+/* -------- Build PDF for role -------- */
+function buildRolePdfHtml(role) {
+  const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
+  const cover = `
+    <div class="pdf-page pdf-cover">
+      <div class="pdf-band" style="background:${role.accent}"></div>
+      <span class="badge">UNTH Operative Resource Manager</span>
+      <h1 style="color:${role.accent}">${role.title}</h1>
+      <div class="sub">Training & Responsibilities Handbook</div>
+      <div class="org">
+        University of Nigeria Teaching Hospital · Ituku Ozalla<br/>
+        Audience: ${role.audience}<br/>
+        Issued: ${today}
+      </div>
+      <div class="pdf-foot"><span>UNTH ORM</span><span>Cover</span></div>
+    </div>`;
+  const slides = role.slides.map((s, idx) => `
+    <div class="pdf-page">
+      <div class="pdf-band" style="background:${role.accent}"></div>
+      <h2 style="color:${role.accent}">${escapeHtml(s.title)}</h2>
+      <h3>Slide ${idx+1} of ${role.slides.length}</h3>
+      <ul>${s.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>
+      <div class="narr"><b>Speaker notes / narration:</b><br/>${escapeHtml(s.narration)}</div>
+      <div class="pdf-foot"><span>UNTH ORM · ${escapeHtml(role.title)}</span><span>${idx+1} / ${role.slides.length}</span></div>
+    </div>`).join('');
+  return cover + slides;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function buildRolePdfBlob(role) {
+  pdfStage.innerHTML = buildRolePdfHtml(role);
+  const opt = {
+    margin: 0,
+    filename: `UNTH-ORM-Training-${role.id}.pdf`,
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
+  const blob = await html2pdf().set(opt).from(pdfStage).outputPdf('blob');
+  pdfStage.innerHTML = '';
+  return blob;
+}
+
+/* -------- Render UI cards -------- */
+function renderCards() {
+  ROLES.forEach(role => {
+    const card = document.createElement('section');
+    card.className = 'card';
+    card.style.borderTopColor = role.accent;
+    card.innerHTML = `
+      <h2 style="color:${role.accent}">${escapeHtml(role.title)}</h2>
+      <div class="audience">${escapeHtml(role.audience)}</div>
+      <div class="meta">${role.slides.length} slides · ~${Math.ceil(role.slides.reduce((n,s)=>n+s.narration.split(/\s+/).length,0)/150)} min audio</div>
+      <div class="actions">
+        <button class="btn btn-play" data-act="play">▶ Play preview</button>
+        <button class="btn btn-mp3" data-act="mp3">⬇ MP3 voiceover</button>
+        <button class="btn btn-pdf" data-act="pdf">📄 PDF handout</button>
+        <button class="btn btn-play" data-act="text" style="background:#edf2f7;color:#333;border:1px solid #cbd5e0;">📝 TXT script</button>
+      </div>
+      <div class="progress"><div></div></div>
+      <div class="status"></div>
+    `;
+    const playBtn = card.querySelector('[data-act="play"]');
+    const mp3Btn  = card.querySelector('[data-act="mp3"]');
+    const pdfBtn  = card.querySelector('[data-act="pdf"]');
+    const txtBtn  = card.querySelector('[data-act="text"]');
+    const prog    = card.querySelector('.progress');
+    const progBar = prog.querySelector('div');
+    const status  = card.querySelector('.status');
+
+    playBtn.onclick = () => playRole(role, playBtn);
+
+    mp3Btn.onclick = async () => {
+      mp3Btn.disabled = true; pdfBtn.disabled = true;
+      prog.classList.add('active'); progBar.style.width = '0%';
+      status.textContent = 'Synthesising voiceover…';
+      try {
+        const blob = await buildRoleMp3(role, p => { progBar.style.width = (p*100).toFixed(0) + '%'; });
+        saveAs(blob, `UNTH-ORM-Training-${role.id}.mp3`);
+        status.textContent = `MP3 ready · ${(blob.size/1024/1024).toFixed(2)} MB`;
+        toast(`${role.title} MP3 downloaded`);
+      } catch (e) {
+        console.error(e); status.textContent = 'MP3 failed: ' + (e.message || e);
+        toast('MP3 generation failed', 3500);
+      } finally {
+        mp3Btn.disabled = false; pdfBtn.disabled = false;
+        setTimeout(()=>prog.classList.remove('active'), 1500);
+      }
+    };
+
+    pdfBtn.onclick = async () => {
+      mp3Btn.disabled = true; pdfBtn.disabled = true;
+      prog.classList.add('active'); progBar.style.width = '30%';
+      status.textContent = 'Rendering PDF…';
+      try {
+        const blob = await buildRolePdfBlob(role);
+        progBar.style.width = '100%';
+        saveAs(blob, `UNTH-ORM-Training-${role.id}.pdf`);
+        status.textContent = `PDF ready · ${(blob.size/1024).toFixed(0)} KB`;
+        toast(`${role.title} PDF downloaded`);
+      } catch (e) {
+        console.error(e); status.textContent = 'PDF failed: ' + (e.message || e);
+        toast('PDF generation failed', 3500);
+      } finally {
+        mp3Btn.disabled = false; pdfBtn.disabled = false;
+        setTimeout(()=>prog.classList.remove('active'), 1500);
+      }
+    };
+
+    txtBtn.onclick = () => {
+      const lines = [];
+      lines.push(`UNTH OPERATIVE RESOURCE MANAGER`);
+      lines.push(`Training Script — ${role.title}`);
+      lines.push(`Audience: ${role.audience}`);
+      lines.push(``.padEnd(60,'='));
+      role.slides.forEach((s,i) => {
+        lines.push(`\nSlide ${i+1}: ${s.title}`);
+        lines.push('Bullets:');
+        s.bullets.forEach(b => lines.push(`  • ${b}`));
+        lines.push(`Narration:\n  ${s.narration}`);
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+      saveAs(blob, `UNTH-ORM-Training-${role.id}.txt`);
+      toast('Script downloaded');
+    };
+
+    grid.appendChild(card);
+  });
+}
+
+/* -------- Bulk ZIP (all MP3 + all PDF) -------- */
+zipAllBtn.onclick = async () => {
+  zipAllBtn.disabled = true;
+  const original = zipAllBtn.textContent;
+  try {
+    const zip = new JSZip();
+    for (let i = 0; i < ROLES.length; i++) {
+      const role = ROLES[i];
+      zipAllBtn.textContent = `Building ${role.title} (${i+1}/${ROLES.length})…`;
+      const [mp3, pdf] = await Promise.all([
+        buildRoleMp3(role, () => {}),
+        buildRolePdfBlob(role)
+      ]);
+      zip.file(`MP3/UNTH-ORM-Training-${role.id}.mp3`, mp3);
+      zip.file(`PDF/UNTH-ORM-Training-${role.id}.pdf`, pdf);
+      // Also include the TXT script
+      const lines = [`UNTH OPERATIVE RESOURCE MANAGER`, `Training Script — ${role.title}`, `Audience: ${role.audience}`, ''.padEnd(60,'=')];
+      role.slides.forEach((s,idx) => {
+        lines.push(`\nSlide ${idx+1}: ${s.title}`);
+        s.bullets.forEach(b => lines.push(`  • ${b}`));
+        lines.push(`Narration:\n  ${s.narration}`);
+      });
+      zip.file(`Scripts/UNTH-ORM-Training-${role.id}.txt`, lines.join('\n'));
+    }
+    zipAllBtn.textContent = 'Compressing ZIP…';
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    saveAs(blob, `UNTH-ORM-Training-Bundle-${new Date().toISOString().slice(0,10)}.zip`);
+    toast('Full training bundle downloaded', 3500);
+  } catch (e) {
+    console.error(e); toast('Bundle generation failed', 3500);
+  } finally {
+    zipAllBtn.disabled = false; zipAllBtn.textContent = original;
+  }
+};
+
+/* -------- Initialise -------- */
+renderCards();
+zipAllBtn.disabled = false;
+
+// Defer engine load until needed; show idle status
+if (!mespeakReady) engineStatus.textContent = 'TTS engine: idle (will load on first MP3)';
+
+</script>
+
+</body>
+</html>
