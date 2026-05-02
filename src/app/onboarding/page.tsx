@@ -169,6 +169,54 @@ export default function StaffOnboardingPage() {
           </p>
         </div>
 
+        {/* Call-to-action banner */}
+        <div className="mb-8 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-white to-blue-50 shadow-md overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-700 to-amber-600 px-5 py-3 text-white text-center font-bold tracking-wide uppercase text-sm">
+            🚨 Action required within 72 hours 🚨
+          </div>
+          <div className="p-5 md:p-6 space-y-3 text-gray-800">
+            <p className="text-base md:text-lg leading-relaxed">
+              <span className="font-semibold text-blue-900">Welcome to the new UNTH Operative Resource Manager (ORM)!</span>{' '}
+              This is your one-stop digital theatre — every surgery, every roster, every store
+              item, every patient handover, all in one place. To get you on the system, we need
+              just a few minutes of your time.
+            </p>
+
+            <div className="rounded-lg bg-white border border-amber-200 p-4">
+              <p className="font-semibold text-amber-800 mb-1">⏰ Deadline: 72 hours from today</p>
+              <p className="text-sm text-gray-700">
+                Please complete this form within the next <span className="font-bold">72 hours</span>.
+                Accounts not registered in time may delay your access when the system goes fully live.
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-white border border-blue-200 p-4">
+              <p className="font-semibold text-blue-800 mb-1">📣 Help us reach everyone</p>
+              <p className="text-sm text-gray-700">
+                Kindly <span className="font-bold">share this link</span> with every theatre user
+                you know — surgeons, anaesthetists, scrub &amp; recovery nurses, anaesthetic
+                technicians, store keepers, porters, cleaners, biomedical engineers, CSSD,
+                laundry, plumbing, water-supply, oxygen-unit and works staff, pharmacy, blood
+                bank and lab colleagues. <span className="italic">Nobody should be left out.</span>
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-white border border-green-200 p-4">
+              <p className="font-semibold text-green-800 mb-1">🎓 Mini-training starts 2nd week of May</p>
+              <p className="text-sm text-gray-700">
+                Once onboarding closes, a guided <span className="font-semibold">mini-training
+                series on how to use the ORM app</span> will commence from the{' '}
+                <span className="font-bold">2nd week of May</span>. Sessions will cover daily
+                workflows for every role — so register now to secure your seat and your login.
+              </p>
+            </div>
+
+            <p className="text-center text-sm text-gray-600 italic pt-1">
+              Together we make the theatre safer, faster and smarter. Thank you for joining the journey. 🙌
+            </p>
+          </div>
+        </div>
+
         {submitted ? (
           <div className="bg-white rounded-xl shadow-lg border border-green-200 p-8 text-center">
             <div className="w-16 h-16 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-4">
