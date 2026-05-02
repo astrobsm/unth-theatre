@@ -51,6 +51,7 @@ import {
   ShieldAlert,
   Eye,
   Volume2,
+  GraduationCap,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -151,6 +152,7 @@ export default function DashboardLayout({
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
+    { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
@@ -212,16 +214,13 @@ export default function DashboardLayout({
           <nav className="mt-6 pb-48 overflow-y-auto sidebar-nav">
             {filteredMenuItems.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center px-6 py-3 transition-all duration-200 relative ${
-                    isActive
-                      ? 'bg-primary-700 border-l-4 border-accent-500 text-white'
-                      : 'text-primary-100 hover:bg-primary-700 hover:border-l-4 hover:border-accent-500'
-                  }`}
-                >
+              const className = `flex items-center px-6 py-3 transition-all duration-200 relative ${
+                isActive
+                  ? 'bg-primary-700 border-l-4 border-accent-500 text-white'
+                  : 'text-primary-100 hover:bg-primary-700 hover:border-l-4 hover:border-accent-500'
+              }`;
+              const inner = (
+                <>
                   <item.icon className="w-5 h-5 mr-3" />
                   <span className="flex-1">{item.label}</span>
                   {item.badge && (
@@ -229,6 +228,24 @@ export default function DashboardLayout({
                       {item.badge}
                     </span>
                   )}
+                </>
+              );
+              if ((item as any).external) {
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={className}
+                  >
+                    {inner}
+                  </a>
+                );
+              }
+              return (
+                <Link key={item.href} href={item.href} className={className}>
+                  {inner}
                 </Link>
               );
             })}
