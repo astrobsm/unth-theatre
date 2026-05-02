@@ -130,8 +130,8 @@
     </div>
     <div class="right">
       <select id="engineSelect" class="voice-select" title="Voice engine for downloaded MP3">
+        <option value="azure" selected>Azure Neural (natural human voice) — recommended</option>
         <option value="offline">Offline (free, robotic) — meSpeak</option>
-        <option value="azure">Azure Neural (natural human voice)</option>
       </select>
       <select id="voiceSelect" class="voice-select" title="Voice for in-browser playback">
         <option>Loading voices…</option>
@@ -156,7 +156,7 @@
 <div id="toast" class="toast"></div>
 
 <!-- Libraries (CDN) -->
-<script src="https://cdn.jsdelivr.net/npm/mespeak@2.0.10/mespeak.min.js"></script>
+<script src="./vendor/mespeak/mespeak.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -179,7 +179,6 @@ const toastEl = document.getElementById('toast');
 
 let mespeakReady = false;
 let mespeakLoading = null;
-const MESPEAK_BASE = 'https://cdn.jsdelivr.net/npm/mespeak@2.0.10/';
 
 function toast(msg, ms=2200) {
   toastEl.textContent = msg;
@@ -187,24 +186,25 @@ function toast(msg, ms=2200) {
   setTimeout(()=>toastEl.classList.remove('show'), ms);
 }
 
-/* -------- Lazy-load meSpeak voice + config (only when first MP3 needed) -------- */
+/* -------- Lazy-load meSpeak voice (only when first MP3 needed) -------- */
 function ensureMespeak() {
   if (mespeakReady) return Promise.resolve();
   if (mespeakLoading) return mespeakLoading;
-  engineStatus.textContent = 'Loading offline TTS engine…';
+  if (typeof meSpeak === 'undefined') {
+    engineStatus.textContent = 'TTS script failed to load';
+    return Promise.reject(new Error('meSpeak script not loaded — check that /training/vendor/mespeak/mespeak.js is reachable.'));
+  }
+  engineStatus.textContent = 'Loading offline TTS voice…';
   mespeakLoading = new Promise((resolve, reject) => {
     try {
-      meSpeak.loadConfig(MESPEAK_BASE + 'src/mespeak_config.json');
-      meSpeak.loadVoice(MESPEAK_BASE + 'voices/en/en-us.json', (success, msg) => {
+      // meSpeak v2: voices are loaded relative to mespeak.js script (vendor/mespeak/voices/...)
+      meSpeak.loadVoice('voices/en/en-us.json', (success, msg) => {
         if (!success) {
-          // fallback to plain en
-          meSpeak.loadVoice(MESPEAK_BASE + 'voices/en/en.json', (s2, m2) => {
-            if (!s2) { engineStatus.textContent = 'TTS load failed'; return reject(new Error(m2 || 'voice load failed')); }
-            mespeakReady = true; engineStatus.textContent = 'Offline TTS ready (en)'; resolve();
-          });
-          return;
+          engineStatus.textContent = 'TTS voice load failed';
+          return reject(new Error(msg || 'voice load failed'));
         }
-        mespeakReady = true; engineStatus.textContent = 'Offline TTS ready (en-US)';
+        mespeakReady = true;
+        engineStatus.textContent = 'Offline TTS ready (en-US)';
         resolve();
       });
     } catch (e) { engineStatus.textContent = 'TTS unavailable'; reject(e); }
@@ -343,21 +343,21 @@ function pcmToMp3(samples, sampleRate, kbps=64) {
   return new Blob(mp3Chunks, { type: 'audio/mpeg' });
 }
 
-/* -------- Speak one chunk via meSpeak → returns Int16Array PCM -------- */
+/* -------- Speak one chunk via meSpeak (v2 callback API) → returns Int16Array PCM -------- */
 function mespeakSynth(text, opts={}) {
   return new Promise((resolve, reject) => {
     try {
-      const ab = meSpeak.speak(text, {
+      meSpeak.speak(text, {
         amplitude: 100,
         speed: 165,
         pitch: 50,
         wordgap: 1,
         variant: opts.variant || 'm3',
-        rawdata: 'ArrayBuffer'
+        rawdata: 'arraybuffer'
+      }, (success, id, stream) => {
+        if (!success || !stream) return reject(new Error('meSpeak synth failed'));
+        try { resolve(parseWav(stream)); } catch (e) { reject(e); }
       });
-      if (!ab) return reject(new Error('meSpeak returned no data'));
-      // meSpeak returns synchronously when rawdata is set, but be defensive
-      Promise.resolve(ab).then(buf => resolve(parseWav(buf))).catch(reject);
     } catch (e) { reject(e); }
   });
 }
@@ -388,6 +388,9 @@ async function buildRoleMp3Azure(role, onProgress) {
     });
     if (!res.ok) {
       const err = await res.text();
+      if (res.status === 503) {
+        throw new Error('Azure Speech is not configured on the server. Switch the engine selector to "Offline" or ask your admin to set AZURE_SPEECH_KEY.');
+      }
       throw new Error('Azure TTS failed: ' + err);
     }
     chunks.push(await res.arrayBuffer());
