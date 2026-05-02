@@ -309,7 +309,25 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="p-8 bg-gray-50 min-h-screen">{children}</main>
+        <main
+          className="p-8 min-h-screen relative"
+          style={{
+            backgroundColor: '#f9fafb',
+            backgroundImage: "url('/unth-orm-logo.png')",
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center center',
+            backgroundSize: '520px 520px',
+            backgroundAttachment: 'fixed',
+          }}
+        >
+          {/* watermark veil — keeps content readable over logo */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0"
+            style={{ background: 'rgba(249,250,251,0.92)' }}
+          />
+          <div className="relative z-10">{children}</div>
+        </main>
       </div>
     </div>
   );

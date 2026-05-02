@@ -21,7 +21,9 @@
       background: var(--bg);
       color: #1a202c;
       line-height: 1.5;
+      position: relative;
     }
+    .container, header.page { position: relative; z-index: 1; }
     header.page {
       background: linear-gradient(135deg, var(--unth-blue), var(--unth-blue-2));
       color: #fff;
@@ -112,9 +114,12 @@
 
 <header class="page">
   <a class="back" href="./index.html">← Back to Slide Deck</a>
+  <img src="/unth-orm-logo.png" alt="UNTH ORM Logo" style="width:96px;height:96px;object-fit:contain;display:block;margin:0 auto 8px;background:#fff;border-radius:50%;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,0.18);" />
   <h1>📥 Training Downloads</h1>
   <p>Per-role MP3 voiceovers and PDF handouts — works offline, ready to share on WhatsApp or email</p>
 </header>
+<!-- page watermark -->
+<div aria-hidden="true" style="position:fixed; inset:0; pointer-events:none; z-index:0; background:url('/unth-orm-logo.png') center center no-repeat; background-size:520px 520px; opacity:0.04;"></div>
 
 <main class="container">
 
@@ -124,6 +129,10 @@
       <span class="pill" id="engineStatus">Loading TTS engine…</span>
     </div>
     <div class="right">
+      <select id="engineSelect" class="voice-select" title="Voice engine for downloaded MP3">
+        <option value="offline">Offline (free, robotic) — meSpeak</option>
+        <option value="azure">Azure Neural (natural human voice)</option>
+      </select>
       <select id="voiceSelect" class="voice-select" title="Voice for in-browser playback">
         <option>Loading voices…</option>
       </select>
@@ -204,9 +213,30 @@ function ensureMespeak() {
 }
 
 /* -------- Web Speech API voice picker (for live playback) -------- */
+const AZURE_VOICES = [
+  { id: 'en-NG-EzinneNeural', name: '🇳🇬 Ezinne (Nigerian English, female)' },
+  { id: 'en-NG-AbeoNeural',   name: '🇳🇬 Abeo (Nigerian English, male)' },
+  { id: 'en-GB-SoniaNeural',  name: '🇬🇧 Sonia (British, female)' },
+  { id: 'en-GB-RyanNeural',   name: '🇬🇧 Ryan (British, male)' },
+  { id: 'en-US-AriaNeural',   name: '🇺🇸 Aria (US, female)' },
+  { id: 'en-US-GuyNeural',    name: '🇺🇸 Guy (US, male)' },
+  { id: 'en-US-JennyNeural',  name: '🇺🇸 Jenny (US, female, conversational)' },
+];
 function refreshVoices() {
-  const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  const engine = (document.getElementById('engineSelect') || {}).value || 'offline';
   voiceSelect.innerHTML = '';
+  if (engine === 'azure') {
+    AZURE_VOICES.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id; opt.textContent = v.name;
+      opt.dataset.azureVoice = v.id;
+      voiceSelect.appendChild(opt);
+    });
+    voiceSelect.dataset.azureVoice = AZURE_VOICES[0].id;
+    voiceSelect.onchange = () => { voiceSelect.dataset.azureVoice = voiceSelect.value; };
+    return;
+  }
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
   if (!voices.length) {
     voiceSelect.innerHTML = '<option>(No English voice available)</option>';
     return;
@@ -226,6 +256,8 @@ if ('speechSynthesis' in window) {
 } else {
   voiceSelect.innerHTML = '<option>SpeechSynthesis not supported</option>';
 }
+// React to engine switch
+document.getElementById('engineSelect').addEventListener('change', refreshVoices);
 
 /* -------- Live playback using SpeechSynthesis (best quality) -------- */
 let activeUtterances = [];
@@ -332,6 +364,41 @@ function mespeakSynth(text, opts={}) {
 
 /* -------- Build full role MP3 (concat slide narrations) -------- */
 async function buildRoleMp3(role, onProgress) {
+  const engine = (document.getElementById('engineSelect') || {}).value || 'offline';
+  if (engine === 'azure') {
+    return buildRoleMp3Azure(role, onProgress);
+  }
+  return buildRoleMp3Offline(role, onProgress);
+}
+
+/* -------- Azure Neural TTS (natural human voice) -------- */
+async function buildRoleMp3Azure(role, onProgress) {
+  // Stitch the whole role into one script and let Azure render a single MP3
+  // (Azure REST returns audio/mpeg directly when the right output format is set)
+  const sel = document.getElementById('voiceSelect');
+  const azureVoice = (sel && sel.dataset.azureVoice) || 'en-NG-EzinneNeural';
+  const chunks = [];
+  for (let i = 0; i < role.slides.length; i++) {
+    const s = role.slides[i];
+    const text = `${s.title}. ${s.narration}`;
+    const res = await fetch('/api/training/tts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, voice: azureVoice })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error('Azure TTS failed: ' + err);
+    }
+    chunks.push(await res.arrayBuffer());
+    onProgress && onProgress((i+1) / role.slides.length);
+  }
+  // Concat MP3 frames (safe — MPEG frames are independently decodable)
+  return new Blob(chunks, { type: 'audio/mpeg' });
+}
+
+/* -------- Offline TTS via meSpeak -------- */
+async function buildRoleMp3Offline(role, onProgress) {
   await ensureMespeak();
   const segments = [];
   let sampleRate = 22050;
@@ -364,9 +431,12 @@ async function buildRoleMp3(role, onProgress) {
 /* -------- Build PDF for role -------- */
 function buildRolePdfHtml(role) {
   const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
+  const watermark = `<img src="/unth-orm-logo.png" crossorigin="anonymous" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:160mm; height:160mm; object-fit:contain; opacity:0.06; pointer-events:none;" />`;
   const cover = `
     <div class="pdf-page pdf-cover">
       <div class="pdf-band" style="background:${role.accent}"></div>
+      ${watermark}
+      <img src="/unth-orm-logo.png" crossorigin="anonymous" style="width:50mm;height:50mm;object-fit:contain;margin:8mm auto 6mm;display:block;" />
       <span class="badge">UNTH Operative Resource Manager</span>
       <h1 style="color:${role.accent}">${role.title}</h1>
       <div class="sub">Training & Responsibilities Handbook</div>
@@ -380,6 +450,7 @@ function buildRolePdfHtml(role) {
   const slides = role.slides.map((s, idx) => `
     <div class="pdf-page">
       <div class="pdf-band" style="background:${role.accent}"></div>
+      ${watermark}
       <h2 style="color:${role.accent}">${escapeHtml(s.title)}</h2>
       <h3>Slide ${idx+1} of ${role.slides.length}</h3>
       <ul>${s.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>
