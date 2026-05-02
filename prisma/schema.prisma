@@ -528,6 +528,36 @@ model User {
   @@map("users")
 }
 
+// Public staff onboarding form submissions. Anyone with the share link can
+// submit; an admin reviews + clicks "Import" to push selected entries through
+// the existing /api/users/bulk-upload pipeline.
+model OnboardingSubmission {
+  id            String    @id @default(uuid())
+  fullName      String
+  username      String
+  email         String?
+  role          String    // Stored as plain string so the form's role list can
+                          // be validated independently of the Prisma enum.
+  phoneNumber   String?
+  department    String?
+  staffCode     String?
+  staffId       String?
+  title         String?   // Dr / Mr / Mrs / Prof / etc.
+  notes         String?
+  status        String    @default("PENDING") // PENDING | IMPORTED | REJECTED
+  importedAt    DateTime?
+  importedBy    String?
+  importError   String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("onboarding_submissions")
+}
+
 model Roster {
   id               String        @id @default(uuid())
   userId           String

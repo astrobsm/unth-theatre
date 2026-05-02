@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download } from 'lucide-react';
+import OnboardingSubmissionsPanel from '@/components/OnboardingSubmissionsPanel';
 // XLSX loaded dynamically when needed (export/import actions)
 
 interface User {
@@ -331,6 +332,9 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      {/* Online Onboarding Submissions (shareable form) */}
+      <OnboardingSubmissionsPanel onImportedRefresh={fetchUsers} />
 
       {/* Pending Approvals */}
       {pendingUsers.length > 0 && (
