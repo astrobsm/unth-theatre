@@ -73,13 +73,32 @@ function formatDataAge(timestamp: number): string {
 // Pleasant, professional hospital notification chime using Web Audio API
 // Three-tone ascending chime followed by voice announcement
 // Priority-aware: CRITICAL = firm tone, HIGH = moderate, MEDIUM = gentle
+interface AlertDetails {
+  patientName?: string;
+  age?: number;
+  gender?: string;
+  ward?: string;
+  procedureName?: string;
+  surgeonName?: string;
+  anesthetistName?: string | null;
+  theatreName?: string | null;
+  bloodRequired?: boolean;
+  bloodType?: string;
+  bloodUnits?: number;
+}
+
 class AudioAlertEngine {
   private enabled = false;
   private alarmInterval: NodeJS.Timeout | null = null;
   private playing = false;
   private audioCtx: AudioContext | null = null;
   private lastPlayTime = 0; // cooldown to prevent rapid re-triggers
+  private currentDetails: AlertDetails | null = null;
   private static COOLDOWN_MS = 15_000; // minimum 15s between announcements
+
+  setDetails(details: AlertDetails | null) {
+    this.currentDetails = details;
+  }
 
   init() {
     this.enabled = true;
@@ -294,8 +313,82 @@ class AudioAlertEngine {
     });
   }
 
-  // Full alert sequence: chime → short pause → recorded voice announcement
-  async playVoiceAlert(priority = 'HIGH') {
+  // Build a natural-sounding narration of the patient & team details.
+  // Spoken AFTER the recorded EMERGENCY ACTIVATION audio finishes.
+  private buildDetailsScript(d: AlertDetails): string {
+    const parts: string[] = [];
+
+    // 1. Operating surgical team
+    const team: string[] = [];
+    if (d.surgeonName) team.push(`lead surgeon, ${d.surgeonName}`);
+    if (d.anesthetistName) team.push(`anaesthetist, ${d.anesthetistName}`);
+    if (team.length > 0) {
+      parts.push(`Operating surgical team: ${team.join('; and ')}.`);
+    }
+    if (d.theatreName) parts.push(`Theatre assigned: ${d.theatreName}.`);
+
+    // 2. Patient demographics & location
+    const demo: string[] = [];
+    if (typeof d.age === 'number' && d.age > 0) {
+      demo.push(`${d.age} year old`);
+    }
+    if (d.gender) {
+      const g = d.gender.toLowerCase();
+      demo.push(g === 'm' ? 'male' : g === 'f' ? 'female' : g);
+    }
+    if (d.patientName) {
+      const who = demo.length > 0
+        ? `Patient ${d.patientName}, ${demo.join(', ')}`
+        : `Patient ${d.patientName}`;
+      parts.push(`${who}.`);
+    } else if (demo.length > 0) {
+      parts.push(`Patient is a ${demo.join(', ')}.`);
+    }
+    if (d.ward) parts.push(`Currently on ${d.ward}.`);
+
+    // 3. Blood requirement
+    if (d.bloodRequired) {
+      const units = d.bloodUnits && d.bloodUnits > 0 ? `${d.bloodUnits} unit${d.bloodUnits > 1 ? 's' : ''}` : 'blood';
+      const type = d.bloodType ? ` of group ${d.bloodType}` : '';
+      parts.push(`Blood transfusion required: ${units}${type}. Please prepare immediately.`);
+    } else {
+      parts.push('No blood transfusion currently required.');
+    }
+
+    return parts.join(' ');
+  }
+
+  private speakDetails(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) {
+        resolve();
+        return;
+      }
+      try {
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.92;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        utterance.lang = 'en-US';
+        const voices = synth.getVoices();
+        const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+          || voices.find(v => v.name.includes('Microsoft') && v.lang.startsWith('en'))
+          || voices.find(v => v.lang.startsWith('en-'));
+        if (preferred) utterance.voice = preferred;
+        // Safety: allow up to 30s for the narration
+        const timeout = setTimeout(() => { synth.cancel(); resolve(); }, 30000);
+        utterance.onend = () => { clearTimeout(timeout); resolve(); };
+        utterance.onerror = () => { clearTimeout(timeout); resolve(); };
+        synth.speak(utterance);
+        console.log('[AudioEngine] Speaking patient details');
+      } catch { resolve(); }
+    });
+  }
+
+  // Full alert sequence: chime → short pause → recorded voice announcement → patient/team narration
+  async playVoiceAlert(priority = 'HIGH', details?: AlertDetails | null) {
     if (!this.enabled || this.playing) return;
 
     // Enforce cooldown — prevent rapid re-triggers from polling/SSE updates
@@ -305,28 +398,43 @@ class AudioAlertEngine {
     this.playing = true;
     this.lastPlayTime = now;
 
+    // Use explicit details when provided, else fall back to the most-recent set details
+    const activeDetails = details ?? this.currentDetails;
+
     try {
       await this.playChime(priority);
       // Brief pause between chime and voice — tight coupling for synchronized alert
       await new Promise(r => setTimeout(r, 250));
       await this.playAnnouncement(priority);
+      // After the recorded MP3 ends, narrate the operating team, blood need,
+      // ward location, age and gender via Speech Synthesis.
+      if (activeDetails) {
+        const script = this.buildDetailsScript(activeDetails);
+        if (script) {
+          await new Promise(r => setTimeout(r, 400));
+          await this.speakDetails(script);
+        }
+      }
     } catch {
+      // ignore
+    } finally {
       this.playing = false;
     }
   }
 
-  playForPriority(priority: string) {
-    this.playVoiceAlert(priority);
+  playForPriority(priority: string, details?: AlertDetails | null) {
+    this.playVoiceAlert(priority, details);
   }
 
   // Continuous alert loop — plays every 5 minutes while emergencies exist
-  // Safe to call multiple times; will not restart if already running
+  // Safe to call multiple times; will not restart if already running.
+  // Reads the latest details set via setDetails() on each repeat.
   startContinuousAlarm(priority: string) {
     // If alarm is already running, don't restart it
     // This prevents SSE/polling updates from re-triggering the alarm loop
     if (this.alarmInterval) return;
 
-    // Play immediately
+    // Play immediately (uses currentDetails)
     this.playVoiceAlert(priority);
     // Then repeat every 5 minutes
     this.alarmInterval = setInterval(() => {
@@ -410,11 +518,23 @@ export default function EmergencyDisplayPage() {
       // The continuous alarm handles ongoing notifications;
       // this handles genuinely new emergencies arriving between alarm cycles
       if (!audioRef.current.hasAlarmRunning()) {
+        const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
         const highestPriority = newlyAdded.reduce((best, e) => {
-          const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
           return (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best;
         }, newlyAdded[0]);
-        audioRef.current.playForPriority(highestPriority.priority);
+        audioRef.current.playForPriority(highestPriority.priority, {
+          patientName: highestPriority.patientName,
+          age: highestPriority.age,
+          gender: highestPriority.gender,
+          ward: highestPriority.ward,
+          procedureName: highestPriority.procedureName,
+          surgeonName: highestPriority.surgeonName,
+          anesthetistName: highestPriority.anesthetistName,
+          theatreName: highestPriority.theatreName,
+          bloodRequired: highestPriority.bloodRequired,
+          bloodType: highestPriority.bloodType,
+          bloodUnits: highestPriority.bloodUnits,
+        });
       }
     }
 
@@ -611,6 +731,23 @@ export default function EmergencyDisplayPage() {
         (order[e.priority] ?? 2) < (order[best.priority] ?? 2) ? e : best
       , emergencies[0]);
       highestPriorityRef.current = highest.priority;
+      // Keep the audio engine's narration in sync with the most urgent case,
+      // so the next continuous-alarm cycle speaks the latest team & patient details.
+      audioRef.current?.setDetails({
+        patientName: highest.patientName,
+        age: highest.age,
+        gender: highest.gender,
+        ward: highest.ward,
+        procedureName: highest.procedureName,
+        surgeonName: highest.surgeonName,
+        anesthetistName: highest.anesthetistName,
+        theatreName: highest.theatreName,
+        bloodRequired: highest.bloodRequired,
+        bloodType: highest.bloodType,
+        bloodUnits: highest.bloodUnits,
+      });
+    } else {
+      audioRef.current?.setDetails(null);
     }
   }, [emergencies]);
 
