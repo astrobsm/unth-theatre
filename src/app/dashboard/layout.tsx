@@ -326,7 +326,15 @@ export default function DashboardLayout({
             className="pointer-events-none fixed inset-0 z-0"
             style={{ background: 'rgba(249,250,251,0.92)' }}
           />
-          <div className="relative z-10">{children}</div>
+          {/*
+            IMPORTANT: do NOT give this wrapper a z-index. A positioned element
+            with z-index creates a new stacking context and traps every modal
+            inside it (their fixed/z-50 overlays end up below the sticky
+            header z-30 and sidebar z-40). `relative` alone is enough to keep
+            children above the watermark veil while letting modals render in
+            the root stacking context.
+          */}
+          <div className="relative">{children}</div>
         </main>
       </div>
     </div>
