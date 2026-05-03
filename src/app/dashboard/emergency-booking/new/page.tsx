@@ -3,7 +3,29 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Siren, Droplet } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Siren, Droplet, Users } from 'lucide-react';
+
+type OnDutyMember = {
+  userId: string;
+  name: string;
+  role: string;
+  staffCode: string | null;
+  phoneNumber: string | null;
+  seniorityLevel: string | null;
+};
+
+type OnDutyTeam = {
+  date: string;
+  shift: string;
+  team: {
+    anaesthetist: OnDutyMember | null;
+    anaestheticTechnician: OnDutyMember | null;
+    scrubNurse: OnDutyMember | null;
+    cleaner: OnDutyMember | null;
+    porter: OnDutyMember | null;
+  };
+  rostersFound: number;
+};
 
 export default function NewEmergencyBookingPage() {
   const { data: session } = useSession();
@@ -12,6 +34,9 @@ export default function NewEmergencyBookingPage() {
   const [error, setError] = useState('');
   const [surgeons, setSurgeons] = useState<{ id: string; fullName: string }[]>([]);
   const [anesthetists, setAnesthetists] = useState<{ id: string; fullName: string }[]>([]);
+  const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
+  const [onDutyLoading, setOnDutyLoading] = useState(false);
+  const [onDutyError, setOnDutyError] = useState('');
 
   const [form, setForm] = useState({
     patientName: '',
@@ -57,6 +82,45 @@ export default function NewEmergencyBookingPage() {
     fetchStaff();
   }, []);
 
+  // Auto-fetch on-duty emergency team whenever the requested date/time changes.
+  useEffect(() => {
+    if (!form.requiredByTime) {
+      setOnDuty(null);
+      setOnDutyError('');
+      return;
+    }
+    const controller = new AbortController();
+    const run = async () => {
+      setOnDutyLoading(true);
+      setOnDutyError('');
+      try {
+        const url = `/api/roster/on-duty?date=${encodeURIComponent(form.requiredByTime)}`;
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Failed to fetch on-duty team (HTTP ${res.status})`);
+        }
+        const data: OnDutyTeam = await res.json();
+        setOnDuty(data);
+        // Auto-select the anaesthetist on duty if one is found and the user
+        // hasn't already picked someone manually.
+        if (data.team.anaesthetist?.userId) {
+          setForm((prev) =>
+            prev.anesthetistId ? prev : { ...prev, anesthetistId: data.team.anaesthetist!.userId }
+          );
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        setOnDuty(null);
+        setOnDutyError(err.message || 'Failed to fetch on-duty team');
+      } finally {
+        setOnDutyLoading(false);
+      }
+    };
+    run();
+    return () => controller.abort();
+  }, [form.requiredByTime]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
@@ -98,6 +162,23 @@ export default function NewEmergencyBookingPage() {
         bloodUnits: form.bloodRequired && form.bloodUnits ? parseInt(form.bloodUnits) : undefined,
         specialEquipment: form.specialEquipment || undefined,
         specialRequirements: form.specialRequirements || undefined,
+        // Auto-fetched on-duty emergency team (advisory — backend may use to notify)
+        onDutyTeam: onDuty
+          ? {
+              date: onDuty.date,
+              shift: onDuty.shift,
+              anaesthetistId: onDuty.team.anaesthetist?.userId ?? null,
+              anaesthetistName: onDuty.team.anaesthetist?.name ?? null,
+              anaestheticTechnicianId: onDuty.team.anaestheticTechnician?.userId ?? null,
+              anaestheticTechnicianName: onDuty.team.anaestheticTechnician?.name ?? null,
+              scrubNurseId: onDuty.team.scrubNurse?.userId ?? null,
+              scrubNurseName: onDuty.team.scrubNurse?.name ?? null,
+              cleanerId: onDuty.team.cleaner?.userId ?? null,
+              cleanerName: onDuty.team.cleaner?.name ?? null,
+              porterId: onDuty.team.porter?.userId ?? null,
+              porterName: onDuty.team.porter?.name ?? null,
+            }
+          : undefined,
       };
 
       const res = await fetch('/api/emergency-booking', {
@@ -219,6 +300,76 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+
+        {/* On-Duty Emergency Team — auto-fetched from roster */}
+        {form.requiredByTime && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold mb-1 text-gray-800 flex items-center gap-2">
+              <Users className="h-5 w-5 text-red-600" />
+              On-Duty Emergency Team
+            </h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Auto-fetched from the duty roster for the selected date / time.
+              {onDuty && (
+                <span className="ml-1">Shift: <strong>{onDuty.shift}</strong></span>
+              )}
+            </p>
+
+            {onDutyLoading && (
+              <div className="text-sm text-gray-600 flex items-center gap-2">
+                <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full" />
+                Looking up roster…
+              </div>
+            )}
+
+            {onDutyError && !onDutyLoading && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                {onDutyError}
+              </div>
+            )}
+
+            {onDuty && !onDutyLoading && (
+              onDuty.rostersFound === 0 ? (
+                <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+                  No roster entries found for {onDuty.date} ({onDuty.shift} shift). Please assign manually below.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { label: 'Anaesthetist', m: onDuty.team.anaesthetist },
+                    { label: 'Anaesthetic Technician', m: onDuty.team.anaestheticTechnician },
+                    { label: 'Scrub Nurse', m: onDuty.team.scrubNurse },
+                    { label: 'Cleaner', m: onDuty.team.cleaner },
+                    { label: 'Porter', m: onDuty.team.porter },
+                  ].map(({ label, m }) => (
+                    <div
+                      key={label}
+                      className={`p-3 rounded border ${m ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+                      {m ? (
+                        <>
+                          <p className="font-semibold text-gray-900">
+                            {m.name}
+                            {m.seniorityLevel && (
+                              <span className="ml-2 text-xs text-gray-500">({m.seniorityLevel.replace(/_/g, ' ')})</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {m.staffCode || m.role.replace(/_/g, ' ')}
+                            {m.phoneNumber && <span className="ml-2">· {m.phoneNumber}</span>}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No one on duty for this role</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        )}
 
         {/* Priority & Classification */}
         <div className="bg-white rounded-lg shadow p-6">
