@@ -52,6 +52,7 @@ import {
   Eye,
   Volume2,
   GraduationCap,
+  ChefHat,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -149,6 +150,7 @@ export default function DashboardLayout({
 
     // === REPORTS & ADMINISTRATION ===
     { href: '/dashboard/announcements', icon: Volume2, label: 'Announcements', badge: 'NEW' },
+    { href: '/dashboard/theatre-meals', icon: ChefHat, label: 'Theatre Meals', badge: 'NEW' },
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
@@ -182,6 +184,7 @@ export default function DashboardLayout({
     PLUMBER: ['/dashboard', '/dashboard/plumbing-water-supply', '/dashboard/works-supervisor', '/dashboard/fault-alerts', '/dashboard/settings'],
     PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/call-for-patient', '/dashboard/emergency-booking', '/dashboard/settings'],
     CLEANER: ['/dashboard', '/dashboard/settings'],
+    THEATRE_CAFETERIA_MANAGER: ['/dashboard', '/dashboard/theatre-meals', '/dashboard/roster', '/dashboard/settings'],
   };
 
   const allowedPaths = roleMenuMap[session.user.role];
