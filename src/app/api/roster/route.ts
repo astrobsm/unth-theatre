@@ -9,10 +9,13 @@ export const dynamic = 'force-dynamic';
 const rosterSchema = z.object({
   userId: z.string(),
   staffName: z.string(),
-  staffCategory: z.enum(['NURSES', 'ANAESTHETISTS', 'PORTERS', 'CLEANERS', 'ANAESTHETIC_TECHNICIANS']),
+  staffCategory: z.enum(['NURSES', 'ANAESTHETISTS', 'PORTERS', 'CLEANERS', 'ANAESTHETIC_TECHNICIANS', 'PHARMACISTS', 'RECOVERY_NURSES']),
   date: z.string(),
   theatreId: z.string().optional().nullable(),
   shift: z.enum(['MORNING', 'CALL', 'NIGHT']),
+  seniorityLevel: z.string().optional().nullable(),
+  subRole: z.string().optional().nullable(),
+  location: z.enum(['MAIN_THEATRE', 'A_AND_E']).optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -102,6 +105,9 @@ export async function POST(request: NextRequest) {
         date: new Date(validatedData.date),
         theatreId: validatedData.theatreId,
         shift: validatedData.shift,
+        seniorityLevel: validatedData.seniorityLevel ?? null,
+        subRole: validatedData.subRole ?? null,
+        location: validatedData.location ?? null,
         uploadedBy: session.user.id,
         notes: validatedData.notes,
       },

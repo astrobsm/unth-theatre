@@ -316,6 +316,8 @@ enum StaffCategory {
   PORTERS
   CLEANERS
   ANAESTHETIC_TECHNICIANS
+  PHARMACISTS
+  RECOVERY_NURSES
 }
 
 enum AllocationType {
@@ -567,8 +569,10 @@ model Roster {
   userId           String
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   staffName        String        // Name from Excel upload
-  staffCategory    StaffCategory // NURSES, ANAESTHETISTS, PORTERS, CLEANERS, ANAESTHETIC_TECHNICIANS
-  seniorityLevel   String?       // For ANAESTHETISTS: CONSULTANT, SENIOR_REGISTRAR, REGISTRAR
+  staffCategory    StaffCategory // NURSES, ANAESTHETISTS, PORTERS, CLEANERS, ANAESTHETIC_TECHNICIANS, PHARMACISTS, RECOVERY_NURSES
+  seniorityLevel   String?       // For ANAESTHETISTS / ANAESTHETIC_TECHNICIANS: CONSULTANT, SENIOR_REGISTRAR, REGISTRAR
+  subRole          String?       // For NURSES: SCRUB, CIRCULATING, HOLDING_AREA, SUPERVISING
+  location         String?       // MAIN_THEATRE | A_AND_E (defaults to MAIN_THEATRE in app)
   date             DateTime      @db.Date
   theatreId        String?
   theatre          TheatreSuite? @relation(fields: [theatreId], references: [id], onDelete: SetNull)
@@ -579,6 +583,7 @@ model Roster {
 
   @@index([date, theatreId, shift])
   @@index([staffCategory, date])
+  @@index([location, date])
   @@map("rosters")
 }
 

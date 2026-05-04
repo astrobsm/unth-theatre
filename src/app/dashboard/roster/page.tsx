@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download } from 'lucide-react';
+import Link from 'next/link';
+import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download, ClipboardCheck } from 'lucide-react';
 // XLSX loaded dynamically when needed (export/import actions)
 import { THEATRES } from '@/lib/constants';
 
@@ -40,6 +41,8 @@ export default function RosterPage() {
     { value: 'PORTERS', label: 'Porters' },
     { value: 'CLEANERS', label: 'Cleaners' },
     { value: 'ANAESTHETIC_TECHNICIANS', label: 'Anaesthetic Technicians' },
+    { value: 'PHARMACISTS', label: 'Pharmacists' },
+    { value: 'RECOVERY_NURSES', label: 'Recovery Room Nurses' },
   ];
 
   useEffect(() => {
@@ -222,6 +225,8 @@ export default function RosterPage() {
       PORTERS: 'bg-yellow-100 text-yellow-800',
       CLEANERS: 'bg-indigo-100 text-indigo-800',
       ANAESTHETIC_TECHNICIANS: 'bg-pink-100 text-pink-800',
+      PHARMACISTS: 'bg-cyan-100 text-cyan-800',
+      RECOVERY_NURSES: 'bg-purple-100 text-purple-800',
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
@@ -248,8 +253,29 @@ export default function RosterPage() {
         </div>
       </div>
 
+      {/* Weekly forms call-out */}
+      <Link
+        href="/dashboard/roster/weekly"
+        className="block rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-indigo-50 p-5 hover:shadow-md transition"
+      >
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-lg bg-primary-600 text-white">
+            <ClipboardCheck className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-primary-900">Weekly Roster Forms</h2>
+            <p className="text-sm text-primary-800 mt-1">
+              Unit leads — submit your group&apos;s weekly roster (Nurses, Anaesthetists, Anaesthetic Technicians,
+              Porters, Cleaners, Pharmacists, Recovery Room Nurses) <strong>every Thursday before 12:00 noon</strong>.
+              Separate forms cover the Main Theatre Complex and the Accident &amp; Emergency Theatre.
+            </p>
+            <p className="text-xs font-semibold text-primary-700 mt-2">Open weekly forms →</p>
+          </div>
+        </div>
+      </Link>
+
       {/* Upload Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {staffCategories.slice(1).map((category) => (
           <div key={category.value} className="card">
             <div className="flex items-center justify-between mb-3">

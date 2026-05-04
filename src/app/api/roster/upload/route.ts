@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate staff category
-    const validCategories = ['NURSES', 'ANAESTHETISTS', 'PORTERS', 'CLEANERS', 'ANAESTHETIC_TECHNICIANS'];
+    const validCategories = ['NURSES', 'ANAESTHETISTS', 'PORTERS', 'CLEANERS', 'ANAESTHETIC_TECHNICIANS', 'PHARMACISTS', 'RECOVERY_NURSES'];
     if (!validCategories.includes(staffCategory)) {
       return NextResponse.json(
         { error: `Invalid staff category. Must be one of: ${validCategories.join(', ')}` },
