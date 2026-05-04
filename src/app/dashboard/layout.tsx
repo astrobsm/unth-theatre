@@ -169,6 +169,12 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/security-reports/view', icon: Eye, label: 'Review Security', badge: 'ADMIN' });
   }
 
+  // Live monitoring — visible to admins, theatre manager and chairman
+  const monitoringRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'];
+  if (monitoringRoles.includes(session.user.role)) {
+    menuItems.push({ href: '/dashboard/live-monitoring', icon: Activity, label: 'Live Monitoring', badge: 'LIVE' });
+  }
+
   // Role-based menu filtering — show only relevant items per role
   // Roles NOT listed here see ALL menu items (e.g. ADMIN, SURGEON, ANESTHETIST, NURSE, etc.)
   const roleMenuMap: Record<string, string[]> = {

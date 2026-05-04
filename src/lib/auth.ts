@@ -65,6 +65,41 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/auth/login",
   },
+  events: {
+    async signIn({ user }) {
+      try {
+        if (user?.id) {
+          await prisma.auditLog.create({
+            data: {
+              userId: user.id,
+              action: "LOGIN",
+              tableName: "users",
+              recordId: user.id,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[auth.events.signIn] failed to record audit log:", e);
+      }
+    },
+    async signOut({ token }) {
+      try {
+        const uid = (token as any)?.id;
+        if (uid) {
+          await prisma.auditLog.create({
+            data: {
+              userId: uid,
+              action: "LOGOUT",
+              tableName: "users",
+              recordId: uid,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[auth.events.signOut] failed to record audit log:", e);
+      }
+    },
+  },
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
