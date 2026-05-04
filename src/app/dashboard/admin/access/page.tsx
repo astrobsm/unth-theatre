@@ -53,7 +53,16 @@ export default function ModuleAccessAdminPage() {
     setError(null);
     try {
       const res = await fetch('/api/admin/user-access', { cache: 'no-store' });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        let msg = res.statusText;
+        try {
+          const j = await res.json();
+          msg = j.hint ? `${j.hint}\n\n(${j.error || ''})` : (j.error || msg);
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
       const data = (await res.json()) as ListResponse;
       setUsers(data.users);
       setModules(data.modules);

@@ -30,56 +30,73 @@ export async function GET(request: NextRequest) {
 
   const userId = request.nextUrl.searchParams.get("userId");
 
-  if (userId) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+  try {
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          fullName: true,
+          username: true,
+          role: true,
+          status: true,
+          moduleGrants: { select: { moduleId: true, grantedAt: true, grantedById: true } },
+        },
+      });
+      if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({
+        user: {
+          id: user.id,
+          fullName: user.fullName,
+          username: user.username,
+          role: user.role,
+          status: user.status,
+          isFullAccess: isFullAccessRole(user.role),
+        },
+        grants: user.moduleGrants.map((g) => g.moduleId),
+        modules: GRANTABLE_MODULES,
+      });
+    }
+
+    const users = await prisma.user.findMany({
+      where: { status: "APPROVED" },
+      orderBy: [{ role: "asc" }, { fullName: "asc" }],
       select: {
         id: true,
         fullName: true,
         username: true,
         role: true,
-        status: true,
-        moduleGrants: { select: { moduleId: true, grantedAt: true, grantedById: true } },
+        _count: { select: { moduleGrants: true } },
       },
     });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
     return NextResponse.json({
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        username: user.username,
-        role: user.role,
-        status: user.status,
-        isFullAccess: isFullAccessRole(user.role),
-      },
-      grants: user.moduleGrants.map((g) => g.moduleId),
+      users: users.map((u) => ({
+        id: u.id,
+        fullName: u.fullName,
+        username: u.username,
+        role: u.role,
+        grantCount: u._count.moduleGrants,
+        isFullAccess: isFullAccessRole(u.role),
+      })),
       modules: GRANTABLE_MODULES,
     });
+  } catch (e: any) {
+    console.error("[/api/admin/user-access GET] failed:", e);
+    const msg = String(e?.message || e);
+    // Likely cause in production: the user_module_grants table does not yet
+    // exist on the prod database. Surface that hint to the admin.
+    const hint =
+      msg.includes("user_module_grants") ||
+      msg.includes("UserModuleGrant") ||
+      e?.code === "P2021"
+        ? "The 'user_module_grants' table is missing on this database. Run `npx prisma db push` against the production DATABASE_URL."
+        : null;
+    return NextResponse.json(
+      { error: msg, hint, code: e?.code ?? null },
+      { status: 500 }
+    );
   }
-
-  const users = await prisma.user.findMany({
-    where: { status: "APPROVED" },
-    orderBy: [{ role: "asc" }, { fullName: "asc" }],
-    select: {
-      id: true,
-      fullName: true,
-      username: true,
-      role: true,
-      _count: { select: { moduleGrants: true } },
-    },
-  });
-
-  return NextResponse.json({
-    users: users.map((u) => ({
-      id: u.id,
-      fullName: u.fullName,
-      username: u.username,
-      role: u.role,
-      grantCount: u._count.moduleGrants,
-      isFullAccess: isFullAccessRole(u.role),
-    })),
-    modules: GRANTABLE_MODULES,
-  });
 }
 
 export async function PUT(request: NextRequest) {

@@ -54,6 +54,8 @@ export const authOptions: NextAuthOptions = {
       }
       // Load per-user module grants from DB. We refresh on initial sign-in
       // and whenever the session is explicitly updated (via update()).
+      // Resilient: if the table doesn't exist yet (pre-`prisma db push` on
+      // production), default to empty so logins keep working.
       if (user || trigger === "update" || token.extraModules === undefined) {
         try {
           const uid = (user?.id as string) || (token.id as string);
@@ -66,8 +68,12 @@ export const authOptions: NextAuthOptions = {
           } else {
             token.extraModules = [];
           }
-        } catch (e) {
-          console.error("[auth.jwt] failed to load module grants:", e);
+        } catch (e: any) {
+          if (e?.code === "P2021" || String(e?.message || "").includes("user_module_grants")) {
+            console.warn("[auth.jwt] user_module_grants table missing — run prisma db push on this DB. Continuing without grants.");
+          } else {
+            console.error("[auth.jwt] failed to load module grants:", e);
+          }
           token.extraModules = token.extraModules || [];
         }
       }
