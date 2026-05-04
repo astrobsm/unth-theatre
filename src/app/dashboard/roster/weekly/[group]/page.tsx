@@ -7,7 +7,16 @@ import { ArrowLeft, Plus, Trash2, Save, Calendar, AlertCircle, CheckCircle2 } fr
 
 // ---------- Group configuration ----------
 type Shift = 'MORNING' | 'CALL' | 'NIGHT';
-type Location = 'MAIN_THEATRE' | 'A_AND_E';
+type Location = 'MAIN_THEATRE' | 'A_AND_E' | 'EYE_THEATRE' | 'CTU_THEATRE';
+
+const LOCATION_LABELS: Record<Location, string> = {
+  MAIN_THEATRE: 'Main Theatre Complex',
+  A_AND_E: 'Accident & Emergency Theatre',
+  EYE_THEATRE: 'Eye Theatre',
+  CTU_THEATRE: 'CTU Theatre',
+};
+
+const ALL_LOCATIONS: Location[] = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE'];
 
 interface GroupConfig {
   slug: string;
@@ -15,9 +24,24 @@ interface GroupConfig {
   category: 'NURSES' | 'ANAESTHETISTS' | 'PORTERS' | 'CLEANERS' | 'ANAESTHETIC_TECHNICIANS' | 'PHARMACISTS' | 'RECOVERY_NURSES';
   shifts: Shift[];
   locations: Location[];
-  seniorityLevels?: string[]; // anaesthetists / techs
+  seniorityLevels?: string[]; // anaesthetists only
   subRoles?: string[];        // nurses
   policy: string;
+  /** UserRole values to query when populating the staff dropdown */
+  userRoles: string[];
+}
+
+interface DirectoryUser {
+  id: string;
+  fullName: string;
+  username: string;
+  role: string;
+}
+
+interface TheatreSuite {
+  id: string;
+  name: string;
+  location: string;
 }
 
 const GROUPS: Record<string, GroupConfig> = {
@@ -26,8 +50,9 @@ const GROUPS: Record<string, GroupConfig> = {
     title: 'Nurses Weekly Roster',
     category: 'NURSES',
     shifts: ['MORNING', 'NIGHT'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
+    locations: ALL_LOCATIONS,
     subRoles: ['SCRUB', 'CIRCULATING', 'HOLDING_AREA', 'SUPERVISING'],
+    userRoles: ['SCRUB_NURSE'],
     policy: 'Morning & Night shifts. Assign each nurse a sub-role: Scrub, Circulating, Holding Area or Supervising.',
   },
   anaesthetists: {
@@ -35,25 +60,27 @@ const GROUPS: Record<string, GroupConfig> = {
     title: 'Anaesthetists Weekly Roster',
     category: 'ANAESTHETISTS',
     shifts: ['MORNING', 'CALL'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
+    locations: ALL_LOCATIONS,
     seniorityLevels: ['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR'],
-    policy: 'Mon–Fri elective list = MORNING (08:00–16:00). On-call covers ALL emergencies Mon–Fri after-hours and weekends = CALL. The Accident & Emergency theatre is rostered separately — switch the location selector above.',
+    userRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
+    policy: 'Mon–Fri elective list = MORNING (08:00–16:00). On-call covers ALL emergencies Mon–Fri after-hours and weekends = CALL. The Accident & Emergency, Eye and CTU theatres are rostered separately — switch the location selector above.',
   },
   'anaesthetic-technicians': {
     slug: 'anaesthetic-technicians',
     title: 'Anaesthetic Technicians Weekly Roster',
     category: 'ANAESTHETIC_TECHNICIANS',
     shifts: ['MORNING', 'CALL'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
-    seniorityLevels: ['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR'],
-    policy: 'Same shift pattern as anaesthetists. Roster Main Theatre and A&E separately.',
+    locations: ALL_LOCATIONS,
+    userRoles: ['ANAESTHETIC_TECHNICIAN'],
+    policy: 'Same shift pattern as anaesthetists. Roster each location separately.',
   },
   porters: {
     slug: 'porters',
     title: 'Porters Weekly Roster',
     category: 'PORTERS',
     shifts: ['MORNING', 'NIGHT'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
+    locations: ALL_LOCATIONS,
+    userRoles: ['PORTER'],
     policy: 'Morning & Night shifts.',
   },
   cleaners: {
@@ -61,7 +88,8 @@ const GROUPS: Record<string, GroupConfig> = {
     title: 'Cleaners Weekly Roster',
     category: 'CLEANERS',
     shifts: ['MORNING', 'NIGHT'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
+    locations: ALL_LOCATIONS,
+    userRoles: ['CLEANER'],
     policy: 'Morning & Night shifts.',
   },
   pharmacists: {
@@ -69,7 +97,8 @@ const GROUPS: Record<string, GroupConfig> = {
     title: 'Pharmacists Weekly Roster',
     category: 'PHARMACISTS',
     shifts: ['MORNING', 'NIGHT'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
+    locations: ALL_LOCATIONS,
+    userRoles: ['PHARMACIST'],
     policy: 'Morning & Night shifts.',
   },
   'recovery-nurses': {
@@ -77,7 +106,8 @@ const GROUPS: Record<string, GroupConfig> = {
     title: 'Recovery Room Nurses Weekly Roster',
     category: 'RECOVERY_NURSES',
     shifts: ['MORNING', 'NIGHT'],
-    locations: ['MAIN_THEATRE', 'A_AND_E'],
+    locations: ALL_LOCATIONS,
+    userRoles: ['RECOVERY_ROOM_NURSE'],
     policy: 'PACU coverage. Morning & Night shifts.',
   },
 };
@@ -85,11 +115,13 @@ const GROUPS: Record<string, GroupConfig> = {
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 interface RosterRow {
-  staffName: string;
+  staffName: string;     // resolved User.fullName (or free-text fallback)
+  userId?: string;       // when chosen from the dropdown
   date: string;          // ISO yyyy-mm-dd
   shift: Shift;
   seniorityLevel?: string;
   subRole?: string;
+  theatreIds: string[];  // multi-select (one staff -> multiple theatres)
   notes?: string;
 }
 
@@ -117,6 +149,55 @@ export default function WeeklyRosterFormPage() {
   const [rows, setRows] = useState<RosterRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; created: number; errors: number; details?: any } | null>(null);
+  const [staffDirectory, setStaffDirectory] = useState<DirectoryUser[]>([]);
+  const [theatres, setTheatres] = useState<TheatreSuite[]>([]);
+  const [loadingDirectory, setLoadingDirectory] = useState(false);
+
+  // Fetch the staff directory for the current group's UserRole(s)
+  useEffect(() => {
+    if (!config) return;
+    let cancelled = false;
+    setLoadingDirectory(true);
+    Promise.all(
+      config.userRoles.map((role) =>
+        fetch(`/api/users?role=${encodeURIComponent(role)}&status=APPROVED`)
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => [])
+      )
+    )
+      .then((lists) => {
+        if (cancelled) return;
+        const flat: DirectoryUser[] = ([] as DirectoryUser[]).concat(...lists);
+        // De-duplicate by id and sort by name
+        const seen = new Set<string>();
+        const merged = flat.filter((u) => {
+          if (!u || seen.has(u.id)) return false;
+          seen.add(u.id);
+          return true;
+        });
+        merged.sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+        setStaffDirectory(merged);
+      })
+      .finally(() => !cancelled && setLoadingDirectory(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [config]);
+
+  // Fetch theatres once
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (cancelled) return;
+        setTheatres(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const weekDates = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -129,8 +210,10 @@ export default function WeeklyRosterFormPage() {
       ...prev,
       {
         staffName: '',
+        userId: undefined,
         date: weekDates[0],
         shift: config.shifts[0],
+        theatreIds: [],
       },
     ]);
   }, [config, weekDates]);
@@ -161,9 +244,31 @@ export default function WeeklyRosterFormPage() {
     setResult(null);
     const cleaned = rows.filter((r) => r.staffName.trim().length > 0);
     if (cleaned.length === 0) {
-      alert('Add at least one staff member with a name.');
+      alert('Add at least one staff member.');
       return;
     }
+    // Expand multi-theatre rows into one entry per theatre (or a single entry with no theatre)
+    type Entry = {
+      staffName: string;
+      date: string;
+      shift: Shift;
+      seniorityLevel?: string;
+      subRole?: string;
+      notes?: string;
+      theatreId?: string;
+    };
+    const expanded: Entry[] = cleaned.flatMap<Entry>((r) => {
+      const base: Entry = {
+        staffName: r.staffName.trim(),
+        date: r.date,
+        shift: r.shift,
+        seniorityLevel: r.seniorityLevel || undefined,
+        subRole: r.subRole || undefined,
+        notes: r.notes || undefined,
+      };
+      if (r.theatreIds.length === 0) return [base];
+      return r.theatreIds.map((tid) => ({ ...base, theatreId: tid }));
+    });
     setSubmitting(true);
     try {
       const res = await fetch('/api/roster/weekly', {
@@ -173,14 +278,7 @@ export default function WeeklyRosterFormPage() {
           staffCategory: config.category,
           weekStart,
           location,
-          entries: cleaned.map((r) => ({
-            staffName: r.staffName.trim(),
-            date: r.date,
-            shift: r.shift,
-            seniorityLevel: r.seniorityLevel || undefined,
-            subRole: r.subRole || undefined,
-            notes: r.notes || undefined,
-          })),
+          entries: expanded,
         }),
       });
       const data = await res.json();
@@ -239,8 +337,9 @@ export default function WeeklyRosterFormPage() {
             className="input w-full"
             aria-label="Roster location"
           >
-            <option value="MAIN_THEATRE">Main Theatre Complex</option>
-            <option value="A_AND_E">Accident &amp; Emergency Theatre</option>
+            {config.locations.map((loc) => (
+              <option key={loc} value={loc}>{LOCATION_LABELS[loc]}</option>
+            ))}
           </select>
         </div>
         <div className="flex items-end">
@@ -260,11 +359,12 @@ export default function WeeklyRosterFormPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-700">
             <tr>
-              <th className="p-3">Staff name / code</th>
+              <th className="p-3">Staff (from directory)</th>
               <th className="p-3">Day</th>
               <th className="p-3">Shift</th>
               {config.seniorityLevels && <th className="p-3">Seniority</th>}
               {config.subRoles && <th className="p-3">Sub-role</th>}
+              <th className="p-3">Theatre(s) assigned</th>
               <th className="p-3">Notes</th>
               <th className="p-3"></th>
             </tr>
@@ -272,20 +372,32 @@ export default function WeeklyRosterFormPage() {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-gray-400">No entries — click “Add staff entry”.</td>
+                <td colSpan={9} className="p-6 text-center text-gray-400">No entries — click “Add staff entry”.</td>
               </tr>
             )}
             {rows.map((r, i) => (
               <tr key={i} className="border-t">
-                <td className="p-2">
-                  <input
-                    type="text"
-                    value={r.staffName}
-                    onChange={(e) => updateRow(i, { staffName: e.target.value })}
-                    placeholder="e.g. Dr. Jane Doe"
+                <td className="p-2 min-w-[14rem]">
+                  <select
+                    value={r.userId || ''}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const user = staffDirectory.find((u) => u.id === id);
+                      updateRow(i, {
+                        userId: id || undefined,
+                        staffName: user?.fullName || '',
+                      });
+                    }}
                     className="input w-full"
-                    aria-label={`Staff name row ${i + 1}`}
-                  />
+                    aria-label={`Staff row ${i + 1}`}
+                  >
+                    <option value="">
+                      {loadingDirectory ? 'Loading…' : `— select ${config.title.replace(' Weekly Roster', '').toLowerCase()} —`}
+                    </option>
+                    {staffDirectory.map((u) => (
+                      <option key={u.id} value={u.id}>{u.fullName}</option>
+                    ))}
+                  </select>
                 </td>
                 <td className="p-2">
                   <select
@@ -341,6 +453,24 @@ export default function WeeklyRosterFormPage() {
                     </select>
                   </td>
                 )}
+                <td className="p-2 min-w-[12rem]">
+                  <select
+                    multiple
+                    value={r.theatreIds}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                      updateRow(i, { theatreIds: selected });
+                    }}
+                    className="input w-full h-24"
+                    aria-label={`Theatres assigned row ${i + 1}`}
+                  >
+                    {theatres.length === 0 && <option disabled>No theatres available</option>}
+                    {theatres.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-500 mt-1">Hold Ctrl / ⌘ to pick multiple. Same theatre may be assigned to multiple staff.</p>
+                </td>
                 <td className="p-2">
                   <input
                     type="text"

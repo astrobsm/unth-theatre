@@ -15,7 +15,7 @@ const rosterSchema = z.object({
   shift: z.enum(['MORNING', 'CALL', 'NIGHT']),
   seniorityLevel: z.string().optional().nullable(),
   subRole: z.string().optional().nullable(),
-  location: z.enum(['MAIN_THEATRE', 'A_AND_E']).optional().nullable(),
+  location: z.enum(['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE']).optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
