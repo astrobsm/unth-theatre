@@ -53,6 +53,20 @@ export default function EmergencyAlertsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
+  // Pre-cache the TV display page so the "Open TV Display" button works offline.
+  // The button uses target="_blank" — a fresh navigation that the SW would
+  // otherwise fall back to the generic /dashboard shell when offline.
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    if (!navigator.onLine) return;
+    const sw = navigator.serviceWorker;
+    if (!sw || !sw.controller) return;
+    sw.controller.postMessage({
+      type: 'PRECACHE_PAGES',
+      urls: ['/dashboard/emergency-alerts/display'],
+    });
+  }, []);
+
   const fetchAlerts = async () => {
     try {
       let url = '/api/emergency-alerts';

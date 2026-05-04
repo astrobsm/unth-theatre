@@ -4,7 +4,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -123,6 +123,31 @@ async function lazyCacheApiRoutes() {
     await new Promise((r) => setTimeout(r, 2000));
   }
 }
+
+// ============================================================
+// MESSAGE - Allow pages to request precaching of specific URLs
+// (used to keep popouts like the Emergency TV display available offline)
+// ============================================================
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'PRECACHE_PAGES' && Array.isArray(data.urls)) {
+    event.waitUntil((async () => {
+      const cache = await caches.open(PAGE_CACHE);
+      await Promise.allSettled(
+        data.urls.map(async (url) => {
+          try {
+            const res = await fetch(url, { credentials: 'include' });
+            if (res.ok) await cache.put(new Request(url), res.clone());
+          } catch (e) {
+            console.log('[SW] PRECACHE_PAGES failed for', url, e);
+          }
+        })
+      );
+    })());
+  } else if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // ============================================================
 // FETCH - Strategy router with full offline support
