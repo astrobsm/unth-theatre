@@ -182,6 +182,21 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/live-monitoring', icon: Activity, label: 'Live Monitoring', badge: 'LIVE' });
   }
 
+  // Public kiosk announcement TVs (open in a new tab so they can be cast to a
+  // wall display). Visible to the relevant department + admins/managers.
+  const labTvRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'LABORATORY_STAFF'];
+  if (labTvRoles.includes(session.user.role)) {
+    menuItems.push({ href: '/announcement-display/lab', icon: FlaskConical, label: 'Lab Announcement TV', badge: 'TV', external: true });
+  }
+  const pharmacyTvRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'PHARMACIST'];
+  if (pharmacyTvRoles.includes(session.user.role)) {
+    menuItems.push({ href: '/announcement-display/pharmacy', icon: Pill, label: 'Pharmacy Announcement TV', badge: 'TV', external: true });
+  }
+  const bloodTvRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'BLOODBANK_STAFF'];
+  if (bloodTvRoles.includes(session.user.role)) {
+    menuItems.push({ href: '/announcement-display/blood-bank', icon: Droplet, label: 'Blood Bank Announcement TV', badge: 'TV', external: true });
+  }
+
   // Role-based menu filtering driven by the central modules catalog +
   // per-user grants in session.user.extraModules. Full-access roles see all.
   const userRole = session.user.role;
