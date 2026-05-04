@@ -47,10 +47,29 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+      }
+      // Load per-user module grants from DB. We refresh on initial sign-in
+      // and whenever the session is explicitly updated (via update()).
+      if (user || trigger === "update" || token.extraModules === undefined) {
+        try {
+          const uid = (user?.id as string) || (token.id as string);
+          if (uid) {
+            const grants = await prisma.userModuleGrant.findMany({
+              where: { userId: uid },
+              select: { moduleId: true },
+            });
+            token.extraModules = grants.map((g) => g.moduleId);
+          } else {
+            token.extraModules = [];
+          }
+        } catch (e) {
+          console.error("[auth.jwt] failed to load module grants:", e);
+          token.extraModules = token.extraModules || [];
+        }
       }
       return token;
     },
@@ -58,6 +77,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.extraModules = (token.extraModules as string[]) || [];
       }
       return session;
     }

@@ -529,8 +529,29 @@ model User {
   handoversGiven NurseHandover[] @relation("HandingOverNurse")
   handoversReceived NurseHandover[] @relation("ReceivingNurse")
   handoversWitnessed NurseHandover[] @relation("WitnessNurse")
-  
+
+  // Module access grants (per-user overrides issued by admins)
+  moduleGrants  UserModuleGrant[] @relation("UserGrants")
+  grantsIssued  UserModuleGrant[] @relation("GrantedByUser")
+
   @@map("users")
+}
+
+// Per-user module access grants. Each row is an admin-issued override that
+// adds a module to a user's allowed set, on top of their role's defaults.
+model UserModuleGrant {
+  id          String   @id @default(uuid())
+  userId      String
+  moduleId    String
+  grantedById String?
+  grantedAt   DateTime @default(now())
+
+  user        User     @relation("UserGrants", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy   User?    @relation("GrantedByUser", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, moduleId])
+  @@index([userId])
+  @@map("user_module_grants")
 }
 
 // Public staff onboarding form submissions. Anyone with the share link can

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
+import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import {
   LayoutDashboard,
   Package,
@@ -169,35 +170,48 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/security-reports/view', icon: Eye, label: 'Review Security', badge: 'ADMIN' });
   }
 
+  // Module Access editor — only true admins / theatre manager grant overrides.
+  const accessEditorRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'];
+  if (accessEditorRoles.includes(session.user.role)) {
+    menuItems.push({ href: '/dashboard/admin/access', icon: Shield, label: 'Module Access', badge: 'ADMIN' });
+  }
+
   // Live monitoring — visible to admins, theatre manager and chairman
   const monitoringRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'];
   if (monitoringRoles.includes(session.user.role)) {
     menuItems.push({ href: '/dashboard/live-monitoring', icon: Activity, label: 'Live Monitoring', badge: 'LIVE' });
   }
 
-  // Role-based menu filtering — show only relevant items per role
-  // Roles NOT listed here see ALL menu items (e.g. ADMIN, SURGEON, ANESTHETIST, NURSE, etc.)
-  const roleMenuMap: Record<string, string[]> = {
-    PHARMACIST: ['/dashboard', '/dashboard/prescriptions', '/dashboard/prescription-approvals', '/dashboard/medication-tracking', '/dashboard/emergency-booking', '/dashboard/settings'],
-    LAUNDRY_SUPERVISOR: ['/dashboard', '/dashboard/laundry-supervisor', '/dashboard/settings'],
-    CSSD_SUPERVISOR: ['/dashboard', '/dashboard/cssd-supervisor', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
-    OXYGEN_UNIT_SUPERVISOR: ['/dashboard', '/dashboard/oxygen-supervisor', '/dashboard/oxygen-control', '/dashboard/settings'],
-    WORKS_SUPERVISOR: ['/dashboard', '/dashboard/works-supervisor', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/fault-alerts', '/dashboard/settings'],
-    LAUNDRY_STAFF: ['/dashboard', '/dashboard/laundry-supervisor', '/dashboard/settings'],
-    CSSD_STAFF: ['/dashboard', '/dashboard/cssd/inventory', '/dashboard/cssd/sterilization', '/dashboard/cssd/readiness', '/dashboard/settings'],
-    POWER_PLANT_OPERATOR: ['/dashboard', '/dashboard/power-house/status', '/dashboard/power-house/maintenance', '/dashboard/power-house/readiness', '/dashboard/settings'],
-    BLOODBANK_STAFF: ['/dashboard', '/dashboard/blood-bank', '/dashboard/emergency-booking', '/dashboard/settings'],
-    LABORATORY_STAFF: ['/dashboard', '/dashboard/emergency-lab-workup', '/dashboard/emergency-booking', '/dashboard/settings'],
-    PLUMBER: ['/dashboard', '/dashboard/plumbing-water-supply', '/dashboard/works-supervisor', '/dashboard/fault-alerts', '/dashboard/settings'],
-    PORTER: ['/dashboard', '/dashboard/holding-area', '/dashboard/transfers', '/dashboard/call-for-patient', '/dashboard/emergency-booking', '/dashboard/settings'],
-    CLEANER: ['/dashboard', '/dashboard/settings'],
-    THEATRE_CAFETERIA_MANAGER: ['/dashboard', '/dashboard/theatre-meals', '/dashboard/roster', '/dashboard/settings'],
+  // Role-based menu filtering driven by the central modules catalog +
+  // per-user grants in session.user.extraModules. Full-access roles see all.
+  const userRole = session.user.role;
+  const extraModules = session.user.extraModules || [];
+  const allowedModuleIds = resolveAllowedModuleIds(userRole, extraModules);
+
+  // Map menu hrefs to module IDs by longest-path prefix match.
+  const sortedModules = [...MODULES].sort(
+    (a, b) => Math.max(...b.paths.map((p) => p.length)) - Math.max(...a.paths.map((p) => p.length))
+  );
+  const findModule = (href: string) => {
+    // Strip query/hash + trailing slash for comparison.
+    const path = href.split(/[?#]/)[0].replace(/\/$/, '') || '/';
+    for (const m of sortedModules) {
+      for (const p of m.paths) {
+        if (path === p || path.startsWith(p + '/')) return m;
+      }
+    }
+    return null;
   };
 
-  const allowedPaths = roleMenuMap[session.user.role];
-  const filteredMenuItems = allowedPaths
-    ? menuItems.filter(item => allowedPaths.some(p => item.href === p || item.href.startsWith(p + '/')))
-    : menuItems;
+  const filteredMenuItems = isFullAccessRole(userRole)
+    ? menuItems
+    : menuItems.filter((item) => {
+        // External links (e.g. /training/) bypass module gating.
+        if ((item as any).external) return true;
+        const mod = findModule(item.href);
+        if (!mod) return true; // unmapped paths default to visible
+        return allowedModuleIds.has(mod.id);
+      });
 
   return (
     <div className="min-h-screen bg-gray-50">
