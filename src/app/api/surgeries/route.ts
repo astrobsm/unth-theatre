@@ -25,6 +25,8 @@ const surgerySchema = z.object({
   teamMembers: z.array(z.object({
     name: z.string(),
     role: z.enum(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER']),
+    userId: z.string().nullish(),
+    staffCode: z.string().nullish(),
   })).optional(),
 });
 
@@ -172,7 +174,8 @@ export async function POST(request: NextRequest) {
         teamMembers: teamMembers && teamMembers.length > 0 ? {
           create: teamMembers.map(tm => ({
             memberName: tm.name,
-            userId: null, // No user ID when entering name directly
+            // Link to staff record when picked from the database; null otherwise.
+            userId: tm.userId || null,
             role: tm.role,
           }))
         } : undefined,

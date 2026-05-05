@@ -54,13 +54,25 @@ type FormState = {
   staffId: string;
   notes: string;
   isContractStaff: boolean;
+  // House Officer rotation (only when role === 'HOUSE_OFFICER')
+  rotationSpecialty: string;
+  rotationStartDate: string;
+  rotationEndDate: string;
 };
 
 const EMPTY: FormState = {
   title: '', fullName: '', username: '', email: '', role: '',
   phoneNumber: '', department: '', staffCode: '', staffId: '', notes: '',
   isContractStaff: false,
+  rotationSpecialty: '', rotationStartDate: '', rotationEndDate: '',
 };
+
+const HOUSE_OFFICER_SPECIALTIES: { value: string; label: string }[] = [
+  { value: 'SURGERY',                 label: 'Surgery' },
+  { value: 'OBSTETRICS_GYNAECOLOGY',  label: 'Obstetrics & Gynaecology' },
+  { value: 'MAXILLOFACIAL',           label: 'Maxillofacial' },
+  { value: 'ENT',                     label: 'ENT' },
+];
 
 export default function StaffOnboardingPage() {
   const [data, setData] = useState<FormState>(EMPTY);
@@ -107,6 +119,14 @@ export default function StaffOnboardingPage() {
       errs.phoneNumber = 'Use 11 digits starting with 0, or +234XXXXXXXXXX';
     if (!data.isContractStaff && !data.staffId.trim())
       errs.staffId = 'Staff ID is required (tick "Contract staff" if you have none)';
+    if (data.role === 'HOUSE_OFFICER') {
+      if (!data.rotationSpecialty) errs.rotationSpecialty = 'Select your rotation specialty';
+      if (!data.rotationStartDate) errs.rotationStartDate = 'Required';
+      if (!data.rotationEndDate)   errs.rotationEndDate   = 'Required';
+      if (data.rotationStartDate && data.rotationEndDate &&
+          data.rotationEndDate < data.rotationStartDate)
+        errs.rotationEndDate = 'End date must be on or after start date';
+    }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -132,6 +152,9 @@ export default function StaffOnboardingPage() {
           staffCode: data.staffCode.trim(),
           staffId: data.staffId.trim(),
           isContractStaff: data.isContractStaff,
+          rotationSpecialty: data.role === 'HOUSE_OFFICER' ? data.rotationSpecialty : null,
+          rotationStartDate: data.role === 'HOUSE_OFFICER' ? data.rotationStartDate : null,
+          rotationEndDate:   data.role === 'HOUSE_OFFICER' ? data.rotationEndDate   : null,
         }),
       });
       const json = await res.json();
@@ -318,6 +341,55 @@ export default function StaffOnboardingPage() {
                 </select>
               </Field>
             </div>
+
+            {data.role === 'HOUSE_OFFICER' && (
+              <div className="rounded-xl border-2 border-blue-200 bg-blue-50/50 p-4 md:p-5 space-y-4">
+                <div>
+                  <h3 className="font-semibold text-blue-900">House Officer rotation</h3>
+                  <p className="text-xs text-blue-800/80 mt-1">
+                    Tell us which posting you are currently on and the dates it runs for.
+                    This is used for analytics, theatre roster planning and meal allocation.
+                  </p>
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <Field label="Rotation specialty *" error={fieldErrors.rotationSpecialty}>
+                    <select
+                      aria-label="Rotation specialty"
+                      className={selectCls}
+                      value={data.rotationSpecialty}
+                      onChange={e => set('rotationSpecialty', e.target.value)}
+                      required
+                    >
+                      <option value="">— select specialty —</option>
+                      {HOUSE_OFFICER_SPECIALTIES.map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Rotation starts *" error={fieldErrors.rotationStartDate}>
+                    <input
+                      type="date"
+                      aria-label="Rotation start date"
+                      className={inputCls}
+                      value={data.rotationStartDate}
+                      onChange={e => set('rotationStartDate', e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Rotation ends *" error={fieldErrors.rotationEndDate}>
+                    <input
+                      type="date"
+                      aria-label="Rotation end date"
+                      className={inputCls}
+                      value={data.rotationEndDate}
+                      onChange={e => set('rotationEndDate', e.target.value)}
+                      min={data.rotationStartDate || undefined}
+                      required
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
 
             <SectionHeader>Identifiers</SectionHeader>
 

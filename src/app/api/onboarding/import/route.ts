@@ -125,6 +125,9 @@ export async function POST(request: NextRequest) {
           approvedAt: new Date(),
           isFirstLogin: true,
           mustChangePassword: true,
+          rotationSpecialty: s.role === 'HOUSE_OFFICER' ? (s.rotationSpecialty || null) : null,
+          rotationStartDate: s.role === 'HOUSE_OFFICER' ? s.rotationStartDate : null,
+          rotationEndDate:   s.role === 'HOUSE_OFFICER' ? s.rotationEndDate   : null,
         },
       });
 

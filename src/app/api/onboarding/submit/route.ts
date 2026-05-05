@@ -50,6 +50,15 @@ export async function POST(request: NextRequest) {
     const notes       = clean(body.notes, 500);
     const isContractStaff = body.isContractStaff === true;
 
+    // House Officer rotation
+    const rotationSpecialty = clean(body.rotationSpecialty, 60).toUpperCase();
+    const rotationStartRaw  = clean(body.rotationStartDate, 30);
+    const rotationEndRaw    = clean(body.rotationEndDate, 30);
+    const rotationStartDate = rotationStartRaw ? new Date(rotationStartRaw) : null;
+    const rotationEndDate   = rotationEndRaw   ? new Date(rotationEndRaw)   : null;
+
+    const VALID_HO_SPECIALTIES = ['SURGERY', 'OBSTETRICS_GYNAECOLOGY', 'MAXILLOFACIAL', 'ENT'];
+
     // Server-side validation (mirrors HTML constraints; never trust the client)
     const errors: string[] = [];
     if (!fullName) errors.push('Full Name is required');
@@ -64,6 +73,17 @@ export async function POST(request: NextRequest) {
       errors.push('Phone must be 11 digits starting with 0, or +234XXXXXXXXXX');
     if (!isContractStaff && !staffId)
       errors.push('Staff ID is required (tick "Contract staff" if you do not have one)');
+
+    if (role === 'HOUSE_OFFICER') {
+      if (!rotationSpecialty || !VALID_HO_SPECIALTIES.includes(rotationSpecialty))
+        errors.push('Rotation specialty is required for House Officers (Surgery, Obstetrics & Gynaecology, Maxillofacial or ENT)');
+      if (!rotationStartDate || isNaN(rotationStartDate.getTime()))
+        errors.push('Rotation start date is required for House Officers');
+      if (!rotationEndDate || isNaN(rotationEndDate.getTime()))
+        errors.push('Rotation end date is required for House Officers');
+      if (rotationStartDate && rotationEndDate && rotationEndDate < rotationStartDate)
+        errors.push('Rotation end date must be on or after the start date');
+    }
 
     if (errors.length) {
       return NextResponse.json({ error: 'Validation failed', details: errors }, { status: 400 });
@@ -92,6 +112,9 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         isContractStaff,
         ipAddress, userAgent,
+        rotationSpecialty: role === 'HOUSE_OFFICER' ? (rotationSpecialty || null) : null,
+        rotationStartDate: role === 'HOUSE_OFFICER' ? rotationStartDate : null,
+        rotationEndDate:   role === 'HOUSE_OFFICER' ? rotationEndDate   : null,
       },
     });
 

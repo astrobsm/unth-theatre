@@ -11,6 +11,7 @@ export interface RoleDef {
 export const ONBOARDING_ROLES: RoleDef[] = [
   // Clinical
   { value: 'SURGEON',                  label: 'Surgeon',                          prefix: 'SRG' },
+  { value: 'HOUSE_OFFICER',            label: 'House Officer',                    prefix: 'HOU' },
   { value: 'ANAESTHETIST',             label: 'Anaesthetist',                     prefix: 'ANS' },
   { value: 'CONSULTANT_ANAESTHETIST',  label: 'Consultant Anaesthetist',          prefix: 'CAN' },
   { value: 'SCRUB_NURSE',              label: 'Scrub Nurse',                      prefix: 'SCN' },

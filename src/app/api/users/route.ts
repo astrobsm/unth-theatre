@@ -14,13 +14,32 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const role = searchParams.get('role');
+    const role  = searchParams.get('role');
+    const roles = searchParams.get('roles'); // comma-separated, e.g. "SURGEON,HOUSE_OFFICER"
     const status = searchParams.get('status');
+    const q = (searchParams.get('q') || '').trim();
+    const limitParam = parseInt(searchParams.get('limit') || '', 10);
+    const limit = Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, 100)
+      : undefined;
 
     // Build filter
     const where: Record<string, unknown> = {};
-    if (role) where.role = role;
+    if (roles) {
+      const list = roles.split(',').map(r => r.trim()).filter(Boolean);
+      if (list.length === 1) where.role = list[0];
+      else if (list.length > 1) where.role = { in: list };
+    } else if (role) {
+      where.role = role;
+    }
     if (status) where.status = status;
+    if (q) {
+      where.OR = [
+        { fullName:  { contains: q, mode: 'insensitive' } },
+        { username:  { contains: q, mode: 'insensitive' } },
+        { staffCode: { contains: q, mode: 'insensitive' } },
+      ];
+    }
 
     const users = await prisma.user.findMany({
       where,
@@ -31,11 +50,16 @@ export async function GET(request: NextRequest) {
         email: true,
         role: true,
         status: true,
+        staffCode: true,
+        phoneNumber: true,
+        department: true,
+        rotationSpecialty: true,
         createdAt: true,
         approvedBy: true,
         approvedAt: true,
       },
-      orderBy: { fullName: 'asc' }
+      orderBy: { fullName: 'asc' },
+      ...(limit ? { take: limit } : {}),
     });
 
     return NextResponse.json(users);

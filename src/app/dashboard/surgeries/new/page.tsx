@@ -6,6 +6,7 @@ import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
+import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -27,6 +28,8 @@ interface Surgeon {
 interface TeamMember {
   name: string;
   role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER';
+  userId?: string | null;   // Linked staff record (when picked from DB)
+  staffCode?: string | null;
 }
 
 type OnDutyMember = {
@@ -152,7 +155,14 @@ export default function NewSurgeryPage() {
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
       otherSpecialNeeds: otherSpecialNeeds,
-      teamMembers: teamMembers.filter(tm => tm.name.trim() !== ''), // Only send team members with names
+      teamMembers: teamMembers
+        .filter(tm => tm.name.trim() !== '')
+        .map(tm => ({
+          name: tm.name.trim(),
+          role: tm.role,
+          userId: tm.userId || null,
+          staffCode: tm.staffCode || null,
+        })),
       // Auto-fetched on-duty team (advisory — backend may persist / notify)
       onDutyTeam: onDuty
         ? {
@@ -193,16 +203,24 @@ export default function NewSurgeryPage() {
   };
 
   const addTeamMember = (role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER') => {
-    setTeamMembers([...teamMembers, { name: '', role }]);
+    setTeamMembers([...teamMembers, { name: '', role, userId: null, staffCode: null }]);
   };
 
   const removeTeamMember = (index: number) => {
     setTeamMembers(teamMembers.filter((_, i) => i !== index));
   };
 
-  const updateTeamMember = (index: number, name: string) => {
+  const updateTeamMember = (
+    index: number,
+    next: { name: string; userId?: string | null; staffCode?: string | null }
+  ) => {
     const updated = [...teamMembers];
-    updated[index].name = name;
+    updated[index] = {
+      ...updated[index],
+      name: next.name,
+      userId: next.userId ?? null,
+      staffCode: next.staffCode ?? null,
+    };
     setTeamMembers(updated);
   };
 
@@ -658,23 +676,14 @@ export default function NewSurgeryPage() {
                 <div className="space-y-2">
                   {teamMembers.map((member, index) => 
                     member.role === 'CONSULTANT' ? (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={member.name}
-                          onChange={(e) => updateTeamMember(index, e.target.value)}
-                          className="input-field flex-1"
-                          placeholder="Enter consultant name"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeTeamMember(index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                          title="Remove team member"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search consultants by name or staff code…"
+                      />
                     ) : null
                   )}
                 </div>
@@ -700,23 +709,14 @@ export default function NewSurgeryPage() {
                 <div className="space-y-2">
                   {teamMembers.map((member, index) => 
                     member.role === 'SENIOR_REGISTRAR' ? (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={member.name}
-                          onChange={(e) => updateTeamMember(index, e.target.value)}
-                          className="input-field flex-1"
-                          placeholder="Enter senior registrar name"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeTeamMember(index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                          title="Remove team member"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search senior registrars by name or staff code…"
+                      />
                     ) : null
                   )}
                 </div>
@@ -742,23 +742,14 @@ export default function NewSurgeryPage() {
                 <div className="space-y-2">
                   {teamMembers.map((member, index) => 
                     member.role === 'REGISTRAR' ? (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={member.name}
-                          onChange={(e) => updateTeamMember(index, e.target.value)}
-                          className="input-field flex-1"
-                          placeholder="Enter registrar name"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeTeamMember(index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                          title="Remove team member"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search registrars by name or staff code…"
+                      />
                     ) : null
                   )}
                 </div>
@@ -784,23 +775,14 @@ export default function NewSurgeryPage() {
                 <div className="space-y-2">
                   {teamMembers.map((member, index) => 
                     member.role === 'HOUSE_OFFICER' ? (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={member.name}
-                          onChange={(e) => updateTeamMember(index, e.target.value)}
-                          className="input-field flex-1"
-                          placeholder="Enter house officer name"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeTeamMember(index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                          title="Remove team member"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="HOUSE_OFFICER,SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search house officers by name or staff code…"
+                      />
                     ) : null
                   )}
                 </div>

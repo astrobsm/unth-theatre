@@ -45,6 +45,7 @@ enum UserRole {
   WATER_SUPPLY_SUPERVISOR
   EMERGENCY_LAB_SCIENTIST
   LABORATORY_STAFF
+  HOUSE_OFFICER
 }
 
 enum UserStatus {
@@ -356,6 +357,10 @@ model User {
   resetTokenExpiry DateTime? // Reset token expiration
   isFirstLogin  Boolean     @default(true) // Track if user has logged in before
   mustChangePassword Boolean @default(false) // Force password change on next login
+  // House Officer rotation tracking (null for non-HOs)
+  rotationSpecialty String?  // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
+  rotationStartDate DateTime?
+  rotationEndDate   DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   approvedBy    String?
@@ -571,6 +576,10 @@ model OnboardingSubmission {
   title         String?   // Dr / Mr / Mrs / Prof / etc.
   notes         String?
   isContractStaff Boolean @default(false) // Contract staff are exempt from Staff ID requirement
+  // House Officer rotation details (only meaningful when role = HOUSE_OFFICER)
+  rotationSpecialty String?  // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
+  rotationStartDate DateTime?
+  rotationEndDate   DateTime?
   status        String    @default("PENDING") // PENDING | IMPORTED | REJECTED
   importedAt    DateTime?
   importedBy    String?

@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getCachedData } from '@/lib/offlineStore';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -60,6 +61,10 @@ export default function LoginPage() {
     };
 
     checkOfflineLogin();
+
+    // Prefill username when arriving from /auth/forgot-username?u=...
+    const u = searchParams?.get('u');
+    if (u) setUsername(u);
 
     window.addEventListener('online', () => setIsOffline(false));
     window.addEventListener('offline', () => setIsOffline(true));
@@ -310,6 +315,12 @@ export default function LoginPage() {
           </div>
           
           <div className="text-center space-y-2">
+            <Link
+              href="/auth/forgot-username"
+              className="block text-sm text-gray-600 hover:text-primary-600"
+            >
+              Forgot your username? Recover with your phone number
+            </Link>
             <Link
               href="/auth/reset-password"
               className="block text-sm text-gray-600 hover:text-primary-600"
