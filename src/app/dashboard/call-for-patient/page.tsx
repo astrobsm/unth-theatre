@@ -647,6 +647,33 @@ export default function CallForPatientPage() {
                 <div className="note-num">Ref: {printData.callUpNoteNumber}</div>
               )}
 
+              <div className="divider" />
+
+              {/* Handwritten escort log — to be filled by ward nurse */}
+              <div style={{ textAlign: 'center', fontSize: '10px', fontWeight: 'bold', margin: '4px 0 2px' }}>
+                WARD ESCORT LOG (fill by hand)
+              </div>
+              <div style={{ fontSize: '9px', textAlign: 'center', color: '#333', marginBottom: '4px' }}>
+                For ward nurse — record times and sign below.
+                The holding-area nurse will transcribe these entries on arrival.
+              </div>
+              <div className="field">
+                <span className="field-label">Porter arrived at ward:</span>
+                <span className="field-value">______ : ______</span>
+              </div>
+              <div className="field">
+                <span className="field-label">Porter departed ward:</span>
+                <span className="field-value">______ : ______</span>
+              </div>
+              <div className="field">
+                <span className="field-label">Ward Nurse Name:</span>
+                <span className="field-value">_______________________</span>
+              </div>
+              <div className="field">
+                <span className="field-label">Ward Nurse Sign:</span>
+                <span className="field-value">_______________________</span>
+              </div>
+
               <div className="footer">
                 <div>Please present this note at the Theatre Reception</div>
                 <div style={{ marginTop: '2px' }}>

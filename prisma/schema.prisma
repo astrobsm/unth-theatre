@@ -4729,7 +4729,18 @@ model PatientCallUp {
   // Patient arrival tracking
   patientEnRouteAt      DateTime?
   patientArrivedAt      DateTime?
-  
+
+  // Theatre porter ward-pickup tracking
+  // (handwritten by ward nurse on the printout, then transcribed in the holding area)
+  theatrePorterArrivedAtWardTime   DateTime?  // Time the theatre porter arrived at the ward
+  theatrePorterDepartedWardTime    DateTime?  // Time the theatre porter left the ward with the patient
+  wardNurseName                    String?    // Ward nurse who handed over the patient (from printout)
+  wardNurseSignaturePresent        Boolean    @default(false) // Holding-area nurse confirms signature is on the printout
+  wardEntriesNotes                 String?    // Optional notes (delays, escort, etc.)
+  wardEntriesRecordedById          String?    // Holding-area nurse who transcribed the entries
+  wardEntriesRecordedByName        String?
+  wardEntriesRecordedAt            DateTime?
+
   // Call-up note reference number
   callUpNoteNumber      String          @unique @default(uuid())
   

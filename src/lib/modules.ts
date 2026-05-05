@@ -67,6 +67,7 @@ export const MODULES: AppModule[] = [
 
   // Intra-operative
   { id: 'holding-area', label: 'Holding Area', paths: ['/dashboard/holding-area'], defaultRoles: ['SCRUB_NURSE', 'PORTER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'], category: 'Intra-Op' },
+  { id: 'ward-entries', label: 'Ward Escort Log', paths: ['/dashboard/holding-area/ward-entries'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Intra-Op' },
   { id: 'checklists', label: 'WHO Checklists', paths: ['/dashboard/checklists'], defaultRoles: ['SCRUB_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
   { id: 'equipment-checkout', label: 'Equipment Checkout', paths: ['/dashboard/equipment-checkout'], defaultRoles: ['THEATRE_STORE_KEEPER', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'], category: 'Intra-Op' },
   { id: 'medication-tracking', label: 'Med Tracking', paths: ['/dashboard/medication-tracking'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Intra-Op' },

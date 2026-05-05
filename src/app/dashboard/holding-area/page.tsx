@@ -195,6 +195,13 @@ export default function HoldingAreaPage() {
             </button>
           </div>
           <button
+            onClick={() => router.push('/dashboard/holding-area/ward-entries')}
+            className="bg-indigo-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+            title="Transcribe handwritten porter times & ward-nurse signature from the Call-for-Patient printout"
+          >
+            Ward Escort Log
+          </button>
+          <button
             onClick={() => router.push('/dashboard/holding-area/new')}
             className="bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors"
           >
