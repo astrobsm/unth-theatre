@@ -158,6 +158,7 @@ export default function DashboardLayout({
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
+    { href: '/role-guide', icon: GraduationCap, label: 'Role Guide', badge: 'GUIDE', external: true },
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
@@ -278,13 +279,19 @@ export default function DashboardLayout({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={className}
+                    onClick={() => setSidebarOpen(false)}
                   >
                     {inner}
                   </a>
                 );
               }
               return (
-                <Link key={item.href} href={item.href} className={className}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={className}
+                  onClick={() => setSidebarOpen(false)}
+                >
                   {inner}
                 </Link>
               );
