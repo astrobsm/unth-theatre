@@ -43,22 +43,14 @@ export default function NewTransferPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
 
-  const theatres = [
-    { value: 'THEATRE_1', label: 'Theatre 1 - General Surgery' },
-    { value: 'THEATRE_2', label: 'Theatre 2 - Orthopaedics' },
-    { value: 'THEATRE_3', label: 'Theatre 3 - Neurosurgery' },
-    { value: 'THEATRE_4', label: 'Theatre 4 - Cardiothoracic' },
-    { value: 'THEATRE_5', label: 'Theatre 5 - Urology' },
-    { value: 'THEATRE_6', label: 'Theatre 6 - OB-GYN' },
-    { value: 'THEATRE_7', label: 'Theatre 7 - Paediatric' },
-    { value: 'THEATRE_8', label: 'Theatre 8 - ENT' },
-    { value: 'THEATRE_9', label: 'Theatre 9 - Ophthalmology' },
-    { value: 'THEATRE_10', label: 'Theatre 10 - Dental/Maxillofacial' },
-    { value: 'THEATRE_11', label: 'Theatre 11 - Plastic Surgery' },
-    { value: 'THEATRE_12', label: 'Theatre 12 - Emergency' },
-    { value: 'THEATRE_13', label: 'Theatre 13 - Minor Procedures' },
-  ];
+  useEffect(() => {
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => Array.isArray(d) && setTheatres(d))
+      .catch(() => setTheatres([]));
+  }, []);
 
   const fetchInventoryItems = async () => {
     try {
@@ -230,7 +222,7 @@ export default function NewTransferPage() {
             >
               <option value="">Select a theatre...</option>
               {theatres.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+                <option key={t.id} value={t.name}>{t.name}{t.location ? ` — ${t.location}` : ''}</option>
               ))}
             </select>
           </div>

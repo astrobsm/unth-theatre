@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const theatreNumber = searchParams.get('theatre');
+    const ownerRole = searchParams.get('ownerRole');
     const category = searchParams.get('category');
     const stockStatus = searchParams.get('stockStatus');
     const managedById = searchParams.get('managedById');
@@ -34,6 +35,9 @@ export async function GET(request: NextRequest) {
     
     if (theatreNumber) {
       where.theatreNumber = theatreNumber;
+    }
+    if (ownerRole) {
+      where.ownerRole = ownerRole;
     }
     
     if (category) {
@@ -195,6 +199,7 @@ export async function GET(request: NextRequest) {
 const createSubStoreSchema = z.object({
   theatreNumber: z.string().min(1, 'Theatre number is required'),
   theatreName: z.string().optional(),
+  ownerRole: z.enum(['SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN']).default('SCRUB_NURSE'),
   itemName: z.string().min(1, 'Item name is required'),
   itemCode: z.string().optional(),
   category: z.string().min(1, 'Category is required'),
@@ -221,10 +226,11 @@ export async function POST(request: NextRequest) {
     const userRole = (session.user as any).role;
     const userId = (session.user as any).id;
     
-    // Only theatre managers, store keepers, and admins can create sub-store items
-    if (!['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN'].includes(userRole)) {
+    // Theatre managers, store keepers, admins, scrub nurses and anaesthetic
+    // technicians can add items to their own sub-store.
+    if (!['THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'].includes(userRole)) {
       return NextResponse.json({ 
-        error: 'Insufficient permissions. Only Theatre Manager or Store Keeper can add items to sub-stores.' 
+        error: 'Insufficient permissions to add items to sub-stores.' 
       }, { status: 403 });
     }
 
@@ -266,10 +272,11 @@ export async function POST(request: NextRequest) {
     // Calculate initial stock status
     const stockStatus = calculateStockStatus(validatedData.currentStock, validatedData.minimumStock);
 
-    // Check if item already exists in this theatre sub-store
+    // Check if item already exists in this theatre sub-store (per ownerRole)
     const existingItem = await prisma.theatreSubStore.findFirst({
       where: {
         theatreNumber: validatedData.theatreNumber,
+        ownerRole: validatedData.ownerRole,
         itemName: validatedData.itemName,
         itemCode: validatedData.itemCode || undefined,
       },
@@ -292,6 +299,7 @@ export async function POST(request: NextRequest) {
       data: {
         theatreNumber: validatedData.theatreNumber,
         theatreName: validatedData.theatreName,
+        ownerRole: validatedData.ownerRole,
         itemName: validatedData.itemName,
         itemCode: validatedData.itemCode,
         category: validatedData.category,

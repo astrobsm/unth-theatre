@@ -22,6 +22,7 @@ interface SubStoreItem {
   id: string;
   theatreNumber: string;
   theatreName?: string;
+  ownerRole: string;
   itemName: string;
   itemCode?: string;
   category: string;
@@ -61,29 +62,39 @@ export default function SubStoresPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTheatre, setSelectedTheatre] = useState('');
+  const [selectedOwnerRole, setSelectedOwnerRole] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [groupBy, setGroupBy] = useState<'theatre' | 'category'>('theatre');
+  const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
 
-  const theatres = [
-    'THEATRE_1', 'THEATRE_2', 'THEATRE_3', 'THEATRE_4', 'THEATRE_5',
-    'THEATRE_6', 'THEATRE_7', 'THEATRE_8', 'THEATRE_9', 'THEATRE_10',
-    'THEATRE_11', 'THEATRE_12', 'THEATRE_13'
+  const ownerRoles = [
+    { value: 'SCRUB_NURSE', label: 'Scrub Nurse Sub-Store' },
+    { value: 'ANAESTHETIC_TECHNICIAN', label: 'Anaesthetic Technician Sub-Store' },
   ];
 
   const categories = ['CONSUMABLE', 'DEVICE', 'MEDICATION', 'EQUIPMENT'];
   const stockStatuses = ['ADEQUATE', 'LOW', 'CRITICAL', 'OUT_OF_STOCK'];
 
+  // Load theatres from the database (no more hardcoded list).
+  useEffect(() => {
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => Array.isArray(data) && setTheatres(data))
+      .catch(() => setTheatres([]));
+  }, []);
+
   useEffect(() => {
     fetchSubStores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTheatre, selectedCategory, selectedStatus, searchTerm, groupBy]);
+  }, [selectedTheatre, selectedOwnerRole, selectedCategory, selectedStatus, searchTerm, groupBy]);
 
   const fetchSubStores = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       if (selectedTheatre) params.set('theatre', selectedTheatre);
+      if (selectedOwnerRole) params.set('ownerRole', selectedOwnerRole);
       if (selectedCategory) params.set('category', selectedCategory);
       if (selectedStatus) params.set('stockStatus', selectedStatus);
       if (searchTerm) params.set('search', searchTerm);
@@ -99,6 +110,51 @@ export default function SubStoresPage() {
       console.error('Error fetching sub-stores:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const reportFault = async (item: SubStoreItem) => {
+    const description = window.prompt(
+      `Report fault for "${item.itemName}".\nDescribe the issue (biomedical, admin and theatre manager will be notified):`
+    );
+    if (!description || !description.trim()) return;
+    const severity = window.prompt('Severity? LOW / MEDIUM / HIGH / CRITICAL', 'MEDIUM') || 'MEDIUM';
+    try {
+      const res = await fetch(`/api/sub-stores/${item.id}/fault`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          faultType: 'FAULTY',
+          severity: severity.toUpperCase(),
+          description: description.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to report fault');
+        return;
+      }
+      alert(`Fault reported. ${data.notified} staff notified (biomedical, admin, theatre manager).`);
+    } catch (e) {
+      alert('Failed to report fault');
+    }
+  };
+
+  const recordCheck = async (item: SubStoreItem, type: 'MORNING' | 'EOD') => {
+    try {
+      const res = await fetch(`/api/sub-stores/${item.id}/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      if (res.ok) {
+        await fetchSubStores();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to record check');
+      }
+    } catch (e) {
+      alert('Failed to record check');
     }
   };
 
@@ -122,13 +178,17 @@ export default function SubStoresPage() {
     }
   };
 
-  // Group items by theatre
-  const groupedByTheatre = subStores.reduce((acc: Record<string, SubStoreItem[]>, item) => {
-    const theatre = item.theatreNumber;
-    if (!acc[theatre]) acc[theatre] = [];
-    acc[theatre].push(item);
-    return acc;
-  }, {});
+  // Group items by theatre + ownerRole so each theatre shows two
+  // separate cards (Scrub Nurse / Anaesthetic Technician).
+  const groupedByTheatre = subStores.reduce(
+    (acc: Record<string, SubStoreItem[]>, item) => {
+      const key = `${item.theatreNumber}::${item.ownerRole || 'SCRUB_NURSE'}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    },
+    {}
+  );
 
   // Group items by category
   const groupedByCategory = subStores.reduce((acc: Record<string, SubStoreItem[]>, item) => {
@@ -238,7 +298,7 @@ export default function SubStoresPage() {
 
       {/* Filters */}
       <div className="card p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -256,8 +316,19 @@ export default function SubStoresPage() {
             title="Filter by theatre"
           >
             <option value="">All Theatres</option>
-            {theatres.map(t => (
-              <option key={t} value={t}>{t.replace('_', ' ')}</option>
+            {theatres.map((t) => (
+              <option key={t.id} value={t.name}>{t.name}</option>
+            ))}
+          </select>
+          <select
+            value={selectedOwnerRole}
+            onChange={(e) => setSelectedOwnerRole(e.target.value)}
+            className="input-field"
+            title="Filter by sub-store owner"
+          >
+            <option value="">All Sub-Stores</option>
+            {ownerRoles.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
             ))}
           </select>
           <select
@@ -294,31 +365,61 @@ export default function SubStoresPage() {
         </div>
       </div>
 
-      {/* Quick Access - Theatre Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
-        {theatres.map(theatre => {
-          const items = groupedByTheatre[theatre] || [];
-          const criticalCount = items.filter(i => i.stockStatus === 'CRITICAL' || i.stockStatus === 'OUT_OF_STOCK').length;
-          
+      {/* Quick Access - Theatre Cards (DB-driven). Each theatre shows two
+          sub-store tiles: Scrub Nurse and Anaesthetic Technician. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        {theatres.map((theatre) => {
+          const scrubItems = subStores.filter(
+            (i) => i.theatreNumber === theatre.name && i.ownerRole === 'SCRUB_NURSE'
+          );
+          const techItems = subStores.filter(
+            (i) => i.theatreNumber === theatre.name && i.ownerRole === 'ANAESTHETIC_TECHNICIAN'
+          );
+          const scrubCritical = scrubItems.filter(
+            (i) => i.stockStatus === 'CRITICAL' || i.stockStatus === 'OUT_OF_STOCK'
+          ).length;
+          const techCritical = techItems.filter(
+            (i) => i.stockStatus === 'CRITICAL' || i.stockStatus === 'OUT_OF_STOCK'
+          ).length;
           return (
-            <Link
-              key={theatre}
-              href={`/dashboard/sub-stores/theatre/${theatre}`}
-              className={`card p-3 hover:shadow-md transition-shadow ${
-                criticalCount > 0 ? 'border-red-200 bg-red-50' : ''
-              }`}
-            >
-              <div className="text-center">
-                <Store className={`w-6 h-6 mx-auto mb-1 ${criticalCount > 0 ? 'text-red-500' : 'text-gray-400'}`} />
-                <p className="text-sm font-medium">{theatre.replace('_', ' ')}</p>
-                <p className="text-xs text-gray-500">{items.length} items</p>
-                {criticalCount > 0 && (
-                  <p className="text-xs text-red-600 font-medium">{criticalCount} critical</p>
+            <div key={theatre.id} className="card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Store className="w-5 h-5 text-primary-600" />
+                <p className="font-semibold text-gray-900">{theatre.name}</p>
+                {theatre.location && (
+                  <span className="text-xs text-gray-500">({theatre.location})</span>
                 )}
               </div>
-            </Link>
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href={`/dashboard/sub-stores/theatre/${encodeURIComponent(theatre.name)}?ownerRole=SCRUB_NURSE`}
+                  className={`p-2 rounded border text-xs ${scrubCritical > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                >
+                  <p className="font-medium">Scrub Nurse</p>
+                  <p className="text-gray-600">{scrubItems.length} items</p>
+                  {scrubCritical > 0 && (
+                    <p className="text-red-600 font-medium">{scrubCritical} critical</p>
+                  )}
+                </Link>
+                <Link
+                  href={`/dashboard/sub-stores/theatre/${encodeURIComponent(theatre.name)}?ownerRole=ANAESTHETIC_TECHNICIAN`}
+                  className={`p-2 rounded border text-xs ${techCritical > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                >
+                  <p className="font-medium">Technician</p>
+                  <p className="text-gray-600">{techItems.length} items</p>
+                  {techCritical > 0 && (
+                    <p className="text-red-600 font-medium">{techCritical} critical</p>
+                  )}
+                </Link>
+              </div>
+            </div>
           );
         })}
+        {theatres.length === 0 && (
+          <div className="col-span-full card p-4 text-center text-sm text-gray-500">
+            No theatres configured yet. Add theatres from the Theatres page first.
+          </div>
+        )}
       </div>
 
       {/* Items List */}
@@ -342,83 +443,119 @@ export default function SubStoresPage() {
           </Link>
         </div>
       ) : groupBy === 'theatre' ? (
-        // Grouped by Theatre
+        // Grouped by Theatre + Owner Role
         <div className="space-y-6">
-          {Object.entries(groupedByTheatre).map(([theatre, items]) => (
-            <div key={theatre} className="card overflow-hidden">
-              <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Store className="w-6 h-6" />
-                  <h3 className="text-lg font-semibold">{theatre.replace('_', ' ')}</h3>
-                  <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
-                    {items.length} items
-                  </span>
+          {Object.entries(groupedByTheatre).map(([key, items]) => {
+            const [theatreNumber, ownerRole] = key.split('::');
+            const ownerLabel =
+              ownerRole === 'ANAESTHETIC_TECHNICIAN'
+                ? 'Anaesthetic Technician Sub-Store'
+                : 'Scrub Nurse Sub-Store';
+            const headerColor =
+              ownerRole === 'ANAESTHETIC_TECHNICIAN'
+                ? 'from-indigo-600 to-indigo-700'
+                : 'from-primary-600 to-primary-700';
+            return (
+              <div key={key} className="card overflow-hidden">
+                <div className={`bg-gradient-to-r ${headerColor} text-white px-6 py-4 flex items-center justify-between`}>
+                  <div className="flex items-center gap-3">
+                    <Store className="w-6 h-6" />
+                    <div>
+                      <h3 className="text-lg font-semibold">{theatreNumber.replace(/_/g, ' ')}</h3>
+                      <p className="text-xs text-white/80">{ownerLabel}</p>
+                    </div>
+                    <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                      {items.length} items
+                    </span>
+                  </div>
+                  <Link
+                    href={`/dashboard/sub-stores/theatre/${encodeURIComponent(theatreNumber)}?ownerRole=${ownerRole}`}
+                    className="flex items-center gap-2 text-white/80 hover:text-white text-sm"
+                  >
+                    View All <ArrowRight className="w-4 h-4" />
+                  </Link>
                 </div>
-                <Link
-                  href={`/dashboard/sub-stores/theatre/${theatre}`}
-                  className="flex items-center gap-2 text-white/80 hover:text-white text-sm"
-                >
-                  View All <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Managed By</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {items.slice(0, 5).map(item => (
-                      <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{item.itemName}</p>
-                            {item.itemCode && (
-                              <p className="text-xs text-gray-500">{item.itemCode}</p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100">
-                            {item.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="font-semibold">{item.currentStock}</span>
-                          <span className="text-gray-500 text-sm"> / {item.maximumStock} {item.unit}</span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.stockStatus)}`}>
-                            {getStatusIcon(item.stockStatus)}
-                            {item.stockStatus.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-gray-700">{item.managedBy?.fullName || 'Unassigned'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Link
-                              href={`/dashboard/sub-stores/usage/new?item=${item.id}`}
-                              className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                            >
-                              Log Use
-                            </Link>
-                          </div>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Daily Check</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {items.slice(0, 10).map(item => (
+                        <tr key={item.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="font-medium text-gray-900">{item.itemName}</p>
+                              {item.itemCode && (
+                                <p className="text-xs text-gray-500">{item.itemCode}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="font-semibold">{item.currentStock}</span>
+                            <span className="text-gray-500 text-sm"> / {item.maximumStock} {item.unit}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.stockStatus)}`}>
+                              {getStatusIcon(item.stockStatus)}
+                              {item.stockStatus.replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs">
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => recordCheck(item, 'MORNING')}
+                                className={`px-2 py-0.5 rounded ${item.morningCheckDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                title="Mark morning check-in"
+                              >
+                                {item.morningCheckDone ? '✓ AM' : 'Mark AM'}
+                              </button>
+                              <button
+                                onClick={() => recordCheck(item, 'EOD')}
+                                className={`px-2 py-0.5 rounded ${item.endOfDayCheckDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                title="Mark end-of-day check-out"
+                              >
+                                {item.endOfDayCheckDone ? '✓ EOD' : 'Mark EOD'}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Link
+                                href={`/dashboard/sub-stores/usage/new?item=${item.id}`}
+                                className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                              >
+                                Log Use
+                              </Link>
+                              <button
+                                onClick={() => reportFault(item)}
+                                className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                title="Report fault — alerts biomedical, admin and theatre manager"
+                              >
+                                Report Fault
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         // Grouped by Category

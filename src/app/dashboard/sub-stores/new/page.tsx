@@ -30,6 +30,7 @@ export default function NewSubStoreItemPage() {
   const [formData, setFormData] = useState({
     theatreNumber: '',
     theatreName: '',
+    ownerRole: 'SCRUB_NURSE',
     itemName: '',
     itemCode: '',
     category: 'CONSUMABLE',
@@ -44,21 +45,14 @@ export default function NewSubStoreItemPage() {
     notes: '',
   });
 
-  const theatres = [
-    { value: 'THEATRE_1', label: 'Theatre 1 - General Surgery' },
-    { value: 'THEATRE_2', label: 'Theatre 2 - Orthopaedics' },
-    { value: 'THEATRE_3', label: 'Theatre 3 - Neurosurgery' },
-    { value: 'THEATRE_4', label: 'Theatre 4 - Cardiothoracic' },
-    { value: 'THEATRE_5', label: 'Theatre 5 - Urology' },
-    { value: 'THEATRE_6', label: 'Theatre 6 - OB-GYN' },
-    { value: 'THEATRE_7', label: 'Theatre 7 - Paediatric' },
-    { value: 'THEATRE_8', label: 'Theatre 8 - ENT' },
-    { value: 'THEATRE_9', label: 'Theatre 9 - Ophthalmology' },
-    { value: 'THEATRE_10', label: 'Theatre 10 - Dental/Maxillofacial' },
-    { value: 'THEATRE_11', label: 'Theatre 11 - Plastic Surgery' },
-    { value: 'THEATRE_12', label: 'Theatre 12 - Emergency' },
-    { value: 'THEATRE_13', label: 'Theatre 13 - Minor Procedures' },
-  ];
+  const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => Array.isArray(data) && setTheatres(data))
+      .catch(() => setTheatres([]));
+  }, []);
 
   const categories = [
     { value: 'CONSUMABLE', label: 'Consumable' },
@@ -114,7 +108,9 @@ export default function NewSubStoreItemPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          theatreName: theatres.find(t => t.value === formData.theatreNumber)?.label || formData.theatreNumber,
+          theatreName:
+            theatres.find((t) => t.name === formData.theatreNumber)?.name ||
+            formData.theatreNumber,
         }),
       });
 
@@ -172,21 +168,50 @@ export default function NewSubStoreItemPage() {
         <div className="card p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Store className="w-5 h-5" />
-            Theatre Selection
+            Theatre &amp; Sub-Store Owner
           </h2>
-          <select
-            name="theatreNumber"
-            value={formData.theatreNumber}
-            onChange={handleChange}
-            required
-            className="input-field"
-            title="Select theatre for this item"
-          >
-            <option value="">Select Theatre</option>
-            {theatres.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Theatre *</label>
+              <select
+                name="theatreNumber"
+                value={formData.theatreNumber}
+                onChange={handleChange}
+                required
+                className="input-field"
+                title="Select theatre for this item"
+              >
+                <option value="">Select Theatre</option>
+                {theatres.map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}{t.location ? ` — ${t.location}` : ''}
+                  </option>
+                ))}
+              </select>
+              {theatres.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  No theatres found. Add theatres in the Theatres page first.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sub-Store Owner *</label>
+              <select
+                name="ownerRole"
+                value={formData.ownerRole}
+                onChange={handleChange}
+                required
+                className="input-field"
+                title="Which sub-store does this item belong to"
+              >
+                <option value="SCRUB_NURSE">Scrub Nurse Sub-Store</option>
+                <option value="ANAESTHETIC_TECHNICIAN">Anaesthetic Technician Sub-Store</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Each theatre has two separate sub-stores for accountability.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Item Details */}

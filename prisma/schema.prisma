@@ -3986,6 +3986,7 @@ model TheatreSubStore {
   
   theatreNumber         String                  // THEATRE_1, THEATRE_2, etc.
   theatreName           String?                 // Human-readable theatre name
+  ownerRole             String                  @default("SCRUB_NURSE") // SCRUB_NURSE | ANAESTHETIC_TECHNICIAN
   itemName              String
   itemCode              String?
   category              String                  // CONSUMABLE, DEVICE, MEDICATION, EQUIPMENT
@@ -4027,14 +4028,48 @@ model TheatreSubStore {
   
   stockTransfers        StockTransfer[]
   usageLogs             SubStoreUsageLog[]
+  faultReports          SubStoreItemFault[]
   
   notes                 String?
   
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
   
-  @@unique([theatreNumber, itemName])
+  @@unique([theatreNumber, ownerRole, itemName])
+  @@index([ownerRole])
   @@map("theatre_sub_stores")
+}
+
+// Faults raised against a sub-store item (faulty device, broken,
+// expired stock that needs biomedical attention, etc.). Notifications
+// are fanned out to BIOMEDICAL_ENGINEER, ADMIN, SYSTEM_ADMINISTRATOR,
+// and THEATRE_MANAGER on creation.
+model SubStoreItemFault {
+  id                  String              @id @default(uuid())
+  subStoreId          String
+  subStore            TheatreSubStore     @relation(fields: [subStoreId], references: [id], onDelete: Cascade)
+  theatreNumber       String
+  theatreName         String?
+  ownerRole           String              // owner sub-store role
+  itemName            String
+  faultType           String              // FAULTY, BROKEN, EXPIRED, MISSING, OTHER
+  severity            String              @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  description         String
+  status              String              @default("REPORTED") // REPORTED | ACKNOWLEDGED | IN_PROGRESS | RESOLVED
+  reportedById        String
+  reportedAt          DateTime            @default(now())
+  acknowledgedById    String?
+  acknowledgedAt      DateTime?
+  resolvedById        String?
+  resolvedAt          DateTime?
+  resolution          String?
+  alertsSentTo        String?             // JSON: array of userIds notified
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([subStoreId])
+  @@index([status])
+  @@map("sub_store_item_faults")
 }
 
 // Sub-store consumable usage log - tracks items used during surgeries

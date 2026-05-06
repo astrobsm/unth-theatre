@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
   ArrowLeft, 
@@ -21,6 +21,7 @@ interface SubStoreItem {
   id: string;
   theatreNumber: string;
   theatreName?: string;
+  ownerRole: string;
   itemName: string;
   itemCode?: string;
   category: string;
@@ -47,50 +48,46 @@ interface SubStoreItem {
 
 export default function TheatreSubStorePage() {
   const params = useParams();
-  const theatreId = params.theatreId as string;
+  const searchParams = useSearchParams();
+  const theatreId = decodeURIComponent(params.theatreId as string);
+  const ownerRoleParam = searchParams.get('ownerRole') || '';
   
   const [items, setItems] = useState<SubStoreItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedOwnerRole, setSelectedOwnerRole] = useState(ownerRoleParam);
 
   const categories = ['CONSUMABLE', 'DEVICE', 'MEDICATION', 'EQUIPMENT', 'SUTURES', 'GLOVES', 'IV_SUPPLIES'];
   const stockStatuses = ['ADEQUATE', 'LOW', 'CRITICAL', 'OUT_OF_STOCK'];
+  const ownerRoles = [
+    { value: 'SCRUB_NURSE', label: 'Scrub Nurse Sub-Store' },
+    { value: 'ANAESTHETIC_TECHNICIAN', label: 'Anaesthetic Technician Sub-Store' },
+  ];
 
-  const theatreNames: Record<string, string> = {
-    'THEATRE_1': 'Theatre 1 - General Surgery',
-    'THEATRE_2': 'Theatre 2 - Orthopaedics',
-    'THEATRE_3': 'Theatre 3 - Neurosurgery',
-    'THEATRE_4': 'Theatre 4 - Cardiothoracic',
-    'THEATRE_5': 'Theatre 5 - Urology',
-    'THEATRE_6': 'Theatre 6 - OB-GYN',
-    'THEATRE_7': 'Theatre 7 - Paediatric',
-    'THEATRE_8': 'Theatre 8 - ENT',
-    'THEATRE_9': 'Theatre 9 - Ophthalmology',
-    'THEATRE_10': 'Theatre 10 - Dental/Maxillofacial',
-    'THEATRE_11': 'Theatre 11 - Plastic Surgery',
-    'THEATRE_12': 'Theatre 12 - Emergency',
-    'THEATRE_13': 'Theatre 13 - Minor Procedures',
-  };
+  // Theatre name comes from the data itself (DB-driven, no hardcoded map).
+  const theatreDisplayName =
+    items[0]?.theatreName || theatreId.replace(/_/g, ' ');
 
   useEffect(() => {
     if (theatreId) {
       fetchItems();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theatreId, selectedCategory, selectedStatus, searchTerm]);
+  }, [theatreId, selectedCategory, selectedStatus, searchTerm, selectedOwnerRole]);
 
   const fetchItems = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      params.set('theatre', theatreId);
-      if (selectedCategory) params.set('category', selectedCategory);
-      if (selectedStatus) params.set('stockStatus', selectedStatus);
-      if (searchTerm) params.set('search', searchTerm);
+      const qs = new URLSearchParams();
+      qs.set('theatre', theatreId);
+      if (selectedOwnerRole) qs.set('ownerRole', selectedOwnerRole);
+      if (selectedCategory) qs.set('category', selectedCategory);
+      if (selectedStatus) qs.set('stockStatus', selectedStatus);
+      if (searchTerm) qs.set('search', searchTerm);
 
-      const response = await fetch(`/api/sub-stores?${params.toString()}`);
+      const response = await fetch(`/api/sub-stores?${qs.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setItems(data.subStores || []);
@@ -141,10 +138,15 @@ export default function TheatreSubStorePage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
               <Store className="w-8 h-8 text-primary-600" />
-              {theatreNames[theatreId] || theatreId.replace('_', ' ')}
+              {theatreDisplayName}
             </h1>
             <p className="text-gray-600 mt-1">
               Sub-store inventory for this theatre
+              {selectedOwnerRole && (
+                <span className="ml-2 inline-block px-2 py-0.5 rounded bg-primary-100 text-primary-800 text-xs">
+                  {ownerRoles.find(r => r.value === selectedOwnerRole)?.label}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -192,7 +194,7 @@ export default function TheatreSubStorePage() {
 
       {/* Filters */}
       <div className="card p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -203,6 +205,17 @@ export default function TheatreSubStorePage() {
               className="input-field pl-10"
             />
           </div>
+          <select
+            value={selectedOwnerRole}
+            onChange={(e) => setSelectedOwnerRole(e.target.value)}
+            className="input-field"
+            title="Filter by sub-store owner"
+          >
+            <option value="">Both Sub-Stores</option>
+            {ownerRoles.map(r => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
