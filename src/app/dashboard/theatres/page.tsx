@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { Calendar, Plus, Trash2, Edit, AlertCircle } from 'lucide-react';
 import { THEATRES } from '@/lib/constants';
 
@@ -44,13 +45,18 @@ interface User {
 }
 
 export default function TheatresPage() {
+  const { data: session } = useSession();
+  const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'];
+  const isAdmin = !!session && ADMIN_ROLES.includes(session.user.role);
   const [theatres, setTheatres] = useState<Theatre[]>([]);
+  const [locations, setLocations] = useState<string[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split('T')[0]
   );
   const [loading, setLoading] = useState(true);
   const [showAddTheatre, setShowAddTheatre] = useState(false);
+  const [editingTheatre, setEditingTheatre] = useState<Theatre | null>(null);
   const [showAddAllocation, setShowAddAllocation] = useState(false);
   const [selectedTheatre, setSelectedTheatre] = useState<string>('');
   const [allocationType, setAllocationType] = useState<string>('SURGERY');
@@ -72,6 +78,7 @@ export default function TheatresPage() {
     fetchTheatres();
     fetchDailySummary();
     fetchStaff();
+    fetch('/api/locations').then((r) => r.json()).then((d) => Array.isArray(d) && setLocations(d)).catch(() => {});
     // Auto-refresh every 30 seconds for cross-device sync
     const interval = setInterval(() => {
       fetchTheatres();
@@ -310,6 +317,50 @@ export default function TheatresPage() {
     }
   };
 
+  const handleEditTheatre = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingTheatre) return;
+    const formData = new FormData(e.currentTarget);
+    try {
+      const response = await fetch(`/api/theatres/${editingTheatre.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          location: formData.get('location'),
+          status: formData.get('status'),
+        }),
+      });
+      if (response.ok) {
+        setEditingTheatre(null);
+        fetchTheatres();
+        fetchDailySummary();
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'Failed to update theatre');
+      }
+    } catch (error) {
+      console.error('Failed to update theatre:', error);
+      alert('Error updating theatre');
+    }
+  };
+
+  const handleDeleteTheatre = async (id: string, name: string) => {    if (!confirm(`Delete theatre "${name}"? This cannot be undone. Existing allocations on this theatre will block deletion.`)) return;
+    try {
+      const response = await fetch(`/api/theatres/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchTheatres();
+        fetchDailySummary();
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'Failed to delete theatre');
+      }
+    } catch (error) {
+      console.error('Failed to delete theatre:', error);
+      alert('Error deleting theatre');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'AVAILABLE':
@@ -342,13 +393,15 @@ export default function TheatresPage() {
           <p className="text-gray-600 mt-1">Manage theatre suites and daily allocations</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => setShowAddTheatre(true)}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Add Theatre
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAddTheatre(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Add Theatre
+            </button>
+          )}
           <button
             onClick={() => setShowAddAllocation(true)}
             className="btn-primary flex items-center gap-2"
@@ -432,11 +485,31 @@ export default function TheatresPage() {
                   {theatre.status}
                 </span>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Utilization</p>
-                <p className="text-2xl font-bold text-primary-600">
-                  {Math.round(theatre.utilizationPercentage)}%
-                </p>
+              <div className="flex items-start gap-4">
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Utilization</p>
+                  <p className="text-2xl font-bold text-primary-600">
+                    {Math.round(theatre.utilizationPercentage)}%
+                  </p>
+                </div>
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => setEditingTheatre({ id: theatre.id, name: theatre.name, location: (theatres.find(t => t.id === theatre.id)?.location) || '', status: theatre.status })}
+                      className="text-blue-600 hover:bg-blue-50 rounded p-2"
+                      title="Edit theatre"
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTheatre(theatre.id, theatre.name)}
+                      className="text-red-600 hover:bg-red-50 rounded p-2"
+                      title="Remove theatre"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -514,13 +587,18 @@ export default function TheatresPage() {
               </div>
               <div>
                 <label className="label">Location</label>
-                <input
-                  type="text"
+                <select
                   name="location"
                   required
                   className="input-field"
-                  placeholder="e.g., Main Building, 2nd Floor"
-                />
+                  title="Location"
+                  defaultValue=""
+                >
+                  <option value="" disabled>— Select Location —</option>
+                  {locations.map((l) => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label">Capacity</label>
@@ -551,6 +629,68 @@ export default function TheatresPage() {
                 </button>
                 <button type="submit" className="btn-primary">
                   Add Theatre
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Theatre Modal */}
+      {editingTheatre && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-2xl font-bold mb-4">Edit Theatre</h2>
+            <form onSubmit={handleEditTheatre} className="space-y-4">
+              <div>
+                <label className="label">Theatre Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  defaultValue={editingTheatre.name}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">Location</label>
+                <select
+                  name="location"
+                  required
+                  defaultValue={editingTheatre.location}
+                  className="input-field"
+                  title="Location"
+                >
+                  <option value="" disabled>— Select Location —</option>
+                  {locations.map((l) => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                  {editingTheatre.location && !locations.includes(editingTheatre.location) && (
+                    <option value={editingTheatre.location}>{editingTheatre.location} (current)</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select
+                  name="status"
+                  required
+                  defaultValue={editingTheatre.status}
+                  className="input-field"
+                  title="Status"
+                >
+                  <option value="AVAILABLE">AVAILABLE</option>
+                  <option value="OCCUPIED">OCCUPIED</option>
+                  <option value="MAINTENANCE">MAINTENANCE</option>
+                  <option value="UNAVAILABLE">UNAVAILABLE</option>
+                </select>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button type="button" onClick={() => setEditingTheatre(null)} className="btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Save Changes
                 </button>
               </div>
             </form>
