@@ -682,7 +682,7 @@ export default function TheatresPage() {
                   <option value="AVAILABLE">AVAILABLE</option>
                   <option value="OCCUPIED">OCCUPIED</option>
                   <option value="MAINTENANCE">MAINTENANCE</option>
-                  <option value="UNAVAILABLE">UNAVAILABLE</option>
+                  <option value="RESERVED">RESERVED</option>
                 </select>
               </div>
               <div className="flex gap-3 justify-end">
