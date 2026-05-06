@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -21,6 +21,13 @@ interface Surgery {
   scheduledTime: string;
   status: string;
   subspecialty: string;
+  unit?: string;
+  needBloodTransfusion?: boolean;
+  needDiathermy?: boolean;
+  needStereo?: boolean;
+  needStirups?: boolean;
+  needMontrellMattress?: boolean;
+  otherSpecialNeeds?: string | null;
 }
 
 export default function SurgeriesPage() {
@@ -29,6 +36,7 @@ export default function SurgeriesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -114,8 +122,128 @@ export default function SurgeriesPage() {
       folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       surgery.procedureName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || surgery.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesDate = !dateFilter || (
+      surgery.scheduledDate && surgery.scheduledDate.slice(0, 10) === dateFilter
+    );
+    return matchesSearch && matchesStatus && matchesDate;
   }) : [];
+
+  const summariseSpecialNeeds = (s: Surgery): string[] => {
+    const tags: string[] = [];
+    if (s.needBloodTransfusion) tags.push('Blood Tx');
+    if (s.needDiathermy) tags.push('Diathermy');
+    if (s.needStirups || s.needStereo) tags.push('Stirrups');
+    if (s.needMontrellMattress) tags.push('Montrell');
+    if (s.otherSpecialNeeds && s.otherSpecialNeeds.trim()) tags.push('Other');
+    return tags;
+  };
+
+  // Export the currently filtered list as a landscape PDF (via browser print).
+  // Sorted by surgical team (subspecialty / unit) then by scheduled time.
+  const handleExportPdf = () => {
+    const rows = [...filteredSurgeries].sort((a, b) => {
+      const teamA = (a.subspecialty || a.unit || '').toLowerCase();
+      const teamB = (b.subspecialty || b.unit || '').toLowerCase();
+      if (teamA !== teamB) return teamA.localeCompare(teamB);
+      return (a.scheduledTime || '').localeCompare(b.scheduledTime || '');
+    });
+
+    // Group by surgical team for clearer printout.
+    const groups = new Map<string, Surgery[]>();
+    for (const r of rows) {
+      const key = r.subspecialty || r.unit || 'Unassigned';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
+    }
+
+    const dateLabel = dateFilter
+      ? new Date(dateFilter).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+      : 'All scheduled dates';
+
+    const escape = (v: string) =>
+      v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let body = '';
+    let groupNo = 0;
+    groups.forEach((items, team) => {
+      groupNo++;
+      body += `<h2 class="team">${groupNo}. ${escape(team)} <span class="count">(${items.length} case${items.length === 1 ? '' : 's'})</span></h2>`;
+      body += `<table><thead><tr>
+        <th style="width:4%">#</th>
+        <th style="width:18%">Patient</th>
+        <th style="width:10%">Folder</th>
+        <th style="width:24%">Procedure</th>
+        <th style="width:14%">Surgeon</th>
+        <th style="width:10%">Date &amp; Time</th>
+        <th style="width:12%">Special Needs</th>
+        <th style="width:8%">Status</th>
+      </tr></thead><tbody>`;
+      items.forEach((s, i) => {
+        const needs = summariseSpecialNeeds(s);
+        body += `<tr>
+          <td>${i + 1}</td>
+          <td>${escape(s.patient?.name || 'Unknown')}</td>
+          <td>${escape(s.patient?.folderNumber || 'N/A')}</td>
+          <td>${escape(s.procedureName)}</td>
+          <td>${escape(s.surgeon?.fullName || 'Not assigned')}</td>
+          <td>${escape(formatDate(s.scheduledDate))}<br/><span class="sub">${escape(s.scheduledTime || '')}</span></td>
+          <td>${needs.length === 0 ? '<span class="sub">—</span>' : needs.map(n => `<span class="badge">${escape(n)}</span>`).join(' ')}</td>
+          <td><span class="status status-${s.status}">${escape(s.status)}</span></td>
+        </tr>`;
+      });
+      body += '</tbody></table>';
+    });
+
+    if (rows.length === 0) {
+      body = '<p style="text-align:center;padding:40px;color:#666">No surgeries match the current filters.</p>';
+    }
+
+    const win = window.open('', '_blank', 'width=1200,height=800');
+    if (!win) {
+      alert('Please allow pop-ups to export the surgery list as PDF.');
+      return;
+    }
+    win.document.write(`<!doctype html><html><head>
+      <title>Surgery Schedule — ${escape(dateLabel)}</title>
+      <style>
+        @page { size: A4 landscape; margin: 10mm; }
+        body { font-family: Arial, sans-serif; color: #111; margin: 0; padding: 6mm; font-size: 11px; }
+        .head { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #111; padding-bottom:6px; margin-bottom:10px; }
+        .head h1 { margin:0; font-size:16px; }
+        .head p { margin:0; font-size:10px; color:#555; }
+        h2.team { font-size:13px; background:#f1f5f9; border-left:4px solid #4f46e5; padding:4px 8px; margin:14px 0 4px; }
+        h2.team .count { font-weight:normal; color:#555; font-size:11px; }
+        table { width:100%; border-collapse:collapse; margin-bottom:6px; }
+        th, td { border:1px solid #cbd5e1; padding:4px 6px; vertical-align:top; text-align:left; }
+        th { background:#e0e7ff; font-size:10px; text-transform:uppercase; }
+        .sub { color:#64748b; font-size:10px; }
+        .badge { display:inline-block; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; padding:1px 5px; border-radius:8px; font-size:9px; margin:1px 2px 1px 0; white-space:nowrap; }
+        .status { padding:2px 6px; border-radius:8px; font-weight:bold; font-size:9px; }
+        .status-SCHEDULED { background:#dbeafe; color:#1e40af; }
+        .status-IN_PROGRESS { background:#fef3c7; color:#92400e; }
+        .status-COMPLETED { background:#dcfce7; color:#166534; }
+        .status-CANCELLED { background:#fee2e2; color:#991b1b; }
+        .footer { margin-top:14px; border-top:1px solid #cbd5e1; padding-top:4px; font-size:9px; color:#64748b; display:flex; justify-content:space-between; }
+      </style>
+    </head><body>
+      <div class="head">
+        <div>
+          <h1>UNTH Theatre — Surgery Schedule</h1>
+          <p>Date: ${escape(dateLabel)} · Sorted by Surgical Team · ${rows.length} case${rows.length === 1 ? '' : 's'}</p>
+        </div>
+        <div style="text-align:right">
+          <p>Generated: ${new Date().toLocaleString('en-GB')}</p>
+        </div>
+      </div>
+      ${body}
+      <div class="footer">
+        <span>University of Nigeria Teaching Hospital — Ituku Ozalla, Enugu State</span>
+        <span>Use Ctrl+P (or ⌘P) and choose “Save as PDF”</span>
+      </div>
+      <script>window.onload = function () { setTimeout(function () { window.print(); }, 250); }</script>
+    </body></html>`);
+    win.document.close();
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -182,8 +310,8 @@ export default function SurgeriesPage() {
 
       {/* Filters */}
       <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="relative md:col-span-2">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
@@ -197,6 +325,7 @@ export default function SurgeriesPage() {
             className="input-field"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            title="Status filter"
           >
             <option value="ALL">All Status</option>
             <option value="SCHEDULED">Scheduled</option>
@@ -204,6 +333,40 @@ export default function SurgeriesPage() {
             <option value="COMPLETED">Completed</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
+          <input
+            type="date"
+            className="input-field"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            title="Filter by scheduled date"
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-gray-600">
+            Showing <strong>{filteredSurgeries.length}</strong> case{filteredSurgeries.length === 1 ? '' : 's'}
+            {dateFilter && <> on <strong>{new Date(dateFilter).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></>}
+          </p>
+          <div className="flex items-center gap-2">
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => setDateFilter('')}
+                className="text-xs text-gray-600 hover:text-gray-800 underline"
+              >
+                Clear date
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={filteredSurgeries.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+              title="Export the filtered list as a landscape PDF, sorted by surgical team"
+            >
+              <Printer className="w-4 h-4" />
+              Export PDF (landscape, by team)
+            </button>
+          </div>
         </div>
       </div>
 
@@ -232,6 +395,9 @@ export default function SurgeriesPage() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date & Time
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Special Needs
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -264,6 +430,28 @@ export default function SurgeriesPage() {
                         {formatDate(surgery.scheduledDate)}
                       </div>
                       <div className="text-sm text-gray-500">{surgery.scheduledTime}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const tags = summariseSpecialNeeds(surgery);
+                        if (tags.length === 0) {
+                          return <span className="text-xs text-gray-400 italic">None</span>;
+                        }
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {tags.map((t) => (
+                              <span
+                                key={t}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium border border-amber-200"
+                              >
+                                {t === 'Blood Tx' && <Droplet className="w-3 h-3 mr-1" />}
+                                {t === 'Diathermy' && <ZapIcon className="w-3 h-3 mr-1" />}
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(surgery.status)}`}>

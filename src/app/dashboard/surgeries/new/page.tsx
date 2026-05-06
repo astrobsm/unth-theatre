@@ -51,8 +51,22 @@ type OnDutyTeam = {
     cleaner: OnDutyMember | null;
     porter: OnDutyMember | null;
   };
+  candidates?: {
+    anaesthetists: OnDutyMember[];
+    anaestheticTechnicians: OnDutyMember[];
+    nurses: OnDutyMember[];
+    cleaners: OnDutyMember[];
+    porters: OnDutyMember[];
+  };
   rostersFound: number;
 };
+
+interface Theatre {
+  id: string;
+  name: string;
+  location: string;
+  status: string;
+}
 
 export default function NewSurgeryPage() {
   const router = useRouter();
@@ -67,6 +81,9 @@ export default function NewSurgeryPage() {
   const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const [unit, setUnit] = useState('');
+  const [theatres, setTheatres] = useState<Theatre[]>([]);
+  const [selectedTheatreId, setSelectedTheatreId] = useState('');
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
@@ -74,6 +91,7 @@ export default function NewSurgeryPage() {
   useEffect(() => {
     fetchPatients();
     fetchSurgeons();
+    fetchTheatres();
   }, []);
 
   // Auto-fetch on-duty team when scheduledDate + scheduledTime are both set.
@@ -89,7 +107,9 @@ export default function NewSurgeryPage() {
       setOnDutyError('');
       try {
         const dateTime = `${scheduledDate}T${scheduledTime}`;
-        const url = `/api/roster/on-duty?date=${encodeURIComponent(dateTime)}`;
+        const params = new URLSearchParams({ date: dateTime });
+        if (selectedTheatreId) params.set('theatreId', selectedTheatreId);
+        const url = `/api/roster/on-duty?${params.toString()}`;
         const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -106,7 +126,7 @@ export default function NewSurgeryPage() {
     };
     run();
     return () => controller.abort();
-  }, [scheduledDate, scheduledTime]);
+  }, [scheduledDate, scheduledTime, selectedTheatreId]);
 
   const fetchPatients = async () => {
     try {
@@ -129,6 +149,18 @@ export default function NewSurgeryPage() {
       }
     } catch (error) {
       console.error('Failed to fetch surgeons:', error);
+    }
+  };
+
+  const fetchTheatres = async () => {
+    try {
+      const response = await fetch('/api/theatres');
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) setTheatres(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch theatres:', error);
     }
   };
 
@@ -309,6 +341,8 @@ export default function NewSurgeryPage() {
                 type="text"
                 name="unit"
                 required
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
                 className="input-field"
                 placeholder="e.g., General Surgery, Orthopedics"
                 list="unit-suggestions"
@@ -325,6 +359,36 @@ export default function NewSurgeryPage() {
                 <option value="Plastic Surgery" />
                 <option value="Pediatric Surgery" />
               </datalist>
+            </div>
+
+            {/* Theatre dropdown — enabled once a surgical unit is chosen.
+                Selecting a theatre populates the Theatre Staff panel below
+                with everyone rostered to that theatre for the chosen shift. */}
+            <div>
+              <label className="label">
+                Theatre to be used
+                {unit ? '' : <span className="text-xs text-gray-400 ml-1">(pick a unit first)</span>}
+              </label>
+              <select
+                name="theatreId"
+                value={selectedTheatreId}
+                onChange={(e) => setSelectedTheatreId(e.target.value)}
+                disabled={!unit}
+                className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
+                title="Select theatre"
+              >
+                <option value="">— Select Theatre —</option>
+                {theatres.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} · {t.location} {t.status !== 'AVAILABLE' ? `(${t.status})` : ''}
+                  </option>
+                ))}
+              </select>
+              {selectedTheatreId && !scheduledDate && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Pick a date & time below to load the staff rostered to this theatre.
+                </p>
+              )}
             </div>
 
             <div>
@@ -547,10 +611,47 @@ export default function NewSurgeryPage() {
               </div>
             )}
 
+            {/* Full theatre staff list (everyone rostered to the selected
+                theatre for this shift) — porters, cleaners, anaesthetic
+                technicians, nurses, anaesthetists. */}
+            {selectedTheatreId && onDuty?.candidates && !onDutyLoading && onDuty.rostersFound > 0 && (
+              <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <p className="text-sm font-semibold text-indigo-900 mb-2">
+                  Staff in {theatres.find(t => t.id === selectedTheatreId)?.name || 'this theatre'} ({onDuty.shift} shift)
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+                  {[
+                    { label: 'Anaesthetists', list: onDuty.candidates.anaesthetists },
+                    { label: 'Anaesthetic Technicians', list: onDuty.candidates.anaestheticTechnicians },
+                    { label: 'Scrub Nurses', list: onDuty.candidates.nurses },
+                    { label: 'Cleaners', list: onDuty.candidates.cleaners },
+                    { label: 'Porters', list: onDuty.candidates.porters },
+                  ].map(({ label, list }) => (
+                    <div key={label} className="bg-white rounded p-2 border border-indigo-100">
+                      <p className="font-semibold text-gray-700">{label} ({list.length})</p>
+                      {list.length === 0 ? (
+                        <p className="italic text-gray-400">— none rostered —</p>
+                      ) : (
+                        <ul className="mt-1 space-y-0.5 text-gray-800">
+                          {list.map((m) => (
+                            <li key={m.userId}>
+                              • {m.name}
+                              {m.staffCode && <span className="text-gray-500"> ({m.staffCode})</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {onDuty && !onDutyLoading && (
               onDuty.rostersFound === 0 ? (
                 <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
-                  No roster entries found for {onDuty.date} ({onDuty.shift} shift). Please assign manually below.
+                  No roster entries found for {onDuty.date} ({onDuty.shift} shift)
+                  {selectedTheatreId ? ' in the selected theatre' : ''}. Please assign manually below.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
