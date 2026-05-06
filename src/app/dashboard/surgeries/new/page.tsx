@@ -10,6 +10,9 @@ import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const dayName = (d: number) => DAY_NAMES[d] || `Day ${d}`;
+
 interface Patient {
   id: string;
   name: string;
@@ -68,6 +71,22 @@ interface Theatre {
   status: string;
 }
 
+interface SurgicalUnitSchedule {
+  id: string;
+  dayOfWeek: number;
+  theatreId: string;
+  theatreName: string;
+}
+
+interface SurgicalUnit {
+  id: string;
+  name: string;
+  subspecialty: string;
+  location: string;
+  active: boolean;
+  schedules: SurgicalUnitSchedule[];
+}
+
 export default function NewSurgeryPage() {
   const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -82,8 +101,13 @@ export default function NewSurgeryPage() {
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   const [unit, setUnit] = useState('');
+  const [subspecialty, setSubspecialty] = useState('');
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
+  const [locations, setLocations] = useState<string[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnit[]>([]);
+  const [autoSuggestNote, setAutoSuggestNote] = useState('');
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
@@ -92,6 +116,8 @@ export default function NewSurgeryPage() {
     fetchPatients();
     fetchSurgeons();
     fetchTheatres();
+    fetchLocations();
+    fetchSurgicalUnits();
   }, []);
 
   // Auto-fetch on-duty team when scheduledDate + scheduledTime are both set.
@@ -164,6 +190,75 @@ export default function NewSurgeryPage() {
     }
   };
 
+  const fetchLocations = async () => {
+    try {
+      const response = await fetch('/api/locations');
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) setLocations(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch locations:', error);
+    }
+  };
+
+  const fetchSurgicalUnits = async () => {
+    try {
+      const response = await fetch('/api/surgical-units?activeOnly=true');
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) setSurgicalUnits(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch surgical units:', error);
+    }
+  };
+
+  // When location changes: clear unit/theatre/subspecialty if they no longer match.
+  useEffect(() => {
+    if (!selectedLocation) return;
+    const current = surgicalUnits.find((u) => u.name === unit);
+    if (current && current.location !== selectedLocation) {
+      setUnit('');
+      setSubspecialty('');
+    }
+    const currentTheatre = theatres.find((t) => t.id === selectedTheatreId);
+    if (currentTheatre && currentTheatre.location !== selectedLocation) {
+      setSelectedTheatreId('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocation]);
+
+  // Auto-suggest theatre + auto-fill subspecialty when unit (and optionally date) changes.
+  useEffect(() => {
+    if (!unit) {
+      setAutoSuggestNote('');
+      return;
+    }
+    const u = surgicalUnits.find((su) => su.name === unit);
+    if (!u) return;
+    if (!subspecialty) setSubspecialty(u.subspecialty);
+    if (!selectedLocation) setSelectedLocation(u.location);
+
+    if (!scheduledDate) {
+      setAutoSuggestNote(`This unit normally runs in: ${u.schedules.map((s) => `${dayName(s.dayOfWeek)} \u2192 ${s.theatreName}`).join(', ') || '\u2014 no schedule on file'}.`);
+      return;
+    }
+    const dow = new Date(scheduledDate + 'T00:00:00').getDay();
+    const match = u.schedules.find((s) => s.dayOfWeek === dow);
+    if (match) {
+      setAutoSuggestNote(`Schedule: ${u.name} runs in ${match.theatreName} on ${dayName(dow)}. Auto-selected.`);
+      // Only auto-select if user hasn't already chosen a theatre or chose the wrong one.
+      if (!selectedTheatreId || selectedTheatreId !== match.theatreId) {
+        setSelectedTheatreId(match.theatreId);
+      }
+    } else {
+      const others = u.schedules.map((s) => `${dayName(s.dayOfWeek)} (${s.theatreName})`).join(', ');
+      setAutoSuggestNote(`No scheduled allocation for ${u.name} on ${dayName(dow)}. Normal days: ${others || 'none on file'}. Pick a theatre manually.`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unit, scheduledDate, surgicalUnits]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -176,6 +271,8 @@ export default function NewSurgeryPage() {
       surgeonName: formData.get('surgeonName'),
       unit: formData.get('unit'),
       subspecialty: formData.get('subspecialty'),
+      location: selectedLocation || null,
+      theatreId: selectedTheatreId || null,
       indication: formData.get('indication'),
       procedureName: formData.get('procedureName'),
       scheduledDate: formData.get('scheduledDate'),
@@ -336,54 +433,86 @@ export default function NewSurgeryPage() {
             </div>
 
             <div>
+              <label className="label">Location *</label>
+              <select
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+                required
+                className="input-field"
+                title="Operating location"
+              >
+                <option value="">— Select Location —</option>
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+              {surgeryType === 'EMERGENCY' && selectedLocation && (
+                <p className="text-xs text-red-600 mt-1">
+                  Emergency: the scrub nurse on duty at <strong>{selectedLocation}</strong> will assign an available theatre and the on-duty emergency team will be activated automatically.
+                </p>
+              )}
+            </div>
+
+            <div>
               <label className="label">Surgical Unit *</label>
-              <input
-                type="text"
+              <select
                 name="unit"
                 required
                 value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-                className="input-field"
-                placeholder="e.g., General Surgery, Orthopedics"
-                list="unit-suggestions"
-              />
-              <datalist id="unit-suggestions">
-                <option value="General Surgery" />
-                <option value="Orthopedics" />
-                <option value="Neurosurgery" />
-                <option value="Cardiothoracic" />
-                <option value="Urology" />
-                <option value="Gynecology" />
-                <option value="ENT" />
-                <option value="Ophthalmology" />
-                <option value="Plastic Surgery" />
-                <option value="Pediatric Surgery" />
-              </datalist>
+                onChange={(e) => {
+                  const newUnit = e.target.value;
+                  setUnit(newUnit);
+                  const u = surgicalUnits.find((x) => x.name === newUnit);
+                  if (u) {
+                    setSubspecialty(u.subspecialty);
+                    if (!selectedLocation) setSelectedLocation(u.location);
+                  }
+                }}
+                disabled={!selectedLocation}
+                className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
+                title="Surgical unit"
+              >
+                <option value="">
+                  {selectedLocation ? '— Select Unit —' : '(pick a location first)'}
+                </option>
+                {surgicalUnits
+                  .filter((u) => !selectedLocation || u.location === selectedLocation)
+                  .map((u) => (
+                    <option key={u.id} value={u.name}>
+                      {u.name} · {u.subspecialty}
+                    </option>
+                  ))}
+              </select>
             </div>
 
-            {/* Theatre dropdown — enabled once a surgical unit is chosen.
-                Selecting a theatre populates the Theatre Staff panel below
-                with everyone rostered to that theatre for the chosen shift. */}
+            {/* Theatre dropdown — filtered by selected location.
+                Auto-suggested by day-of-week from the unit's schedule. */}
             <div>
               <label className="label">
                 Theatre to be used
-                {unit ? '' : <span className="text-xs text-gray-400 ml-1">(pick a unit first)</span>}
+                {surgeryType === 'EMERGENCY' && (
+                  <span className="text-xs text-red-600 ml-1">(optional — scrub nurse will assign)</span>
+                )}
               </label>
               <select
-                name="theatreId"
                 value={selectedTheatreId}
                 onChange={(e) => setSelectedTheatreId(e.target.value)}
-                disabled={!unit}
+                disabled={!selectedLocation}
                 className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
                 title="Select theatre"
               >
                 <option value="">— Select Theatre —</option>
-                {theatres.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} · {t.location} {t.status !== 'AVAILABLE' ? `(${t.status})` : ''}
-                  </option>
-                ))}
+                {theatres
+                  .filter((t) => !selectedLocation || t.location === selectedLocation)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.status !== 'AVAILABLE' ? `(${t.status})` : ''}
+                    </option>
+                  ))}
               </select>
+              {autoSuggestNote && (
+                <p className="text-xs text-indigo-700 mt-1">{autoSuggestNote}</p>
+              )}
               {selectedTheatreId && !scheduledDate && (
                 <p className="text-xs text-amber-600 mt-1">
                   Pick a date & time below to load the staff rostered to this theatre.
@@ -397,6 +526,8 @@ export default function NewSurgeryPage() {
                 type="text"
                 name="subspecialty"
                 required
+                value={subspecialty}
+                onChange={(e) => setSubspecialty(e.target.value)}
                 className="input-field"
                 placeholder="e.g., Laparoscopic Surgery"
               />

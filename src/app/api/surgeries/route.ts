@@ -11,6 +11,8 @@ const surgerySchema = z.object({
   surgeonName: z.string(),
   unit: z.string(),
   subspecialty: z.string(),
+  location: z.string().optional(),
+  theatreId: z.string().optional(),
   indication: z.string(),
   procedureName: z.string(),
   scheduledDate: z.string(),

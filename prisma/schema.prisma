@@ -805,6 +805,8 @@ model Surgery {
   scrubNurseId          String?
   subspecialty          String
   unit                  String                  // Surgical unit/department
+  location              String?                 // Operating location/complex (e.g., Professor Ojukwu Theatre Complex, Eye Theatre, A&E, Cardiothoracic Centre)
+  theatreId             String?                 // Optional FK-style id of the chosen TheatreSuite (string match, no FK to keep migration safe)
   indication            String                  // Clinical indication
   procedureName         String
   scheduledDate         DateTime
@@ -5993,4 +5995,45 @@ model HandoverAuditLog {
   @@index([handoverId])
   @@index([timestamp])
   @@map("handover_audit_logs")
+}
+
+// ============================================================================
+// Surgical Units & Day-of-Week Theatre Allocation Schedule
+// ----------------------------------------------------------------------------
+// Models the OPERATING THEATRE ALLOCATION SCHEDULE (Locations 1-4).
+// Admins manage these from /dashboard/admin/surgical-units.
+// ============================================================================
+model SurgicalUnit {
+  id            String                   @id @default(uuid())
+  name          String                   @unique  // e.g. "GS Unit I", "Neuro Unit III"
+  subspecialty  String                            // e.g. "General Surgery", "Neurosurgery"
+  location      String                            // e.g. "Professor Ojukwu Theatre Complex", "Eye Theatre", "A&E", "Cardiothoracic Centre"
+  active        Boolean                  @default(true)
+  notes         String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  
+  schedules     SurgicalUnitSchedule[]
+  
+  @@index([location])
+  @@index([subspecialty])
+  @@map("surgical_units")
+}
+
+model SurgicalUnitSchedule {
+  id          String        @id @default(uuid())
+  unitId      String
+  dayOfWeek   Int           // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  theatreId   String        // TheatreSuite.id (matched by id; soft reference)
+  theatreName String        // Cached name for quick display (e.g., "Theatre 3", "Suite 1")
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  unit        SurgicalUnit  @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  
+  @@unique([unitId, dayOfWeek, theatreId])
+  @@index([dayOfWeek])
+  @@index([theatreId])
+  @@map("surgical_unit_schedules")
 }

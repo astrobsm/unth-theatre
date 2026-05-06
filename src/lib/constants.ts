@@ -42,6 +42,38 @@ export const THEATRES = [
 export type Ward = typeof WARDS[number];
 export type Theatre = typeof THEATRES[number];
 
+// ============================================================================
+// Operating-theatre LOCATIONS (canonical labels — used for booking + seeding).
+// ============================================================================
+export const LOCATIONS = [
+  'Professor Ojukwu Theatre Complex', // Location 4 — main complex (Theatres 1-5, Suites 1-3)
+  'Eye Theatre',                       // Location 2 — Ophthalmology
+  'A&E',                               // Location 1 — 24/7 Accident & Emergency theatre
+  'Cardiothoracic Centre',             // Location 3 — CTU TH1
+] as const;
+
+export type Location = typeof LOCATIONS[number];
+
+// Canonical theatres seeded by scripts/seed-theatres-and-units.ts
+// Each row: { name (unique), location, capacity, status }
+export const CANONICAL_THEATRES: Array<{ name: string; location: Location; capacity?: number }> = [
+  // Location 4 – Professor Ojukwu Theatre Complex
+  { name: 'Theatre 1', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Theatre 2', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Theatre 3', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Theatre 4', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Theatre 5', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Suite 1', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Suite 2', location: 'Professor Ojukwu Theatre Complex' },
+  { name: 'Suite 3', location: 'Professor Ojukwu Theatre Complex' },
+  // Location 2 – Eye Theatre
+  { name: 'Eye Theatre', location: 'Eye Theatre' },
+  // Location 1 – A&E (24/7 emergency)
+  { name: 'A&E Theatre', location: 'A&E' },
+  // Location 3 – Cardiothoracic Centre
+  { name: 'CTU TH1', location: 'Cardiothoracic Centre' },
+];
+
 // University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla
 // Nkanu West Local Government Area, Enugu State, Nigeria
 export const FACILITY_COORDS = {
