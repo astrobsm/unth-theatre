@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { triggerRadio } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -187,6 +188,26 @@ export async function POST(
           message: `All medications for patient ${updatedPrescription.patientName} have been packed and are ready for surgery: ${updatedPrescription.surgery.procedureName || 'N/A'}`,
           link: `/dashboard/prescriptions`,
         },
+      });
+    }
+
+    // Theatre Radio: announce pharmacist packing
+    {
+      const patientName =
+        (updatedPrescription as any).patient?.fullName ||
+        (updatedPrescription as any).patientName ||
+        'patient';
+      const proc = updatedPrescription.surgery?.procedureName || 'scheduled procedure';
+      const oosNote = outOfStockItems.length > 0
+        ? ` Out of stock: ${outOfStockItems.join(', ')}.`
+        : '';
+      await triggerRadio({
+        category: newStatus === 'PACKED' ? 'CONFIRMATION' : 'WORKFLOW',
+        title: newStatus === 'PACKED' ? 'Drugs packed by pharmacy' : 'Drugs partially packed',
+        message: `${session.user.name ?? 'Pharmacy'} has ${newStatus === 'PACKED' ? 'completed packing' : 'partially packed'} the anaesthetic drugs for ${patientName} (${proc}).${oosNote}`,
+        priority: newStatus === 'PACKED' ? 60 : 70,
+        triggeredById: session.user.id,
+        metadata: { prescriptionId: updatedPrescription.id, status: newStatus, outOfStockItems },
       });
     }
 

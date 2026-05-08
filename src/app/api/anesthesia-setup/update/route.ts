@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
+import { triggerRadio } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,6 +104,22 @@ export async function POST(request: NextRequest) {
       where: { id: validatedData.setupLogId },
       data: updateData,
     });
+
+    // Theatre Radio: announce when theatre anaesthetic setup is ready
+    if (validatedData.markAsReady && updateData.status === 'READY') {
+      const theatreName = (updatedLog as any).theatreName || (setupLog as any).theatreName || 'Theatre';
+      const technicianName = (setupLog as any).technicianName || session.user.name || 'Anaesthetic technician';
+      const dur = (updateData as any).durationMinutes;
+      await triggerRadio({
+        category: 'CONFIRMATION',
+        title: 'Theatre anaesthetic setup ready',
+        message: `${theatreName} anaesthetic setup is complete and ready. Set up by ${technicianName}${dur ? ` in ${dur} minutes` : ''}. All anaesthesia equipment checked.`,
+        location: theatreName,
+        priority: 65,
+        triggeredById: session.user.id,
+        metadata: { setupLogId: updatedLog.id, theatreId: (updatedLog as any).theatreId },
+      });
+    }
 
     return NextResponse.json(
       {

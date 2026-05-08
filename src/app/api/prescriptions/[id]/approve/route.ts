@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { triggerRadio } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,6 +121,39 @@ export async function POST(
         }),
       },
     });
+
+    // Theatre Radio: announce prescription review outcome
+    {
+      const patientName =
+        (updatedPrescription as any).patient?.fullName ||
+        (updatedPrescription as any).patientName ||
+        'patient';
+      const theatreName =
+        (updatedPrescription as any).surgery?.theatreName ||
+        (updatedPrescription as any).surgery?.theatre ||
+        null;
+      if (validatedData.approved) {
+        await triggerRadio({
+          category: 'CONFIRMATION',
+          title: 'Anaesthetic prescription approved',
+          message: `Anaesthetic prescription for ${patientName} has been reviewed and approved by ${session.user.name ?? 'the consultant anaesthetist'}.${isLateArrival ? ' Note: late arrival flagged.' : ''} Pharmacy please proceed to pack the drugs.`,
+          location: theatreName,
+          priority: 60,
+          triggeredById: session.user.id,
+          metadata: { prescriptionId: updatedPrescription.id, isLateArrival },
+        });
+      } else {
+        await triggerRadio({
+          category: 'WORKFLOW',
+          title: 'Anaesthetic prescription rejected',
+          message: `Anaesthetic prescription for ${patientName} was rejected by ${session.user.name ?? 'the consultant anaesthetist'}. Reason: ${validatedData.rejectionReason ?? 'see prescription notes'}.`,
+          location: theatreName,
+          priority: 65,
+          triggeredById: session.user.id,
+          metadata: { prescriptionId: updatedPrescription.id },
+        });
+      }
+    }
 
     return NextResponse.json(updatedPrescription);
   } catch (error) {

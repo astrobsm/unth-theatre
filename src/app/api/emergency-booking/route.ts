@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { triggerRadio } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -316,6 +317,21 @@ export async function POST(request: NextRequest) {
           priority: validatedData.priority,
         }),
       },
+    });
+
+    // Theatre Radio: announce emergency booking
+    await triggerRadio({
+      category: 'EMERGENCY',
+      title: `Emergency case booked${validatedData.theatreName ? ' — ' + validatedData.theatreName : ''}`,
+      message: `${validatedData.priority} priority emergency. ${validatedData.procedureName} for ${validatedData.patientName}, folder ${validatedData.folderNumber}. Indication: ${validatedData.indication}.${validatedData.bloodRequired ? ` Blood required: ${validatedData.bloodUnits ?? ''} unit(s) ${validatedData.bloodType ?? ''}.` : ''}${validatedData.specialEquipment ? ` Special equipment: ${validatedData.specialEquipment}.` : ''} All theatre staff please respond.`,
+      location: validatedData.theatreName ?? null,
+      specialty: validatedData.surgicalUnit,
+      urgency: validatedData.priority === 'CRITICAL' ? 'CRITICAL' : validatedData.priority === 'HIGH' ? 'HIGH' : 'MEDIUM',
+      requireAck: true,
+      repeatUntilAck: true,
+      repeatEverySec: 45,
+      triggeredById: session.user.id,
+      metadata: { surgeryId: surgery.id, bookingId: booking.id, alertId: emergencyAlert.id },
     });
 
     return NextResponse.json({
