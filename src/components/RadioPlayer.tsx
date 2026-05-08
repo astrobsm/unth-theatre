@@ -37,6 +37,28 @@ export default function RadioPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playedRecentlyRef = useRef<Map<string, number>>(new Map());
 
+  // Restore persisted state once on mount so the radio stays activated
+  // across page reloads / navigation. Persistence keys are scoped per-user.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const e = window.localStorage.getItem('theatreRadio.enabled');
+      const m = window.localStorage.getItem('theatreRadio.muted');
+      if (e === '1') setEnabled(true);
+      if (m === '1') setMuted(true);
+    } catch { /* localStorage may be blocked */ }
+  }, []);
+
+  // Persist whenever the user toggles the radio.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem('theatreRadio.enabled', enabled ? '1' : '0'); } catch {}
+  }, [enabled]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem('theatreRadio.muted', muted ? '1' : '0'); } catch {}
+  }, [muted]);
+
   const speak = useCallback(
     (text: string) => {
       if (typeof window === 'undefined' || muted) return;
@@ -90,6 +112,14 @@ export default function RadioPlayer() {
       /* offline ok */
     }
   }, []);
+
+  // Keep service alive while tab is hidden by re-fetching when it becomes visible.
+  useEffect(() => {
+    if (status !== 'authenticated' || !enabled) return;
+    const onVisible = () => { if (!document.hidden) fetchQueue(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [status, enabled, fetchQueue]);
 
   // Poll
   useEffect(() => {

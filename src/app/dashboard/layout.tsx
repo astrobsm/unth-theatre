@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
-import RadioPlayer from '@/components/RadioPlayer';
 import AssistantWidget from '@/components/AssistantWidget';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import {
@@ -102,6 +101,7 @@ export default function DashboardLayout({
 
     // === PRE-OPERATIVE (Night Before & Morning Of) ===
     { href: '/dashboard/pre-operative-visit', icon: ClipboardPlus, label: 'Pre-Op Visit', badge: 'NEW' },
+    { href: '/dashboard/anaesthetist-board', icon: Stethoscope, label: 'Anaesthetist Board', badge: 'NEW' },
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
     { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Rx Approvals', badge: 'NEW' },
     { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions' },
@@ -142,6 +142,7 @@ export default function DashboardLayout({
 
     // === ALERTS & SAFETY ===
     { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
+    { href: '/dashboard/radio', icon: Volume2, label: 'Theatre Radio' },
     { href: '/dashboard/fault-alerts', icon: AlertOctagon, label: 'Fault Alerts' },
     { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts' },
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
@@ -387,7 +388,6 @@ export default function DashboardLayout({
           <div className="relative">{children}</div>
         </main>
       </div>
-      <RadioPlayer />
       <AssistantWidget />
     </div>
   );
