@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
             ptNumber: true,
             age: true,
             gender: true,
+            ward: true,
           }
         },
         surgeon: {
@@ -71,7 +72,25 @@ export async function GET(request: NextRequest) {
       orderBy: { scheduledDate: 'desc' }
     });
 
-    return NextResponse.json(surgeries);
+    // Resolve theatre names (theatreId is a string FK-style, no Prisma relation)
+    const theatreIds = Array.from(
+      new Set(surgeries.map(s => s.theatreId).filter((x): x is string => !!x))
+    );
+    const theatres = theatreIds.length
+      ? await prisma.theatreSuite.findMany({
+          where: { id: { in: theatreIds } },
+          select: { id: true, name: true, location: true },
+        })
+      : [];
+    const theatreMap = new Map(theatres.map(t => [t.id, t]));
+
+    const enriched = surgeries.map(s => ({
+      ...s,
+      theatre: s.theatreId ? theatreMap.get(s.theatreId) ?? null : null,
+      theatreName: s.theatreId ? theatreMap.get(s.theatreId)?.name ?? null : null,
+    }));
+
+    return NextResponse.json(enriched);
 
   } catch (error) {
     console.error("Surgeries fetch error:", error);

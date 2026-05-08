@@ -12,16 +12,25 @@ interface Surgery {
   patient: {
     name: string;
     folderNumber: string;
+    age?: number;
+    gender?: string;
+    ward?: string;
   };
   surgeon: {
     fullName: string;
   } | null;
+  surgeonName?: string | null;
   procedureName: string;
+  indication?: string;
   scheduledDate: string;
   scheduledTime: string;
   status: string;
   subspecialty: string;
   unit?: string;
+  location?: string | null;
+  theatreId?: string | null;
+  theatreName?: string | null;
+  theatre?: { id: string; name: string; location: string } | null;
   needBloodTransfusion?: boolean;
   needDiathermy?: boolean;
   needStereo?: boolean;
@@ -139,19 +148,19 @@ export default function SurgeriesPage() {
   };
 
   // Export the currently filtered list as a landscape PDF (via browser print).
-  // Sorted by surgical team (subspecialty / unit) then by scheduled time.
+  // Grouped by surgical UNIT (e.g. "PS Unit I", "GS Unit III"), then by scheduled time.
   const handleExportPdf = () => {
     const rows = [...filteredSurgeries].sort((a, b) => {
-      const teamA = (a.subspecialty || a.unit || '').toLowerCase();
-      const teamB = (b.subspecialty || b.unit || '').toLowerCase();
+      const teamA = (a.unit || a.subspecialty || '').toLowerCase();
+      const teamB = (b.unit || b.subspecialty || '').toLowerCase();
       if (teamA !== teamB) return teamA.localeCompare(teamB);
       return (a.scheduledTime || '').localeCompare(b.scheduledTime || '');
     });
 
-    // Group by surgical team for clearer printout.
+    // Group by surgical UNIT for clearer printout (more granular than subspecialty).
     const groups = new Map<string, Surgery[]>();
     for (const r of rows) {
-      const key = r.subspecialty || r.unit || 'Unassigned';
+      const key = r.unit || r.subspecialty || 'Unassigned';
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(r);
     }
@@ -169,23 +178,33 @@ export default function SurgeriesPage() {
       groupNo++;
       body += `<h2 class="team">${groupNo}. ${escape(team)} <span class="count">(${items.length} case${items.length === 1 ? '' : 's'})</span></h2>`;
       body += `<table><thead><tr>
-        <th style="width:4%">#</th>
-        <th style="width:18%">Patient</th>
-        <th style="width:10%">Folder</th>
-        <th style="width:24%">Procedure</th>
-        <th style="width:14%">Surgeon</th>
-        <th style="width:10%">Date &amp; Time</th>
-        <th style="width:12%">Special Needs</th>
-        <th style="width:8%">Status</th>
+        <th style="width:3%">#</th>
+        <th style="width:13%">Patient</th>
+        <th style="width:7%">Folder</th>
+        <th style="width:7%">Age / Sex</th>
+        <th style="width:8%">Ward</th>
+        <th style="width:18%">Procedure</th>
+        <th style="width:12%">Diagnosis / Indication</th>
+        <th style="width:10%">Surgeon</th>
+        <th style="width:9%">Theatre</th>
+        <th style="width:8%">Date &amp; Time</th>
+        <th style="width:5%">Special</th>
+        <th style="width:5%">Status</th>
       </tr></thead><tbody>`;
       items.forEach((s, i) => {
         const needs = summariseSpecialNeeds(s);
+        const ageSex = `${s.patient?.age ?? '?'}${s.patient?.gender ? ' / ' + s.patient.gender : ''}`;
+        const theatreLabel = s.theatreName || s.theatre?.name || s.location || '';
         body += `<tr>
           <td>${i + 1}</td>
           <td>${escape(s.patient?.name || 'Unknown')}</td>
           <td>${escape(s.patient?.folderNumber || 'N/A')}</td>
+          <td>${escape(ageSex)}</td>
+          <td>${escape(s.patient?.ward || '—')}</td>
           <td>${escape(s.procedureName)}</td>
-          <td>${escape(s.surgeon?.fullName || (s as any).surgeonName || 'Not assigned')}</td>
+          <td>${escape(s.indication || '—')}</td>
+          <td>${escape(s.surgeon?.fullName || s.surgeonName || 'Not assigned')}</td>
+          <td>${escape(theatreLabel)}</td>
           <td>${escape(formatDate(s.scheduledDate))}<br/><span class="sub">${escape(s.scheduledTime || '')}</span></td>
           <td>${needs.length === 0 ? '<span class="sub">—</span>' : needs.map(n => `<span class="badge">${escape(n)}</span>`).join(' ')}</td>
           <td><span class="status status-${s.status}">${escape(s.status)}</span></td>
@@ -388,7 +407,10 @@ export default function SurgeriesPage() {
                     Patient
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Procedure
+                    Procedure / Indication
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Unit / Theatre
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Surgeon
@@ -414,16 +436,35 @@ export default function SurgeriesPage() {
                       <div className="text-sm font-medium text-gray-900">
                         {surgery.patient?.name || 'Unknown Patient'}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs text-gray-500">
                         {surgery.patient?.folderNumber || 'N/A'}
+                        {(surgery.patient?.age != null || surgery.patient?.gender) && (
+                          <span className="ml-1 text-gray-400">
+                            · {surgery.patient?.age ?? '?'}y {surgery.patient?.gender ?? ''}
+                          </span>
+                        )}
                       </div>
+                      {surgery.patient?.ward && (
+                        <div className="text-xs text-gray-500">Ward: {surgery.patient.ward}</div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">{surgery.procedureName}</div>
-                      <div className="text-sm text-gray-500">{surgery.subspecialty}</div>
+                      <div className="text-xs text-gray-500">{surgery.subspecialty}</div>
+                      {surgery.indication && (
+                        <div className="text-xs text-gray-500">
+                          <span className="font-medium text-gray-600">Indication:</span> {surgery.indication}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{surgery.unit || '—'}</div>
+                      <div className="text-xs text-gray-500">
+                        {surgery.theatreName || surgery.theatre?.name || (surgery.location || 'No theatre')}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {surgery.surgeon?.fullName || (surgery as any).surgeonName || 'Not assigned'}
+                      {surgery.surgeon?.fullName || surgery.surgeonName || 'Not assigned'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">

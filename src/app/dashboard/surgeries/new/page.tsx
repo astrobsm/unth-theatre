@@ -171,15 +171,17 @@ export default function NewSurgeryPage() {
 
   const fetchSurgeons = async () => {
     try {
-      // Pull all roles that can act as the operating surgeon.
-      const response = await fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON,SENIOR_REGISTRAR,REGISTRAR');
+      // Only roles that exist in the UserRole enum can act as the operating surgeon.
+      // (Trainee grades aren't separate enum values in this system; consultants and trainees
+      //  all sit under SURGEON. House officers are added via the team-member picker, not here.)
+      const response = await fetch('/api/users?role=SURGEON&status=APPROVED');
       if (response.ok) {
         const data = await response.json();
-        if (Array.isArray(data)) {
-          // Sort alphabetically for easy picking
-          data.sort((a: Surgeon, b: Surgeon) => (a.fullName || '').localeCompare(b.fullName || ''));
-          setSurgeons(data);
-        }
+        const list = Array.isArray(data) ? data : (data?.users ?? []);
+        list.sort((a: Surgeon, b: Surgeon) => (a.fullName || '').localeCompare(b.fullName || ''));
+        setSurgeons(list);
+      } else {
+        console.error('fetchSurgeons HTTP', response.status);
       }
     } catch (error) {
       console.error('Failed to fetch surgeons:', error);
