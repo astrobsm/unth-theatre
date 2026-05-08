@@ -185,7 +185,7 @@ export default function SurgeriesPage() {
           <td>${escape(s.patient?.name || 'Unknown')}</td>
           <td>${escape(s.patient?.folderNumber || 'N/A')}</td>
           <td>${escape(s.procedureName)}</td>
-          <td>${escape(s.surgeon?.fullName || 'Not assigned')}</td>
+          <td>${escape(s.surgeon?.fullName || (s as any).surgeonName || 'Not assigned')}</td>
           <td>${escape(formatDate(s.scheduledDate))}<br/><span class="sub">${escape(s.scheduledTime || '')}</span></td>
           <td>${needs.length === 0 ? '<span class="sub">—</span>' : needs.map(n => `<span class="badge">${escape(n)}</span>`).join(' ')}</td>
           <td><span class="status status-${s.status}">${escape(s.status)}</span></td>
@@ -423,7 +423,7 @@ export default function SurgeriesPage() {
                       <div className="text-sm text-gray-500">{surgery.subspecialty}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {surgery.surgeon?.fullName || 'Not assigned'}
+                      {surgery.surgeon?.fullName || (surgery as any).surgeonName || 'Not assigned'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">

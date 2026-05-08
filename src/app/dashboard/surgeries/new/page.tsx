@@ -26,6 +26,8 @@ interface Patient {
 interface Surgeon {
   id: string;
   fullName: string;
+  role?: string;
+  staffCode?: string | null;
 }
 
 interface TeamMember {
@@ -102,6 +104,7 @@ export default function NewSurgeryPage() {
   const [scheduledTime, setScheduledTime] = useState('');
   const [unit, setUnit] = useState('');
   const [subspecialty, setSubspecialty] = useState('');
+  const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
   const [locations, setLocations] = useState<string[]>([]);
@@ -168,10 +171,15 @@ export default function NewSurgeryPage() {
 
   const fetchSurgeons = async () => {
     try {
-      const response = await fetch('/api/users?role=SURGEON');
+      // Pull all roles that can act as the operating surgeon.
+      const response = await fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON,SENIOR_REGISTRAR,REGISTRAR');
       if (response.ok) {
         const data = await response.json();
-        setSurgeons(data);
+        if (Array.isArray(data)) {
+          // Sort alphabetically for easy picking
+          data.sort((a: Surgeon, b: Surgeon) => (a.fullName || '').localeCompare(b.fullName || ''));
+          setSurgeons(data);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch surgeons:', error);
@@ -265,10 +273,13 @@ export default function NewSurgeryPage() {
     setError('');
 
     const formData = new FormData(e.currentTarget);
-    
+
+    const chosenSurgeon = surgeons.find((s) => s.id === selectedSurgeonId);
+
     const data = {
       patientId: formData.get('patientId'),
-      surgeonName: formData.get('surgeonName'),
+      surgeonId: selectedSurgeonId || null,
+      surgeonName: chosenSurgeon?.fullName || formData.get('surgeonName'),
       unit: formData.get('unit'),
       subspecialty: formData.get('subspecialty'),
       location: selectedLocation || null,
@@ -423,13 +434,28 @@ export default function NewSurgeryPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="label">Surgeon *</label>
-              <input
-                type="text"
-                name="surgeonName"
+              <select
+                name="surgeonId"
                 required
+                value={selectedSurgeonId}
+                onChange={(e) => setSelectedSurgeonId(e.target.value)}
                 className="input-field"
-                placeholder="Enter surgeon name"
-              />
+                title="Select operating surgeon"
+              >
+                <option value="">— Select Surgeon —</option>
+                {surgeons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
+                  </option>
+                ))}
+              </select>
+              {surgeons.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  No surgeons found in the staff database. Ask an administrator to add users with role SURGEON / CONSULTANT_SURGEON.
+                </p>
+              )}
+              {/* Hidden field keeps the surgeon name in the form payload for legacy validation */}
+              <input type="hidden" name="surgeonName" value={surgeons.find((s) => s.id === selectedSurgeonId)?.fullName || ''} />
             </div>
 
             <div>

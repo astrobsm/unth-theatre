@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 
 const surgerySchema = z.object({
   patientId: z.string(),
+  surgeonId: z.string().nullish(),
   surgeonName: z.string(),
   unit: z.string(),
   subspecialty: z.string(),
@@ -92,7 +93,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
 
-    const { teamMembers, surgeryType, ...surgeryData } = validatedData;
+    const { teamMembers, surgeryType, surgeonId, surgeonName, ...surgeryData } = validatedData;
+
+    // Resolve surgeon: if a user id was supplied, validate it and prefer the DB fullName.
+    let resolvedSurgeonId: string | null = null;
+    let resolvedSurgeonName = surgeonName;
+    if (surgeonId) {
+      const surgeonUser = await prisma.user.findUnique({
+        where: { id: surgeonId },
+        select: { id: true, fullName: true },
+      });
+      if (surgeonUser) {
+        resolvedSurgeonId = surgeonUser.id;
+        resolvedSurgeonName = surgeonUser.fullName || surgeonName;
+      }
+    }
 
     // Get patient details for emergency alert
     const patient = await prisma.patient.findUnique({
@@ -168,8 +183,8 @@ export async function POST(request: NextRequest) {
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
-        surgeonName: validatedData.surgeonName,
-        surgeonId: null, // No user ID when entering name directly
+        surgeonName: resolvedSurgeonName,
+        surgeonId: resolvedSurgeonId,
         surgeryType: surgeryType,
         scheduledDate: new Date(validatedData.scheduledDate),
         // Create team members if provided
