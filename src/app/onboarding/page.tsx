@@ -21,7 +21,6 @@ const DEPARTMENTS = [
   'Surgery (Maxillofacial)',
   'Obstetrics & Gynaecology',
   'CSSD / Sterile Services',
-  'Holding Area',
   'Theatre Stores',
   'Cleaning Services',
   'Porter Services',
