@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
+import RadioPlayer from '@/components/RadioPlayer';
+import AssistantWidget from '@/components/AssistantWidget';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import {
   LayoutDashboard,
@@ -385,6 +387,8 @@ export default function DashboardLayout({
           <div className="relative">{children}</div>
         </main>
       </div>
+      <RadioPlayer />
+      <AssistantWidget />
     </div>
   );
 }

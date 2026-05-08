@@ -6072,3 +6072,104 @@ model SurgicalUnitSchedule {
   @@index([theatreId])
   @@map("surgical_unit_schedules")
 }
+
+// ============================================================================
+// THEATRE RADIO SERVICE & ASSISTANT
+// ============================================================================
+
+// Scheduled or recurring broadcast definition (welcome msg, rules, music slot)
+model RadioBroadcast {
+  id             String   @id @default(uuid())
+  title          String
+  category       String   // WELCOME | RULES | MUSIC | ANNOUNCEMENT | CUSTOM
+  message        String?  // text content for TTS (nullable when audioUrl is used)
+  audioUrl       String?  // optional pre-recorded audio
+  voice          String?  // preferred voice hint (e.g. "en-GB-female")
+  priority       Int      @default(50) // 1=lowest, 100=emergency override
+  daysOfWeek     String   @default("0,1,2,3,4,5,6") // CSV of DOW
+  timeOfDay      String?  // "HH:mm" 24h, null = on-demand only
+  intervalMins   Int?     // if set, replays every N minutes during active window
+  startDate      DateTime?
+  endDate        DateTime?
+  active         Boolean  @default(true)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastTriggered  DateTime?
+
+  @@index([active])
+  @@index([category])
+  @@map("radio_broadcasts")
+}
+
+// A single announcement instance queued/played by the radio service
+model RadioAnnouncement {
+  id              String   @id @default(uuid())
+  broadcastId     String?  // links back to RadioBroadcast (optional)
+  category        String   // WELCOME | RULES | MUSIC | EMERGENCY | WORKFLOW | STAFF_REQUEST | CONFIRMATION | CUSTOM
+  title           String
+  message         String   // text to speak
+  audioUrl        String?
+  priority        Int      @default(50) // 100 = emergency override
+  location        String?  // e.g. "Theatre 3"
+  specialty       String?  // e.g. "Cardiothoracic"
+  urgency         String?  // LOW | MEDIUM | HIGH | CRITICAL
+  triggerSource   String   // SYSTEM | MANUAL | SCHEDULED | EVENT
+  triggeredById   String?
+  status          String   @default("PENDING") // PENDING | PLAYING | PLAYED | ACKNOWLEDGED | EXPIRED | CANCELLED
+  requireAck      Boolean  @default(false)
+  ackCode         String?  // staff confirmation code (optional)
+  repeatUntilAck  Boolean  @default(false)
+  repeatEverySec  Int      @default(30)
+  lastPlayedAt    DateTime?
+  acknowledgedAt  DateTime?
+  acknowledgedById String?
+  metadata        String?  // JSON blob (event-specific data)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  acks            RadioAcknowledgment[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([createdAt])
+  @@map("radio_announcements")
+}
+
+// Audit log of acknowledgments (who/when responded)
+model RadioAcknowledgment {
+  id              String   @id @default(uuid())
+  announcementId  String
+  userId          String
+  userName        String?
+  userRole        String?
+  responseSecs    Int?     // seconds from announcement creation to ack
+  codeUsed        String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  announcement    RadioAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId])
+  @@index([userId])
+  @@map("radio_acknowledgments")
+}
+
+// AI assistant conversation log (lightweight)
+model AssistantInteraction {
+  id          String   @id @default(uuid())
+  userId      String?
+  userRole    String?
+  question    String
+  answer      String
+  channel     String   @default("TEXT") // TEXT | VOICE
+  contextPath String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("assistant_interactions")
+}
+
+

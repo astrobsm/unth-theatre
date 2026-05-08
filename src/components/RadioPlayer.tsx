@@ -1,0 +1,249 @@
+'use client';
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2 } from 'lucide-react';
+
+interface Announcement {
+  id: string;
+  category: string;
+  title: string;
+  message: string;
+  audioUrl?: string | null;
+  priority: number;
+  location?: string | null;
+  specialty?: string | null;
+  urgency?: string | null;
+  status: string;
+  requireAck: boolean;
+  ackCode?: string | null;
+  repeatUntilAck: boolean;
+  repeatEverySec: number;
+  lastPlayedAt?: string | null;
+  createdAt: string;
+}
+
+const POLL_MS = 7000;
+
+export default function RadioPlayer() {
+  const { data: session, status } = useSession();
+  const [enabled, setEnabled] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [queue, setQueue] = useState<Announcement[]>([]);
+  const [current, setCurrent] = useState<Announcement | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [ackBusy, setAckBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playedRecentlyRef = useRef<Map<string, number>>(new Map());
+
+  const speak = useCallback(
+    (text: string) => {
+      if (typeof window === 'undefined' || muted) return;
+      try {
+        const synth = window.speechSynthesis;
+        if (!synth) return;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 0.98;
+        u.pitch = 1;
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const preferred =
+          voices.find((v) => /en-?(GB|US)/i.test(v.lang) && /female|samantha|zira|google/i.test(v.name)) ||
+          voices.find((v) => /en/i.test(v.lang)) ||
+          voices[0];
+        if (preferred) u.voice = preferred;
+        u.onstart = () => setSpeaking(true);
+        u.onend = () => setSpeaking(false);
+        u.onerror = () => setSpeaking(false);
+        synth.speak(u);
+      } catch {
+        /* noop */
+      }
+    },
+    [muted]
+  );
+
+  const playAudio = useCallback(
+    (url: string) => {
+      if (muted) return;
+      try {
+        if (!audioRef.current) audioRef.current = new Audio();
+        audioRef.current.src = url;
+        audioRef.current.volume = 1;
+        audioRef.current.play().catch(() => {});
+      } catch {
+        /* noop */
+      }
+    },
+    [muted]
+  );
+
+  const fetchQueue = useCallback(async () => {
+    try {
+      const r = await fetch('/api/radio/queue', { cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      setQueue(data.queue ?? []);
+    } catch {
+      /* offline ok */
+    }
+  }, []);
+
+  // Poll
+  useEffect(() => {
+    if (status !== 'authenticated' || !enabled) return;
+    fetchQueue();
+    const id = setInterval(fetchQueue, POLL_MS);
+    return () => clearInterval(id);
+  }, [status, enabled, fetchQueue]);
+
+  // Pick the highest-priority announcement and play it (respecting repeat windows)
+  useEffect(() => {
+    if (!enabled || queue.length === 0) return;
+    const top = queue[0];
+    setCurrent(top);
+    const lastPlayedKey = `${top.id}`;
+    const now = Date.now();
+    const last = playedRecentlyRef.current.get(lastPlayedKey) ?? 0;
+    const minGap = (top.repeatUntilAck ? top.repeatEverySec : 60) * 1000;
+    if (now - last < minGap) return;
+    playedRecentlyRef.current.set(lastPlayedKey, now);
+
+    const isEmergency = top.category === 'EMERGENCY' || top.priority >= 90;
+    const prefix = isEmergency
+      ? `Attention. Emergency. ${top.urgency ? top.urgency + ' priority. ' : ''}`
+      : '';
+    const text = `${prefix}${top.title}. ${top.message}${top.location ? '. Location: ' + top.location : ''}${top.specialty ? '. Specialty: ' + top.specialty : ''}.`;
+
+    if (top.audioUrl) playAudio(top.audioUrl);
+    else speak(text);
+
+    // mark as PLAYING (best-effort, fire-and-forget)
+    fetch('/api/radio/queue', { cache: 'no-store' }).catch(() => {});
+  }, [queue, enabled, speak, playAudio]);
+
+  const acknowledge = useCallback(
+    async (id: string) => {
+      setAckBusy(true);
+      let code: string | undefined;
+      const ann = queue.find((q) => q.id === id) ?? current;
+      if (ann?.ackCode) {
+        code = window.prompt('Enter your acknowledgment code:') ?? undefined;
+        if (!code) {
+          setAckBusy(false);
+          return;
+        }
+      }
+      try {
+        const r = await fetch('/api/radio/acknowledge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ announcementId: id, code }),
+        });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          alert(e.error ?? 'Failed to acknowledge');
+        } else {
+          window.speechSynthesis?.cancel();
+          if (audioRef.current) audioRef.current.pause();
+          await fetchQueue();
+        }
+      } finally {
+        setAckBusy(false);
+      }
+    },
+    [queue, current, fetchQueue]
+  );
+
+  if (status !== 'authenticated') return null;
+
+  const top = queue[0];
+  const isEmergency = top && (top.category === 'EMERGENCY' || top.priority >= 90);
+
+  return (
+    <div
+      className={`fixed bottom-0 left-0 right-0 z-[60] shadow-2xl border-t-4 ${
+        isEmergency
+          ? 'bg-red-600 border-red-900 text-white animate-pulse'
+          : 'bg-gradient-to-r from-slate-900 to-slate-800 border-primary-600 text-white'
+      }`}
+    >
+      <div className="flex items-center px-4 py-2 gap-3">
+        <button
+          onClick={() => {
+            if (!enabled) {
+              // user gesture unlocks audio
+              setEnabled(true);
+              try { window.speechSynthesis?.getVoices(); } catch {}
+              speak('Theatre radio service activated.');
+            } else {
+              setCollapsed((c) => !c);
+            }
+          }}
+          className="flex items-center gap-2 font-bold"
+          title={enabled ? 'Toggle radio panel' : 'Click to start theatre radio'}
+        >
+          {isEmergency ? <AlertOctagon className="w-5 h-5" /> : <Radio className="w-5 h-5" />}
+          <span>{enabled ? 'THEATRE RADIO' : 'START RADIO'}</span>
+          {speaking && <Loader2 className="w-4 h-4 animate-spin" />}
+        </button>
+
+        {enabled && (
+          <>
+            <button
+              onClick={() => {
+                setMuted((m) => {
+                  const nm = !m;
+                  if (nm) {
+                    window.speechSynthesis?.cancel();
+                    audioRef.current?.pause();
+                  }
+                  return nm;
+                });
+              }}
+              className="p-1 rounded hover:bg-white/10"
+              title={muted ? 'Unmute' : 'Mute'}
+            >
+              {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+
+            <div className="flex-1 truncate text-sm">
+              {top ? (
+                <span>
+                  <span className="font-semibold">{top.title}</span>
+                  <span className="opacity-80"> — {top.message}</span>
+                </span>
+              ) : (
+                <span className="opacity-70 flex items-center gap-2">
+                  <Music className="w-4 h-4" /> Idle. Listening for announcements…
+                </span>
+              )}
+            </div>
+
+            {top?.requireAck && (
+              <button
+                onClick={() => acknowledge(top.id)}
+                disabled={ackBusy}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold disabled:opacity-60"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Acknowledge
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {enabled && !collapsed && queue.length > 1 && (
+        <div className="bg-black/30 px-4 py-1 text-xs flex gap-3 overflow-x-auto">
+          {queue.slice(1, 6).map((q) => (
+            <span key={q.id} className="whitespace-nowrap opacity-80">
+              • [{q.category}] {q.title}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

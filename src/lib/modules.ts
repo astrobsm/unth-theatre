@@ -92,6 +92,7 @@ export const MODULES: AppModule[] = [
 
   // Alerts & safety
   { id: 'alerts', label: 'Alerts', paths: ['/dashboard/alerts'], defaultRoles: ['*'], category: 'Alerts' },
+  { id: 'radio', label: 'Theatre Radio', paths: ['/dashboard/radio'], defaultRoles: ['*'], category: 'Alerts' },
   { id: 'fault-alerts', label: 'Fault Alerts', paths: ['/dashboard/fault-alerts'], defaultRoles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR', 'PLUMBER'], category: 'Alerts' },
   { id: 'emergency-alerts', label: 'Emergency Alerts', paths: ['/dashboard/emergency-alerts'], defaultRoles: [...CLINICAL_CORE], category: 'Alerts' },
   { id: 'mortality', label: 'Mortality Registry', paths: ['/dashboard/mortality'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Alerts' },
