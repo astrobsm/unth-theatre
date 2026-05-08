@@ -15,7 +15,7 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   { value: 'ANAESTHETIST',             label: 'Anaesthetist',                     prefix: 'ANS' },
   { value: 'CONSULTANT_ANAESTHETIST',  label: 'Consultant Anaesthetist',          prefix: 'CAN' },
   { value: 'SCRUB_NURSE',              label: 'Scrub Nurse',                      prefix: 'SCN' },
-  { value: 'RECOVERY_ROOM_NURSE',      label: 'Recovery Room Nurse',              prefix: 'RRN' },
+  { value: 'RECOVERY_ROOM_NURSE',      label: 'PACU/Recovery Room Nurse',         prefix: 'RRN' },
   { value: 'ANAESTHETIC_TECHNICIAN',   label: 'Anaesthetic Technician',           prefix: 'ANT' },
   { value: 'PHARMACIST',               label: 'Pharmacist',                       prefix: 'PHM' },
   { value: 'EMERGENCY_LAB_SCIENTIST',  label: 'Emergency Lab Scientist',          prefix: 'ELS' },

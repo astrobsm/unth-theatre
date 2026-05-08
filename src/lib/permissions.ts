@@ -346,7 +346,7 @@ export function getRoleName(role: UserRole): string {
     ANAESTHETIST: 'Anaesthetist',
     CONSULTANT_ANAESTHETIST: 'Consultant Anaesthetist',
     SCRUB_NURSE: 'Scrub Nurse',
-    RECOVERY_ROOM_NURSE: 'Recovery Room Nurse',
+    RECOVERY_ROOM_NURSE: 'PACU/Recovery Room Nurse',
     THEATRE_STORE_KEEPER: 'Theatre Store Keeper',
     PORTER: 'Porter',
     ANAESTHETIC_TECHNICIAN: 'Anaesthetic Technician',

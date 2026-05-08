@@ -7,7 +7,7 @@ import { ONBOARDING_ROLES, prefixForRole } from '@/lib/onboarding-roles';
 const ROLES = ONBOARDING_ROLES;
 
 const DEPARTMENTS = [
-  'Theatre / Operating Rooms',
+  'Nursing Department',
   'Anaesthesia',
   'Surgery (General)',
   'Surgery (Orthopaedic)',
@@ -20,7 +20,6 @@ const DEPARTMENTS = [
   'Surgery (Urology)',
   'Surgery (Maxillofacial)',
   'Obstetrics & Gynaecology',
-  'Recovery / PACU',
   'CSSD / Sterile Services',
   'Holding Area',
   'Theatre Stores',
