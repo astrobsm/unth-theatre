@@ -69,6 +69,88 @@ export async function GET(_req: NextRequest) {
     });
   }
 
+  // ----------------------------------------------------------------
+  // Promote scheduled Announcements (admin Announcements module) whose
+  // scheduledDate has arrived into the radio queue. Each is enqueued as a
+  // RadioAnnouncement with audioUrl pointing at the streaming endpoint so
+  // the RadioPlayer plays the uploaded MP3 directly.
+  // ----------------------------------------------------------------
+  try {
+    const due = await prisma.announcement.findMany({
+      where: {
+        status: { in: ['SCHEDULED', 'ACTIVE'] },
+        scheduledDate: { lte: now },
+        OR: [{ endDate: null }, { endDate: { gte: now } }],
+      },
+      take: 20,
+    });
+
+    for (const a of due) {
+      // Decide whether this announcement is due to play right now (taking
+      // recurring frequency + lastPlayedAt into account so we don't spam).
+      let shouldFire = false;
+      const last = a.lastPlayedAt?.getTime() ?? 0;
+      const sinceLast = now.getTime() - last;
+
+      if (a.frequency === 'ONE_TIME') {
+        shouldFire = !a.lastPlayedAt;
+      } else if (a.frequency === 'DAILY') {
+        // Fire once per calendar day at/after scheduled time of day.
+        shouldFire = !a.lastPlayedAt || sinceLast >= 23 * 60 * 60 * 1000;
+      } else if (a.frequency === 'WEEKLY') {
+        let allowToday = true;
+        if (a.repeatDays) {
+          try {
+            const days = JSON.parse(a.repeatDays) as number[];
+            allowToday = days.includes(dow);
+          } catch { /* keep true on malformed json */ }
+        }
+        shouldFire =
+          allowToday && (!a.lastPlayedAt || sinceLast >= 23 * 60 * 60 * 1000);
+      } else if (a.frequency === 'CUSTOM_INTERVAL' && a.customIntervalMin) {
+        shouldFire =
+          !a.lastPlayedAt || sinceLast >= a.customIntervalMin * 60 * 1000;
+      }
+
+      if (!shouldFire) continue;
+
+      // Avoid double-enqueue if a PENDING/PLAYING radio row for this
+      // announcement already exists (e.g. created in a previous poll within
+      // the same minute).
+      const existing = await prisma.radioAnnouncement.findFirst({
+        where: {
+          status: { in: ['PENDING', 'PLAYING'] },
+          metadata: { contains: `"announcementId":"${a.id}"` },
+        },
+      });
+      if (existing) continue;
+
+      await prisma.radioAnnouncement.create({
+        data: {
+          category: 'CUSTOM',
+          title: a.title,
+          message: a.description || a.title,
+          audioUrl: `/api/announcements/${a.id}/audio`,
+          priority: 60,
+          triggerSource: 'SCHEDULED',
+          status: 'PENDING',
+          metadata: JSON.stringify({ announcementId: a.id }),
+        },
+      });
+
+      await prisma.announcement.update({
+        where: { id: a.id },
+        data: {
+          lastPlayedAt: now,
+          playCount: { increment: 1 },
+          status: a.frequency === 'ONE_TIME' ? 'PLAYED' : 'ACTIVE',
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[radio/queue] failed to promote scheduled announcements:', err);
+  }
+
   // Expire ack-required announcements older than 30 min that nobody acked
   await prisma.radioAnnouncement.updateMany({
     where: {
