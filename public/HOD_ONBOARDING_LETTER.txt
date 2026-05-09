@@ -1,0 +1,107 @@
+UNTH ITUKU-OZALLA — OPERATIVE RESOURCE MANAGER (ORM)
+Office of the Theatre Chairman
+9th May 2026
+
+To: All Heads of Department
+(Department of Surgery and its Sub-Specialties; Department of Anaesthesia; Theatre Nursing
+Services; PACU/Recovery; Pharmacy; Laboratory; Blood Bank; Biomedical Engineering;
+Power House; Plumbing & Water Services; CSSD; Theatre Stores; Portering Services;
+Catering & Theatre Meals; Security; ICT; Records and any other allied service)
+
+Through: The Chief Medical Director
+The Chairman, Medical Advisory Committee
+The Director of Nursing Services
+
+RE: STAFF ONBOARDING ON THE OPERATIVE RESOURCE MANAGER (ORM) PLATFORM
+    AND COMMENCEMENT OF DIGITAL DUTY ROSTERS WITH EFFECT FROM
+    SUNDAY, 10TH MAY 2026
+
+Dear Sir/Madam,
+
+Sequel to the deployment of the Operative Resource Manager (ORM) — the unified digital
+platform now serving the Main Theatre Complex of UNTH Ituku-Ozalla — I write to formally
+solicit your support in driving full staff adoption across your department.
+
+The platform consolidates patient scheduling, pre-operative review, theatre allocation,
+intra-operative documentation (WHO Surgical Safety Checklist), PACU handover, blood and
+drug requests, equipment checkout, fault and emergency alerts, the live theatre radio
+service, departmental announcements and the weekly duty roster — all in one place,
+accessible from any phone, tablet or computer, online or offline.
+
+To this end, I respectfully request the following:
+
+1.  STAFF PROFILE CREATION
+    Kindly direct every member of staff in your department — clinical and non-clinical —
+    to register an individual profile on the platform without delay. Each staff member
+    will use the role and department that matches their substantive posting; the system
+    will automatically generate their unique staff code on approval.
+
+2.  COMMENCEMENT OF DIGITAL DUTY ROSTERS — SUNDAY, 10TH MAY 2026
+    With effect from Sunday, 10th May 2026, all departmental duty rosters (call,
+    morning, afternoon and night shifts; on-call consultants; standby teams) shall be
+    created and maintained on the ORM platform. Manual / paper rosters will run only
+    in parallel during the transition fortnight and will be retired thereafter. Heads
+    of Department, Unit Heads and Roster Officers are kindly requested to ensure that
+    the roster for the week beginning Sunday, 10th May 2026 is published on the
+    platform on or before Saturday, 9th May 2026, 12:00 noon, and that subsequent
+    weekly rosters are uploaded every Thursday before 12:00 noon as already
+    standardised.
+
+3.  PHYSICAL ONBOARDING MEETINGS — FROM NEXT WEEK
+    A dedicated physical onboarding session will be held for each department from
+    next week. The schedule will be circulated separately by this office in
+    consultation with each Head of Department. Attendance is mandatory for all
+    departmental staff; laptops, tablets or smartphones should be brought along so
+    that profiles, rosters and module access can be configured live during the
+    session.
+
+4.  PLATFORM ACCESS LINK
+    The platform is available at:
+
+        https://unth-theatre-mai.vercel.app
+
+    It is also installable as a Progressive Web App on Android, iOS and Windows
+    devices (use the "Install App" prompt or the browser's "Add to Home Screen"
+    option). The app continues to function in offline mode and will synchronise
+    once connectivity is restored.
+
+5.  ROLE NOMENCLATURE — ALIGNMENT WITH HOSPITAL PRACTICE
+    Please note the following role-label alignment now reflected on the platform,
+    which Heads of Nursing and Anaesthesia are kindly requested to bring to the
+    attention of their staff during onboarding:
+        •  "Scrub Nurse"          →  Peri-Operative Nurse
+        •  "Recovery Room Nurse"  →  Nurse Anaesthetist
+
+    Existing staff records are unaffected; only the displayed role title has been
+    updated.
+
+6.  SUPPORT
+    For technical assistance during registration or roster upload, departmental
+    super-users and the ICT helpdesk will be on hand throughout the onboarding
+    fortnight. Issues may also be reported in-app via Settings → Fault Alerts.
+
+Your usual co-operation in ensuring 100% staff onboarding and timely roster publication
+will go a long way in enhancing patient safety, transparency and operational efficiency
+in our theatre complex.
+
+Thank you.
+
+Yours faithfully,
+
+
+
+______________________________
+Theatre Chairman
+UNTH Ituku-Ozalla
+For: The Chief Medical Director
+
+
+cc:  Chief Medical Director
+     Chairman, Medical Advisory Committee
+     Director of Clinical Services
+     Director of Nursing Services
+     Director of Pharmaceutical Services
+     Head, Biomedical Engineering
+     Head, ICT
+     Theatre Manager
+     File
