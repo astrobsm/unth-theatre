@@ -273,34 +273,7 @@ export default function HodLetterPrintPage() {
         </div>
 
         <div className="clause">
-          <h3>5. Role Nomenclature — Alignment with Hospital Practice</h3>
-          <p>
-            Please note the following role-label alignment now reflected on the platform,
-            which Heads of Nursing and Anaesthesia are kindly requested to bring to the
-            attention of their staff during onboarding:
-          </p>
-          <table className="role-table">
-            <tbody>
-              <tr>
-                <td>&ldquo;Scrub Nurse&rdquo;</td>
-                <td className="arrow">&rarr;</td>
-                <td><strong>Peri-Operative Nurse</strong></td>
-              </tr>
-              <tr>
-                <td>&ldquo;Recovery Room Nurse&rdquo;</td>
-                <td className="arrow">&rarr;</td>
-                <td><strong>Nurse Anaesthetist</strong></td>
-              </tr>
-            </tbody>
-          </table>
-          <p style={{ marginTop: '8px' }}>
-            Existing staff records are unaffected; only the displayed role title has
-            been updated.
-          </p>
-        </div>
-
-        <div className="clause">
-          <h3>6. Support</h3>
+          <h3>5. Support</h3>
           <p>
             For technical assistance during registration or roster upload, departmental
             super-users and the ICT helpdesk will be on hand throughout the onboarding

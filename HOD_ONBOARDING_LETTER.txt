@@ -65,17 +65,7 @@ To this end, I respectfully request the following:
     option). The app continues to function in offline mode and will synchronise
     once connectivity is restored.
 
-5.  ROLE NOMENCLATURE — ALIGNMENT WITH HOSPITAL PRACTICE
-    Please note the following role-label alignment now reflected on the platform,
-    which Heads of Nursing and Anaesthesia are kindly requested to bring to the
-    attention of their staff during onboarding:
-        •  "Scrub Nurse"          →  Peri-Operative Nurse
-        •  "Recovery Room Nurse"  →  Nurse Anaesthetist
-
-    Existing staff records are unaffected; only the displayed role title has been
-    updated.
-
-6.  SUPPORT
+5.  SUPPORT
     For technical assistance during registration or roster upload, departmental
     super-users and the ICT helpdesk will be on hand throughout the onboarding
     fortnight. Issues may also be reported in-app via Settings → Fault Alerts.
