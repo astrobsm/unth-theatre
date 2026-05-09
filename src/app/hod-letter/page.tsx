@@ -158,7 +158,7 @@ export default function HodLetterPrintPage() {
           <div className="titles">
             <p className="institution">University of Nigeria Teaching Hospital</p>
             <p className="subline">Ituku-Ozalla, Enugu State, Nigeria</p>
-            <p className="office">Office of the Theatre Chairman — Operative Resource Manager (ORM)</p>
+            <p className="office">Operative Resource Manager (ORM)</p>
           </div>
           <div className="crest">
             <Image
