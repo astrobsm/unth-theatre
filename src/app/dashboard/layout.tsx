@@ -155,7 +155,7 @@ export default function DashboardLayout({
 
     // === REPORTS & ADMINISTRATION ===
     { href: '/dashboard/announcements', icon: Volume2, label: 'Announcements', badge: 'NEW' },
-    { href: '/dashboard/hod-letter', icon: FileText, label: 'HOD Onboarding Letter', badge: 'NEW' },
+    { href: '/hod-letter', icon: FileText, label: 'HOD Onboarding Letter', badge: 'NEW', external: true },
     { href: '/dashboard/theatre-meals', icon: ChefHat, label: 'Theatre Meals', badge: 'NEW' },
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
