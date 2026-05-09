@@ -103,7 +103,7 @@ const GROUPS: Record<string, GroupConfig> = {
   },
   'recovery-nurses': {
     slug: 'recovery-nurses',
-    title: 'Recovery Room Nurses Weekly Roster',
+    title: 'Nurse Anaesthetists Weekly Roster',
     category: 'RECOVERY_NURSES',
     shifts: ['MORNING', 'NIGHT'],
     locations: ALL_LOCATIONS,

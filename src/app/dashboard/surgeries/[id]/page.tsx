@@ -273,7 +273,7 @@ export default function SurgeryDetailPage() {
             )}
             {surgery.scrubNurse && (
               <div>
-                <label className="text-sm font-medium text-gray-500">Scrub Nurse</label>
+                <label className="text-sm font-medium text-gray-500">Perioperative Nurse</label>
                 <p className="text-gray-900 font-medium">{surgery.scrubNurse?.fullName || 'Not assigned'}</p>
               </div>
             )}

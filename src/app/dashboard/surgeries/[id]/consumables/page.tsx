@@ -360,7 +360,7 @@ export default function SurgeryConsumablesPage() {
             <h2 className="text-xl font-semibold">Add Consumables</h2>
             {inventory.length > 0 && (
               <p className="text-sm text-gray-600 mt-1">
-                Showing items collected by scrub nurse for this theatre on {new Date(surgery.scheduledDate).toLocaleDateString()}
+                Showing items collected by perioperative nurse for this theatre on {new Date(surgery.scheduledDate).toLocaleDateString()}
               </p>
             )}
             {inventory.length === 0 && (

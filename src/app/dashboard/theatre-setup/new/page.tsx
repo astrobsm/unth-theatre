@@ -457,7 +457,7 @@ export default function NewTheatreSetupPage() {
           {/* Scrub Nurse Info */}
           <div className="mt-4 p-4 bg-blue-50 rounded-lg">
             <div className="mb-3">
-              <label className="label">Scrub Nurse Collecting Materials</label>
+              <label className="label">Perioperative Nurse Collecting Materials</label>
               <div className="relative">
                 <input
                   type="text"
@@ -467,7 +467,7 @@ export default function NewTheatreSetupPage() {
                     setShowScrubNurseDropdown(true);
                   }}
                   onFocus={() => setShowScrubNurseDropdown(true)}
-                  placeholder="Enter or select scrub nurse name"
+                  placeholder="Enter or select perioperative nurse name"
                   className="input-field"
                 />
                 
@@ -491,7 +491,7 @@ export default function NewTheatreSetupPage() {
                 )}
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                Type to search existing scrub nurses or enter a new name
+                Type to search existing perioperative nurses or enter a new name
               </p>
             </div>
             <p className="text-sm text-gray-700">

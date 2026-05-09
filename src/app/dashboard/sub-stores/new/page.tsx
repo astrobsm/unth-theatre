@@ -204,7 +204,7 @@ export default function NewSubStoreItemPage() {
                 className="input-field"
                 title="Which sub-store does this item belong to"
               >
-                <option value="SCRUB_NURSE">Scrub Nurse Sub-Store</option>
+                <option value="SCRUB_NURSE">Perioperative Nurse Sub-Store</option>
                 <option value="ANAESTHETIC_TECHNICIAN">Anaesthetic Technician Sub-Store</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">

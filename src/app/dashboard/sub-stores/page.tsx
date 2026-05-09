@@ -69,7 +69,7 @@ export default function SubStoresPage() {
   const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
 
   const ownerRoles = [
-    { value: 'SCRUB_NURSE', label: 'Scrub Nurse Sub-Store' },
+    { value: 'SCRUB_NURSE', label: 'Perioperative Nurse Sub-Store' },
     { value: 'ANAESTHETIC_TECHNICIAN', label: 'Anaesthetic Technician Sub-Store' },
   ];
 
@@ -395,7 +395,7 @@ export default function SubStoresPage() {
                   href={`/dashboard/sub-stores/theatre/${encodeURIComponent(theatre.name)}?ownerRole=SCRUB_NURSE`}
                   className={`p-2 rounded border text-xs ${scrubCritical > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}
                 >
-                  <p className="font-medium">Scrub Nurse</p>
+                  <p className="font-medium">Perioperative Nurse</p>
                   <p className="text-gray-600">{scrubItems.length} items</p>
                   {scrubCritical > 0 && (
                     <p className="text-red-600 font-medium">{scrubCritical} critical</p>
@@ -450,7 +450,7 @@ export default function SubStoresPage() {
             const ownerLabel =
               ownerRole === 'ANAESTHETIC_TECHNICIAN'
                 ? 'Anaesthetic Technician Sub-Store'
-                : 'Scrub Nurse Sub-Store';
+                : 'Perioperative Nurse Sub-Store';
             const headerColor =
               ownerRole === 'ANAESTHETIC_TECHNICIAN'
                 ? 'from-indigo-600 to-indigo-700'

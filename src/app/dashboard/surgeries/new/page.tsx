@@ -476,7 +476,7 @@ export default function NewSurgeryPage() {
               </select>
               {surgeryType === 'EMERGENCY' && selectedLocation && (
                 <p className="text-xs text-red-600 mt-1">
-                  Emergency: the scrub nurse on duty at <strong>{selectedLocation}</strong> will assign an available theatre and the on-duty emergency team will be activated automatically.
+                  Emergency: the perioperative nurse on duty at <strong>{selectedLocation}</strong> will assign an available theatre and the on-duty emergency team will be activated automatically.
                 </p>
               )}
             </div>
@@ -519,7 +519,7 @@ export default function NewSurgeryPage() {
               <label className="label">
                 Theatre to be used
                 {surgeryType === 'EMERGENCY' && (
-                  <span className="text-xs text-red-600 ml-1">(optional — scrub nurse will assign)</span>
+                  <span className="text-xs text-red-600 ml-1">(optional — perioperative nurse will assign)</span>
                 )}
               </label>
               <select
@@ -782,7 +782,7 @@ export default function NewSurgeryPage() {
                   {[
                     { label: 'Anaesthetists', list: onDuty.candidates.anaesthetists },
                     { label: 'Anaesthetic Technicians', list: onDuty.candidates.anaestheticTechnicians },
-                    { label: 'Scrub Nurses', list: onDuty.candidates.nurses },
+                    { label: 'Perioperative Nurses', list: onDuty.candidates.nurses },
                     { label: 'Cleaners', list: onDuty.candidates.cleaners },
                     { label: 'Porters', list: onDuty.candidates.porters },
                   ].map(({ label, list }) => (
@@ -817,7 +817,7 @@ export default function NewSurgeryPage() {
                   {[
                     { label: 'Anaesthetist', m: onDuty.team.anaesthetist },
                     { label: 'Anaesthetic Technician', m: onDuty.team.anaestheticTechnician },
-                    { label: 'Scrub Nurse', m: onDuty.team.scrubNurse },
+                    { label: 'Perioperative Nurse', m: onDuty.team.scrubNurse },
                     { label: 'Cleaner', m: onDuty.team.cleaner },
                     { label: 'Porter', m: onDuty.team.porter },
                   ].map(({ label, m }) => (

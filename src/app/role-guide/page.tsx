@@ -209,7 +209,7 @@ const ROLES: Role[] = [
   // ─── Nursing ───────────────────────────────────────────────────
   {
     id: 'SCRUB_NURSE',
-    label: 'Scrub Nurse',
+    label: 'Perioperative Nurse',
     group: 'Nursing',
     icon: Heart,
     color: 'from-pink-600 to-rose-700',
@@ -244,7 +244,7 @@ const ROLES: Role[] = [
   },
   {
     id: 'RECOVERY_ROOM_NURSE',
-    label: 'Recovery Room Nurse',
+    label: 'Nurse Anaesthetist',
     group: 'Nursing',
     icon: Bed,
     color: 'from-teal-600 to-emerald-700',

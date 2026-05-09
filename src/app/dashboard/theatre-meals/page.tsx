@@ -36,7 +36,7 @@ const ROSTER_LABELS: Record<string, string> = {
   ANAESTHETISTS: 'Anaesthetists',
   ANAESTHETIC_TECHNICIANS: 'Anaesthetic Technicians',
   NURSES: 'Theatre Nurses',
-  RECOVERY_NURSES: 'Recovery Room Nurses',
+  RECOVERY_NURSES: 'Nurse Anaesthetists',
   PHARMACISTS: 'Pharmacists',
   PORTERS: 'Porters',
   CLEANERS: 'Cleaners',

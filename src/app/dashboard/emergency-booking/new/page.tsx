@@ -338,7 +338,7 @@ export default function NewEmergencyBookingPage() {
                   {[
                     { label: 'Anaesthetist', m: onDuty.team.anaesthetist },
                     { label: 'Anaesthetic Technician', m: onDuty.team.anaestheticTechnician },
-                    { label: 'Scrub Nurse', m: onDuty.team.scrubNurse },
+                    { label: 'Perioperative Nurse', m: onDuty.team.scrubNurse },
                     { label: 'Cleaner', m: onDuty.team.cleaner },
                     { label: 'Porter', m: onDuty.team.porter },
                   ].map(({ label, m }) => (
@@ -458,7 +458,7 @@ export default function NewEmergencyBookingPage() {
               <p className="font-semibold text-red-800">Emergency Alert Notice</p>
               <p className="text-sm text-red-700 mt-1">
                 Submitting this form will immediately create a surgery record, raise an emergency alert visible on all TV displays,
-                and notify the Theatre Manager, assigned Surgeon, Anesthetist, Scrub Nurses, and all relevant staff.
+                and notify the Theatre Manager, assigned Surgeon, Anesthetist, Perioperative Nurses, and all relevant staff.
               </p>
             </div>
           </div>

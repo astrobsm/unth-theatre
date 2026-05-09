@@ -62,7 +62,7 @@ export default function TheatreSubStorePage() {
   const categories = ['CONSUMABLE', 'DEVICE', 'MEDICATION', 'EQUIPMENT', 'SUTURES', 'GLOVES', 'IV_SUPPLIES'];
   const stockStatuses = ['ADEQUATE', 'LOW', 'CRITICAL', 'OUT_OF_STOCK'];
   const ownerRoles = [
-    { value: 'SCRUB_NURSE', label: 'Scrub Nurse Sub-Store' },
+    { value: 'SCRUB_NURSE', label: 'Perioperative Nurse Sub-Store' },
     { value: 'ANAESTHETIC_TECHNICIAN', label: 'Anaesthetic Technician Sub-Store' },
   ];
 

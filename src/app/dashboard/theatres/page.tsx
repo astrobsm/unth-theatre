@@ -907,9 +907,9 @@ export default function TheatresPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Scrub Nurse */}
                     <div>
-                      <label className="label">Scrub Nurse</label>
+                      <label className="label">Perioperative Nurse</label>
                       <select name="scrubNurseId" className="input-field">
-                        <option value="">Select Scrub Nurse</option>
+                        <option value="">Select Perioperative Nurse</option>
                         {scrubNurses.map((nurse) => (
                           <option key={nurse.id} value={nurse.id}>
                             {nurse.fullName || 'Not assigned'}

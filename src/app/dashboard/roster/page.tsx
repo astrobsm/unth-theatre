@@ -42,7 +42,7 @@ export default function RosterPage() {
     { value: 'CLEANERS', label: 'Cleaners' },
     { value: 'ANAESTHETIC_TECHNICIANS', label: 'Anaesthetic Technicians' },
     { value: 'PHARMACISTS', label: 'Pharmacists' },
-    { value: 'RECOVERY_NURSES', label: 'Recovery Room Nurses' },
+    { value: 'RECOVERY_NURSES', label: 'Nurse Anaesthetists' },
   ];
 
   useEffect(() => {
@@ -266,7 +266,7 @@ export default function RosterPage() {
             <h2 className="text-lg font-bold text-primary-900">Weekly Roster Forms</h2>
             <p className="text-sm text-primary-800 mt-1">
               Unit leads — submit your group&apos;s weekly roster (Nurses, Anaesthetists, Anaesthetic Technicians,
-              Porters, Cleaners, Pharmacists, Recovery Room Nurses) <strong>every Thursday before 12:00 noon</strong>.
+              Porters, Cleaners, Pharmacists, Nurse Anaesthetists) <strong>every Thursday before 12:00 noon</strong>.
               Separate forms cover the Main Theatre Complex and the Accident &amp; Emergency Theatre.
             </p>
             <p className="text-xs font-semibold text-primary-700 mt-2">Open weekly forms →</p>

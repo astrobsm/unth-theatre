@@ -318,7 +318,7 @@ export default function TheatreReadinessDashboard() {
                 <div className="grid grid-cols-1 gap-1 text-xs">
                   {theatre.staffAssignments.scrubNurse && (
                     <div className="flex justify-between bg-blue-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Scrub Nurse:</span>
+                      <span className="text-gray-600">Perioperative Nurse:</span>
                       <span className="font-semibold text-gray-900">{theatre.staffAssignments.scrubNurse}</span>
                     </div>
                   )}

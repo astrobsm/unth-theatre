@@ -390,7 +390,7 @@ export default function EquipmentCheckoutPage() {
                     onChange={(e) => setCollectorRole(e.target.value as 'SCRUB_NURSE' | 'ANAESTHETIC_TECHNICIAN')}
                     className="input-field"
                   >
-                    <option value="SCRUB_NURSE">Scrub Nurse</option>
+                    <option value="SCRUB_NURSE">Perioperative Nurse</option>
                     <option value="ANAESTHETIC_TECHNICIAN">Anaesthetic Technician</option>
                   </select>
                 </div>

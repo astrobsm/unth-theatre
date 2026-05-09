@@ -161,6 +161,18 @@ export async function GET(_req: NextRequest) {
     data: { status: 'EXPIRED' },
   });
 
+  // Safety net: non-ack PENDING items that have been sitting around for more
+  // than 5 minutes are auto-marked PLAYED so the radio cannot loop on them
+  // (covers cases where every listening client missed the "played" callback).
+  await prisma.radioAnnouncement.updateMany({
+    where: {
+      requireAck: false,
+      status: { in: ['PENDING', 'PLAYING'] },
+      createdAt: { lt: new Date(now.getTime() - 5 * 60 * 1000) },
+    },
+    data: { status: 'PLAYED', lastPlayedAt: now },
+  });
+
   const queue = await prisma.radioAnnouncement.findMany({
     where: { status: { in: ['PENDING', 'PLAYING'] } },
     orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],

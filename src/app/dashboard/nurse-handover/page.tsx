@@ -176,7 +176,7 @@ interface DashboardData {
 const PHASE_CONFIG: Record<string, { label: string; color: string; icon: any; description: string }> = {
   SHIFT_HANDOVER: { label: 'Shift Handover', color: 'bg-blue-100 text-blue-800', icon: Users, description: 'Nurse-to-nurse shift change' },
   INTRA_OP_HANDOVER: { label: 'Intra-Op Handover', color: 'bg-purple-100 text-purple-800', icon: Activity, description: 'During surgery team change' },
-  POST_OP_HANDOVER: { label: 'Post-Op Handover', color: 'bg-orange-100 text-orange-800', icon: ArrowRight, description: 'Theatre → PACU/Recovery' },
+  POST_OP_HANDOVER: { label: 'Post-Op Handover', color: 'bg-orange-100 text-orange-800', icon: ArrowRight, description: 'Theatre → PACU/Nurse Anaesthetist' },
   THEATRE_TO_WARD: { label: 'Theatre → Ward', color: 'bg-green-100 text-green-800', icon: ArrowRight, description: 'Recovery → Ward transfer' },
 };
 

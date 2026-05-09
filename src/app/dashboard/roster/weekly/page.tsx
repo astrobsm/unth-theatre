@@ -18,7 +18,7 @@ const GROUPS: GroupCard[] = [
   { slug: 'porters',                title: 'Porters',                blurb: 'Morning & Night shifts.',                                       icon: Wrench,       color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
   { slug: 'cleaners',               title: 'Cleaners',               blurb: 'Morning & Night shifts.',                                       icon: Sparkles,     color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
   { slug: 'pharmacists',            title: 'Pharmacists',            blurb: 'Morning & Night shifts.',                                       icon: Pill,         color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
-  { slug: 'recovery-nurses',        title: 'Recovery Room Nurses',   blurb: 'Morning & Night shifts in PACU.',                               icon: Bed,          color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { slug: 'recovery-nurses',        title: 'Nurse Anaesthetists',   blurb: 'Morning & Night shifts in PACU.',                               icon: Bed,          color: 'bg-purple-100 text-purple-700 border-purple-200' },
 ];
 
 function nextThursdayDeadline(): { date: Date; isPast: boolean } {

@@ -53,7 +53,7 @@ const KB: KbEntry[] = [
   {
     keywords: ['sub store', 'substore', 'sub-store'],
     answer:
-      'Each theatre has two sub-stores: Scrub Nurse and Anaesthetic Technician. Open Sub-Stores → choose the theatre → choose the owner. Use AM and EOD buttons to log daily check-in/out, and Report Fault for any faulty item.',
+      'Each theatre has two sub-stores: Perioperative Nurse and Anaesthetic Technician. Open Sub-Stores → choose the theatre → choose the owner. Use AM and EOD buttons to log daily check-in/out, and Report Fault for any faulty item.',
   },
   {
     keywords: ['knife on skin', 'start surgery'],

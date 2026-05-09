@@ -125,7 +125,7 @@ const DEPARTMENTS: Dept[] = [
       { title: '7. Intra-op',
         detail: 'Run WHO Time-Out with the team. Track instrument and swab counts in Equipment Checkout.' },
       { title: '8. Handover to PACU',
-        detail: 'Sidebar → Nurse Handover → record swab/instrument counts, drains, dressings → submit to Recovery Room Nurse.' },
+        detail: 'Sidebar → Nurse Handover → record swab/instrument counts, drains, dressings → submit to Nurse Anaesthetist.' },
     ],
     cautions: [
       'Never sign Sign-Out before final swab and instrument counts match.',
@@ -248,7 +248,7 @@ const DEPARTMENTS: Dept[] = [
       { title: '2. Start cleaning', detail: 'Sidebar → Cleaning → Start. Pick the theatre.' },
       { title: '3. End cleaning', detail: 'When done → End. The system records turnover time for analytics.' },
     ],
-    cautions: ['Always wait for the scrub nurse to confirm theatre is empty before entering.'],
+    cautions: ['Always wait for the perioperative nurse to confirm theatre is empty before entering.'],
   },
   {
     id: 'STORE',
@@ -290,7 +290,7 @@ const DEPARTMENTS: Dept[] = [
     steps: [
       { title: '1. Log in', detail: '/auth/login.' },
       { title: '2. Open Roster', detail: 'Sidebar → Roster → pick the date.' },
-      { title: '3. Assign staff to theatres', detail: 'Drag staff into theatre slots (scrub nurse, circulating nurse, porter, anaesthetic technician).' },
+      { title: '3. Assign staff to theatres', detail: 'Drag staff into theatre slots (perioperative nurse, circulating nurse, porter, anaesthetic technician).' },
       { title: '4. Publish', detail: 'Click Publish — affected staff see their assignments on next login.' },
     ],
     cautions: ['Do not double-book a staff member in two theatres at the same time.'],

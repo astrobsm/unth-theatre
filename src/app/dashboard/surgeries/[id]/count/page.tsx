@@ -216,7 +216,7 @@ export default function SurgicalCountPage({ params }: { params: { id: string } }
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Scrub Nurse Name *
+                    Perioperative Nurse Name *
                   </label>
                   <input
                     type="text"

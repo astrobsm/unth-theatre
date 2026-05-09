@@ -59,12 +59,22 @@ export default function RadioPlayer() {
     try { window.localStorage.setItem('theatreRadio.muted', muted ? '1' : '0'); } catch {}
   }, [muted]);
 
+  const markPlayed = useCallback(async (id: string) => {
+    try {
+      await fetch('/api/radio/played', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+    } catch { /* offline ok */ }
+  }, []);
+
   const speak = useCallback(
-    (text: string) => {
-      if (typeof window === 'undefined' || muted) return;
+    (text: string, onDone?: () => void) => {
+      if (typeof window === 'undefined' || muted) { onDone?.(); return; }
       try {
         const synth = window.speechSynthesis;
-        if (!synth) return;
+        if (!synth) { onDone?.(); return; }
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.rate = 0.98;
@@ -77,26 +87,29 @@ export default function RadioPlayer() {
           voices[0];
         if (preferred) u.voice = preferred;
         u.onstart = () => setSpeaking(true);
-        u.onend = () => setSpeaking(false);
-        u.onerror = () => setSpeaking(false);
+        u.onend = () => { setSpeaking(false); onDone?.(); };
+        u.onerror = () => { setSpeaking(false); onDone?.(); };
         synth.speak(u);
       } catch {
-        /* noop */
+        onDone?.();
       }
     },
     [muted]
   );
 
   const playAudio = useCallback(
-    (url: string) => {
-      if (muted) return;
+    (url: string, onDone?: () => void) => {
+      if (muted) { onDone?.(); return; }
       try {
         if (!audioRef.current) audioRef.current = new Audio();
-        audioRef.current.src = url;
-        audioRef.current.volume = 1;
-        audioRef.current.play().catch(() => {});
+        const a = audioRef.current;
+        a.src = url;
+        a.volume = 1;
+        a.onended = () => onDone?.();
+        a.onerror = () => onDone?.();
+        a.play().catch(() => onDone?.());
       } catch {
-        /* noop */
+        onDone?.();
       }
     },
     [muted]
@@ -129,7 +142,9 @@ export default function RadioPlayer() {
     return () => clearInterval(id);
   }, [status, enabled, fetchQueue]);
 
-  // Pick the highest-priority announcement and play it (respecting repeat windows)
+  // Pick the highest-priority announcement and play it. Non-ack items play
+  // ONCE (then are marked PLAYED server-side so they leave the queue).
+  // requireAck items repeat every `repeatEverySec` until acknowledged.
   useEffect(() => {
     if (!enabled || queue.length === 0) return;
     const top = queue[0];
@@ -137,8 +152,15 @@ export default function RadioPlayer() {
     const lastPlayedKey = `${top.id}`;
     const now = Date.now();
     const last = playedRecentlyRef.current.get(lastPlayedKey) ?? 0;
-    const minGap = (top.repeatUntilAck ? top.repeatEverySec : 60) * 1000;
-    if (now - last < minGap) return;
+
+    if (top.repeatUntilAck) {
+      const minGap = (top.repeatEverySec || 30) * 1000;
+      if (now - last < minGap) return;
+    } else {
+      // Non-ack: play once. If we've already triggered it this session, wait
+      // for the server to remove it from the queue.
+      if (last > 0) return;
+    }
     playedRecentlyRef.current.set(lastPlayedKey, now);
 
     const isEmergency = top.category === 'EMERGENCY' || top.priority >= 90;
@@ -147,12 +169,15 @@ export default function RadioPlayer() {
       : '';
     const text = `${prefix}${top.title}. ${top.message}${top.location ? '. Location: ' + top.location : ''}${top.specialty ? '. Specialty: ' + top.specialty : ''}.`;
 
-    if (top.audioUrl) playAudio(top.audioUrl);
-    else speak(text);
+    const onDone = () => {
+      // For non-ack items, tell the server we've played it so it stops
+      // appearing in the queue (no endless loop).
+      if (!top.repeatUntilAck) markPlayed(top.id);
+    };
 
-    // mark as PLAYING (best-effort, fire-and-forget)
-    fetch('/api/radio/queue', { cache: 'no-store' }).catch(() => {});
-  }, [queue, enabled, speak, playAudio]);
+    if (top.audioUrl) playAudio(top.audioUrl, onDone);
+    else speak(text, onDone);
+  }, [queue, enabled, speak, playAudio, markPlayed]);
 
   const acknowledge = useCallback(
     async (id: string) => {
