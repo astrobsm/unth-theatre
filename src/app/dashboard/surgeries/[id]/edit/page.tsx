@@ -13,6 +13,8 @@ const ANAES_OPTIONS = [
   { value: '', label: '— Select anaesthesia type —' },
   { value: 'GENERAL', label: 'General Anaesthesia (GA)' },
   { value: 'SPINAL', label: 'Spinal' },
+  { value: 'EPIDURAL', label: 'Epidural' },
+  { value: 'COMBINED_SPINAL_EPIDURAL', label: 'Combined Spinal-Epidural (CSE)' },
   { value: 'REGIONAL', label: 'Regional / Block' },
   { value: 'SEDATION', label: 'Sedation / MAC' },
   { value: 'LOCAL', label: 'Local (no anaesthetist review)' },
@@ -330,7 +332,7 @@ export default function EditSurgeryPage() {
       <div className="card">
         <div className="flex items-center gap-2 mb-3">
           <History className="w-5 h-5 text-gray-600" />
-          <h2 className="font-semibold">Change history (date / time / location)</h2>
+          <h2 className="font-semibold">Change history</h2>
         </div>
         {history.length === 0 ? (
           <p className="text-sm text-gray-500">No previous edits recorded.</p>
@@ -342,17 +344,39 @@ export default function EditSurgeryPage() {
                 let parsed: any = {};
                 try { parsed = JSON.parse(h.changes || '{}'); } catch { parsed = { raw: h.changes }; }
                 const isReschedule = h.action === 'RESCHEDULE';
+                const rows = humaniseChanges(parsed, isReschedule, { theatres, surgeons, units });
                 return (
-                  <li key={h.id} className="py-2">
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${isReschedule ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}`}>
-                        {h.action}
+                  <li key={h.id} className="py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${isReschedule ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}`}>
+                        {isReschedule ? 'Re-scheduled' : 'Edited'}
                       </span>
                       <span className="text-xs text-gray-500">
                         {h.user?.fullName || h.userId} · {new Date(h.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <pre className="mt-1 bg-gray-50 border rounded p-2 text-xs overflow-x-auto">{JSON.stringify(parsed, null, 2)}</pre>
+                    {rows.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">No tracked field changes.</p>
+                    ) : (
+                      <table className="w-full text-xs border rounded overflow-hidden">
+                        <thead className="bg-gray-50 text-gray-600">
+                          <tr>
+                            <th className="text-left px-2 py-1 w-1/4">Field</th>
+                            {isReschedule && <th className="text-left px-2 py-1 w-1/3">From</th>}
+                            <th className="text-left px-2 py-1">{isReschedule ? 'To' : 'Value'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {rows.map((r) => (
+                            <tr key={r.field} className="hover:bg-gray-50">
+                              <td className="px-2 py-1 font-medium text-gray-700">{r.label}</td>
+                              {isReschedule && <td className="px-2 py-1 text-gray-500 line-through">{r.from ?? '—'}</td>}
+                              <td className="px-2 py-1 text-gray-900">{r.to ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </li>
                 );
               })}
@@ -361,4 +385,76 @@ export default function EditSurgeryPage() {
       </div>
     </div>
   );
+}
+
+// === Audit-log humaniser ===
+const FIELD_LABELS: Record<string, string> = {
+  scheduledDate: 'Date',
+  scheduledTime: 'Time',
+  location: 'Location',
+  theatreId: 'Theatre',
+  unit: 'Surgical unit',
+  subspecialty: 'Subspecialty',
+  surgeonId: 'Surgeon',
+  surgeonName: 'Surgeon (name)',
+  procedureName: 'Procedure',
+  indication: 'Indication',
+  surgeryType: 'Surgery type',
+  anesthesiaType: 'Anaesthesia type',
+  status: 'Status',
+  needBloodTransfusion: 'Blood transfusion',
+  needDiathermy: 'Diathermy',
+  needStereo: 'Stereo',
+  needStirups: 'Stirrups',
+  needMontrellMattress: 'Montrell mattress',
+  needCArm: 'C-arm',
+  needMicroscope: 'Microscope',
+  needSuction: 'Suction',
+  needPneumaticTourniquet: 'Pneumatic tourniquet',
+  needICU: 'ICU bed',
+  otherSpecialNeeds: 'Other special needs',
+  remarks: 'Remarks',
+};
+
+const HIDDEN_KEYS = new Set(['updatedAt', 'createdAt']);
+
+function formatValue(field: string, val: any, lookups: { theatres: Theatre[]; surgeons: Surgeon[]; units: SurgicalUnit[] }): string {
+  if (val === null || val === undefined || val === '') return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (field === 'scheduledDate') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString();
+  }
+  if (field === 'theatreId') {
+    const t = lookups.theatres.find((x) => x.id === val);
+    return t ? `${t.name} (${t.location})` : String(val);
+  }
+  if (field === 'surgeonId') {
+    const s = lookups.surgeons.find((x) => x.id === val);
+    return s ? s.fullName : String(val);
+  }
+  return String(val);
+}
+
+function humaniseChanges(
+  parsed: any,
+  isReschedule: boolean,
+  lookups: { theatres: Theatre[]; surgeons: Surgeon[]; units: SurgicalUnit[] },
+): { field: string; label: string; from?: string; to?: string }[] {
+  if (!parsed || typeof parsed !== 'object') return [];
+  return Object.entries(parsed)
+    .filter(([k]) => !HIDDEN_KEYS.has(k))
+    .map(([field, raw]) => {
+      const label = FIELD_LABELS[field] || field;
+      if (isReschedule && raw && typeof raw === 'object' && 'from' in (raw as any) && 'to' in (raw as any)) {
+        const r = raw as { from: any; to: any };
+        return {
+          field,
+          label,
+          from: formatValue(field, r.from, lookups),
+          to: formatValue(field, r.to, lookups),
+        };
+      }
+      return { field, label, to: formatValue(field, raw, lookups) };
+    });
 }

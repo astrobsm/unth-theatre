@@ -87,6 +87,8 @@ enum SurgeryReadinessStatus {
 enum AnesthesiaType {
   GENERAL
   SPINAL
+  EPIDURAL
+  COMBINED_SPINAL_EPIDURAL
   LOCAL
   REGIONAL
   SEDATION

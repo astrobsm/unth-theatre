@@ -20,7 +20,7 @@ const surgerySchema = z.object({
   scheduledTime: z.string(),
   estimatedDuration: z.number().int().min(1, 'Estimated duration must be at least 1 minute').default(60),
   surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
-  anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
+  anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
   needBloodTransfusion: z.boolean().default(false),
   needDiathermy: z.boolean().default(false),
   needStereo: z.boolean().default(false),

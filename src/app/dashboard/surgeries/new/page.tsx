@@ -706,6 +706,8 @@ export default function NewSurgeryPage() {
                 <option value="">— Select anaesthesia type —</option>
                 <option value="GENERAL">General Anaesthesia (GA)</option>
                 <option value="SPINAL">Spinal</option>
+                <option value="EPIDURAL">Epidural</option>
+                <option value="COMBINED_SPINAL_EPIDURAL">Combined Spinal-Epidural (CSE)</option>
                 <option value="REGIONAL">Regional / Block</option>
                 <option value="SEDATION">Sedation / MAC</option>
                 <option value="LOCAL">Local Anaesthesia (no anaesthetist review needed)</option>
