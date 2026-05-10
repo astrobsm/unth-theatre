@@ -386,7 +386,7 @@ export default function LoginPage() {
               Forgot your password?
             </Link>
             <Link
-              href="/auth/register"
+              href="/onboarding"
               className="block text-sm text-primary-600 hover:text-primary-700"
             >
               Don&apos;t have an account? Register here
