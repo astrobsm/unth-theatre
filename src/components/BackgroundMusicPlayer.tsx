@@ -159,7 +159,7 @@ export default function BackgroundMusicPlayer() {
   }, [track]);
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 print:hidden">
+    <div className="fixed bottom-20 left-4 z-[10006] print:hidden">
       <div className="bg-white border border-gray-200 shadow-lg rounded-xl overflow-hidden">
         <button
           type="button"
