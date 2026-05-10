@@ -2,7 +2,7 @@
  * UNTH Theatre Management System — Database Seed
  *
  * Seeds ONLY the following baseline records:
- *   • Allow-listed admin users  (admin, douglas, ngozi.mba)
+ *   • Allow-listed admin users  (admin, douglas, ngozi.mbah)
  *   • Theatre suites
  *   • Inventory items (machines, devices, consumables)
  *
@@ -40,10 +40,10 @@ const ADMIN_USERS: UserSeed[] = [
     staffCode: 'UNTH/ADM/002',
   },
   {
-    username: 'ngozi.mba',
+    username: 'ngozi.mbah',
     password: 'changeme123',
-    fullName: 'Ngozi Mba',
-    email: 'ngozi.mba@unth.edu.ng',
+    fullName: 'Ngozi Mbah',
+    email: 'ngozi.mbah@unth.edu.ng',
     staffCode: 'UNTH/ADM/003',
   },
 ];
@@ -66,7 +66,7 @@ async function main() {
         status: 'APPROVED',
         staffCode: u.staffCode,
         isFirstLogin: false,
-        mustChangePassword: u.username === 'ngozi.mba',
+        mustChangePassword: u.username === 'ngozi.mbah',
       },
     });
     console.log(`✓ Admin upserted: ${u.username} (${u.fullName})`);

@@ -300,12 +300,12 @@ export default function StaffOnboardingPage() {
 
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Username *" error={fieldErrors.username}
-                hint="Lowercase letters, digits, '.' or '_' (3–30). Example: ngozi.mba">
+                hint="Lowercase letters, digits, '.' or '_' (3–30). Example: ngozi.mbah">
                 <input
                   className={inputCls}
                   value={data.username}
                   onChange={e => set('username', e.target.value.toLowerCase())}
-                  placeholder="ngozi.mba"
+                  placeholder="ngozi.mbah"
                   pattern="[a-z0-9._]{3,30}"
                   required
                   maxLength={30}

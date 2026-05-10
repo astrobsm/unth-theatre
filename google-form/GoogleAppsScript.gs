@@ -37,7 +37,7 @@ const FORM_DESCRIPTION =
   'Please complete this form so the UNTH Operative Resource Manager (ORM) ' +
   'team can create your login account.\n\n' +
   '• Use your real, full name as printed on your hospital ID.\n' +
-  '• Choose a username you will remember (lowercase, no spaces — e.g. ngozi.mba).\n' +
+  '• Choose a username you will remember (lowercase, no spaces — e.g. ngozi.mbah).\n' +
   '• Your initial password will be the same as your username; you will be ' +
   'forced to change it on first login.\n\n' +
   'For help, contact the ORM administrator.';
@@ -104,12 +104,12 @@ function setupForm() {
   // 2. Add fields (in the same order as the bulk-upload template)
   form.addTextItem()
     .setTitle('Full Name')
-    .setHelpText('Exactly as printed on your hospital ID, e.g. Dr. Ngozi Mba')
+    .setHelpText('Exactly as printed on your hospital ID, e.g. Dr. Ngozi Mbah')
     .setRequired(true);
 
   form.addTextItem()
     .setTitle('Username')
-    .setHelpText('Lowercase letters, numbers, dot or underscore. No spaces. Example: ngozi.mba')
+    .setHelpText('Lowercase letters, numbers, dot or underscore. No spaces. Example: ngozi.mbah')
     .setRequired(true)
     .setValidation(
       FormApp.createTextValidation()

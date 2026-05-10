@@ -3,7 +3,7 @@
  * Purge Staff & Users Script
  *
  * Removes ALL users from the database except the explicit allow-list
- * (admin, douglas, ngozi.mba) and CASCADE-removes every dependent record
+ * (admin, douglas, ngozi.mbah) and CASCADE-removes every dependent record
  * (surgeries, allocations, rosters, prescriptions, logs, audit trails, etc.).
  *
  * After purging, the allowed admin users are re-created via ensure-admin.ts
@@ -24,7 +24,7 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-const KEEP_USERNAMES = ['admin', 'douglas', 'ngozi.mba'];
+const KEEP_USERNAMES = ['admin', 'douglas', 'ngozi.mbah'];
 
 interface UserSeed {
   username: string;
@@ -53,10 +53,10 @@ const USERS_TO_RECREATE: UserSeed[] = [
     role: 'ADMIN',
   },
   {
-    username: 'ngozi.mba',
+    username: 'ngozi.mbah',
     password: 'changeme123',
-    fullName: 'Ngozi Mba',
-    email: 'ngozi.mba@unth.edu.ng',
+    fullName: 'Ngozi Mbah',
+    email: 'ngozi.mbah@unth.edu.ng',
     staffCode: 'UNTH/ADM/003',
     role: 'ADMIN',
   },
@@ -118,7 +118,7 @@ async function main() {
         status: 'APPROVED',
         staffCode: u.staffCode,
         isFirstLogin: false,
-        mustChangePassword: u.username === 'ngozi.mba',
+        mustChangePassword: u.username === 'ngozi.mbah',
       },
     });
     console.log(`   ✓ ${u.username} (${u.fullName}) created [${u.role}]`);
@@ -130,7 +130,7 @@ async function main() {
     console.log(`   ${u.username.padEnd(20)} / ${u.password}`);
   });
   console.log('');
-  console.log('   Ngozi Mba will be required to change password on first login.');
+  console.log('   Ngozi Mbah will be required to change password on first login.');
 }
 
 main()

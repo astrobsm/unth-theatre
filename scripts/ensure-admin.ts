@@ -38,10 +38,10 @@ const ADMIN_USERS: AdminConfig[] = [
     staffCode: 'UNTH/ADM/002',
   },
   {
-    username: 'ngozi.mba',
+    username: 'ngozi.mbah',
     password: 'changeme123',
-    fullName: 'Ngozi Mba',
-    email: 'ngozi.mba@unth.edu.ng',
+    fullName: 'Ngozi Mbah',
+    email: 'ngozi.mbah@unth.edu.ng',
     staffCode: 'UNTH/ADM/003',
   },
 ];
