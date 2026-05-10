@@ -37,6 +37,7 @@ interface Surgery {
   needStirups?: boolean;
   needMontrellMattress?: boolean;
   otherSpecialNeeds?: string | null;
+  anesthesiaType?: string | null;
 }
 
 export default function SurgeriesPage() {
@@ -172,6 +173,20 @@ export default function SurgeriesPage() {
     const escape = (v: string) =>
       v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+    const formatAnaesthesia = (a?: string | null) => {
+      if (!a) return '—';
+      const map: Record<string, string> = {
+        GENERAL: 'General (GA)',
+        SPINAL: 'Spinal',
+        EPIDURAL: 'Epidural',
+        COMBINED_SPINAL_EPIDURAL: 'CSE',
+        REGIONAL: 'Regional',
+        SEDATION: 'Sedation',
+        LOCAL: 'Local',
+      };
+      return map[a] || a;
+    };
+
     let body = '';
     let groupNo = 0;
     groups.forEach((items, team) => {
@@ -179,15 +194,16 @@ export default function SurgeriesPage() {
       body += `<h2 class="team">${groupNo}. ${escape(team)} <span class="count">(${items.length} case${items.length === 1 ? '' : 's'})</span></h2>`;
       body += `<table><thead><tr>
         <th style="width:3%">#</th>
-        <th style="width:13%">Patient</th>
-        <th style="width:7%">Folder</th>
-        <th style="width:7%">Age / Sex</th>
-        <th style="width:8%">Ward</th>
-        <th style="width:18%">Procedure</th>
-        <th style="width:12%">Diagnosis / Indication</th>
-        <th style="width:10%">Surgeon</th>
-        <th style="width:9%">Theatre</th>
+        <th style="width:12%">Patient</th>
+        <th style="width:6%">Folder</th>
+        <th style="width:6%">Age / Sex</th>
+        <th style="width:7%">Ward</th>
+        <th style="width:16%">Procedure</th>
+        <th style="width:11%">Diagnosis / Indication</th>
+        <th style="width:9%">Surgeon</th>
+        <th style="width:8%">Theatre</th>
         <th style="width:8%">Date &amp; Time</th>
+        <th style="width:7%">Anaesthesia</th>
         <th style="width:5%">Special</th>
         <th style="width:5%">Status</th>
       </tr></thead><tbody>`;
@@ -206,6 +222,7 @@ export default function SurgeriesPage() {
           <td>${escape(s.surgeon?.fullName || s.surgeonName || 'Not assigned')}</td>
           <td>${escape(theatreLabel)}</td>
           <td>${escape(formatDate(s.scheduledDate))}<br/><span class="sub">${escape(s.scheduledTime || '')}</span></td>
+          <td>${escape(formatAnaesthesia(s.anesthesiaType))}</td>
           <td>${needs.length === 0 ? '<span class="sub">—</span>' : needs.map(n => `<span class="badge">${escape(n)}</span>`).join(' ')}</td>
           <td><span class="status status-${s.status}">${escape(s.status)}</span></td>
         </tr>`;
