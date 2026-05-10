@@ -151,12 +151,142 @@ export async function GET(_req: NextRequest) {
     console.error('[radio/queue] failed to promote scheduled announcements:', err);
   }
 
-  // Expire ack-required announcements older than 30 min that nobody acked
+  // ----------------------------------------------------------------
+  // Auto-broadcast EVERY submitted Emergency Surgery Booking and every
+  // submitted Emergency Prescription that is still awaiting action.
+  // Each one becomes a single PENDING radio announcement that:
+  //   • is EMERGENCY priority (100, top of queue)
+  //   • requires acknowledgment
+  //   • repeats every 5 minutes until acknowledged
+  //   • speaks the message THREE TIMES in a row each cycle (the text is
+  //     baked with a 3× repeat so the TTS engine voices it three times
+  //     before the 5-minute gap kicks in)
+  // We dedupe by stamping `metadata.emergencyBookingId` / `.prescriptionId`
+  // — if ANY radio row already references that source we do nothing, so
+  // once a clinician has acknowledged it the radio falls silent for that
+  // case forever (until a brand-new submission is made).
+  // ----------------------------------------------------------------
+  try {
+    const ACTIVE_BOOKING_STATUSES = ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED'] as const;
+    const bookings = await prisma.emergencySurgeryBooking.findMany({
+      where: { status: { in: ACTIVE_BOOKING_STATUSES as any } },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
+
+    for (const b of bookings) {
+      const dup = await prisma.radioAnnouncement.findFirst({
+        where: { metadata: { contains: `"emergencyBookingId":"${b.id}"` } },
+        select: { id: true },
+      });
+      if (dup) continue;
+
+      const speak3 = (s: string) => `${s} I repeat. ${s} Final call. ${s}`;
+      const baseMsg =
+        `Emergency surgery requested. Patient ${b.patientName}, folder ${b.folderNumber}. ` +
+        `Procedure: ${b.procedureName}. Indication: ${b.indication}. ` +
+        `Surgeon: ${b.surgeonName}.` +
+        (b.theatreName ? ` Theatre: ${b.theatreName}.` : '') +
+        (b.bloodRequired
+          ? ` Blood required${b.bloodType ? ` (${b.bloodType}${b.bloodUnits ? `, ${b.bloodUnits} units` : ''})` : ''}.`
+          : '');
+
+      await prisma.radioAnnouncement.create({
+        data: {
+          category: 'EMERGENCY',
+          title: `Emergency surgery — ${b.patientName} (${b.procedureName})`,
+          message: speak3(baseMsg),
+          priority: 100,
+          location: b.theatreName ?? null,
+          specialty: b.surgicalUnit ?? null,
+          urgency: 'CRITICAL',
+          triggerSource: 'EVENT',
+          status: 'PENDING',
+          requireAck: true,
+          repeatUntilAck: true,
+          repeatEverySec: 300, // 5 minutes
+          metadata: JSON.stringify({
+            emergencyBookingId: b.id,
+            tripleRepeat: true,
+            source: 'EmergencySurgeryBooking',
+          }),
+        },
+      });
+    }
+
+    const ACTIVE_PRESCRIPTION_STATUSES = ['DRAFT', 'SUBMITTED', 'PHARMACIST_VIEWED', 'PACKING'] as const;
+    const prescriptions = await prisma.emergencyPrescription.findMany({
+      where: { status: { in: ACTIVE_PRESCRIPTION_STATUSES as any } },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
+
+    for (const p of prescriptions) {
+      const dup = await prisma.radioAnnouncement.findFirst({
+        where: { metadata: { contains: `"emergencyPrescriptionId":"${p.id}"` } },
+        select: { id: true },
+      });
+      if (dup) continue;
+
+      let medSummary = '';
+      try {
+        const meds = JSON.parse(p.medications) as Array<{ name?: string; dose?: string; route?: string }>;
+        if (Array.isArray(meds) && meds.length > 0) {
+          medSummary =
+            ' Medications: ' +
+            meds
+              .slice(0, 4)
+              .map((m) => [m.name, m.dose, m.route].filter(Boolean).join(' '))
+              .join(', ') +
+            (meds.length > 4 ? `, and ${meds.length - 4} more.` : '.');
+        }
+      } catch { /* keep medSummary empty on bad JSON */ }
+
+      const speak3 = (s: string) => `${s} I repeat. ${s} Final call. ${s}`;
+      const baseMsg =
+        `Emergency prescription awaiting pharmacy. Patient ${p.patientName}, folder ${p.folderNumber}. ` +
+        `Prescriber: ${p.prescribedByName}.${medSummary}` +
+        (p.allergyAlerts ? ` Allergy alerts: ${p.allergyAlerts}.` : '') +
+        (p.hasOutOfStockItems ? ' Some items are flagged out of stock.' : '');
+
+      await prisma.radioAnnouncement.create({
+        data: {
+          category: 'EMERGENCY',
+          title: `Emergency prescription — ${p.patientName}`,
+          message: speak3(baseMsg),
+          priority: 100,
+          urgency: 'CRITICAL',
+          triggerSource: 'EVENT',
+          status: 'PENDING',
+          requireAck: true,
+          repeatUntilAck: true,
+          repeatEverySec: 300, // 5 minutes
+          metadata: JSON.stringify({
+            emergencyPrescriptionId: p.id,
+            emergencyBookingId: p.emergencyBookingId,
+            tripleRepeat: true,
+            source: 'EmergencyPrescription',
+          }),
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[radio/queue] failed to auto-promote emergency events:', err);
+  }
+
+  // Expire ack-required announcements older than 30 min that nobody acked.
+  // EXCEPTION: auto-promoted emergency-surgery / emergency-prescription rows
+  // must keep repeating every 5 min until a clinician acknowledges them, so
+  // we exclude anything whose metadata carries an emergency source id.
   await prisma.radioAnnouncement.updateMany({
     where: {
       requireAck: true,
       status: { in: ['PENDING', 'PLAYING'] },
       createdAt: { lt: new Date(now.getTime() - 30 * 60 * 1000) },
+      AND: [
+        { OR: [{ metadata: null }, { NOT: { metadata: { contains: 'emergencyBookingId' } } }] },
+        { OR: [{ metadata: null }, { NOT: { metadata: { contains: 'emergencyPrescriptionId' } } }] },
+      ],
     },
     data: { status: 'EXPIRED' },
   });
