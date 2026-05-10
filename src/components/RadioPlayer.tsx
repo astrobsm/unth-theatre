@@ -92,6 +92,64 @@ export default function RadioPlayer() {
     } catch { /* offline ok */ }
   }, []);
 
+  // ---- Offline-first acknowledgement queue --------------------------------
+  // Failed POSTs to /api/radio/acknowledge are persisted in localStorage and
+  // automatically retried when the browser comes back online. This guarantees
+  // that a clinician's tap is never lost even if the network is down at the
+  // moment of acknowledgement.
+  const ACK_QUEUE_KEY = 'theatreRadio.pendingAcks';
+  type PendingAck = { id: string; code?: string; ts: number };
+
+  const readAckQueue = useCallback((): PendingAck[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(ACK_QUEUE_KEY);
+      return raw ? (JSON.parse(raw) as PendingAck[]) : [];
+    } catch { return []; }
+  }, []);
+
+  const writeAckQueue = useCallback((items: PendingAck[]) => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem(ACK_QUEUE_KEY, JSON.stringify(items)); } catch {}
+  }, []);
+
+  const enqueueAck = useCallback((p: PendingAck) => {
+    const cur = readAckQueue();
+    if (cur.some((x) => x.id === p.id)) return;
+    writeAckQueue([...cur, p]);
+  }, [readAckQueue, writeAckQueue]);
+
+  const flushAckQueue = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    const pending = readAckQueue();
+    if (pending.length === 0) return;
+    const remaining: PendingAck[] = [];
+    for (const p of pending) {
+      try {
+        const r = await fetch('/api/radio/acknowledge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ announcementId: p.id, code: p.code }),
+        });
+        // 4xx from server (already acked / not found) → drop. Network/5xx → keep.
+        if (!r.ok && r.status >= 500) remaining.push(p);
+      } catch {
+        remaining.push(p);
+      }
+    }
+    writeAckQueue(remaining);
+  }, [readAckQueue, writeAckQueue]);
+
+  // Replay any queued acks once on mount and again whenever the browser
+  // reports it is back online.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    flushAckQueue();
+    const onOnline = () => { flushAckQueue(); };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [flushAckQueue]);
+
   const speak = useCallback(
     (text: string, onDone?: () => void) => {
       if (typeof window === 'undefined' || muted) { onDone?.(); return; }
@@ -246,15 +304,15 @@ export default function RadioPlayer() {
         }
       } catch (err) {
         // Network failure — keep the local suppression so the radio stays
-        // quiet for the operator who clicked, but warn them so they can
-        // retry from the audit page once back online.
-        console.error('[radio] acknowledge failed:', err);
-        alert('Acknowledgement could not reach the server. The radio is silenced on this device; please retry from Radio → Audit when connectivity returns.');
+        // quiet for the operator who clicked, AND queue the ack for retry
+        // when the browser comes back online (handled by flushAckQueue).
+        console.warn('[radio] acknowledge offline; queued for retry', err);
+        enqueueAck({ id, code, ts: Date.now() });
       } finally {
         setAckBusy(false);
       }
     },
-    [queue, current, fetchQueue, hardStop]
+    [queue, current, fetchQueue, hardStop, enqueueAck]
   );
 
   if (status !== 'authenticated') return null;

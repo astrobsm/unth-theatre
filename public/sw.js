@@ -4,7 +4,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -44,6 +44,7 @@ const CRITICAL_API_ROUTES = [
   '/api/emergency-booking',
   '/api/emergency-display',
   '/api/emergency-alerts',
+  '/api/radio/queue',
 ];
 
 // ============================================================
