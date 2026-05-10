@@ -58,6 +58,10 @@ export default function RadioPlayer() {
       }
     } catch {}
     setSpeaking(false);
+    // Resume background music after a hard stop / acknowledgement.
+    if (typeof window !== 'undefined') {
+      try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
+    }
   }, []);
 
   // Restore persisted state once on mount so the radio stays activated
@@ -150,6 +154,18 @@ export default function RadioPlayer() {
     return () => window.removeEventListener('online', onOnline);
   }, [flushAckQueue]);
 
+  // Notify the BackgroundMusicPlayer (or any other passive audio source) that
+  // the radio is about to speak / has finished. Listeners should duck
+  // (pause / lower volume) on `radio:active` and resume on `radio:idle`.
+  const emitRadioActive = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try { window.dispatchEvent(new CustomEvent('radio:active')); } catch {}
+  }, []);
+  const emitRadioIdle = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
+  }, []);
+
   const speak = useCallback(
     (text: string, onDone?: () => void) => {
       if (typeof window === 'undefined' || muted) { onDone?.(); return; }
@@ -167,15 +183,19 @@ export default function RadioPlayer() {
           voices.find((v) => /en/i.test(v.lang)) ||
           voices[0];
         if (preferred) u.voice = preferred;
-        u.onstart = () => setSpeaking(true);
-        u.onend = () => { setSpeaking(false); onDone?.(); };
-        u.onerror = () => { setSpeaking(false); onDone?.(); };
+        u.onstart = () => { setSpeaking(true); emitRadioActive(); };
+        u.onend = () => { setSpeaking(false); emitRadioIdle(); onDone?.(); };
+        u.onerror = () => { setSpeaking(false); emitRadioIdle(); onDone?.(); };
+        // Pre-emptively duck before the synth actually starts (some browsers
+        // never fire onstart for very short utterances).
+        emitRadioActive();
         synth.speak(u);
       } catch {
+        emitRadioIdle();
         onDone?.();
       }
     },
-    [muted]
+    [muted, emitRadioActive, emitRadioIdle]
   );
 
   const playAudio = useCallback(
@@ -186,14 +206,16 @@ export default function RadioPlayer() {
         const a = audioRef.current;
         a.src = url;
         a.volume = 1;
-        a.onended = () => onDone?.();
-        a.onerror = () => onDone?.();
-        a.play().catch(() => onDone?.());
+        a.onended = () => { emitRadioIdle(); onDone?.(); };
+        a.onerror = () => { emitRadioIdle(); onDone?.(); };
+        emitRadioActive();
+        a.play().catch(() => { emitRadioIdle(); onDone?.(); });
       } catch {
+        emitRadioIdle();
         onDone?.();
       }
     },
-    [muted]
+    [muted, emitRadioActive, emitRadioIdle]
   );
 
   const fetchQueue = useCallback(async () => {
