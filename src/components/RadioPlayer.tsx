@@ -263,8 +263,22 @@ export default function RadioPlayer() {
   const isEmergency = top && (top.category === 'EMERGENCY' || top.priority >= 90);
 
   return (
+    <>
+    {/* Floating, always-on-top Acknowledge button. Sits above the install
+        prompt (z-[9999/10000]) and any site footer so a single click is
+        guaranteed to land. */}
+    {top?.requireAck && (
+      <button
+        onClick={() => acknowledge(top.id)}
+        disabled={ackBusy}
+        title="Acknowledge emergency announcement"
+        className="fixed bottom-20 right-4 z-[10010] flex items-center gap-2 px-4 py-3 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold shadow-2xl ring-4 ring-green-300/60 disabled:opacity-60 print:hidden animate-pulse"
+      >
+        <CheckCircle2 className="w-5 h-5" /> ACKNOWLEDGE
+      </button>
+    )}
     <div
-      className={`fixed bottom-0 left-0 right-0 z-[60] shadow-2xl border-t-4 ${
+      className={`fixed bottom-0 left-0 right-0 z-[10005] shadow-2xl border-t-4 ${
         isEmergency
           ? 'bg-red-600 border-red-900 text-white animate-pulse'
           : 'bg-gradient-to-r from-slate-900 to-slate-800 border-primary-600 text-white'
@@ -326,7 +340,7 @@ export default function RadioPlayer() {
               <button
                 onClick={() => acknowledge(top.id)}
                 disabled={ackBusy}
-                className="flex items-center gap-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold disabled:opacity-60"
+                className="relative z-[10010] flex items-center gap-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold disabled:opacity-60"
               >
                 <CheckCircle2 className="w-4 h-4" /> Acknowledge
               </button>
@@ -345,5 +359,6 @@ export default function RadioPlayer() {
         </div>
       )}
     </div>
+    </>
   );
 }
