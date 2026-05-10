@@ -271,6 +271,7 @@ export default function AnaesthetistBoardPage() {
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date / Time</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Anaesthesia</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Special</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -312,6 +313,21 @@ export default function AnaesthetistBoardPage() {
                             }`}>
                               {s.surgeryType || 'ELECTIVE'}
                             </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {s.anesthesiaType ? (
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                ['LOCAL','NONE'].includes(String(s.anesthesiaType).toUpperCase())
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                {s.anesthesiaType}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                Pending
+                              </span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1">
