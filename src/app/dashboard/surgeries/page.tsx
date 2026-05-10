@@ -179,7 +179,7 @@ export default function SurgeriesPage() {
         GENERAL: 'General (GA)',
         SPINAL: 'Spinal',
         EPIDURAL: 'Epidural',
-        COMBINED_SPINAL_EPIDURAL: 'CSE',
+        COMBINED_SPINAL_EPIDURAL: 'Combined Spinal-Epidural',
         REGIONAL: 'Regional',
         SEDATION: 'Sedation',
         LOCAL: 'Local',

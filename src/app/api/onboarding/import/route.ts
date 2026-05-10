@@ -74,7 +74,18 @@ export async function POST(request: NextRequest) {
 
       // Username MUST be unique — this is the login key, no auto-rewrite
       const existingUser = await prisma.user.findUnique({ where: { username: s.username } });
-      if (existingUser) throw new Error(`Username '${s.username}' already exists`);
+      if (existingUser) {
+        // Detect "same person re-submitted" — likely a duplicate onboarding entry.
+        // Surface a clearer, actionable message so the admin can either delete
+        // this duplicate submission or rename the username before retry.
+        const sameName =
+          existingUser.fullName?.trim().toLowerCase() === s.fullName?.trim().toLowerCase();
+        throw new Error(
+          sameName
+            ? `User '${s.username}' (${existingUser.fullName}) is already registered — this looks like a duplicate submission. Delete it from the list, or change the username if this is a different person.`
+            : `Username '${s.username}' is already taken by ${existingUser.fullName}. Edit this submission to use a different username, then retry.`
+        );
+      }
 
       // Email conflict → drop the email rather than fail the whole import
       let importEmail: string | null = s.email || null;
@@ -106,6 +117,22 @@ export async function POST(request: NextRequest) {
         notes.push(`Auto-assigned staff code '${importStaffCode}'.`);
       }
 
+      // Staff ID (the externally-issued hospital ID): if it collides, leave it
+      // blank so the user can enter it themselves on first login via the
+      // existing /api/users/set-staff-id flow. We do NOT silently overwrite or
+      // throw — staffId is meaningful but mutable.
+      let importStaffId: string | null = s.staffId || null;
+      if (importStaffId) {
+        const clashId = await prisma.user.findUnique({ where: { staffId: importStaffId } });
+        if (clashId) {
+          notes.push(
+            `Staff ID '${importStaffId}' is already registered to ${clashId.fullName} (${clashId.username}). ` +
+            `Imported without a Staff ID — the user can set it themselves on first login.`
+          );
+          importStaffId = null;
+        }
+      }
+
       const defaultPassword = s.username; // user must change on first login
       const hashed = await bcrypt.hash(defaultPassword, 10);
 
@@ -119,7 +146,7 @@ export async function POST(request: NextRequest) {
           phoneNumber: s.phoneNumber || null,
           department: s.department || null,
           staffCode: importStaffCode,
-          staffId: s.staffId || null,
+          staffId: importStaffId,
           status: 'APPROVED',
           approvedBy: (session as any).user.id,
           approvedAt: new Date(),
