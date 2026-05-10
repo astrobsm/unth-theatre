@@ -19,6 +19,8 @@ export async function GET() {
         id: true,
         isFirstLogin: true,
         mustChangePassword: true,
+        staffId: true,
+        role: true,
       },
     });
 

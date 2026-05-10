@@ -18,6 +18,10 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [userId, setUserId] = useState('');
   const [isOffline, setIsOffline] = useState(false);
+  // First-time staff ID capture (porters/cleaners and any other newly seeded staff)
+  const [showStaffIdCapture, setShowStaffIdCapture] = useState(false);
+  const [staffIdValue, setStaffIdValue] = useState('');
+  const [postLoginRole, setPostLoginRole] = useState<string>('');
   
   // Quick duty logging states
   const [showDutyPanel, setShowDutyPanel] = useState(false);
@@ -117,7 +121,17 @@ export default function LoginPage() {
           
           if (userData.mustChangePassword || userData.isFirstLogin) {
             setUserId(userData.id);
+            setPostLoginRole(userData.role || session?.user?.role || '');
             setShowChangePassword(true);
+            setLoading(false);
+            return;
+          }
+
+          // Password is fine but Staff ID has never been recorded — capture it now.
+          if (!userData.staffId) {
+            setUserId(userData.id);
+            setPostLoginRole(userData.role || session?.user?.role || '');
+            setShowStaffIdCapture(true);
             setLoading(false);
             return;
           }
@@ -185,6 +199,37 @@ export default function LoginPage() {
     }
   };
 
+  const handleStaffIdSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const trimmed = staffIdValue.trim();
+    if (!trimmed) {
+      setError('Please enter your hospital Staff ID exactly as it appears on your ID card.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/users/set-staff-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to save Staff ID');
+        setLoading(false);
+        return;
+      }
+      setShowStaffIdCapture(false);
+      setStaffIdValue('');
+      router.push('/dashboard');
+    } catch {
+      setError('Network error while saving Staff ID. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -209,10 +254,23 @@ export default function LoginPage() {
       });
 
       if (response.ok) {
-        alert('Password changed successfully! Please log in with your new password.');
         setShowChangePassword(false);
         setNewPasswordValue('');
         setConfirmPassword('');
+        // After password change, check whether we still need to capture Staff ID
+        try {
+          const check = await fetch('/api/users/check-first-login');
+          if (check.ok) {
+            const data = await check.json();
+            if (!data.staffId) {
+              setStaffIdValue('');
+              setShowStaffIdCapture(true);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch {}
+        alert('Password changed successfully!');
         router.push('/dashboard');
       } else {
         const data = await response.json();
@@ -470,6 +528,47 @@ export default function LoginPage() {
                 className="btn-primary w-full disabled:opacity-50"
               >
                 {loading ? 'Changing Password...' : 'Change Password & Continue'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* First-time Staff ID capture (porters / cleaners and other newly seeded staff) */}
+      {showStaffIdCapture && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Your Hospital Staff ID</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Welcome{postLoginRole ? `, ${postLoginRole.replace(/_/g, ' ').toLowerCase()}` : ''}! This is your first time signing in.
+              Please enter your official UNTH Staff ID exactly as it appears on your ID card.
+              You only need to do this once. If you do not have a hospital Staff ID, type
+              <strong> &ldquo;CONTRACT&rdquo;</strong> followed by your phone number (e.g. <em>CONTRACT-08012345678</em>).
+            </p>
+            <form onSubmit={handleStaffIdSubmit} className="space-y-4">
+              <div>
+                <label className="label">Hospital Staff ID</label>
+                <input
+                  type="text"
+                  value={staffIdValue}
+                  onChange={(e) => setStaffIdValue(e.target.value)}
+                  className="input-field"
+                  placeholder="e.g. UNTH/2018/4521"
+                  required
+                  autoFocus
+                />
+              </div>
+              {error && (
+                <div className="text-red-600 text-sm bg-red-50 p-3 rounded">
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : 'Save Staff ID & Continue'}
               </button>
             </form>
           </div>
