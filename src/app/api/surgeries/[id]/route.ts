@@ -156,6 +156,8 @@ export async function PUT(
       procedureName,
       subspecialty,
       unit,
+      location,
+      theatreId,
       indication,
       surgeonId,
       surgeonName,
@@ -188,6 +190,8 @@ export async function PUT(
     if (procedureName) updateData.procedureName = procedureName;
     if (subspecialty) updateData.subspecialty = subspecialty;
     if (unit) updateData.unit = unit;
+    if (location !== undefined) updateData.location = location || null;
+    if (theatreId !== undefined) updateData.theatreId = theatreId || null;
     if (indication) updateData.indication = indication;
     if (surgeonId !== undefined) updateData.surgeonId = surgeonId;
     if (surgeonName) updateData.surgeonName = surgeonName;
@@ -227,6 +231,33 @@ export async function PUT(
     });
 
     // Log the update
+    // Detect critical reschedule changes (date, time, location, theatre) and log a dedicated entry
+    const reschedule: Record<string, { from: any; to: any }> = {};
+    if (scheduledDate && new Date(scheduledDate).toISOString() !== new Date(existingSurgery.scheduledDate).toISOString()) {
+      reschedule.scheduledDate = { from: existingSurgery.scheduledDate, to: new Date(scheduledDate) };
+    }
+    if (scheduledTime && scheduledTime !== existingSurgery.scheduledTime) {
+      reschedule.scheduledTime = { from: existingSurgery.scheduledTime, to: scheduledTime };
+    }
+    if (location !== undefined && (location || null) !== (existingSurgery.location || null)) {
+      reschedule.location = { from: existingSurgery.location, to: location || null };
+    }
+    if (theatreId !== undefined && (theatreId || null) !== (existingSurgery.theatreId || null)) {
+      reschedule.theatreId = { from: existingSurgery.theatreId, to: theatreId || null };
+    }
+
+    if (Object.keys(reschedule).length > 0) {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'RESCHEDULE',
+          tableName: 'surgeries',
+          recordId: id,
+          changes: JSON.stringify(reschedule),
+        },
+      });
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,

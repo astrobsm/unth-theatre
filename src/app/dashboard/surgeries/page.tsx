@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -510,6 +510,17 @@ export default function SurgeriesPage() {
                           <Eye className="w-4 h-4" />
                           View
                         </Link>
+
+                        {/* Edit (re-schedule, change theatre/anaesthesia) - tracked in audit log */}
+                        {surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
+                          <Link
+                            href={`/dashboard/surgeries/${surgery.id}/edit`}
+                            className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-800"
+                            title="Edit case (date/time/location tracked)"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Link>
+                        )}
 
                         {/* WHO Checklist */}
                         {canAccessWHOChecklist && (

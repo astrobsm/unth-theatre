@@ -99,6 +99,7 @@ export default function NewSurgeryPage() {
   const [searchPatient, setSearchPatient] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
   const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
+  const [anesthesiaType, setAnesthesiaType] = useState<string>('');
   const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -292,6 +293,7 @@ export default function NewSurgeryPage() {
       scheduledTime: formData.get('scheduledTime'),
       estimatedDuration: parseInt(formData.get('estimatedDuration') as string) || 60,
       surgeryType: surgeryType,
+      anesthesiaType: anesthesiaType || null,
       needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
       needDiathermy: formData.get('needDiathermy') === 'on',
       needStereo: formData.get('needStereo') === 'on',
@@ -688,6 +690,30 @@ export default function NewSurgeryPage() {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Anaesthesia Type Selection */}
+            <div className="md:col-span-2">
+              <label className="label">Proposed Anaesthesia Type *</label>
+              <select
+                required
+                value={anesthesiaType}
+                onChange={(e) => setAnesthesiaType(e.target.value)}
+                className="input-field"
+                title="Proposed anaesthesia type"
+              >
+                <option value="">— Select anaesthesia type —</option>
+                <option value="GENERAL">General Anaesthesia (GA)</option>
+                <option value="SPINAL">Spinal</option>
+                <option value="REGIONAL">Regional / Block</option>
+                <option value="SEDATION">Sedation / MAC</option>
+                <option value="LOCAL">Local Anaesthesia (no anaesthetist review needed)</option>
+              </select>
+              {anesthesiaType === 'LOCAL' && (
+                <p className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                  Local cases do not require pre-anaesthetic review by an anaesthetist.
+                </p>
               )}
             </div>
           </div>

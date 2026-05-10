@@ -347,6 +347,13 @@ export default function AnaesthetistBoardPage() {
                               <Eye className="w-4 h-4" /> View
                             </Link>
                             <Link
+                              href={`/dashboard/surgeries/${s.id}/edit`}
+                              className="inline-flex items-center gap-1 ml-3 text-amber-600 hover:text-amber-800 text-sm"
+                              title="Edit case (date/time/location tracked)"
+                            >
+                              ✏ Edit
+                            </Link>
+                            <Link
                               href={`/dashboard/preop-reviews?surgeryId=${s.id}`}
                               className="inline-flex items-center gap-1 ml-3 text-emerald-600 hover:text-emerald-800 text-sm"
                               title="Pre-op review"
