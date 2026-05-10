@@ -22,6 +22,9 @@ const createEmergencyBookingSchema = z.object({
   surgeonName: z.string().optional(),
   anesthetistId: z.string().optional(),
   anesthetistName: z.string().optional(),
+  anaesthesiaType: z
+    .enum(['LOCAL', 'REGIONAL', 'SPINAL', 'EPIDURAL', 'GENERAL', 'SEDATION', 'NONE'])
+    .optional(),
   requiredByTime: z.string().optional(),
   estimatedDuration: z.number().optional(),
   theatreId: z.string().optional(),
@@ -151,6 +154,7 @@ export async function POST(request: NextRequest) {
         surgeonName: surgeonName,
         anesthetistId: validatedData.anesthetistId || null,
         anesthetistName: validatedData.anesthetistName || null,
+        anaesthesiaType: validatedData.anaesthesiaType || null,
         requiredByTime: validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : null,
         estimatedDuration: validatedData.estimatedDuration,
         theatreId: validatedData.theatreId || null,
@@ -320,10 +324,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Theatre Radio: announce emergency booking
+    const anaesNote = validatedData.anaesthesiaType
+      ? validatedData.anaesthesiaType === 'LOCAL' || validatedData.anaesthesiaType === 'NONE'
+        ? ` Anaesthesia: ${validatedData.anaesthesiaType} — no anaesthetist review required.`
+        : ` Anaesthesia: ${validatedData.anaesthesiaType}.`
+      : '';
     await triggerRadio({
       category: 'EMERGENCY',
       title: `Emergency case booked${validatedData.theatreName ? ' — ' + validatedData.theatreName : ''}`,
-      message: `${validatedData.priority} priority emergency. ${validatedData.procedureName} for ${validatedData.patientName}, folder ${validatedData.folderNumber}. Indication: ${validatedData.indication}.${validatedData.bloodRequired ? ` Blood required: ${validatedData.bloodUnits ?? ''} unit(s) ${validatedData.bloodType ?? ''}.` : ''}${validatedData.specialEquipment ? ` Special equipment: ${validatedData.specialEquipment}.` : ''} All theatre staff please respond.`,
+      message: `${validatedData.priority} priority emergency. ${validatedData.procedureName} for ${validatedData.patientName}, folder ${validatedData.folderNumber}. Indication: ${validatedData.indication}.${anaesNote}${validatedData.bloodRequired ? ` Blood required: ${validatedData.bloodUnits ?? ''} unit(s) ${validatedData.bloodType ?? ''}.` : ''}${validatedData.specialEquipment ? ` Special equipment: ${validatedData.specialEquipment}.` : ''} All theatre staff please respond.`,
       location: validatedData.theatreName ?? null,
       specialty: validatedData.surgicalUnit,
       urgency: validatedData.priority === 'CRITICAL' ? 'CRITICAL' : validatedData.priority === 'HIGH' ? 'HIGH' : 'MEDIUM',

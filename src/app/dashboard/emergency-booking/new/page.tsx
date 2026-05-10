@@ -50,6 +50,7 @@ export default function NewEmergencyBookingPage() {
     indication: '',
     surgeonId: '',
     anesthetistId: '',
+    anaesthesiaType: '',
     requiredByTime: '',
     estimatedDuration: '',
     priority: 'CRITICAL',
@@ -153,6 +154,7 @@ export default function NewEmergencyBookingPage() {
         surgeonName: surgeonObj?.fullName || 'Unknown',
         anesthetistId: form.anesthetistId || undefined,
         anesthetistName: anesthetistObj?.fullName || undefined,
+        anaesthesiaType: form.anaesthesiaType || undefined,
         requiredByTime: form.requiredByTime || undefined,
         estimatedDuration: form.estimatedDuration ? parseInt(form.estimatedDuration) : undefined,
         priority: form.priority,
@@ -283,11 +285,50 @@ export default function NewEmergencyBookingPage() {
             </div>
             <div>
               <label className="label">Anesthetist</label>
-              <select name="anesthetistId" value={form.anesthetistId} onChange={handleChange} className="input-field">
+              <select
+                name="anesthetistId"
+                value={form.anesthetistId}
+                onChange={handleChange}
+                disabled={form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE'}
+                className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
+              >
                 <option value="">Select anesthetist</option>
                 {anesthetists.map(a => (
                   <option key={a.id} value={a.id}>{a.fullName}</option>
                 ))}
+              </select>
+              {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') && (
+                <p className="mt-1 text-xs text-green-700">
+                  No anaesthetist needed for {form.anaesthesiaType} anaesthesia — anaesthetic review is not required.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="label">Anaesthesia Type *</label>
+              <select
+                name="anaesthesiaType"
+                value={form.anaesthesiaType}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((prev) => ({
+                    ...prev,
+                    anaesthesiaType: v,
+                    // Clear the anaesthetist when LOCAL/NONE is chosen
+                    anesthetistId:
+                      v === 'LOCAL' || v === 'NONE' ? '' : prev.anesthetistId,
+                  }));
+                }}
+                required
+                className="input-field"
+              >
+                <option value="">Select anaesthesia type</option>
+                <option value="LOCAL">Local — no anaesthetist review needed</option>
+                <option value="NONE">None — procedure without anaesthesia</option>
+                <option value="SEDATION">Sedation</option>
+                <option value="REGIONAL">Regional block</option>
+                <option value="SPINAL">Spinal</option>
+                <option value="EPIDURAL">Epidural</option>
+                <option value="GENERAL">General anaesthesia</option>
               </select>
             </div>
             <div>

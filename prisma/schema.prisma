@@ -3240,7 +3240,12 @@ model EmergencySurgeryBooking {
   surgeonName               String
   anesthetistId             String?
   anesthetistName           String?
-  
+
+  // Anaesthesia plan — drives whether an anaesthetist pre-op review is required.
+  // Allowed values: LOCAL | REGIONAL | SPINAL | EPIDURAL | GENERAL | SEDATION | NONE
+  // LOCAL & NONE bypass the pre-anaesthetic review step.
+  anaesthesiaType           String?
+
   // Timing
   requestedAt               DateTime              @default(now())
   requiredByTime            DateTime?             // When surgery must start

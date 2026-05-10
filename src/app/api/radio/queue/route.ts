@@ -182,10 +182,16 @@ export async function GET(_req: NextRequest) {
       if (dup) continue;
 
       const speak3 = (s: string) => `${s} I repeat. ${s} Final call. ${s}`;
+      const anaesNote = (b as any).anaesthesiaType
+        ? (b as any).anaesthesiaType === 'LOCAL' || (b as any).anaesthesiaType === 'NONE'
+          ? ` Anaesthesia: ${(b as any).anaesthesiaType} — anaesthetist review NOT required.`
+          : ` Anaesthesia: ${(b as any).anaesthesiaType}.`
+        : '';
       const baseMsg =
         `Emergency surgery requested. Patient ${b.patientName}, folder ${b.folderNumber}. ` +
         `Procedure: ${b.procedureName}. Indication: ${b.indication}. ` +
         `Surgeon: ${b.surgeonName}.` +
+        anaesNote +
         (b.theatreName ? ` Theatre: ${b.theatreName}.` : '') +
         (b.bloodRequired
           ? ` Blood required${b.bloodType ? ` (${b.bloodType}${b.bloodUnits ? `, ${b.bloodUnits} units` : ''})` : ''}.`
