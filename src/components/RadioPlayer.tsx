@@ -36,6 +36,29 @@ export default function RadioPlayer() {
   const [collapsed, setCollapsed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playedRecentlyRef = useRef<Map<string, number>>(new Map());
+  // IDs the user has acknowledged in this tab. Even if the server hasn't
+  // yet flipped status to ACKNOWLEDGED (network race), the player will
+  // refuse to play these again.
+  const suppressedRef = useRef<Set<string>>(new Set());
+
+  const hardStop = useCallback(() => {
+    try {
+      const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
+      if (synth) {
+        synth.cancel();
+        // Chrome occasionally needs a second nudge if cancel() is called
+        // mid-utterance — schedule one more cancel on the next tick.
+        setTimeout(() => { try { synth.cancel(); } catch {} }, 50);
+      }
+    } catch {}
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    } catch {}
+    setSpeaking(false);
+  }, []);
 
   // Restore persisted state once on mount so the radio stays activated
   // across page reloads / navigation. Persistence keys are scoped per-user.
@@ -147,7 +170,10 @@ export default function RadioPlayer() {
   // requireAck items repeat every `repeatEverySec` until acknowledged.
   useEffect(() => {
     if (!enabled || queue.length === 0) return;
-    const top = queue[0];
+    // Skip any items the user has already acknowledged locally, even if the
+    // server hasn't dropped them from the queue yet.
+    const top = queue.find((q) => !suppressedRef.current.has(q.id));
+    if (!top) return;
     setCurrent(top);
     const lastPlayedKey = `${top.id}`;
     const now = Date.now();
@@ -191,6 +217,17 @@ export default function RadioPlayer() {
           return;
         }
       }
+
+      // 1) Stop the radio IMMEDIATELY — don't wait for the server.
+      hardStop();
+
+      // 2) Locally suppress this announcement so the playback effect won't
+      //    re-trigger it before the next /api/radio/queue poll comes back
+      //    without it.
+      suppressedRef.current.add(id);
+      setQueue((q) => q.filter((x) => x.id !== id));
+      setCurrent((c) => (c?.id === id ? null : c));
+
       try {
         const r = await fetch('/api/radio/acknowledge', {
           method: 'POST',
@@ -200,16 +237,24 @@ export default function RadioPlayer() {
         if (!r.ok) {
           const e = await r.json().catch(() => ({}));
           alert(e.error ?? 'Failed to acknowledge');
+          // Server rejected — lift suppression so the broadcast resumes,
+          // and refresh from server to restore accurate state.
+          suppressedRef.current.delete(id);
+          await fetchQueue();
         } else {
-          window.speechSynthesis?.cancel();
-          if (audioRef.current) audioRef.current.pause();
           await fetchQueue();
         }
+      } catch (err) {
+        // Network failure — keep the local suppression so the radio stays
+        // quiet for the operator who clicked, but warn them so they can
+        // retry from the audit page once back online.
+        console.error('[radio] acknowledge failed:', err);
+        alert('Acknowledgement could not reach the server. The radio is silenced on this device; please retry from Radio → Audit when connectivity returns.');
       } finally {
         setAckBusy(false);
       }
     },
-    [queue, current, fetchQueue]
+    [queue, current, fetchQueue, hardStop]
   );
 
   if (status !== 'authenticated') return null;
