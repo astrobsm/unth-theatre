@@ -5,7 +5,14 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
-const VitalsChart = dynamic(() => import('@/components/VitalsChart'), { ssr: false });
+const VitalsChart = dynamic(() => import('@/components/VitalsChart'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center text-sm text-blue-700">
+      Loading vitals chart…
+    </div>
+  ),
+});
 
 interface AnesthesiaRecord {
   id: string;
@@ -643,6 +650,9 @@ export default function AnesthesiaMonitoringPage() {
           </div>
 
           {/* Live charts of recorded vitals */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            ✅ Live charts enabled — plotting {record.vitalSignsRecords.length} reading{record.vitalSignsRecords.length === 1 ? '' : 's'}.
+          </div>
           <VitalsChart records={record.vitalSignsRecords} startTimeISO={(record as any).inductionTime || undefined} />
 
           <div className="bg-white border rounded-lg overflow-x-auto">
