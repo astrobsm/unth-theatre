@@ -21,7 +21,8 @@ export default function AssistantWidget() {
   const [msgs, setMsgs] = useState<Msg[]>([
     {
       role: 'assistant',
-      text: 'Hi — I can help you book emergencies, find theatres, report faults or delays, use sub-stores, and operate the radio. Ask me anything.',
+      text:
+        "Hi — I'm your Theatre Assistant. I know every part of this app: patients, surgeries, theatres, anaesthesia, prescriptions, blood & lab requests, sub-stores, equipment, transfers/PACU, roster, CSSD, laundry, power, water, oxygen, incidents, mortality, the radio, reports, and admin tasks.\n\nAsk me anything — e.g. \"how do I book an emergency?\", \"how do I do an AM check?\", \"what is the WHO checklist?\", or \"show available theatres\".",
     },
   ]);
   const recRef = useRef<any>(null);
