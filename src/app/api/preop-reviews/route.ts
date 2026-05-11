@@ -6,45 +6,55 @@ import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
+// Helpers: turn '' / null into undefined before validation
+const emptyToUndef = (v: unknown) => (v === '' || v === null ? undefined : v);
+const optStr = z.preprocess(emptyToUndef, z.string().optional());
+const optNum = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : typeof v === 'string' ? Number(v) : v),
+  z.number().optional()
+);
+const optEnum = <T extends [string, ...string[]]>(values: T) =>
+  z.preprocess(emptyToUndef, z.enum(values).optional());
+
 // Schema for creating pre-op review
 const createPreOpReviewSchema = z.object({
-  surgeryId: z.string(),
-  patientId: z.string(),
-  patientName: z.string(),
-  folderNumber: z.string(),
-  scheduledSurgeryDate: z.string(),
-  currentMedications: z.string().optional().nullable().transform(v => v || undefined),
-  allergies: z.string().optional().nullable().transform(v => v || undefined),
-  comorbidities: z.string().optional().nullable().transform(v => v || undefined),
-  previousAnesthesia: z.string().optional().nullable().transform(v => v || undefined),
-  lastOralIntake: z.string().optional().nullable().transform(v => v || undefined),
-  fastingStatus: z.string().optional().nullable().transform(v => v || undefined),
-  weight: z.number().optional().nullable(),
-  height: z.number().optional().nullable(),
-  bmi: z.number().optional().nullable(),
-  bloodPressure: z.string().optional().nullable().transform(v => v || undefined),
-  heartRate: z.number().optional().nullable(),
-  respiratoryRate: z.number().optional().nullable(),
-  temperature: z.number().optional().nullable(),
-  airwayClass: z.string().optional().nullable().transform(v => v || undefined),
-  neckMovement: z.string().optional().nullable().transform(v => v || undefined),
-  dentition: z.string().optional().nullable().transform(v => v || undefined),
-  hemoglobin: z.number().optional().nullable(),
-  plateletCount: z.number().optional().nullable(),
-  ptInr: z.number().optional().nullable(),
-  creatinine: z.number().optional().nullable(),
-  sodium: z.number().optional().nullable(),
-  potassium: z.number().optional().nullable(),
-  bloodGlucose: z.number().optional().nullable(),
-  otherLabResults: z.string().optional().nullable().transform(v => v || undefined),
-  asaClass: z.string().optional().nullable().transform(v => v || undefined),
-  proposedAnesthesiaType: z.enum(['GENERAL', 'SPINAL', 'LOCAL', 'REGIONAL', 'SEDATION']).optional().nullable().transform(v => v || undefined),
-  anestheticPlan: z.string().optional().nullable().transform(v => v || undefined),
-  specialConsiderations: z.string().optional().nullable().transform(v => v || undefined),
-  riskLevel: z.string().optional().nullable().transform(v => v || undefined),
-  riskFactors: z.string().optional().nullable().transform(v => v || undefined),
-  reviewNotes: z.string().optional().nullable().transform(v => v || undefined),
-  recommendations: z.string().optional().nullable().transform(v => v || undefined),
+  surgeryId: z.string().min(1, 'surgeryId is required'),
+  patientId: z.string().min(1, 'patientId is required'),
+  patientName: z.string().min(1, 'patientName is required'),
+  folderNumber: z.string().min(1, 'folderNumber is required'),
+  scheduledSurgeryDate: z.string().min(1, 'scheduledSurgeryDate is required'),
+  currentMedications: optStr,
+  allergies: optStr,
+  comorbidities: optStr,
+  previousAnesthesia: optStr,
+  lastOralIntake: optStr,
+  fastingStatus: optStr,
+  weight: optNum,
+  height: optNum,
+  bmi: optNum,
+  bloodPressure: optStr,
+  heartRate: optNum,
+  respiratoryRate: optNum,
+  temperature: optNum,
+  airwayClass: optStr,
+  neckMovement: optStr,
+  dentition: optStr,
+  hemoglobin: optNum,
+  plateletCount: optNum,
+  ptInr: optNum,
+  creatinine: optNum,
+  sodium: optNum,
+  potassium: optNum,
+  bloodGlucose: optNum,
+  otherLabResults: optStr,
+  asaClass: optStr,
+  proposedAnesthesiaType: optEnum(['GENERAL', 'SPINAL', 'LOCAL', 'REGIONAL', 'SEDATION']),
+  anestheticPlan: optStr,
+  specialConsiderations: optStr,
+  riskLevel: optStr,
+  riskFactors: optStr,
+  reviewNotes: optStr,
+  recommendations: optStr,
   // Prescription data
   prescription: z.object({
     medications: z.array(z.object({
@@ -181,8 +191,8 @@ export async function POST(request: NextRequest) {
 
     if (existingReview) {
       return NextResponse.json(
-        { error: 'Pre-operative review already exists for this surgery' },
-        { status: 400 }
+        { error: 'A pre-operative review already exists for this surgery. Open it from the list to edit.' },
+        { status: 409 }
       );
     }
 
@@ -243,15 +253,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(review, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      const issues = error.errors.map(e => `${e.path.join('.') || 'body'}: ${e.message}`);
+      console.error('Pre-op review validation failed:', issues);
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: `Validation error: ${issues.join('; ')}`, details: error.errors },
         { status: 400 }
       );
     }
 
     console.error('Error creating pre-op review:', error);
     return NextResponse.json(
-      { error: 'Failed to create pre-op review' },
+      { error: 'Failed to create pre-op review', message: (error as Error)?.message },
       { status: 500 }
     );
   }
