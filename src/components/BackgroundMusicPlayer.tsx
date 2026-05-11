@@ -6,7 +6,8 @@
  * - Fetches /audio/background/manifest.json (built by scripts/build-music-manifest.ps1).
  *   Each track is a public URL on Supabase Storage.
  * - Plays a shuffled queue at low volume; auto-advances on track end.
- * - Listens for `radio:active` to pause (ducking) and `radio:idle` to resume.
+ * - Listens for `radio:active` to fade out (over ~1.2s) and `radio:idle` to fade back in (~1.5s),
+ *   triggered by theatre radio, pharmacy/announcement TVs and emergency surgery alerts.
  * - Persists enabled / volume / collapsed / shuffle in localStorage.
  */
 
@@ -62,6 +63,42 @@ export default function BackgroundMusicPlayer() {
 
   const audioRef             = useRef<HTMLAudioElement | null>(null);
   const wasPlayingBeforeDuck = useRef(false);
+  const fadeTimerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const duckCountRef         = useRef(0); // supports nested/overlapping duck triggers
+
+  // Smoothly ramp the audio element volume to `target` over `durationMs`.
+  // Cancels any in-flight fade. Calls `onDone` when finished. If the audio
+  // element disappears mid-fade the timer self-clears.
+  const fadeTo = useCallback((target: number, durationMs: number, onDone?: () => void) => {
+    const a = audioRef.current;
+    if (fadeTimerRef.current) { clearInterval(fadeTimerRef.current); fadeTimerRef.current = null; }
+    if (!a) { onDone?.(); return; }
+    const stepMs = 50;
+    const startVol = a.volume;
+    const delta    = target - startVol;
+    if (Math.abs(delta) < 0.001 || durationMs <= 0) {
+      a.volume = Math.max(0, Math.min(1, target));
+      onDone?.();
+      return;
+    }
+    const steps = Math.max(1, Math.round(durationMs / stepMs));
+    let i = 0;
+    fadeTimerRef.current = setInterval(() => {
+      i++;
+      const aNow = audioRef.current;
+      if (!aNow) {
+        if (fadeTimerRef.current) { clearInterval(fadeTimerRef.current); fadeTimerRef.current = null; }
+        return;
+      }
+      const next = startVol + delta * (i / steps);
+      aNow.volume = Math.max(0, Math.min(1, next));
+      if (i >= steps) {
+        if (fadeTimerRef.current) { clearInterval(fadeTimerRef.current); fadeTimerRef.current = null; }
+        aNow.volume = Math.max(0, Math.min(1, target));
+        onDone?.();
+      }
+    }, stepMs);
+  }, []);
 
   // ---- restore localStorage --------------------------------------------------
   useEffect(() => {
@@ -148,37 +185,62 @@ export default function BackgroundMusicPlayer() {
     return () => a.removeEventListener('ended', onEnded);
   }, [advance]);
 
-  // volume + duck
+  // volume + duck (instant when not fading; fades are driven by radio events below)
   useEffect(() => {
+    if (fadeTimerRef.current) return; // a fade is in flight; let it finish
     if (audioRef.current) audioRef.current.volume = ducked ? 0 : volume;
   }, [volume, ducked]);
 
-  // ducking via radio events
+  // Ducking via radio / announcement / emergency events.
+  // Fades music down (~1.2s) before pausing, then fades back up (~1.5s) on resume.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const FADE_OUT_MS = 1200;
+    const FADE_IN_MS  = 1500;
+
     const onActive = () => {
+      duckCountRef.current += 1;
+      if (duckCountRef.current > 1) return; // already ducked
       setDucked(true);
       const a = audioRef.current;
       if (!a) return;
       wasPlayingBeforeDuck.current = !a.paused;
-      try { a.pause(); } catch {}
+      if (a.paused) return;
+      fadeTo(0, FADE_OUT_MS, () => {
+        try { audioRef.current?.pause(); } catch {}
+      });
     };
+
     const onIdle = () => {
+      duckCountRef.current = Math.max(0, duckCountRef.current - 1);
+      if (duckCountRef.current > 0) return; // another announcement still active
       setDucked(false);
       const a = audioRef.current;
       if (!a || !enabled) return;
-      if (wasPlayingBeforeDuck.current) {
-        a.volume = volume;
-        a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-      }
+      if (!wasPlayingBeforeDuck.current) return;
+      a.volume = 0;
+      a.play()
+        .then(() => {
+          setPlaying(true);
+          fadeTo(volume, FADE_IN_MS);
+        })
+        .catch(() => setPlaying(false));
     };
+
     window.addEventListener('radio:active', onActive as EventListener);
     window.addEventListener('radio:idle',   onIdle   as EventListener);
     return () => {
       window.removeEventListener('radio:active', onActive as EventListener);
       window.removeEventListener('radio:idle',   onIdle   as EventListener);
     };
-  }, [enabled, volume]);
+  }, [enabled, volume, fadeTo]);
+
+  // Cleanup any pending fade on unmount
+  useEffect(() => {
+    return () => {
+      if (fadeTimerRef.current) { clearInterval(fadeTimerRef.current); fadeTimerRef.current = null; }
+    };
+  }, []);
 
   const togglePlay = useCallback(async () => {
     if (!enabled) { setEnabled(true); return; }

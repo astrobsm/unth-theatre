@@ -398,6 +398,9 @@ class AudioAlertEngine {
     this.playing = true;
     this.lastPlayTime = now;
 
+    // Duck any background music while the alert plays.
+    try { window.dispatchEvent(new CustomEvent('radio:active')); } catch {}
+
     // Use explicit details when provided, else fall back to the most-recent set details
     const activeDetails = details ?? this.currentDetails;
 
@@ -419,6 +422,7 @@ class AudioAlertEngine {
       // ignore
     } finally {
       this.playing = false;
+      try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
     }
   }
 

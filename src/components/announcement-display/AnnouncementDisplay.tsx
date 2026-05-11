@@ -169,11 +169,14 @@ export default function AnnouncementDisplay({
     async (item: AnnouncementItem) => {
       if (!audioEnabled || speakingRef.current) return;
       speakingRef.current = true;
+      // Duck background music while we chime + speak.
+      try { window.dispatchEvent(new CustomEvent('radio:active')); } catch {}
       try {
         await playChime();
         await speak(buildAnnouncement(item));
       } finally {
         speakingRef.current = false;
+        try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
       }
     },
     [audioEnabled, playChime, speak, buildAnnouncement]
