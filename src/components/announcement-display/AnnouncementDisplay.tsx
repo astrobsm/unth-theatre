@@ -117,9 +117,9 @@ export default function AnnouncementDisplay({
       try { await ctx.resume(); } catch { return; }
     }
     const tones: [number, number, number][] = [
-      [523, 0.3, 0.3],
-      [659, 0.3, 0.3],
-      [784, 0.45, 0.28],
+      [523, 0.3, 1.0],
+      [659, 0.3, 1.0],
+      [784, 0.45, 1.0],
     ];
     const start = ctx.currentTime + 0.05;
     let t = start;
