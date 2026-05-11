@@ -23,6 +23,13 @@ export async function GET() {
             name: true,
             folderNumber: true,
           }
+        },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true,
+          }
         }
       },
       orderBy: { transferTime: 'desc' },
@@ -86,6 +93,7 @@ export async function POST(request: Request) {
       },
       include: {
         patient: { select: { name: true, folderNumber: true } },
+        user: { select: { id: true, fullName: true, username: true } },
       },
     });
 
