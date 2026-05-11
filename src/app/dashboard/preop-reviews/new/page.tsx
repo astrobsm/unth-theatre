@@ -336,6 +336,19 @@ export default function NewPreOpReviewPage() {
       return;
     }
 
+    // Resolve patient identity with fallbacks (surgery FK fields if relation missing)
+    const patientId = selectedSurgery.patient?.id || (selectedSurgery as any).patientId;
+    const patientName = selectedSurgery.patient?.name || (selectedSurgery as any).patientName || 'Unknown Patient';
+    const folderNumber = selectedSurgery.patient?.folderNumber || (selectedSurgery as any).folderNumber || 'N/A';
+    if (!patientId) {
+      setError('Selected surgery has no patient linked. Open the surgery and assign a patient first.');
+      return;
+    }
+    if (!selectedSurgery.scheduledDate) {
+      setError('Selected surgery has no scheduled date.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
 
@@ -343,9 +356,9 @@ export default function NewPreOpReviewPage() {
     
     const payload = {
       surgeryId: selectedSurgeryId,
-      patientId: selectedSurgery.patient?.id,
-      patientName: selectedSurgery.patient?.name || 'Unknown Patient',
-      folderNumber: selectedSurgery.patient?.folderNumber || 'N/A',
+      patientId,
+      patientName,
+      folderNumber,
       scheduledSurgeryDate: selectedSurgery.scheduledDate,
       // ASA & Airway
       asaClass: formData.get('asaClass'),
@@ -380,8 +393,16 @@ export default function NewPreOpReviewPage() {
       if (response.ok) {
         router.push('/dashboard/preop-reviews');
       } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to create pre-operative review');
+        let msg = 'Failed to create pre-operative review';
+        try {
+          const data = await response.json();
+          if (data?.error) msg = data.error;
+          if (Array.isArray(data?.details)) {
+            const issues = data.details.map((d: any) => `${(d.path || []).join('.') || 'body'}: ${d.message}`).join('; ');
+            if (issues) msg = `${msg} — ${issues}`;
+          }
+        } catch {}
+        setError(msg);
       }
     } catch (error) {
       console.error('Error creating review:', error);
