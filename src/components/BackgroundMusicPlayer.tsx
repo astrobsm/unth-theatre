@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Music, Pause, Play, Volume2, VolumeX, ChevronUp, ChevronDown,
+  Music, Pause, Play, Volume2, VolumeX, ChevronDown,
   SkipForward, SkipBack, Shuffle,
 } from 'lucide-react';
 
@@ -267,22 +267,63 @@ export default function BackgroundMusicPlayer() {
     return 'Off';
   }, [ducked, enabled, playing, currentTrack]);
 
+  // ---- autohide: re-collapse the expanded panel after a short idle period ----
+  const AUTOHIDE_MS = 5000;
+  const autohideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearAutohide = useCallback(() => {
+    if (autohideTimerRef.current) {
+      clearTimeout(autohideTimerRef.current);
+      autohideTimerRef.current = null;
+    }
+  }, []);
+
+  const armAutohide = useCallback(() => {
+    clearAutohide();
+    autohideTimerRef.current = setTimeout(() => setCollapsed(true), AUTOHIDE_MS);
+  }, [clearAutohide]);
+
+  // Re-arm whenever the panel becomes visible or relevant state changes.
+  useEffect(() => {
+    if (collapsed) { clearAutohide(); return; }
+    armAutohide();
+    return clearAutohide;
+  }, [collapsed, enabled, playing, idx, volume, shuffle, armAutohide, clearAutohide]);
+
+  // Cleanup on unmount
+  useEffect(() => clearAutohide, [clearAutohide]);
+
   return (
-    <div className="fixed bottom-20 left-4 z-[10006] print:hidden">
-      <div className="bg-white border border-gray-200 shadow-lg rounded-xl overflow-hidden">
+    <div
+      className="fixed bottom-20 left-4 z-[10006] print:hidden"
+      onMouseEnter={collapsed ? undefined : clearAutohide}
+      onMouseLeave={collapsed ? undefined : armAutohide}
+    >
+      {collapsed ? (
+        // Auto-hidden state: tiny floating icon. Click to reveal full controls.
         <button
           type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-gray-50 max-w-[20rem]"
+          onClick={() => setCollapsed(false)}
+          title={`Background music — ${headerLabel}`}
+          aria-label={`Background music — ${headerLabel}`}
+          className={`w-9 h-9 rounded-full bg-white border border-gray-200 shadow-lg flex items-center justify-center hover:bg-gray-50 transition-opacity ${enabled && playing ? 'opacity-90' : 'opacity-50 hover:opacity-100'}`}
         >
-          <Music className={`w-4 h-4 flex-shrink-0 ${ducked ? 'text-amber-500' : enabled && playing ? 'text-green-600' : 'text-gray-400'}`} />
-          <span className="text-xs font-semibold text-gray-700">Background music</span>
-          <span className="ml-auto text-[10px] text-gray-500 truncate max-w-[10rem]" title={headerLabel}>{headerLabel}</span>
-          {collapsed ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+          <Music className={`w-4 h-4 ${ducked ? 'text-amber-500' : enabled && playing ? 'text-green-600' : 'text-gray-400'}`} />
         </button>
+      ) : (
+        <div className="bg-white border border-gray-200 shadow-lg rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-gray-50 max-w-[20rem]"
+          >
+            <Music className={`w-4 h-4 flex-shrink-0 ${ducked ? 'text-amber-500' : enabled && playing ? 'text-green-600' : 'text-gray-400'}`} />
+            <span className="text-xs font-semibold text-gray-700">Background music</span>
+            <span className="ml-auto text-[10px] text-gray-500 truncate max-w-[10rem]" title={headerLabel}>{headerLabel}</span>
+            <ChevronDown className="w-3 h-3 text-gray-400" />
+          </button>
 
-        {!collapsed && (
-          <div className="px-3 pb-3 pt-1 space-y-2 w-80">
+          <div className="px-3 pb-3 pt-1 space-y-2 w-80" onClick={clearAutohide}>
             <div className="text-[11px] text-gray-700 leading-tight min-h-[2.2rem]">
               {currentTrack ? (
                 <>
@@ -342,8 +383,8 @@ export default function BackgroundMusicPlayer() {
             </p>
             {error && <p className="text-[10px] text-amber-600">{error}</p>}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
