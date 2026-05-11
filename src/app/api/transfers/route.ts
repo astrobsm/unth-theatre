@@ -5,6 +5,9 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = 'force-dynamic';
 
+const VALID_LOCATIONS = ['WARD', 'HOLDING_AREA', 'THEATRE_SUITE', 'RECOVERY'] as const;
+type Location = typeof VALID_LOCATIONS[number];
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -34,5 +37,61 @@ export async function GET() {
       { error: "Internal server error" },
       { status: 500 }
     );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    const patientId    = typeof body.patientId === 'string' ? body.patientId.trim() : '';
+    const fromLocation = typeof body.fromLocation === 'string' ? body.fromLocation.trim() : '';
+    const toLocation   = typeof body.toLocation === 'string' ? body.toLocation.trim() : '';
+    const notes        = typeof body.notes === 'string' ? body.notes.trim() : '';
+
+    if (!patientId)    return NextResponse.json({ error: "patientId is required" }, { status: 400 });
+    if (!fromLocation) return NextResponse.json({ error: "fromLocation is required" }, { status: 400 });
+    if (!toLocation)   return NextResponse.json({ error: "toLocation is required" }, { status: 400 });
+
+    if (!VALID_LOCATIONS.includes(fromLocation as Location)) {
+      return NextResponse.json({ error: `fromLocation must be one of ${VALID_LOCATIONS.join(', ')}` }, { status: 400 });
+    }
+    if (!VALID_LOCATIONS.includes(toLocation as Location)) {
+      return NextResponse.json({ error: `toLocation must be one of ${VALID_LOCATIONS.join(', ')}` }, { status: 400 });
+    }
+    if (fromLocation === toLocation) {
+      return NextResponse.json({ error: "fromLocation and toLocation must differ" }, { status: 400 });
+    }
+
+    const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { id: true } });
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    const transfer = await prisma.patientTransfer.create({
+      data: {
+        patientId,
+        fromLocation: fromLocation as Location,
+        toLocation:   toLocation   as Location,
+        transferredBy: session.user.id,
+        notes: notes || null,
+      },
+      include: {
+        patient: { select: { name: true, folderNumber: true } },
+      },
+    });
+
+    return NextResponse.json(transfer, { status: 201 });
+  } catch (error) {
+    console.error("Transfer create error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
