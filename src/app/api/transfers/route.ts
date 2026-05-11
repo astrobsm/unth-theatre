@@ -97,6 +97,54 @@ export async function POST(request: Request) {
       },
     });
 
+    // ----------------------------------------------------------------
+    // Auto-broadcast every patient transfer on the theatre radio in
+    // real time. The RadioPlayer polls /api/radio/queue every few
+    // seconds, so creating a PENDING RadioAnnouncement here is enough
+    // to make it speak on every connected client.
+    // ----------------------------------------------------------------
+    try {
+      const prettyLocation = (loc: string) =>
+        loc.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+      const staffName =
+        transfer.user?.fullName?.trim() ||
+        transfer.user?.username?.trim() ||
+        'a staff member';
+      const patientName = transfer.patient?.name || 'Patient';
+      const folder = transfer.patient?.folderNumber ? `, folder ${transfer.patient.folderNumber}` : '';
+      const message =
+        `Patient transfer notice. ${patientName}${folder} has just been moved from ` +
+        `${prettyLocation(fromLocation)} to ${prettyLocation(toLocation)} ` +
+        `by ${staffName}.` +
+        (notes ? ` Note: ${notes}.` : '');
+
+      await prisma.radioAnnouncement.create({
+        data: {
+          category: 'WORKFLOW',
+          title: `Patient transfer — ${patientName} → ${prettyLocation(toLocation)}`,
+          message,
+          priority: 70,
+          location: prettyLocation(toLocation),
+          urgency: 'MEDIUM',
+          triggerSource: 'EVENT',
+          triggeredById: session.user.id,
+          status: 'PENDING',
+          requireAck: false,
+          repeatUntilAck: false,
+          metadata: JSON.stringify({
+            patientTransferId: transfer.id,
+            patientId: transfer.patientId,
+            fromLocation,
+            toLocation,
+            source: 'PatientTransfer',
+          }),
+        },
+      });
+    } catch (radioErr) {
+      // Never fail the transfer if the radio broadcast fails to enqueue.
+      console.error('[transfers] failed to enqueue radio announcement:', radioErr);
+    }
+
     return NextResponse.json(transfer, { status: 201 });
   } catch (error) {
     console.error("Transfer create error:", error);
