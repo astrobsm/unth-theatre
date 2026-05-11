@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { triggerRadio } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -256,6 +257,37 @@ export async function PATCH(
         }
 
         await Promise.all(notificationPromises);
+
+        // Real-time radio broadcast for every lab result entered.
+        const isCritical = !!data.criticalResult;
+        const isAbnormal = !!data.abnormalResult;
+        const radioPriority = isCritical ? 95 : isAbnormal ? 80 : 65;
+        const flag = isCritical ? 'CRITICAL ' : isAbnormal ? 'Abnormal ' : '';
+        const valueText =
+          data.resultValue != null
+            ? ` ${data.resultValue}${data.resultUnit ? ' ' + data.resultUnit : ''}`
+            : '';
+        await triggerRadio({
+          category: isCritical ? 'EMERGENCY' : 'WORKFLOW',
+          title: `${flag}lab result — ${labReq?.patientName ?? 'patient'}`,
+          message:
+            `${flag}emergency lab result available. Patient ${labReq?.patientName ?? ''}` +
+            `${labReq?.folderNumber ? `, folder ${labReq.folderNumber}` : ''}. ` +
+            `${data.testName ?? 'Test'} result${valueText}.` +
+            (isCritical ? ' Immediate clinical review required.' : ''),
+          priority: radioPriority,
+          urgency: isCritical ? 'CRITICAL' : isAbnormal ? 'HIGH' : 'MEDIUM',
+          requireAck: isCritical,
+          repeatUntilAck: isCritical,
+          repeatEverySec: 180,
+          triggeredById: session.user.id,
+          metadata: {
+            source: 'EmergencyLabResult',
+            labRequestId: params.id,
+            testId,
+            critical: isCritical,
+          },
+        });
 
         return NextResponse.json({ message: 'Results entered and clinical team notified' });
       }

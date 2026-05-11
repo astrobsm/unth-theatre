@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { acknowledgeRadioByMetadata, triggerRadio } from '@/lib/radioEvents';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -106,6 +107,23 @@ export async function POST(request: NextRequest) {
         notes: validatedData.notes,
         status: 'IN_PROGRESS',
       },
+    });
+
+    // Silence any pending porter-call radio loops for this surgery / patient
+    await acknowledgeRadioByMetadata('kind', 'porter_call', porter.id);
+    if (validatedData.surgeryId) {
+      await acknowledgeRadioByMetadata('surgeryId', validatedData.surgeryId, porter.id);
+    }
+
+    // Confirmation broadcast
+    await triggerRadio({
+      category: 'CONFIRMATION',
+      title: `Porter on the way — ${patient.name}`,
+      message: `Porter ${porter.fullName} has started transport of patient ${patient.name} from ${validatedData.fromLocation} to ${validatedData.toLocation}.`,
+      priority: 60,
+      urgency: 'LOW',
+      triggeredById: porter.id,
+      metadata: { source: 'PorterStart', porterId: porter.id, patientId: patient.id },
     });
 
     return NextResponse.json(

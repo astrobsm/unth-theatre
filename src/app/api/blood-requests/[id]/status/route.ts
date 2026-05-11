@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { triggerRadio } from '@/lib/radioEvents';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -149,6 +150,32 @@ export async function PATCH(
         notificationTitle = 'Blood Request Cancelled';
         notificationMessage = `Blood request for ${existingRequest.patientName} has been cancelled. Reason: ${validatedData.cancellationReason}`;
         break;
+    }
+
+    // Real-time radio broadcast on key blood-bank state changes
+    if (validatedData.status === 'READY' || validatedData.status === 'DELIVERED') {
+      const ready = validatedData.status === 'READY';
+      const units = `${existingRequest.unitsRequested} unit${existingRequest.unitsRequested === 1 ? '' : 's'} of ${existingRequest.bloodType}${existingRequest.rhFactor ?? ''}`;
+      await triggerRadio({
+        category: 'WORKFLOW',
+        title: ready
+          ? `Blood ready — ${existingRequest.patientName}`
+          : `Blood delivered — ${existingRequest.patientName}`,
+        message: ready
+          ? `Blood is ready for collection. Patient ${existingRequest.patientName}, ${units}. Please send a porter to collect from blood bank.`
+          : `Blood has been delivered for patient ${existingRequest.patientName}, ${units}.`,
+        priority: ready ? 85 : 70,
+        urgency: ready ? 'HIGH' : 'MEDIUM',
+        requireAck: ready,
+        repeatUntilAck: ready,
+        repeatEverySec: 240,
+        triggeredById: session.user.id,
+        metadata: {
+          source: 'BloodRequest',
+          bloodRequestId: params.id,
+          status: validatedData.status,
+        },
+      });
     }
 
     return NextResponse.json(updatedRequest);

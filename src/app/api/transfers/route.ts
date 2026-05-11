@@ -112,6 +112,7 @@ export async function POST(request: Request) {
         'a staff member';
       const patientName = transfer.patient?.name || 'Patient';
       const folder = transfer.patient?.folderNumber ? `, folder ${transfer.patient.folderNumber}` : '';
+      const toRecovery = toLocation === 'RECOVERY';
       const message =
         `Patient transfer notice. ${patientName}${folder} has just been moved from ` +
         `${prettyLocation(fromLocation)} to ${prettyLocation(toLocation)} ` +
@@ -121,11 +122,15 @@ export async function POST(request: Request) {
       await prisma.radioAnnouncement.create({
         data: {
           category: 'WORKFLOW',
-          title: `Patient transfer — ${patientName} → ${prettyLocation(toLocation)}`,
-          message,
-          priority: 70,
+          title: toRecovery
+            ? `Patient transferred to RECOVERY — ${patientName}`
+            : `Patient transfer — ${patientName} → ${prettyLocation(toLocation)}`,
+          message: toRecovery
+            ? `Patient transferred to recovery. ${patientName}${folder} is now in recovery. Recovery team please attend.`
+            : message,
+          priority: toRecovery ? 80 : 70,
           location: prettyLocation(toLocation),
-          urgency: 'MEDIUM',
+          urgency: toRecovery ? 'HIGH' : 'MEDIUM',
           triggerSource: 'EVENT',
           triggeredById: session.user.id,
           status: 'PENDING',
@@ -137,6 +142,40 @@ export async function POST(request: Request) {
             fromLocation,
             toLocation,
             source: 'PatientTransfer',
+          }),
+        },
+      });
+
+      // Porter call: every transfer needs a porter. Speak 3x and repeat
+      // every 2 minutes until porter starts the transport (which acks the
+      // call) or someone manually acknowledges from the radio bar.
+      const speak3 = (s: string) => `${s} I repeat. ${s} Final call. ${s}`;
+      const porterMsg =
+        `Porter required to transport patient ${patientName}${folder} from ` +
+        `${prettyLocation(fromLocation)} to ${prettyLocation(toLocation)}. ` +
+        `Please respond and acknowledge.`;
+      await prisma.radioAnnouncement.create({
+        data: {
+          category: 'STAFF_REQUEST',
+          title: `Porter required — ${patientName}`,
+          message: speak3(porterMsg),
+          priority: 88,
+          location: prettyLocation(fromLocation),
+          urgency: 'HIGH',
+          triggerSource: 'EVENT',
+          triggeredById: session.user.id,
+          status: 'PENDING',
+          requireAck: true,
+          repeatUntilAck: true,
+          repeatEverySec: 120,
+          metadata: JSON.stringify({
+            patientTransferId: transfer.id,
+            patientId: transfer.patientId,
+            fromLocation,
+            toLocation,
+            source: 'PorterCall',
+            kind: 'porter_call',
+            tripleRepeat: true,
           }),
         },
       });

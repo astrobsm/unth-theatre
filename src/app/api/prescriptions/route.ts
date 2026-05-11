@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { triggerRadio } from '@/lib/radioEvents';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -175,6 +176,24 @@ export async function POST(request: NextRequest) {
         tableName: 'AnestheticPrescription',
         recordId: prescription.id,
         changes: JSON.stringify(prescription),
+      },
+    });
+
+    // Real-time radio broadcast: prescription submitted
+    await triggerRadio({
+      category: 'WORKFLOW',
+      title: `Prescription submitted — ${prescription.patientName ?? validatedData.patientName}`,
+      message:
+        `New anaesthetic prescription submitted for patient ` +
+        `${prescription.patientName ?? validatedData.patientName}. ` +
+        `Prescriber: ${session.user.name ?? 'anaesthetist'}. Pharmacy please review.`,
+      priority: 70,
+      urgency: 'MEDIUM',
+      triggeredById: session.user.id,
+      metadata: {
+        source: 'AnestheticPrescription',
+        prescriptionId: prescription.id,
+        patientId: validatedData.patientId,
       },
     });
 

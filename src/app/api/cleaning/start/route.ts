@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { acknowledgeRadioByMetadata, triggerRadio } from '@/lib/radioEvents';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -93,6 +94,20 @@ export async function POST(request: NextRequest) {
         notes: validatedData.notes,
         status: 'IN_PROGRESS',
       },
+    });
+
+    // Silence any pending cleaner-call radio loops for this theatre
+    await acknowledgeRadioByMetadata('kind', 'cleaner_call', user.id);
+
+    // Confirmation broadcast
+    await triggerRadio({
+      category: 'CONFIRMATION',
+      title: `Cleaner on duty — ${theatre.name}`,
+      message: `Cleaner ${user.fullName} has started cleaning ${theatre.name}.`,
+      priority: 55,
+      urgency: 'LOW',
+      triggeredById: user.id,
+      metadata: { source: 'CleanerStart', cleanerId: user.id, theatreId: theatre.id },
     });
 
     return NextResponse.json(

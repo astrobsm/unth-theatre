@@ -65,3 +65,42 @@ export async function triggerRadio(input: RadioEventInput): Promise<void> {
     console.error('[radioEvents] failed to enqueue announcement:', err);
   }
 }
+
+/**
+ * Wrap a sentence so the TTS speaks it three times in a row, with a short
+ * gap baked in via the connector text. Used for high-priority calls
+ * (porter / cleaner) that the user wants spoken three times each cycle.
+ */
+export function speak3(s: string): string {
+  return `${s} I repeat. ${s} Final call. ${s}`;
+}
+
+/**
+ * Mark every PENDING / PLAYING radio announcement whose metadata JSON
+ * contains the given key/value pair as ACKNOWLEDGED, so the radio service
+ * stops looping it. Fire-and-forget — never throws.
+ */
+export async function acknowledgeRadioByMetadata(
+  key: string,
+  value: string,
+  acknowledgedById?: string | null,
+): Promise<number> {
+  try {
+    const needle = `"${key}":"${value}"`;
+    const res = await prisma.radioAnnouncement.updateMany({
+      where: {
+        status: { in: ['PENDING', 'PLAYING'] },
+        metadata: { contains: needle },
+      },
+      data: {
+        status: 'ACKNOWLEDGED',
+        acknowledgedAt: new Date(),
+        acknowledgedById: acknowledgedById ?? null,
+      },
+    });
+    return res.count;
+  } catch (err) {
+    console.error('[radioEvents] failed to acknowledge announcements:', err);
+    return 0;
+  }
+}

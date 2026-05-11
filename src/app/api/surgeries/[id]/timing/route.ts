@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,6 +134,24 @@ export async function POST(
       }
     });
 
+    // Real-time radio broadcast: surgery start (incision/procedure start)
+    if (body.incisionTime || body.procedureStartTime) {
+      const patientName = timing.surgery?.patient?.name || 'patient';
+      const procedure = timing.surgery?.procedureName || 'surgery';
+      await triggerRadio({
+        category: 'WORKFLOW',
+        title: `Surgery started — ${procedure}`,
+        message: `Surgery has commenced. Patient ${patientName}. Procedure: ${procedure}. Knife on skin.`,
+        priority: 75,
+        urgency: 'MEDIUM',
+        triggeredById: session.user.id,
+        metadata: {
+          source: 'SurgicalTiming.start',
+          surgeryId: params.id,
+        },
+      });
+    }
+
     return NextResponse.json(timing, { status: 201 });
   } catch (error: any) {
     console.error('Error creating surgical timing:', error);
@@ -260,6 +279,80 @@ export async function PUT(
       await prisma.surgery.update({
         where: { id: params.id },
         data: { status: 'COMPLETED' }
+      });
+    }
+
+    const patientName = timing.surgery?.patient?.name || 'patient';
+    const procedure = timing.surgery?.procedureName || 'surgery';
+
+    // Real-time radio broadcast: surgery start (first time incision recorded)
+    if ((body.incisionTime && !existing.incisionTime) ||
+        (body.procedureStartTime && !existing.procedureStartTime)) {
+      await triggerRadio({
+        category: 'WORKFLOW',
+        title: `Surgery started — ${procedure}`,
+        message: `Surgery has commenced. Patient ${patientName}. Procedure: ${procedure}. Knife on skin.`,
+        priority: 75,
+        urgency: 'MEDIUM',
+        triggeredById: session.user.id,
+        metadata: { source: 'SurgicalTiming.start', surgeryId: params.id },
+      });
+    }
+
+    // Real-time radio broadcast: end of surgery -> announce + call porter & cleaner
+    if (body.procedureEndTime && !existing.procedureEndTime) {
+      const dur = surgicalDuration ? ` Duration: ${surgicalDuration} minutes.` : '';
+      // 1. End-of-surgery announcement (informational)
+      await triggerRadio({
+        category: 'WORKFLOW',
+        title: `End of surgery — ${procedure}`,
+        message: `Surgery completed for patient ${patientName}. Procedure: ${procedure}.${dur} Preparing for transfer to recovery.`,
+        priority: 80,
+        urgency: 'MEDIUM',
+        triggeredById: session.user.id,
+        metadata: { source: 'SurgicalTiming.end', surgeryId: params.id },
+      });
+
+      // 2. Porter call (3x baked, repeats every 2 min until acknowledged
+      //    e.g. by porter starting transport or scrub nurse acknowledging)
+      const porterMsg = `Porter required in theatre. Patient ${patientName} ready for transfer to recovery. Please respond and acknowledge.`;
+      await triggerRadio({
+        category: 'STAFF_REQUEST',
+        title: `Porter required — ${patientName}`,
+        message: speak3(porterMsg),
+        priority: 88,
+        urgency: 'HIGH',
+        requireAck: true,
+        repeatUntilAck: true,
+        repeatEverySec: 120,
+        triggeredById: session.user.id,
+        metadata: {
+          source: 'PorterCall',
+          surgeryId: params.id,
+          kind: 'porter_call',
+          tripleRepeat: true,
+        },
+      });
+
+      // 3. Cleaner call (3x baked, repeats every 2 min until acknowledged
+      //    by cleaner starting cleaning or scrub nurse acknowledging)
+      const cleanerMsg = `Cleaner required in theatre for case turnover at end of surgery for ${patientName}. Please respond and acknowledge.`;
+      await triggerRadio({
+        category: 'STAFF_REQUEST',
+        title: `Cleaner required — theatre turnover`,
+        message: speak3(cleanerMsg),
+        priority: 86,
+        urgency: 'HIGH',
+        requireAck: true,
+        repeatUntilAck: true,
+        repeatEverySec: 120,
+        triggeredById: session.user.id,
+        metadata: {
+          source: 'CleanerCall',
+          surgeryId: params.id,
+          kind: 'cleaner_call',
+          tripleRepeat: true,
+        },
       });
     }
 
