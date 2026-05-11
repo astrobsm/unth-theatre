@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
+const VitalsChart = dynamic(() => import('@/components/VitalsChart'), { ssr: false });
 
 interface AnesthesiaRecord {
   id: string;
@@ -640,6 +641,9 @@ export default function AnesthesiaMonitoringPage() {
               Record Vitals
             </button>
           </div>
+
+          {/* Live charts of recorded vitals */}
+          <VitalsChart records={record.vitalSignsRecords} startTimeISO={(record as any).inductionTime || undefined} />
 
           <div className="bg-white border rounded-lg overflow-x-auto">
             <table className="w-full">
