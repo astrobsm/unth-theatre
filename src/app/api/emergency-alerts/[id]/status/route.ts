@@ -80,7 +80,7 @@ export async function POST(
       // Fall back to status-only update if optional fields don't exist
       updated = await prisma.emergencySurgeryAlert.update({
         where: { id },
-        data: { status },
+        data: { status: status as any },
       });
     }
 
