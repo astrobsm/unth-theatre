@@ -77,6 +77,10 @@ export async function GET(request: NextRequest) {
         surgery: {
           include: {
             patient: true,
+            // On-duty anaesthetist set at booking time -> shown as "To be collected by"
+            anesthetist: {
+              select: { id: true, fullName: true, phoneNumber: true, role: true },
+            },
           },
         },
         prescribedBy: {
@@ -84,6 +88,7 @@ export async function GET(request: NextRequest) {
             id: true,
             fullName: true,
             role: true,
+            phoneNumber: true,
           },
         },
         approvedBy: {
@@ -91,6 +96,7 @@ export async function GET(request: NextRequest) {
             id: true,
             fullName: true,
             role: true,
+            phoneNumber: true,
           },
         },
         packedBy: {

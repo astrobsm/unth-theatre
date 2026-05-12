@@ -89,6 +89,43 @@ interface SurgicalUnit {
   schedules: SurgicalUnitSchedule[];
 }
 
+// Pre-anaesthetic comorbidity tick-list (categorised) and common current-medications list.
+// Selections are saved to Patient.comorbidities / Patient.otherMedications and shown
+// to the pharmacist as a Clinical Summary on the Pharmacy page.
+const COMORBIDITY_GROUPS: { category: string; items: string[] }[] = [
+  { category: 'Cardiovascular', items: ['Hypertension', 'Ischemic heart disease', 'Heart failure', 'Arrhythmias', 'Valvular heart disease', 'Cardiomyopathy', 'Peripheral vascular disease', 'Previous myocardial infarction', 'Stroke / TIA history', 'Implanted cardiac device (pacemaker / ICD)'] },
+  { category: 'Respiratory / Pulmonary', items: ['Asthma', 'COPD', 'Obstructive sleep apnea', 'Pulmonary fibrosis', 'TB history', 'Active respiratory infection', 'Smoking history', 'Previous pulmonary embolism'] },
+  { category: 'Endocrine / Metabolic', items: ['Diabetes mellitus', 'Hyperthyroidism', 'Hypothyroidism', 'Obesity / metabolic syndrome', 'Hypoglycemia history'] },
+  { category: 'Renal', items: ['Chronic kidney disease', 'Acute kidney injury', 'Dialysis dependence', 'Electrolyte disturbance'] },
+  { category: 'Hepatic', items: ['Chronic liver disease', 'Hepatitis', 'Cirrhosis', 'Portal hypertension', 'Alcohol-related liver disease'] },
+  { category: 'Hematologic', items: ['Anemia', 'Coagulopathy', 'Thrombocytopenia', 'Sickle cell disease', 'Bleeding disorder', 'Thromboembolic disease'] },
+  { category: 'Neurologic', items: ['Stroke history', 'Seizure disorder', 'Parkinson disease', 'Dementia', 'Neuromuscular disorder', 'Peripheral neuropathy'] },
+  { category: 'Infectious', items: ['HIV', 'Hepatitis B', 'Hepatitis C', 'Sepsis', 'Active infection', 'Tuberculosis'] },
+  { category: 'Nutritional', items: ['Malnutrition', 'Cachexia', 'Hypoalbuminemia', 'Vitamin deficiency'] },
+  { category: 'Gastrointestinal', items: ['Peptic ulcer disease', 'GERD', 'Inflammatory bowel disease', 'Previous abdominal surgery'] },
+  { category: 'Musculoskeletal / Functional', items: ['Reduced mobility', 'Frailty', 'Contractures', 'Arthritis'] },
+  { category: 'Psychiatric / Cognitive', items: ['Depression', 'Anxiety', 'Psychosis', 'Substance abuse', 'Cognitive impairment'] },
+  { category: 'Substance Use', items: ['Smoking', 'Alcohol use', 'Opioid dependence', 'Recreational drug use'] },
+  { category: 'Connective tissue / Other', items: ['Steroid use', 'Connective tissue disorder', 'Allergy / atopy'] },
+];
+
+const CURRENT_MEDICATION_OPTIONS: string[] = [
+  'Anticoagulants (e.g. Warfarin, DOACs, Heparin)',
+  'Antiplatelets (e.g. Aspirin, Clopidogrel)',
+  'Steroids',
+  'Antihypertensives (ACEi / ARB / CCB / Beta-blocker / Diuretic)',
+  'Insulin',
+  'Oral hypoglycemics',
+  'Immunosuppressants',
+  'Bronchodilators / inhalers',
+  'Antiepileptics',
+  'Antidepressants / SSRIs / SNRIs',
+  'Antipsychotics',
+  'Opioid analgesics',
+  'NSAIDs',
+  'Herbal / traditional medications',
+];
+
 export default function NewSurgeryPage() {
   const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -115,6 +152,16 @@ export default function NewSurgeryPage() {
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
+
+  // Clinical Summary (comorbidities + current medications)
+  const [comorbidities, setComorbidities] = useState<string[]>([]);
+  const [otherComorbidities, setOtherComorbidities] = useState('');
+  const [currentMedications, setCurrentMedications] = useState<string[]>([]);
+  const [otherMedications, setOtherMedications] = useState('');
+
+  const toggleListItem = (list: string[], setList: (v: string[]) => void, item: string) => {
+    setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
+  };
 
   useEffect(() => {
     fetchPatients();
@@ -299,6 +346,11 @@ export default function NewSurgeryPage() {
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
       otherSpecialNeeds: otherSpecialNeeds,
+      // Clinical summary persisted on the Patient record so the Pharmacist sees it on every prescription.
+      comorbiditiesList: comorbidities,
+      otherComorbidities: otherComorbidities.trim() || null,
+      currentMedicationsList: currentMedications,
+      otherCurrentMedications: otherMedications.trim() || null,
       teamMembers: teamMembers
         .filter(tm => tm.name.trim() !== '')
         .map(tm => ({

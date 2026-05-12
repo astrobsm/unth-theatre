@@ -104,7 +104,7 @@ export default function DashboardLayout({
     { href: '/dashboard/anaesthetist-board', icon: Stethoscope, label: 'Anaesthetist Board', badge: 'NEW' },
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
     { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Rx Approvals', badge: 'NEW' },
-    { href: '/dashboard/prescriptions', icon: FileText, label: 'Prescriptions' },
+    { href: '/dashboard/prescriptions', icon: FileText, label: 'Pharmacy' },
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
 

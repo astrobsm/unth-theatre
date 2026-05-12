@@ -54,12 +54,19 @@ interface Prescription {
   hasOutOfStockItems?: boolean;
   outOfStockItems?: string;
   medicationPackingStatus?: string;
-  prescribedBy: { fullName: string };
-  approvedBy?: { fullName: string };
+  prescribedBy: { fullName: string; phoneNumber?: string | null };
+  approvedBy?: { fullName: string; phoneNumber?: string | null };
   packedBy?: { fullName: string };
   packedAt?: string;
   surgery: {
     procedureName: string;
+    anesthetist?: { id: string; fullName: string; phoneNumber?: string | null } | null;
+    patient?: {
+      comorbidities?: string | null;
+      otherMedications?: string | null;
+      anticoagulantName?: string | null;
+      antiplateletName?: string | null;
+    } | null;
   };
   // Emergency-specific fields
   isEmergencyRx?: boolean;
@@ -83,6 +90,7 @@ export default function PrescriptionsPage() {
   const [packingNotes, setPackingNotes] = useState('');
   const [packing, setPacking] = useState(false);
   const [medicationItems, setMedicationItems] = useState<MedicationPackingItem[]>([]);
+  const [contactModal, setContactModal] = useState<{ name: string; phone: string | null; role: string } | null>(null);
 
   useEffect(() => {
     fetchPrescriptions();
@@ -305,10 +313,11 @@ export default function PrescriptionsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
           <Pill className="h-8 w-8" />
-          Anesthetic Prescriptions
+          Pharmacy
         </h1>
         <p className="text-gray-600 mt-2">
-          Pack and prepare medications for upcoming surgeries (includes emergency prescriptions)
+          Pack and prepare medications for upcoming surgeries (includes emergency prescriptions). Click a prescriber’s
+          name to see their phone number.
         </p>
       </div>
 
@@ -495,6 +504,36 @@ export default function PrescriptionsPage() {
                     )}
                   </div>
 
+                  {/* Clinical Summary (from Schedule Surgery -> Patient record) */}
+                  {(prescription.surgery?.patient?.comorbidities ||
+                    prescription.surgery?.patient?.otherMedications) && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                      <p className="font-semibold text-amber-900 text-sm mb-1">Clinical Summary (for Pharmacist)</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-amber-900">
+                        {prescription.surgery?.patient?.comorbidities && (
+                          <div>
+                            <div className="font-medium">Comorbidities</div>
+                            <ul className="list-disc list-inside whitespace-pre-line">
+                              {prescription.surgery.patient.comorbidities.split('\n').filter(Boolean).map((c, i) => (
+                                <li key={i}>{c}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {prescription.surgery?.patient?.otherMedications && (
+                          <div>
+                            <div className="font-medium">Current Medications</div>
+                            <ul className="list-disc list-inside whitespace-pre-line">
+                              {prescription.surgery.patient.otherMedications.split('\n').filter(Boolean).map((c, i) => (
+                                <li key={i}>{c}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Allergy Alerts */}
                   {prescription.allergyAlerts && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
@@ -555,11 +594,38 @@ export default function PrescriptionsPage() {
                   )}
 
                   {/* Footer */}
-                  <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
-                    <div className="flex items-center gap-1">
+                  <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                    <button
+                      type="button"
+                      onClick={() => setContactModal({
+                        name: prescription.prescribedBy?.fullName || 'Not assigned',
+                        phone: prescription.prescribedBy?.phoneNumber || null,
+                        role: 'Prescriber',
+                      })}
+                      className="flex items-center gap-1 text-blue-700 hover:text-blue-900 hover:underline"
+                      title="Click to view prescriber phone number"
+                    >
                       <User className="h-4 w-4" />
-                      <span>Prescribed by: {prescription.prescribedBy?.fullName || 'Not assigned'}</span>
-                    </div>
+                      <span>Prescribed by: <strong>{prescription.prescribedBy?.fullName || 'Not assigned'}</strong></span>
+                    </button>
+
+                    {/* On-duty anaesthetist for the booked theatre - will pick up the packed meds */}
+                    {prescription.surgery?.anesthetist?.fullName && (
+                      <button
+                        type="button"
+                        onClick={() => setContactModal({
+                          name: prescription.surgery.anesthetist!.fullName,
+                          phone: prescription.surgery.anesthetist!.phoneNumber || null,
+                          role: 'On-duty Anaesthetist (will collect)',
+                        })}
+                        className="flex items-center gap-1 text-indigo-700 hover:text-indigo-900 hover:underline"
+                        title="On-duty anaesthetist for the booked theatre"
+                      >
+                        <User className="h-4 w-4" />
+                        <span>To be collected by: <strong>{prescription.surgery.anesthetist.fullName}</strong></span>
+                      </button>
+                    )}
+
                     {prescription.packedBy && (
                       <div className="flex items-center gap-1 text-green-600">
                         <CheckCircle className="h-4 w-4" />
@@ -750,6 +816,44 @@ export default function PrescriptionsPage() {
                     Confirm Packing
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Contact info popover (prescriber / on-duty anaesthetist phone number) */}
+      {contactModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setContactModal(null)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <User className="h-5 w-5 text-indigo-600" />
+              <h3 className="text-lg font-semibold">{contactModal.role}</h3>
+            </div>
+            <p className="text-gray-900 font-medium">{contactModal.name}</p>
+            {contactModal.phone ? (
+              <a
+                href={`tel:${contactModal.phone}`}
+                className="mt-3 inline-flex items-center gap-2 text-blue-700 hover:text-blue-900 hover:underline text-base"
+              >
+                📞 {contactModal.phone}
+              </a>
+            ) : (
+              <p className="mt-3 text-sm text-gray-500 italic">
+                No phone number on file. Ask reception or check the staff directory.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setContactModal(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Close
               </button>
             </div>
           </div>

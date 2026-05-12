@@ -26,6 +26,30 @@ const surgerySchema = z.object({
   needStereo: z.boolean().default(false),
   needMontrellMattress: z.boolean().default(false),
   otherSpecialNeeds: z.string().optional(),
+  // Clinical Summary collected on the booking form. Persisted on the Patient record
+  // so the Pharmacy page (and other downstream views) can display them.
+  comorbiditiesList: z.array(z.string()).optional(),
+  otherComorbidities: z.string().nullish(),
+  currentMedicationsList: z.array(z.string()).optional(),
+  otherCurrentMedications: z.string().nullish(),
+  // Auto-fetched on-duty team. We use the on-duty anaesthetist as the default
+  // Surgery.anesthetistId so the Pharmacist can see who will collect the packed meds.
+  onDutyTeam: z
+    .object({
+      date: z.string().optional(),
+      shift: z.string().optional(),
+      anaesthetistId: z.string().nullish(),
+      anaesthetistName: z.string().nullish(),
+      anaestheticTechnicianId: z.string().nullish(),
+      anaestheticTechnicianName: z.string().nullish(),
+      scrubNurseId: z.string().nullish(),
+      scrubNurseName: z.string().nullish(),
+      cleanerId: z.string().nullish(),
+      cleanerName: z.string().nullish(),
+      porterId: z.string().nullish(),
+      porterName: z.string().nullish(),
+    })
+    .optional(),
   teamMembers: z.array(z.object({
     name: z.string(),
     role: z.enum(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER']),
@@ -113,7 +137,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
 
-    const { teamMembers, surgeryType, surgeonId, surgeonName, ...surgeryData } = validatedData;
+    const {
+      teamMembers,
+      surgeryType,
+      surgeonId,
+      surgeonName,
+      comorbiditiesList,
+      otherComorbidities,
+      currentMedicationsList,
+      otherCurrentMedications,
+      onDutyTeam,
+      ...surgeryData
+    } = validatedData;
 
     // Resolve surgeon: if a user id was supplied, validate it and prefer the DB fullName.
     let resolvedSurgeonId: string | null = null;
@@ -136,6 +171,31 @@ export async function POST(request: NextRequest) {
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    // Persist Clinical Summary (comorbidities + current medications) on the Patient record
+    // so the Pharmacist can read it on every prescription. We replace prior values to reflect
+    // the most recent assessment by the booking clinician.
+    const comorbLines: string[] = [];
+    if (comorbiditiesList && comorbiditiesList.length) comorbLines.push(...comorbiditiesList);
+    if (otherComorbidities && otherComorbidities.trim()) comorbLines.push(`Other: ${otherComorbidities.trim()}`);
+
+    const medLines: string[] = [];
+    if (currentMedicationsList && currentMedicationsList.length) medLines.push(...currentMedicationsList);
+    if (otherCurrentMedications && otherCurrentMedications.trim()) medLines.push(`Other: ${otherCurrentMedications.trim()}`);
+
+    if (comorbLines.length || medLines.length) {
+      try {
+        await prisma.patient.update({
+          where: { id: patient.id },
+          data: {
+            ...(comorbLines.length ? { comorbidities: comorbLines.join('\n') } : {}),
+            ...(medLines.length ? { otherMedications: medLines.join('\n') } : {}),
+          },
+        });
+      } catch (e) {
+        console.warn('Patient clinical-summary update skipped:', (e as Error)?.message);
+      }
     }
 
     // === 5 PM Cutoff Validation for Elective and Urgent cases ===
@@ -205,6 +265,9 @@ export async function POST(request: NextRequest) {
         ...surgeryData,
         surgeonName: resolvedSurgeonName,
         surgeonId: resolvedSurgeonId,
+        // Default the surgery anaesthetist to the on-duty anaesthetist for the chosen
+        // theatre/date. The Pharmacist sees this name as "To be collected by".
+        anesthetistId: onDutyTeam?.anaesthetistId || null,
         surgeryType: surgeryType,
         scheduledDate: new Date(validatedData.scheduledDate),
         // Create team members if provided
