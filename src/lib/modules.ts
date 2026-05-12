@@ -55,7 +55,7 @@ export const MODULES: AppModule[] = [
   { id: 'anaesthetist-board', label: 'Anaesthetist Review Board', paths: ['/dashboard/anaesthetist-board'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
   { id: 'preop-reviews', label: 'Pre-op Reviews', paths: ['/dashboard/preop-reviews'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'], category: 'Pre-Op' },
   { id: 'prescription-approvals', label: 'Rx Approvals', paths: ['/dashboard/prescription-approvals'], defaultRoles: ['CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
-  { id: 'prescriptions', label: 'Prescriptions', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
+  { id: 'prescriptions', label: 'Pharmacy', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
   { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
   { id: 'anesthesia-setup', label: 'Anesthesia Setup', paths: ['/dashboard/anesthesia-setup'], defaultRoles: ['ANAESTHETIC_TECHNICIAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
 
