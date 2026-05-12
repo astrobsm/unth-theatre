@@ -509,7 +509,7 @@ async function dynamicAnswer(question: string): Promise<string | null> {
       const start = new Date(); start.setHours(0, 0, 0, 0);
       const end = new Date(start); end.setDate(end.getDate() + 1);
       const n = await prisma.surgery.count({
-        where: { scheduledDate: { gte: start, lt: end }, urgency: { in: ['EMERGENCY', 'RED_ALERT'] as any } },
+        where: { scheduledDate: { gte: start, lt: end }, surgeryType: { in: ['EMERGENCY'] as any } },
       });
       return `${n} emergency cases have been booked today.`;
     }
