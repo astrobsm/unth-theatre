@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
         anesthetistId: session.user.id,
         anesthetistName: session.user.name || '',
         status: 'IN_PROGRESS',
-      },
+      } as any,
       include: {
         surgery: true,
         patient: true,
