@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 // Comprehensive Anesthetic Medications Database
-const ANESTHETIC_MEDICATIONS = {
+const ANESTHETIC_MEDICATIONS_BASE = {
   'Induction Agents': [
     { name: 'Propofol', unit: 'mg', commonDoses: ['50', '100', '150', '200'] },
     { name: 'Thiopentone', unit: 'mg', commonDoses: ['250', '375', '500'] },
@@ -172,6 +173,14 @@ const ANESTHETIC_MEDICATIONS = {
   ],
 };
 
+// Merge curated anaesthesia categories with the full Nigeria EML catalogue so
+// every prescription/modification draws from one approved source. Curated
+// entries appear first; NEML categories are prefixed "NEML —".
+const ANESTHETIC_MEDICATIONS: Record<string, { name: string; unit: string; commonDoses: string[] }[]> = {
+  ...ANESTHETIC_MEDICATIONS_BASE,
+  ...getNemlMedicationCategories(),
+};
+
 const ROUTES = [
   'IV Push',
   'IV Infusion',
@@ -259,7 +268,7 @@ export default function NewPreOpReviewPage() {
   // Get medication details from selected category and name
   const getMedicationDetails = () => {
     if (!selectedCategory || !selectedMedication) return null;
-    const category = ANESTHETIC_MEDICATIONS[selectedCategory as keyof typeof ANESTHETIC_MEDICATIONS];
+    const category = (ANESTHETIC_MEDICATIONS as Record<string, { name: string; unit: string; commonDoses: string[] }[]>)[selectedCategory];
     return category?.find(med => med.name === selectedMedication);
   };
 
@@ -764,7 +773,7 @@ export default function NewPreOpReviewPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
                     >
                       <option value="">Select medication</option>
-                      {selectedCategory && ANESTHETIC_MEDICATIONS[selectedCategory as keyof typeof ANESTHETIC_MEDICATIONS]?.map((med) => (
+                      {selectedCategory && (ANESTHETIC_MEDICATIONS as Record<string, { name: string; unit: string; commonDoses: string[] }[]>)[selectedCategory]?.map((med) => (
                         <option key={med.name} value={med.name}>{med.name}</option>
                       ))}
                     </select>

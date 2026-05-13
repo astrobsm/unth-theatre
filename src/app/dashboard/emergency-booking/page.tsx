@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
+import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
   User, Building2, Siren, Phone, Calendar, MapPin, Navigation,
@@ -25,7 +26,7 @@ interface PrescribedMedication {
   notes: string;
 }
 
-const BNF_DIRECTORY: Record<string, DrugEntry[]> = {
+const BNF_DIRECTORY_BASE: Record<string, DrugEntry[]> = {
   'Induction Agents': [
     { name: 'Propofol', unit: 'mg', commonDoses: ['50', '100', '150', '200'] },
     { name: 'Thiopental (Pentothal)', unit: 'mg', commonDoses: ['200', '300', '400', '500'] },
@@ -146,6 +147,12 @@ const BNF_DIRECTORY: Record<string, DrugEntry[]> = {
 };
 
 // Flatten the directory for search
+// Merge curated emergency BNF entries with the full Nigeria EML 2024 catalogue
+// so all prescriptions and modifications draw from the approved national list.
+const BNF_DIRECTORY: Record<string, DrugEntry[]> = {
+  ...BNF_DIRECTORY_BASE,
+  ...getNemlMedicationCategories(),
+};
 const ALL_DRUGS: (DrugEntry & { category: string })[] = Object.entries(BNF_DIRECTORY).flatMap(
   ([cat, drugs]) => drugs.map(d => ({ ...d, category: cat }))
 );

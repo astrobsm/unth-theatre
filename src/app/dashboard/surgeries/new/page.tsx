@@ -986,7 +986,7 @@ export default function NewSurgeryPage() {
           </div>
         </div>
 
-        {/* Clinical Summary - Comorbidities & Current Medications */}
+        {/* Clinical Summary — Comorbidities & Current Medications */}
         <div className="card">
           <div className="flex items-center gap-3 mb-2">
             <Stethoscope className="w-6 h-6 text-primary-600" />
@@ -1009,17 +1009,17 @@ export default function NewSurgeryPage() {
                       return (
                         <label
                           key={item}
-                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm cursor-pointer select-none ${
+                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border cursor-pointer select-none ${
                             checked
-                              ? 'bg-primary-600 text-white border-primary-600'
-                              : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'
+                              ? 'bg-primary-100 border-primary-400 text-primary-800'
+                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                           }`}
                         >
                           <input
                             type="checkbox"
-                            className="hidden"
                             checked={checked}
                             onChange={() => toggleListItem(comorbidities, setComorbidities, item)}
+                            className="hidden"
                           />
                           {item}
                         </label>
@@ -1029,66 +1029,68 @@ export default function NewSurgeryPage() {
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="mb-4">
-            <SmartTextInput
-              label="Other comorbidities / clinical notes"
-              value={otherComorbidities}
-              onChange={setOtherComorbidities}
-              rows={2}
-              placeholder="Any other relevant clinical conditions..."
-              enableSpeech={true}
-              enableOCR={true}
-              medicalMode={true}
-            />
-          </div>
-
-          <div className="mb-4">
-            <h3 className="font-semibold text-gray-800 mb-2">Current Medications (tick all that apply)</h3>
-            <div className="flex flex-wrap gap-2">
-              {CURRENT_MEDICATION_OPTIONS.map((med) => {
-                const checked = currentMedications.includes(med);
-                return (
-                  <label
-                    key={med}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm cursor-pointer select-none ${
-                      checked
-                        ? 'bg-amber-600 text-white border-amber-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="hidden"
-                      checked={checked}
-                      onChange={() => toggleListItem(currentMedications, setCurrentMedications, med)}
-                    />
-                    {med}
-                  </label>
-                );
-              })}
+            <div className="mt-3">
+              <label htmlFor="otherComorbidities" className="block text-sm font-medium text-gray-700 mb-1">
+                Other comorbidities / clinical notes
+              </label>
+              <textarea
+                id="otherComorbidities"
+                value={otherComorbidities}
+                onChange={(e) => setOtherComorbidities(e.target.value)}
+                rows={2}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                placeholder="Any other relevant condition not listed above"
+              />
             </div>
           </div>
 
           <div>
-            <SmartTextInput
-              label="Other current medications (dose, frequency)"
-              value={otherMedications}
-              onChange={setOtherMedications}
-              rows={2}
-              placeholder="e.g., Warfarin 5mg OD, Metformin 500mg BD..."
-              enableSpeech={true}
-              enableOCR={true}
-              medicalMode={true}
-            />
+            <h3 className="font-semibold text-gray-800 mb-2">Current Medications (tick all that apply)</h3>
+            <div className="flex flex-wrap gap-2">
+              {CURRENT_MEDICATION_OPTIONS.map((m) => {
+                const checked = currentMedications.includes(m);
+                return (
+                  <label
+                    key={m}
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border cursor-pointer select-none ${
+                      checked
+                        ? 'bg-emerald-100 border-emerald-400 text-emerald-800'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleListItem(currentMedications, setCurrentMedications, m)}
+                      className="hidden"
+                    />
+                    {m}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3">
+              <label htmlFor="otherMedications" className="block text-sm font-medium text-gray-700 mb-1">
+                Other current medications (specify name, dose, frequency)
+              </label>
+              <textarea
+                id="otherMedications"
+                value={otherMedications}
+                onChange={(e) => setOtherMedications(e.target.value)}
+                rows={2}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                placeholder="e.g. Metformin 500mg PO BD; Amlodipine 5mg PO daily"
+              />
+            </div>
           </div>
 
-          <div className="mt-3 text-xs text-gray-500">
-            Selected: {comorbidities.length} comorbidit{comorbidities.length === 1 ? 'y' : 'ies'},{' '}
-            {currentMedications.length} medication{currentMedications.length === 1 ? '' : 's'}.
-          </div>
+          {(comorbidities.length + currentMedications.length) > 0 && (
+            <div className="mt-3 text-xs text-gray-500">
+              Selected: {comorbidities.length} comorbidities, {currentMedications.length} current medications.
+            </div>
+          )}
         </div>
+
         {/* Surgical Team Members */}
         <div className="card">
           <div className="flex items-center gap-3 mb-4">

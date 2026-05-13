@@ -1,0 +1,3519 @@
+
+===== PAGE 1 =====
+NIGERIA 
+ESSENTIAL 
+MEDICINES 
+8TH EDITION 2024 
+Federal Ministry of Health and Social Welfare 
+LIST FOR  
+ADULTS 
+===== PAGE 2 =====
+NIGERIA 
+ESSENTIAL 
+MEDICINES 
+FOR ADULTS 
+8th Edition 2024 
+Federal Ministry of Health and Social Welfare 
+All rights reserved. 
+===== PAGE 3 =====
+FOREWORD 
+As part of its mission/vision, the Federal Ministry of Health and Social Welfare has reviewed 
+the 7th edition of the Nigeria Essential Medicines List (NEML), and is happy to present the 
+8th edition of the NEML for use by the public. It is a veritable tool in the healthcare delivery 
+system which contains the most efficacious, safe and cost effective medicines for priority 
+conditions. 
+The review of the NEML is the mandate of the National Drug Fonnulary/ Essential Drug List 
+(NDF/EDL) Review Committee, a statutory body under the Federal Ministry of Health that 
+was established by Decree 43 of 1989 now Act CAP 252 LFN 2004. 
+The publication contains the collective views of the Review Committee members, Experts and 
+various stakeholders in the healthcare delivery system. The Expert Therapeutic Groups of the 
+NDF/EDL Committee have meticulously evaluated the safety, efficacy, quality, as we well as 
+the cost effectiveness of new medicines incorporated into this document. 
+I urge all relevant stakeholders in the health sector to use the NEML to improve access to 
+medicines and medical product through streamlined procurement and distribution of quality­
+assured medicines and the subsequent rational use of these medicines. It is the Ministry's 
+resolve to widely disseminate the NEML through both print and electronic media. 
+Finally, I commend the committee, experts, other stakeholders and partners for their 
+commitment and support in producing this document. 
+Professor Muhammad Ali Pate CON 
+Coordinating Minister of Health and Social Welfare 
+ii 
+===== PAGE 4 =====
+PREFACE 
+The Essential Medicines List has contributed immensely to the effective utilization of 
+therapeutic agents in Nigeria since the first edition was developed in 1989 by the National 
+Drug Fonnulary I Essential Drug List Review Committee in accordance with the then Federal 
+Government Decree 43 of 1989 which has now been enacted in the Health Act of 2014. 
+This 8th edition is being introduced in 2024 following the revision of the seventh edition 
+which was published in 2020. Importantly, the procedure for the development and production 
+of this list followed the procedure for updating as recommended by the World Health 
+Organisation. Additionally, we used information contained in the 3n:1 edition of the Nigeria 
+Standard Treatment Guidelines, and conducted extensive consultations with various experts 
+and stakeholders in the health care delivery system in the country. 
+To ensure more inclusiveness, comprehensiveness and use by all levels of care in the health 
+system, as was also adopted in two previous editions of this document, there has been an 
+increase of inclusion of medicines for treatment of diseases at higher levels of care in the 
+therapeutic areas of emerging diseases, oncology as well as rheumatology among others. 
+Furthermore, in order to combat antimicrobial resistance, the antibiotic medicines have been 
+listed in keeping with the WHO AWaRe categorization. It is pertinent to mention that the 
+diseases in the complementary (restricted) section should be used as appropriate by 
+specialists after thorough evaluation of patients. 
+It is hoped that this important document would be widely circulated and put to use by all 
+stakeholders. Moreover, healthcare providers at all levels are advised to limit their choice of 
+medicines to the lists so as to realise the set objectives. A statutory provision exists for use of 
+medicines outside the list and should be sought whenever the need arises so that patients 
+could have the needed benefits of pharmacotherapy. 
+The committee highly appreciates the support of the Hon. Minister of Health and Social 
+Welfare, Prof. Muhammad Ali Pate, other staff of the Ministry, experts, development partners 
+and all stakeholders who made the production of this document possible. We are grateful to 
+you all. 
+Prof. John 0. Ohaju-Obodo 
+MBBS, M.Sc, FWACP (Int, Med.), FACP, FRCP(Edin) 
+Chairman, National Drug Formulary/Essential Drug List Review Committee 
+January, 2024 
+iii 
+===== PAGE 5 =====
+ACKNOWLEDGEMENT 
+The Federal Ministry of Health and Social Welfare recognizes and appreciates the 
+contributioos of the members of the National Drug Formulary/Essential Drug List Review 
+Committee. The review of this 8" edition of the Nigeria Essential Medicines List {NEML) 
+would not have been possible without the dedication and commitment of the members of this 
+Committee listed below: 
+NDF/EDL COMMITTEE MEMBERS 
+SIN Name Organization Designation/ 
+Member 
+1 Prof. John Obaju-Obodo DELSUTII Chairman 
+2 Phann. (Mrs) Olubuomi Aribeana Director, Food & Drug Services, 
+FMOHSW 
+Member 
+3 Dr. Jimoh Olawale Salaudeen mni Director, Hospital Services, 
+FMOHSW Member 
+4 Dr. Chukwuma Anyaike Director, Public Health, 
+FMOHSW Member 
+5 Phann. Ologun Taiyo Joseph Former Director, Pharmaceutical Secretary Services Division. FMOHSW 
+6 Phann. YusufNasiru DPS, Katsina SMOH Member 
+7 Phann. Lasekan Oluwole Gbenga DPS, Ondo SMOH Member 
+8 Phann. Ottobong Amana DPS, Akwa Ibom SMOH Member 
+9 Phann. Haruna N. Yarep DPS, Plateau SMOH Member 
+10 Phann. (Dr.) Sinclair Nwankwo Rep. National President PSN Member 
+11 Phann. (Dr.) Thomas Ilupeju Director, PCN Member 
+12 Phann. Fraden Bitrus NAFDAC Member 
+13 Phann. Yusuf Albassan NIDA Member 
+14 Phann. Fatima Bubr NCDC Member 
+15 Phann. (Dr.) Otakho Daniel Federal Medical Centre, Member Orumwense Yena2oa 
+16 Phann. Munir Elelu Pharmaceutical Society of 
+NiaP.ria Member 
+17 Wmg Conmumder (Dr.) Joseph Nigerian Air Force Member O~rima Ovosi 
+18 Phann. Frank Muonemeh PMG-MAN Member 
+19 Phann. Omotayo Hamzat WHO Member 
+iv 
+===== PAGE 6 =====
+EXPERT CLINICIANS 
+SIN Name Organization Specialty 
+1 Prof. John Ohaju- Obodo DELSUTH Consultant Physician 
+2 Prof. Adedayo Asalu Federal Medical Centre, Keffi Consultant Physician 
+3 Prof. Adamu G. Bakari Modibbo Adama University Consultant Physician Teaching Hospital, Yola 
+4 Prof. Lohfa B. Chirdan Jos University Teaching Consultant Surgeon 
+Hosnital (Paediatric surgery) 
+5 Prof. Sulyman Alege University of Ilorin Teaching Consultant Surgeon 
+Kuranga Hosnital (Urology) 
+6 Prof. Titus lbekwe University of Abuja Teaching Consultant Surgeon 
+Hospital (ENT) 
+7 Prof. U. Nnebe-Agumadu University of Abuja Teaching Consultant 
+Hospital Paediatrician 
+8 Prof. Olufemi Adelowo Lagos State University Teaching Consultant Physician Hosnital 
+9 Prof. Obehi Akoria University of Benin Teaching Consultant Physician Hospital 
+10 Dr. Stephen Ayinbuomwan University of Benin Teaching Consultant Physician Hospital 
+11 Prof. Ray I. Ozolua University of Benin Pharmacist/ 
+Pharmacolooist 
+12 Dr. Habibu Galadanci National Hospital Abuja Consultant Physician 
+13 Dr. Babatunde Ogunbosi University College Hospital, 
+Ibadan 
+Consultant Paediatrician 
+14 Prof. Ditnie Ogoina Niger Delta University Teaching Consultant Physician Hosnital 
+15 Dr. Ayesha Akinkugbe Lagos University Teaching Consultant Physician Hospital 
+16 Prof. Jesse Otegbayo University College Hospital, Consultant Physician 
+Ibadan 
+17 Prof. Adesola Ogunniyi University College Hospital, Consultant Physician 
+Ibadan 
+18 Prof. Sani Balarabe Garko Ahmadu Bello University Consultant Physician mni. Teaching Hosnital 
+19 Dr. Andrew Orovwigho Federal Neuro-Psychiatric Consultant Psychiatrist Hospital. EnuP11 
+Dr. Adegboye Majeed University of Ilorin Teaching 20 Babajide Hospital Consultant Anaesthetist 
+v 
+===== PAGE 7 =====
+SIN Name Organization Specialty 
+21 Dr. Perpetua U. Ibekwe University of Abuja Teaching Consultant Physician Hosoi ta! 
+Prof. Abdulkarim Garba University of Maiduguri Consultant Obstetrician 22 Mairiga 
+Teaching Hospital & Gynaecologist 
+EDITORIAL TEAM 
+SIN Name Organlzation Designation 
+1 Prof. Jobo Obaju- Obodo Delta State University Teaching Chairman Hosnital 
+2 Prof. Ray Ozolua University of Benin Member 
+3 Pbarm. (Dr.) Otakho Daniel Federsl Medical Centre, Member Orumwense Yena~oa 
+4 Dr. Stephen Ayinbuomwan University of Benin Teaching Member 
+Ho~ital 
+5 Wing Commander Joseph Ovosi Nigerian Airforce Member 
+6 Dr. Ayesha Akinlrugbe University of Lagos Teaching 
+Ho~ital 
+Member 
+7 Pbarm. (Dr.) Thomas Ilupeju PCN Member 
+8 Dr. Emuesiri Umukoro Delta State University Member 
+SECRETARIAT 
+SIN Name Designation 
+1 Phann. Mohammed Ibrahim Deputy Director, FMOHSW 
+2 Phann. Bulama Yakubu Deputy Director, FMOHSW 
+3 Pharm. Hasiya Daum Deputy Director, FMOHSW 
+4 Phann. Silas Jacob Guluwa Chief Pharmacist, FMOHSW 
+5 Phann. Stephanie Kolawole Senior Pharmacist, FMOHSW 
+6 Emmanuel Okenwa Senior Scientific Officer, FMOHSW 
+vi 
+===== PAGE 8 =====
+PARTNERS 
+UNICEF Resolve to UNFPA 
+Save Lives 
+~ 
+Dajo, Kachollom S. mni 
+Permanent Secretary 
+USAID-MTaPS WHO CHAI 
+Federal Ministry of Health and Social Welfare 
+vii 
+PSNF 
+===== PAGE 9 =====
+TABLE OF CONTENTS 
+FOREWORD ii 
+PREFACE iii 
+ACKNOWLEDGEMENT iv 
+TABLE OF CONTENTS viii 
+LIST OF MEDICINES I 
+THE PRIMARY HEALTH CARE LIST (PRIMARY HEALTH CARE CLINIC) 58 
+THE PRIMARY HEALTH CARE LIST (HEALTH POSTS) 64 
+LIST OF PRODUCTS TO BE STOCKED AND SOLD BY PATENT AND PROPRIETARY 
+MEDICINE VENDORS 66 
+APPENDIX I: APPROVED DOSES FOR VITAMINS 
+APPENDIX 2: RESTRICTED MEDICINES LIST 
+APPENDIX 3: AWaR.e CATEGORIZATION 
+INDEX 
+viii 
+73 
+76 
+86 
+88 
+===== PAGE 10 =====
+LIST OF MEDICINES 
+1. ANAESTHETICS, PREOPERATIVE MEDICINES, AND MEDICAL GASES 
+1.1 General anaesthetics and oxygen 
+1.1.1 Inhalational medicines 
+Halothane Inhalation (volatile liquid): 250-mL bottle. 
+Isotlurane Inhalation (volatile liquid): 250-mL bottle. 
+Nitrous oxide Inhalation: Medical gas. 
+Oxygen Inhalation: Medical gas. 
+Sevoflurane Inhalation (volatile liquid): 250-mL bottle. 
+1.1.2 Injectable medicines 
+Ketamine Injection: 50 mg (hydrochloride)/mL in 10-mL vial; 100 
+mg (hydrochloride)/mL in 5-mL vial. 
+Propofol Injection (emnlsion): 10 mg/mL in 20-mL ampoule. 
+Thiopental Injection: 10 mg/mL; 20 mg/mL. 
+1.2 Local anaesthetics (see restricted medicines list) 
+Bupivacaine Injection: 0.25%; 0.5% (hydrochloride) in vial. 
+Injection for spinal anaesthesia: 0.5% (hydrochloride) in 
+4-mL ampoule to be mixed with 7.5% glucose solution. 
+Lidocaine Injection: 1 %; 2% (hydrochloride) in vial. 
+Injection for spinal anaesthesia: 5% (hydrochloride) in 
+2-mL ampoule to be mixed with 7.5% glucose solution. 
+Topical: 2%; 4% creams. 
+Lidocaine + Epinephrine Dental cartridge: 2% (hydrochloride) + epinephrine 
+(Adrenaline) 1: 80,000. 
+Injection: 1 %; 2% (hydrochloride or sulfate) + 
+epinephrine 1: 200,000 in vial. 
+1.3 Preoperative medication and anaesthetic adjuvants 
+Atropine Injection: 600 mcg (sulfate) in 1-mL ampoule; 1 mg 
+(sulfate) in 1-mL ampoule. 
+Clonidine Injection: 500 mcg in 1-mL ampoule. 
+Tablet: 0.1 mg; 0.2 mg. 
+Diaz.epam Injection: 5 mg/mL in 2-mL ampoule. 
+1 
+===== PAGE 11 =====
+Midazolam Injection: 1 mg/mL in 1-mL ampoule; 2-mL and 5-mL 
+ampoule; 2 mg /mL in 2-mL and 5-mL ampoule. 
+Oral Liquid: 2 mg/mL. 
+Tablet: 7.5 mg; 15 mg. 
+Morphine Injection: 10 mg; 15 mg (sulfate or hydrochloride) in 1-
+mLampoule. 
+Injection: 0.5 mg/mL; 1 mg/mL in 10-mL vials (preservative-
+free). 
+Promethazine Injection: 25 mg/mL. 
+Suppository: 12.5 mg; 25 mg. 
+Oral liquid: 5 mg/mL. 
+Tablet: 12.5 mg; 25 mg. 
+1.4 Medical gases 
+Oxygen I Inhalation: For use in the management of hypoxaemia. 
+1.5 Skeletal muscle relaxants and cholinesterase inhibitors 
+Atta.curium Injection: 10 mg/mL. 
+Neostigmine Injection: 0.5 mg/mL; 1 mg/mL; 2.5 mg/mL 
+(methylsulfate) in 1-mL ampoule. 
+Pancuronium Injection: 2 mg (bromide )/mL. 
+Suxamethonium Injection: 20 mg/mL; 50 mg/mL; 100 mg/mL (chloride) 
+in 2-mL ampoule. 
+Vecuronium Powder for injection: 10 mg; 20 mg (bromide) in vial. 
+2. ANTIALLERGICS AND MEDICINES USED IN ANAPHYLAXIS 
+2.1 Anti-anaphylactlcs 
+Dexamethasone Injection: 4 mg (disodium phosphate)/mL in 1-mL 
+ampoule. 
+Epinephrine {Adrenaline) Injection: 1 mg (hydrochloride or hydrogen tartrate) in 1-
+mLampoule. 
+Hydrocortisone Powder for injection: 100 mg (sodium succinate) in vial. 
+Prednisolone Oral liquid: 5 mg/mL; 15 mg/5mL. 
+Tablet: 5 mg; 25 mg. 
+2.2 Anti-histamines (see restricted medicines list) 
+Chlorphenamine Injection: 10 mg (maleate) in 1-mL ampoule. 
+Oral liquid: 2 mg/5 mL. 
+2 
+===== PAGE 12 =====
+Loratadine Oral liquid: 1 mg/mL. 
+Tablet: 10 mg. 
+3. ANTICONVULSANTS/ANTI-EPILEPTICS 
+Carbamazepine Tablet: 100 mg; 200 mg. 
+Clonazepam Injection: 1 mg/mL ampoule for dilution. 
+Oral liquid: 500 mcg/5 mL. 
+Tablet: 500 mcg. 
+Diazepam Injection: 5 mg/mL in 2-mL ampoule. 
+Ethosuximide Capsule: 250 mg. 
+Oral liquid: 250 mg/5 mL. 
+Tablet: 250 mg. 
+Levetiracetam Oral solution: 100 mg/mL 
+Tablet: 250 mg; 500 mg; 750 mg; 1000 mg. 
+Lorazepam Injection: 2 mg/mL in 1-mL ampoule; 4 mg/mL in 1 mL 
+ampoule. 
+Magnesium sulfate Injection: 50% in 2-mL ampoule; 20% in 5- or 10-mL 
+ampoule. 
+Midazolam Solution for oromucosal administration: 1 mg/mL; 5 
+mg/mL; 10 mg/mL ampoule•• 
+**For buccal administration when solution/or 
+oromucosal administration is not available. 
+Phenobarbital Injection: 30 mg/mL; 60 mg/mL. 
+Oral liquid: 15 mg/5 mL; 20 mg/mL. 
+Tablet: 15 mg; 30 mg; 60 mg. 
+Phenytoin sodium Capsule: 25 mg; 50 mg; 100 mg; 300 mg. 
+Injection: 50 mg/mL. 
+Oral liquid: 125 mg/5 mL. 
+Tablet: 25 mg; 50 mg; 100 mg. 
+Pregabalin Capsule: 25 mg; 75 mg; 150 mg; 300 mg. 
+Sodium valproate (Valproic Oral liquid: 200 mg/5 mL; 250 mg/5 mL. 
+acid) Tablet (enteric~oated): 100 mg; 200 mg; 500 mg. 
+Topiramate Capsule: 25 mg; 50 mg; 100 mg. 
+Tablet: 25 mg; 50 mg; 100 mg; 200mg. 
+4. ANTIDOTES AND OTHER SUBSTANCES USED IN POISONINGS 
+4.1 Non-specific 
+3 
+===== PAGE 13 =====
+Charcoal (activated) Capsule: 260 mg. 
+Powder/granules: 5 g. 
+Tablet: 250 mg. 
+4.2 Specific 
+Acetylcysteine Injection: 200 mglmL in 10-mL ampoule. 
+Atropine Injection: 600 mcg in 1-mL ampoule; I mg in 1-mL 
+ampoule; 2 mg in 0.7-mL ampoule. 
+Calcium gluconate Injection: 100 mglmL in 10-mL ampoule. 
+Flumazenil Injection: 0.1 mg/mL. 
+Methionine Tablet: 250 mg. 
+Methylammonium chloride Injection: 10 mg/mL in 10-mL ampoule. 
+(methylene blue) 
+Naloxone Injection: 400 mcg (hydrochloride) in 1-mL ampoule. 
+Phytomenadione (vitamin K1) Injection: 10 mg/mL in 1-mL ampoule. 
+Potassium ferric Capsule: 500 mg. 
+hexacya.noferrate (II) (Prussian Powder for oral administration. 
+blue) 
+Protamine sulfate Injection: 10 mg/mL in 5-mL ampoule. 
+Complementary List 
+Desferoxamine Powder for injection: 500 mg (mesilate) in vial. 
+Dimercaprol Injection in oil: 50 mg/ml in 2-ml ampoule. 
+Fomepizole Injection: 5 mg (sulfate)/mL in 20-ml ampoule or 1 g 
+(base)/mL in 1.5-mL ampoule. 
+Sodium calcium edetate Injection: 200 mg/ml in 5-ml ampoule. 
+Succimer Capsule: 100 mg. 
+Pralidoxime Injection solution: 300 mg/ml. 
+Powder for injection: 1 g in vial. 
+S. ANTI-INFECTIVE MEDICINES 
+5.1 Antiamoebic and antigiardiasis medicines (see restricted medicines list) 
+Metronidazole Oral liquid: 200 mg/5 mL. 
+Tablet: 200 mg; 400 mg. 
+Secnidazole Oral granules: 2 g. 
+Tablet: 500 mg 
+4 
+===== PAGE 14 =====
+Tinidazole Tablet: 500 mg. 
+S.2 Anthelminthics 
+S.2.1 Antifilarials (see restricted medicines list) 
+Albendazole Tablet: 200 mg; 400 mg. 
+Diethylcarbamazine Tablet: 50 mg; 100 mg (dihydrogen citrate). 
+Ivennectin Tablet: 3 mg. 
+S.2.2 Antischistosomals and other antitrematode medicines (see restricted medicines 
+list) 
+Praziquantel Tablet: 600 mg. 
+S.2.3 Intestinal antbelmintbics 
+Albendazole Oral liquid: 100 mg/5 mL. 
+Tablet: 200 mg; 400 mg. 
+Mebendazole Oral liquid: 100 mg/5 mL. 
+Tablet: 100 mg; 500 mg. 
+Pyrantel pamoate Capsule: 180 mg. 
+Oral suspension: 250 mg/5 mL. 
+Tablet (chewable): 720.5 mg. 
+Praziquantel Tablet: 600 mg. 
+CoMplemenuuy List 
+Oxamniquine .. Capsule: 250 mg. 
+Oral liquid: 250 mg/5 mL . 
+.. Oxamniquine is listed for use when praziquantel 
+treatment fails. 
+S.3 Antibacterial medicines 
+AWaRe Categorization 
+The Access, Watch, Reserve (A WaRe) classification of antibiotics helps guide antibiotic 
+stewardship and combat antimicrobial resistance. 
+Access group 
+Amikacin Injection: 250 mg/mL in 2-mL ampoule (sulfate). 
+Amoxicillin Capsule: 250 mg; 500 mg (trihydrate). 
+Powder for injection: 250 mg; 500 mg; 1 g (sodium) in 
+vial. 
+Powder for oral liquid: 125 mg/5 mL; 250 mg /5mL 
+(trihydrate). 
+Tablet: 250 mg; 500 mg (trihydrate). 
+5 
+===== PAGE 15 =====
+Amoxicillin + Clavulanic acid Oral liquid: 125 mg+ 31.25 m.g/5 mL; 250 mg+ 62.5 
+mg/5mL. 
+Powder for injection: 500 mg (sodium)+ 100 mg 
+(potassium); 1000 mg (sodium) + 200 mg (potassium) in 
+vial. 
+Tablet: 250 mg (trihydrate) + 125 mg (potassium); 500 
+mg (trihydrate) + 125 mg (potassium); 875 mg (trihydrate) 
++ 125 mg (potassium). 
+Ampicillin Capsule: 250 mg; 500 mg. 
+Powder for injection: 500 mg; 1 g (sodium). 
+Benzathine benzylpenicillin Powder for injection: 900 mg benzylpenicillin (= 1.2 
+million unitsY2 mL; 1.44 g benzylpenicillin (= 2.4 million 
+units)/4 mL. 
+Benzylpenicillin Powder for injection: 600 mg(= 1 million units); 3 g (= 
+5 million units) (sodium or potassium) in vial. 
+Cefazolin Powder for injection: 500 mg; 1 g; 2 g in vial (sodium) 
+Cephalexin Capsules: 250 mg; 500 mg 
+Oral Suspension: 125 mg/5 mL; 250 mg/5 mL. 
+Clindamycin Capsule: 150 mg; 300 mg. 
+Injection: 150 mg/mL (phosphate). 
+Cloxacillin Capsule: 250 mg; 500 mg (sodium). 
+Powder for injection: 500 mg (sodium) in vial. 
+Powder for oral solution: 125 mg (sodium)/5 mL. 
+Doxycycline Capsule: 100 mg (hydrochloride). 
+Flucloxacillin Capsule: 250 mg; 500 mg. 
+Powder for oral liquid: 125 m.g/5 mL. 
+Gentamicin Injection: 40 mg (sulfate)/mL in 2-mL ampoule. 
+Metronidazole Injection: 500 mg in 100-mL bottle. 
+Tablet: 200 mg; 400 mg. 
+Nitrofurantoin Tablet: 50 mg; 100 mg. 
+Phenoxymethylpenicillin Powder for oral liquid: 250 mg (potassium)/5 mL. 
+Tablet: 250 mg (potassium). 
+6 
+===== PAGE 16 =====
+Sulfamethoxazole + Injection: 80 mg+ 16 mg/mL in 5-mL ampoule; 
+Trimethoprim (Co- 80 mg+ 16 mg/mL in 10-mL ampoule. 
+trimoxazole )* * Oral liquid: 200 mg + 40 mg/5 mL. 
+Tablet: 100 mg + 20 mg; 400 mg+ 80 mg; 800 mg + 160 
+mg. 
+**Single agent trimethoprim may be an alternative for 
+lower urinary tract infections. 
+Tetracycline Capsule: 250 mg. 
+Watch group 
+Azithromycin Tablet: 250 mg; 500 mg 
+Powder for oral liquid: 200 mg/5 mL 
+Cefixime Capsule: 200 mg; 400 mg. 
+Oral liquid: 100 mg/5 mL. 
+Tablet: 200 mg; 400 mg. 
+Cephalexin Capsule: 250 mg; 500 mg 
+Oral Suspension: 125 mg/5 mL; 250 mg/5 mL. 
+Cefazolin Powder for injection: 500 mg; 1 g; 2 gin vial (sodium) 
+Cefpodoxime Tablet: 200 mg; 400 mg. 
+Ceftazidime Powder for injection: 250 mg; 1 g (pentahydrate) in vial. 
+Ceftriaxone Powder for injection: 250 mg; 500 mg; 1 g (sodium) in 
+vial. 
+Cefuroxime Powder for injection: 750 mg; 1.5 g (sodium). 
+Tablet: 250 mg; 500 mg (axetil). 
+Ciprofloxacin Injection (intravenous infusion): 2 mg (hyclate)/mL in 
+50-mL; 100-mL bottle. 
+Tablet: 250 mg; 500 mg (as hydrochloride). 
+Clarithromycin Suspension: 250 mg/5 mL. 
+Tablet: 250 mg; 500 mg. 
+Erythromycin Capsule: 250 mg; 500 mg (stearate or ethylsuccinate). 
+Cream: 20 mg in 2% of erythromycin 
+Powder for injection: 500 mg (lactobionate) vial. 
+Oral liquid: 125 mg/5 mL (stearate or ethylsuccinate). 
+Tablet: 250 mg; 500 mg (stearate or ethylsuccinate). 
+Levofloxacin Injection: 5 mg/mL in 100-mL bottle. 
+Tablet: 250 mg; 500 mg; 750 mg. 
+7 
+===== PAGE 17 =====
+Ofloxacin Capsule: 200 mg. 
+Injection: 100 mg in 50 mL; 200 mg in 100 mL. 
+Tablet: 200 mg. 
+Piperacillin + Tazobactam Powder for injection: 2 g (sodium) + 250 mg (sodium); 
+4 g (sodium)+ 500 mg (sodium) in vial. 
+Reserve group 
+Ceftazidime/ Powder for injection: 2 g (sodium)+ 500 mg (sodium). 
+Avibactam 
+Colistin Powder for injection: 150 mg (colistinmethate sodium) 
+in vial. 
+Imipenem + Cilastatin Powder for injection: 250 mg+ 250 mg; 500 mg + 500 
+mg. 
+Linezolid Solution for injection: 200 mg/100 mL; 600 mg/300 mL. 
+Oral suspension: 100 mg in 5ml. 
+Tablet: 600 mg. 
+Meropenem** Powder for injection: 500 mg (trihydrate); 1 g 
+(trihydrate) in vial. 
+** Imipenem + cilastatin is an alternative except for acute 
+bacterial meningitis where meropenem is preferred. 
+Vancomycin Capsule: 125 mg; 250 mg (hydrochloride). 
+Powder for injection: 250 mg;500 mg; 1 g 
+(hydrochloride) in vial. 
+S.4 Antifongal medicines (systemic) (see restricted medicines list) 
+Amphotericin B Powder for injection: 50 mg (deoxycholate) in vial. 
+Clotrimazole Vaginal cream: 1%; 10%. 
+Vaginal tablet: 100 mg; 500 mg. 
+Fluconazole Capsule: 50 mg; 100 mg; 150 mg; 200 mg. 
+Injection: 2 mg/mL in 0.9% sodium chloride infusion. 
+Miconazole Cream: 2% (nitrate). 
+Pessary: 200 mg; 400 mg (nitrate). 
+Tablet: 250 mg; 500 mg. 
+Nystatin Lozenges: 100,000 units. 
+Oral liquid: 100,000 units/mL. 
+Pessary: 100,000 units. 
+Tablet: 500,000 units. 
+8 
+===== PAGE 18 =====
+Voriconazole Tablet: 50 mg; 200 mg. 
+Powder for injection: 200 mg/vial. 
+Powder for Oral liquid: 40 mg/mL. 
+S.S Antileishmaniasis medicines 
+Meglumine antimoniate Injection: 1.5 g/5 mL in 5-mL ampoule 
+Sodium stibogluconate Injection: 100 mg/mL in 30-mL vial. 
+S.6 Antileprosy medicines 
+Clofazimine Capsule: 50 mg; 100 mg. 
+Dapsone Tablet: 25 mg; 50 mg; 100 mg. 
+Rifampicin Capsule: 150 mg; 300 mg. 
+Tablet: 150 mg; 300 mg. 
+S.7 Antimalarial medicines 
+S.7.1 Treatment 
+Artemether Injection: 80 mg/mL in 1-mL ampoule. 
+Artemether + Lumefantrine Tablet: 20 mg + 120 mg; 40 mg+ 240 mg; 80 mg+ 480 
+mg. 
+Artesunate Powder for Injection: 60 mg/mL in vial plus 1- mL of 
+5% sodium bicarbonate as solvent. 
+Artesunate + Amodiaquine Tablet: 25 mg+ 67.5 mg; 50 mg+ 135 mg; 100 mg+ 270 
+mg. 
+Artesunate + Pyronaridine Tablet: 60 mg + 180 mg. 
+tetraphosphate 
+Dihydroartemisinin + Tablet: 20 mg + 160 mg; 40 mg+ 320 mg. 
+Piperaquine phosphate 
+Doxycycline* * Capsule: 100 mg (hydrochloride or hyclate ). 
+** For use only in combination with quinine. 
+Quinine Injection: 300 mg/mL ( dihydrochloride) in 2-mL 
+ampoule. 
+Tablet: 300 mg (quinine sulfate) or 300 mg (quinine 
+bisulfate). 
+S.7.2 Prophylu:is (see restricted medicines list) 
+Proguanil Tablet: 100 mg. 
+Sulfadoxine + Pyrimethamine Tablet: 500 mg + 25 mg. 
+S.8 Antipneumocystosis and antito:s:oplasmosis medicines 
+9 
+===== PAGE 19 =====
+Pyrim.ethamine Tablet: 25 mg. 
+Sulfamethoxazole + Oral liquid: 200 mg + 40 mg/5 mL. 
+Trimethoprim Tablet: 100 mg + 20 mg; 400 mg+ 80 mg. 
+5.9 Antitrypanosomal medicines 
+S.9.1 Medicines for the treatment of first stage African trypanosomiasis 
+Pentamidine Powder for injection: 200 mg; 300 mg (isetionate) in 
+vial. 
+Suramin Powder for injection: 1 g (sodium) in vial. 
+5.9.2 Medicines for the treatment of second stage African trypanosomiasis 
+Eflornithine Injection: 200 mg/mL in 100-mL bottle. 
+Nifurtimox Tablet: 120 mg. 
+Complementary List 
+Melarsoprol Powder for injection: 1 g. 
+S.10 Antituberculosis medicines 
+5.10.1 First line antituberculosis medicines 
+Ethambutol Tablet: 100 mg; 275 mg; 400 mg. 
+Ethambutol + Isoniazid Tablet: 2-FDC** (400 mg+ 150 mg). 
+**FDC is Fixed dose combination 
+Isoniazid Tablet: 100 mg; 300 mg. 
+Isoniazid + Rifapentine Tablet: 2-FDC (300 mg+300 mg) 
+Isoniazid + Pyrazinamide + Tablet: 2-FDC (75 mg+ 150 mg+ 150 mg). 
+Rifampicin 
+Isoniazid + Rifampicin Tablet: 2-FDC (75 mg+ 150 mg; 75 mg+ 50 mg). 
+Isoniazid + Rifampicin + Tablet: 2-FDC (75 mg+ 150 mg+ 275 mg+ 400 mg). 
+Ethambutol + Pyrazinamide 
+Pyrazinamide Tablet: 100 mg; 400 mg; 500 mg. 
+Rifampicin Capsule: 150 mg; 300 mg. 
+Tablet: 150 mg; 300 mg. 
+Complementary List 
+P-Aminosalicylic acid Granules: 4 g. 
+Tablet: 500 mg. 
+Rifabutin Capsule: 150 mg; 300 mg. 
+10 
+===== PAGE 20 =====
+Rifapentine** Tabkt: 150 mg; 300 mg. 
+**For treatment of latent TB infection (LTBI) only. 
+Streptomycin Powder for injection: 1 g (sulfate) in vial. 
+5.10.2 Second line antituberculosis medicines (see restricted medicines list) 
+S.11 Antiviral medicines 
+5.11.1 Antiherpes medicines 
+Aciclovir Cream: 5%. 
+Oral liquid: 200 mg/5 mL. 
+Powder for injection: 250 mg; 500 mg; 1 g (sodium) in 
+vial. 
+Tablet: 200 mg; 400 mg; 800 mg. 
+Idoxuridine Cream: 5%. 
+Solution: 5% in dimethyl sulphoxide (for external 
+application). 
+Valaciclovir Tablets: 250 mg; 500 mg 
+S.11.2 Antiretrovirals 
+5.11.2.1 Integrase inhibiton 
+Cabotegravir** Tablet: 30 mg 
+Injection: 600 mg/3 mL 
+**Can be used/or HIV prevention or management 
+Dolutegravir Tablets: 50 mg. 
+S.11.2.2 Non-nucleoside reverse transcriptase inhibitors 
+Efavirenz (EFV or EFZ) Capsule: 50 mg; 100 mg; 200 mg. 
+Oral liquid: 150 mg/5 mL. 
+Tablet: 600 mg. 
+Nevirapine (NVP) Oral liquid: 50 mg/5 mL. 
+Tablet: 200 mg. 
+S.11.2.3 Nucleoside/nucleotide reverse transcriptase inhibitors 
+Abacavir (ABC) Oral liquid: 100 mg (sulfate)/5 mL. 
+Tablet: 300 mg (sulfate). 
+Didanosine ( ddI) Buffered powder for oral liquid: 100 mg; 167 mg; 250 
+mg; 2 g; 4 g packets. 
+Capsule: 125 mg; 200 mg; 250 mg; 400 mg (unbuffered 
+enteric-coated). 
+Tablet (buffered chewable~ dispersible): 25 mg; 50 mg; 
+100 mg; 150 mg; 200 mg. 
+11 
+===== PAGE 21 =====
+Lamivudine (3TC) Oral liquid: 5 mg/mL. 
+Tablet: 150 mg. 
+Zidovudine (ZDV) Capsule: 100 mg; 250 mg. 
+Oral liquid: 50 mg/mL. 
+S.11.l.4 Protease inhibitors 
+Atazanavir + Ritonavir (KrV I Tablet (heat-stable): 300 mg+ 100 mg 
+r) 
+Darunavir + Ritonavir (DRV/r) Tablet (heat-stable): 400 mg+ 50 mg 
+Indinavir (IDV) Capsule: 200 mg; 400 mg (sulfate). 
+Lopinavir + Ritonavir (LPV /r) Capsule: 133.3 mg+ 33.3 mg. 
+Oral liquid: 400 mg + 100 mg/5 mL. 
+Tablet (heat-stable): 100 mg + 25 mg; 200 mg+ 50 mg. 
+S.11.2.5 Fixed-dose combinations (adult first line) 
+Abacavir + Efavirenz + Tablet: 600 mg+ 300 mg+ 600 mg. 
+Lamivudine 
+Abacavir + Lamivudine Tablet: 60 mg (sulfate)+ 30 mg; 120 mg (sulfate)+ 60 
+mg. 
+Lamivudine + Nevirapine + Tablet: 30 mg + 50 mg + 60 mg; 300 mg+ 150 mg + 200 
+Zidovudine mg. 
+Lamivudine + Zidovudine Tablet: 30 mg + 60 mg. 
+Tenofovir + Lamivudine + Tablet: 300 mg+ 300 mg + 50 mg. 
+Dolutegravir 
+Tenofovir + Lamivudine + Tablet: 300 mg +300 mg+ 400 mg; 300 mg +300 mg+ 
+Efavirenz 600mg. 
+S.11.l.6 Fixed-dose combinations (adult second line) 
+Tenofovir/Lamivudine + Tablet: 300 mg/300 mg+ 200 mg/50 mg. 
+Lopinavir I Ritonavir*• ••If Jst line was AZT based. 
+Tenofovir/Lamivudine + Tablet: 300 mg/300 mg+ 300 mg/100 mg. 
+Atazanavir/Ritonavir** **If ]at line was AZT based. 
+Tenofovir/Lamivudine + Tablet: 300 mg/300 mg+ 300 mg + 300 mg/100 mg. 
+Zidovudine+ Atazanavir/ 
+Ritonavir"'* "'"' Recommen<kd in Hepatitis B co-infection. 
+Zidovudine/Lamivudine + Tablet: 300 mg/150 mg+ 300 mg/100 mg. 
+Atazanavir/Ritonavir** "'*If ]st line was TDF based. 
+12 
+===== PAGE 22 =====
+Zidovudine/Lamivudine + Tablet: 300 mg/150 mg+ 200 mg/50 mg. 
+Lopinavir/Ritonavir** **If Jat line was TDF based. 
+S.11.l.7 Fixed-dose combinations (adult third line) 
+Tenofovir/Lamivudine + Tablet: 300 mg/300 mg+ 50 mg + 600 mg/100 mg. 
+Dolutegravir + Darunavir/ **DRV/r available as single DRV and Ritonavir. 
+Ritonavir** **Genotyping important before choosing regimen. 
+Zidovudine + Lamivudine + Tablet: 300 mg+ 300 mg+ 150 mg+ 600 mg/100 mg. 
+Efavirenz + Dolutegravir/ 
+Ritonavir** **Genotyping important before choosing regimen. 
+S.11.l.8 Medicines for prevention of HIV-related opportunistic infections 
+Isoniazid+ Pyridoxine + Fixed dose combination tablet (scored): 300 mg + 25 
+Sulfamethoxazole + mg+ 800 mg+ 160 mg. 
+Trimethoprim 
+S.11.3 Antihepatitis medicines 
+S.11.3.1 Medicines for Hepatitis B 
+Entecavir Oral liquid: 0.05 mg/mL (50 mcg/mL). 
+Tablet: 0.5 mg (500 mcg); 1 mg. 
+Lamivudine Oral liquid: 5 mg/mL. 
+Tablet: 100 mg; 150 mg. 
+Tenofovir Tablet: 200 mg; 300 mg. 
+S.11.3.2 Medicines for Hepatitis C 
+Daclatasvir** Tablet: 30 mg; 60 mg (hydrochloride). 
+**Pangenotypic when used in combination with 
+sofosbuvir. 
+Daclatasvir + Sofosbuvir Tablet: 60 mg + 400 mg. 
+Sofosbuvir** Tablet: 400 mg. 
+**Pangenotypic when used in combination with 
+daclatasvir. 
+Sofosbuvir + Velpatasvir Tablet: 400 mg + 100 mg. 
+S.11.4 Other antivirals 
+Pegylated interferon alpha-2b Powder for injection: 3,000,000; 9,000,000 units. 
+Ribavirin Capsule: 200 mg; 400 mg; 600 mg. 
+Injection: 800 mg and 1 g in 10-mL phosphate buffer 
+solution. 
+Tablet: 200 mg; 400 mg; 600 mg. 
+13 
+===== PAGE 23 =====
+6. ANTIMIGRAINE MEDICINES 
+6.1 Treatment of acute attack 
+Ergotamine Tablet: 2 mg (tartrate). 
+Ibuprofen Tablet: 200 mg; 400 mg. 
+Paracetamol Oral liquid: 120 mg/5 mL; 125 mg/5 mL. 
+Suppository: 125 mg; 250 mg. 
+Tablet: 500 mg. 
+Sumatriptan Tablet: 25 mg; 50 mg. 
+Injection: 3 mg in 0.5-mL vial. 
+6.l Prophylaxis 
+Amitriptyline Tablet: 25 mg. 
+Propranolol Tablet: 20 mg; 40 mg (hydrochloride). 
+7. ANTINEOPLASTIC, IMMUNOSUPPRESSIVE MEDICINES AND ADJUVANTS 
+7.1 Antineoplastics 
+Abiraterone Tablet: 250 mg; 500 mg. 
+Actinomycin-D Powder for injection: 0.5 mg in vial. 
+Arsenic trioxide Injection: 2 mg/mL; 1 mg/mL. 
+Asparaginase Powder for injection: 10,000 units in vial. 
+Az.athioprine Powder for injection: 50 mg (sodium) in vial. 
+Tablet: 50 mg. 
+Bendamustine Injection: 25 mg/mL (hydrochloride) in 4-mL vial. 
+Bicalutamide Tablet: 50 mg. 
+Bleomycin Powder for injection: 15 mg (sulfate) in vial; 15,000 
+units (sulfate) in vial. 
+Buserelin Injection: 1 mg (acetate)/mL in 5.5-mL vial. 
+Nasal spray: 150 mcg (acetate)/metered spray. 
+Busulfan (Busulphan) Injection: 6 mg/mL. 
+Tablet: 2 mg. 
+Capecitabine Tablet: 150 mg; 500 mg. 
+Carboplatin Injection: 10 mg/mL in 5-mL vial. 
+Chlorambucil Tablet: 2 mg; 5 mg. 
+Cisplatin Powder for injection: 10 mg; 50 mg in vial. 
+14 
+===== PAGE 24 =====
+Cyclophosphamide Powder for injection: 100 mg; 500 mg; 1 g in vial. 
+Tablet: 25 mg; 50 mg. 
+Cytarabine Powder for injection: 100 mg in vial. 
+Dacarbazine (DTIC) Powder for injection: 100 mg; 200 mg; 500 mg (citrate) 
+in vial. 
+Daunorubicin Powder for injection: 50 mg (hydrochloride) in vial. 
+Degarelix Powder for injection: 80 mg; 120 mg (acetate) in vial. 
+Docet:axel Injection: 10 mg/mL. 
+Powder for injection: 20 mg; 80 mg. 
+Doxorubicin Powder for injection: 10 mg; 50 mg (hydrochloride) in 
+vial. 
+Epirubicin Injection: 2 mg (hydrochloride)/mL in 5-mL vial. 
+Powder for injection: 50 mg (hydrochloride) in vial. 
+Etoposide Capsule: 50 mg; 100 mg. 
+Injection: 100 m.g/5 mL in vial. 
+Fludarabine Powder for injection: 50 mg (phosphate) in vial. 
+Tablet: 10 mg (phosphate). 
+Fluorouracil Injection: 50 mg (sodium)/mL in 5-mL vial. 
+Flutamide Tablet: 250 mg. 
+Gemcitabine Powder for injection: 200 mg; 1 gin vial. 
+Goserelin Injection: 3 .6 mg; 10.8 mg (acetate) in pre- D lled syringe. 
+IIydroxycarbatn.ide Capsule: 200 mg; 250 mg; 300 mg; 400 mg; 500 mg. 
+(IIydroxyurea) Tablet: 100 mg; 1 g. 
+Ifosfamide Powder for injection: 500 mg; 1 g; 2 g in vial. 
+Irinotecan Injection: 40 mg/2 mL in 2-mL vial; 100 m.g/5 mL in 5-
+mL vial; 500 mg/25 mL in 25- mL vial. 
+Letrozole Tablet: 2.5 mg. 
+Leuprolide Injection: 1 mg (acetate)/0.2 mL. 
+Mechloretharnine Powder for injection: 10 mg in vial. 
+Melphalan Injection: 50 mg (hydrochloride) in vial. 
+Tablet: 2 mg. 
+Mercaptopurine Tablet: 50 mg. 
+15 
+===== PAGE 25 =====
+Methotrexate Injection: 2.5 mg/mL; 25 mg/mL. 
+Powder for injection: 50 mg (sodium) in vial. 
+Tablet: 2.5 mg; 10 mg (sodium). 
+Mitoxantrone Concentrate for intravenous infusion: 2 mg/mL in 10-
+mLvial. 
+Oxaliplatin Injection: 50 mg/10 mL in 10-mL vial; 100 mg/20 mL in 
+20-mL vial; 200 mg/40 mL in 40-mL vial. 
+Powder for injection: 50 mg; 100 mg in vial. 
+Paclitaxel Injection: 100 mg/16.67 mL vial. 
+Procarbazine Capsule: 50 mg (hydrochloride). 
+Stilboestrol Tablet: 1 mg; 5 mg; 25 mg. 
+Tamoxifen Tablet: 10 mg; 20 mg (citrate). 
+Thioguanine Tablet: 40 mg. 
+Vinblastine Injection: 1 mg/mL in 10-mL vial. 
+Vincristine Powder for injection: 1 mg; 2 mg; 5 mg (sulfate) in vial. 
+Vinorelbine Tablet: 10 mg/mL in 1-mL vial; 50 mg/mL in 5-mL vial. 
+7.2 Adjuvants 
+Dexamethasone Injection: 4 mg (sodium phosphate)/mL in 1-mL 
+ampoule. 
+Tablet: 500 mcg; 4 mg. 
+Diethystiboestrol Tablet: 0.5 mg; 1 mg; 10 mg. 
+Granulocytic colony Injection: 300 mcg/mL; 480 mcg/1.6 mL; 300 mcg/0.5 
+stimulating factor mL; 480 mcg/0.8 mL. 
+Leucovorin Tablet: 5 mg; 10 mg; 15 mg; 25 mg. 
+Powder for injection: 50 mg; 100 mg; 200 mg; 350 mg; 
+500mg. 
+Mesna (Mercaptoethane Injection: 100 mg/mL in 10-mL ampoule. 
+sulfonate sodium) Tablet: 400 mg; 600 mg. 
+Ondansetron Injection: 2 mg/mL in 4-mL ampoule. 
+Tablet: 8 mg. 
+Prednisolone Injection: 20 mg/mL; 25 mg/mL (sodium phosphate or 
+sodium succinate) in vial. 
+Tablet: 5 mg. 
+Zoledronic acid Injection: 5 mg/100 mL. 
+7.3 Immonosuppressives 
+16 
+===== PAGE 26 =====
+Bevacizumab Injection: 25 mg/mL. 
+Bortezomib Powder for injection: 3.5 mg in vial. 
+Ciclosporin (Cyclosporin) Capsule: 25 mg; 50 mg; 100 mg. 
+Injection: 50 mg/mL ampoule. 
+Oral liquid: 100 mg/mL. 
+Dasatinib Tablet: 20 mg; 50 mg; 70 mg; 80 mg; IOO mg; 140 mg. 
+Erlotinib Tablet: 25 mg; IOO mg; 150 mg. 
+Gefitinib Tablet: 250 mg. 
+Imatinib Tablet: 100 mg; 400 mg (mesylate). 
+Nilotinib Capsule: 150 mg; 200 mg. 
+Rituximab Injection: 10 mg/mL in 10-mL and 50-mL vials. 
+Trastuzumab Powder for injection: 60 mg; 150 mg; 440 mg in vial. 
+8. ANTISEPTICS AND DISINFECTANTS 
+Benzoin Compound tincture of Benzoin. 
+Cetrimide + Chlorhexidine Solution: Cetrimide 15% + chlorhexidine 
+(gluconate) 1.5%; for dilution. 
+Chlorhexidine Gel: 4% in 25 g tube. 
+Solution: 5% (gluconate) for dilution. 
+Dichloroxylenol + Soap. 
+Chlorophenol Solution. 
+EUSOL Solution: Chlorinated lime 1.25% plus boric acid 1.25%; 
+freshly prepared. 
+Formaldehyde Solution: 1.5 - IO%. 
+Glutaraldehyde Solution: 2% (in buffered base). 
+Iodine Weak solution of iodine: 1 %. 
+Methylated spirit Solution: 99%; 95% 
+Potassium permanganate Solution: 0.1 %. 
+Povidone iodine Solution: 10%. 
+Sodium hypochlorite Solution: 1 - 10%. 
+Trichlorophenol (Mixture of Cream. 
+halogenated phenols and Liquid. 
+salicylic acid) Ointment. 
+9. BLOOD PRODUCTS OF HUMAN ORIGIN AND PLASMA SUBSTITUTES 
+17 
+===== PAGE 27 =====
+9.1 Human immunoglobuJins 
+Anti-rabies immunoglobulin Injection: 150 units/mL in 2-mL and 10-mL vial. 
+Anti-tetanus immunoglobulin Injection: 1500 units/mL; 10,000 units/lOmL. 
+Hepatitis B immunoglobulin Injection: 220 units/mL; 312 units/mL 
+Complementary List 
+Human immunoglobulin Intramuscular administration: 16% protein solution. 
+Intravenous administration: 5%; 10% protein 
+solution. 
+Subcutaneous administration: 15%; 16% protein 
+solution. 
+9.2 Blood coagulation factors 
+Complementary List 
+Coagulation/actor VIII Powder for injection: 500 units/vial. 
+Coagulation factor IX Powder for injection: 500 units/vial; 1,000 units/vial. 
+9.3 Plasma substitutes 
+Dextran 10•• Injectable solution: 6%. 
+••Polygeline injectable solution, 3.5% is 
+considered as equivalent. 
+Polygeline Injection: 3.5% solution; 500 mL. 
+10. CARDIOVASCULAR MEDICINES 
+10.1 Anti-anginal medicines 
+Bisoprolol*• Tablet: 1.25 mg; 5 mg. 
+** Metoprolol and Carvedilol are alternatives. 
+Diltiazem Tablet: 60 mg; 90 mg; 120 mg; 180 mg (hydrochloride). 
+Glyceryl trinitrate Patch: 0.1 mg; 0.2 mg; 0.4 mg. 
+Tablet (sublingual): 500 mcg. 
+Isosorbide dinitrate Tablet (oral): .5 mg; 10 mg; 20 mg; 30 mg. 
+Tablet (subllngual): 5 mg. 
+10.2 Anti-arrhythmic medicines 
+Amiodarone Tablet: 100 mg; 200 mg. 
+Atenolol Tablet: 25 mg; 50 mg; 100 mg. 
+Bisoprolol*• Tablet: 1.25 mg; 5 mg . 
+.. Metoprolol and Carvedilol are alternatives. 
+18 
+===== PAGE 28 =====
+Digman Injection: 250 mcg/mL in 2 mL ampoule. 
+Oral liquid: 50 mcg/mL. 
+Tablet: 62.5 mcg; 250 mcg. 
+Lidocaine Injection: 20 mg/mL in 5-mL ampoule. 
+Procainamide Tablet: 250 mg. 
+Verapamil Tablet: 40 mg; 80 mg; 120 mg. 
+10.3 Antihypertensive medicines 
+Alpha methyl-dopa Injection: 250 mg. 
+Tablet: 250 mg; 500 mg 
+Amiloride+ Tablet: 2.5 mg+ 25 mg. 
+Hydrochlorothiazide 
+Amlodipine Tablet: 5 mg; 10 mg (besylate ). 
+Amlodipine + Losartan Tablet: 5 mg + 50 mg; 5 mg + 100 mg; 10 mg+ 50 mg. 
+Atenolol Tablet: 25 mg; 50 mg; 100 mg. 
+Bendroflumethiazide Tablet: 2.5 mg; 5 mg. 
+Captopril Tablet: 12.5 mg; 25 mg; 50 mg. 
+Enalapril Tablet: 5 mg; 10 mg. 
+Hydralazine Powder for injection: 20 mg in ampoule. 
+Tablet: 25 mg; 50 mg. 
+Hydrochlorothiazide Tablet: 12.5 mg; 25 mg. 
+Indapamide Tablet: 1.5 mg; 2.5 mg. 
+Labetalol Powder for Injection: 5 mg/mL in 20-mL ampoule. 
+Tablet: 100 mg; 200 mg. 
+Lisinopril Tablet: 5 mg; 10 mg. 
+Losartan Tablet: 25 mg; 50 mg. 
+Methyldopa Tablet: 250 mg; 500 mg. 
+Nifedipine Tablet: 20 mg. 
+Tablet (slow release): 30 mg. 
+Nimodipine Tablet: 30 mg. 
+Telmisartan Tablet: 40 mg; 80 mg. 
+Valsartan Tablet: 40 mg; 80 mg. 
+10.4 Medicines used in heart failure 
+19 
+===== PAGE 29 =====
+Captopril Tablet: 12.5 mg; 25 mg. 
+Carvedilol Tablet: 6.25 mg;12.5 mg; 25 mg. 
+Digmtin Injection: 100 mcg/mL in 1-mL ampoule. 
+Oral liquid: 50 mcg/mL. 
+Tablet: 62.5 mcg; 125 mcg; 250 mcg. 
+Dobutamine Injection: 5 mg/mL in 50-mL vial. 
+Dopamine Injection: 40 mg/mL in 5-mL vial. 
+Furosemide Injection: 10 mg/2 mL in 2-mL ampoule. 
+Tablet: 40 mg. 
+Metoprolol Tablet (extended release): 25 mg (Metoprolol succinate 
+23.75 mg equiv. to Metoprolol tartrate 25 mg); 50 mg 
+(Metoprolol succinate 47.5 mg equiv. to Metoprolol 
+tartrate 50 mg). 
+Spironolactone Tablet: 25 mg. 
+Torsemide Injection: 10 mg/mL. 
+Tablet: 5 mg; 10 mg; 20 mg. 
+Valsartan Capsule: 40 mg, 80 mg, 160 mg 
+Oral solution: 3 mg/mL in 160 mL bottle 
+Tablet: 40 mg, 80 mg, 160 mg, 320 mg 
+10.5 Anti-thrombotic medicines 
+10.5.1 Anti-platelet medicines 
+Acetylsalicylic acid Tablet: 75 mg; 100 mg. 
+Clopidogrel Tablet: 75 mg; 300 mg. 
+10.5.2 Tbrombolytic medicines 
+Alteplase Powder for injection: 10 mg; 20 mg; 50 mg in vial. 
+Streptokinase Powder for injection: 1.5 million units in vial. 
+10.6 Lipid-lowering agents 
+Atorvastatin Tablet: 10 mg; 20 mg; 40 mg. 
+Ezetimibe Tablet: 10 mg. 
+Rosuvastatin Tablet: 5 mg; 10 mg; 20 mg; 40 mg. 
+Simvastatin Tablet: 10 mg; 20 mg; 40 mg. 
+11. DENTAL MEDICINES 
+11.1 Anti-inflammatory dental medicines 
+20 
+===== PAGE 30 =====
+Dexamethasone Oral solution: 0.5mg/5 mL. 
+Fluocinonide Gel: 0.05%. 
+Miconazole Gel: 15 g (2%). 
+Triamcinolone Injection: 10 mg/mL; 40 mg/mL. 
+Paste: 0.1% (acetonide). 
+11.2. Local anaesthetics 
+Lidocaine Cream: 5%. 
+Injection: 2% anhydrous lidocaine hydrochloride with 
+epinephrine (adrenaline) 1:80,000 in dental cartridge. 
+Spray: 0.2%. 
+11.3 Mouthwashes 
+Fluoride Containing 230 to 900 ppm fluoride. 
+Hexeti.dine Solution: 0.1 %. 
+Nystatin Solution: 100,000 units/mL. 
+Zinc chloride + Zinc sulfate Compound mouthwash: 1 % + 2%. 
+12. DERMATOLOGICAL MEDICINES 
+12.1 Anti-acne medicines (see restricted medicines list) 
+12.2 Antifungal medicines 
+Benzoic acid + salicylic acid Cream: 6% containing benzoic acid and 3% salicylic acid 
+Ointment: 6% containing benzoic acid and 3% salicylic 
+acid. 
+Benzoyl peroxide Cream: 2.5%; 5%; 10%. 
+Gel: 2.5%; 5%; 10%. 
+Clotrimazole Cream: 1%. 
+Dusting powder: 1 %. 
+Ointment: 1 % 
+Pessary: 100 mg; 200 mg. 
+Fusidic acid Cream: 20 mg/g (2%). 
+Ketoconazole Cream: 20 mg/g (2%). 
+Shampoo: 20 mg/g (2%); 10 mg/g (1 %). 
+21 
+===== PAGE 31 =====
+Miconazole Cream: 2% (nitrate). 
+Dusting powder: 2% (nitrate). 
+Lotion/tincture: 2%. 
+Oral gel: 2% - 2.5% (nitrate). 
+Vaginal ovule: 200 mg; 400 mg. 
+Miconazole + hydrocortisone Cream: 2% + 1 %. 
+Nystatin Cream: 100,000 units. 
+Ointment: 100,000 units. 
+Oral suspension: 100,000 units. 
+Terbinafine Cream: 1%. 
+Ointment: 1 %. 
+Tablet: 250 mg. 
+Tretinoin Cream: 0.025%; 0.05%. 
+12.3 Anti-infective medicines 
+Gentamicin Cream: 0.3% (sulfate). 
+Gentian violet Aqueous solution: 0.5% (chloride). 
+(Methylrosaniliniwn chloride) 
+Mupirocin Cream: 2% ( calciwn). 
+Ointment: 2%. 
+Silver sulfadia.zine Cream: 1%. 
+12.4 Anti-inflammatory and antipruritic medicines (see restricted medicines list) 
+Betamethasone Cream: 0.1% (valerate). 
+Ointment: 0.1 % (valerate). 
+Calamine Lotion: 8%; 15% 
+Calamine +Zinc Lotion: 8% + 8%. 
+Hydrocortisone Cream: 1 % (acetate). 
+Ointment: 1 %. 
+Salicylic acid Ointment: 3%; 5%; 10%. 
+12.5 Medicines affecting skin differentiation and proliferation 
+Aluminiwn diacetate Solution: 13% for dilution. 
+Benzoyl peroxide Cream or lotion: 5%. 
+Gel: 2.5%; 5%; 10%. 
+Coal tar Solution: 5%. 
+Dithranol Ointment: 0.1 % - to 2%. 
+22 
+===== PAGE 32 =====
+Podophyllum resin Solution: 10%; 25%. 
+Potassium permanganate Aqueous solution: 1: 10, 000. 
+Salicylic acid Solution: 10%; 20%. 
+Urea Cream: 5%; 10%. 
+Ointment: 5%; 10%. 
+12.6 Hair disorders 
+12.6.1 Anti-alopecia medicines (see restricted medicines list) 
+12.7 Psoriasis and vitiligo medicines (see restricted medicines list) 
+12.8 Scabicides and pediculicides (see restricted medicines list) 
+Benzyl benzoate Lotion: 25%. 
+Monosulfira.m Soap 
+Permethrin Cream: 5%. 
+Lotion: 1%. 
+12.9 Sunscreen agents 
+Aminobenzoic acid Cream: 5%. 
+Lotion:5%. 
+Paste: 5%. 
+Titanium dioxide Cream: 20% - 25%. 
+Paste: 20% - 25%. 
+13. DIAGNOSTIC AGENTS 
+13.1 Ophthalmic medicines 
+Fluorescein Eye drops: 1% (sodium). 
+Tropicamide Eye drops: 0.5%. 
+13.2 Radiocontrast media 
+Co111plementary List 
+Barium sulfate Aqueous suspension. 
+14. DIURETICS 
+Amiloride+ Tablet: 2.5 mg+ 25 mg; 5 mg+ 50 mg. 
+Hydrocblorothiazide 
+Furosemide Injection: 10 mg/mL in 2-mL ampoule. 
+Tablet: 20 mg; 40 mg. 
+Hydrocblorothiazide Tablet: 25 mg. 
+23 
+===== PAGE 33 =====
+Mannitol Injectable solution: 10%; 20%. 
+Spironolactone Tablet: 25 mg. 
+Torsemide Injection: 10 mg/m.L. 
+Tablet: 5 mg; 10 mg. 
+15. GASTROINTESTINAL MEDICINES 
+15.1 Antiemetic medicines (see restricted medicines list) 
+Metoclopramide Injection: 5 mg (hydrochloride)/m.L in 2-m.L ampoule. 
+Oral liquid: 5 mg/5 m.L. 
+Tablet: 10 mg. 
+Ondansetron Injection: 2 mg/m.L in 2-m.L ampoule. 
+Oral liquid: 4 mg/5 m.L. 
+Tablet: 4 mg; 8 mg. 
+Promethazine Injectable solution: 25 mg/mL. 
+Oral liquid: 5 mg/5 mL. 
+Tablet: 10 mg. 
+Complementary List 
+Domperidone Oral suspension: 1 mglmL. 
+15.2 Antacids 
+Aluminium hydroxide+ Oral 11nspension: 500 mg+ 500 mg in 5-mL. 
+Magnesium hydroxide Oral liquid: 200 mg + 200 mg in 5-mL. 
+Magnesium trisilicate Mixture: 250 mg/5 m.L. 
+Tablet: 500 mg. 
+15.3 Antiulcer medicines 
+Omeprazole Capsule: 10 mg; 20 mg. 
+Powder for injection: 40 mg in vial. 
+Rabeprazole Tablet: 20 mg. 
+Rani ti dine Injection: 25 mg/mL in 2-mL ampoule. 
+Tablet: 150 mg; 300 mg. 
+15.4 Laxatives 
+Bisacodyl Suppository: 5 mg; 10 mg. 
+Tablet: 5 mg. 
+Lactulose Oral liquid: 68%. 
+Liquid Paraffin Oral liquid 
+24 
+===== PAGE 34 =====
+Senna Oral liquid: 7 .5 mg/5 mL. 
+Tablet: 7.5 mg (sennosides) 
+15.5 Medicines used in diarrhoea 
+15.5.1 Oral rehydration 
+Oral rehydration salts Powder for dilution in 200 mL; 500 mL; 1 L. 
+Glucose: 75mEq. 
+Sodium: 75 mEq or mmol/L. 
+Chloride: 65 mEq or mmol/L. 
+Potassium: 20 mEq or mmol/L. 
+Citrate: lOmmol/L. 
+Osmolarity: 245m0sm/L. 
+Glucose: 13.5 g/L. 
+Sodium chloride: 2.6 g/L. 
+Potassium chloride: 1.5 g/L. 
+Trisodium citrate dehydrate•: 2.9 g/L. 
+*May be replaced by sodium hydrogen carbonate (sodium 
+bicarbonate) 2.5 g/L. 
+15.5.2 Medicines for reducing intestinal motility 
+Loperamide Capsule: 2 mg. 
+Tablet: 2 mg. 
+Diphenoxylate + Atropine Tablet: 2.5 mg (hydrochloride)+ 25 mcg (sulfate). 
+15.6 Diagnostic agents for gastric function (See Restricted Medicines List) 
+16. HORMONES AND OTHER ENDOCRINE MEDICINES 
+16.1 Adrenal hormones and synthetic substitutes 
+Dexamethasone Injection: 2 mg/mL; 4 mg/mL in 2-mL ampoule. 
+Tablet: 0.5 mg; 4 mg. 
+Fludrocortisone Tablet: 100 mcg (acetate). 
+Hydrocortisone Injection: 100 mg in 2-mL vial. 
+Methylprednisolone Injectable Suspension: 20 mg/mL; 40 mg/mL. 
+Powder for injection: 40 mg/mL (sodium succinate) in 1-
+mL single dose vial and 5-mL multi-dose vials; 80 mg 
+(sodium succinate)/mL in 1-mL single dose vial. 
+Tablet: 2 mg; 4 mg. 
+Prednisolone Tablet: 5 mg. 
+16.2 Androgens 
+Complementary List 
+25 
+===== PAGE 35 =====
+Testosterone Injection: 200 mg (enanthate) in 1-mL ampoule. 
+16.3 Antidiuretic hormone (See Restricted Medicines List) 
+16.4 Diagnostic agents for endocrine disorders (See Restricted Medicines List) 
+16.5 Oestrogens (see restricted medicines list) 
+Oestradiol Tablet: 1 mg; 2 mg. 
+16.6 Progestogens 
+Medroxyprogesterone acetate Tablet: 5 mg. 
+16.7 Insulins and other medicines used for diabetes and hypoglycaemia 
+16.7.1 Medicines for hypoglycaemia 
+Glucagon Injection: 1 mg/mL. 
+Glucose Intravenous solution: 50%. 
+16.7.2 Insulin preparations 
+Biphasic isophane insulin Injection: 30% soluble: 70% isophane (100 units/mL). 
+Insulin (soluble) Injection: 100 units/mL in 10-mL vial. 
+Insulin aspart Injection: 100 units/mL (prefilled). 
+Insulin determir Injection: 100 units/mL in 3-mL cartridge. 
+Insulin glargine Injection: 100 units/mL in 10-mL vial. 
+Insulin glulisine Injection: 300 units/3 mL pen; 1,000 units/10 mL vial; 
+300 units/3 mL cartridge. 
+Intermediate-acting insulin Injection: 100 units/mL in 10-mL vial 
+(Compound insulin zinc suspension or isophane insulin). 
+16.7.3 Oral antidiabetic medicines 
+Dapagliflozin Tablet: 5 mg; 10 mg. 
+Glibenclamide Tablet: 5 mg. 
+Gliclazide Tablet: 60 mg; 80 mg. 
+Glimeperide Tablet: 1 mg; 2 mg; 3 mg; 4 mg. 
+Metformin Tablet: 500 mg; 1 g. 
+Sitagliptin Tablet: 50 mg; 100 mg. 
+Vidagliptin Tablet: 50 mg. 
+16.8 Medicines acting on pituitary-ovarian axis (See Restricted Medicines List) 
+16.9 Thyroid hormones and antithyroid medicines 
+26 
+===== PAGE 36 =====
+16.9.1 Antithyroid medicines (see restricted medicines list) 
+Carbimazole Tablet: 5 mg. 
+Lugol's solution Oral liquid: 100 mg/mL potassium iodide + 50 mg 
+iodine/mL. 
+Potassium iodide Oral solution: 65 mg/ml; 325 mg/5 mL. 
+Tablet: 65 mg; 130 mg. 
+Propylthiouracil Tablet: 50 mg. 
+16.9.2 Thyroid hormone 
+Levothyroxine Tablet: 50 mcg; 100 mcg (sodium). 
+Liothyronine Tablet: 20 mcg (sodium). 
+16.9.3 Other hormone inhibitors (see restrided medicines list) 
+Octreotide Injection: 50 mcg/mL in 1-mL ampoule; 100 mcg/mL in 
+1-mL ampoule; 200 mcg/mL in 1-mL ampoule. 
+Antiandrogen 
+Finasteride Tablet: 5 mg. 
+16.10 Uterotonics 
+Carbetocin Injection (heat stable): 100 mcg/mL. 
+Ergometrine Injection: 200 mcg (hydrogen maleate) in 1-mL ampoule. 
+Oxytocin Injection: 10 units in 1 mL. 
+16.11 Medicines for management of incomplete abortion and miscarriage (See 
+Restrided Medicines List) 
+17. IMMUNOLOGICALS 
+17.1 Diagnostic agents 
+Rapid diagnostic test Various kits for malaria, pregnancy, HIV, blood glucose 
+etc. 
+Tuberculin, purified protein Injection. 
+derivative (PPD) 
+17.2 Sera and immunoglobulins 
+Anti-snake venom Powder for injection: 10 mL; 20 mL (polyvalent). 
+immunoglobulin 
+Anti-tetanus serum Injection: 1,500 units; 10,000 units in vial. 
+Anti-venom immunoglobulin Injection. 
+27 
+===== PAGE 37 =====
+Diphtheria antitoxin Injection: 10,000 units; 20,000 units in vial. 
+17.3 Vaccines 
+Recommendations for all 
+BCGvaccine Lyophillzed injection: 10/20 dose vial+ 1-mL ampoule 
+of sodium chloride diluent. 
+Cholera vaccine Oral liquid: 1-dose vial. 
+DPT+ HEPB + Hib Liquid Injection: 10-dose vial. 
+(Pentavalent vaccine) 
+Haemophilus injluenzae Type Liquid Injection: 10-dose vial. 
+bvaccine 
+HPVvaccine Liquid Injection: 10-dose vial. 
+Measles vaccine Lyophilized injection: 10 dose vial. 
+Meningococcal meningitis Lyophilized injection: 10-dose vial. 
+vaccine 
+Pneumococcal conjugate Liquid injection: 2-dose vial; 4-dose vial. 
+vaccme 
+Poliomyelitis vaccine Injection: 5-dose vial; 10-dose vial (inactivated polio 
+vaccine). 
+Oral liquid: 20-dose vial. 
+Rabies vaccine Lyophilized injection: 2.5 units/mL. 
+Rotavirus vaccine Oral: 5-dose vial. 
+Rubella vaccine Lyophilized injection: 10 dose vial. 
+Tetanus vaccine Liquid Injection: 10-dose vial. 
+Typhoid vaccine Capsule. 
+Injection: 25 mcg/0.5 mL. 
+Yellow fever vaccine Lyophilized injection: 10-dose vial. 
+18. MEDICINES ACTING ON THE RESPIRATORY TRACT 
+18.1 Antiasthmatic medicines (see restricted medicines list). 
+Budesonide Inhalation (aerosol): 100 mcg per dose; 200 mcg per 
+dose. 
+Epinephrine (Adrenaline) Injection: 1 mg (hydrochloride or hydrogen tartrate) in 1-
+mLampoule. 
+Ipratropium bromide Metered dose inhaler: 20 mcg/metered dose. 
+Respirator solution for use in nebulizer: 0.02%. 
+28 
+===== PAGE 38 =====
+Salbutamol Injection: 50 mcg (sulfate)/mL in 5-mL ampoule. 
+Metered dose inhaler (aerosol): 100 mcg (sulfate) per 
+dose. 
+Respirator solution for use in nebulizer: 5 mg (sulfate)/ 
+mL. 
+Tablet: 2 mg. 
+Salmeterol + Fluticasone Inhalation (aerosol): 21mcg+45 mcg/ dose. 
+Inhalation (powder): 50 mcg + 100 mcg/dose; 50 mcg + 
+250 mcg/dose. 
+19. MEDICINES AFFECTING THE BLOOD 
+19.1 Antianaemia medicines (Haematinics) (see restricted medicines list) 
+Ferrous salt Oral liquid: Equivalent to 25 mg iron (sulfate)/mL. 
+Tablet: Equivalent to 60 mg iron. 
+Folic acid Injectable solution: 5 mg/mL. 
+Tablet: 400 mcg**; 1 mg; 5 mg. 
+**Periconceptual use for prevention of .first occurrence of 
+neural tube defects. 
+Hydroxocobalamin (vitamin Injection: 1 mg (acetate, hydrochloride or sulfate) in 1-
+B12) mLampoule. 
+Complementary List 
+Erythropoiesis-stimulating agents 
+Erythropoietin Injection: pre-filled syringe: 
+1,000 units/0.5 mL; 2,000 units/0.5 mL; 3,000 units/0.3 
+mL; 4,000 units/0.4 mL; 5,000 units/0.5 mL; 6,000 
+units/0.6 mL; 8,000 units/0.8mL; 10,000 units/I mL; 
+20,000 units/0.5 mL; 40,000 units/ml. 
+19.2 Medicines affecting blood coagulation 
+19.2.1 Antiplatelets 
+Acetylsalicylic acid (aspirin) Tablet: 75 mg; 150 mg; 300 mg. 
+Clopidogrel Tablet: 75 mg; 300 mg. 
+19.2.2 Anticoagulants 
+Apixaban Tablet: 2.5 mg; 5 mg. 
+Dabigatran Capsule: 110 mg; 150 mg. 
+Desmopressin Injection: 4 mcg (acetate)/ mL in 1-mL ampoule. 
+Nasal spray: 10 mcg (acetate) per dose. 
+Tablet: 0.1 mg; 0.2 mg. 
+29 
+===== PAGE 39 =====
+Enoxaparin (Low molecular Injection: 1,000 units/mL; 5,000 units/mL in 1-mL 
+weight heparin) ampoule. 
+Heparin (unfractionated Injection: 1,000 units/mL; 5,000 units/mL in 1-mL 
+heparin) ampoule. 
+Phytomenadione (vitamin K1) Injection: 1 mg/mL; 10 mg/mL in 5-mL ampoule. 
+Tablet: 10 mg. 
+Protamine sulfate Injection: 10 mg/mL in 5-mL ampoule. 
+Tranexamic acid Injection: 100 mg/mL in 10-mL ampoule. 
+Warfarin Tablet: 1 mg; 2 mg; 5 mg (sodium). 
+19.3 Medicines for haemoglobinopathies 
+Complementary List 
+Hydroxyurea Capsule: 200 mg; 300 mg. 
+Tablet: 100 mg; 1000 mg. 
+20. MEDICINES CORRECTING WATER, ELECTROLYTE AND ACIDDBASE 
+DISTURBANCES 
+20.1 Oral 
+Oral rehydration salts Powder for dilution in 200 mL; 500 mL; 1 L. 
+Glucose: 75 mEq or mmol/L. 
+Sodium: 75 mEq or mmol/L. 
+Chloride: 65 mEq or mmol/L. 
+Potassium: 20 mEq or mmol/L. 
+Citrate: lOmmol/L. 
+Osmolarity: 245m0sm/L. 
+Glucose: 13.5 g/L. 
+Sodium chloride: 2.6g/L. 
+Potassium chloride: 1.5 g/L. 
+Trisodium citrate dehydrate•: 2.9 g/L. 
+•May be replaced by sodium hydrogen carbonate (sodium 
+bicarbonate) 2.5 g/L. 
+Potassium chloride Solution for dilution: 7.5% (equivalent to K+ 1 mmol/mL 
+and Cl· 1 mmol/mL); 15% (equivalent to K+ 2 mmol/mL 
+and Cl· 2 mmol/mL). 
+Tablet: 600 mg. 
+20.2 Parenteral 
+30 
+===== PAGE 40 =====
+DarrowDs solution Infusion: 
+Full-strength 
+Sodium: 121 mEq or mmol/L. 
+Chloride: 103 mEq or mmol/L. 
+Potassium: 35 mEq or mmol/L. 
+Lactate: 53mmol/L. 
+Half-strength 
+Sodium: 61 mEq ormmol/L. 
+Chloride: 52 mEq or mmol/L. 
+Potassium: 17 mEq or mmol/L. 
+Lactate: 27mmol/L. 
+Glucose Infusion: 5% (isotonic); 10% and 50% (hypertonic) 
+Glucose with sodium chloride Infusion: 5% Glucose/0.9% sodium chloride; 
+4.3% glucose/0.18% sodium chloride. 
+Potassium chloride Injection: 20 mEq; 40 mEq. 
+Ringer Os lactate Infusion: 
+Sodium: 130 mEq or mmol/L. 
+Chloride: 112 mEq or mmol/L. 
+Potassium: 5.4 mEq or mmol/L. 
+Lactate: 27 mEq or mmol/L. 
+Calcium: 1.8 mEq or mmol/L. 
+Sodium chloride Infusion: 0.9%; 0.45%. 
+Sodium hydrogen carbonate Infusion: 8.4% isotonic (equivalent to Na+167 mmol/L; 
+HCOr 167 mmol/L). 
+20.3 Miscellaneous 
+Water for injection 2-mL; 5-mL; 10-mL ampoules. 
+21. MEDICINES FOR EAR, NOSE AND THROAT 
+Acetic acid Topical: 2% in alcohol. 
+Arachis oil + Ear drop: 57% + 2% + 5% + 10%. 
+Paradichlorobenzene + 
+Chlorobutanol + Turpentine oil 
+Budesonide Nasal spray: 100 mcg per dose. 
+Chloramphenicol Ear drop: 5%. 
+Cipro:floxacin + Ear drop: 0.3%+ 0.1 % 
+Dexamethasone 
+31 
+===== PAGE 41 =====
+Fludrocortisone (acetate)+ Ear drop: 0.1 % + 0.44% + 0.12% + 4.0%. 
+Neomycin (sulfate)+ 
+Polymyxin-B (sulfate)+ 
+Lidocaine (hydrochloride) 
+Fluticasone furoate Nasal spray: 27.5 mcg. 
+Xylometazoline Nasal spray: 0.05%. 
+22. MEDICINES FOR REPRODUCTIVE HEALTH 
+22.1 Contraceptives 
+22.1.1 Oral hormonal contraceptives 
+Ethinylestradiol + Tablet: 30 mcg + 150 mcg. 
+Levonorgestrel 
+Ethinylestradiol + Tablet: 35 mcg + 1 mg. 
+Norethisterone 
+Levonorgestrel Tablet: 30 mcg; 750 mcg (pack of two); 1.5 mg. 
+22.1.2 Injectable hormonal contraceptives 
+Estradiol cypionate + Injection: 5 mg + 25 mg. 
+Medroxyprogesterone acetate 
+Medroxyprogesterone acetate Injection (intramuscular): 150 mg/mL in 1 mL vial. 
+Injection (subcutaneous): 104 mg/0.65 mL in pre-filled 
+syringe or single-dose injection delivery system. 
+Norethisterone enanthate Oily solution: 200 mg/mL in 1-mL ampoule. 
+22.1.3 Intrauterine devices 
+Copper-containing device 
+Levonorgestrel-releasing Intrauterine system: with reservoir containing 52 mg of 
+intrauterine system levonorgestrel 
+22.1.4 Barrier methods 
+Condoms 
+Diaphragms 
+22.1.5 Implantable contraceptives 
+Etonogestrel-releasing implant Single-rod etonogestrel-releasing implant: containing 
+68 mg of etonogestrel. 
+Levonorgestrel-releasing Two-rod levonorgestrel-releasing implant: each rod 
+implant containing 75 mg oflevonorgestrel (150 mg total). 
+32 
+===== PAGE 42 =====
+22.1.6 Intravaginal contraceptives 
+Ethinylestradiol + etonogestrel Vaginal ring: containing 2. 7 mg+ 11. 7 mg 
+Progesterone vaginal ring* Progesterone-releasing vaginal ring: containing 
+2.074 g ofmicronized progesterone. 
+*For use in women actively breastfeeding at least 
+4 times per day 
+22.2 Ovulation inducers 
+Complementary List 
+Anastrozole Tablet: 1 mg. 
+Bromocriptine Tablet: 2.5 mg; 5 mg. 
+Carbergoline Tablet: 0.5 mg. 
+Clomifene Tablet: 50 mg (citrate). 
+Letrozole Tablet: 2.5 mg. 
+22.3 Uterotonics 
+Carbetocin Injection (heat stable): 100 mcg/mL. 
+Ergometrine Injection: 200 mcg (hydrogen maleate) in 1-mL ampoule. 
+Mifepristone + Misoprostol Tablet (co-packaged): 200 mg+ 200 mcg. 
+Misoprostol Tablet: 200 mcg. 
+Oxytocin Injection: 10 units/ mL. 
+22.4 AntioI)'tocics (tocolytics) 
+Nifedipine Tablet: 20 mg. 
+Salbutamol Tablet: 2 mg. 
+Injection: 500 mcg/mL. 
+23. MEDICINES FOR MENTAL AND BEHAVIOURAL DISORDERS 
+23.1 Antidotes to anti.psychotic medicines 
+Benzhexol (trihexyphenidyl) Tablet: 2 mg; 5 mg. 
+Biperiden Injection: 5 mg (lactate)/mL in 1-mL ampoule. 
+Tablet: 2 mg. 
+Tetrabenazine Tablet: 25 mg; 50 mg. 
+23.2 Medicines for annety disorders 
+Bromazepam Tablet: 1.5 mg; 3 mg. 
+33 
+===== PAGE 43 =====
+Diazepam Tablet: 2 mg; 5 mg; 10 mg. 
+Injection: 10 mg/2mL. 
+Lorazepam Tablet: 1 mg; 2 mg. 
+Complementary list 
+Alprazolam Tablet: 0.25 mg; 0.5 mg; 1 mg; 2 mg 
+Amitriptyline Tablet: 25 mg. 
+23.3 Medicines used in mood disorders 
+23.3.1 Medicines used in depressive disorders 
+Amitriptyline Tablet: 25 mg; 50 mg; 100 mg. 
+Imipramine Tablet: 25 mg. 
+Complementary List 
+Fluoxetine Tablet: 20 mg (hydrochloride). 
+Paroxetine Tablet: 20 mg (hydrochloride). 
+23.3.2 Medicines used in bipolar disorders 
+Carbamazepine Tablet: 100 mg; 200 mg; 400 mg. 
+Valproic acid (sodium Syrup: 250 mg/5 mL. 
+valproate) Tablet: 200 mg; 500 mg. 
+23.4 Medicines used for obsessive compulsive disorders 
+Clomipramine Capsule: 10 mg; 25 mg. 
+23.5 Medicines used in psychotic disorders 
+Chlorpromazine Injection: 25 mg (hydrochloride )/mL in 2-mL ampoule. 
+Oral liquid: 25 mg (hydrochloride)/5 mL. 
+Tablet: 100 mg (hydrochloride). 
+Clozapine Tablet: 25 mg; 50 mg; 100 mg. 
+Fluphenazine Injection: 25 mg (decanoate) in 1-mL ampoule. 
+Haloperidol Injection: 5 mg ( decanoate) in 1-mL ampoule. 
+Oral liquid: 2 mg/mL. 
+Tablet: 0.5 mg; 2 mg; 5 mg. 
+Olanzapine Tablet: 5 mg; 10 mg. 
+Risperidone Tablet: 0.5 mg; 2 mg; 4 mg. 
+23.6 Medicines used in substance dependence (see restricted medicines list) 
+23.7 Drugs used inAlzheimerDs disease 
+34 
+===== PAGE 44 =====
+Donepezil Tablet: 5 mg. 
+24. MEDICINES FOR PAIN AND PALLIATIVE CARE 
+24.1 Opioid analgesics 
+Dihydrocodeine Injection: 50 mg/mL in 1-mL ampoule. 
+Tablet: 30 mg (tartrate). 
+Fentanyl Injection: 25 mcg (citrate)/mL; 50 mcg (citrate)/mL in 1-
+mL; 2-mL and 10-mL ampoules. 
+Injection (preservative-free): 50 mcg (citrate)/mL in 1-
+mL; 2-mL and 10-mL ampoules. 
+Patch: 12 mcg; 25 mcg; 75 mcg. 
+Morphine Injection: 10 mg; 15 mg (sulfate or hydrochloride) in 1-
+mLampoule. 
+Tablet (modified release): 10 mg; 30 mg; 60 mg. 
+Oral liquid: 10 mg/5 mL (morphine hydrochloride or 
+morphine sulfate). 
+Pentazocine Injection: 30 mg (lactate) in 1-mL ampoule. 
+Pethidine Injection: 50 mg (hydrochloride)/mL in 1-mL and 2-mL 
+ampoule. 
+Tramadol Capsule: 50 mg; 100 mg (hydrochloride). 
+Injection: 50 mg (hydrochloride )/mL in 1-mL and 2-mL 
+ampoule; 100 mg/2 mL in 2-mL ampoule. 
+24.2 Opioid antagonists /medicines for treatment of opioid dependence 
+24.2.1 Opioid antagonists 
+Naloxone Injection: 0.4 mg (hydrochloride) in 1-mL ampoule. 
+24.2.2 Medicines for treatment of opioid dependence (see restricted medicines list) 
+24.3 Non-opioid analgesics and antipyretics 
+Acetylsalicylic acid (aspirin) Capsule: 300 mg. 
+Tablet: 300 mg. 
+Methyl salicylate Ointment: 25%; 30% 
+Paracetamol Injection: 150 mg/mL. 
+Oral liquid: 125 mg/5 mL. 
+Suppository: 100 mg. 
+Tablet: 125 mg; 500 mg. 
+24.4 Medicines for other symptoms common in palliative care 
+Amitriptyline Tablet: 10 mg; 25 mg; 50 mg; 100 mg. 
+35 
+===== PAGE 45 =====
+Cyclizine Injection: 50 mg/mL. 
+Tablet: 25mg; 50 mg. 
+Dexamethasone Injection: 4 mg (disodium phosphate)/mL in 1-mL 
+ampoule. 
+Oral liquid: 2 mg/5 mL. 
+Tablet: 2 mg. 
+Diazepam Injection: 5 mg/mL. 
+Oral liquid: 2 mg/5 mL. 
+Suppository: 2.5 mg; 5 mg; 10 mg. 
+Tablet: 5 mg; 10 mg. 
+Docusate sodium Capsule: 100 mg. 
+Oral liquid: 50 mg/5 mL. 
+Fluoxetine Capsule: 20 mg. 
+Tablet: 20 mg. 
+Haloperidol Injection: 5 mg in 1-mL ampoule. 
+Oral liquid: 2 mg/mL. 
+Tablet: 0.5 mg; 2 mg; 5 mg. 
+Hyoscine hydrobromide Injection: 400 mcg/mL; 600 mcg/mL. 
+Transdermal patch: 1 mg. 
+Hyoscine N butylbromide Injection: 10 mg/mL. 
+Tablet: 10 mg; 20 mg. 
+Lactulose Oral liquid: 3.1to3.7 g/5 mL. 
+Loperamide Tablet: 2 mg. 
+Metoclopramide Injection: 5 mg (hydrochloride)/mL in 2-mL ampoule. 
+Oral liquid: 5 mg/5 mL. 
+Tablet: 10 mg. 
+Midazolam Injection: 1 mg/mL; 5 mg/mL. 
+Oral liquid: 2 mg/mL. 
+Ondanse1ron Injection: 2 mg/mL in 2-mL ampoule. 
+Oral liquid: 4 mg/5 mL. 
+Tablet: 4 mg base; 8 mg. 
+25. MEDICINES FOR PARKINSONISM AND OTHER NEUROLOGICAL 
+DISORDERS 
+25.1 Antiparkinsonism medicines 
+Benzhexol Tablet: 2 mg; 5 mg. 
+Biperiden Injection: 5 mg (lactate)/mL in 1-mL ampoule. 
+Tablet: 2 mg (lactate). 
+36 
+===== PAGE 46 =====
+Levodopa + Carbidopa Tablet: 100 mg + 10 mg; 250 mg+ 25 mg. 
+25.2 Medicines for myasthenia gravis 
+25.2.1 Diagnostic agent for myasthenia gravis (See Restricted Medicines List) 
+Edrophonium Injection: 10 mg/mL (chloride). 
+25.2.2 Treatment for myasthenia gravis 
+Neostigmine Tablet: 15 mg (bromide). 
+Pyridostigmine Tablet: 60 mg (bromide) 
+26. MEDICINES FOR RHEUMATIC AND MUSCULOSKELETAL DISEASES 
+26.1 Non-steroidal anti-inflammatory medicines 
+Celecoxib Capsules: 200 mg. 
+Diclofenac Gel: 1%. 
+Injection: 25 mg/mL in 3-mL ampoule. 
+Suppository: 25 mg; 50 mg 
+Tablet: 25 mg; 50 mg; 100 mg. 
+Ibuprofen Capsule: 200 mg; 400 mg. 
+Tablet: 200 mg; 400 mg. 
+Ketoprofen Gel: 25 mg/g (2.5%) 
+Modified release capsules: 200 mg. 
+Ketorolac Injection: 30 mg/mL. 
+Naproxen Tablet: 250 mg; 500mg. 
+26.2 Medicines for gout 
+Allopurinol Tablet: 100 mg; 300 mg. 
+Cole hi cine Tablet: 0.5 mg; 1 mg. 
+Febuxostat Tablet: 40 mg; 80 mg. 
+26.3 Medicines for rheumatic disorders 
+26.3.1 Biologicals (see restricted medicines list) 
+Adalimumab Injection: 40 mg/0.8 mL; 40 mg/0.4 mL. 
+Etanercept Injection: 25 mg/0.5 mL; 50 mg/mL (prefilled syringe). 
+Rituximab Injection: 100 mg/10 mL in 10-mL vial; 500 mg/50 mL in 
+50-mLvial. 
+Tocilizumab Injection: 20 mg/mL in 4-mL and 10-mL vials; 162 mg/ 
+0.9mL. 
+37 
+===== PAGE 47 =====
+26.3.2 Corticosteroids 
+Dexamethasone Injection: 4 mg (disodium)/mL in 1-mL ampoule. 
+Tablet: 0.5 mg; 1 mg; 2 mg; 4 mg. 
+Methylprednisolone Injection: 40 mg (sodium succinate)/mL in 1-mL and 2-
+mLvial. 
+Powder for injection: 125 mg; 500 mg (sodium 
+succinate). 
+Tablet: 2 mg; 4 mg. 
+Prednisolone Tablet: 5 mg. 
+26.4 Disease-modifying agents used in rheumatic disorders (DMARDs) 
+CoMplementary List 
+Cyclophosphamide Powder for injection: 500 mg; 1 g. 
+Tablet: 25 mg; 50 mg. 
+Hydrorychloroquine Tablet: 200 mg (sulfate). 
+Methotrexate Tablet: 2.5 mg (sodium). 
+Mycophenolate Mofetil Tablet: 250 mg; 500 mg. 
+Sulf asalazine Tablet: 500 mg. 
+27. MUSCLE RELAXANTS (PERIPHERALLY-ACTING) AND 
+CHOLINESTERASE INHIBITORS 
+Complementary List 
+Baclofen Tablet: 10 mg; 20 mg. 
+Methocarbamol Tablet: 500 mg; 750 mg. 
+Injection solution: 100 mg/ml. 
+Neostigmine Injection: 500 mcg in 1-mL ampoule; 2.5 mg 
+(metilsulfate) in 1- mL ampoule. 
+Tablet: I 5 mg (bromide). 
+Pyridostigmine Tablet: 60 mg (bromide). 
+Injection: 1 mg in 1-mL ampoule. 
+Tizanidine Capsule (Modified-release): 6 mg; 12 mg (hydrochloride). 
+Tablet: 2 mg; 4 mg (hydrochloride). 
+28. OPHTHALMOLOGICAL PREPARATIONS 
+28.1 Anti-infective agents 
+Aciclovir Ointment: 3%. 
+Azithromycin Eye drops: 1.5%. 
+38 
+===== PAGE 48 =====
+Chloramphenicol Eye ointment. 
+Erythromycin** Ointment: 0.5%. 
+••Infections due to Chlamydia trachomatis or 
+Neisseria gonorrhoeae. 
+Fluconazole Eye drops: 0.3% 
+Gentamicin Eye drops: 0.3% (sulfate). 
+Natamycin Eye drops: 5%. 
+Ofloxacin Eye drops: 0.3%. 
+Tetracycline Eye ointment: 1 %. 
+28.2 Anti-inflammatory agents and anti-allergic medicines (see restricted medicines 
+list) 
+Antazoline!Te1rahydrozoline Eye drops: 0.05/0.04%. 
+combination 
+Dexamethasone Eye drops: 0.3%. 
+Diclofenac Eye drops: 0.1% (sodium). 
+Ketotifen fumarate Eye drops: 0.025%. 
+Prednisolone Eye drops: 0.5% (sodium phosphate). 
+28.3 Local anaesthetics 
+Amethocaine Eye drops: 0.5%. 
+Tetracaine Eye drops: 0.5%. 
+28.4 Miotics and anti.glaucoma medicines (see restricted medicines list) 
+Acetazolamide Tablet: 250 mg. 
+Injection: 500 mg (sodium) in vial. 
+Latanoprost Eye drops: 50 mcg/mL. 
+Pilocarpine Eye drops: 1 %; 2%; 3%; 4%. 
+Timolol Eye drops: 0.25%; 0.5% (maleate). 
+28.5 Mydriatic medicines 
+Atropine Eye drops: 0.5%; 1 % (sulfate). 
+Homatropine Eye drops: 1%; 2% (hydrobromide). 
+Phenylephrine Eye drops: 0.25%; 0.5%; 2.5%; 10%. 
+Tropicamide Eye drops: 0.5%; 1 %. 
+Complementary List 
+39 
+===== PAGE 49 =====
+Epinephrine (Adrenaline) Eye drops: 2%. 
+28.6 Diagnostic eye medicines 
+Fluorescein sodium Eye drops: 1%; 2% (sodium). 
+Tropicamide + Phenylephrine Eye drops: 0.8% + 5%. 
+28. 7 Miscellaneous eye preparation 
+Methylcellulose Eye drops: 1 %; 2%. 
+29. PERITONEAL DIALYSIS SOLUTION 
+Complementary List 
+Intraperitoneal dialysis Parenteral solution. 
+solution (of appropriate 
+composition) 
+30. URINARY AND ERECTILE DYSFUNCTION MEDICINES (See Restricted 
+Medicines List) 
+31. VITAMINS AND MINERALS 
+Ascorbic acid (vitamin C) Injection: 100 mg. 
+Oral solution: 100 mg/5 mL. 
+Tablet: 50 mg; 100 mg. 
+Cholecalciferol ** Capsule: 400 units; 1,000 units. 
+Oral solution: 400 units/mL. 
+Tablet: 400 units; 1,000 units. 
+** Ergocalciferol can be used as an alternative. 
+Ergocalciferol Oral solution for dilution: 200 mcg/mL (equivalent of 
+8,000 units/mL). 
+Capsule: 1.25 mg (50,000 units/mL). 
+Tablet: 10 mcg (400 units); 50 mcg (2,000 units). 
+Iodine Capsule: 200 mg. 
+Iodized oil: 1 mL (480 mg iodine); 0.5 mL (240 mg 
+iodine) in ampoule (oral or injectable); 0.57 mL (308 mg 
+iodine) in dispenser. 
+Multiple Micronutrients Vitamin A: 800 mcg RAE; Vitamin C: 70 mg; Vitamin D: 
+Supplements (MMS) 5 mcg; Vitamin E: 10 mg; Vitamin B1: 1.4 mg; Vitamin 
+B2: 1.4 mg; Vitamin B3: 18 mg NE; Vitamin B6: 1.9 mg; 
+Folic Acid: 400 mcg; Vitamin B12: 2.6 mcg; Iron: 30 mg; 
+Iodine: 150 mcg; Zinc: 15 mg; Selenium: 65 mcg; 
+Copper: 2 mg. 
+Pyridoxine Tablet: 10 mg; 25 mg. 
+40 
+===== PAGE 50 =====
+Retinol Capsule: 100,000 units; 200,000 units (palmitate). 
+Oral oily solution: 100,000 units (palmitate)/mL 
+in multidose dispenser. 
+Tablet (sugar-coated): 10,000 units (palmitate). 
+Water-miscible injection: 100,000 units (palmitate) in 2-
+mLampoule. 
+Riboflavin Tablet: 25 mg; 50 mg. 
+Thiamine Capsule: 50 mg. 
+Injection: 100 mg/mL. 
+Tablet: 50 mg; 100 mg. 
+Vitamin B complex Injection. 
+Tablet. 
+Syrup. 
+Complementary List 
+Calcium gluconate Injection: 100 mglm.L in 10-m.L ampoule. 
+41 
+===== PAGE 51 =====
+THE PRIMARY HEALTH CARE LIST 
+(HEALTH CENTRES) 
+ANAESTHETICS (Local) 
+Lidocaine Injection: 1 %; 2% (hydrochloride) in vial. 
+Cream: 2%; 4%. 
+ANALGESICS 
+Acetylsalicylic acid•• Tablet: 75 mg; 300 mg. 
+**Not for children, use with caution in adults 
+Ibuprofen Capsule: 200 mg; 400 mg. 
+Tablet: 200 mg; 400 mg. 
+Paracetamol Injection: 150 mg/mL. 
+Oral liquid: 125 mg/5 mL. 
+Suppository: 100 mg. 
+Tablet: 125 mg; 500 mg. 
+ANTIALLERGICS 
+Chlorphenamine Injection: 10 mg (maleate) in 1-mL ampoule. 
+Oral liquid: 2 mg/5 mL. 
+42 
+===== PAGE 52 =====
+Epinephrine (adrenaline)+ Lidocaine Injection: 2% anhydrous lidocaine 
+hydrochloride with epinephrine (adrenaline) 1 : 
+80,000 in dental cartridge. 
+Promethazine Oral liquid: 5 mg/5 mL. 
+Tablet: 10 mg. 
+ANTICONVULSANTS 
+Diazepam•• Injection: 5 mg/mL 
+.. Use with caution. 
+Magnesium Sulfate Injection: 50% in 2-mL ampoule; 20% in 5- or 
+10-mL ampoule. 
+Phenobarbital•• Injection: 30 mg/mL; 60 mg/mL. 
+.. Use with caution. 
+Paraldehyde .. Injection: 5-mL; 10-mL ampoule 
+••Only to be used in a glass syringe. 
+ANTIDOTES 
+43 
+===== PAGE 53 =====
+Atropine Injection: 600 mcg in 1-mL ampoule; 1 mg in 
+1-mL ampoule; 2 mg in 0.7-mL ampoule. 
+Charcoal (activated) Capsule: 260 mg. 
+Powder/granules: 5 g. 
+ANTIHYPERTENSIVE MEDICINES 
+Alpha methyl-dopa Tablet: 250 mg; 500 mg 
+Amiloride Tablet: 5mg 
+Amlodipine Tablet: 5 mg; 10 mg (besylate ). 
+Amlodipine + Losartan Tablet: 5 mg+ 50 mg; 5 mg+ 100 mg; 10 mg+ 
+50mg. 
+Amiloride + Hydrochlorothiazide Tablet: 2.5 mg+ 25 mg. 
+Hydrochlorothiazide Tablet: 12.5 mg; 25 mg. 
+Losartan + Hydrochlorothiazide Tablet: 50 mg + 12.5 mg; 100 mg + 12.5 mg; 
+100 mg+ 25 mg. 
+44 
+===== PAGE 54 =====
+Nifedipine Tablet: 20 mg. 
+ANTI-INFECTIVE MEDICINES 
+Antibacterial medicines 
+Amoxicillin Capsule: 250 mg; 500 mg (trihydrate) 
+Dispersible tablets: 200 mg (trihydrate) + 28.5 
+mg (potassium salt); 250 mg (trihydrate) + 62.5 
+mg (potassium salt) 
+Powder for injection: 250 mg; 500 mg; 1 g 
+(sodium) in vial. 
+Benzathine benzylpenicillin Powder for injection: 900 mg benzylpenicillin 
+(= 1.2 million units)/2 mL; 1.44 g 
+benzylpenicillin (= 2.4 million units)/4 mL. 
+45 
+===== PAGE 55 =====
+Benzylpenicillin Powder for injection: 600 mg (= 1 million 
+units); 3 g (= 5 million units) (sodium or 
+potassium) in vial. 
+Sulfamethoxazole + Trimethoprim Oral liquid: 200 mg+ 40 mg/5 mL. 
+( co-trimoxazole) Tablet: 100 mg + 20 mg; 400 mg+ 80 mg; 800 
+mg+ 160mg. 
+Erythromycin Oral liquid: 125 mg/5 mL (stearate or 
+ethylsuccinate ). 
+Tablet: 250 mg; 500 mg (stearate or 
+ethylsuccinate ). 
+Gentamicin Injection: 40 mg (sulfate)/mL in 2-mL 
+ampoule; 80 mg in 2-mL ampoule. 
+Nitrofurantoin Tablet: 50 mg; 100 mg. 
+Phenoxymethylpenicillin Tablet: 250 mg (potassium). 
+Tetracycline Capsule: 250 mg; 500 mg. 
+Amoebicide 
+46 
+===== PAGE 56 =====
+Metronidazole Tablet: 200 mg; 400 mg. 
+Anthelminthics 
+Albendazole Oral liquid: 100 mg/5 mL. 
+Tablet: 200 mg; 400 mg. 
+Praziquantel Tablet: 600 mg. 
+Pyrantel pamoate Oral liquid: 50 mg/ mL 
+Tablet (chewable): 720.5 mg equivalent to 250 
+mg base. 
+Antifilarials 
+Diethylcarbamazine Tablet: 50 mg; 100 mg ( dihydrogen citrate). 
+Ivermectin Tablet: 3 mg. 
+Antimalarial medicines 
+Artemether + Lumefantrine Oral liquid: 20 mg + 120 mg in 5 mL 
+Tablet: 20 mg + 120 mg; 40 mg+ 240 mg; 80 
+mg+480mg. 
+47 
+===== PAGE 57 =====
+Artesunate Powder for injection: 60 mg/mL in vial plus 1-
+mL of 5% sodium bicarbonate as solvent. 
+Suppository (rectal dosage form): 50 mg; 100 
+mg;200mg. 
+Tablet: 50 mg. 
+Artesunate + Amodiaquine Tablet: 25 mg+ 67.5 mg; 50 mg+ 135 mg; 100 
+mg+270mg. 
+Dihydroartemisinin + Piperaquine Tablet: 20 mg+ 160 mg; 40 mg+ 320 mg. 
+phosphate 
+Pyrimethamine + Sulfadoxine** Oral liquid. 
+Tablet: 25 mg + 500 mg. 
+**Only as prophylaxis. 
+48 
+===== PAGE 58 =====
+Quinine** Injection: 300 mg/mL (dihydrochloride) in 2-
+mLampoule. 
+**Intramuscular, for pre-referral treatment only. 
+ANTISEPTIC AND DISINFECTANTS 
+Benzoin Compound tincture of Benwin. 
+Chlorhexidine Gel: 4% in 25 g tube. 
+Solution: 5% (gluconate) for dilution. 
+Iodine Weak solution of iodine: 1 %. 
+Methylated spirit Solution: 99%; 95%. 
+Sodium hypochlorite Solution: 1 % - 10%. 
+DERMATOLOGICAL MEDICINES 
+Benzoic acid + salicylic acid Ointment: 6% + 3%. 
+Benzoyl peroxide Cream: 5%. 
+Gel: 2.5%; 5%. 
+Lotion: 5%. 
+Benzyl benzoate Emulsion: 25%. 
+49 
+===== PAGE 59 =====
+Calamine Lotion: 8%; 15%. 
+Gentamicin Ointment: 0.1 %. 
+Neomycin+ Bacitracin+ Polymyxin Ointment: 3.5 mg+ 400 units+ 10,000 units in 
+1 g. 
+Powder: 3.5 mg+ 400 units+ 10,000 units in 1 
+g. 
+Nystatin Cream: 100,000 units. 
+Ointment: 100,000 units. 
+Zinc oxide Ointment: 20%. 
+MEDICINES AFFECTING THE BLOOD 
+Ferrous salt Oral liquid: Equivalent to 25 mg iron (sulfate)/ 
+mL. 
+Tablet: Equivalent to 60 mg iron. 
+Folic acid Tablet: 400 mcg••; 1 mg; 5 mg 
+**Periconceptual use for prevention of.first 
+occurrence of neural tube defects. 
+50 
+===== PAGE 60 =====
+DIAGNOSTIC AGENTS 
+Rapid diagnostic tests Various kits for malaria, pregnancy, HIV, blood 
+glucose etc. 
+Tuberculin PPD Injection. 
+DRESSINGS 
+Absorbent gauze 
+Cotton/crepe bandages 
+Cotton wool 
+Elastic plaster dressings 
+Disposable gloves 
+Disposable syringes 1 mL; 2 mL; 5 mL; 10 mL; 20 mL with needles 
+(18 G; 19 G; 21 G; 23 G). 
+Dusting powder 
+EYE DROPS 
+Chloramphenicol Eye drops: 0.5%. 
+Chlortetracycline Eye ointment: I%. 
+GASTROINTESTINAL MEDICINES 
+51 
+===== PAGE 61 =====
+Aluminium hydroxide+ Magnesium Oral liquid: 200 mg+ 200 mg in 5-mL. 
+hydroxide Tablet. 
+Hyoscine N-butylbromide** Tablet: 10 mg; 20 mg. 
+**For trained health personnel. 
+Hydrocortisone + Lidocaine Ointment: 2.75 mg (acetate) + 50 mg/ g (5%, 
+0.275%) 
+Magnesium trisilicate Oral liquid: 100 mL; 200 mL. 
+Tablet. 
+52 
+===== PAGE 62 =====
+Oral rehydration salt Powder for dilution in 200 mL; 500 mL; 1 L. 
+Glucose: 75mEq. 
+Sodium: 75 mEq or mmol/L. 
+Chloride: 65 mEq or mmol/L. 
+Potassium: 20 mEq or mmol/L. 
+Citrate: lOmmol/L. 
+Os.molarity: 245m0sm/L. 
+Glucose: 13.5 g/L. 
+Sodium chloride: 2.6 g/L. 
+Potassium chloride: 1.5 g/L. 
+Trisodium citrate dehydrate*: 2.9 g/L. 
+*May be replaced by sodium hydrogen 
+carbonate (sodium bicarbonate) 2.5 g/L. 
+Senna Tablet: 7.5 mg (sennosides) 
+53 
+===== PAGE 63 =====
+Zinc Effervescent tablet: Zinc sulfate 
+monohydratel25 mg 
+HORMONES AND SYNTHETIC SUBSTITUTES 
+Barrier methods 
+Condoms With or without spermicide. 
+Diaphragms 
+Oral contraceptives 
+Combined Oral Contraceptives Tablets. 
+Progesterone only pills Tablets. 
+IMMUNOLOGICALS 
+Anti-snake venom immunoglobulin Powder for injection: 10 mL; 20 mL 
+(polyvalent). 
+Anti-Tetanus serum Injection: 1,500 units; 10,000 units in vial. 
+BCGvaccine Lyophilized injection: 10 dose vial; 20 dose 
+vial + 1-mL ampoule of sodium chloride diluent. 
+54 
+===== PAGE 64 =====
+Cholera vaccine Oral liquid: 1-dose vial. 
+DPT+ HEPB + Hib (Pentavalent Liquid Injection: 10-dose vial. 
+vaccine) 
+Haemophilus influenzae Type b Liquid Injection: 10-dose vial. 
+vaccine 
+HPVvaccine Liquid Injection: 10-dose vial. 
+Measles vaccine Lyophilized injection: 10 dose vial. 
+Meningococcal meningitis vaccine Lyophilized injection: 10-dose vial. 
+Pneumococcal conjugate vaccine Liquid injection: 2-dose vial; 4-dose vial. 
+OXYTOCICS 
+Ergometrine Tablet. 
+Misoprostol Tablet: 200 mcg. 
+Pessary: 25 mcg. 
+Oxytocin Injection: 10 units in 1-mL. 
+PSYCHOTHERAPEUTIC MEDICINES 
+55 
+===== PAGE 65 =====
+Chlorpromazine Injection: 25 mg (hydrochloride )/mL in 2-mL 
+ampoules. 
+RESPIRATORY MEDICINES 
+Beclomethasone Inhaler: 100 mcg per dose; 200 mcg per dose. 
+Salbutamol Injection: 50 mcg (sulfate)/mL in 5-mL 
+ampoule. 
+Respirator Solution for use in nebulizer: 5 mg 
+(sulfate)/mL. 
+Tablet: 2 mg. 
+VITAMINS AND MINERALS 
+Ascorbic acid (Vitamin C) Tablet: 50 mg; 100 mg. 
+Calcium gluconate Injection: 100 mg/mL in 10-mL ampoule 
+Calcium lactate Tablets: 300 mg. 
+Folic acid Tablet: 5 mg. 
+Vitamin A Capsule: 100,000 IU; 200,000 IU (as palmitate). 
+Micro nutrients 
+56 
+===== PAGE 66 =====
+Multiple Micronutrients Supplements Vitamin A: 800 mcg RAE; Vitamin C: 70 mg; 
+(MMS) Vitamin D: 5 mcg; Vitamin E: 10 mg; Vitamin 
+B1: 1.4 mg; Vitamin B2: 1.4 mg; Vitamin B3: 18 
+mg NE; Vitamin B6: 1.9 mg; Folic Acid: 
+400 mcg; Vitamin B12: 2.6 mcg; Iron: 30 mg; 
+Iodine: 150 mcg; Zinc: 15 mg; Selenium: 
+65 mcg; Copper: 2 mg. 
+MISCELLANEOUS 
+Water for injection Injection: 2-mL; 5-mL; 10-mL ampoules. 
+Spatulas 
+57 
+===== PAGE 67 =====
+THE PRIMARY HEALTH CARE LIST 
+(PRIMARY HEALTH CARE CLINIC) 
+ANAESTHETICS (Local) 
+Lidocaine Injection: 1%; 2% (hydrochloride) in vial. 
+Cream: 2%; 4%. 
+ANALGESICS 
+Acetylsalicylic Acid (aspirin)** Tablet: 75 mg; 300 mg. 
+**Not for children, use with caution in adults 
+Ibuprofen Capsule: 200 mg; 400 mg. 
+Tablet: 200 mg; 400 mg. 
+Paracetamol Oral liquid: 125 mg/5 mL. 
+Suppository (for rectal use): 100 mg. 
+Tablet: 125 mg; 500 mg. 
+ANTIALLERGICS 
+Chlorpheniramine (Chlorphenamine) Oral liquid: 2 mg/5 mL. 
+Tablet: 4 mg. 
+Epinephrine (Adrenaline}+ Lidocaine Injection: 2% anhydrous lidocaine 
+hydrochloride with epinephrine (adrenaline) 
+1 : 80,000 in dental cartridge. 
+Promethazine Oral liquid: 5 mg/5 mL. 
+Tablet: 10 mg. 
+ANTICONVULSANTS 
+Diazepam** Injection: 5 mg/mL. 
+••Use with caution. 
+Phenobarbital•• Injection: 30 mg/mL; 60 mg/mL. 
+••Use with caution. 
+Paraldehyde** Injection: 5-mL; 10-mL ampoule 
+**Only to be used in a glass syringe. 
+58 
+===== PAGE 68 =====
+ANTIDOTES 
+Atropine Injection: 600 mcg in 1-mL ampoule; 1 mg in 
+1-mL ampoule; 2 mg in 0.7-mL ampoule. 
+Charcoal (activated) Capsule: 260 mg. 
+Powder/granules: 5 g. 
+ANTIHYPERTENSIVE MEDICINES 
+Amiloride Tablet: 5 mg. 
+Amlodipine Tablet: 5 mg; 10 mg (besylate ). 
+Hydrochlorothiazide Tablet: 12.5 mg; 25 mg. 
+Nifedipine Tablet: 20 mg. 
+ANTI-INFECTIVE MEDICINES 
+Antibacterial medicines 
+Amoxicillin Capsule: 250 mg; 500 mg (trihydrate). 
+Dispersible tablets: 125 mg; 250 mg. 
+Powder for reconstitution: 125 mg/5 mL. 
+Powder for injection: 250 mg; 500 mg; 1 g 
+(sodium) in vial. 
+Sulfamethoxazole + Trimethoprim (co- Oral liquid: 200 mg + 40 mg/5 mL. 
+trimoxarole) Tablet: 100 mg + 20 mg; 400 mg+ 80 mg; 
+800 mg+ 160 mg. 
+Amoebicide 
+Metronidazole Tablet: 200 mg; 400 mg. 
+Anthelmintbics 
+Mebendazole Oral suspension: 20 mg/mL in 5mL bottle. 
+Tablet (chewable): lOOmg. 
+59 
+===== PAGE 69 =====
+Antimalarial medicines 
+Artesunate Powder for injection: 60 mg/mL in vial plus 
+1- mL of 5% sodium bicarbonate as solvent. 
+Suppository (rectal): 50 mg; 100 mg; 200 
+mg. 
+Tablet: 50 mg. 
+Artesunate + Amodiaquine Tablet: 25 mg+ 67.5 mg; 50 mg+ 135 mg; 
+100 mg+ 270 mg. 
+Artemether + Lumefantrine Tablet: 20 mg + 120 mg; 80 mg + 480 mg. 
+Dihydroartemisinin + Piperaquine Tablet: 20 mg + 160 mg; 40 mg+ 320 mg. 
+phosphate 
+Sulphadoxine + Pyrimethamine** Oral liquid: 
+Tablet: 500 mg + 25 mg. 
+**Only as prophylaxis. 
+ANTISEPTIC AND DISINFECTANTS 
+Benzoin Compound tincture. 
+Chlorhexidine Gel: 4% in 25 g tube. 
+Solution: 5% (gluconate) for dilution. 
+Iodine Weak solution of iodine: 1 %. 
+Methylated spirit Solution: 99%; 95%. 
+Sodium hypochlorite Solution: 1 - 10%. 
+DERMATOLOGICAL MEDICINES 
+Benzoic acid + Salicylic acid Ointment: 6% + 3%. 
+Benzoyl peroxide Cream: 5%. 
+Gel: 2.5%; 5%; 10%. 
+Lotion: 5%. 
+Benzyl benzoate Emulsion: 25%. 
+Calamine Lotion: 8%; 15%. 
+Calamine + Zinc oxide Lotion: 8% + 8%. 
+Gentamicin Ointment. 
+Monosulfiram Soap. 
+60 
+===== PAGE 70 =====
+Neomycin+ Bacitracin + Polymyxin Ointment: 3.5 mg+ 400 units+ 10,000 units 
+in 1 g. 
+Zinc oxide Ointment: 20%. 
+MEDICINES AFFECTING THE BLOOD 
+Ferrous salts Oral liquid: Equivalent to 25 mg iron 
+(sulfate)/mL. 
+Tablet: Equivalent to 60 mg iron. 
+Folic acid Tablet: 400 m.cg••; 1 mg; 5 mg. 
+**Periconceptual use for prevention of neural 
+tube defects. 
+DIAGNOSTIC AGENTS 
+Rapid diagnostic tests Various kits for malaria, pregnancy, HIV, blood 
+glucose etc. 
+DRESSINGS 
+Absorbent gauze 
+Cotton/crepe bandages 
+Cotton wool 
+Disposable gloves 
+Disposable syringes 1 mL; 2 mL; 5 mL; 10 mL; 20 mL with 
+needles (18 G; 19 G; 21 G; 23 G). 
+EYE DROPS 
+Chloramphenicol Eye drops: 0.5%. 
+GASTROINTESTINAL MEDICINES 
+Aluminium hydroxide +Magnesium Oral liquid: 200 mg + 200 mg in 5-mL. 
+hydroxide Tablet. 
+Hyoscine N-butylbromide** Tablet: 10 mg; 20 mg. 
+••For trained health personnel. 
+Magnesium trisilicate Oral liquid: 100 mL; 200 mL. 
+Tablet. 
+Oral rehydration salts Low osmolarity oral rehydration saltst co-
+packed with zinc sulfate tablet: 20.5 g ORS 
+(sodium chloride: 2.6 g; potassium chloride: 
+1.5 g; sodium citrate: 2.9 g: glucose: 13.5 g) + 
+20 mg dispersible zinc sulfate. 
+61 
+===== PAGE 71 =====
+Senna Tablet: 7.5 mg (sennosides). 
+Zinc Effervescent tablet: Zinc sulfate 
+monohydrate125 mg. 
+HORMONES AND SYNTHETIC SUBSTITUTES 
+Barrier methods 
+Condoms With or without spermicides. 
+Diaphragms 
+Oral contraceptives 
+Combined Oral Contraceptives Tablets. 
+Progesterone only pills Tablets. 
+IMMUNOLOGICALS 
+Anti-Tetanus serum Injection: 1,500 units; 10,000 units in vial. 
+Tetanus toxoid Injection: ampoules and multidose vials. 
+Anti-snake venom Powder for injection: 10 mL; 20 mL 
+(polyvalent). 
+OXYTOCICS 
+Ergometrine Injection: 200 mcg (hydrogen maleate) in 1-
+mLampoule. 
+Tablet: 250 mcg. 
+Misoprostol Tablet: 200 mcg. 
+Pessary: 25 mcg. 
+Oxytocin Injection: 10 units in 1- mL. 
+RESPIRATORY MEDICINES 
+Beclomethasone Inhaler: 100 mcg per dose; 200 mcg per dose. 
+Salbutamol Injection: 50 mcg (sulfate)/mL in 5-mL 
+ampoule. 
+Metered dose inhaler: 100 mcg (sulfate) per 
+dose. 
+Tablet: 2 mg. 
+VITAMINS AND MINERALS 
+Ascorbic acid (Vitamin C) Tablet: 50 mg; 100 mg. 
+Calcium salts (lactate) Tablets: 300 mg. 
+62 
+===== PAGE 72 =====
+Folic acid Tablet: 400 mcg**; 1 mg; 5 mg 
+**Periconceptual use for prevention of first 
+occurrence of neural tube defects. 
+Multiple Micronutrients Supplements Vitamin A: 800 mcg RAE; Vitamin C: 70 mg; 
+(MMS) Vitamin D: 5 mcg; Vitamin E: 10 mg; Vitamin 
+Bi: 1.4 mg; Vitamin B2: 1.4 mg; Vitamin B3: 
+18 mg NE; Vitamin B6: 1.9 mg; Folic Acid: 
+400 mcg; Vitamin B12: 2.6 mcg; Iron: 30 mg; 
+Iodine: 150 mcg; Zinc: 15 mg; Selenium: 
+65 mcg; Copper: 2 mg. 
+Vitamin A Capsule: 100,000 IU; 200,000 IU (as 
+palmitate). 
+Vitamin B complex Injection. 
+Tablet. 
+Syrup. 
+MISCELLANEOUS 
+Water for injection Injection: 2 mL; 5 mL; 10 mL ampoules. 
+63 
+===== PAGE 73 =====
+THE PRIMARY HEALTH CARE LIST 
+(HEALTH POSTS) 
+Absorbent gauze Dressing. 
+Amoxicillin Dispersible tablets: 250 mg (as trihydrate). 
+Artemether + Lumefantrine Tablet: 20 mg + 120 mg; 80 mg+ 480 mg. 
+Artesunate + Amodiaquine Tablet: 25 mg+ 67.5 mg; 50 mg+ 135 mg; 100 
+mg+270mg. 
+Benzyl benzoate Emulsion: 25%. 
+Calamine lotion Lotion: 8%; 15%. 
+Chlorhexidine Gel: 4% in 25 g tube. 
+Solution: 5% (gluconate) for dilution. 
+Condoms Barrier methods. 
+Cotton wool /crepe bandages Dressing. 
+Ferrous salts Oral liquid: Equivalent to 25 mg iron (sulfate)/ 
+mL. 
+Tablet: Equivalent to 60 mg iron. 
+Folic acid Tablet: 400 mcg**; 1 mg; 5 mg 
+**Periconceptual use for prevention of.first 
+occurrence of neural tube defects. 
+Lancet 
+Methyl salicylate Ointment: 25%; 30%. 
+Methylated spirit Solution: 99%; 95%. 
+Multiple Micronutrients Supplements Vitamin A: 800 mcg RAE; Vitamin C: 70 mg; 
+(MMS) Vitamin D: 5 mcg; Vitamin E: 10 mg; Vitamin 
+B1: 1.4 mg; Vitamin B2: 1.4 mg; Vitamin B3: 18 
+mg NE; Vitamin B6: 1.9 mg; Folic Acid: 
+400 mcg; Vitamin B12: 2.6 mcg; Iron: 30 mg; 
+Iodine: 150 mcg; Zinc: 15 mg; Selenium: 
+65 mcg; Copper: 2 mg. 
+64 
+===== PAGE 74 =====
+Oral rehydration salts Low osmolarity oral rehydration salts, co-
+packed with zinc sulfate tablet: 20.5 g ORS 
+(sodium chloride: 2.6 g; potassium chloride: 1.5 
+g; sodium citrate: 2.9 g; glucose: 13.5 g) + 20 
+mg dispersible zinc sulfate. 
+Paracetamol Oral liquid: 125 mg/5 mL. 
+Tablet: 500 mg. 
+Plastic aprons 
+Povidone iodine Solution: 30 mL; 60 mL. 
+Rapid Diagnostic Test Various kits for malaria, pregnancy, HIY, blood 
+glucose etc. 
+Salicylic acid + Benzoic acid Ointment: 3% + 6%. 
+(Whitfield's) 
+Surgical Blades 
+Zinc Effervescent tablet: Zinc sulfate 
+monohydratel25 mg. 
+Zinc oxide plaster Dressing. 
+65 
+===== PAGE 75 =====
+LIST OF PRODUCTS TO BE STOCKED AND SOLD BY PATENT AND 
+PROPRIETARY MEDICINE VENDORS 
+ANALGESICS AND ANTIPYRETICS 
+Acetylsalicylic acid (aspirin) Tablet: 300 mg. 
+Ibuprofen Capsule: 200 mg; 400 mg. 
+Tablet: 200 mg; 400 mg. 
+Paracetamol Oral liquid: 125 mg/5 mL. 
+Tablets: 125 mg; 500 mg. 
+ANTACID MEDICINES 
+Aluminium hydroxide+ Magnesium Oral liquid: 100 mL + 200 m.L. 
+hydroxide Tablet. 
+Magnesium trisilicate Oral liquid: 100 m.L; 200 m.L. 
+Tablet. 
+ANTI-ALLERGICS 
+Chlorpheniramine (Chlorphenamine) Oral liquid: 2 mg/5 m.L. 
+Tablet: 4 mg. 
+ANTI-ANAEMIA 
+Ferric ammonium citrate Oral liquid: 400 mg/5 mL. 
+Ferrous salts Capsule: 200 mg (sulfate); 300 mg (gluconate). 
+Tablet: 200 mg (sulfate); 300 mg (gluconate). 
+Folic acid Oral liquid: 5mg/5 mL. 
+Tablet: 5 mg. 
+ANTI-EMETIC 
+Promethazine Oral liquid: 5 mg/5 mL (hydrochloride). 
+Tablet: 10 mg; 25 mg (hydrochloride); 25 mg 
+(theoclate). 
+ANTI-INFECTIVE 
+Amoxicillin** Capsules: 250 mg; 500 mg. 
+Dispersible tablets: 125 mg; 250 mg. 
+Dry powder for suspension: 125 mg; 250 mg. 
+•• For use by appropriately trained health 
+personnel. 
+66 
+===== PAGE 76 =====
+Sulfamethoxazole + Trimethoprim Oral liquid: 200 mg+ 40 mg/5 mL. 
+(Co-1rimoxazole) Tablet: 400 mg + 80 mg. 
+Metronidazole Oral liquid: 200 mg/5 mL. 
+Tablet: 200 mg; 400 mg. 
+ANTIFUNGAL 
+Fluconazole Capsule: 50 mg; 150 mg. 
+ANTIHELMINTIDCS 
+Albendazole Oral liquid: 400 mg/20 mL. 
+Tablet: 200 mg; 400 mg. 
+Levamisole Oral liquid: 40 mg/5 mL. 
+Tablet: 40 mg. 
+Mebendazole Oral liquid: 100 mg/5 mL. 
+Tablet: 100 mg. 
+Pyrantel pamoate Suspension: 125.5/5 mL. 
+Tablets: 125 mg. 
+ANTIMALARIALS 
+Artesunate Powder for injection: 60 mg/mL in vial plus 1-
+mL of 5% sodium bicarbonate as solvent. 
+Rectal dosage form: 50 mg; 100 mg; 200 mg. 
+Tablet: 50 mg. 
+Artesunate + Amodiaquine Oral liquid: 15 mg + 90 mg (powder) in 5-mL. 
+Tablet: 25 mg+ 67.5 mg; 50 mg+ 135 mg; 100 
+mg+270mg. 
+Artemether + Lumefantrine Tablet: 20 mg + 120 mg; 80 mg+ 480 mg. 
+Sulfadoxine + Pyrimethamine** Syrup: 500 mg+ 25 mg in 5-mL. 
+Tablet: 500 mg + 25 mg. 
+* * Only as prophylaxis 
+ANTI-DIARRHOEAL MEDICINES 
+Oral rehydration salts + Zinc Low osmolarity oral rehydration salts, co-
+packed with zinc sulfate tablet: 20.5 g ORS 
+(sodium chloride 2.6 g, potassium chloride 1.5 g, 
+sodium citrate 2.9 g, glucose 13.5 g) + 20 mg 
+dispersible zinc sulfate. 
+ANTISEPTIC AND DISINFECTANT SOLUTIONS 
+67 
+===== PAGE 77 =====
+Benzoin Compound tincture. 
+Cetrimide + Chlorhexidine Solution: 15% + 1.5%. 
+Chlorhexidine gluconate Solution: 5% for dilution. 
+Chorhexidine Gel: 4% in 25 g (umbilical cord care). 
+Chloroxylenol Solution: 5% (for dilution). 
+Dichloroxylenol + Chlorophenol Soap. 
+Solution. 
+Methylated spirit Solution: 99%; 95% 
+Povidone iodine Solution: 30 mL; 60 mL. 
+Sodium hypochlorite 10% in 250 mL; 500 mL. 
+COLD RELIEF 
+Chlorphenamine maleate Tablet: 4 mg. 
+Oral liquid (syrup/expectorant): 2 mg/5 m.L. 
+Diphenhydramine preparations Oral liquid (expectorant): 2 mg/5 mL. 
+CONTRACEPTIVES 
+Condoms Male; Female. 
+Cycle beads 
+Depot medroxyprogesterone acetate Injection (subcutanous): 104 mg/0.65 mL. 
+(DMPA)** **For appropriately trained persons. 
+Foaming tablets 
+Levonorgestrel Tablet: 0.75 mg (emergency contraceptive). 
+Medroxyprogesterone** Injection (depot subcutaneous): 104 mg/0.65 
+mL in 1-mL ampoule. 
+**For appropriately trained persons 
+DERMATOLOGICALS 
+Anti-infective Medicines 
+Gentian violet Tincture: 1 %. 
+Silver sulphadiazine Cream: 1%. 
+Antipruritic and astringent Medicines 
+Calamine lotion Lotion: 8%; 15%. 
+68 
+===== PAGE 78 =====
+Calamine+ Zinc oxide Lotion: 40 mg/ 30 mg (4o/o/ 3%). 
+Fungicides 
+Benzoic acid + Salicylic acid Ointment: 6% + 3%. 
+(Whitfield's) 
+Clotrimazole Cream: 1%. 
+Powder: 1%. 
+Selenium sulphide Shampoo: 2.5%. 
+DRESSINGS, CONSUMABLES AND MISCELLANEOUS 
+Absorbent gauze 
+Cotton/crepe bandages 
+Cotton wool 
+Dusting powder Zinc, starch and talc dusting powder with or 
+without menthol. 
+Disposable syringes and needles 2 mL; 5 mL; 10 mL; 20 mL. 
+Elastic plaster dressings 
+Long lasting insecticide treated net 
+Rapid diagnostic test kits for malaria 
+(RDTM) 
+Spatula 
+Urine pregnancy test strips 
+Water for injection 
+EYE DROPS 
+Chloramphenicol Eye drops: 0.5%. 
+Eye ointment: 1 %. 
+Gentamicin Eye drops: 0.3% (sulfate). 
+Eye ointment: 0.3% (sulfate). 
+GASTROINTESTINAL MEDICINES 
+Hyoscine N-butylbromide** Tablet: 10 mg; 20 mg. 
+"'* For trained health personnel. 
+GASTRIC ACID SUPPRESSANT 
+69 
+===== PAGE 79 =====
+Omeprazole Injection (powder)**: 40 mg (sodium) vial. 
+Tablet: 10 mg; 20 mg. 
+**For trained health personnel 
+Rani ti dine Injection**: 25 mg/mL in 2-mL ampoule. 
+Tablet: 150 mg; 300 mg (hydrochloride). 
+**For trained health personnel 
+Keratolytic and keratoplastic medicines 
+Coal tar Solution: 5%. 
+Salicylic acid Ointment: 2.5% 
+Solution: 30 mL; 60 mL. 
+Scabicides and pediculicides 
+Benzyl benzoate Emulsion: 25%. 
+Monosulfiram. Soap: 25%. 
+Solution: 25%. 
+IMMUNOLOGICALS 
+Tetanus vaccine** Injection. 
+**Store in refrigerator. 
+MOUTHWASH 
+Hexetidine solution 0.1%. 
+NON-SPECIFIC (GENERAL) ANTIDOTES 
+Charcoal (activated) Capsule: 260 mg. 
+Powder/granules: 5 g. 
+Tablet: 1 g. 
+PURGATIVE MEDICINES 
+Bisacodyl Suppository: 5 mg; 10 mg. 
+Tablet: 5 mg. 
+Liquid paraffin Oral liquid 
+Magnesium hydroxide Oral liquid: 8% hydrated magnesium oxide. 
+Magnesium sulfate Granules: 5 g. 
+Oral liquid: 4 g /10 mL. 
+Senna Oral liquid: 7.5 mg/5 mL. 
+Tablet: 7.5 mg (sennosides) 
+RESPIRATORY MEDICINES 
+70 
+===== PAGE 80 =====
+Salbutamol Inhalation (aerosol): 100 mcg (sulfate) per 
+dose. 
+Menthol Inhalation (crystals). 
+RUBEFACIENTS AND INHALERS 
+Methyl salicylate compound Balm; cream; embrocation; liniment; rubs; 
+preparations ointment; oil and inhaler. 
+THROAT ANTISEPTIC PREPARATIONS 
+Dequalinium hydrochloride Lozenge: 250 mg. 
+Domiphen bromide Lozenge: 1.5 mg. 
+Hexetidine Mouthwash/gargle: 0.1 %. 
+Menthol+ Ascorbic acid+ Hydrous Lozenge: 0.09% + 2.9412% + 0.8332%. 
+citric acid 
+Menthol+ Eucalyptus oil + Camphor+ Lozenge: 49 mg+ 0.069% + 0.0007% + 16.8 
+Thymol mg. 
+VITAMINS, MINERALS AND NUTRITIONALS 
+Ascorbic acid (Vitamin C) Oral liquid: 100 mg/5 mL. 
+Tablet: 100 mg. 
+Calcium salts Tablet: 600 mg (gluconate). 
+Tablet: 300 mg (lactate). 
+Cod liver oil Capsule. 
+Oral liquid. 
+Folic acid Tablet: 5 mg. 
+Glucose Tablet (chewable). 
+Powder for oral use. 
+Multi vitamins Capsule. 
+Drop. 
+Oral liquid. 
+Tablet. 
+Multiple Micronutrients Supplements Vitamin A: 800 mcg RAE; Vitamin C: 70 mg; 
+(MMS) Vitamin D: 5 mcg; Vitamin E: 10 mg; Vitamin 
+B1: 1.4 mg; Vitamin B2: 1.4 mg; Vitamin B3: 18 
+mg NE; Vitamin B6: 1.9 mg; Folic Acid: 
+400 mcg; Vitamin B12: 2.6 mcg; Iron: 30 mg; 
+Iodine: 150 mcg; Zinc: 15 mg; Selenium: 
+65 mcg; Copper: 2 mg. 
+71 
+===== PAGE 81 =====
+I v..,,,;,, B oomp1ex 
+1
+0ral ...... 
+Tablet. 
+72 
+===== PAGE 82 =====
+APPENDIX 1: APPROVED DOSES FOR VITAMINS 
+Vitamin Age group/Physiological Daily dosage 
+state 
+Biotin Adults 100 to 300 mg. 
+Folic acid Children 40 to 200 mcg. 
+Adults 200 to 5000 mcg. 
+Nicotinamide Adults 15 to 30 mg (prophylaxis). 
+Deficiency 50 to 250 mg (therapeutic). 
+Pantothenic acid Children 0.5 to 3.5 mg. 
+Adults 1to7mg. 
+Vitamin A Children 1,500 to 5,000 units. 
+Adults 5,000 to 10,000 units. 
+Pregnancy 5,000 to 6,000 units. 
+Lactation 5,000 to 10,000 units. 
+Deficiency 25,000 to 50,000 units. 
+73 
+===== PAGE 83 =====
+Vitamin B1 (thiamine) Children 0.3to1 mg. 
+Adults I to 1.3 mg. 
+Defickncy: 
+Children 5 to 50mg. 
+Adults 200 to 300 mg. 
+Vitamin B2 (riboflavin) Children 1to1.8 mg. 
+Adults 0.3to1 mg. 
+Defickncy: 
+Adults 5 to30mg. 
+Vitamin B6 (pyridoxine Children 0.3 to 0.6 mg. 
+hydrochloride) Adults 1 to2mg. 
+Defickncy: 
+Children 20to 50mg. 
+Adults 50 to400mg. 
+Vitamin B12 Children 0.3 to 2mcg. 
+( cyanocobalamin) Adults 2 to3 mcg. 
+Defickncy: 
+Adults 50 to 1,000 mcg. 
+Vitamin C (ascorbic acid) Children 50 to200mg. 
+Adults 250 to 1,000 mg. 
+74 
+===== PAGE 84 =====
+VitaminD Children 2.5 to 5 mcg. 
+( cholecalciferol) Adults 25 to 50mcg. 
+VitaminE Children 3to15 mg. 
+Adults 50 to200mg. 
+Deficiency: 
+Children 1,000 - 2,000 mg. 
+*Formulations containing various specified amounts of vitamins are accepted provided the 
+formulations satisfy the vitamin requirements of the age and the physiological state of the 
+intended user. 
+75 
+===== PAGE 85 =====
+APPENDIX 2: RESTRICTED MEDICINES LIST 
+1. ANAESTHETICS, PREOPERATIVE MEDICINES AND MEDICAL GASES 
+1.2 Local anaesthetics 
+Prilocaine Injection: 3% with felypressin O.o3 units/mL. 
+2. ANTIALLERGICS AND MEDICINES USED IN ANAPHYLAXIS 
+2.2 Antihistamines 
+Cionarizine Tablet: 15 mg. 
+S. ANTI-INFECTIVE MEDICINES 
+5.1 Amoebicide and antigiardiasis medicines 
+Diloxanide Tablet: 500 mg (furoate). 
+5.2.1 Antifilarials 
+Diethylcarbarmazine Tablet: 50 mg (citrate). 
+S.2.2 Antischistosomal and other anti.trematode medicines 
+Eflomithine Injection: 200 mg/mL (hydrochloride) in 100-mL bottle. 
+Nifortimox Tablet: 30 mg; 120 mg; 250 mg. 
+76 
+===== PAGE 86 =====
+5.4 Antifungal medicines (systemic) 
+Terbinafine Tablet: 250 mg (hydrochloride). 
+5.7 Antimalarial medicines 
+5.7.2 Prophylaxis 
+Atovaquone + Proguanil Tablet: 250 mg atovaquone + 100 mg proguanil 
+(hydrochloride) 
+Mefloquine Tablet: 250 mg. 
+5.10 Second line Anti-tuberculosis medicines 
+Amikacin (Am) Tablets: 1 g. 
+Bedaquiline (Bdq) Tablets: 20 mg; 100 mg. 
+Capreomycin (Cm) Tablets: 1 g. 
+Clofazimine (Cfz) Tablets: 50 mg; 100 mg. 
+Cycloserine {Cs) Capsule: 250 mg. 
+Delamanid (Dim) Tablets: 50 mg. 
+Kanamycin (Km) Tablets: 1 g. 
+77 
+===== PAGE 87 =====
+Levofloxacin (Lflc.) Tablets: 100 mg; 250 mg; 500 mg 
+Linez.olid (Lzd) Tablets: 150 mg; 600 mg. 
+Moxifloxacin (Mflc.) Tablets: 100 mg; 400 mg. 
+Prothionamide (Pto) Tablets: 250 mg. 
+Pyridoxine (Pyr) Tablets: 50 mg. 
+Pretomenid (Pa) Tablets: 200 mg. 
+12. DERMATOLOGICAL MEDICINES 
+12.1 Antiacne 
+Isotretinoin Capsules: 20 mg. 
+12.4 Anti-inflammatory and antipruritic Medicines 
+Clobetasol Cream: 0.05% (propionate). 
+Ointment: 0.05% (propionate). 
+Doxepin Capsule: 10 mg; 25 mg; 50 mg; 75 mg. 
+Flucinolone Cream: 0.25% (acetonide). 
+Ointment: 0.25% (acetonide). 
+78 
+===== PAGE 88 =====
+K.etotifen Tablet: 1 mg. 
+12.6Hair 
+12.6.1 Alopecia 
+Minoxidil Solution: 1 %; 5%. 
+12. 7 Psoriasis and vitiligo medicines 
+8-Methylpsoralen Capsule: 10 mg. 
+Lotion: 10 mg/mL. 
+Tacrolimus Topical ointment: 0.1 %; 0.3%. 
+Tazarotene Cream: 0.05%; 0.1%. 
+Gel: 0.05%; 0.1%. 
+12.8 Scabicides and pediculicides 
+Crotamiton Cream: 10%. 
+15. GASTROINTESTINAL MEDICINES 
+15.1 Anti-emetic medicines 
+Cyclizine Tablet: 25 mg. 
+15.6 Diagnostic agents for gastric function 
+Histamine phosphate Injection: 1 mg/mL ampoule. 
+79 
+===== PAGE 89 =====
+Pentagastrin Injection: 0.25 mg/mL ampoule. 
+Tetracosactide Injection: 1 mg/mL (acetate). 
+16. HORMONES AND OTHER ENDOCRINE MEDICINES 
+16.2 Androgens 
+Mesterolone Tablet: 25 mg. 
+16.3 Antidiuretic hormones 
+Vasopressin Injection: 20 units/mL in 1-mL ampoule. 
+16.4 Diagnostic agents for endocrine disorders 
+Luteinizing hormone-releasing Injection: 0.1 mg/mL in 1-mL ampoule. 
+hormone (LH-RH) 
+Metyrapone Capsule: 250 mg. 
+Tablet: 250 mg. 
+Thyrotropin releasing hormone Injection: 0.2 mg/mL in 5-mL vial. 
+(TRH) 
+80 
+===== PAGE 90 =====
+Triamcinolone Injection: 10 mg/mL (acetonide); 40 mg/mL. 
+16.5 Oestrogens 
+Diethylstilbestrol Tablet: 0.5 mg; 1 mg; 5 mg; 25 mg. 
+16.8 Medicines acting on pituitary-ovarian axis 
+Chorionic gonadotropin Injection powder: 500 units; 1,000 units ampoule. 
+Danazol Capsules: 100 mg; 200 mg. 
+Epimestrol Tablet: 5 mg. 
+Follicle-stimulating hormone Injection powder: 75 units + 75 units. 
+(FSH) + luteinizing hormone 
+(LH) 
+16.9 Thyroid hormone and antithyroid medicines 
+16.9.1 Antithyroid medicines 
+Triiodothyronine Tablet: 5 mcg; 10 mcg; 25 mcg. 
+16.9.3 Other hormone inhibitors 
+81 
+===== PAGE 91 =====
+Aminoglutethi.mide Tablet: 250 mg. 
+Mifepristone Tablet: 300 mg. 
+16.11 For Management of incomplete abortion and miscarriage 
+Misoprostol Tablet: 200 mcg. 
+Pessary: 25 mcg. 
+Mifepristone + Misoprostol Tablet: 200 mg + 200 mcg. 
+18.1 Antiastbmatic medicines 
+Aminophylline** Injection: 25 mg/mL in 10-mL ampoule. 
+** To be used only by trained personnel. 
+19. MEDICINES AFFECTING THE BLOOD 
+19.1 Anti-Anaemia Medicines 
+Iron dex1ran Injection: equivalent to 50 mg iron/mL in 2-mL 
+ampoule. 
+Iron sucrose Injection: 20 mg/mL. 
+23. MEDICINES FOR MENTAL AND BEHAVIOURAL DISORDERS 
+23.3.2 Medicines used in bipolar disorders 
+82 
+===== PAGE 92 =====
+Lithium carbonate Capsule: 300 mg. 
+Tablet: 300 mg. 
+Pimozide Tablet: 4 mg; 10 mg. 
+.23.6 Medicines used in substance dependence programmes 
+Buprenorphine** Tablet: 150 mcg; 300 mcg; 400 mcg; 600 mcg. 
+**For use only within an established support 
+programme. 
+Clonidine•• Tablet: 0.1mg;0.2 mg. 
+••For use only within an established support 
+programme. 
+Hydromorphone•• Tablet: 2 mg; 4 mg. 
+••For use only within an established support 
+programme. 
+Methadone•• Injection: 10 mg/mL in 1-mL ampoule. 
+Tablet: 5 mg. 
+**For use only within an established support 
+programme. 
+83 
+===== PAGE 93 =====
+Naloxone Injection: 5 mg/mL 
+Naltrexone Tablet: 50 mg. 
+Oxycodone** Injection: 10 mg/mL (hydrochloride) in 1-mL ampoule. 
+Tablet: 5 mg; 7 .5 mg. 
+Tablet: 10 mg; 20 mg; 40 mg (extended release). 
+**For use only within an established support 
+programme. 
+26. MEDICINES FOR RHEUMATIC AND MUSCULOSKELETAL DISEASES 
+26.3 Medicines for rheumatic disorders 
+26.3.1 Biologicals 
+Adalimumab Injection: 10 mg/0.2 mL; 20 mg/0.4 mL. 
+Etanercept Injection: 25 mg; 50 mg (prefilled syringe). 
+Leflunomide Tablets: 10 mg; 20 mg; 100 mg. 
+Rituximab Injection: 10 mg/mL in 10-mL vial. 
+84 
+===== PAGE 94 =====
+Tocilizumab Injection: 20 mg/mL in 20-mL vial. 
+28. OPHTHALMOLOGICAL PREPARATIONS 
+28.2 Anti-inflammatory and anti-allergic medicines 
+Ketotifen Eye drops: 0.035%. 
+Olopatadine Eye drops: 0.1%; 0.2%. 
+28.4 Miotic and antiglaucoma medicines 
+Dipivefrin Eye drops: 0.1 %. 
+30. URINARY AND ERECTILE DYSFUNCTION MEDICINES 
+Alfuz.osin Tablet: 10 mg. 
+Bethanecol Tablet: 10 mg; 25 mg. 
+Finasteride Tablet: 5 mg. 
+Sildenafil Tablet: 25 mg; 50 mg; 100 mg. 
+Tadalafil Tablet: 20 mg. 
+85 
+===== PAGE 95 =====
+APPENDIX 3: AWaRe CATEGORIZATION 
+To assist in the developmeot of tools for aotibiotic stewardship at local, national aod global 
+levels aod to reduce aotimicrobial resistaoce, the Access, Watch, Reserve (AWaRe) 
+classification of aotibiotics was developed D where antibiotics are classified into different 
+groups to emphasize the importance of their appropriate use. 
+ACCESS GROUP ANTIBIOTICS 
+This group includes antibiotics that have activity againat a wide range of commonly 
+eocountered susceptible pathogeos while also showing lower resistaoce potential than 
+antibiotics in the other groups. Selected Access group antibiotics are recommended as 
+essential first or second choice empiric treatment options for infectious syndromes reviewed 
+by the EML Expert Committee and are listed as individual medicines on the Model Lists to 
+improve access and promote appropriate use. They are essential antibiotics that should be 
+widely available, affordable and quality assured. 
+WATCH GROUP ANTIBIOTICS 
+This group includes antibiotic classes that have higher resistaoce potential and includes most 
+of the highest priority ageots among the Critically Importaot Antimicrobials for Human 
+Medicine and/or antibiotics that are at relatively high risk of selection of bacterial resistaoce. 
+These medicines should be prioritized as key targets of stewardship programs and 
+monitoring. Selected Watch group antibiotics are recommeoded as esseotial first or second 
+choice empiric treatmeot options for a limited number of specific infectious syndromes and 
+are listed as individual medicines on the Model Lists. 
+RESERVE GROUP ANTIBIOTICS 
+This group includes antibiotics and antibiotic classes that should be reserved for treatment of 
+confirmed or suspected infections due to multi-drug-resistant organisms. Reserve group antibiotics 
+should be treated as Dlast resortD options. Selected Reserve group antibiotics are listed as individua 
+medicines on the Model Lists when they have a favourable risk- benefit profile and proven activity 
+against DCritical PriorityD or Dlligh PriorityD pathogens identified by the WHO Priority Pathog< 
+List, notably carbapenem resistant Enterobacteriaceae. These antibiotics should be accessible, but 
+their use should be tailored to highly specific patients and settings, when all alternatives have failed or 
+are not suitable. These medicines could be protected and prioritized as key targets of national and 
+86 
+===== PAGE 96 =====
+international stewardship programs involving monitoring and utilization reporting, to preserve their 
+effectiveness. 
+87 
+===== PAGE 97 =====
+INDEX 
+8-Methylpsoralen 80 
+Abacavir (ABC) 11 
+Abacavir + Efavirenz + Lamivudine 12 
+Abacavir + Lamivudine 12 
+Abiraterone 14 
+Absorbent gauze 
+Acetazolamide 
+51, 61, 64, 69 
+39 
+Acetic acid 31 
+Acetylcysteioe 4 
+Acetylsalicylic acid 20, 42 
+Acetylsalicylic acid (aspirin) 29, 35, 58, 66 
+Aciclovir 11, 38 
+Actinomycin-D 14 
+Adalimumab 37, 85 
+Albendazole 5, 47, 67 
+Alfuzosin 86 
+Allopurinol 37 
+Alpha methyl-dopa 19, 44 
+A/prazo/am 34 
+Alteplase 20 
+Aluminium diacetate 22 
+Aluminium hydroxide + Magoesium 
+hydroxide 24, 52, 61, 66 
+Amethocaine 39 
+Amikacin 5 
+Amikacin (Am) 78 
+Amiloride 44, 59 
+Amiloride + Hydrochlorothiazidel9, 23, 44 
+Aminobeuzoic acid 23 
+Aminoglutethimide 83 
+Aminophylline 83 
+Amiodarone 18 
+Amitriptyline 14, 34, 35 
+Amlodipine 19, 44, 59 
+Amlodipine + Losartan 19, 44 
+Amoxicillin 5, 45, 59, 64, 66 
+Amoxicillin + Clavulanic acid 6 
+Amphotericin B 
+Ampicillin 
+8 
+6 
+Anastrozo/e 33 
+Aotazoline!I'etrahydrozoline combination39 
+Aoti-rabies immuooglobulin 18 
+Aoti-snake venom 62 
+88 
+Aoti-snake venom immunoglobulin 27, 54 
+Aoti-tetanus immunoglobulin 18 
+Aoti-tetanus serum 27, 54, 62 
+Aoti-venom immunoglobulin 27 
+Apixaban 29 
+Arachis oil + Paradichlorobeuzene + 
+Chlorobutanol + Turpentine oil 31 
+Arsenic trioxide 14 
+Artemether 9 
+Artemether+ Lumefantrine9, 47, 60, 64, 67 
+Artesunate 9, 48, 60, 67 
+Artesunate + Amodiaquine9, 48, 60, 64, 67 
+Artesunate + Pyronaridine tetraphosphate9 
+Ascorbic acid (Vitamin C) 40, 56, 62, 71 
+Asparaginase 14 
+Atazanavir + Ritunavir (ATV/r) 12 
+Atenolol 18, 19 
+Atorvastatin 20 
+Atovaquone + Proguanil 78 
+Atracurium 2 
+Atropine 1, 4, 39, 44, 59 
+Azathioprine 14 
+Azithromycin 7, 38 
+Bacio/en 38 
+Barium sulfate 23 
+BCG vaccine 28, 54 
+Beclomethasone 56, 62 
+Bedaquiline (Bdq) 78 
+Bendamustine 14 
+Bendroflumethiazide 19 
+Benzathine benzylpenicillin 6, 45 
+Benzhexol 36 
+Benzhexol (trihexyphenidyl) 33 
+Benzoic acid+ salicylic acid 21, 49, 60 
+Benzoic acid+ Salicylic acid (Whitfield's) 
+69 
+Benzoin 
+Benzoyl peroxide 
+Benzyl beuzoate 
+Benzylpenicillin 
+Betamethasone 
+Bethanecol 
+Bevacizumab 
+17, 49, 60, 68 
+21, 22, 49, 60 
+23,49,60,64, 70 
+6,46 
+22 
+86 
+17 
+===== PAGE 98 =====
+Bicalutamide 14 Chlorhexidine 17, 49, 60, 64, 68 
+Biotin 73 Chlorhexidine gluconate 68 
+Biperideo 33, 36 Chloroxyleool 68 
+Biphasic isophaoe insulin 26 Chlorphenamine 2,42 
+Bisacodyl 24, 70 Chlorpheniramine (Chlorphenamine)58, 66 
+Bisoprolol 18 Chlorphenamine maleate 68 
+Bleomycin 14 Chlorpromazine 34,56 
+Bortezomib 17 Chlortetracycline 51 
+Bromazepam 33 Cholecalciferol 40 
+Bromocriptine 33 Cholera vaccine 28,55 
+Budesonide 28, 31 Chorionic gonadotropin 82 
+Bupivacaine 1 Ciclosporin (Cyclosporin) 17 
+Bupreoorphine 84 Cinnarizine 77 
+Buserelin 14 Ciprofloxacin 7 
+Busulfan (Busulphan) 14 Ciprofloxacin + Dexamethaaone 31 
+Cabotegravir 11 Cisplatin 14 
+Calamine 22,50,60 Clarithromycin 7 
+Calamine + Zinc 22 Clindamycin 6 
+Calamine lotion 64,68 Clobetasol 79 
+Calamine + Zinc oxide 60,69 Clofazimine 9 
+Calcium gluconate 4, 41, 56 Clofazimine (Cfz) 78 
+Calcium lactate 56 Clomifene 33 
+Calcium salts 71 Clomipramine 34 
+Calcium salts (lactate) 62 Clonazepam 3 
+Capecitabine 14 Clonidine 1, 84 
+Capreomycin (Cm) 78 Clopidogrel 20,29 
+Captopril 19,20 Clotrimazole 8, 21, 69 
+Carbamazepine 3,34 Cloxacillin 6 
+Carbergoline 33 Clozapine 34 
+Carbetocin 27,33 Coagulation factor IX 18 
+Carbimazole 27 Coagulation factor VIII 18 
+Carboplatin 14 Coal tar 22, 70 
+Carvedilol 20 Cod liver oil 71 
+Cefazolin 6, 7 Col chi cine 37 
+Cefixime 7 Colistin 8 
+Cefpodoxime 7 Combined Oral Contraceptives 54,62 
+Ceftazidime 7 Condoms 32,54,62,64,68 
+Ceftazidime/ Avibactam 8 Copper-containing device 32 
+Ceflriaxone 7 Cotton wool 51, 61, 69 
+Cefuroxime 7 Cotton wool /crepe bandages 64 
+Celecoxib 37 Cotton/crepe bandages 51, 61, 69 
+Cephalexin 6, 7 Crotamiton 80 
+Cetrimide + Chlorhexidine 17, 68 Cycle beads 68 
+Charcoal (activated) 4,44,59, 70 Cyclizine 36,80 
+Chlorambucil 14 Cyclophosphamide 15, 38 
+Chlorampheoicol 31, 39, 51, 61, 69 Cycloserine (Cs) 78 
+89 
+===== PAGE 99 =====
+Cytarabine 
+Dabigatran 
+Dacarl>azine (DTIC) 
+Daclatasvir 
+Daclatasvir + Sofosbuvir 
+Danazol 
+Dapagliflozin 
+Dapsone 
+DarrowDs solution 
+Darunavir + Ritonavir (DRV /r) 
+Dasatinib 
+Daunorubicin 
+Degarelix 
+Delamanid (Dim) 
+15 
+29 
+15 
+13 
+13 
+82 
+26 
+9 
+31 
+12 
+17 
+15 
+15 
+78 
+Depot medroxyprogesterone acetate 
+(DMPA) 
+Dequalinium hydrochloride 
+Desferoxamine 
+68 
+71 
+4 
+29 Desmopressin 
+Dexamethasone 
+Dextran 70 
+2, 16,21,25,36,38,39 
+18 
+Diaphragms 32, 54, 62 
+Diazepam 1, 3, 34, 36, 43, 58 
+Dichloroxyleool + Chloropheool 17, 68 
+Diclofenac 37, 39 
+Didanosine ( ddI) II 
+Diethylcarl>amazine 5, 47, 77 
+Diethylstilbestrol 16, 82 
+Digoxin 19, 20 
+Dihydroartemisinin + Piperaquine 
+phosphate 
+Dihydrocodeine 
+Diloxanide 
+Diltiazem 
+Dimercapro/ 
+Diphenhydramine preparations 
+Diphenoxylate +Atropine 
+Diphtheria antitoxin 
+Dipivefrin 
+Disposable gloves 
+Disposable syriuges 
+Disposable syriuges and needles 
+Dithranol 
+Dobutamine 
+Docetaxel 
+Docusate sodium 
+9,48,60 
+35 
+77 
+18 
+4 
+68 
+25 
+28 
+86 
+51, 
+61 
+51, 61 
+69 
+22 
+20 
+15 
+36 
+Dolutegravir II 
+Domiphen bromide 71 
+Domperidone 24 
+Donepezil 35 
+Dopamine 20 
+Doxepin 79 
+Doxorubicin 15 
+Doxycycline 6,9 
+DPT + HEPB + Hlb (Peotavalent vaccine) 
+28,55 
+Dusting powder 51, 69 
+Edrophonium 37 
+Efavirenz (EFV or EFZ) II 
+Eflornithine 10, 77 
+Elaatic plaater dressings 51, 69 
+Enalapril 19 
+Enoxaparin (Low molecular weight heparin) 
+30 
+Entecavir 13 
+Epimestrol 82 
+Epinephrine (Adrenaline) 2, 28, 40 
+Epinephrine (Adrenaline)+ Lidocaine43, 58 
+Epirubicin 15 
+Ergocalciferol 40 
+Ergometrine 27,33,55,62 
+Ergotamine 14 
+Erlotinib 17 
+Erythromycin 7, 39, 46 
+Erythropoietin 29 
+Estradiol cypionate + Medroxyprogesterone 
+acetate 32 
+Etanercept 37, 85 
+Ethambutol 10 
+Ethambutol + lsoniazid 10 
+Ethinylestradiol + etonogestrel 33 
+Ethinylestradiol + Levonorgestrel 32 
+Ethinylestradiol + Norethisterone 32 
+Ethosuximide 3 
+Etonogestrel-releasing implant 32 
+Etoposide 15 
+EUSOL 17 
+Ezetimibe 20 
+Febuxostat 37 
+Fentanyl 35 
+Ferric ammonium citrate 66 
+Ferrous salt 29, 50, 61, 64, 66 
+90 
+===== PAGE 100 =====
+Finasteride 
+Flucinolone 
+Flucloxacillin 
+Fluconazole 
+Fludarabine 
+27,86 
+79 
+6 
+8, 39, 67 
+15 
+Fludrocortisooe 25 
+Fludrocortisooe (acetate)+ Neomycin 
+(sulfate)+ Polymyxin-B (sulfate)+ 
+Lidocaine (hydrochloride) 32 
+Flumazenil 4 
+Fluocinonide 21 
+Fluorescein 23 
+Fluorescein sodium 40 
+Fluoride 21 
+Fluorouracil 15 
+Fluoxetine 34, 36 
+Fluphenazine 34 
+Flutamide 15 
+Fluticasooe furoate 32 
+Foaming tablets 68 
+Folic acid 29, 50, 56, 61, 63, 64, 66, 71, 73 
+Follicle-stimulating hormone (FSH) + 
+luteinizing honnooe (LH) 
+Fomepizole 
+Formaldehyde 
+Furosemide 
+Fusidic acid 
+Gefitinib 
+Gemcitabine 
+82 
+4 
+17 
+20,23 
+21 
+17 
+15 
+Gentamicin 
+Gentian violet 
+6,22,39,46,50,60,69 
+68 
+Gentian violet (Methylrosanilinium 
+chloride) 
+Glibenclamide 
+22 
+26 
+Gliclazide 26 
+Glimeperide 26 
+Glucagon 26 
+Glucose 26, 31, 
+71 
+Glucose with sodium chloride 31 
+Glutaraldehyde 17 
+Glyceryl trinitrate 18 
+Goserelin 15 
+Granulocytic colony stimulating factor 16 
+Haemophilus injluenzae 1)'pe b vaccine28, 
+55 
+Haloperidol 34,36 
+91 
+Halothane 1 
+Heparin (unfractionated heparin) 30 
+Hepatitis B immunoglohulin 18 
+Hexetidine 21, 71 
+Hexetidine solutioo 70 
+Histamine phosphate 80 
+Homatropine 39 
+HPV vaccine 28, 55 
+Human immunoglobu/in 18 
+Hydralazine 19 
+Hydrochlorothiazide 19, 23, 44, 59 
+Hydrocortisone 2, 22, 25 
+Hydrocortisone + Lidocaine 52 
+Hydromorphone 84 
+Hydroxocobalamin (vitamin B12) 29 
+Hydroxycarbamide (Hydroxyurea) 15 
+Hydroxychloroquine 38 
+Hydroxyurea 30 
+Hyoscine hydrobromide 36 
+Hyoscine N-butylbromide 36, 52, 61, 69 
+Ibuprofen 14, 37, 42, 58, 66 
+Idoxuridine 11 
+Ifosfamide 15 
+Imatinib 17 
+Imipenem + Cilastatin 8 
+Imipramine 34 
+Indapamide 19 
+Indinavir (IDV) 12 
+Insulin (soluble) 26 
+Insulin aspart 26 
+Insulin determir 26 
+Insulin glargine 26 
+Insulin glulisine 26 
+Intermediate-acting insulin 26 
+Intraperitoneal dialysis solution (of 
+appropriate composition) 40 
+Iodine 17, 40, 49, 60 
+Ipratropium bromide 28 
+Irinotecan 15 
+Iron dextran 83 
+Iron sucrose 83 
+lsoflurane 1 
+Isoniazid 10 
+Isoniazid + Pyrazinamide + Rifampicin 10 
+Isoniazid + Rifampicin 10 
+===== PAGE 101 =====
+Isoniazid + Rifampicin + Ethambutol + 
+Pyrazinamide 10 
+Isoniazid + Rifapentine 10 
+Isoniazid+ Pyridoxine + Sulfamethoxazole 
++ Trimethoprim 13 
+Isosorbide dinitrate 18 
+Isotretinoin 
+Ivermectin 
+Kanamycin (Km) 
+Ketamine 
+Ketoconazole 
+Ketoprofen 
+Ketorolac 
+79 
+5,47 
+78 
+1 
+21 
+37 
+37 
+Ketotifen 37, 80, 86 
+Ketotifen fumarate 39 
+Labetalol 19 
+Lactulose 24, 36 
+Lamivudine 13 
+Lamivudine (3TC) 12 
+Lamivudine + Nevirapine + Zidovudine 12 
+Lamivudine + Zidovudine 12 
+Lancet 
+Latanoprost 
+Leflunomide 
+Letrozole 
+Leucovorin 
+Leuprolide 
+Levamisole 
+Levetiracetam 
+Levodopa + Carbidopa 
+Levofloxacin 
+Levofloxacin (Lfx) 
+64 
+39 
+85 
+15,33 
+16 
+15 
+67 
+3 
+37 
+7 
+79 
+32,68 
+32 
+Levonorgestrel 
+Levonorgestrel-releasing implant 
+Levonorgestrel-releasing intrauterine 
+system 32 
+Levothyroxine 27 
+Lidocaine I, 19, 21, 42, 58 
+Lidocaine + Epinephrine (Adrenaline) I 
+Linezolid 8 
+Linezolid (Lzd) 79 
+Lio thyronine 27 
+Liquid paraffin 24, 70 
+Lisinopril 19 
+Lithium carbonate 84 
+Long lasting insecticide treated net 69 
+92 
+Loperamide 
+Lopinavir 
++ Ritonavir (LPV/r) 
+Loratadine 
+Lorazepam 
+Losartan 
+25,36 
+12 
+3 
+3, 34 
+19 
+Losartan + Hydrochlorothiazide 44 
+Lugol's solution 27 
+Luteinizing hormone-releasing hormone 
+(LH-RH) 81 
+70 Magnesium hydroxide 
+Magnesium sulfate 
+Magnesium trisilicate 
+Manni to I 
+3, 43, 70 
+24, 52, 61, 66 
+24 
+Measles vaccine 
+Mebendazole 
+Mechlorethamine 
+Medroxyprogesterone 
+Medroxyprogesterone acetate 
+Mefloquine 
+Meglumine antimoniate 
+Melarsoprol 
+Melphalan 
+28,55 
+5, 59, 67 
+15 
+68 
+26,32 
+78 
+9 
+10 
+15 
+Meningococcal meningitis vaccine 
+Menthol 
+28,55 
+71 
+Menthol+ Ascorbic acid+ Hydrous citric 
+acid 71 
+Menthol+ Eucalyptus oil + Camphor+ 
+Thymol 71 
+Mercaptopurine 15 
+Meropenem•• 8 
+Mesna (Mercaptoethane sulfonate sodium) 
+16 
+Mesterolone 
+Metformin 
+81 
+26 
+Methadone 84 
+Methionine 4 
+Methocarbamol 38 
+Methotrexate 16, 38 
+Methyl salicylate 35, 64 
+Methyl salicylate compound preparations71 
+Methylammonium chloride (methylene 
+blue) 
+Methylated spirit 
+Methylcellulose 
+Methyldopa 
+Methylprednisolone 
+4 
+17, 49, 60, 64, 68 
+40 
+19 
+25,38 
+===== PAGE 102 =====
+Metoclopramide 
+Metoprolol 
+Metrooidazole 
+Metyrapone 
+Miconazole 
+24,36 
+20 
+4,6,47,59,67 
+81 
+Miconazole + hydrocortisone 
+Midazolam 
+8, 21, 22 
+22 
+2, 3, 36 
+83 
+33, 83 
+80 
+33, 55, 62, 83 
+16 
+Mifepristone 
+Mifepristone + Misoprostol 
+Minoxidil 
+Misoprostol 
+Mitoxantrone 
+Monosulfiram 
+Morphine 
+Moxifloxacin 
+(Mfr) 
+Multi vitamins 
+23,60, 70 
+2,35 
+79 
+71 
+Multiple Micronutrients Supplements 
+(MMS) 40,57,63,64, 71 
+Mupirocin 22 
+Mycopheno/ate Mofetil 38 
+Naloxone 4, 35, 85 
+Naltrexone 85 
+Naproxen 37 
+Natamycin 39 
+Neomycin+ Bacitracin + Polymyxin50, 61 
+Neostigmioe 2, 37, 38 
+Nevirapine (NVP) 11 
+Nicotinamide 73 
+Nifedipine 19, 33, 45, 59 
+Nifurtimox 10, 77 
+Nilotinib 17 
+Nimodipine 
+Nitrofurantoin 
+Nitrous oxide 
+Norethisterone enanthate 
+Nystatin 
+Octreotide 
+Oestradiol 
+19 
+6,46 
+1 
+32 
+8, 21, 22, 50 
+27 
+26 
+Ofloxacin 8, 39 
+Olanzapine 34 
+Olopatadine 86 
+Omeprazole 24, 70 
+Oodansetron 16, 24, 36 
+Oral rehydration salt 25, 30, 53, 61, 65 
+Oral rehydration salts + Zinc 67 
+Oxaliplatin 16 
+93 
+Oxamniquine** 
+Oxycodone 
+Oxygen 
+Oxytocin 
+5 
+85 
+1, 2 
+27, 33, 55, 62 
+16 
+10 
+2 
+73 
+Paclitaxel 
+P-Aminosalicylic acid 
+Pancuronium 
+Pantothenic acid 
+Paracetamol 
+Paraldehyde 
+14, 35, 42, 58, 65, 66 
+43,58 
+34 Paroxetine 
+Pegylated interferon alpha-2b 
+Pentagastrin 
+13 
+81 
+10 
+35 
+23 
+35 
+Pentamidine 
+Pentazocine 
+Pennethrin 
+Pethidine 
+Phenobarbital 
+Phenoxymethylpenicillin 
+Phenylephrine 
+Phenytoin 
+sodium 
+Phytomenadione (vitamin Ki) 
+Pilocaipine 
+3, 43, 58 
+6,46 
+39 
+3 
+4,30 
+39 
+84 Pimozide 
+Piperacillin + Tazobactam 8 
+Plastic aprons 65 
+Pneumococcal conjugate vaccine 28, 55 
+Podophyllum resin 23 
+Poliomyelitis vaccine 28 
+Polygeline 18 
+Potassium chloride 30, 31 
+Potassium ferric hexacyanoferrate (TI) 
+(Prussian blue) 4 
+Potassium iodide 27 
+Potassium permanganate 
+Povidone iodine 
+Pralidoxime 
+Praziquantel 
+Predoisolone 
+Pregabalin 
+Pretomenid (Pa) 
+Prilocaine 
+Procainamide 
+Procarbazine 
+Progesterone only pills 
+Progesterone vaginal ring 
+17, 23 
+17, 65, 68 
+4 
+5,47 
+2, 16, 25, 38, 39 
+3 
+79 
+77 
+19 
+16 
+54,62 
+33 
+===== PAGE 103 =====
+9 Prognanil 
+Promethazine 
+Propofol 
+Propranolol 
+2,24,43,58,66 
+1 
+Propylthiouracil 
+Protamine sulfate 
+Prothionamide (Pto) 
+Pyrantel pamoate 
+Pyrazinamide 
+Pyridostigmine 
+Pyridoxine 
+Pyridoxine (Pyr) 
+Pyrimethamine 
+Pyrimethamine + Sulfadoxine 
+Quinine 
+Rabeprazole 
+Rabies vaccine 
+Rani ti dine 
+14 
+27 
+4,30 
+79 
+5,47,67 
+10 
+37, 38 
+40 
+79 
+10 
+48 
+9,49 
+24 
+28 
+24, 70 
+Rapid diagnostic test 27, 51, 61, 65 
+Rapid diagnostic test kits for malaria 
+(RDTM) 69 
+Retinal 
+Ribavirin 
+Riboflavin 
+Rifabutin 
+Rifampicin 
+Rifapentine 
+Ringer Os lactate 
+Risperidone 
+Rituximab 
+Rosuvastatin 
+41 
+13 
+41 
+10 
+9, 10 
+11 
+31 
+34 
+17,37,85 
+20 
+Rotavirus vaccine 28 
+Rubella vaccine 28 
+Salbutamol 29,33,56,62, 71 
+Salicylic acid 22, 23, 70 
+Salicylic acid+ Benzoic acid (Whitfield's) 
+65 
+Salmeterol + Fluticasone 29 
+Secnidazole 4 
+Selenium sulphide 69 
+Senna 25,53,62, 70 
+Sevoflurane 1 
+Sildenafil 86 
+Silver sulfadiazine 22 
+Silver sulphadiazine 68 
+Simvastatin 20 
+94 
+Sitagliptin 26 
+Sodium calcium edetate 4 
+Sodium chloride 31 
+Sodium hydrogen carbonate 31 
+Sodium hypochlorite 17, 49, 60, 68 
+Sodium stibogluconate 9 
+Sodium valproate (Valproic acid) 3 
+Sofosbuvir 13 
+Sofosbuvir + Velpatasvir 
+Spatula 
+Spironolactone 
+Stilboestrol 
+Streptokinase 
+Streptomycin 
+Succimer 
+13 
+57,69 
+20,24 
+16 
+20 
+11 
+4 
+9,67 
+10 
+Sulfadoxine + Pyrimethamine 
+Sulfamethoxazole + Trimethoprim 
+Sulfamethoxazole + Trimethoprim (co-
+trimoxazole) 7, 46, 59, 67 
+Sulfasa/azine 38 
+Sulphadoxine + Pyrimethamine 60 
+Sumatriptan 14 
+Suramin 10 
+Surgical Blades 65 
+Suxamethonium 2 
+Tacrolim.us 80 
+Tadalafil 86 
+Tamoxifen 16 
+Tazarotene 80 
+Tehnisartan 19 
+Tenofovir 13 
+Tenofovir + Lamivudine + Dolutegravir 12 
+Tenofovir + Lamivudine + Efavirenz 12 
+Tenofovir/Lamivudine + Lopinavir I 
+Ritonavir 12 
+Tenofovir/Lamivudine + Atazanavir/ 
+Ritonavir 12 
+Tenofovir/Lamivudine + Dolutegravir + 
+Darunavir/Ritonavir 13 
+Tenofovir/Lamivudine + 
+Zidovudine+Atazanavir/ Ritonavir 12 
+Terbinafine 22, 78 
+Testosterone 26 
+Tetanus toxoid 62 
+Tetanus vaccine 
+Tetrabenazine 
+28, 70 
+33 
+===== PAGE 104 =====
+Tetracaine 
+Tetracosactide 
+Tetracycline 
+Thiamine 
+39 
+81 
+7, 39, 46 
+41 
+Thioguanine 16 
+Thiopeotal I 
+Thyrotropin releasing hormone (TRH) 81 
+Timolol 39 
+Tinidazole 
+Titanium dioxide 
+1izanidine 
+Tocilizumab 
+Topiramate 
+Torsemide 
+Tramadol 
+Tranexamic acid 
+Trastuzumab 
+Tretinoin 
+5 
+23 
+38 
+37, 86 
+3 
+20,24 
+35 
+30 
+17 
+22 
+Triamcinolone 21, 82 
+Trichlorophenol (Mixture of halogenated 
+phenols aod salicylic acid) 17 
+Triiodothyronine 82 
+Tropicamide 23, 39 
+Tropicamide + Phenylephrine 40 
+Tuberculin PPD 51 
+Tuberculin, purified protein derivative 
+(PPD) 27 
+Typhoid vaccine 28 
+Urea 23 
+Urine pregnancy test strips 69 
+Valaciclovir II 
+Valproic acid (sodium valproate) 34 
+Valsartao 
+Vancomycin 
+Vasopressin 
+Vecuronium 
+Verapamil 
+Vidagliptin 
+Vinblastine 
+Vincristine 
+Vinorelbine 
+Vitamin A 
+Vitamin B complex 
+Vitamin B1 (thiamine) 
+Vitamin B12 ( cyanocobalamin) 
+Vitamin B2 (riboflavin) 
+19,20 
+8 
+81 
+2 
+19 
+26 
+16 
+16 
+16 
+56,63, 74 
+41, 63, 72 
+74 
+75 
+74 
+95 
+Vitamin 
+B• (pyridoxine hydrochloride) 75 
+Vitamin C (ascorbic acid) 75 
+Vitamin D (cholecalciferol) 75 
+VitaminE 75 
+Voriconazole 
+Warfarin 
+Water for injection 
+Xylometazoline 
+Yellow fever vaccine 
+Zidovudine (ZDV) 
+9 
+30 
+31, 57, 63, 69 
+32 
+28 
+12 
+Zidovudine + Lamivudine + Efavirenz + 
+Dolutegravir/ Ritonavir 13 
+Zidovudine/Lamivudine + Atazaoavir/ 
+Ritonavir 12 
+Zidovudine/Lamivudine + Lopinavir/ 
+Ritonavir 13 
+54,62,65 
+21 
+Zinc 
+Zinc chloride + Zinc sulfate 
+Zinc oxide 
+Zinc oxide plaster 
+Zoledronic acid 
+50, 61 
+65 
+16 
+===== PAGE 105 =====
