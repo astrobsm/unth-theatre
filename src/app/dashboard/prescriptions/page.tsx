@@ -15,8 +15,22 @@ import {
   AlertTriangle,
   XCircle,
   RefreshCw,
-  Siren
+  Siren,
+  FileDown,
+  Printer,
+  MessageCircle,
+  ShieldAlert
 } from 'lucide-react';
+import { isNarcotic } from '@/lib/narcotics';
+import { whatsappLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
+import {
+  buildRegisterPdf,
+  buildPatientPrescriptionPdf,
+  downloadPdf,
+  printPdf,
+  type ReportPrescription,
+  type ReportMedication,
+} from '@/lib/prescription-pdf';
 
 interface Medication {
   name: string;
@@ -84,13 +98,20 @@ export default function PrescriptionsPage() {
   const { data: session } = useSession();
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'needsPacking' | 'all' | 'packed'>('needsPacking');
+  const [filter, setFilter] = useState<'needsPacking' | 'all' | 'packed' | 'partiallyPacked'>('needsPacking');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
   const [showPackModal, setShowPackModal] = useState(false);
   const [packingNotes, setPackingNotes] = useState('');
   const [packing, setPacking] = useState(false);
   const [medicationItems, setMedicationItems] = useState<MedicationPackingItem[]>([]);
   const [contactModal, setContactModal] = useState<{ name: string; phone: string | null; role: string } | null>(null);
+  const [exportFrom, setExportFrom] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [exportTo, setExportTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchPrescriptions();
@@ -108,6 +129,8 @@ export default function PrescriptionsPage() {
         regularUrl += '?needsPacking=true';
       } else if (filter === 'packed') {
         regularUrl += '?status=PACKED';
+      } else if (filter === 'partiallyPacked') {
+        regularUrl += '?status=PARTIALLY_PACKED';
       }
 
       const [regularRes, emergencyRes] = await Promise.all([
@@ -176,6 +199,8 @@ export default function PrescriptionsPage() {
           );
         } else if (filter === 'packed') {
           emergencyData = emergencyData.filter(p => p.status === 'PACKED');
+        } else if (filter === 'partiallyPacked') {
+          emergencyData = emergencyData.filter(p => p.status === 'PARTIALLY_PACKED');
         }
       } catch (eErr) {
         console.error('Error processing emergency prescriptions:', eErr);
@@ -204,6 +229,141 @@ export default function PrescriptionsPage() {
     } catch {
       return [];
     }
+  };
+
+  // ---- PDF export helpers ----
+  const toReportPrescription = (p: Prescription): ReportPrescription => {
+    const meds = parseMedications(p.medications).map<ReportMedication>(m => ({
+      name: m.name,
+      dose: m.dose,
+      route: m.route,
+      frequency: m.frequency,
+      timing: m.timing,
+      notes: m.notes,
+    }));
+    let oos: string[] | undefined;
+    if (p.outOfStockItems) {
+      try { oos = JSON.parse(p.outOfStockItems); } catch { oos = undefined; }
+    }
+    return {
+      id: p.id,
+      patientName: p.patientName,
+      folderNumber: (p as any).folderNumber || null,
+      scheduledSurgeryDate: p.scheduledSurgeryDate,
+      procedureName: p.surgery?.procedureName || null,
+      prescribedByName: p.prescribedBy?.fullName || 'Unknown',
+      prescribedByPhone: p.prescribedBy?.phoneNumber || null,
+      approvedByName: p.approvedBy?.fullName || null,
+      packedByName: p.packedBy?.fullName || null,
+      packedAt: p.packedAt || null,
+      status: p.status,
+      urgency: p.urgency,
+      medications: meds,
+      outOfStockItems: oos,
+      hasOutOfStockItems: p.hasOutOfStockItems,
+      notes: p.specialInstructions || null,
+    };
+  };
+
+  const handleExportRange = async (mode: 'download' | 'print') => {
+    setExporting(true);
+    try {
+      const fromDate = new Date(exportFrom + 'T00:00:00');
+      const toDate = new Date(exportTo + 'T23:59:59');
+      // Pull broad set then filter client-side by scheduledSurgeryDate
+      const [regRes, emRes] = await Promise.all([
+        fetch('/api/prescriptions'),
+        fetch('/api/emergency-prescriptions'),
+      ]);
+      const reg: any[] = regRes.ok ? await regRes.json() : [];
+      const em: any[] = emRes.ok ? await emRes.json() : [];
+      const inRange = (iso: string | undefined | null) => {
+        if (!iso) return false;
+        const d = new Date(iso);
+        return d >= fromDate && d <= toDate;
+      };
+      const regular = reg
+        .filter((p: any) => inRange(p.scheduledSurgeryDate))
+        .map((p: any) => toReportPrescription({
+          ...p,
+          surgery: p.surgery || { procedureName: '' },
+        } as Prescription));
+      const emergency = em
+        .filter((p: any) => inRange(p.emergencyBooking?.requiredByTime || p.createdAt))
+        .map((p: any) => ({
+          id: p.id,
+          patientName: p.patientName || p.emergencyBooking?.patientName || 'Unknown',
+          folderNumber: p.folderNumber || null,
+          scheduledSurgeryDate: p.emergencyBooking?.requiredByTime || p.createdAt,
+          procedureName: p.emergencyBooking?.procedureName || 'Emergency Surgery',
+          prescribedByName: p.prescribedByName || p.review?.reviewerName || 'Unknown',
+          prescribedByPhone: null,
+          status: p.status,
+          urgency: 'EMERGENCY',
+          medications: (() => { try { return JSON.parse(p.medications || '[]'); } catch { return []; } })(),
+          hasOutOfStockItems: p.hasOutOfStockItems,
+          outOfStockItems: (() => {
+            try { return p.outOfStockItems ? JSON.parse(p.outOfStockItems) : undefined; } catch { return undefined; }
+          })(),
+          notes: p.specialInstructions || null,
+        } as ReportPrescription));
+      const all = [...regular, ...emergency].sort(
+        (a, b) => new Date(a.scheduledSurgeryDate).getTime() - new Date(b.scheduledSurgeryDate).getTime()
+      );
+      if (!all.length) {
+        alert('No prescriptions found in the selected date range.');
+        return;
+      }
+      const doc = buildRegisterPdf(all, fromDate.toISOString(), toDate.toISOString());
+      if (mode === 'download') {
+        downloadPdf(doc, `prescription-register_${exportFrom}_to_${exportTo}.pdf`);
+      } else {
+        printPdf(doc);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate PDF.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handlePrintSingle = (p: Prescription, mode: 'download' | 'print') => {
+    const doc = buildPatientPrescriptionPdf(toReportPrescription(p));
+    if (mode === 'download') {
+      downloadPdf(doc, `prescription_${p.patientName.replace(/\s+/g, '_')}_${p.id.slice(0, 6)}.pdf`);
+    } else {
+      printPdf(doc);
+    }
+  };
+
+  const handleWhatsAppPrescriber = (p: Prescription) => {
+    const phone = p.prescribedBy?.phoneNumber || null;
+    let oos: string[] = [];
+    if (p.outOfStockItems) {
+      try { oos = JSON.parse(p.outOfStockItems); } catch { /* ignore */ }
+    }
+    if (!oos.length) {
+      alert('No out-of-stock items recorded for this prescription.');
+      return;
+    }
+    const url = whatsappLink(
+      phone,
+      buildOutOfStockWhatsAppMessage({
+        patientName: p.patientName,
+        procedureName: p.surgery?.procedureName,
+        outOfStockItems: oos,
+      }),
+    );
+    if (!url) {
+      alert('Prescriber phone number is not available.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const prescriptionHasNarcotic = (p: Prescription): boolean => {
+    return parseMedications(p.medications).some(m => isNarcotic(m.name));
   };
 
   const handlePackPrescription = async () => {
@@ -321,6 +481,50 @@ export default function PrescriptionsPage() {
         </p>
       </div>
 
+      {/* Date-range PDF export toolbar */}
+      <div className="bg-white rounded-lg shadow-sm mb-4 p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+          <input
+            type="date"
+            value={exportFrom}
+            onChange={(e) => setExportFrom(e.target.value)}
+            className="border rounded px-2 py-1 text-sm"
+            title="Export start date"
+            placeholder="From"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+          <input
+            type="date"
+            value={exportTo}
+            onChange={(e) => setExportTo(e.target.value)}
+            className="border rounded px-2 py-1 text-sm"
+            title="Export end date"
+            placeholder="To"
+          />
+        </div>
+        <button
+          onClick={() => handleExportRange('download')}
+          disabled={exporting}
+          className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm px-3 py-1.5 rounded"
+          title="Download PDF register of all prescriptions in range (narcotics highlighted)"
+        >
+          <FileDown className="h-4 w-4" /> Export PDF
+        </button>
+        <button
+          onClick={() => handleExportRange('print')}
+          disabled={exporting}
+          className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white text-sm px-3 py-1.5 rounded"
+        >
+          <Printer className="h-4 w-4" /> Print Register
+        </button>
+        <span className="text-xs text-gray-500 ml-auto flex items-center gap-1">
+          <ShieldAlert className="h-3 w-3 text-red-600" /> Narcotic items are highlighted in red and tallied separately for accountability.
+        </span>
+      </div>
+
       {/* Filter Tabs */}
       <div className="bg-white rounded-lg shadow-sm mb-6">
         <div className="flex border-b border-gray-200">
@@ -351,6 +555,22 @@ export default function PrescriptionsPage() {
             <div className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5" />
               Packed
+            </div>
+          </button>
+          <button
+            onClick={() => setFilter('partiallyPacked')}
+            className={`px-6 py-3 font-medium ${
+              filter === 'partiallyPacked'
+                ? 'border-b-2 border-amber-600 text-amber-700'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Partially Packed
+              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full">
+                {prescriptions.filter(p => p.status === 'PARTIALLY_PACKED').length}
+              </span>
             </div>
           </button>
           <button
@@ -471,6 +691,11 @@ export default function PrescriptionsPage() {
                             ✓ Packed
                           </span>
                         )}
+                        {prescriptionHasNarcotic(prescription) && (
+                          <span className="bg-red-50 text-red-700 border border-red-300 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                            <ShieldAlert className="h-3 w-3" /> Contains narcotic
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
@@ -502,6 +727,34 @@ export default function PrescriptionsPage() {
                         <Clock className="w-3 h-3" /> Awaiting Approval
                       </span>
                     )}
+                    <div className="flex flex-col gap-1 ml-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePrintSingle(prescription, 'download')}
+                        className="inline-flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                        title="Download patient prescription PDF (narcotic-aware)"
+                      >
+                        <FileDown className="h-3 w-3" /> PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePrintSingle(prescription, 'print')}
+                        className="inline-flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                        title="Print patient prescription"
+                      >
+                        <Printer className="h-3 w-3" /> Print
+                      </button>
+                      {prescription.hasOutOfStockItems && (
+                        <button
+                          type="button"
+                          onClick={() => handleWhatsAppPrescriber(prescription)}
+                          className="inline-flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded"
+                          title="Notify prescriber on WhatsApp about out-of-stock items"
+                        >
+                          <MessageCircle className="h-3 w-3" /> WhatsApp
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Clinical Summary (from Schedule Surgery -> Patient record) */}

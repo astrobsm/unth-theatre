@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { isNarcotic } from '@/lib/narcotics';
+import { triggerRadio } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +44,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Prescription not found' }, { status: 404 });
     }
 
+    // Tag each requested item with a narcotic flag so it surfaces clearly
+    // in the Drug Administration Chart, the prescription register PDF and
+    // the post-op reconciliation report. This is the primary anti-drug-
+    // diversion control for intra-op additions.
+    const itemsWithNarcoticFlag = data.medicationsRequested.map((m) => ({
+      ...m,
+      isNarcotic: isNarcotic(m.drugName),
+    }));
+    const containsNarcotic = itemsWithNarcoticFlag.some((m) => m.isNarcotic);
+
     // Create additional request
     const additionalRequest = await prisma.additionalMedicationRequest.create({
       data: {
@@ -49,7 +61,7 @@ export async function POST(request: NextRequest) {
         surgeryId: data.surgeryId,
         requestedById: user.id,
         requestedByName: user.fullName || user.name || 'Unknown',
-        medicationsRequested: JSON.stringify(data.medicationsRequested),
+        medicationsRequested: JSON.stringify(itemsWithNarcoticFlag),
         urgency: data.urgency,
         reason: data.reason,
         status: 'PENDING',
@@ -74,18 +86,65 @@ export async function POST(request: NextRequest) {
     });
 
     const drugNames = data.medicationsRequested.map((m) => m.drugName).join(', ');
-    const notificationMessage = `🚨 EMERGENCY MEDICATION REQUEST: ${drugNames} needed for surgery "${surgery?.procedureName || 'Unknown'}". Urgency: ${data.urgency}. Reason: ${data.reason}. WALKIE-TALKIE ALERT: Please prepare medications immediately and notify theatre.`;
+    const narcoticBadge = containsNarcotic
+      ? '⚠ CONTAINS NARCOTIC — controlled-drug witness required. '
+      : '';
+    const notificationMessage = `🚨 EMERGENCY MEDICATION REQUEST: ${drugNames} needed for surgery "${surgery?.procedureName || 'Unknown'}". ${narcoticBadge}Urgency: ${data.urgency}. Reason: ${data.reason}. WALKIE-TALKIE ALERT: Please prepare medications immediately and notify theatre.`;
 
     for (const pharmacist of pharmacists) {
       await prisma.notification.create({
         data: {
           userId: pharmacist.id,
           type: 'EMERGENCY',
-          title: '🚨 EMERGENCY: Additional Medication Request',
+          title: containsNarcotic
+            ? '🚨 NARCOTIC: Additional Medication Request'
+            : '🚨 EMERGENCY: Additional Medication Request',
           message: notificationMessage,
           link: '/dashboard/medication-tracking',
         },
       });
+    }
+
+    // Also notify the original prescriber (so they have a record of the
+    // intra-op addition made under their prescription — anti-diversion audit)
+    if (prescription.prescribedById && prescription.prescribedById !== user.id) {
+      await prisma.notification.create({
+        data: {
+          userId: prescription.prescribedById,
+          type: 'ADDITIONAL_MEDICATION_REQUEST',
+          title: containsNarcotic
+            ? 'Intra-op narcotic addition to your prescription'
+            : 'Intra-op addition to your prescription',
+          message: `${user.fullName || user.name || 'An anaesthetist'} added ${data.medicationsRequested.length} medication(s) during surgery for ${prescription.patientName}. ${narcoticBadge}Reason: ${data.reason}`,
+          link: '/dashboard/anaesthetist-board',
+        },
+      });
+    }
+
+    // Theatre Radio broadcast — high priority for narcotic adds
+    try {
+      await triggerRadio({
+        category: 'WORKFLOW',
+        title: containsNarcotic
+          ? 'Intra-op narcotic request'
+          : 'Intra-op additional medication request',
+        message: `${user.fullName || user.name || 'Anaesthetist'} has requested additional medications during surgery (${surgery?.procedureName || 'procedure'}) for ${prescription.patientName}. ${
+          containsNarcotic
+            ? 'Includes a controlled (narcotic) item — pharmacy please escort with witness.'
+            : ''
+        }`,
+        priority: containsNarcotic ? 90 : 75,
+        urgency: data.urgency === 'EMERGENCY' ? 'HIGH' : 'MEDIUM',
+        triggeredById: user.id,
+        metadata: {
+          source: 'AdditionalMedicationRequest',
+          requestId: additionalRequest.id,
+          prescriptionId: data.prescriptionId,
+          containsNarcotic,
+        },
+      });
+    } catch (e) {
+      console.warn('Theatre radio broadcast failed:', e);
     }
 
     return NextResponse.json({
