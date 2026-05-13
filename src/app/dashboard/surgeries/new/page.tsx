@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -159,6 +159,20 @@ export default function NewSurgeryPage() {
   const [currentMedications, setCurrentMedications] = useState<string[]>([]);
   const [otherMedications, setOtherMedications] = useState('');
 
+  // Pre-pack plan: surgical consumables (visible to Consumable Pack Provider)
+  const [consumableTemplates, setConsumableTemplates] = useState<any[]>([]);
+  const [consumableLoading, setConsumableLoading] = useState(false);
+  const [selectedConsumables, setSelectedConsumables] = useState<Record<string, { quantity: number; notes?: string }>>({});
+
+  // Pre-pack plan: drugs / IV fluids / wound dressing agents (visible to Pharmacy)
+  const [drugDressingTemplates, setDrugDressingTemplates] = useState<any[]>([]);
+  const [drugDressingLoading, setDrugDressingLoading] = useState(false);
+  const [selectedDrugs, setSelectedDrugs] = useState<Record<string, { quantity: number; dosage?: string; route?: string; notes?: string }>>({});
+
+  // Informed Consent upload (file → base64 → posted with surgery)
+  const [consentFile, setConsentFile] = useState<{ name: string; mimeType: string; base64: string; size: number } | null>(null);
+  const [consentError, setConsentError] = useState<string>('');
+
   const toggleListItem = (list: string[], setList: (v: string[]) => void, item: string) => {
     setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
   };
@@ -169,7 +183,75 @@ export default function NewSurgeryPage() {
     fetchTheatres();
     fetchLocations();
     fetchSurgicalUnits();
+    fetchConsumableTemplates();
+    fetchDrugDressingTemplates();
   }, []);
+
+  async function fetchConsumableTemplates(specialty?: string) {
+    setConsumableLoading(true);
+    try {
+      const url = `/api/admin/consumable-templates?activeOnly=true${specialty ? `&specialty=${encodeURIComponent(specialty)}` : ''}`;
+      const r = await fetch(url);
+      if (r.ok) setConsumableTemplates(await r.json());
+    } catch {} finally { setConsumableLoading(false); }
+  }
+  async function fetchDrugDressingTemplates() {
+    setDrugDressingLoading(true);
+    try {
+      const r = await fetch('/api/admin/drug-dressing-templates?activeOnly=true');
+      if (r.ok) setDrugDressingTemplates(await r.json());
+    } catch {} finally { setDrugDressingLoading(false); }
+  }
+
+  function toggleConsumable(t: any) {
+    setSelectedConsumables((prev) => {
+      const next = { ...prev };
+      if (next[t.id]) delete next[t.id];
+      else next[t.id] = { quantity: t.defaultQuantity ?? 1 };
+      return next;
+    });
+  }
+  function setConsumableQty(id: string, q: number) {
+    setSelectedConsumables((p) => ({ ...p, [id]: { ...p[id], quantity: Math.max(1, q) } }));
+  }
+  function toggleDrug(t: any) {
+    setSelectedDrugs((prev) => {
+      const next = { ...prev };
+      if (next[t.id]) delete next[t.id];
+      else next[t.id] = { quantity: t.defaultQuantity ?? 1, dosage: t.defaultDosage, route: t.defaultRoute };
+      return next;
+    });
+  }
+  function setDrugField(id: string, field: 'quantity' | 'dosage' | 'route' | 'notes', value: any) {
+    setSelectedDrugs((p) => ({
+      ...p,
+      [id]: { ...p[id], [field]: field === 'quantity' ? Math.max(1, Number(value) || 1) : value },
+    }));
+  }
+
+  async function handleConsentFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setConsentError('');
+    const file = e.target.files?.[0];
+    if (!file) { setConsentFile(null); return; }
+    if (file.size > 10 * 1024 * 1024) { setConsentError('Consent file must be ≤ 10 MB.'); return; }
+    if (!/^(application\/pdf|image\/(png|jpe?g|webp|heic))$/i.test(file.type)) {
+      setConsentError('Allowed formats: PDF, PNG, JPG, WEBP, HEIC.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',').pop() || '' : result;
+      setConsentFile({ name: file.name, mimeType: file.type, base64, size: file.size });
+    };
+    reader.onerror = () => setConsentError('Failed to read file.');
+    reader.readAsDataURL(file);
+  }
+
+  // Reload consumable catalog when subspecialty changes (so the picker can be specialty-filtered)
+  useEffect(() => {
+    if (subspecialty) fetchConsumableTemplates(subspecialty);
+  }, [subspecialty]);
 
   // Auto-fetch on-duty team when scheduledDate + scheduledTime are both set.
   useEffect(() => {
@@ -375,6 +457,37 @@ export default function NewSurgeryPage() {
             porterId: onDuty.team.porter?.userId ?? null,
             porterName: onDuty.team.porter?.name ?? null,
           }
+        : undefined,
+      // Pre-pack plan: surgical consumables (Consumable Pack Provider)
+      consumableRequests: Object.entries(selectedConsumables).map(([templateId, sel]) => {
+        const t = consumableTemplates.find((x: any) => x.id === templateId);
+        return {
+          templateId,
+          name: t?.name ?? 'Unknown',
+          category: t?.category ?? 'OTHER',
+          size: t?.size ?? null,
+          unit: t?.unit ?? 'piece',
+          quantity: sel.quantity,
+          notes: sel.notes ?? null,
+        };
+      }),
+      // Pre-pack plan: drugs / IV fluids / wound-dressing agents (Pharmacy)
+      drugDressingRequests: Object.entries(selectedDrugs).map(([templateId, sel]) => {
+        const t = drugDressingTemplates.find((x: any) => x.id === templateId);
+        return {
+          templateId,
+          name: t?.name ?? 'Unknown',
+          type: t?.type ?? 'OTHER',
+          dosage: sel.dosage ?? t?.defaultDosage ?? null,
+          route: sel.route ?? t?.defaultRoute ?? null,
+          quantity: sel.quantity,
+          unit: t?.unit ?? 'vial',
+          notes: sel.notes ?? null,
+        };
+      }),
+      // Informed consent file (base64) — visible to holding-area nurse for clearance
+      consentFile: consentFile
+        ? { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 }
         : undefined,
     };
 
@@ -1087,6 +1200,175 @@ export default function NewSurgeryPage() {
           {(comorbidities.length + currentMedications.length) > 0 && (
             <div className="mt-3 text-xs text-gray-500">
               Selected: {comorbidities.length} comorbidities, {currentMedications.length} current medications.
+            </div>
+          )}
+        </div>
+
+        {/* Surgical Consumables — Pre-pack plan for Consumable Pack Provider */}
+        <div className="card">
+          <div className="flex items-center gap-3 mb-2">
+            <Package className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Surgical Consumables</h2>
+            <span className="ml-auto text-xs text-gray-500">
+              Pre-pack list for the night before surgery (visible to Consumable Pack Provider).
+            </span>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Tick each item the patient needs. Quantities default to typical usage and can be edited.
+            {subspecialty ? ` Filtered to ${subspecialty}.` : ''}
+          </p>
+          {consumableLoading ? (
+            <div className="text-sm text-gray-500">Loading consumables…</div>
+          ) : consumableTemplates.length === 0 ? (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+              No consumables in catalog yet. An admin can seed the starter list at
+              <code className="mx-1 bg-amber-100 px-1 rounded">POST /api/admin/seed-surgical-catalog</code>
+              or curate items from <a href="/dashboard/admin/surgical-catalog" className="underline">Admin → Surgical Catalog</a>.
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[460px] overflow-y-auto pr-2">
+              {Object.entries(
+                consumableTemplates.reduce((acc: Record<string, any[]>, t: any) => {
+                  (acc[t.category] ||= []).push(t); return acc;
+                }, {}),
+              ).map(([cat, items]: any) => (
+                <div key={cat}>
+                  <div className="font-medium text-sm text-gray-800 mb-2">{cat.replaceAll('_', ' ')}</div>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {items.map((t: any) => {
+                      const sel = selectedConsumables[t.id];
+                      return (
+                        <div key={t.id} className={`flex items-center gap-2 border rounded px-3 py-2 ${sel ? 'bg-primary-50 border-primary-200' : 'border-gray-200'}`}>
+                          <input
+                            aria-label={`Select ${t.name}`}
+                            title={`Select ${t.name}`}
+                            type="checkbox"
+                            checked={!!sel}
+                            onChange={() => toggleConsumable(t)}
+                            className="w-4 h-4"
+                          />
+                          <div className="flex-1 text-sm">
+                            <div className="font-medium">{t.name}{t.size ? ` — ${t.size}` : ''}</div>
+                            <div className="text-xs text-gray-500">{t.unit}{t.specialty ? ` · ${t.specialty}` : ''}</div>
+                          </div>
+                          {sel && (
+                            <input
+                              aria-label={`Quantity for ${t.name}`}
+                              title="Quantity"
+                              placeholder="Qty"
+                              type="number"
+                              min={1}
+                              value={sel.quantity}
+                              onChange={(ev) => setConsumableQty(t.id, parseInt(ev.target.value, 10) || 1)}
+                              className="w-16 input text-sm py-1"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 text-xs text-gray-600">
+            Selected items: {Object.keys(selectedConsumables).length}
+          </div>
+        </div>
+
+        {/* Drugs and IV Fluids / Active Wound Dressing Agents — Pharmacy pre-pack */}
+        <div className="card">
+          <div className="flex items-center gap-3 mb-2">
+            <Pill className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Drugs and IV Fluids / Active Wound Dressing Agents</h2>
+            <span className="ml-auto text-xs text-gray-500">Visible to Pharmacy for packing.</span>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Select antibiotics, IV fluids, dressings and wound-care agents needed for this case.
+            Edit dosage / route / quantity per item.
+          </p>
+          {drugDressingLoading ? (
+            <div className="text-sm text-gray-500">Loading drugs &amp; dressings…</div>
+          ) : drugDressingTemplates.length === 0 ? (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+              No drugs/dressings in catalog yet. Admin can seed via
+              <code className="mx-1 bg-amber-100 px-1 rounded">POST /api/admin/seed-surgical-catalog</code>.
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[460px] overflow-y-auto pr-2">
+              {Object.entries(
+                drugDressingTemplates.reduce((acc: Record<string, any[]>, t: any) => {
+                  (acc[t.type] ||= []).push(t); return acc;
+                }, {}),
+              ).map(([typ, items]: any) => (
+                <div key={typ}>
+                  <div className="font-medium text-sm text-gray-800 mb-2">{typ.replaceAll('_', ' ')}</div>
+                  <div className="space-y-2">
+                    {items.map((t: any) => {
+                      const sel = selectedDrugs[t.id];
+                      return (
+                        <div key={t.id} className={`border rounded px-3 py-2 ${sel ? 'bg-primary-50 border-primary-200' : 'border-gray-200'}`}>
+                          <div className="flex items-center gap-2">
+                            <input
+                              aria-label={`Select ${t.name}`}
+                              title={`Select ${t.name}`}
+                              type="checkbox"
+                              checked={!!sel}
+                              onChange={() => toggleDrug(t)}
+                              className="w-4 h-4"
+                            />
+                            <div className="flex-1 text-sm font-medium">
+                              {t.name}
+                              {t.isControlled ? <span className="ml-2 text-[10px] uppercase bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Controlled</span> : null}
+                            </div>
+                            <div className="text-xs text-gray-500">{t.unit}</div>
+                          </div>
+                          {sel && (
+                            <div className="grid sm:grid-cols-4 gap-2 mt-2 ml-6 text-xs">
+                              <input className="input py-1" placeholder="Dosage" value={sel.dosage || ''} onChange={(e) => setDrugField(t.id, 'dosage', e.target.value)} />
+                              <input className="input py-1" placeholder="Route" value={sel.route || ''} onChange={(e) => setDrugField(t.id, 'route', e.target.value)} />
+                              <input aria-label={`Quantity for ${t.name}`} title="Quantity" placeholder="Qty" type="number" min={1} className="input py-1" value={sel.quantity} onChange={(e) => setDrugField(t.id, 'quantity', e.target.value)} />
+                              <input className="input py-1" placeholder="Notes" value={sel.notes || ''} onChange={(e) => setDrugField(t.id, 'notes', e.target.value)} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 text-xs text-gray-600">Selected: {Object.keys(selectedDrugs).length}</div>
+        </div>
+
+        {/* Informed Consent Upload — visible to Holding Area for clearance */}
+        <div className="card">
+          <div className="flex items-center gap-3 mb-2">
+            <FileText className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Informed Consent</h2>
+            <span className="ml-auto text-xs text-gray-500">Required for holding-area clearance.</span>
+          </div>
+          <p className="text-sm text-gray-600 mb-3">
+            Upload the signed informed consent (PDF or image, ≤ 10 MB). The Holding Area Nurse will review it
+            before transferring the patient to theatre.
+          </p>
+          <input
+            aria-label="Upload signed informed consent file"
+            title="Upload signed informed consent file"
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
+            onChange={handleConsentFileChange}
+            className="block text-sm"
+          />
+          {consentError && <div className="text-sm text-red-600 mt-2">{consentError}</div>}
+          {consentFile && (
+            <div className="mt-3 flex items-center gap-3 text-sm">
+              <span className="font-medium">{consentFile.name}</span>
+              <span className="text-gray-500">{(consentFile.size / 1024).toFixed(0)} KB · {consentFile.mimeType}</span>
+              <button type="button" className="text-red-600 underline text-xs" onClick={() => setConsentFile(null)}>
+                Remove
+              </button>
             </div>
           )}
         </div>

@@ -322,6 +322,28 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
         {/* Consent */}
         <div className="mb-6">
           <h3 className="font-semibold text-lg mb-3">3. Consent Validation</h3>
+
+          {/* Uploaded consent file (from booking form) */}
+          <div className="mb-4 p-3 border border-blue-200 bg-blue-50 rounded">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium">Uploaded Informed Consent Document</span>
+              <a
+                href={`/api/surgeries/${assessment.surgeryId}/consent`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-700 underline text-xs"
+              >
+                Open in new tab
+              </a>
+            </div>
+            <iframe
+              src={`/api/surgeries/${assessment.surgeryId}/consent`}
+              title="Informed consent document"
+              className="w-full h-64 mt-2 border rounded bg-white"
+            />
+            <p className="text-xs text-gray-600 mt-1">If empty, the surgeon has not yet uploaded a consent file.</p>
+          </div>
+
           <div className="space-y-3">
             <label className="flex items-center gap-2">
               <input

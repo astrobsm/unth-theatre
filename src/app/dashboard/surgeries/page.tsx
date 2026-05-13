@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -591,6 +591,17 @@ export default function SurgeriesPage() {
                             title="Track Consumables"
                           >
                             <Package className="w-4 h-4" />
+                          </Link>
+                        )}
+
+                        {/* Post-Op Prescription (after surgery) */}
+                        {(surgery.status === 'COMPLETED' || surgery.status === 'IN_RECOVERY' || surgery.status === 'RECOVERY_COMPLETE') && (
+                          <Link
+                            href={`/dashboard/surgeries/${surgery.id}/post-op-prescription`}
+                            className="inline-flex items-center gap-1 text-pink-600 hover:text-pink-900"
+                            title="Send post-op prescription to pharmacy"
+                          >
+                            <Pill className="w-4 h-4" />
                           </Link>
                         )}
 

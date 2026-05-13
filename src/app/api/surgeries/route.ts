@@ -56,6 +56,47 @@ const surgerySchema = z.object({
     userId: z.string().nullish(),
     staffCode: z.string().nullish(),
   })).optional(),
+
+  // ── Pre-pack plan: surgical consumables to be packed the night before ──
+  consumableRequests: z.array(z.object({
+    templateId: z.string().nullish(),
+    name: z.string().min(1),
+    category: z
+      .enum([
+        'GLOVES','GOWNS_DRAPES','SUTURES','SYRINGES_NEEDLES','CATHETERS_TUBING',
+        'DRESSING_PACKS','SKIN_PREP','CLEANING_SOLUTION','STERILE_DRESSINGS',
+        'IRRIGATION','DIATHERMY','SUCTION','ANAESTHESIA_AIRWAY','PPE','OTHER',
+      ])
+      .default('OTHER'),
+    size: z.string().nullish(),
+    unit: z.string().default('piece'),
+    quantity: z.number().int().min(1).default(1),
+    notes: z.string().nullish(),
+  })).optional(),
+
+  // ── Drugs / IV fluids / wound-dressing agents to be packed by Pharmacy ──
+  drugDressingRequests: z.array(z.object({
+    templateId: z.string().nullish(),
+    name: z.string().min(1),
+    type: z
+      .enum([
+        'ANTIBIOTIC','ANALGESIC','ANAESTHETIC_ADJUNCT','IV_FLUID',
+        'WOUND_DRESSING_AGENT','ANTISEPTIC','HAEMOSTATIC','OTHER',
+      ])
+      .default('OTHER'),
+    dosage: z.string().nullish(),
+    route: z.string().nullish(),
+    quantity: z.number().int().min(1).default(1),
+    unit: z.string().default('vial'),
+    notes: z.string().nullish(),
+  })).optional(),
+
+  // ── Informed consent file uploaded at booking (base64) ──
+  consentFile: z.object({
+    name: z.string().min(1),
+    mimeType: z.string().min(1),
+    base64: z.string().min(10), // base64 payload (no "data:" prefix expected, but tolerated)
+  }).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -147,6 +188,9 @@ export async function POST(request: NextRequest) {
       currentMedicationsList,
       otherCurrentMedications,
       onDutyTeam,
+      consumableRequests,
+      drugDressingRequests,
+      consentFile,
       ...surgeryData
     } = validatedData;
 
@@ -270,6 +314,19 @@ export async function POST(request: NextRequest) {
         anesthetistId: onDutyTeam?.anaesthetistId || null,
         surgeryType: surgeryType,
         scheduledDate: new Date(validatedData.scheduledDate),
+        // Informed consent file (base64) — visible to the holding-area nurse for
+        // pre-theatre clearance.
+        ...(consentFile
+          ? {
+              consentFileName: consentFile.name,
+              consentFileMimeType: consentFile.mimeType,
+              consentFileData: consentFile.base64.includes(",")
+                ? consentFile.base64.split(",").pop() || consentFile.base64
+                : consentFile.base64,
+              consentUploadedAt: new Date(),
+              consentUploadedById: (session.user as any).id,
+            }
+          : {}),
         // Create team members if provided
         teamMembers: teamMembers && teamMembers.length > 0 ? {
           create: teamMembers.map(tm => ({
@@ -295,6 +352,82 @@ export async function POST(request: NextRequest) {
         }
       }
     });
+
+    // Persist booking-time pre-pack plan (consumables for pack provider, drugs for pharmacy)
+    if (consumableRequests && consumableRequests.length) {
+      await prisma.surgeryConsumableRequest.createMany({
+        data: consumableRequests.map((c) => ({
+          surgeryId: surgery.id,
+          templateId: c.templateId ?? null,
+          name: c.name,
+          category: c.category as any,
+          size: c.size ?? null,
+          unit: c.unit ?? "piece",
+          quantity: c.quantity,
+          notes: c.notes ?? null,
+        })),
+      });
+    }
+
+    if (drugDressingRequests && drugDressingRequests.length) {
+      await prisma.surgeryDrugDressingRequest.createMany({
+        data: drugDressingRequests.map((d) => ({
+          surgeryId: surgery.id,
+          templateId: d.templateId ?? null,
+          name: d.name,
+          type: d.type as any,
+          dosage: d.dosage ?? null,
+          route: d.route ?? null,
+          quantity: d.quantity,
+          unit: d.unit ?? "vial",
+          notes: d.notes ?? null,
+        })),
+      });
+
+      // Notify pharmacists so they can begin packing as soon as the booking lands
+      try {
+        const pharmacists = await prisma.user.findMany({
+          where: { role: { in: ["PHARMACIST", "ADMIN", "SYSTEM_ADMINISTRATOR"] }, status: "APPROVED" },
+          select: { id: true },
+        });
+        for (const p of pharmacists) {
+          await prisma.notification.create({
+            data: {
+              userId: p.id,
+              type: "STOCK_ALERT",
+              title: "New surgical drug/dressing pack request",
+              message: `${drugDressingRequests.length} item(s) requested for ${patient.name} (${validatedData.procedureName}) — ${new Date(validatedData.scheduledDate).toLocaleDateString()}.`,
+              link: `/dashboard/medication-tracking?surgery=${surgery.id}`,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn("Pharmacy notification skipped", e);
+      }
+    }
+
+    // Notify consumable-pack providers (pre-pack night before surgery)
+    if (consumableRequests && consumableRequests.length) {
+      try {
+        const packers = await prisma.user.findMany({
+          where: { role: { in: ["CONSUMABLE_PACK_PROVIDER", "THEATRE_STORE_KEEPER", "ADMIN"] }, status: "APPROVED" },
+          select: { id: true },
+        });
+        for (const p of packers) {
+          await prisma.notification.create({
+            data: {
+              userId: p.id,
+              type: "STOCK_ALERT",
+              title: "New consumables pre-pack request",
+              message: `${consumableRequests.length} item(s) requested for ${patient.name} — ${validatedData.procedureName} on ${new Date(validatedData.scheduledDate).toLocaleDateString()}.`,
+              link: `/dashboard/consumable-pack-provider?surgery=${surgery.id}`,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn("Pack-provider notification skipped", e);
+      }
+    }
 
     // Log the action
     await prisma.auditLog.create({

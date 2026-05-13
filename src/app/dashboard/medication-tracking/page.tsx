@@ -119,10 +119,12 @@ interface Prescription {
 }
 
 // ===== TAB DEFINITIONS =====
-type TabKey = 'active' | 'reconciliation' | 'returns' | 'additional' | 'queries';
+type TabKey = 'active' | 'reconciliation' | 'returns' | 'additional' | 'queries' | 'pre-pack' | 'post-op';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'active', label: 'Active Surgery Tracking', icon: <Activity className="w-4 h-4" /> },
+  { key: 'pre-pack', label: 'Surgery Pre-Pack (Drugs/Dressings)', icon: <Package className="w-4 h-4" /> },
+  { key: 'post-op', label: 'Post-Op Prescriptions', icon: <Pill className="w-4 h-4" /> },
   { key: 'reconciliation', label: 'Reconciliation', icon: <ArrowLeftRight className="w-4 h-4" /> },
   { key: 'returns', label: 'Pharmacy Returns', icon: <RotateCcw className="w-4 h-4" /> },
   { key: 'additional', label: 'Emergency Requests', icon: <Radio className="w-4 h-4" /> },
@@ -162,6 +164,14 @@ export default function MedicationTrackingPage() {
   const [returnItems, setReturnItems] = useState<{ drugName: string; quantityReturned: number; condition: string; pharmacistNotes: string }[]>([]);
   const [pharmacistId, setPharmacistId] = useState('');
   const [pharmacistName, setPharmacistName] = useState('');
+
+  // Surgery pre-pack (drugs/dressings) state
+  const [drugDressingItems, setDrugDressingItems] = useState<any[]>([]);
+
+  // Post-op prescriptions state
+  const [postOpPrescriptions, setPostOpPrescriptions] = useState<any[]>([]);
+  const [postOpFilter, setPostOpFilter] = useState<string>('SENT_TO_PHARMACY');
+  const [billCostInputs, setBillCostInputs] = useState<Record<string, string>>({});
 
   const user = session?.user as any;
 
@@ -226,6 +236,20 @@ export default function MedicationTrackingPage() {
     }
   }, []);
 
+  const fetchDrugDressingItems = useCallback(async () => {
+    try {
+      const res = await fetch('/api/drug-dressing-requests');
+      if (res.ok) setDrugDressingItems(await res.json());
+    } catch (err) { console.error(err); }
+  }, []);
+
+  const fetchPostOpPrescriptions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/post-op-prescriptions?status=${encodeURIComponent(postOpFilter)}`);
+      if (res.ok) setPostOpPrescriptions(await res.json());
+    } catch (err) { console.error(err); }
+  }, [postOpFilter]);
+
   useEffect(() => {
     if (activeTab === 'active') {
       fetchActivePrescriptions();
@@ -235,8 +259,12 @@ export default function MedicationTrackingPage() {
       fetchAdditionalRequests();
     } else if (activeTab === 'queries') {
       fetchQueries();
+    } else if (activeTab === 'pre-pack') {
+      fetchDrugDressingItems();
+    } else if (activeTab === 'post-op') {
+      fetchPostOpPrescriptions();
     }
-  }, [activeTab, fetchActivePrescriptions, fetchReconciliations, fetchAdditionalRequests, fetchQueries]);
+  }, [activeTab, fetchActivePrescriptions, fetchReconciliations, fetchAdditionalRequests, fetchQueries, fetchDrugDressingItems, fetchPostOpPrescriptions]);
 
   useEffect(() => {
     if (selectedPrescription) {
@@ -1015,6 +1043,167 @@ export default function MedicationTrackingPage() {
     </div>
   );
 
+  // ===== TAB: SURGERY PRE-PACK (DRUGS / DRESSINGS) =====
+  const patchDrugDressing = async (id: string, action: string) => {
+    const r = await fetch('/api/drug-dressing-requests', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action }),
+    });
+    if (r.ok) fetchDrugDressingItems();
+    else alert((await r.json()).error || 'Failed');
+  };
+  const broadcastDrugDressing = async (surgeryId: string) => {
+    const r = await fetch('/api/drug-dressing-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ surgeryId }),
+    });
+    if (r.ok) alert('📻 Broadcast announced.');
+    else alert((await r.json()).error || 'Broadcast failed');
+  };
+
+  const renderPrePackTab = () => {
+    const grouped: Record<string, { surgery: any; items: any[] }> = {};
+    for (const it of drugDressingItems) {
+      if (!grouped[it.surgeryId]) grouped[it.surgeryId] = { surgery: it.surgery, items: [] };
+      grouped[it.surgeryId].items.push(it);
+    }
+    const groups = Object.values(grouped);
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-600">Drugs, IV fluids and active wound dressing agents requested at booking time.</p>
+        {groups.length === 0 && <div className="text-sm text-gray-500 italic">No pre-pack requests.</div>}
+        {groups.map((g) => {
+          const allPacked = g.items.every((i) => i.status === 'PACKED' || i.status === 'DELIVERED');
+          return (
+            <div key={g.surgery?.id} className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(g.surgery?.scheduledDate).toLocaleDateString()} · {g.surgery?.scheduledTime} · {g.surgery?.subspecialty}
+                  </div>
+                  <div className="font-semibold">{g.surgery?.patient?.name} — {g.surgery?.procedureName}</div>
+                  <div className="text-xs text-gray-500">Surgeon: {g.surgery?.surgeonName}</div>
+                </div>
+                {allPacked && (
+                  <button onClick={() => broadcastDrugDressing(g.surgery?.id)} className="text-xs px-3 py-1 bg-blue-600 text-white rounded inline-flex items-center gap-1">
+                    <Radio className="w-3 h-3" /> Broadcast Ready
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                {g.items.map((it) => (
+                  <div key={it.id} className={`border rounded p-2 text-sm ${it.status === 'PACKED' || it.status === 'DELIVERED' ? 'bg-green-50 border-green-200' : ''}`}>
+                    <div className="flex justify-between gap-2">
+                      <div>
+                        <div className="font-medium">{it.name}{it.dosage ? ` — ${it.dosage}` : ''}{it.isControlled ? ' 🔒' : ''}</div>
+                        <div className="text-xs text-gray-500">
+                          {it.quantity} {it.unit} · {it.route || it.type?.replaceAll('_', ' ')} · {it.status}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {it.status === 'REQUESTED' && (
+                          <button onClick={() => patchDrugDressing(it.id, 'PACKED')} className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded">Pack</button>
+                        )}
+                        {it.status === 'PACKED' && (
+                          <button onClick={() => patchDrugDressing(it.id, 'DELIVERED')} className="text-xs px-2 py-0.5 bg-gray-200 rounded">Delivered</button>
+                        )}
+                      </div>
+                    </div>
+                    {it.notes && <div className="text-xs text-gray-500 mt-1">📝 {it.notes}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ===== TAB: POST-OP PRESCRIPTIONS =====
+  const patchPostOp = async (id: string, action: string, body: any = {}) => {
+    const r = await fetch('/api/post-op-prescriptions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action, ...body }),
+    });
+    if (r.ok) fetchPostOpPrescriptions();
+    else alert((await r.json()).error || 'Failed');
+  };
+
+  const renderPostOpTab = () => (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-sm text-gray-600">Status:</span>
+        {['SENT_TO_PHARMACY', 'PACKING', 'PACKED', 'AWAITING_PAYMENT', 'PAID', 'COLLECTED'].map((s) => (
+          <button key={s} onClick={() => setPostOpFilter(s)} className={`px-2 py-1 rounded text-xs ${postOpFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>{s}</button>
+        ))}
+        <button onClick={fetchPostOpPrescriptions} className="ml-auto text-xs underline">Refresh</button>
+      </div>
+      {postOpPrescriptions.length === 0 && <div className="text-sm text-gray-500 italic">No prescriptions in this state.</div>}
+      {postOpPrescriptions.map((p: any) => {
+        const meds = Array.isArray(p.medications) ? p.medications : [];
+        return (
+          <div key={p.id} className="bg-white rounded-lg shadow p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-xs text-gray-500">{new Date(p.createdAt).toLocaleString()} · status <strong>{p.status}</strong></div>
+                <div className="font-semibold">{p.surgery?.patient?.name} — {p.surgery?.procedureName}</div>
+                <div className="text-xs text-gray-500">Prescribed by {p.prescribedByName}</div>
+              </div>
+              <div className="text-right text-xs">
+                {p.totalCost ? <div>Bill: ₦{Number(p.totalCost).toLocaleString()}</div> : null}
+                {p.billAnnouncedAt && <div className="text-blue-600">📻 Bill announced</div>}
+                {p.billPaidAt && <div className="text-green-600">✓ Paid</div>}
+                {p.collectedAt && <div className="text-green-700">✓ Collected</div>}
+              </div>
+            </div>
+            <ul className="mt-2 text-sm list-disc ml-5">
+              {meds.map((m: any, i: number) => (
+                <li key={i}>
+                  {m.drugName} {m.dosage} {m.route} — qty {m.quantity}{m.frequency ? `, ${m.frequency}` : ''}{m.duration ? `, ${m.duration}` : ''}{m.isControlled ? ' 🔒' : ''}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2 items-center">
+              {p.status === 'SENT_TO_PHARMACY' && (
+                <button onClick={() => patchPostOp(p.id, 'RECEIVE')} className="text-xs px-2 py-1 bg-blue-600 text-white rounded">Receive</button>
+              )}
+              {(p.status === 'SENT_TO_PHARMACY' || p.status === 'PACKING') && (
+                <>
+                  <input
+                    type="number"
+                    placeholder="Total cost (₦)"
+                    aria-label="Total cost in Naira"
+                    className="text-xs border rounded px-2 py-1 w-32"
+                    value={billCostInputs[p.id] ?? (p.totalCost ?? '')}
+                    onChange={(e) => setBillCostInputs((s) => ({ ...s, [p.id]: e.target.value }))}
+                  />
+                  <button
+                    onClick={() => patchPostOp(p.id, 'PACKED', { totalCost: Number(billCostInputs[p.id] || p.totalCost || 0) })}
+                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded"
+                  >Mark Packed & Announce Bill</button>
+                </>
+              )}
+              {p.status === 'AWAITING_PAYMENT' && (
+                <button onClick={() => patchPostOp(p.id, 'MARK_PAID')} className="text-xs px-2 py-1 bg-green-600 text-white rounded">Mark Paid & Announce Pickup</button>
+              )}
+              {p.status === 'PAID' && (
+                <button onClick={() => patchPostOp(p.id, 'COLLECTED')} className="text-xs px-2 py-1 bg-green-700 text-white rounded">Mark Collected</button>
+              )}
+              {p.status !== 'COLLECTED' && p.status !== 'CANCELLED' && (
+                <button onClick={() => patchPostOp(p.id, 'CANCEL')} className="text-xs underline text-red-600 ml-auto">Cancel</button>
+              )}
+            </div>
+            {p.notes && <div className="mt-2 text-xs text-gray-500">📝 {p.notes}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   // ===== MAIN RENDER =====
   return (
     <div className="p-4 max-w-7xl mx-auto">
@@ -1052,6 +1241,8 @@ export default function MedicationTrackingPage() {
       {(activeTab === 'reconciliation' || activeTab === 'returns') && renderReconciliationTab()}
       {activeTab === 'additional' && renderAdditionalTab()}
       {activeTab === 'queries' && renderQueriesTab()}
+      {activeTab === 'pre-pack' && renderPrePackTab()}
+      {activeTab === 'post-op' && renderPostOpTab()}
 
       {/* ===== MODALS ===== */}
 

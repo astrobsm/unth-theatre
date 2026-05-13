@@ -24,6 +24,7 @@ export const ONBOARDING_ROLES: RoleDef[] = [
 
   // Support / Stores
   { value: 'THEATRE_STORE_KEEPER',     label: 'Theatre Store Keeper',             prefix: 'TSK' },
+  { value: 'CONSUMABLE_PACK_PROVIDER', label: 'Consumable Pack Provider',         prefix: 'CPP' },
   { value: 'BIOMEDICAL_ENGINEER',      label: 'Biomedical Engineer',              prefix: 'BME' },
   { value: 'PROCUREMENT_OFFICER',      label: 'Procurement Officer',              prefix: 'PRO' },
   { value: 'PORTER',                   label: 'Porter',                           prefix: 'PRT' },

@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
           'POWER_PLANT_OPERATOR',
           'THEATRE_CAFETERIA_MANAGER',
           'EMERGENCY_LAB_SCIENTIST', 'LABORATORY_STAFF',
+          'CONSUMABLE_PACK_PROVIDER',
         ];
 
         if (!validRoles.includes(user.role)) {

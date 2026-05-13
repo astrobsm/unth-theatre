@@ -32,7 +32,8 @@ export type UserRole =
   | 'THEATRE_CAFETERIA_MANAGER'
   | 'LAUNDRY_STAFF'
   | 'PLUMBER'
-  | 'LABORATORY_STAFF';
+  | 'LABORATORY_STAFF'
+  | 'CONSUMABLE_PACK_PROVIDER';
 
 export interface Permission {
   create: UserRole[];
@@ -361,6 +362,7 @@ export function getRoleName(role: UserRole): string {
     LAUNDRY_STAFF: 'Laundry Staff',
     PLUMBER: 'Plumber',
     LABORATORY_STAFF: 'Laboratory Staff',
+    CONSUMABLE_PACK_PROVIDER: 'Consumable Pack Provider',
   };
   
   return roleNames[role] || role;
@@ -401,6 +403,7 @@ export function getRoleDashboard(role: UserRole): string {
     LAUNDRY_STAFF: '/dashboard/laundry',
     PLUMBER: '/dashboard/water-supply',
     LABORATORY_STAFF: '/dashboard/emergency-lab-workup',
+    CONSUMABLE_PACK_PROVIDER: '/dashboard/consumable-pack-provider',
   };
   
   return roleDashboards[role] || '/dashboard';
