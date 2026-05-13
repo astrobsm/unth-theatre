@@ -181,6 +181,7 @@ export default function DashboardLayout({
   if (accessEditorRoles.includes(session.user.role)) {
     menuItems.push({ href: '/dashboard/admin/access', icon: Shield, label: 'Module Access', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-units', icon: Building2, label: 'Surgical Units', badge: 'ADMIN' });
+    menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog', badge: 'ADMIN' });
   }
 
   // Live monitoring — visible to admins, theatre manager and chairman
