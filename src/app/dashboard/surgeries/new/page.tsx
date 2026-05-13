@@ -1019,7 +1019,7 @@ export default function NewSurgeryPage() {
                             type="checkbox"
                             className="hidden"
                             checked={checked}
-                            onChange={() => setComorbidities((prev) => toggleListItem(prev, item))}
+                            onChange={() => toggleListItem(comorbidities, setComorbidities, item)}
                           />
                           {item}
                         </label>
@@ -1062,7 +1062,7 @@ export default function NewSurgeryPage() {
                       type="checkbox"
                       className="hidden"
                       checked={checked}
-                      onChange={() => setCurrentMedications((prev) => toggleListItem(prev, med))}
+                      onChange={() => toggleListItem(currentMedications, setCurrentMedications, med)}
                     />
                     {med}
                   </label>
