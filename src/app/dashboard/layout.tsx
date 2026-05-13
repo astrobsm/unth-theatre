@@ -119,6 +119,7 @@ export default function DashboardLayout({
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
+    { href: '/dashboard/consumable-pack-provider', icon: PackageCheck, label: 'Consumable Packs', badge: 'NEW' },
     { href: '/dashboard/medication-tracking', icon: Pill, label: 'Med Tracking', badge: 'NEW' },
 
     // === HANDOVER ===

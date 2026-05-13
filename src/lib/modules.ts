@@ -72,6 +72,7 @@ export const MODULES: AppModule[] = [
   { id: 'checklists', label: 'WHO Checklists', paths: ['/dashboard/checklists'], defaultRoles: ['SCRUB_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
   { id: 'equipment-checkout', label: 'Equipment Checkout', paths: ['/dashboard/equipment-checkout'], defaultRoles: ['THEATRE_STORE_KEEPER', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'], category: 'Intra-Op' },
   { id: 'medication-tracking', label: 'Med Tracking', paths: ['/dashboard/medication-tracking'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Intra-Op' },
+  { id: 'consumable-pack-provider', label: 'Consumable Packs', paths: ['/dashboard/consumable-pack-provider'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER'], category: 'Intra-Op' },
 
   // Handover
   { id: 'nurse-handover', label: 'Nurse Handover', paths: ['/dashboard/nurse-handover'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Handover' },
