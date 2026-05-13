@@ -441,55 +441,67 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
           <h3 className="font-semibold text-lg mb-3">6. Vital Signs</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Temperature (°C)</label>
+              <label htmlFor="vs-temperature" className="block text-sm text-gray-600 mb-1">Temperature (°C)</label>
               <input
+                id="vs-temperature"
                 type="number"
                 step="0.1"
+                placeholder="e.g. 36.8"
                 value={assessment.temperature || ''}
                 onChange={(e) => updateAssessment({ temperature: parseFloat(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Heart Rate (bpm)</label>
+              <label htmlFor="vs-heart-rate" className="block text-sm text-gray-600 mb-1">Heart Rate (bpm)</label>
               <input
+                id="vs-heart-rate"
                 type="number"
+                placeholder="e.g. 78"
                 value={assessment.heartRate || ''}
                 onChange={(e) => updateAssessment({ heartRate: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">BP Systolic</label>
+              <label htmlFor="vs-bp-systolic" className="block text-sm text-gray-600 mb-1">BP Systolic</label>
               <input
+                id="vs-bp-systolic"
                 type="number"
+                placeholder="mmHg"
                 value={assessment.bloodPressureSystolic || ''}
                 onChange={(e) => updateAssessment({ bloodPressureSystolic: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">BP Diastolic</label>
+              <label htmlFor="vs-bp-diastolic" className="block text-sm text-gray-600 mb-1">BP Diastolic</label>
               <input
+                id="vs-bp-diastolic"
                 type="number"
+                placeholder="mmHg"
                 value={assessment.bloodPressureDiastolic || ''}
                 onChange={(e) => updateAssessment({ bloodPressureDiastolic: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Respiratory Rate</label>
+              <label htmlFor="vs-respiratory-rate" className="block text-sm text-gray-600 mb-1">Respiratory Rate</label>
               <input
+                id="vs-respiratory-rate"
                 type="number"
+                placeholder="breaths/min"
                 value={assessment.respiratoryRate || ''}
                 onChange={(e) => updateAssessment({ respiratoryRate: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">SpO2 (%)</label>
+              <label htmlFor="vs-spo2" className="block text-sm text-gray-600 mb-1">SpO2 (%)</label>
               <input
+                id="vs-spo2"
                 type="number"
+                placeholder="%"
                 value={assessment.oxygenSaturation || ''}
                 onChange={(e) => updateAssessment({ oxygenSaturation: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -615,8 +627,10 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
             <h3 className="text-xl font-bold mb-4">Trigger Red Alert</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Alert Type</label>
+                <label htmlFor="alert-type" className="block text-sm font-medium mb-2">Alert Type</label>
                 <select
+                  id="alert-type"
+                  aria-label="Alert type"
                   value={alertType}
                   onChange={(e) => setAlertType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"

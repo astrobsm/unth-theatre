@@ -1,0 +1,43 @@
+{
+  "extends": ["development"],
+  "hints": {
+    "axe/forms": [
+      "warning",
+      {
+        "label": "warning"
+      }
+    ],
+    "axe/text-alternatives": "warning",
+    "axe/color": "off",
+    "axe/aria": "warning",
+    "axe/name-role-value": "warning",
+    "axe/keyboard": "warning",
+    "axe/structure": "warning",
+    "axe/language": "off",
+    "axe/parsing": "off",
+    "axe/sensory-and-visual-cues": "off",
+    "axe/tables": "off",
+    "axe/time-and-media": "off",
+    "axe/other": "off",
+    "no-inline-styles": "off",
+    "button-type": "warning",
+    "compat-api": "off",
+    "no-vulnerable-javascript-libraries": "warning",
+    "meta-viewport": "warning",
+    "html-checker": "off",
+    "no-disallowed-headers": "warning",
+    "x-content-type-options": "warning",
+    "create-element-svg": "off",
+    "apple-touch-icons": "off",
+    "manifest-icons": "warning",
+    "manifest-is-valid": "warning"
+  },
+  "ignoredUrls": [
+    {
+      "domain": ".*",
+      "hints": [
+        "no-vulnerable-javascript-libraries"
+      ]
+    }
+  ]
+}

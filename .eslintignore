@@ -1,0 +1,17 @@
+# Build output / generated
+.next/
+out/
+node_modules/
+coverage/
+
+# Static assets and service worker (not source)
+public/sw.js
+public/training/**
+public/**/*.js
+
+# Generated Prisma artefacts
+prisma/migrations/**
+
+# Build / debug logs
+build-log*.txt
+*.log
