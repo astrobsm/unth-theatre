@@ -161,6 +161,7 @@ export default function DashboardLayout({
     { href: '/dashboard/reports/staff-effectiveness', icon: TrendingUp, label: 'Staff Effectiveness' },
     { href: '/dashboard/reports', icon: FileText, label: 'Reports & Analytics' },
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
+    { href: '/dashboard/catalog-contribute', icon: Package, label: 'Contribute Catalog', badge: 'NEW' },
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
     { href: '/role-guide', icon: GraduationCap, label: 'Role Guide', badge: 'GUIDE', external: true },

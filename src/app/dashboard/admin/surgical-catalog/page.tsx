@@ -13,7 +13,7 @@
  * curated UNTH starter list — ~50 consumables + ~30 drugs).
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -29,6 +29,9 @@ import {
   X,
   ArrowLeft,
   Search,
+  Share2,
+  FileDown,
+  Users,
 } from 'lucide-react';
 
 type ConsumableCategory =
@@ -100,6 +103,9 @@ export default function SurgicalCatalogPage() {
 
   const [tab, setTab] = useState<'consumables' | 'drugs'>('consumables');
   const [filter, setFilter] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [consumables, setConsumables] = useState<Consumable[]>([]);
   const [drugs, setDrugs] = useState<Drug[]>([]);
@@ -125,6 +131,99 @@ export default function SurgicalCatalogPage() {
   }, []);
 
   useEffect(() => { if (status === 'authenticated') refresh(); }, [status, refresh]);
+
+  // Auto-refresh every 20s when toggled on (real-time view of crowdsourced submissions)
+  useEffect(() => {
+    if (!autoRefresh) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    pollRef.current = setInterval(() => { refresh(); }, 20_000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [autoRefresh, refresh]);
+
+  const copyShareLink = async () => {
+    const url = `${window.location.origin}/dashboard/catalog-contribute`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Share link copied to clipboard');
+    } catch {
+      window.prompt('Copy this link:', url);
+    }
+  };
+
+  const exportPdf = async () => {
+    setExporting(true);
+    try {
+      const [{ default: jsPDF }, autoTableMod] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const autoTable = (autoTableMod as any).default || (autoTableMod as any);
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const today = new Date().toLocaleString();
+
+      doc.setFontSize(16);
+      doc.text('UNTH Theatre — Surgical Catalog', 40, 40);
+      doc.setFontSize(10);
+      doc.setTextColor(110);
+      doc.text(`Generated ${today}`, 40, 56);
+      doc.setTextColor(0);
+
+      // Consumables table
+      doc.setFontSize(13);
+      doc.text(`Surgical Consumables (${consumables.length})`, 40, 80);
+      autoTable(doc, {
+        startY: 90,
+        head: [['Name', 'Category', 'Size', 'Unit', 'Default Qty', 'Specialty', 'Active', 'Notes']],
+        body: consumables.map(c => [
+          c.name, c.category, c.size || '-', c.unit, c.defaultQuantity,
+          c.specialty || 'all', c.isActive ? 'Yes' : 'No', c.notes || '',
+        ]),
+        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+        headStyles: { fillColor: [37, 99, 235] },
+        columnStyles: { 7: { cellWidth: 160 } },
+      });
+
+      // Drugs table on a fresh page
+      doc.addPage();
+      doc.setFontSize(13);
+      doc.text(`Drugs / IV Fluids / Active Wound Dressings (${drugs.length})`, 40, 40);
+      autoTable(doc, {
+        startY: 50,
+        head: [['Name', 'Type', 'Dosage', 'Route', 'Default Qty', 'Unit', 'Specialty', 'Controlled', 'Active', 'Notes']],
+        body: drugs.map(d => [
+          d.name, d.type, d.defaultDosage || '-', d.defaultRoute || '-',
+          d.defaultQuantity, d.unit, d.specialty || 'all',
+          d.isControlled ? 'YES' : '-', d.isActive ? 'Yes' : 'No', d.notes || '',
+        ]),
+        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+        headStyles: { fillColor: [124, 58, 237] },
+        columnStyles: { 9: { cellWidth: 140 } },
+      });
+
+      const pageCount = (doc as any).getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(140);
+        doc.text(
+          `Page ${i} of ${pageCount}  •  UNTH Theatre Surgical Catalog`,
+          doc.internal.pageSize.getWidth() / 2,
+          doc.internal.pageSize.getHeight() - 20,
+          { align: 'center' },
+        );
+      }
+
+      const filename = `surgical-catalog-${new Date().toISOString().slice(0, 10)}.pdf`;
+      doc.save(filename);
+      toast.success('PDF exported');
+    } catch (e: any) {
+      toast.error('Export failed: ' + (e?.message ?? e));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const seed = async () => {
     if (!confirm('Seed the curated UNTH starter catalog?\n\nThis adds ~50 consumables and ~30 drugs/IV fluids/dressings using idempotent upserts (existing items are not duplicated).')) return;
@@ -221,6 +320,33 @@ export default function SurgicalCatalogPage() {
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
+          <label className="px-3 py-2 bg-white border border-gray-300 rounded-lg inline-flex items-center text-sm cursor-pointer">
+            <input type="checkbox" className="mr-2" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
+            Live (20s)
+          </label>
+          <button
+            onClick={exportPdf}
+            disabled={exporting || (consumables.length === 0 && drugs.length === 0)}
+            className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center text-sm"
+          >
+            <FileDown className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} />
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+          <button
+            onClick={copyShareLink}
+            className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center text-sm"
+            title="Copy contribute link to clipboard"
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Share contribute link
+          </button>
+          <Link
+            href="/dashboard/catalog-contribute"
+            className="px-3 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-lg hover:bg-emerald-100 inline-flex items-center text-sm"
+          >
+            <Users className="w-4 h-4 mr-2" />
+            Open contribute form
+          </Link>
           {canEdit && (
             <button
               onClick={seed}
