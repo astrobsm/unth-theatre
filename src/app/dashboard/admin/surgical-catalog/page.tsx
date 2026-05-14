@@ -347,6 +347,14 @@ export default function SurgicalCatalogPage() {
             <Users className="w-4 h-4 mr-2" />
             Open contribute form
           </Link>
+          <Link
+            href="/dashboard/catalog-letter"
+            className="px-3 py-2 bg-indigo-50 border border-indigo-300 text-indigo-800 rounded-lg hover:bg-indigo-100 inline-flex items-center text-sm"
+            title="Letter to Chief Residents — printable / PDF / WhatsApp"
+          >
+            <FileDown className="w-4 h-4 mr-2" />
+            Chief Residents letter
+          </Link>
           {canEdit && (
             <button
               onClick={seed}
