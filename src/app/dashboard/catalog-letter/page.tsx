@@ -70,11 +70,7 @@ async function buildPdf(): Promise<{ doc: any; blob: Blob; filename: string }> {
   doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL (UNTH), ITUKU-OZALLA', W / 2, y, { align: 'center' });
   y += 16;
   doc.setFontSize(11);
-  doc.text('DEPARTMENT OF SURGERY — THEATRE COMPLEX', W / 2, y, { align: 'center' });
-  y += 14;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text('Office of the Theatre Manager / Coordinating Surgeon', W / 2, y, { align: 'center' });
+  doc.text('THEATRE COMPLEX', W / 2, y, { align: 'center' });
   y += 18;
   doc.setDrawColor(37, 99, 235);
   doc.setLineWidth(1);
@@ -293,8 +289,7 @@ export default function ChiefResidentsLetterPage() {
       <article className="bg-white shadow-sm border rounded-lg p-10 leading-relaxed text-gray-900 print:shadow-none print:border-0 print:p-0">
         <header className="text-center border-b pb-4 mb-6">
           <h1 className="text-lg font-bold tracking-wide">UNIVERSITY OF NIGERIA TEACHING HOSPITAL (UNTH), ITUKU-OZALLA</h1>
-          <p className="text-sm font-semibold mt-1">DEPARTMENT OF SURGERY — THEATRE COMPLEX</p>
-          <p className="text-xs text-gray-600 mt-1">Office of the Theatre Manager / Coordinating Surgeon</p>
+          <p className="text-sm font-semibold mt-1">THEATRE COMPLEX</p>
         </header>
 
         <div className="flex justify-between text-sm mb-6">
