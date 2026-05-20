@@ -55,3 +55,78 @@ body {
     max-height: calc(100vh - 380px);
   }
 }
+
+/* ---------------------------------------------------------------
+ * Mobile-first responsive helpers
+ * Keeps content clear of the fixed Theatre Radio bar at the bottom
+ * and prevents long tables / wide toolbars from being clipped on
+ * small phones (≤ 360px screens).
+ * -------------------------------------------------------------*/
+
+/* Reserve space at the bottom of every dashboard page so the global
+   Theatre Radio bar (fixed, ~64px) never overlaps the last row of
+   content. iOS safe-area inset added for notched devices. */
+.dashboard-main {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Generic responsive page header — title + toolbar that stack on
+   small screens and sit side-by-side on ≥ sm. */
+.page-header {
+  @apply flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4 sm:mb-6;
+}
+.page-header-actions {
+  @apply flex flex-wrap items-end gap-2 w-full sm:w-auto;
+}
+
+/* Sticky action bar for primary CTAs on mobile so important buttons
+   are never hidden behind tables / off-screen scroll. */
+.mobile-action-bar {
+  @apply sm:hidden sticky top-0 z-20 -mx-4 px-4 py-2 bg-white/95 backdrop-blur border-b border-gray-200;
+}
+
+/* Table → card responsive pattern: hide horizontal-scroll tables on
+   phones; show a card list instead. Use:
+     <div class="responsive-table">…<table/>…</div>
+     <div class="responsive-cards">…cards…</div>          */
+.responsive-table {
+  @apply hidden sm:block;
+}
+.responsive-cards {
+  @apply sm:hidden space-y-3;
+}
+
+/* Prevent any single element from forcing horizontal scroll on the
+   whole viewport (common cause: very long unbroken folder numbers /
+   procedure names). */
+.dashboard-main h1,
+.dashboard-main h2,
+.dashboard-main h3,
+.dashboard-main p,
+.dashboard-main span,
+.dashboard-main td,
+.dashboard-main a {
+  overflow-wrap: anywhere;
+}
+
+/* Make all <input>, <select>, <textarea> at least 44px tall on touch
+   devices — meets WCAG 2.5.5 target size and stops form fields from
+   feeling cramped on small phones. */
+@media (hover: none) and (pointer: coarse) {
+  .dashboard-main input:not([type="checkbox"]):not([type="radio"]),
+  .dashboard-main select,
+  .dashboard-main textarea,
+  .dashboard-main button {
+    min-height: 40px;
+  }
+}
+
+/* Tighten outer padding on very small phones so a 320–360px screen
+   does not lose 32px of horizontal real estate to gutters. */
+@media (max-width: 480px) {
+  .dashboard-main {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+}
+

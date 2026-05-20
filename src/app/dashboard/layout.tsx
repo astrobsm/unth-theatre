@@ -66,7 +66,22 @@ export default function DashboardLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Default: collapsed on phones (<1024px), expanded on desktop. Avoids the
+  // sidebar covering the page on first load on small screens.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSidebarOpen(window.matchMedia('(min-width: 1024px)').matches);
+    }
+  }, []);
+
+  // Auto-close sidebar after navigation on mobile so the page is visible.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1024px)').matches) {
+      setSidebarOpen(false);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -328,23 +343,23 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main content */}
-      <div className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
+      <div className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'ml-0'}`}>
         <header className="bg-white shadow-sm border-b-2 border-primary-500 sticky top-0 z-30">
-          <div className="px-8 py-5 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+          <div className="px-4 sm:px-8 py-3 sm:py-5 flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
               {/* Toggle Sidebar Button */}
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 rounded-lg bg-primary-100 hover:bg-primary-200 text-primary-800 transition-colors"
+                className="p-2 rounded-lg bg-primary-100 hover:bg-primary-200 text-primary-800 transition-colors flex-shrink-0"
                 aria-label="Toggle sidebar"
               >
                 {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
-              <div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent truncate">
                   Welcome, {session.user.name}
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1 hidden xs:block sm:block">
                   {new Date().toLocaleDateString('en-GB', { 
                     weekday: 'long', 
                     year: 'numeric', 
@@ -354,10 +369,10 @@ export default function DashboardLayout({
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <OfflineIndicator />
               <ServiceWorkerUpdatePrompt />
-              <span className="px-4 py-2 bg-primary-100 text-primary-800 rounded-full text-sm font-semibold">
+              <span className="px-2 sm:px-4 py-1 sm:py-2 bg-primary-100 text-primary-800 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap">
                 {session.user.role.replace(/_/g, ' ')}
               </span>
             </div>
@@ -365,7 +380,7 @@ export default function DashboardLayout({
         </header>
 
         <main
-          className="p-8 min-h-screen relative"
+          className="dashboard-main p-4 sm:p-8 min-h-screen relative"
           style={{
             backgroundColor: '#f9fafb',
             backgroundImage: "url('/unth-orm-logo.png')",
