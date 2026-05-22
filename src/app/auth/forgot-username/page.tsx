@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 
 const PHONE_RE = /^(0\d{10}|\+234\d{10})$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Match = {
   username: string;
@@ -13,36 +14,61 @@ type Match = {
   staffCode?: string | null;
 };
 
+type Method = 'email' | 'phone';
+
 export default function ForgotUsernamePage() {
+  const [method, setMethod] = useState<Method>('email');
+  const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
   const [pending, setPending] = useState<Match[]>([]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const cleaned = phoneNumber.trim().replace(/\s+/g, '');
-    if (!PHONE_RE.test(cleaned)) {
-      setError('Enter the 11-digit number you registered with (e.g. 08012345678 or +2348012345678).');
-      return;
+
+    let payload: Record<string, string>;
+    if (method === 'email') {
+      const cleaned = email.trim().toLowerCase();
+      if (!EMAIL_RE.test(cleaned)) {
+        setError('Enter the email address you registered with.');
+        return;
+      }
+      payload = { email: cleaned };
+    } else {
+      const cleaned = phoneNumber.trim().replace(/\s+/g, '');
+      if (!PHONE_RE.test(cleaned)) {
+        setError('Enter the 11-digit number you registered with (e.g. 08012345678 or +2348012345678).');
+        return;
+      }
+      payload = { phoneNumber: cleaned };
     }
+
     setLoading(true);
     try {
       const res = await fetch('/api/auth/forgot-username', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: cleaned }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Lookup failed');
         return;
       }
-      setMatches(data.matches || []);
-      setPending(data.pending || []);
+      if (data.method === 'email') {
+        setEmailMessage(data.message);
+        setMatches([]);
+        setPending([]);
+      } else {
+        setEmailMessage(null);
+        setMatches(data.matches || []);
+        setPending(data.pending || []);
+      }
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message || 'Network error');
@@ -55,6 +81,8 @@ export default function ForgotUsernamePage() {
     setSubmitted(false);
     setMatches([]);
     setPending([]);
+    setEmailMessage(null);
+    setEmail('');
     setPhoneNumber('');
     setError(null);
   };
@@ -67,8 +95,8 @@ export default function ForgotUsernamePage() {
             Recover your username
           </h1>
           <p className="mt-2 text-sm text-gray-700">
-            Forgot the username you registered with? Enter the phone number you used during
-            staff onboarding and we&apos;ll show you the username on file.
+            Forgot the username you registered with? Choose how we should look it up — we&apos;ll
+            email it to your registered address, or show it on screen if you use your phone number.
           </p>
         </div>
 
@@ -79,36 +107,96 @@ export default function ForgotUsernamePage() {
                 {error}
               </div>
             )}
-            <div>
-              <label htmlFor="phoneNumber" className="label">Phone number</label>
-              <input
-                id="phoneNumber"
-                name="phoneNumber"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                required
-                className="input-field"
-                placeholder="08012345678 or +2348012345678"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                disabled={loading}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Must match the number you submitted on the onboarding form.
-              </p>
+
+            <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Recovery method">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={method === 'email' ? 'true' : 'false'}
+                onClick={() => { setMethod('email'); setError(null); }}
+                className={`py-2 px-3 rounded-lg text-sm font-medium border transition ${
+                  method === 'email'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'
+                }`}
+              >
+                By email
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={method === 'phone' ? 'true' : 'false'}
+                onClick={() => { setMethod('phone'); setError(null); }}
+                className={`py-2 px-3 rounded-lg text-sm font-medium border transition ${
+                  method === 'phone'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'
+                }`}
+              >
+                By phone
+              </button>
             </div>
+
+            {method === 'email' ? (
+              <div>
+                <label htmlFor="email" className="label">Registered email address</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  required
+                  className="input-field"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  We&apos;ll email your username(s) to this address if it&apos;s on file.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="phoneNumber" className="label">Phone number</label>
+                <input
+                  id="phoneNumber"
+                  name="phoneNumber"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  required
+                  className="input-field"
+                  placeholder="08012345678 or +2348012345678"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Must match the number you submitted on the onboarding form.
+                </p>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
               className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Searching…' : 'Find my username'}
+              {loading ? 'Searching…' : method === 'email' ? 'Email me my username' : 'Find my username'}
             </button>
           </form>
         ) : (
           <div className="space-y-4">
-            {matches.length === 0 && pending.length === 0 && (
+            {emailMessage && (
+              <div className="bg-green-50 border border-green-300 text-green-800 rounded-lg p-4 text-sm">
+                <p className="font-semibold mb-1">Check your inbox</p>
+                <p>{emailMessage}</p>
+              </div>
+            )}
+
+            {!emailMessage && matches.length === 0 && pending.length === 0 && (
               <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-4 text-sm">
                 <p className="font-semibold mb-1">No account found</p>
                 <p>

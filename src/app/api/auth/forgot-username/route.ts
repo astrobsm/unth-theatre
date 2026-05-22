@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { sendMail, usernameRecoveryEmail } from '@/lib/mailer';
 
 export const dynamic = 'force-dynamic';
 
 const PHONE_RE = /^(0\d{10}|\+234\d{10})$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function originFromRequest(request: NextRequest): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    request.headers.get('origin') ||
+    `https://${request.headers.get('host') || 'unth-theatre-mai.vercel.app'}`
+  );
+}
 
 // Tiny in-memory rate limit (per IP) — Vercel/serverless: best-effort only.
 const RL = new Map<string, { count: number; resetAt: number }>();
@@ -49,10 +59,46 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const rawEmail = String(body.email ?? '').trim().toLowerCase();
     const phoneNumber = String(body.phoneNumber ?? '').trim().replace(/\s+/g, '');
 
+    /* ---------------- Email path (preferred) -------------------- */
+    if (rawEmail) {
+      if (!EMAIL_RE.test(rawEmail)) {
+        return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+      }
+
+      const users = await prisma.user.findMany({
+        where: { email: rawEmail },
+        select: { username: true, fullName: true, role: true, status: true, email: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      const usable = users.filter((u) => u.status === 'APPROVED' || u.status === 'PENDING');
+
+      if (usable.length > 0) {
+        const loginUrl = `${originFromRequest(request)}/auth/login`;
+        const { subject, text, html } = usernameRecoveryEmail({
+          fullName: usable[0].fullName,
+          usernames: usable.map((u) => u.username),
+          loginUrl,
+        });
+        await sendMail({ to: rawEmail, subject, text, html });
+      }
+
+      // Generic response either way to avoid revealing which addresses are registered.
+      return NextResponse.json({
+        method: 'email',
+        message:
+          'If that email is registered with us, your username has been sent to it. Please check your inbox (and spam folder).',
+      });
+    }
+
+    /* ---------------- Phone path (legacy) ----------------------- */
     if (!phoneNumber) {
-      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Provide your registered email address or phone number.' },
+        { status: 400 }
+      );
     }
     if (!PHONE_RE.test(phoneNumber)) {
       return NextResponse.json(
@@ -87,7 +133,7 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({ matches: users, pending });
+    return NextResponse.json({ method: 'phone', matches: users, pending });
   } catch (err: any) {
     console.error('forgot-username error:', err);
     return NextResponse.json(
