@@ -2,7 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog } from 'lucide-react';
+
+const USER_ROLES = [
+  'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
+  'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC', 'LAUNDRY_SUPERVISOR',
+  'CSSD_SUPERVISOR', 'OXYGEN_UNIT_SUPERVISOR', 'WORKS_SUPERVISOR',
+  'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE',
+  'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'PORTER',
+  'ANAESTHETIC_TECHNICIAN', 'BIOMEDICAL_ENGINEER', 'CLEANER',
+  'PROCUREMENT_OFFICER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF',
+  'POWER_PLANT_OPERATOR', 'THEATRE_CAFETERIA_MANAGER', 'LAUNDRY_STAFF',
+  'PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR',
+  'EMERGENCY_LAB_SCIENTIST', 'LABORATORY_STAFF', 'HOUSE_OFFICER',
+  'CONSUMABLE_PACK_PROVIDER',
+] as const;
 import OnboardingSubmissionsPanel from '@/components/OnboardingSubmissionsPanel';
 // XLSX loaded dynamically when needed (export/import actions)
 
@@ -36,6 +50,9 @@ export default function UsersPage() {
   const [staffCodeLoading, setStaffCodeLoading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [roleUserId, setRoleUserId] = useState<string | null>(null);
+  const [newRole, setNewRole] = useState('');
+  const [roleLoading, setRoleLoading] = useState(false);
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -131,6 +148,46 @@ export default function UsersPage() {
       alert('Failed to reset password');
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleChangeRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleUserId || !newRole) return;
+
+    const target = users.find(u => u.id === roleUserId);
+    if (!target) return;
+    if (target.role === newRole) {
+      alert('Selected role is the same as the current role.');
+      return;
+    }
+    if (!confirm(`Change ${target.fullName || target.username}'s role from ${target.role} to ${newRole}?`)) {
+      return;
+    }
+
+    setRoleLoading(true);
+    try {
+      const response = await fetch(`/api/users/${roleUserId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`Role updated to ${newRole} successfully.`);
+        setRoleUserId(null);
+        setNewRole('');
+        fetchUsers();
+      } else {
+        alert(data.error || 'Failed to update role');
+      }
+    } catch (error) {
+      console.error('Failed to update role:', error);
+      alert('Failed to update role');
+    } finally {
+      setRoleLoading(false);
     }
   };
 
@@ -482,6 +539,18 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
+                    {session?.user.role === 'ADMIN' && session.user.id !== user.id && (
+                      <button
+                        onClick={() => {
+                          setRoleUserId(user.id);
+                          setNewRole(user.role);
+                        }}
+                        className="text-indigo-600 hover:text-indigo-900"
+                        title="Change user role"
+                      >
+                        <UserCog className="w-5 h-5 inline" />
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setStaffCodeUserId(user.id);
@@ -509,6 +578,57 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {/* Change Role Modal */}
+      {roleUserId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold mb-4 flex items-center">
+              <UserCog className="w-5 h-5 mr-2 text-indigo-600" />
+              Change User Role
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Changing a user&apos;s role updates their access permissions immediately on their next session refresh.
+              Use with care &mdash; granting ADMIN gives full system access.
+            </p>
+            <form onSubmit={handleChangeRole} className="space-y-4">
+              <div>
+                <label className="label" htmlFor="role-select">Role</label>
+                <select
+                  id="role-select"
+                  className="input-field"
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  required
+                >
+                  {USER_ROLES.map((r) => (
+                    <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={roleLoading}
+                  className="btn-primary flex-1 disabled:opacity-50"
+                >
+                  {roleLoading ? 'Saving...' : 'Update Role'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleUserId(null);
+                    setNewRole('');
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Staff Code Assignment Modal */}
       {staffCodeUserId && (
