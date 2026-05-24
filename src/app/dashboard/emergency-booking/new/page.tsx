@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users } from 'lucide-react';
+import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPrePackSelectors';
 
 type OnDutyMember = {
   userId: string;
@@ -37,6 +38,7 @@ export default function NewEmergencyBookingPage() {
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
+  const [prePack, setPrePack] = useState<PrePackPayload>({ consumableRequests: [], drugDressingRequests: [] });
 
   const [form, setForm] = useState({
     patientName: '',
@@ -164,6 +166,9 @@ export default function NewEmergencyBookingPage() {
         bloodUnits: form.bloodRequired && form.bloodUnits ? parseInt(form.bloodUnits) : undefined,
         specialEquipment: form.specialEquipment || undefined,
         specialRequirements: form.specialRequirements || undefined,
+        // Pre-pack shopping lists — pushed to Consumable Pack Provider and Pharmacy with red EMERGENCY tag
+        consumableRequests: prePack.consumableRequests,
+        drugDressingRequests: prePack.drugDressingRequests,
         // Auto-fetched on-duty emergency team (advisory — backend may use to notify)
         onDutyTeam: onDuty
           ? {
@@ -490,6 +495,13 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+
+        {/* Pre-pack lists — Surgical Consumables + Drugs/IV/Wound Dressing for night-before packing */}
+        <SurgeryPrePackSelectors
+          subspecialty={form.surgicalUnit || undefined}
+          emergency
+          onChange={setPrePack}
+        />
 
         {/* Warning Banner */}
         <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">

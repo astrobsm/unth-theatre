@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
           subspecialty: true,
           surgeonName: true,
           location: true,
+          surgeryType: true,
         },
       },
     },

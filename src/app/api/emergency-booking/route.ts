@@ -36,6 +36,41 @@ const createEmergencyBookingSchema = z.object({
   bloodUnits: z.number().optional(),
   specialEquipment: z.string().optional(),
   specialRequirements: z.string().optional(),
+  // Pre-pack lists — same shape as /api/surgeries
+  consumableRequests: z
+    .array(
+      z.object({
+        templateId: z.string().optional(),
+        name: z.string().min(1),
+        category: z.enum([
+          'GLOVES','GOWNS_DRAPES','SUTURES','SYRINGES_NEEDLES','CATHETERS_TUBING',
+          'DRESSING_PACKS','SKIN_PREP','CLEANING_SOLUTION','STERILE_DRESSINGS',
+          'IRRIGATION','DIATHERMY','SUCTION','ANAESTHESIA_AIRWAY','PPE','OTHER',
+        ]),
+        size: z.string().nullable().optional(),
+        unit: z.string().min(1),
+        quantity: z.number().int().positive(),
+        notes: z.string().nullable().optional(),
+      })
+    )
+    .optional(),
+  drugDressingRequests: z
+    .array(
+      z.object({
+        templateId: z.string().optional(),
+        name: z.string().min(1),
+        type: z.enum([
+          'ANTIBIOTIC','ANALGESIC','ANAESTHETIC_ADJUNCT','IV_FLUID',
+          'WOUND_DRESSING_AGENT','ANTISEPTIC','HAEMOSTATIC','OTHER',
+        ]),
+        dosage: z.string().nullable().optional(),
+        route: z.string().nullable().optional(),
+        quantity: z.number().int().positive(),
+        unit: z.string().min(1),
+        notes: z.string().nullable().optional(),
+      })
+    )
+    .optional(),
 });
 
 // GET - Fetch all emergency bookings
@@ -262,10 +297,80 @@ export async function POST(request: NextRequest) {
         notifiedRoles: JSON.stringify([
           'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ANAESTHETIST', 'SCRUB_NURSE',
           'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN',
-          'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CMAC', 'DC_MAC',
+          'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CONSUMABLE_PACK_PROVIDER',
+          'CMAC', 'DC_MAC',
         ]),
       },
     });
+
+    // ── Pre-pack lists: persist consumables & drugs/dressings and notify packers
+    const consumableRequests = validatedData.consumableRequests ?? [];
+    const drugDressingRequests = validatedData.drugDressingRequests ?? [];
+
+    if (consumableRequests.length > 0) {
+      await prisma.surgeryConsumableRequest.createMany({
+        data: consumableRequests.map((c) => ({
+          surgeryId: surgery.id,
+          templateId: c.templateId || null,
+          name: c.name,
+          category: c.category as any,
+          size: c.size ?? null,
+          unit: c.unit,
+          quantity: c.quantity,
+          notes: c.notes ?? null,
+        })),
+      });
+
+      // Notify Consumable Pack Providers with red EMERGENCY tag
+      const packProviders = await prisma.user.findMany({
+        where: { role: 'CONSUMABLE_PACK_PROVIDER', status: 'APPROVED' },
+        select: { id: true },
+      });
+      if (packProviders.length > 0) {
+        await prisma.notification.createMany({
+          data: packProviders.map((u) => ({
+            userId: u.id,
+            type: 'STOCK_ALERT' as any,
+            title: '🚨 EMERGENCY: New consumable pre-pack request',
+            message: `Emergency ${validatedData.procedureName} for ${validatedData.patientName} — ${consumableRequests.length} item(s) to pack.`,
+            link: '/dashboard/consumable-pack-provider',
+          })),
+        });
+      }
+    }
+
+    if (drugDressingRequests.length > 0) {
+      await prisma.surgeryDrugDressingRequest.createMany({
+        data: drugDressingRequests.map((d) => ({
+          surgeryId: surgery.id,
+          templateId: d.templateId || null,
+          name: d.name,
+          type: d.type as any,
+          dosage: d.dosage ?? null,
+          route: d.route ?? null,
+          quantity: d.quantity,
+          unit: d.unit,
+          notes: d.notes ?? null,
+        })),
+      });
+
+      // Notify Pharmacy with red EMERGENCY tag
+      const pharmacists = await prisma.user.findMany({
+        where: { role: 'PHARMACIST', status: 'APPROVED' },
+        select: { id: true },
+      });
+      if (pharmacists.length > 0) {
+        await prisma.notification.createMany({
+          data: pharmacists.map((u) => ({
+            userId: u.id,
+            type: 'STOCK_ALERT' as any,
+            title: '🚨 EMERGENCY: New surgical drug/dressing pre-pack',
+            message: `Emergency ${validatedData.procedureName} for ${validatedData.patientName} — ${drugDressingRequests.length} item(s) to pack.`,
+            link: `/dashboard/prescriptions?surgery=${surgery.id}`,
+          })),
+        });
+      }
+    }
 
     // If blood is required, auto-create blood request
     if (validatedData.bloodRequired && validatedData.bloodUnits) {

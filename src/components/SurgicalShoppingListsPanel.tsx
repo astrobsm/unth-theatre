@@ -21,6 +21,7 @@ import {
   PlayCircle,
   Truck,
   AlertCircle,
+  Siren,
 } from 'lucide-react';
 import { isNarcotic } from '@/lib/narcotics';
 
@@ -47,6 +48,7 @@ interface DDRequest {
     subspecialty?: string | null;
     surgeonName?: string | null;
     location?: string | null;
+    surgeryType?: string | null;
     patient: { name: string; folderNumber?: string | null };
   };
 }
@@ -122,10 +124,13 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
       if (g) g.items.push(it);
       else m.set(it.surgeryId, { surgery: it.surgery, items: [it] });
     }
-    // Sort by scheduled date asc
-    return Array.from(m.values()).sort((a, b) =>
-      new Date(a.surgery.scheduledDate).getTime() - new Date(b.surgery.scheduledDate).getTime()
-    );
+    // Emergencies first, then earliest scheduled
+    return Array.from(m.values()).sort((a, b) => {
+      const ae = a.surgery.surgeryType === 'EMERGENCY' ? 0 : 1;
+      const be = b.surgery.surgeryType === 'EMERGENCY' ? 0 : 1;
+      if (ae !== be) return ae - be;
+      return new Date(a.surgery.scheduledDate).getTime() - new Date(b.surgery.scheduledDate).getTime();
+    });
   }, [filtered]);
 
   const totals = useMemo(() => {
@@ -216,10 +221,11 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
             const allPacked = gItems.every(i => i.status === 'PACKED' || i.status === 'DELIVERED' || i.status === 'CANCELLED');
             const anyPacking = gItems.some(i => i.status === 'PACKING');
             const narcoticCount = gItems.filter(i => isNarcotic(i.name)).length;
+            const isEmergency = surgery.surgeryType === 'EMERGENCY';
             const dt = new Date(surgery.scheduledDate);
 
             return (
-              <li key={surgery.id} className="px-4 py-3">
+              <li key={surgery.id} className={`px-4 py-3 ${isEmergency ? 'bg-red-50/40 border-l-4 border-red-500' : ''}`}>
                 <button
                   type="button"
                   onClick={() => setExpanded(e => ({ ...e, [surgery.id]: !isOpen }))}
@@ -229,6 +235,11 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
                     {isOpen ? <ChevronDown className="h-4 w-4 mt-1 text-gray-500" /> : <ChevronRight className="h-4 w-4 mt-1 text-gray-500" />}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {isEmergency && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase bg-red-600 text-white px-2 py-0.5 rounded-full">
+                            <Siren className="h-3 w-3" /> Emergency
+                          </span>
+                        )}
                         <span className="font-semibold text-gray-900">{surgery.patient.name}</span>
                         {surgery.patient.folderNumber && (
                           <span className="text-xs text-gray-500">Folder: {surgery.patient.folderNumber}</span>
