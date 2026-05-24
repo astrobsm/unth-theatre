@@ -116,7 +116,7 @@ export const MODULES: AppModule[] = [
 
   // Admin-only modules (cannot be granted; gated separately)
   { id: 'users', label: 'User Management', paths: ['/dashboard/users'], defaultRoles: [], category: 'Admin' },
-  { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: [], category: 'Admin' },
+  { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },
   { id: 'disciplinary-queries', label: 'Disciplinary Queries', paths: ['/dashboard/disciplinary-queries'], defaultRoles: [], category: 'Admin' },
   { id: 'anonymous-tips-review', label: 'Review Anonymous Tips', paths: ['/dashboard/anonymous-tips/view'], defaultRoles: [], category: 'Admin' },
   { id: 'security-reports-review', label: 'Review Security Reports', paths: ['/dashboard/security-reports/view'], defaultRoles: [], category: 'Admin' },

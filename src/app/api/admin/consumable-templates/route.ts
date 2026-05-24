@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-const ADMIN_ROLES = ["ADMIN", "SYSTEM_ADMINISTRATOR", "THEATRE_MANAGER"];
+const ADMIN_ROLES = ["ADMIN", "SYSTEM_ADMINISTRATOR", "THEATRE_MANAGER", "CONSUMABLE_PACK_PROVIDER"];
 
 const consumableCategoryEnum = z.enum([
   "GLOVES",

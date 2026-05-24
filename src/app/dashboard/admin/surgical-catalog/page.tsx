@@ -82,7 +82,7 @@ const DRUG_TYPES: DrugType[] = [
   'WOUND_DRESSING_AGENT', 'ANTISEPTIC', 'HAEMOSTATIC', 'OTHER',
 ];
 
-const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'];
+const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'CONSUMABLE_PACK_PROVIDER'];
 
 const blankConsumable = (): Consumable => ({
   name: '', category: 'OTHER', size: '', unit: 'piece', specialty: '',
