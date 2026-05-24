@@ -32,6 +32,7 @@ import {
   Share2,
   FileDown,
   Users,
+  Eye,
 } from 'lucide-react';
 
 type ConsumableCategory =
@@ -149,6 +150,16 @@ export default function SurgicalCatalogPage() {
       toast.success('Share link copied to clipboard');
     } catch {
       window.prompt('Copy this link:', url);
+    }
+  };
+
+  const copyPublicViewLink = async () => {
+    const url = `${window.location.origin}/public/surgical-catalog`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Public view link copied — no login required');
+    } catch {
+      window.prompt('Copy this public view link (no login required):', url);
     }
   };
 
@@ -340,6 +351,24 @@ export default function SurgicalCatalogPage() {
             <Share2 className="w-4 h-4 mr-2" />
             Share contribute link
           </button>
+          <button
+            onClick={copyPublicViewLink}
+            className="px-3 py-2 bg-sky-50 border border-sky-300 text-sky-800 rounded-lg hover:bg-sky-100 inline-flex items-center text-sm"
+            title="Copy a public, no-login link to view the catalog"
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            Share view link (public)
+          </button>
+          <a
+            href="/public/surgical-catalog"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center text-sm"
+            title="Open the public view in a new tab"
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            Preview public view
+          </a>
           <Link
             href="/dashboard/catalog-contribute"
             className="px-3 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-lg hover:bg-emerald-100 inline-flex items-center text-sm"
