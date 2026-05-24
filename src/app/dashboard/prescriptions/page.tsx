@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { isNarcotic } from '@/lib/narcotics';
 import { whatsappLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
+import SurgicalShoppingListsPanel from '@/components/SurgicalShoppingListsPanel';
 import {
   buildRegisterPdf,
   buildPatientPrescriptionPdf,
@@ -524,6 +525,13 @@ export default function PrescriptionsPage() {
           <ShieldAlert className="h-3 w-3 text-red-600" /> Narcotic items are highlighted in red and tallied separately for accountability.
         </span>
       </div>
+
+      {/* Surgical Shopping Lists — drugs/IV/wound dressings selected at booking */}
+      <SurgicalShoppingListsPanel
+        fromDate={exportFrom}
+        toDate={exportTo}
+        canPack={['PHARMACIST', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(((session?.user as any)?.role) || '')}
+      />
 
       {/* Filter Tabs */}
       <div className="bg-white rounded-lg shadow-sm mb-6">
