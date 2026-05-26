@@ -127,8 +127,12 @@ export async function POST(
         preCountNeedles: body.preCountNeedles || 0,
         preCountSutures: body.preCountSutures || 0,
         preCountTrocars: body.preCountTrocars || 0,
+        preCountClips: body.preCountClips || 0,
         preCountOthers: body.preCountOthers,
-        
+
+        // Phase 8 — searchable instrument set (per-item counts)
+        instrumentSet: body.instrumentSet ?? [],
+
         preCountInstrumentsRecorded: true,
         preCountSwabsRecorded: true,
         preCountSharpsRecorded: true,
@@ -200,19 +204,25 @@ export async function PUT(
 
     // Copy all updateable fields from body
     const updateableFields = [
+      // Pre-count edits (allow scrub nurse to correct initial entries)
+      'preCountInstruments', 'preCountSmallSwabs', 'preCountMediumSwabs', 'preCountLargeSwabs',
+      'preCountRollSwabs', 'preCountTapeLaparotomy', 'preCountAbdominalPack', 'preCountBlades',
+      'preCountNeedles', 'preCountSutures', 'preCountTrocars', 'preCountClips', 'preCountOthers',
       'addedInstruments', 'addedSmallSwabs', 'addedMediumSwabs', 'addedLargeSwabs',
       'addedRollSwabs', 'addedTapeLaparotomy', 'addedAbdominalPack', 'addedBlades',
-      'addedNeedles', 'addedSutures', 'addedTrocars', 'addedOthers',
+      'addedNeedles', 'addedSutures', 'addedTrocars', 'addedClips', 'addedOthers',
       'firstCountInstruments', 'firstCountSmallSwabs', 'firstCountMediumSwabs',
       'firstCountLargeSwabs', 'firstCountRollSwabs', 'firstCountTapeLaparotomy',
       'firstCountAbdominalPack', 'firstCountBlades', 'firstCountNeedles',
-      'firstCountSutures', 'firstCountTrocars', 'firstCountOthers',
+      'firstCountSutures', 'firstCountTrocars', 'firstCountClips', 'firstCountOthers',
       'firstCountCorrect', 'firstCountDiscrepancy',
       'secondCountInstruments', 'secondCountSmallSwabs', 'secondCountMediumSwabs',
       'secondCountLargeSwabs', 'secondCountRollSwabs', 'secondCountTapeLaparotomy',
       'secondCountAbdominalPack', 'secondCountBlades', 'secondCountNeedles',
-      'secondCountSutures', 'secondCountTrocars', 'secondCountOthers',
+      'secondCountSutures', 'secondCountTrocars', 'secondCountClips', 'secondCountOthers',
       'secondCountCorrect', 'secondCountDiscrepancy',
+      // Phase 8 — per-instrument tracker
+      'instrumentSet',
       'allCountsCorrect', 'finalCountVerifiedBy', 'finalCountWitnessedBy',
       'surgeonNotifiedOfCount', 'discrepancyOccurred', 'discrepancyType',
       'discrepancyDetails', 'discrepancyResolved', 'discrepancyResolution',

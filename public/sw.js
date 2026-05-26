@@ -4,7 +4,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v24';
+const CACHE_VERSION = 'v25';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;

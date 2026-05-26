@@ -2392,6 +2392,17 @@ model SurgicalCountChecklist {
   secondCountCorrect        Boolean?
   secondCountDiscrepancy    String? // Description of any discrepancy
 
+  // Clips (added in Phase 8 — sharp count clips)
+  preCountClips    Int @default(0)
+  addedClips       Int @default(0)
+  firstCountClips  Int @default(0)
+  secondCountClips Int @default(0)
+
+  // Instrument Set (Phase 8) — JSON array of per-instrument counts.
+  // Shape: Array<{ id: string, name: string, category: string, subspecialty?: string,
+  //                initial: number, atClosure: number, final: number }>
+  instrumentSet Json?
+
   // Final Count Verification
   allCountsCorrect       Boolean @default(false)
   finalCountVerifiedBy   String? // Scrub nurse
