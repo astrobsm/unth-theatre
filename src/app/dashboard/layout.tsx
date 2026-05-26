@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Package,
   Calendar,
+  CalendarDays,
   ClipboardList,
   FileText,
   Users,
@@ -125,6 +126,7 @@ export default function DashboardLayout({
 
     // === DAY-OF-SURGERY LOGISTICS ===
     { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster' },
+    { href: '/dashboard/surgical-unit-calendar', icon: CalendarDays, label: 'Surgical Unit Calendar', badge: 'NEW' },
     { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
