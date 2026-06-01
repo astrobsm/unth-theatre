@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy } from 'lucide-react';
 
 const USER_ROLES = [
   'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
@@ -28,6 +28,8 @@ interface User {
   role: string;
   status: string;
   staffCode: string | null;
+  phoneNumber: string | null;
+  department: string | null;
   createdAt: string;
   resetToken: string | null;
   resetTokenExpiry: Date | null;
@@ -306,6 +308,150 @@ export default function UsersPage() {
     XLSX.writeFile(wb, 'staff_upload_template.xlsx');
   };
 
+  const normalizePhone = (p?: string | null) => {
+    if (!p) return '';
+    let s = String(p).trim().replace(/[\s\-().]/g, '');
+    if (s.startsWith('+')) return s;
+    if (s.startsWith('234')) return '+' + s;
+    if (s.startsWith('0') && s.length === 11) return '+234' + s.slice(1);
+    return s;
+  };
+
+  const buildContactDirectory = () => {
+    const approved = (Array.isArray(users) ? users : []).filter(u => u.status === 'APPROVED');
+    const cleaned = approved
+      .map(u => ({
+        fullName: (u.fullName || '').trim(),
+        role: u.role,
+        department: u.department || 'Unassigned',
+        phone: normalizePhone(u.phoneNumber),
+        email: u.email || '',
+      }))
+      .filter(u => u.fullName && !/^\d+$/.test(u.fullName));
+    const withPhone = cleaned.filter(u => u.phone);
+    const withoutPhone = cleaned.filter(u => !u.phone);
+    return { withPhone, withoutPhone };
+  };
+
+  const copyDirectoryForWhatsApp = async () => {
+    const { withPhone, withoutPhone } = buildContactDirectory();
+    const byDept: Record<string, typeof withPhone> = {};
+    for (const u of withPhone) {
+      (byDept[u.department] ||= []).push(u);
+    }
+    const depts = Object.keys(byDept).sort();
+    const lines: string[] = [];
+    lines.push('📒 *ORM PLATFORM — REGISTERED USERS & PHONE NUMBERS*');
+    lines.push(`Total: ${withPhone.length} (with phone) + ${withoutPhone.length} (missing phone)`);
+    lines.push('🔗 https://unth-theatre-mai.vercel.app');
+    lines.push('');
+    let counter = 0;
+    for (const d of depts) {
+      lines.push(`*${d.toUpperCase()} (${byDept[d].length})*`);
+      for (const u of byDept[d]) {
+        counter += 1;
+        lines.push(`${counter}. ${u.fullName} — ${u.phone} _(${u.role})_`);
+      }
+      lines.push('');
+    }
+    if (withoutPhone.length > 0) {
+      lines.push('────────────────────────────');
+      lines.push(`⚠️ *USERS WITHOUT A PHONE NUMBER ON FILE* (${withoutPhone.length})`);
+      lines.push('Kindly send your phone number to the ORM Team.');
+      lines.push('────────────────────────────');
+      withoutPhone.forEach((u, i) => {
+        lines.push(`${i + 1}. ${u.fullName} _(${u.role}${u.department ? ', ' + u.department : ''})_`);
+      });
+    }
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`Copied ${withPhone.length} contacts to clipboard. Paste into WhatsApp.`);
+    } catch {
+      // Fallback: download as .txt
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `orm-contacts-${new Date().toISOString().split('T')[0]}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const downloadDirectoryCSV = () => {
+    const { withPhone, withoutPhone } = buildContactDirectory();
+    const all = [...withPhone, ...withoutPhone];
+    const esc = (v: string) => {
+      const s = (v ?? '').replace(/"/g, '""');
+      return /[",\n]/.test(s) ? `"${s}"` : s;
+    };
+    const headers = ['Full Name', 'Phone', 'Role', 'Department', 'Email'];
+    const rows = [
+      headers.join(','),
+      ...all.map(u => [u.fullName, u.phone, u.role, u.department, u.email].map(esc).join(',')),
+    ];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `orm-contacts-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadDirectoryPDF = async () => {
+    const { withPhone, withoutPhone } = buildContactDirectory();
+    const [{ default: jsPDF }, autoTableMod] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
+    const autoTable = (autoTableMod as any).default || (autoTableMod as any);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const today = new Date().toLocaleDateString();
+
+    doc.setFontSize(16);
+    doc.text('ORM Platform — Registered Users & Phone Numbers', 40, 40);
+    doc.setFontSize(10);
+    doc.text(`Generated: ${today}    |    With phone: ${withPhone.length}    |    Missing phone: ${withoutPhone.length}`, 40, 58);
+    doc.text('https://unth-theatre-mai.vercel.app', 40, 72);
+
+    const byDept: Record<string, typeof withPhone> = {};
+    for (const u of withPhone) (byDept[u.department] ||= []).push(u);
+    const depts = Object.keys(byDept).sort();
+
+    let startY = 90;
+    let counter = 0;
+    for (const d of depts) {
+      const body = byDept[d].map(u => {
+        counter += 1;
+        return [String(counter), u.fullName, u.phone, u.role];
+      });
+      autoTable(doc, {
+        startY,
+        head: [[`#`, `${d} (${byDept[d].length})`, 'Phone', 'Role']],
+        body,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+        margin: { left: 40, right: 40 },
+      });
+      startY = (doc as any).lastAutoTable.finalY + 12;
+    }
+
+    if (withoutPhone.length > 0) {
+      autoTable(doc, {
+        startY,
+        head: [[`Users without a phone on file (${withoutPhone.length})`, 'Role', 'Department']],
+        body: withoutPhone.map(u => [u.fullName, u.role, u.department]),
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+        margin: { left: 40, right: 40 },
+      });
+    }
+
+    doc.save(`orm-contacts-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'THEATRE_MANAGER')) {
     return (
       <div className="text-center py-8">
@@ -316,6 +462,7 @@ export default function UsersPage() {
 
   const pendingUsers = Array.isArray(users) ? users.filter(u => u.status === 'PENDING') : [];
   const approvedUsers = Array.isArray(users) ? users.filter(u => u.status === 'APPROVED') : [];
+  const approvedWithPhone = approvedUsers.filter(u => !!u.phoneNumber).length;
 
   return (
     <div className="space-y-6">
@@ -388,6 +535,32 @@ export default function UsersPage() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Contact Directory Export */}
+      <div className="card bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
+        <h2 className="text-xl font-semibold mb-2 flex items-center">
+          <Phone className="w-6 h-6 mr-2 text-green-600" />
+          Contact Directory
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Export the list of approved users and their phone numbers — share on WhatsApp, save as PDF, or download as CSV.
+          Currently <strong>{approvedWithPhone}</strong> of <strong>{approvedUsers.length}</strong> approved users have a phone number on file.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={copyDirectoryForWhatsApp} className="btn-primary inline-flex items-center">
+            <Copy className="w-4 h-4 mr-2" />
+            Copy for WhatsApp
+          </button>
+          <button onClick={downloadDirectoryPDF} className="btn-secondary inline-flex items-center">
+            <FileText className="w-4 h-4 mr-2" />
+            Download PDF
+          </button>
+          <button onClick={downloadDirectoryCSV} className="btn-secondary inline-flex items-center">
+            <Download className="w-4 h-4 mr-2" />
+            Download CSV
+          </button>
+        </div>
       </div>
 
       {/* Online Onboarding Submissions (shareable form) */}
