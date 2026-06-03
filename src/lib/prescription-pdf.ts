@@ -130,7 +130,7 @@ export function buildRegisterPdf(
           ? rx.patientName + (rx.folderNumber ? ` (${rx.folderNumber})` : "")
           : "",
         i === 0 ? rx.procedureName || "—" : "",
-        (isNarc ? "★ " : "") + m.name,
+        (isNarc ? "* " : "") + m.name,
         [m.dose, m.route].filter(Boolean).join(" • "),
         [m.frequency, m.timing].filter(Boolean).join(" • "),
         i === 0
@@ -149,7 +149,7 @@ export function buildRegisterPdf(
         "Surgery date",
         "Patient",
         "Procedure",
-        "Drug (★ = narcotic)",
+        "Drug (* = narcotic)",
         "Dose / Route",
         "Frequency / Timing",
         "Prescribed by",
@@ -259,7 +259,7 @@ export function buildPatientPrescriptionPdf(rx: ReportPrescription) {
     if (isNarc) narcRows.push(i);
     return [
       String(i + 1),
-      (isNarc ? "★ " : "") + m.name,
+      (isNarc ? "* " : "") + m.name,
       m.dose || "",
       m.route || "",
       m.frequency || "",
@@ -270,7 +270,7 @@ export function buildPatientPrescriptionPdf(rx: ReportPrescription) {
 
   autoTable(doc, {
     startY: y + 4,
-    head: [["#", "Drug (★ = narcotic)", "Dose", "Route", "Frequency", "Timing", "Notes"]],
+    head: [["#", "Drug (* = narcotic)", "Dose", "Route", "Frequency", "Timing", "Notes"]],
     body,
     styles: { fontSize: 9, cellPadding: 2, valign: "top" },
     headStyles: { fillColor: [30, 64, 175], textColor: 255 },
