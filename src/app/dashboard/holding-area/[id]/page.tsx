@@ -89,12 +89,22 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
   const [showAlertDialog, setShowAlertDialog] = useState(false);
   const [alertType, setAlertType] = useState('');
   const [alertDescription, setAlertDescription] = useState('');
+  const [consentFileAvailable, setConsentFileAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchAssessment();
     // Re-fetch only when route id changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  useEffect(() => {
+    if (!assessment?.surgeryId) return;
+    let cancelled = false;
+    fetch(`/api/surgeries/${assessment.surgeryId}/consent`, { method: 'HEAD' })
+      .then((r) => { if (!cancelled) setConsentFileAvailable(r.ok); })
+      .catch(() => { if (!cancelled) setConsentFileAvailable(false); });
+    return () => { cancelled = true; };
+  }, [assessment?.surgeryId]);
 
   const fetchAssessment = async () => {
     try {
@@ -327,21 +337,32 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
           <div className="mb-4 p-3 border border-blue-200 bg-blue-50 rounded">
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="font-medium">Uploaded Informed Consent Document</span>
-              <a
-                href={`/api/surgeries/${assessment.surgeryId}/consent`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-700 underline text-xs"
-              >
-                Open in new tab
-              </a>
+              {consentFileAvailable && (
+                <a
+                  href={`/api/surgeries/${assessment.surgeryId}/consent`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 underline text-xs"
+                >
+                  Open in new tab
+                </a>
+              )}
             </div>
-            <iframe
-              src={`/api/surgeries/${assessment.surgeryId}/consent`}
-              title="Informed consent document"
-              className="w-full h-64 mt-2 border rounded bg-white"
-            />
-            <p className="text-xs text-gray-600 mt-1">If empty, the surgeon has not yet uploaded a consent file.</p>
+            {consentFileAvailable === null && (
+              <p className="text-xs text-gray-500 mt-2">Checking for uploaded consent…</p>
+            )}
+            {consentFileAvailable === true && (
+              <iframe
+                src={`/api/surgeries/${assessment.surgeryId}/consent`}
+                title="Informed consent document"
+                className="w-full h-64 mt-2 border rounded bg-white"
+              />
+            )}
+            {consentFileAvailable === false && (
+              <p className="text-xs text-amber-700 mt-2">
+                No consent file has been uploaded for this surgery yet. The surgeon can upload it from the booking form.
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">

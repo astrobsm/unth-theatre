@@ -43,3 +43,20 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     },
   });
 }
+
+// HEAD — lightweight presence check used by the UI to avoid noisy 404s
+export async function HEAD(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return new NextResponse(null, { status: 401 });
+  const role = (session.user as any).role;
+  if (!ALLOWED_ROLES.includes(role)) return new NextResponse(null, { status: 403 });
+  const surgery = await prisma.surgery.findUnique({
+    where: { id: params.id },
+    select: { consentFileMimeType: true, consentFileData: true },
+  });
+  if (!surgery?.consentFileData) return new NextResponse(null, { status: 404 });
+  return new NextResponse(null, {
+    status: 200,
+    headers: { "Content-Type": surgery.consentFileMimeType || "application/octet-stream" },
+  });
+}
