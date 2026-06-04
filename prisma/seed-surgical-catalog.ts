@@ -109,6 +109,42 @@ export const CONSUMABLE_SEED: Array<{
   { name: "Sterile Surgeon Cap (Long)", category: "PPE" as any, unit: "piece", defaultQuantity: 4 },
   { name: "Shoe Cover (Disposable)", category: "PPE" as any, unit: "pair", defaultQuantity: 8 },
   { name: "Eye Shield / Visor", category: "PPE" as any, unit: "piece", defaultQuantity: 4 },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Orthopaedic Unit — submitted by Igwe Jovita
+  // Specialty-tagged so the booking form filters them under Orthopaedics.
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Normal Saline 0.9% N/F (Carton, 1 L)", category: "IRRIGATION" as any, size: "1 L", unit: "carton", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Blood Giving Set", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "IV Fluid Giving Set", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "IV Cannula", category: "SYRINGES_NEEDLES" as any, size: "16 G", unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "IV Cannula", category: "SYRINGES_NEEDLES" as any, size: "22 G", unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Disposable Syringe", category: "SYRINGES_NEEDLES" as any, size: "2 ml", unit: "piece", specialty: "Orthopaedics", defaultQuantity: 10 },
+  { name: "Latex Gloves (Examination, Packet)", category: "GLOVES" as any, unit: "packet", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Methylated Spirit", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Savlon (Cetrimide + Chlorhexidine)", category: "CLEANING_SOLUTION" as any, size: "500 ml", unit: "bottle", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Crepe Bandage", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 8 },
+  { name: "Adhesive Plaster (Big)", category: "STERILE_DRESSINGS" as any, size: "Big", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Redivac Drain", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Cerclage Wire", category: "OTHER" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "K-Wire (Kirschner Wire)", category: "OTHER" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 4 },
+  { name: "Gigli Saw", category: "OTHER" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Urethral Catheter (Foley)", category: "CATHETERS_TUBING" as any, size: "Age-dependent", unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Urine Drainage Bag", category: "CATHETERS_TUBING" as any, size: "Ortho", unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "KY Lubricating Gel", category: "OTHER" as any, unit: "tube", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Vicryl 2 (Round Body)", category: "SUTURES" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Vicryl 2-0 (Round Body)", category: "SUTURES" as any, size: "Ortho", unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Nylon 2 (Cutting)", category: "SUTURES" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Nylon 1 (Cutting)", category: "SUTURES" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Nylon 0 (Cutting)", category: "SUTURES" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Nylon 2-0 (Cutting)", category: "SUTURES" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 2 },
+  { name: "Skin Stapler (Disposable)", category: "OTHER" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Skin Staple Remover", category: "OTHER" as any, unit: "piece", specialty: "Orthopaedics", defaultQuantity: 1 },
+  { name: "Water for Injection (10 ml)", category: "IRRIGATION" as any, size: "10 ml", unit: "ampoule", specialty: "Orthopaedics", defaultQuantity: 10 },
+  { name: "Velband Orthopaedic Padding", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 8 },
+  { name: "Velband Orthopaedic Padding", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 4 },
+  { name: "Plaster of Paris (POP) Cast", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 15 },
+  { name: "Plaster of Paris (POP) Cast", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 4 },
 ];
 
 // --------------------------------------------------------------------------
@@ -167,6 +203,13 @@ export const DRUG_DRESSING_SEED: Array<{
   // Analgesics
   { name: "Paracetamol 1 g IV (100 ml)", type: "ANALGESIC", defaultDosage: "1 g IV", defaultRoute: "IV", defaultQuantity: 1, unit: "bottle" },
   { name: "Diclofenac 75 mg IM (Ampoule)", type: "ANALGESIC", defaultDosage: "75 mg IM", defaultRoute: "IM", defaultQuantity: 1, unit: "ampoule" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Orthopaedic Unit drugs — submitted by Igwe Jovita
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Ceftriaxone 2 g (Vial)", type: "ANTIBIOTIC", defaultDosage: "2 g IV stat", defaultRoute: "IV", defaultQuantity: 1, unit: "vial" },
+  { name: "Tranexamic Acid 1 g (Ampoule)", type: "HAEMOSTATIC", defaultDosage: "1 g IV", defaultRoute: "IV", defaultQuantity: 1, unit: "ampoule" },
+  { name: "Lidocaine 2% with Adrenaline 1:200,000 (20 ml)", type: "ANAESTHETIC_ADJUNCT", defaultRoute: "SC/Local", defaultQuantity: 1, unit: "vial" },
 ];
 
 export async function seedSurgicalCatalog(prisma: PrismaClient = prismaInstance) {
