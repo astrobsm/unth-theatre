@@ -251,6 +251,95 @@ export const CONSUMABLE_SEED: Array<{
   { name: "Hydrogen Peroxide 3% (ENT)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1 },
   { name: "Methylated Spirit (ENT)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1 },
   { name: "Formalin 10% (ENT, Specimen Pot)", category: "CLEANING_SOLUTION" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1, notes: "For histology specimens" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Oral & Maxillofacial Surgery — Theatre + Dental Clinic packs
+  // Packs covered:
+  //   Theatre Major: A) Tumour, B) Fracture, C) Ludwig Angina I&D (GA)
+  //   Dental Clinic Minor: A) I&D, B) Necrotizing-fasciitis debridement,
+  //   C) Surgical extraction, D) Incisional biopsy, E) Fracture under LA,
+  //   F) Consultation/Examination, G) Wound dressing
+  // Quantities = max requested across packs; the `notes` field indicates
+  // which pack(s) the item belongs to so the packer can confirm.
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Gloves / PPE
+  { name: "Disposable Sterile Surgical Gloves (OMF)", category: "GLOVES" as any, size: "7.5", unit: "pair", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 7, notes: "OMF Tumour pack 7 each / Fracture 5 / I&D 6 / Dental I&D 4 / Debridement 2 / Extraction 2 / Biopsy 2 / Fracture-LA 2" },
+  { name: "Disposable Sterile Surgical Gloves (OMF)", category: "GLOVES" as any, size: "8.0", unit: "pair", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 7, notes: "OMF Tumour pack 7 each / Fracture 5 / I&D 6" },
+  { name: "Examination/Disposable Gloves (OMF Packet)", category: "GLOVES" as any, unit: "packet", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "All OMF theatre & dental packs" },
+  { name: "Latex Gloves (OMF Consultation)", category: "GLOVES" as any, unit: "pair", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 3, notes: "Dental Consultation/Examination pack" },
+  { name: "Disposable Surgical Gown (OMF)", category: "GOWNS_DRAPES" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 4, notes: "Tumour 3 / Fracture 4 / Ludwig I&D 3" },
+  { name: "Face Mask (OMF)", category: "PPE" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 10, notes: "Dental I&D 10 / Theatre packs 4-7 / Consultation 3" },
+  { name: "Sterile Drape (OMF Dental Clinic)", category: "GOWNS_DRAPES" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Dental clinic minor packs" },
+
+  // Catheters / drains / tubes
+  { name: "Foley Catheter (OMF)", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Size depends on patient — Tumour, Fracture, Ludwig I&D" },
+  { name: "Urine Drainage Bag (OMF)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour, Fracture, Ludwig I&D packs" },
+  { name: "Active Drain (Redivac)", category: "CATHETERS_TUBING" as any, size: "OMF", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour pack" },
+  { name: "Corrugated Rubber Drain", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Ludwig I&D, Dental I&D" },
+  { name: "NG Tube (OMF)", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour & Ludwig I&D packs" },
+  { name: "NG Tube (OMF)", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour pack" },
+  { name: "Blood Giving Set (OMF)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour, Fracture packs" },
+  { name: "IV Fluid Giving Set (OMF)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Ludwig I&D ×2 / Tumour, Fracture, Dental I&D ×1" },
+  { name: "Suction Tube (OMF)", category: "SUCTION" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour, Fracture packs" },
+  { name: "Tracheostomy Tube & Set (OMF)", category: "ANAESTHESIA_AIRWAY" as any, size: "Assorted", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Ludwig Angina I&D under GA" },
+
+  // IV cannulae (UK colour-coded)
+  { name: "IV Cannula (OMF)", category: "SYRINGES_NEEDLES" as any, size: "16 G - Grey", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Tumour, Fracture, Ludwig I&D" },
+  { name: "IV Cannula (OMF)", category: "SYRINGES_NEEDLES" as any, size: "18 G - Green", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "All major packs + Dental I&D/Debridement/Fracture-LA" },
+  { name: "IV Cannula (OMF)", category: "SYRINGES_NEEDLES" as any, size: "20 G - Pink", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "All major packs + Dental I&D/Debridement/Fracture-LA" },
+
+  // Syringes & dental needles
+  { name: "Disposable Syringe (OMF)", category: "SYRINGES_NEEDLES" as any, size: "2 ml", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 15, notes: "Tumour 15 / Fracture 10 / Ludwig 5 / Dental packs 3-5" },
+  { name: "Disposable Syringe (OMF)", category: "SYRINGES_NEEDLES" as any, size: "5 ml", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 15, notes: "Tumour 15 / Fracture 10 / Ludwig 5 / Dental packs 3-5" },
+  { name: "Disposable Syringe (OMF)", category: "SYRINGES_NEEDLES" as any, size: "10 ml", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 15, notes: "Tumour 15 / Fracture 10 / Ludwig 5 / Dental packs 3-5" },
+  { name: "Dental Needle (27 G Long)", category: "SYRINGES_NEEDLES" as any, size: "27 G - Long", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "All dental clinic LA packs" },
+  { name: "Dental Needle (27 G Short)", category: "SYRINGES_NEEDLES" as any, size: "27 G - Short", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Dental I&D pack" },
+
+  // Surgical blades
+  { name: "Surgical Blade No. 15 (OMF)", category: "OTHER" as any, size: "15", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Tumour ×2 / Fracture, Debridement, Extraction, Biopsy, Fracture-LA ×1" },
+  { name: "Surgical Blade No. 11 (OMF)", category: "OTHER" as any, size: "11", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Ludwig Angina I&D, Dental I&D" },
+
+  // Sutures
+  { name: "Vicryl (OMF)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 5, notes: "Tumour 5 / Fracture 4 / Extraction-Biopsy-Fracture-LA 1-2" },
+  { name: "Vicryl (OMF)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 5, notes: "Tumour 5 / Fracture 4" },
+  { name: "Vicryl (OMF, Heavy)", category: "SUTURES" as any, size: "0", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Tumour, Fracture" },
+  { name: "Vicryl (OMF, Heavy)", category: "SUTURES" as any, size: "1", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Tumour, Fracture" },
+  { name: "Nylon (OMF)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 4, notes: "Tumour 3 / Fracture 4 / Ludwig 2 / Dental I&D 2" },
+  { name: "Nylon (OMF)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 4, notes: "Tumour 3 / Fracture 4" },
+
+  // Maxillofacial fracture hardware
+  { name: "Soft Stainless Steel Wire 0.45 mm", category: "OTHER" as any, size: "5 m roll", unit: "roll", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Fracture pack 4 m / Fracture-LA 5 m" },
+  { name: "Arch Bar", category: "OTHER" as any, size: "30 cm", unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Fracture, Fracture-LA packs" },
+  { name: "Gigli Saw (OMF)", category: "OTHER" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour pack" },
+
+  // Haemostasis / theatre adjuncts
+  { name: "Surgicel (OMF)", category: "OTHER" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 3, notes: "Tumour pack ×3" },
+  { name: "Bone Wax (OMF)", category: "OTHER" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour pack" },
+  { name: "KY Lubricating Gel (OMF)", category: "OTHER" as any, unit: "tube", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "All major packs (catheter insertion)" },
+  { name: "Diathermy Pad / Patient Return Plate (OMF)", category: "DIATHERMY" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour, Fracture, Ludwig I&D" },
+  { name: "ECG Electrode (OMF)", category: "OTHER" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 6, notes: "All theatre packs" },
+
+  // Dressings / gauze
+  { name: "Sterile Gauze Pack (OMF)", category: "STERILE_DRESSINGS" as any, unit: "pack", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 5, notes: "Tumour 5 packs / Ludwig 2 / Dental Debridement 20 pcs / Dental I&D 15 pcs / Extraction-Biopsy 10 pcs" },
+  { name: "Sterile Mop (OMF)", category: "STERILE_DRESSINGS" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 8, notes: "Tumour 8 / Fracture 5" },
+  { name: "Cotton Wool Roll (OMF)", category: "STERILE_DRESSINGS" as any, unit: "roll", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 15, notes: "Debridement 15 / Dental I&D 10" },
+  { name: "Crepe Bandage (OMF)", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "All major + dental packs" },
+  { name: "Adhesive Plaster (OMF)", category: "STERILE_DRESSINGS" as any, unit: "roll", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "All major + dental packs" },
+  { name: "Size 4 Bandage (OMF Wound Dressing)", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Wound Dressing pack" },
+  { name: "Honey-Care Gauze (OMF)", category: "STERILE_DRESSINGS" as any, unit: "pack", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Debridement for necrotising fasciitis" },
+
+  // Fluids / consumable liquids (kept under IRRIGATION for booking-form filtering)
+  { name: "Water for Injection (OMF)", category: "IRRIGATION" as any, size: "10 ml", unit: "ampoule", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 5, notes: "All theatre + dental packs" },
+  { name: "IVF Normal Saline (OMF)", category: "IRRIGATION" as any, size: "500 ml", unit: "bag", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Dental Extraction, Biopsy, Fracture-LA, Wound Dressing" },
+
+  // Skin prep / cleaning solutions
+  { name: "Savlon (OMF, 125 ml)", category: "SKIN_PREP" as any, size: "125 ml", unit: "bottle", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour, Fracture, Ludwig I&D, Dental I&D, Debridement" },
+  { name: "Methylated Spirit (OMF)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "All theatre + dental packs" },
+  { name: "Povidone Iodine (OMF)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 1, notes: "Tumour, Fracture packs" },
+
+  // Examination consumables (Consultation pack)
+  { name: "Wooden Tongue Spatula", category: "OTHER" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Consultation/Examination pack" },
 ];
 
 // --------------------------------------------------------------------------
@@ -329,6 +418,15 @@ export const DRUG_DRESSING_SEED: Array<{
   { name: "Gentamicin Ear/Eye Cream", type: "WOUND_DRESSING_AGENT", defaultRoute: "Topical", defaultQuantity: 1, unit: "tube" },
   { name: "Liquid Paraffin (BP)", type: "WOUND_DRESSING_AGENT", defaultRoute: "Topical", defaultQuantity: 1, unit: "bottle" },
   { name: "Adrenaline 1 mg / 1 ml (Ampoule)", type: "HAEMOSTATIC", defaultDosage: "Titrate per case", defaultRoute: "Topical/IV", defaultQuantity: 2, unit: "ampoule" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Oral & Maxillofacial Surgery — drugs / topical agents / LA carpules
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Lidocaine 2% + Adrenaline (Brown Bottle, OMF)", type: "LOCAL_ANAESTHETIC", defaultDosage: "Max 7 mg/kg with adrenaline", defaultRoute: "Infiltration", defaultQuantity: 1, unit: "bottle" },
+  { name: "Lidocaine 2% + Adrenaline Dental Carpule", type: "LOCAL_ANAESTHETIC", defaultDosage: "2.2 ml carpule (1:80,000 adrenaline)", defaultRoute: "Dental Infiltration/Block", defaultQuantity: 2, unit: "carpule" },
+  { name: "Carnoy's Solution", type: "OTHER", defaultDosage: "Apply topically with cotton applicator, 3 min × cycles", defaultRoute: "Topical (Bone Cavity)", defaultQuantity: 1, unit: "bottle" },
+  { name: "Wosan Antiseptic Cream", type: "ANTISEPTIC", defaultRoute: "Topical", defaultQuantity: 1, unit: "tube" },
+  { name: "Hydrogen Peroxide (OMF, 250 ml)", type: "ANTISEPTIC", defaultRoute: "Topical/Wound Irrigation", defaultQuantity: 1, unit: "bottle" },
 ];
 
 export async function seedSurgicalCatalog(prisma: PrismaClient = prismaInstance) {
