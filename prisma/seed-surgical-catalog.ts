@@ -340,6 +340,79 @@ export const CONSUMABLE_SEED: Array<{
 
   // Examination consumables (Consultation pack)
   { name: "Wooden Tongue Spatula", category: "OTHER" as any, unit: "piece", specialty: "Oral & Maxillofacial Surgery", defaultQuantity: 2, notes: "Consultation/Examination pack" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // General Surgery Unit — standard laparotomy / hernia / drainage kit
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Gloves / PPE
+  { name: "Surgical Gloves (General Surgery)", category: "GLOVES" as any, size: "7.5", unit: "pair", specialty: "General Surgery", defaultQuantity: 4 },
+  { name: "Surgical Gloves (General Surgery)", category: "GLOVES" as any, size: "8.0", unit: "pair", specialty: "General Surgery", defaultQuantity: 4 },
+  { name: "Elbow-Length Sterile Gloves", category: "GLOVES" as any, size: "Medium", unit: "pair", specialty: "General Surgery", defaultQuantity: 1, notes: "For bowel surgery / contaminated cases" },
+  { name: "Elbow-Length Sterile Gloves", category: "GLOVES" as any, size: "Large", unit: "pair", specialty: "General Surgery", defaultQuantity: 1 },
+
+  // Syringes
+  { name: "Disposable Syringe (General Surgery)", category: "SYRINGES_NEEDLES" as any, size: "2 ml", unit: "piece", specialty: "General Surgery", defaultQuantity: 5 },
+  { name: "Disposable Syringe (General Surgery)", category: "SYRINGES_NEEDLES" as any, size: "5 ml", unit: "piece", specialty: "General Surgery", defaultQuantity: 5 },
+  { name: "Disposable Syringe (General Surgery)", category: "SYRINGES_NEEDLES" as any, size: "10 ml", unit: "piece", specialty: "General Surgery", defaultQuantity: 5 },
+  { name: "Water for Injection (General Surgery)", category: "IRRIGATION" as any, size: "10 ml", unit: "ampoule", specialty: "General Surgery", defaultQuantity: 5 },
+
+  // IV access & giving sets
+  { name: "IV Cannula (General Surgery)", category: "SYRINGES_NEEDLES" as any, size: "16 G - Grey", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "IV Cannula (General Surgery)", category: "SYRINGES_NEEDLES" as any, size: "18 G - Green", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "IV Cannula (General Surgery)", category: "SYRINGES_NEEDLES" as any, size: "20 G - Pink", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "IV Fluid Giving Set (General Surgery)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Blood Giving Set (General Surgery)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+
+  // Catheters & tubes
+  { name: "Foley Catheter (General Surgery)", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "Foley Catheter (General Surgery)", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "Foley Catheter (General Surgery)", category: "CATHETERS_TUBING" as any, size: "22 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "3-way / haematuria" },
+  { name: "Foley Catheter (General Surgery)", category: "CATHETERS_TUBING" as any, size: "24 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "3-way / haematuria" },
+  { name: "Silicone Foley Catheter", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "For prolonged catheterisation" },
+  { name: "Silicone Foley Catheter", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "NG Tube (General Surgery)", category: "CATHETERS_TUBING" as any, size: "6 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "NG Tube (General Surgery)", category: "CATHETERS_TUBING" as any, size: "8 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "NG Tube (General Surgery)", category: "CATHETERS_TUBING" as any, size: "10 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "NG Tube (General Surgery)", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "NG Tube (General Surgery)", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "Urine Drainage Bag (General Surgery)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "KY Jelly / Lidocaine Lubricating Gel (General Surgery)", category: "OTHER" as any, unit: "tube", specialty: "General Surgery", defaultQuantity: 1 },
+
+  // Sutures (Ethicon preferred)
+  { name: "Vicryl (General Surgery, Ethicon)", category: "SUTURES" as any, size: "8-0", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "Microsurgery / fine anastomosis" },
+  { name: "Vicryl (General Surgery, Ethicon)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "General Surgery", defaultQuantity: 3 },
+  { name: "Vicryl (General Surgery, Ethicon)", category: "SUTURES" as any, size: "0", unit: "piece", specialty: "General Surgery", defaultQuantity: 3, notes: "Fascial closure" },
+  { name: "Vicryl (General Surgery, Ethicon)", category: "SUTURES" as any, size: "1", unit: "piece", specialty: "General Surgery", defaultQuantity: 3, notes: "Fascial closure" },
+  { name: "Vicryl (General Surgery, Ethicon)", category: "SUTURES" as any, size: "2", unit: "piece", specialty: "General Surgery", defaultQuantity: 2, notes: "Heavy mass closure" },
+  { name: "Nylon (General Surgery, Ethicon)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Nylon (General Surgery, Ethicon)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Nylon (General Surgery, Ethicon)", category: "SUTURES" as any, size: "1", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Nylon (General Surgery, Ethicon)", category: "SUTURES" as any, size: "2", unit: "piece", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Monocryl (General Surgery, Ethicon)", category: "SUTURES" as any, size: "8-0", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "Subcuticular / microvascular" },
+
+  // Drains
+  { name: "Redivac Drain (General Surgery)", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "Redivac Drain (General Surgery)", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "General Surgery", defaultQuantity: 1 },
+
+  // Fluids (placed in IRRIGATION for booking-form filtering; also see drugs section for IV_FLUID)
+  { name: "Normal Saline 0.9% (General Surgery)", category: "IRRIGATION" as any, size: "500 ml", unit: "bag", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Normal Saline 0.9% (General Surgery)", category: "IRRIGATION" as any, size: "1 L", unit: "bag", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Dextrose 5% Water (General Surgery)", category: "IRRIGATION" as any, size: "1 L", unit: "bag", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "Dextrose 10% Water (General Surgery)", category: "IRRIGATION" as any, size: "1 L", unit: "bag", specialty: "General Surgery", defaultQuantity: 1 },
+  { name: "Ringer's Lactate (General Surgery)", category: "IRRIGATION" as any, size: "1 L", unit: "bag", specialty: "General Surgery", defaultQuantity: 2 },
+
+  // Hernia surgery — Prolene mesh sizes
+  { name: "Prolene Mesh (Hernia, Ethicon)", category: "OTHER" as any, size: "7.5 x 7.5 cm", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "Inguinal / small defect" },
+  { name: "Prolene Mesh (Hernia, Ethicon)", category: "OTHER" as any, size: "15 x 15 cm", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "Standard hernia repair" },
+  { name: "Prolene Mesh (Hernia, Ethicon)", category: "OTHER" as any, size: "30 x 30 cm", unit: "piece", specialty: "General Surgery", defaultQuantity: 1, notes: "Incisional / large ventral hernia" },
+
+  // Dressings & casting
+  { name: "Crepe Bandage (General Surgery)", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Crepe Bandage (General Surgery)", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Plaster of Paris (POP) Bandage", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Plaster of Paris (POP) Bandage", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "General Surgery", defaultQuantity: 2 },
+  { name: "Povidone Iodine 10% (General Surgery)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "General Surgery", defaultQuantity: 1 },
 ];
 
 // --------------------------------------------------------------------------
@@ -427,6 +500,14 @@ export const DRUG_DRESSING_SEED: Array<{
   { name: "Carnoy's Solution", type: "OTHER", defaultDosage: "Apply topically with cotton applicator, 3 min × cycles", defaultRoute: "Topical (Bone Cavity)", defaultQuantity: 1, unit: "bottle" },
   { name: "Wosan Antiseptic Cream", type: "ANTISEPTIC", defaultRoute: "Topical", defaultQuantity: 1, unit: "tube" },
   { name: "Hydrogen Peroxide (OMF, 250 ml)", type: "ANTISEPTIC", defaultRoute: "Topical/Wound Irrigation", defaultQuantity: 1, unit: "bottle" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // General Surgery Unit — antibiotics & IV fluids
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Levofloxacin 500 mg / 100 ml IV", type: "ANTIBIOTIC", defaultDosage: "500 mg IV daily", defaultRoute: "IV", defaultQuantity: 1, unit: "bottle" },
+  { name: "Metronidazole (Flagyl) 500 mg / 100 ml IV (General Surgery)", type: "ANTIBIOTIC", defaultDosage: "500 mg IV 8-hourly", defaultRoute: "IV", defaultQuantity: 2, unit: "bottle" },
+  { name: "Ceftriaxone 1 g (General Surgery)", type: "ANTIBIOTIC", defaultDosage: "1 g IV stat / pre-op prophylaxis", defaultRoute: "IV", defaultQuantity: 2, unit: "vial" },
+  { name: "Dextrose 10% (1 L)", type: "IV_FLUID", defaultRoute: "IV", defaultQuantity: 1, unit: "bag" },
 ];
 
 export async function seedSurgicalCatalog(prisma: PrismaClient = prismaInstance) {
