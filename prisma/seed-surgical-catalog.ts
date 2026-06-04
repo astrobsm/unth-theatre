@@ -186,6 +186,71 @@ export const CONSUMABLE_SEED: Array<{
   { name: "Ethicon Vicryl (Hypospadias Unit 2 — Both Sizes)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 4, notes: "Unit 2 prefers Ethicon only — Ethicon-equivalent of Surgicryl 2-0" },
   { name: "Ethicon Vicryl (Hypospadias Unit 2 — Both Sizes)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 4, notes: "Unit 2 prefers Ethicon only — Ethicon-equivalent of Surgicryl 3-0" },
   { name: "Normal Saline 0.9% (Paediatric, 500 ml)", category: "IRRIGATION" as any, size: "500 ml", unit: "bottle", specialty: "Paediatric Surgery", defaultQuantity: 1, notes: "Both Hypospadias Units 1 & 2" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // ENT (Otorhinolaryngology) Units — disposables / single-use
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Gloves
+  { name: "Disposable Sterile Surgical Gloves (ENT)", category: "GLOVES" as any, size: "7.5", unit: "pair", specialty: "ENT", defaultQuantity: 4 },
+  { name: "Disposable Sterile Surgical Gloves (ENT)", category: "GLOVES" as any, size: "8.0", unit: "pair", specialty: "ENT", defaultQuantity: 4 },
+
+  // Drapes / gowns / PPE
+  { name: "Fenestrated ENT Drape", category: "GOWNS_DRAPES" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Sterile Surgeon Gown (ENT)", category: "GOWNS_DRAPES" as any, size: "L", unit: "piece", specialty: "ENT", defaultQuantity: 3 },
+  { name: "Disposable Face Mask (ENT)", category: "PPE" as any, unit: "piece", specialty: "ENT", defaultQuantity: 6 },
+  { name: "Disposable Theatre Cap (ENT)", category: "PPE" as any, unit: "piece", specialty: "ENT", defaultQuantity: 6 },
+  { name: "Shoe Cover (ENT)", category: "PPE" as any, unit: "pair", specialty: "ENT", defaultQuantity: 6 },
+
+  // Suction
+  { name: "Yankauer Suction Tip (ENT)", category: "SUCTION" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Fine ENT Suction Tip (Frazier)", category: "SUCTION" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+
+  // ENT instruments / disposables
+  { name: "Disposable Ear Speculum (Assorted)", category: "OTHER" as any, unit: "piece", specialty: "ENT", defaultQuantity: 4 },
+  { name: "Surgical Blade No. 15", category: "OTHER" as any, size: "15", unit: "piece", specialty: "ENT", defaultQuantity: 2 },
+
+  // Syringes
+  { name: "Disposable Syringe (ENT)", category: "SYRINGES_NEEDLES" as any, size: "2 ml", unit: "piece", specialty: "ENT", defaultQuantity: 5 },
+  { name: "Disposable Syringe (ENT)", category: "SYRINGES_NEEDLES" as any, size: "5 ml", unit: "piece", specialty: "ENT", defaultQuantity: 5 },
+  { name: "Disposable Syringe (ENT)", category: "SYRINGES_NEEDLES" as any, size: "10 ml", unit: "piece", specialty: "ENT", defaultQuantity: 5 },
+  { name: "Disposable Syringe (ENT)", category: "SYRINGES_NEEDLES" as any, size: "20 ml", unit: "piece", specialty: "ENT", defaultQuantity: 3 },
+
+  // IV cannulae (all colours/sizes)
+  { name: "IV Cannula (ENT)", category: "SYRINGES_NEEDLES" as any, size: "24 G - Yellow", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "IV Cannula (ENT)", category: "SYRINGES_NEEDLES" as any, size: "22 G - Blue", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "IV Cannula (ENT)", category: "SYRINGES_NEEDLES" as any, size: "20 G - Pink", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "IV Cannula (ENT)", category: "SYRINGES_NEEDLES" as any, size: "18 G - Green", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "IV Cannula (ENT)", category: "SYRINGES_NEEDLES" as any, size: "16 G - Grey", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+
+  // Sutures (ENT-tagged variants so they appear in the ENT filter)
+  { name: "Vicryl (ENT)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "ENT", defaultQuantity: 2 },
+  { name: "Vicryl (ENT)", category: "SUTURES" as any, size: "4-0", unit: "piece", specialty: "ENT", defaultQuantity: 2 },
+  { name: "Nylon (ENT)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "ENT", defaultQuantity: 2 },
+  { name: "Silk (ENT)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "ENT", defaultQuantity: 2 },
+
+  // Haemostatics / packing
+  { name: "Surgicel (ENT, Oxidised Cellulose)", category: "OTHER" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Bone Wax", category: "OTHER" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Merocel Nasal Pack", category: "OTHER" as any, unit: "piece", specialty: "ENT", defaultQuantity: 2 },
+  { name: "Nasal Stent", category: "OTHER" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+
+  // Airways
+  { name: "Tracheostomy Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "Assorted", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Tracheostomy Tube (Uncuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "Assorted", unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+
+  // IV fluids (issued as consumables alongside giving sets)
+  { name: "Normal Saline 0.9% (ENT, 500 ml)", category: "IRRIGATION" as any, size: "500 ml", unit: "bag", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Dextrose-Saline 5% (ENT, 500 ml)", category: "IRRIGATION" as any, size: "500 ml", unit: "bag", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Paediatric Saline (ENT, 500 ml)", category: "IRRIGATION" as any, size: "500 ml", unit: "bag", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Blood Giving Set (ENT)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+  { name: "IV Fluid Giving Set (ENT)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "ENT", defaultQuantity: 1 },
+
+  // Skin prep / cleaning
+  { name: "Povidone Iodine 10% (ENT)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Hydrogen Peroxide 3% (ENT)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Methylated Spirit (ENT)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1 },
+  { name: "Formalin 10% (ENT, Specimen Pot)", category: "CLEANING_SOLUTION" as any, size: "500 ml", unit: "bottle", specialty: "ENT", defaultQuantity: 1, notes: "For histology specimens" },
 ];
 
 // --------------------------------------------------------------------------
@@ -255,6 +320,14 @@ export const DRUG_DRESSING_SEED: Array<{
   // ─────────────────────────────────────────────────────────────────────
   // Paediatric Surgery drugs — submitted by Dr Ogaranya
   // ─────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────
+  // ENT Units — drugs / inhalational agents / topical preparations
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Sevoflurane (Inhalational Anaesthetic, 250 ml)", type: "ANAESTHETIC_ADJUNCT", defaultRoute: "Inhalation", defaultQuantity: 1, unit: "bottle" },
+  { name: "Otrivine (Xylometazoline 0.1%) Nasal Drops", type: "OTHER", defaultRoute: "Intranasal", defaultQuantity: 1, unit: "bottle" },
+  { name: "Diclofenac 100 mg Suppository", type: "ANALGESIC", defaultDosage: "100 mg PR", defaultRoute: "PR", defaultQuantity: 2, unit: "suppository" },
+  { name: "Gentamicin Ear/Eye Cream", type: "WOUND_DRESSING_AGENT", defaultRoute: "Topical", defaultQuantity: 1, unit: "tube" },
+  { name: "Liquid Paraffin (BP)", type: "WOUND_DRESSING_AGENT", defaultRoute: "Topical", defaultQuantity: 1, unit: "bottle" },
   { name: "Adrenaline 1 mg / 1 ml (Ampoule)", type: "HAEMOSTATIC", defaultDosage: "Titrate per case", defaultRoute: "Topical/IV", defaultQuantity: 2, unit: "ampoule" },
 ];
 
