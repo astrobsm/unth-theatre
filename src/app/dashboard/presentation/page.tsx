@@ -1,8 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import Image from 'next/image';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { DECKS, getDeck, type Deck, type DeckSlide, type SlideBg } from '@/lib/presentations';
+
+// Build a short, shareable tutorial link, e.g. https://host/t/pharmacy
+function shortLinkFor(id: string): string {
+  if (typeof window === 'undefined') return `/t/${id}`;
+  return `${window.location.origin}/t/${id}`;
+}
+
+async function copyShareLink(id: string, label: string) {
+  const url = shortLinkFor(id);
+  try {
+    await navigator.clipboard.writeText(url);
+    alert(`Sharable link copied!\n\n${label}\n${url}\n\nPaste it into WhatsApp, email or SMS. Anyone who opens it will land directly on this tutorial.`);
+  } catch {
+    window.prompt('Copy this sharable tutorial link:', url);
+  }
+}
 
 const themes: Record<SlideBg, { background: string; accent: string; text: string; sub: string }> = {
   navy:    { background: 'linear-gradient(135deg, #001f3f 0%, #003366 50%, #001a2e 100%)', accent: '#87CEEB', text: '#FFFFFF', sub: '#87CEEB' },
@@ -83,34 +100,46 @@ function DeckPicker({ onPick }: { onPick: (id: string) => void }) {
           </div>
         </div>
 
+        {/* How-to-share help banner */}
+        <div style={{ marginTop: 20, background: 'rgba(135,206,235,0.10)', border: '1px solid rgba(135,206,235,0.35)', borderRadius: 12, padding: '14px 18px', color: '#E0F4FF', fontFamily: 'Georgia, serif', fontSize: 14, lineHeight: 1.55 }}>
+          <div style={{ fontWeight: 'bold', color: '#87CEEB', marginBottom: 6 }}>🔗 Share a tutorial in one click</div>
+          Each tutorial has its own short link. Tap <b>Share link</b> on any card below (or the <b>Share</b> button while viewing a tutorial) and the link is copied to your clipboard. Paste it into WhatsApp, email or SMS — anyone who opens it lands directly on that tutorial, ready to play with voice-over.
+          <div style={{ marginTop: 6, opacity: 0.85, fontSize: 12 }}>Example: <code style={{ background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: 4 }}>{typeof window !== 'undefined' ? window.location.origin : 'https://unth-theatre-mai.vercel.app'}/t/pharmacy</code></div>
+        </div>
+
         {Object.entries(grouped).map(([cat, decks]) => (
           <div key={cat} style={{ marginTop: 32 }}>
             <h2 style={{ color: '#87CEEB', fontFamily: 'Georgia, serif', fontSize: 20, borderBottom: '2px solid rgba(135,206,235,0.3)', paddingBottom: 6, marginBottom: 16 }}>{cat}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {decks.map((d) => (
-                <button
+                <div
                   key={d.id}
-                  onClick={() => onPick(d.id)}
                   style={{
                     background: 'rgba(255,255,255,0.08)',
                     border: '1px solid rgba(135,206,235,0.3)',
                     borderRadius: 14,
                     padding: 18,
-                    textAlign: 'left',
-                    cursor: 'pointer',
                     color: '#fff',
                     fontFamily: 'Georgia, serif',
                     transition: 'all 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(135,206,235,0.18)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 >
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>{d.icon}</div>
-                  <div style={{ fontSize: 17, fontWeight: 'bold', marginBottom: 6 }}>{d.title}</div>
-                  <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 8, lineHeight: 1.4 }}>{d.description}</div>
-                  <div style={{ fontSize: 11, color: '#87CEEB', opacity: 0.9 }}>👥 {d.audience}</div>
-                  <div style={{ fontSize: 11, color: '#90EE90', marginTop: 4 }}>📊 {d.slides.length} slides · 🎙 voice-over</div>
-                </button>
+                  <button onClick={() => onPick(d.id)} style={{ background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#fff', fontFamily: 'Georgia, serif', padding: 0 }}>
+                    <div style={{ fontSize: 36, marginBottom: 8 }}>{d.icon}</div>
+                    <div style={{ fontSize: 17, fontWeight: 'bold', marginBottom: 6 }}>{d.title}</div>
+                    <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 8, lineHeight: 1.4 }}>{d.description}</div>
+                    <div style={{ fontSize: 11, color: '#87CEEB', opacity: 0.9 }}>👥 {d.audience}</div>
+                    <div style={{ fontSize: 11, color: '#90EE90', marginTop: 4 }}>📊 {d.slides.length} slides · 🎙 voice-over</div>
+                  </button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(135,206,235,0.2)' }}>
+                    <button onClick={() => onPick(d.id)} style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #87CEEB', background: '#87CEEB', color: '#001f3f', cursor: 'pointer', fontFamily: 'Georgia, serif', fontWeight: 'bold' }}>▶ Open</button>
+                    <button onClick={(e) => { e.stopPropagation(); copyShareLink(d.id, d.title); }} title="Copy short share link" style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #87CEEB', background: 'transparent', color: '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>🔗 Share link</button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -148,7 +177,12 @@ function EditModal({ slide, index, onSave, onClose }: { slide: DeckSlide; index:
 }
 
 export default function PresentationPage() {
-  const [deckId, setDeckId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const initialDeck = searchParams?.get('deck') || null;
+
+  const [deckId, setDeckId] = useState<string | null>(initialDeck);
   const [data, setData] = useState<DeckSlide[]>([]);
   const [deckTitle, setDeckTitle] = useState<string>('');
   const [current, setCurrent] = useState(0);
@@ -161,15 +195,30 @@ export default function PresentationPage() {
   const speech = useSpeech();
   const total = data.length;
 
+  // Sync deck selection with URL ?deck= so links are shareable.
   useEffect(() => {
-    if (!deckId) return;
+    const q = searchParams?.get('deck') || null;
+    if (q !== deckId) setDeckId(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const selectDeck = useCallback((id: string | null) => {
+    setDeckId(id);
+    if (typeof window !== 'undefined' && pathname) {
+      const url = id ? `${pathname}?deck=${encodeURIComponent(id)}` : pathname;
+      router.replace(url, { scroll: false });
+    }
+  }, [pathname, router]);
+
+  useEffect(() => {
+    if (!deckId) { setData([]); setDeckTitle(''); return; }
     const d = getDeck(deckId);
-    if (!d) return;
+    if (!d) { selectDeck(null); return; }
     setData(d.slides);
     setDeckTitle(d.title);
     setCurrent(0);
     setAnim('morph-in');
-  }, [deckId]);
+  }, [deckId, selectDeck]);
 
   useEffect(() => {
     if (!narrate || !data.length) return;
@@ -249,7 +298,7 @@ export default function PresentationPage() {
   }, [auto, total, deckId, narrate]);
 
   if (!deckId) {
-    return <DeckPicker onPick={(id) => setDeckId(id)} />;
+    return <DeckPicker onPick={(id) => selectDeck(id)} />;
   }
 
   if (!data.length) return null;
@@ -274,7 +323,7 @@ export default function PresentationPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#001f3f', padding: '8px 20px', color: '#fff', flexShrink: 0, gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <button onClick={() => { speech.stop(); setDeckId(null); setNarrate(false); setAuto(false); }} title="Back to tutorial library" style={{ background: 'transparent', border: '1px solid #87CEEB', borderRadius: 6, color: '#87CEEB', padding: '4px 10px', cursor: 'pointer', fontFamily: 'Georgia, serif', fontSize: 12 }}>← Library</button>
+            <button onClick={() => { speech.stop(); setNarrate(false); setAuto(false); selectDeck(null); }} title="Back to tutorial library" style={{ background: 'transparent', border: '1px solid #87CEEB', borderRadius: 6, color: '#87CEEB', padding: '4px 10px', cursor: 'pointer', fontFamily: 'Georgia, serif', fontSize: 12 }}>← Library</button>
             <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Image src="/logo.png" alt="Logo" width={28} height={28} style={{ objectFit: 'contain' }} />
             </div>
@@ -284,6 +333,7 @@ export default function PresentationPage() {
             {speech.supported && (
               <button onClick={() => { const on = !narrate; setNarrate(on); if (on) { const t = data[current]?.voiceOver; if (t) speech.speak(t); } else { speech.stop(); } }} className={narrate && speech.speaking ? 'speaking' : ''} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: narrate ? '#87CEEB' : 'transparent', color: narrate ? '#001f3f' : '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif', fontWeight: narrate ? 'bold' : 'normal' }}>{narrate ? (speech.speaking ? '🔊 Speaking…' : '🔊 Narration ON') : '🔇 Narrate'}</button>
             )}
+            <button onClick={() => copyShareLink(deckId!, deckTitle)} title="Copy a short shareable link to this tutorial" style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: 'transparent', color: '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>🔗 Share</button>
             <button onClick={downloadPdf} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: '#87CEEB', color: '#001f3f', cursor: 'pointer', fontFamily: 'Georgia, serif', fontWeight: 'bold' }}>📥 PDF</button>
             <button onClick={() => setEditing(current)} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: 'transparent', color: '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>Edit</button>
             <button onClick={() => setAuto(!auto)} style={{ fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #87CEEB', background: auto ? '#87CEEB' : 'transparent', color: auto ? '#001f3f' : '#87CEEB', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>{auto ? 'Pause' : 'Auto'}</button>
