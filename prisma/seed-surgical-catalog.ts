@@ -413,6 +413,89 @@ export const CONSUMABLE_SEED: Array<{
   { name: "Plaster of Paris (POP) Bandage", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "General Surgery", defaultQuantity: 2 },
   { name: "Plaster of Paris (POP) Bandage", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "General Surgery", defaultQuantity: 2 },
   { name: "Povidone Iodine 10% (General Surgery)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "General Surgery", defaultQuantity: 1 },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Urology Unit — cystoscopy / TURP / open uro / stenting / nephrostomy
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Gloves / PPE
+  { name: "Surgical Gloves (Urology)", category: "GLOVES" as any, size: "7.5", unit: "pair", specialty: "Urology", defaultQuantity: 4 },
+  { name: "Surgical Gloves (Urology)", category: "GLOVES" as any, size: "8.0", unit: "pair", specialty: "Urology", defaultQuantity: 4 },
+  { name: "Latex Examination Gloves (Urology)", category: "GLOVES" as any, unit: "pair", specialty: "Urology", defaultQuantity: 4 },
+
+  // IV access / fluids consumables
+  { name: "IV Fluid Giving Set (Urology)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "IV Cannula (Urology)", category: "SYRINGES_NEEDLES" as any, size: "18 G - Green", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "IVF Normal Saline 0.9% (Urology)", category: "IRRIGATION" as any, size: "1 L", unit: "bag", specialty: "Urology", defaultQuantity: 2, notes: "Also used for bladder irrigation" },
+  { name: "IVF Dextrose Water 5% (Urology)", category: "IRRIGATION" as any, size: "1 L", unit: "bag", specialty: "Urology", defaultQuantity: 1 },
+
+  // Syringes & injectables
+  { name: "Disposable Syringe (Urology)", category: "SYRINGES_NEEDLES" as any, size: "2 ml", unit: "piece", specialty: "Urology", defaultQuantity: 5 },
+  { name: "Disposable Syringe (Urology)", category: "SYRINGES_NEEDLES" as any, size: "5 ml", unit: "piece", specialty: "Urology", defaultQuantity: 5 },
+  { name: "Disposable Syringe (Urology)", category: "SYRINGES_NEEDLES" as any, size: "10 ml", unit: "piece", specialty: "Urology", defaultQuantity: 5 },
+  { name: "Bladder Syringe (50/60 ml Catheter-Tip)", category: "SYRINGES_NEEDLES" as any, size: "60 ml", unit: "piece", specialty: "Urology", defaultQuantity: 1, notes: "For bladder washout / clot evacuation" },
+  { name: "Water for Injection (Urology)", category: "IRRIGATION" as any, size: "10 ml", unit: "ampoule", specialty: "Urology", defaultQuantity: 5, notes: "Also for Foley balloon inflation" },
+
+  // Catheters — haematuria 3-way (latex)
+  { name: "Haematuria Catheter 3-Way (Latex)", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Haematuria Catheter 3-Way (Latex)", category: "CATHETERS_TUBING" as any, size: "20 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Haematuria Catheter 3-Way (Latex)", category: "CATHETERS_TUBING" as any, size: "22 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+
+  // All-silicone 3-way catheters
+  { name: "All-Silicone Catheter 3-Way", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 3-Way", category: "CATHETERS_TUBING" as any, size: "20 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 3-Way", category: "CATHETERS_TUBING" as any, size: "22 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 3-Way", category: "CATHETERS_TUBING" as any, size: "24 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+
+  // All-silicone 2-way catheters
+  { name: "All-Silicone Catheter 2-Way", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 2-Way", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 2-Way", category: "CATHETERS_TUBING" as any, size: "20 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 2-Way", category: "CATHETERS_TUBING" as any, size: "22 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "All-Silicone Catheter 2-Way", category: "CATHETERS_TUBING" as any, size: "24 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+
+  // Foley latex 2-way catheters (urology variants)
+  { name: "Foley Latex Catheter 2-Way (Urology)", category: "CATHETERS_TUBING" as any, size: "16 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Foley Latex Catheter 2-Way (Urology)", category: "CATHETERS_TUBING" as any, size: "18 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Foley Latex Catheter 2-Way (Urology)", category: "CATHETERS_TUBING" as any, size: "20 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Foley Latex Catheter 2-Way (Urology)", category: "CATHETERS_TUBING" as any, size: "22 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Foley Latex Catheter 2-Way (Urology)", category: "CATHETERS_TUBING" as any, size: "24 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+
+  // NG tubes (urology)
+  { name: "NG Tube (Urology)", category: "CATHETERS_TUBING" as any, size: "6 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "NG Tube (Urology)", category: "CATHETERS_TUBING" as any, size: "8 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "NG Tube (Urology)", category: "CATHETERS_TUBING" as any, size: "10 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "NG Tube (Urology)", category: "CATHETERS_TUBING" as any, size: "12 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+
+  // Stents, drains & accessories
+  { name: "Catheter Spigot", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Urology", defaultQuantity: 1, notes: "For trial without catheter / intermittent drainage" },
+  { name: "Double-J (JJ) Ureteric Stent", category: "CATHETERS_TUBING" as any, size: "6 Fr x 26 cm", unit: "piece", specialty: "Urology", defaultQuantity: 1, notes: "Size confirm per case" },
+  { name: "Nephrostomy Tube", category: "CATHETERS_TUBING" as any, size: "8 Fr", unit: "piece", specialty: "Urology", defaultQuantity: 1, notes: "Size per case (8–14 Fr)" },
+
+  // Drainage bags
+  { name: "Ordinary Urine Drainage Bag (Urology)", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Urology", defaultQuantity: 1 },
+  { name: "BARD Urine Drainage Bag", category: "CATHETERS_TUBING" as any, unit: "piece", specialty: "Urology", defaultQuantity: 1, notes: "For 3-way irrigation / large-volume collection" },
+
+  // Lubricant
+  { name: "KY Lubricating Jelly (Urology)", category: "OTHER" as any, unit: "tube", specialty: "Urology", defaultQuantity: 1 },
+
+  // Sutures
+  { name: "Vicryl (Urology)", category: "SUTURES" as any, size: "4-0", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Vicryl (Urology)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Vicryl (Urology)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Vicryl (Urology)", category: "SUTURES" as any, size: "0", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Vicryl (Urology)", category: "SUTURES" as any, size: "1", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Vicryl (Urology)", category: "SUTURES" as any, size: "2", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Nylon (Urology)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Nylon (Urology)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Nylon (Urology)", category: "SUTURES" as any, size: "1", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+  { name: "Nylon (Urology)", category: "SUTURES" as any, size: "2", unit: "piece", specialty: "Urology", defaultQuantity: 2 },
+
+  // Dressings / DVT prophylaxis
+  { name: "Crepe Bandage (Urology)", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Crepe Bandage (Urology)", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "Urology", defaultQuantity: 1 },
+  { name: "Plaster (Adhesive, Large)", category: "STERILE_DRESSINGS" as any, size: "Big", unit: "roll", specialty: "Urology", defaultQuantity: 1, notes: "Large adhesive plaster for catheter / wound securing" },
+  { name: "TED Anti-Embolism Stocking", category: "OTHER" as any, size: "Pair", unit: "pair", specialty: "Urology", defaultQuantity: 1, notes: "DVT prophylaxis; specify thigh/knee length and size per patient" },
 ];
 
 // --------------------------------------------------------------------------
@@ -508,6 +591,17 @@ export const DRUG_DRESSING_SEED: Array<{
   { name: "Metronidazole (Flagyl) 500 mg / 100 ml IV (General Surgery)", type: "ANTIBIOTIC", defaultDosage: "500 mg IV 8-hourly", defaultRoute: "IV", defaultQuantity: 2, unit: "bottle" },
   { name: "Ceftriaxone 1 g (General Surgery)", type: "ANTIBIOTIC", defaultDosage: "1 g IV stat / pre-op prophylaxis", defaultRoute: "IV", defaultQuantity: 2, unit: "vial" },
   { name: "Dextrose 10% (1 L)", type: "IV_FLUID", defaultRoute: "IV", defaultQuantity: 1, unit: "bag" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Urology Unit — antibiotics, analgesics, diuretic, local anaesthetics
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Ceftriaxone 1 g (Urology)", type: "ANTIBIOTIC", defaultDosage: "1 g IV stat / pre-op prophylaxis", defaultRoute: "IV", defaultQuantity: 2, unit: "vial" },
+  { name: "Metronidazole (Flagyl) 500 mg / 100 ml IV (Urology)", type: "ANTIBIOTIC", defaultDosage: "500 mg IV 8-hourly", defaultRoute: "IV", defaultQuantity: 2, unit: "bottle" },
+  { name: "Gentamicin 80 mg (Urology)", type: "ANTIBIOTIC", defaultDosage: "80 mg IV/IM", defaultRoute: "IV/IM", defaultQuantity: 2, unit: "ampoule" },
+  { name: "Tramadol 100 mg / 2 ml IM (Ampoule)", type: "ANALGESIC", defaultDosage: "50–100 mg IM", defaultRoute: "IM", defaultQuantity: 2, unit: "ampoule" },
+  { name: "Frusemide 20 mg / 2 ml (Ampoule)", type: "OTHER", defaultDosage: "20–40 mg IV", defaultRoute: "IV", defaultQuantity: 2, unit: "ampoule" },
+  { name: "Plain Xylocaine (Lidocaine 2% Plain, Urology)", type: "LOCAL_ANAESTHETIC", defaultDosage: "Max 3 mg/kg", defaultRoute: "Local Infiltration / Urethral Gel", defaultQuantity: 1, unit: "vial" },
+  { name: "Lidocaine 2% with Adrenaline (Urology)", type: "LOCAL_ANAESTHETIC", defaultDosage: "Max 7 mg/kg with adrenaline", defaultRoute: "Local Infiltration", defaultQuantity: 1, unit: "vial" },
 ];
 
 export async function seedSurgicalCatalog(prisma: PrismaClient = prismaInstance) {
