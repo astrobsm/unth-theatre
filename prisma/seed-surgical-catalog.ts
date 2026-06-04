@@ -27,6 +27,7 @@ export const CONSUMABLE_SEED: Array<{
   specialty?: string | null;
   defaultQuantity?: number;
   sortOrder?: number;
+  notes?: string;
 }> = [
   // Disposable surgical gloves — sized
   ...GLOVE_SIZES.map((s, i) => ({
@@ -145,6 +146,46 @@ export const CONSUMABLE_SEED: Array<{
   { name: "Velband Orthopaedic Padding", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 4 },
   { name: "Plaster of Paris (POP) Cast", category: "STERILE_DRESSINGS" as any, size: "6 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 15 },
   { name: "Plaster of Paris (POP) Cast", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Orthopaedics", defaultQuantity: 4 },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Paediatric Surgery Unit — submitted by Dr Ogaranya
+  // Includes hypospadias repair sub-units (Unit 1 = Surgicryl SF;
+  // Unit 2 = Ethicon). All entries carry distinct (name,size) pairs so
+  // the upsert keeps each variant as its own row.
+  // ─────────────────────────────────────────────────────────────────────
+
+  // General paediatric surgery essentials
+  { name: "IV Cannula (Paediatric)", category: "SYRINGES_NEEDLES" as any, size: "24 G - Yellow", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 1 },
+  { name: "IV Cannula (Paediatric)", category: "SYRINGES_NEEDLES" as any, size: "22 G - Blue", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 1 },
+  { name: "Crepe Bandage", category: "STERILE_DRESSINGS" as any, size: "4 inch", unit: "roll", specialty: "Paediatric Surgery", defaultQuantity: 1 },
+  { name: "Dextrose 5% (500 ml)", category: "IRRIGATION" as any, size: "500 ml", unit: "bag", specialty: "Paediatric Surgery", defaultQuantity: 1 },
+  { name: "Disposable Syringe (Paediatric)", category: "SYRINGES_NEEDLES" as any, size: "10 ml", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 5 },
+  { name: "Disposable Syringe (Paediatric)", category: "SYRINGES_NEEDLES" as any, size: "5 ml", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 5 },
+  { name: "Disposable Syringe (Paediatric)", category: "SYRINGES_NEEDLES" as any, size: "2 ml", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 5 },
+  { name: "Water for Injection (Paediatric)", category: "IRRIGATION" as any, size: "10 ml", unit: "ampoule", specialty: "Paediatric Surgery", defaultQuantity: 5 },
+  { name: "NG Tube (Paediatric)", category: "CATHETERS_TUBING" as any, size: "10 Fr", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 12 },
+  { name: "Savlon (Paediatric Surgery)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "Paediatric Surgery", defaultQuantity: 1 },
+  { name: "Povidone Iodine 10% (Paediatric Surgery)", category: "SKIN_PREP" as any, size: "500 ml", unit: "bottle", specialty: "Paediatric Surgery", defaultQuantity: 1 },
+
+  // Hypospadias Repair Unit 1 — Surgicryl SF Vicryl
+  { name: "Surgicryl SF Vicryl (Hypospadias Unit 1)", category: "SUTURES" as any, size: "4-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 3, notes: "Hypospadias Repair Unit 1 — Surgicryl brand SF" },
+  { name: "Surgicryl SF Vicryl (Hypospadias Unit 1)", category: "SUTURES" as any, size: "5-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 2, notes: "Hypospadias Repair Unit 1 — Surgicryl brand SF" },
+  { name: "Surgicryl SF Vicryl (Hypospadias Unit 1)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 2, notes: "Hypospadias Repair Unit 1 — Surgicryl brand SF" },
+  { name: "Silk (Hypospadias Repair)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 1, notes: "Used by Hypospadias Repair Units 1 & 2" },
+
+  // Hypospadias Repair Unit 2 — Ethicon Vicryl
+  { name: "Ethicon Vicryl (Hypospadias Unit 2)", category: "SUTURES" as any, size: "4-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 3, notes: "Hypospadias Repair Unit 2 — Ethicon brand (Unit 2 prefers Ethicon only)" },
+  { name: "Ethicon Vicryl (Hypospadias Unit 2)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 3, notes: "Hypospadias Repair Unit 2 — Ethicon brand (Unit 2 prefers Ethicon only)" },
+  { name: "Latex Foley Catheter (Paediatric)", category: "CATHETERS_TUBING" as any, size: "6 Fr", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 1, notes: "Hypospadias Repair Unit 2" },
+  { name: "All-Silicone Urethral Catheter (Paediatric)", category: "CATHETERS_TUBING" as any, size: "8 Fr", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 1, notes: "Hypospadias Repair Unit 2 (also used in general paediatric cases)" },
+  { name: "Urine Drainage Bag (Paediatric)", category: "CATHETERS_TUBING" as any, size: "Paed", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 1, notes: "Hypospadias Repair Units 1 & 2" },
+
+  // Sutures used by BOTH hypospadias units (Unit 2 prefers Ethicon equivalents — higher quantity row)
+  { name: "Surgicryl Vicryl (Both Hypospadias Units)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 2, notes: "Both Hypospadias Units 1 & 2" },
+  { name: "Surgicryl Vicryl (Both Hypospadias Units)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 2, notes: "Both Hypospadias Units 1 & 2" },
+  { name: "Ethicon Vicryl (Hypospadias Unit 2 — Both Sizes)", category: "SUTURES" as any, size: "2-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 4, notes: "Unit 2 prefers Ethicon only — Ethicon-equivalent of Surgicryl 2-0" },
+  { name: "Ethicon Vicryl (Hypospadias Unit 2 — Both Sizes)", category: "SUTURES" as any, size: "3-0", unit: "piece", specialty: "Paediatric Surgery", defaultQuantity: 4, notes: "Unit 2 prefers Ethicon only — Ethicon-equivalent of Surgicryl 3-0" },
+  { name: "Normal Saline 0.9% (Paediatric, 500 ml)", category: "IRRIGATION" as any, size: "500 ml", unit: "bottle", specialty: "Paediatric Surgery", defaultQuantity: 1, notes: "Both Hypospadias Units 1 & 2" },
 ];
 
 // --------------------------------------------------------------------------
@@ -210,6 +251,11 @@ export const DRUG_DRESSING_SEED: Array<{
   { name: "Ceftriaxone 2 g (Vial)", type: "ANTIBIOTIC", defaultDosage: "2 g IV stat", defaultRoute: "IV", defaultQuantity: 1, unit: "vial" },
   { name: "Tranexamic Acid 1 g (Ampoule)", type: "HAEMOSTATIC", defaultDosage: "1 g IV", defaultRoute: "IV", defaultQuantity: 1, unit: "ampoule" },
   { name: "Lidocaine 2% with Adrenaline 1:200,000 (20 ml)", type: "ANAESTHETIC_ADJUNCT", defaultRoute: "SC/Local", defaultQuantity: 1, unit: "vial" },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Paediatric Surgery drugs — submitted by Dr Ogaranya
+  // ─────────────────────────────────────────────────────────────────────
+  { name: "Adrenaline 1 mg / 1 ml (Ampoule)", type: "HAEMOSTATIC", defaultDosage: "Titrate per case", defaultRoute: "Topical/IV", defaultQuantity: 2, unit: "ampoule" },
 ];
 
 export async function seedSurgicalCatalog(prisma: PrismaClient = prismaInstance) {
