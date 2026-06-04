@@ -476,6 +476,12 @@ model User {
   theatreMeals  TheatreMeal[]
   mealsPrepared TheatreMeal[] @relation("MealPreparer")
 
+  // Meal Menu / Ordering Relations
+  mealMenuItemsCreated MealMenuItem[] @relation("MealMenuItemCreator")
+  mealOrders           MealOrder[]    @relation("MealOrderRequester")
+  mealOrdersVerified   MealOrder[]    @relation("MealOrderPaymentVerifier")
+  mealOrdersDelivered  MealOrder[]    @relation("MealOrderDeliveredBy")
+
   // Oxygen Control Room Relations
   oxygenReadinessReports   OxygenReadinessReport[]
   oxygenReportsVerified    OxygenReadinessReport[] @relation("OxygenReportVerifier")
@@ -6420,4 +6426,164 @@ model PostOpPrescription {
   @@index([surgeryId])
   @@index([status])
   @@map("postop_prescriptions")
+}
+
+// ============================================
+// MEAL MENU & ORDERING (Cafeteria Manager)
+// ============================================
+
+enum MealItemCategory {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  BEVERAGE
+  COMBO
+}
+
+enum MealAvailability {
+  FREE_FOR_ON_DUTY
+  PAID
+}
+
+enum MealOrderType {
+  FREE
+  PAID
+}
+
+enum MealPaymentStatus {
+  NOT_REQUIRED
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  REFUNDED
+}
+
+enum MealOrderStatus {
+  PLACED
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+/// Menu item published by the Theatre Cafeteria Manager.
+/// FREE items are dispensed only to qualified on-duty staff.
+/// PAID items can be ordered by any authenticated user with proof of payment.
+model MealMenuItem {
+  id            String           @id @default(uuid())
+  name          String
+  description   String?
+  category      MealItemCategory
+  availability  MealAvailability
+  price         Decimal          @default(0) @db.Decimal(10, 2)
+  currency      String           @default("NGN")
+  imageUrl      String?
+  isActive      Boolean          @default(true)
+  /// Optional max servings the kitchen can prepare today (null = unlimited)
+  dailyCapacity Int?
+  /// Optional preparation time in minutes
+  prepTimeMin   Int?
+
+  createdById String
+  createdBy   User   @relation("MealMenuItemCreator", fields: [createdById], references: [id])
+
+  orderItems MealOrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([availability, isActive])
+  @@index([category])
+  @@map("meal_menu_items")
+}
+
+/// A meal order placed by any authenticated user (staff or otherwise).
+/// FREE orders require the requester to be eligible (on-duty per roster
+/// or surgical team today). PAID orders require payment evidence upload
+/// before the kitchen will prepare them.
+model MealOrder {
+  id String @id @default(uuid())
+
+  requesterId   String
+  requester     User   @relation("MealOrderRequester", fields: [requesterId], references: [id])
+  requesterName String // snapshot in case user is removed
+  requesterRole String
+
+  orderType   MealOrderType
+  orderStatus MealOrderStatus @default(PLACED)
+
+  // Totals
+  totalAmount Decimal @default(0) @db.Decimal(10, 2)
+  currency    String  @default("NGN")
+
+  // Delivery
+  deliveryLocation String // e.g. "Theatre 3 lounge", "PACU", "Holding bay"
+  deliveryNotes    String?
+  preferredTime    DateTime?
+
+  // Payment (only relevant when orderType = PAID)
+  paymentStatus           MealPaymentStatus @default(NOT_REQUIRED)
+  paymentReference        String? // bank reference / pos receipt id provided by user
+  paymentMethod           String? // e.g. "Bank Transfer", "POS", "Cash"
+  paymentEvidenceFileName String?
+  paymentEvidenceMimeType String?
+  paymentEvidenceData     Bytes?
+  paymentUploadedAt       DateTime?
+  paymentVerifiedAt       DateTime?
+  paymentVerifiedById     String?
+  paymentVerifiedBy       User?             @relation("MealOrderPaymentVerifier", fields: [paymentVerifiedById], references: [id])
+  paymentRejectionReason  String?
+
+  // Fulfilment
+  confirmedAt   DateTime?
+  preparedAt    DateTime?
+  readyAt       DateTime?
+  deliveredAt   DateTime?
+  deliveredById String?
+  deliveredBy   User?     @relation("MealOrderDeliveredBy", fields: [deliveredById], references: [id])
+
+  // Eligibility snapshot (for FREE orders) — captured at placement time
+  eligibilitySource String? // "ROSTER" | "SURGICAL_TEAM" | "MANUAL_OVERRIDE"
+  eligibilityNotes  String?
+
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  items MealOrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requesterId, createdAt])
+  @@index([orderStatus, createdAt])
+  @@index([paymentStatus])
+  @@map("meal_orders")
+}
+
+model MealOrderItem {
+  id String @id @default(uuid())
+
+  orderId String
+  order   MealOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  menuItemId String
+  menuItem   MealMenuItem @relation(fields: [menuItemId], references: [id])
+
+  // Snapshot fields so historic orders survive menu edits / deletions
+  nameSnapshot         String
+  categorySnapshot     MealItemCategory
+  availabilitySnapshot MealAvailability
+  unitPrice            Decimal          @default(0) @db.Decimal(10, 2)
+  quantity             Int              @default(1)
+  lineTotal            Decimal          @default(0) @db.Decimal(10, 2)
+  notes                String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@map("meal_order_items")
 }
