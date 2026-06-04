@@ -304,6 +304,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Auto-assign anaesthetist from the duty roster. Prefer whatever the client
+    // already resolved (onDutyTeam.anaesthetistId); otherwise look it up server-side
+    // from the Roster for the scheduled date/shift/theatre. Falls back to any theatre
+    // if no one is rostered specifically for the chosen one — an anaesthetist on duty
+    // anywhere in the suite is better than leaving the slot empty.
+    let resolvedAnaesthetistId: string | null = onDutyTeam?.anaesthetistId || null;
+    if (!resolvedAnaesthetistId) {
+      try {
+        const sched = new Date(validatedData.scheduledDate);
+        const [hh, mm] = (validatedData.scheduledTime || '08:00').split(':').map((n) => parseInt(n, 10));
+        if (!Number.isNaN(hh)) sched.setHours(hh, Number.isNaN(mm) ? 0 : mm, 0, 0);
+        const hour = sched.getHours();
+        const shift: 'MORNING' | 'CALL' | 'NIGHT' =
+          hour >= 8 && hour < 16 ? 'MORNING' : hour >= 16 && hour < 22 ? 'CALL' : 'NIGHT';
+        const dateOnly = new Date(Date.UTC(sched.getFullYear(), sched.getMonth(), sched.getDate()));
+
+        const baseWhere = { date: dateOnly, shift, staffCategory: 'ANAESTHETISTS' as const };
+        const tId = (validatedData.theatreId || '').trim();
+        const rosters = await prisma.roster.findMany({
+          where: tId ? { ...baseWhere, theatreId: tId } : baseWhere,
+          include: { user: { select: { id: true } } },
+        });
+        const pool = rosters.length
+          ? rosters
+          : tId
+            ? await prisma.roster.findMany({ where: baseWhere, include: { user: { select: { id: true } } } })
+            : [];
+        const rank = (s: string | null) =>
+          s === 'CONSULTANT' ? 0 : s === 'SENIOR_REGISTRAR' ? 1 : s === 'REGISTRAR' ? 2 : 3;
+        pool.sort((a, b) => rank(a.seniorityLevel) - rank(b.seniorityLevel));
+        resolvedAnaesthetistId = pool[0]?.user.id || null;
+      } catch (e) {
+        console.warn('Auto-assign anaesthetist from roster failed:', (e as Error)?.message);
+      }
+    }
+
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
@@ -311,7 +347,7 @@ export async function POST(request: NextRequest) {
         surgeonId: resolvedSurgeonId,
         // Default the surgery anaesthetist to the on-duty anaesthetist for the chosen
         // theatre/date. The Pharmacist sees this name as "To be collected by".
-        anesthetistId: onDutyTeam?.anaesthetistId || null,
+        anesthetistId: resolvedAnaesthetistId,
         surgeryType: surgeryType,
         scheduledDate: new Date(validatedData.scheduledDate),
         // Informed consent file (base64) — visible to the holding-area nurse for
