@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import jsPDF from 'jspdf';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-static';
+export const dynamic = 'force-dynamic';
 
-function buildPdf(): Uint8Array {
+function buildPdf(): Buffer {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = 210;
   const margin = 18;
@@ -252,18 +252,27 @@ function buildPdf(): Uint8Array {
   }
 
   const out = doc.output('arraybuffer');
-  return new Uint8Array(out);
+  return Buffer.from(out);
 }
 
 export async function GET() {
-  const bytes = buildPdf();
-  return new NextResponse(bytes, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition':
-        'inline; filename="UNTH-ORM-GoLive-8June2026.pdf"',
-      'Cache-Control': 'public, max-age=3600',
-    },
-  });
+  try {
+    const bytes = buildPdf();
+    return new NextResponse(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(bytes.length),
+        'Content-Disposition':
+          'inline; filename="UNTH-ORM-GoLive-8June2026.pdf"',
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+  } catch (err) {
+    console.error('[announcement-pdf] generation failed', err);
+    return NextResponse.json(
+      { error: 'PDF generation failed', detail: (err as Error)?.message ?? 'unknown' },
+      { status: 500 },
+    );
+  }
 }
