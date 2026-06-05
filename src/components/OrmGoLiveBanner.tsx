@@ -51,13 +51,21 @@ export default function OrmGoLiveBanner() {
           </p>
           <div className="mt-2 flex flex-wrap gap-3">
             <a
+              href="/api/announcements/orm-go-live/pdf"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-white hover:bg-amber-700 font-semibold"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Download PDF
+            </a>
+            <a
               href="/announcements/orm-go-live-2026-06-08.md"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-900 underline font-medium"
             >
-              <Download className="h-4 w-4" aria-hidden />
-              Read full announcement
+              Read full text
             </a>
             <a
               href="/announcements/orm-go-live-2026-06-08-whatsapp.txt"
