@@ -7,6 +7,7 @@ import Link from 'next/link';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 import AssistantWidget from '@/components/AssistantWidget';
+import OrmGoLiveBanner from '@/components/OrmGoLiveBanner';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import {
   LayoutDashboard,
@@ -410,7 +411,10 @@ export default function DashboardLayout({
             children above the watermark veil while letting modals render in
             the root stacking context.
           */}
-          <div className="relative">{children}</div>
+          <div className="relative">
+            <OrmGoLiveBanner />
+            {children}
+          </div>
         </main>
       </div>
       <AssistantWidget />

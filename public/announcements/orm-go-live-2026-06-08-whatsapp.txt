@@ -1,0 +1,23 @@
+*UNTH THEATRE — ORM GO-LIVE: Mon 8 June 2026*
+
+Dear Colleagues,
+
+From *Monday, 8 June 2026*, ALL surgical bookings (elective & emergency) across *every unit* MUST be made on the *ORM Platform*. No paper or WhatsApp bookings will be accepted by theatre, anaesthesia, or pharmacy.
+
+*Key points:*
+1. Surgical team books the case on ORM. The system auto-assigns the on-duty anaesthetist, notifies the theatre nurse, pack provider & pharmacy.
+2. Patients/relatives pay for the *Surgical Consumable Pack* at the *Pack Shop — upstairs, beside the FCMB ATM, near the former DA office*. They receive an *Evidence of Payment* receipt.
+3. Surgical team collects the pre-packed consumables in theatre by presenting that receipt. *No cash is collected at the theatre.*
+4. All *anaesthetic prescriptions* raised on ORM are *wired automatically to Pharmacy* — drugs dispensed the night before / morning of surgery.
+
+*Action before Monday:*
+- HoDs: brief your unit, confirm all members have ORM logins.
+- Anaesthetists: verify your roster & prescription access.
+- Nurses: confirm your specialty consumable list is correct on ORM.
+- Pharmacy: monitor the wired-prescription queue daily.
+
+*Compliance:* From 8 June, any case not on ORM by *08:00 of the surgery day will be deferred*.
+
+Training: Fri 5 & Sat 6 June. Support: Theatre IT desk / System Administrator.
+
+— *Office of the Director, Theatre Complex, UNTH*
