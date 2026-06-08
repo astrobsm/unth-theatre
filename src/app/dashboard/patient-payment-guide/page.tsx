@@ -74,20 +74,16 @@ export default function PatientPaymentGuidePage() {
         const size = 130; // mm — large central watermark
         const x = (pageW - size) / 2;
         const y = (pageH - size) / 2;
-        // Try faint alpha; if GState unsupported, the image will simply be
-        // drawn at full opacity, so we put it BEFORE text and rely on white
-        // rectangle overlays not being needed (image is light enough).
+        // Try faint alpha; if GState unsupported, fall back to a small corner logo.
         try {
-          // @ts-expect-error - GState typing varies across jsPDF versions
-          const g = new jsPDF.GState({ opacity: 0.08 });
-          // @ts-expect-error - setGState exists at runtime
-          doc.setGState(g);
+          const jsPdfAny = jsPDF as unknown as { GState: new (opts: { opacity: number }) => unknown };
+          const docAny = doc as unknown as { setGState: (g: unknown) => void };
+          const faint = new jsPdfAny.GState({ opacity: 0.08 });
+          docAny.setGState(faint);
           doc.addImage(watermark, 'PNG', x, y, size, size, undefined, 'FAST');
-          // @ts-expect-error - reset GState
-          doc.setGState(new jsPDF.GState({ opacity: 1 }));
+          docAny.setGState(new jsPdfAny.GState({ opacity: 1 }));
         } catch {
-          // Fallback: draw a much smaller logo at the bottom-right so it
-          // never obscures content if GState isn't available.
+          // Fallback: small logo at the bottom-right so it never obscures content.
           doc.addImage(watermark, 'PNG', pageW - 35, pageH - 35, 25, 25, undefined, 'FAST');
         }
       };
@@ -176,8 +172,8 @@ export default function PatientPaymentGuidePage() {
       });
 
       // Notes section
-      // @ts-expect-error - lastAutoTable injected by jspdf-autotable
-      let y = (doc.lastAutoTable?.finalY ?? 200) + 8;
+      const docWithTable = doc as unknown as { lastAutoTable?: { finalY?: number } };
+      let y = (docWithTable.lastAutoTable?.finalY ?? 200) + 8;
       if (y > 250) {
         doc.addPage();
         drawWatermark();
