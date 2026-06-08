@@ -59,6 +59,7 @@ import {
   GraduationCap,
   ChefHat,
   Wind,
+  Receipt,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -119,6 +120,7 @@ export default function DashboardLayout({
 
     // === PRE-OPERATIVE (Night Before & Morning Of) ===
     { href: '/dashboard/pre-operative-visit', icon: ClipboardPlus, label: 'Pre-Op Visit', badge: 'NEW' },
+    { href: '/dashboard/patient-payment-guide', icon: Receipt, label: 'Patient Payment Guide', badge: 'NEW' },
     { href: '/dashboard/anaesthetist-board', icon: Stethoscope, label: 'Anaesthetist Board', badge: 'NEW' },
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
     { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Rx Approvals', badge: 'NEW' },
