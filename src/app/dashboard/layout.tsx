@@ -58,6 +58,7 @@ import {
   Volume2,
   GraduationCap,
   ChefHat,
+  Wind,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -155,6 +156,7 @@ export default function DashboardLayout({
     { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status' },
     { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance' },
     { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness' },
+    { href: '/dashboard/oxygen-control', icon: Wind, label: 'Oxygen Control' },
     { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory' },
     { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization' },
     { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness' },
