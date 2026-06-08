@@ -4,7 +4,7 @@ import jsPDF from 'jspdf';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function buildPdf(): Uint8Array {
+function buildPdf(): ArrayBuffer {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = 210;
   const margin = 18;
@@ -252,13 +252,14 @@ function buildPdf(): Uint8Array {
   }
 
   const out = doc.output('arraybuffer');
-  return new Uint8Array(out);
+  return out as ArrayBuffer;
 }
 
 export async function GET() {
   try {
     const bytes = buildPdf();
-    return new NextResponse(bytes, {
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    return new NextResponse(blob, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
