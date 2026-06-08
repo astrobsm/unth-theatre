@@ -4,7 +4,7 @@ import jsPDF from 'jspdf';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function buildPdf(): Buffer {
+function buildPdf(): Uint8Array {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = 210;
   const margin = 18;
@@ -252,7 +252,7 @@ function buildPdf(): Buffer {
   }
 
   const out = doc.output('arraybuffer');
-  return Buffer.from(out);
+  return new Uint8Array(out);
 }
 
 export async function GET() {
@@ -262,7 +262,7 @@ export async function GET() {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Length': String(bytes.length),
+        'Content-Length': String(bytes.byteLength),
         'Content-Disposition':
           'inline; filename="UNTH-ORM-GoLive-8June2026.pdf"',
         'Cache-Control': 'public, max-age=300',
