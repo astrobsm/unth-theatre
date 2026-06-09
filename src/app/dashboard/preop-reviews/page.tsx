@@ -19,8 +19,10 @@ import {
   Syringe,
   Trash2,
   CalendarDays,
-  Building2
+  Building2,
+  FilePlus2
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface PreOpReview {
   id: string;
@@ -434,6 +436,7 @@ export default function PreOpReviewsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Procedure</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surgeon</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -455,6 +458,15 @@ export default function PreOpReviewsPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{surgery.procedureName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.surgeon?.fullName || 'Not assigned'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                      <Link
+                        href={`/dashboard/preop-reviews/new?surgeryId=${surgery.id}`}
+                        className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700"
+                      >
+                        <FilePlus2 className="h-4 w-4" />
+                        Open Review Form
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

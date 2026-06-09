@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -239,6 +239,8 @@ interface Surgery {
 export default function NewPreOpReviewPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedSurgeryId = searchParams.get('surgeryId') || '';
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
   const [selectedSurgeryId, setSelectedSurgeryId] = useState('');
   const [selectedSurgery, setSelectedSurgery] = useState<Surgery | null>(null);
@@ -312,6 +314,15 @@ export default function NewPreOpReviewPage() {
   useEffect(() => {
     fetchScheduledSurgeries();
   }, []);
+
+  useEffect(() => {
+    if (!preselectedSurgeryId || surgeries.length === 0) return;
+    const matched = surgeries.find((s) => s.id === preselectedSurgeryId);
+    if (matched) {
+      setSelectedSurgeryId(matched.id);
+      setError('');
+    }
+  }, [preselectedSurgeryId, surgeries]);
 
   useEffect(() => {
     if (selectedSurgeryId) {
@@ -482,6 +493,11 @@ export default function NewPreOpReviewPage() {
             {surgeries.length === 0 && (
               <p className="mt-2 text-sm text-gray-500">
                 No scheduled surgeries available. Please schedule a surgery first.
+              </p>
+            )}
+            {preselectedSurgeryId && selectedSurgery && (
+              <p className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                Review form opened for the selected booked surgery. Any prescription entered below will be created from this review and sent into the pharmacy workflow for packing.
               </p>
             )}
           </div>
