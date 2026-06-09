@@ -175,6 +175,7 @@ export default function PreOpReviewsPage() {
   };
 
   const canApprove = ['ADMIN', 'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER', 'ANAESTHETIST', 'SYSTEM_ADMINISTRATOR'].includes(session?.user?.role || '');
+  const reviewBySurgeryId = new Map(reviews.map((review) => [review.surgeryId, review]));
 
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -459,13 +460,23 @@ export default function PreOpReviewsPage() {
                     <td className="px-6 py-4 text-sm text-gray-900">{surgery.procedureName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.surgeon?.fullName || 'Not assigned'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <Link
-                        href={`/dashboard/preop-reviews/new?surgeryId=${surgery.id}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700"
-                      >
-                        <FilePlus2 className="h-4 w-4" />
-                        Open Review Form
-                      </Link>
+                      {(() => {
+                        const existingReview = reviewBySurgeryId.get(surgery.id);
+                        const href = existingReview
+                          ? `/dashboard/preop-reviews/${existingReview.id}/edit`
+                          : `/dashboard/preop-reviews/new?surgeryId=${surgery.id}`;
+                        const label = existingReview ? 'Edit Review' : 'Open Review Form';
+                        const buttonClass = existingReview
+                          ? 'inline-flex items-center gap-2 rounded-md bg-amber-600 px-3 py-2 text-white hover:bg-amber-700'
+                          : 'inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700';
+
+                        return (
+                          <Link href={href} className={buttonClass}>
+                            <FilePlus2 className="h-4 w-4" />
+                            {label}
+                          </Link>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
