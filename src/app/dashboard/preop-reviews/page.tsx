@@ -17,7 +17,9 @@ import {
   Filter,
   ThumbsUp,
   Syringe,
-  Trash2
+  Trash2,
+  CalendarDays,
+  Building2
 } from 'lucide-react';
 
 interface PreOpReview {
@@ -39,21 +41,43 @@ interface PreOpReview {
   };
 }
 
+interface BookedSurgery {
+  id: string;
+  unit: string;
+  procedureName: string;
+  scheduledDate: string;
+  scheduledTime?: string | null;
+  status: string;
+  patient: {
+    name: string;
+    folderNumber?: string | null;
+  };
+  surgeon?: {
+    fullName?: string | null;
+  } | null;
+  theatreName?: string | null;
+}
+
 export default function PreOpReviewsPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [reviews, setReviews] = useState<PreOpReview[]>([]);
+  const [bookedSurgeries, setBookedSurgeries] = useState<BookedSurgery[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('');
 
   useEffect(() => {
-    fetchReviews();
+    fetchPageData();
     // Auto-refresh every 30 seconds for cross-device sync
-    const interval = setInterval(fetchReviews, 30000);
+    const interval = setInterval(fetchPageData, 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, dateFilter]);
+
+  const fetchPageData = async () => {
+    await Promise.all([fetchReviews(), fetchBookedSurgeries()]);
+  };
 
   const fetchReviews = async () => {
     try {
@@ -80,6 +104,28 @@ export default function PreOpReviewsPage() {
       console.error('Error fetching reviews:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBookedSurgeries = async () => {
+    try {
+      if (!dateFilter) {
+        setBookedSurgeries([]);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.append('date', dateFilter);
+      const response = await fetch(`/api/surgeries?${params.toString()}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const filtered = (Array.isArray(data) ? data : []).filter(
+        (s: BookedSurgery) => s.status !== 'CANCELLED'
+      );
+      setBookedSurgeries(filtered);
+    } catch (error) {
+      console.error('Error fetching booked surgeries:', error);
     }
   };
 
@@ -358,6 +404,63 @@ export default function PreOpReviewsPage() {
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
         </div>
+      </div>
+
+      {/* Booked Surgeries For Selected Date */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-blue-600" />
+            Booked Surgeries for Selected Date
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {dateFilter
+              ? `Sorted by theatre and surgical unit for ${new Date(dateFilter).toLocaleDateString()}`
+              : 'Select a surgery date above to display booked surgeries'}
+          </p>
+        </div>
+        {!dateFilter ? (
+          <div className="p-6 text-sm text-gray-600">No date selected.</div>
+        ) : bookedSurgeries.length === 0 ? (
+          <div className="p-6 text-sm text-gray-600">No booked surgeries found for this date.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Theatre</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surgical Unit</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Procedure</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surgeon</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {bookedSurgeries.map((surgery) => (
+                  <tr key={surgery.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span className="inline-flex items-center gap-1">
+                        <Building2 className="h-4 w-4 text-gray-400" />
+                        {surgery.theatreName || 'Unassigned Theatre'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.unit || '—'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.scheduledTime || '—'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <div>{surgery.patient?.name || '—'}</div>
+                      {surgery.patient?.folderNumber && (
+                        <div className="text-xs text-gray-500">{surgery.patient.folderNumber}</div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{surgery.procedureName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.surgeon?.fullName || 'Not assigned'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Reviews List */}

@@ -109,10 +109,21 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
+    const date = searchParams.get('date');
 
     const where: any = {};
     if (status) {
       where.status = status;
+    }
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      where.scheduledDate = {
+        gte: startOfDay,
+        lte: endOfDay,
+      };
     }
 
     const surgeries = await prisma.surgery.findMany({
@@ -135,7 +146,7 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy: { scheduledDate: 'desc' }
+      orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }]
     });
 
     // Resolve theatre names (theatreId is a string FK-style, no Prisma relation)
@@ -155,6 +166,25 @@ export async function GET(request: NextRequest) {
       theatre: s.theatreId ? theatreMap.get(s.theatreId) ?? null : null,
       theatreName: s.theatreId ? theatreMap.get(s.theatreId)?.name ?? null : null,
     }));
+
+    // For daily planning views, keep output stable by sorting by theatre then unit.
+    enriched.sort((a, b) => {
+      const theatreA = (a.theatreName || 'Unassigned Theatre').toLowerCase();
+      const theatreB = (b.theatreName || 'Unassigned Theatre').toLowerCase();
+      if (theatreA < theatreB) return -1;
+      if (theatreA > theatreB) return 1;
+
+      const unitA = (a.unit || '').toLowerCase();
+      const unitB = (b.unit || '').toLowerCase();
+      if (unitA < unitB) return -1;
+      if (unitA > unitB) return 1;
+
+      const timeA = (a.scheduledTime || '').toLowerCase();
+      const timeB = (b.scheduledTime || '').toLowerCase();
+      if (timeA < timeB) return -1;
+      if (timeA > timeB) return 1;
+      return 0;
+    });
 
     return NextResponse.json(enriched);
 
