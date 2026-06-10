@@ -79,6 +79,87 @@ export async function PUT(
     }
 
     const body = await request.json();
+    const cancelToWard = body.returnToWardCancelled === true;
+    const cancelReason = typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : '';
+
+    // Return-to-ward cancellation from holding area
+    if (cancelToWard) {
+      if (cancelReason.length < 5) {
+        return NextResponse.json(
+          { error: 'Cancellation reason (minimum 5 characters) is required' },
+          { status: 400 }
+        );
+      }
+
+      const currentAssessment = await prisma.holdingAreaAssessment.findUnique({
+        where: { id: params.id },
+        select: { surgeryId: true }
+      });
+
+      if (!currentAssessment) {
+        return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
+      }
+
+      await prisma.surgery.update({
+        where: { id: currentAssessment.surgeryId },
+        data: {
+          status: 'CANCELLED',
+          remarks: cancelReason,
+        }
+      });
+
+      await prisma.patientMovement.create({
+        data: {
+          surgeryId: currentAssessment.surgeryId,
+          phase: 'RETURNED_TO_WARD',
+          recordedBy: session.user.id,
+          notes: `Returned to ward - case cancelled. Reason: ${cancelReason}`,
+        }
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'HOLDING_AREA_CANCEL_TO_WARD',
+          tableName: 'holding_area_assessments',
+          recordId: params.id,
+          changes: JSON.stringify({ reason: cancelReason }),
+        }
+      });
+
+      const cancelledAssessment = await prisma.holdingAreaAssessment.update({
+        where: { id: params.id },
+        data: {
+          status: 'DISCREPANCY_FOUND',
+          discrepancyDetected: true,
+          clearanceNotes: `Returned to ward. ${cancelReason}`,
+        },
+        include: {
+          patient: true,
+          surgery: {
+            include: {
+              surgeon: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true
+                }
+              },
+              anesthetist: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true
+                }
+              }
+            }
+          },
+          redAlerts: true
+        }
+      });
+
+      return NextResponse.json(cancelledAssessment);
+    }
 
     // Calculate if all safety checks are complete
     const allChecksComplete = 
@@ -140,6 +221,7 @@ export async function PUT(
     // Transfer to theatre
     if (body.transferredToTheatre === true) {
       updateData.status = 'TRANSFERRED_TO_THEATRE';
+      updateData.transferredToTheatre = true;
       updateData.transferTime = new Date();
       
       // Update surgery status
@@ -152,6 +234,15 @@ export async function PUT(
         await prisma.surgery.update({
           where: { id: currentAssessment.surgeryId },
           data: { status: 'IN_PROGRESS' }
+        });
+
+        await prisma.patientMovement.create({
+          data: {
+            surgeryId: currentAssessment.surgeryId,
+            phase: 'INSIDE_THEATRE',
+            recordedBy: session.user.id,
+            notes: 'Transferred from holding area to operating theatre',
+          }
         });
       }
     }

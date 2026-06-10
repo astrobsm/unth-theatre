@@ -78,6 +78,7 @@ interface Assessment {
   discrepancyDetected: boolean;
   redAlertTriggered: boolean;
   clearedForTheatre: boolean;
+  transferredToTheatre?: boolean;
   redAlerts: any[];
 }
 
@@ -197,6 +198,63 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
     }
   };
 
+  const transferToOperatingTheatre = async () => {
+    if (!confirm('Transfer this patient from holding area to operating theatre now?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/holding-area/${params.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transferredToTheatre: true,
+        })
+      });
+
+      if (response.ok) {
+        alert('Patient transferred to operating theatre successfully.');
+        fetchAssessment();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to transfer patient to operating theatre');
+      }
+    } catch (error) {
+      console.error('Error transferring patient:', error);
+      alert('Failed to transfer patient');
+    }
+  };
+
+  const returnToWardIfCancelled = async () => {
+    const reason = prompt('Enter cancellation reason to return patient to ward:');
+    if (!reason || reason.trim().length < 5) {
+      alert('Cancellation reason (minimum 5 characters) is required.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/holding-area/${params.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          returnToWardCancelled: true,
+          cancellationReason: reason.trim(),
+        })
+      });
+
+      if (response.ok) {
+        alert('Case cancelled and patient returned to ward.');
+        router.push('/dashboard/holding-area');
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to return patient to ward');
+      }
+    } catch (error) {
+      console.error('Error returning patient to ward:', error);
+      alert('Failed to process cancellation');
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
@@ -240,6 +298,22 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
                   ✓ Clear for Theatre
                 </button>
               </>
+            )}
+            {assessment.clearedForTheatre && !assessment.transferredToTheatre && (
+              <button
+                onClick={transferToOperatingTheatre}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                Transfer to Operating Theatre
+              </button>
+            )}
+            {!assessment.transferredToTheatre && (
+              <button
+                onClick={returnToWardIfCancelled}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+              >
+                Return to Ward (Cancel Case)
+              </button>
             )}
           </div>
         </div>

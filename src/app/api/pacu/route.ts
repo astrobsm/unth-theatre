@@ -182,6 +182,15 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    await prisma.patientMovement.create({
+      data: {
+        surgeryId,
+        phase: 'RECOVERY_ROOM',
+        recordedBy: session.user.id,
+        notes: 'Admitted into recovery room (PACU) after initial assessment',
+      }
+    });
+
     console.log('PACU assessment created successfully:', assessment.id);
 
     return NextResponse.json(assessment, { status: 201 });

@@ -88,6 +88,15 @@ export async function POST(
       }
     });
 
+    await prisma.patientMovement.create({
+      data: {
+        surgeryId: assessment.surgeryId,
+        phase: 'RETURNED_TO_WARD',
+        recordedBy: session.user.id,
+        notes: `Discharged from PACU to ${dischargedTo || 'WARD'}`,
+      }
+    });
+
     // Create notification for ward nurse if specified
     if (wardNurseHandover) {
       await prisma.systemNotification.create({

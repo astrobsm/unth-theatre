@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface Surgery {
   id: string;
   procedureName: string;
   scheduledDate: string;
+  pacuAssessment?: { id: string } | null;
   patient: {
     id: string;
     name: string;
@@ -18,6 +19,7 @@ interface Surgery {
 
 export default function NewPACUAssessment() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
   const [selectedSurgeryId, setSelectedSurgeryId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -47,14 +49,19 @@ export default function NewPACUAssessment() {
 
   useEffect(() => {
     fetchCompletedSurgeries();
-  }, []);
+    const presetSurgeryId = searchParams.get('surgeryId');
+    if (presetSurgeryId) {
+      setSelectedSurgeryId(presetSurgeryId);
+    }
+  }, [searchParams]);
 
   const fetchCompletedSurgeries = async () => {
     try {
       const response = await fetch('/api/surgeries?status=COMPLETED');
       if (response.ok) {
         const data = await response.json();
-        setSurgeries(data);
+        const list = Array.isArray(data) ? data : [];
+        setSurgeries(list.filter((s: Surgery) => !s.pacuAssessment));
       }
     } catch (error) {
       console.error('Error fetching surgeries:', error);
@@ -150,6 +157,8 @@ export default function NewPACUAssessment() {
             value={selectedSurgeryId}
             onChange={(e) => setSelectedSurgeryId(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            title="Select completed surgery"
+            aria-label="Select completed surgery"
             required
           >
             <option value="">-- Select a surgery --</option>
@@ -176,6 +185,8 @@ export default function NewPACUAssessment() {
                     value={formData.consciousnessLevel}
                     onChange={(e) => setFormData({...formData, consciousnessLevel: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    title="Consciousness level"
+                    aria-label="Consciousness level"
                     required
                   >
                     <option value="FULLY_AWAKE">Fully Awake</option>
@@ -193,6 +204,8 @@ export default function NewPACUAssessment() {
                     value={formData.airwayStatus}
                     onChange={(e) => setFormData({...formData, airwayStatus: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    title="Airway status"
+                    aria-label="Airway status"
                     required
                   >
                     <option value="PATENT">Patent (Clear)</option>
@@ -223,6 +236,8 @@ export default function NewPACUAssessment() {
                     value={formData.breathingPattern}
                     onChange={(e) => setFormData({...formData, breathingPattern: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    title="Breathing pattern"
+                    aria-label="Breathing pattern"
                   >
                     <option value="Spontaneous">Spontaneous</option>
                     <option value="Assisted">Assisted</option>
@@ -237,6 +252,8 @@ export default function NewPACUAssessment() {
                   checked={formData.oxygenTherapy}
                   onChange={(e) => setFormData({...formData, oxygenTherapy: e.target.checked})}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                  title="Oxygen therapy required"
+                  aria-label="Oxygen therapy required"
                 />
                 <label className="ml-2 text-sm text-gray-700">Oxygen Therapy Required</label>
               </div>
@@ -331,6 +348,8 @@ export default function NewPACUAssessment() {
                     value={formData.surgicalSiteCondition}
                     onChange={(e) => setFormData({...formData, surgicalSiteCondition: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    title="Surgical site condition"
+                    aria-label="Surgical site condition"
                   >
                     <option value="Clean and dry">Clean and dry</option>
                     <option value="Oozing">Oozing</option>

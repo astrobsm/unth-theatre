@@ -144,7 +144,12 @@ export async function GET(request: NextRequest) {
           select: {
             fullName: true,
           }
-        }
+        },
+        pacuAssessment: {
+          select: {
+            id: true,
+          },
+        },
       },
       orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }]
     });

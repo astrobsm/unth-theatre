@@ -59,6 +59,7 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [flowSaving, setFlowSaving] = useState(false);
 
   const fetchTiming = async (signal?: AbortSignal) => {
     try {
@@ -161,6 +162,30 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
     return `${hours}h ${mins}m`;
   };
 
+  const triggerFlowAction = async (action: string) => {
+    setFlowSaving(true);
+    try {
+      const response = await fetch(`/api/surgeries/${params.id}/flow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Failed to update workflow stage');
+        return;
+      }
+
+      await fetchTiming();
+    } catch (error) {
+      console.error('Flow transition error:', error);
+      alert('Failed to update workflow stage');
+    } finally {
+      setFlowSaving(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
@@ -217,6 +242,51 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-600">Closure Duration</p>
           <p className="text-2xl font-bold text-purple-600">{formatDuration(timing?.closureDuration)}</p>
+        </div>
+      </div>
+
+      {/* Operating Theatre Workflow Controls */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-bold mb-4">Operating Theatre Workflow</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Use these stage buttons to keep patient flow synchronized across holding area, theatre, completed list, and PACU.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <button
+            onClick={() => triggerFlowAction('RECEIVE_IN_THEATRE')}
+            disabled={flowSaving}
+            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-300"
+          >
+            Received in Theatre
+          </button>
+          <button
+            onClick={() => triggerFlowAction('MARK_ANAESTHESIZED')}
+            disabled={flowSaving || !timing?.patientEnteredRoomTime || !!timing?.anesthesiaReadyTime}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300"
+          >
+            Anaesthesized
+          </button>
+          <button
+            onClick={() => triggerFlowAction('MARK_KNIFE_ON_SKIN')}
+            disabled={flowSaving || !timing?.anesthesiaReadyTime || !!timing?.incisionTime}
+            className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-gray-300"
+          >
+            Knife on Skin
+          </button>
+          <button
+            onClick={() => triggerFlowAction('MARK_END_OF_SURGERY')}
+            disabled={flowSaving || !timing?.incisionTime || !!timing?.procedureEndTime}
+            className="px-4 py-2 bg-green-700 text-white rounded hover:bg-green-800 disabled:bg-gray-300"
+          >
+            End of Surgery
+          </button>
+          <button
+            onClick={() => triggerFlowAction('TRANSFER_OUT_OF_THEATRE')}
+            disabled={flowSaving || !timing?.procedureEndTime || !!timing?.patientLeftRoomTime}
+            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300"
+          >
+            Transferred Out
+          </button>
         </div>
       </div>
 

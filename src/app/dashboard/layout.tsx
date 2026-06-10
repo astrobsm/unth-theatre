@@ -116,6 +116,7 @@ export default function DashboardLayout({
     // === PATIENT REGISTRATION & SCHEDULING ===
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
+    { href: '/dashboard/surgeries/completed', icon: FileText, label: 'Completed Surgeries' },
     { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
 
     // === PRE-OPERATIVE (Night Before & Morning Of) ===
