@@ -63,7 +63,7 @@ export async function POST(
     }
 
     const stamp = new Date().toLocaleString('en-GB');
-    const author = session.user.name || session.user.username || 'Surgeon';
+    const author = session.user.name || session.user.email || 'Surgeon';
     const nextRemarks = `${surgery.remarks || ''}\n\n[POST-OP NOTE ${stamp} - ${author}]\n${note}`.trim();
 
     await prisma.surgery.update({
