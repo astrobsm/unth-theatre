@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download, ClipboardCheck } from 'lucide-react';
+import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download, ClipboardCheck, Pencil, Check, X } from 'lucide-react';
 // XLSX loaded dynamically when needed (export/import actions)
 import { THEATRES } from '@/lib/constants';
 
@@ -24,6 +24,16 @@ interface Theatre {
   name: string;
 }
 
+interface EditRosterForm {
+  staffName: string;
+  staffCategory: string;
+  date: string;
+  shift: string;
+  theatreId: string;
+  notes: string;
+  editReason: string;
+}
+
 export default function RosterPage() {
   const router = useRouter();
   const [rosters, setRosters] = useState<Roster[]>([]);
@@ -33,6 +43,9 @@ export default function RosterPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState('');
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [editingRosterId, setEditingRosterId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditRosterForm | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const staffCategories = [
     { value: 'ALL', label: 'All Staff' },
@@ -152,6 +165,80 @@ export default function RosterPage() {
       }
     } catch (error) {
       console.error('Delete error:', error);
+    }
+  };
+
+  const startEditing = (roster: Roster) => {
+    setEditingRosterId(roster.id);
+    setEditForm({
+      staffName: roster.staffName,
+      staffCategory: roster.staffCategory,
+      date: new Date(roster.date).toISOString().slice(0, 10),
+      shift: roster.shift,
+      theatreId: roster.theatreId || '',
+      notes: roster.notes || '',
+      editReason: '',
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingRosterId(null);
+    setEditForm(null);
+  };
+
+  const hasEditChanges = (roster: Roster) => {
+    if (!editForm) return false;
+    return (
+      editForm.staffName.trim() !== roster.staffName ||
+      editForm.staffCategory !== roster.staffCategory ||
+      editForm.date !== new Date(roster.date).toISOString().slice(0, 10) ||
+      editForm.shift !== roster.shift ||
+      editForm.theatreId !== (roster.theatreId || '') ||
+      editForm.notes.trim() !== (roster.notes || '')
+    );
+  };
+
+  const saveEdit = async (roster: Roster) => {
+    if (!editForm) return;
+    if (!hasEditChanges(roster)) {
+      alert('No changes detected to save.');
+      return;
+    }
+    if (editForm.editReason.trim().length < 5) {
+      alert('Please provide a reason for this edit (minimum 5 characters).');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const response = await fetch('/api/roster', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: roster.id,
+          staffName: editForm.staffName.trim(),
+          staffCategory: editForm.staffCategory,
+          date: editForm.date,
+          shift: editForm.shift,
+          theatreId: editForm.theatreId || null,
+          notes: editForm.notes.trim() || null,
+          editReason: editForm.editReason.trim(),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Update failed: ${data.error || response.statusText}`);
+        return;
+      }
+
+      cancelEditing();
+      fetchRosters();
+    } catch (error) {
+      console.error('Update error:', error);
+      alert('Failed to update roster entry');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -337,6 +424,8 @@ export default function RosterPage() {
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="input-field"
+              title="Filter by staff category"
+              aria-label="Filter by staff category"
             >
               {staffCategories.map((cat) => (
                 <option key={cat.value} value={cat.value}>
@@ -352,6 +441,8 @@ export default function RosterPage() {
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="input-field"
+              title="Filter by date"
+              aria-label="Filter by date"
             />
           </div>
         </div>
@@ -382,34 +473,160 @@ export default function RosterPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredRosters.map((roster) => (
-                  <tr key={roster.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm">{roster.staffName}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${getCategoryBadge(roster.staffCategory)}`}>
-                        {roster.staffCategory.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {new Date(roster.date).toLocaleDateString('en-GB')}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${getShiftBadge(roster.shift)}`}>
-                        {roster.shift}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{roster.theatre?.name || 'Any'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{roster.notes || '-'}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <button
-                        onClick={() => deleteRoster(roster.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredRosters.map((roster) => {
+                  const isEditing = editingRosterId === roster.id && !!editForm;
+                  const changed = isEditing ? hasEditChanges(roster) : false;
+
+                  return (
+                    <tr key={roster.id} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-3 text-sm">
+                        {isEditing ? (
+                          <input
+                            className="input-field"
+                            value={editForm.staffName}
+                            onChange={(e) => setEditForm((prev) => prev ? { ...prev, staffName: e.target.value } : prev)}
+                            title="Edit staff name"
+                            aria-label="Edit staff name"
+                          />
+                        ) : roster.staffName}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {isEditing ? (
+                          <select
+                            className="input-field"
+                            value={editForm.staffCategory}
+                            onChange={(e) => setEditForm((prev) => prev ? { ...prev, staffCategory: e.target.value } : prev)}
+                            title="Edit staff category"
+                            aria-label="Edit staff category"
+                          >
+                            {staffCategories.slice(1).map((cat) => (
+                              <option key={cat.value} value={cat.value}>{cat.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${getCategoryBadge(roster.staffCategory)}`}>
+                            {roster.staffCategory.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            className="input-field"
+                            value={editForm.date}
+                            onChange={(e) => setEditForm((prev) => prev ? { ...prev, date: e.target.value } : prev)}
+                            title="Edit roster date"
+                            aria-label="Edit roster date"
+                          />
+                        ) : new Date(roster.date).toLocaleDateString('en-GB')}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {isEditing ? (
+                          <select
+                            className="input-field"
+                            value={editForm.shift}
+                            onChange={(e) => setEditForm((prev) => prev ? { ...prev, shift: e.target.value } : prev)}
+                            title="Edit shift"
+                            aria-label="Edit shift"
+                          >
+                            <option value="MORNING">MORNING</option>
+                            <option value="CALL">CALL</option>
+                            <option value="NIGHT">NIGHT</option>
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${getShiftBadge(roster.shift)}`}>
+                            {roster.shift}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {isEditing ? (
+                          <select
+                            className="input-field"
+                            value={editForm.theatreId}
+                            onChange={(e) => setEditForm((prev) => prev ? { ...prev, theatreId: e.target.value } : prev)}
+                            title="Edit theatre"
+                            aria-label="Edit theatre"
+                          >
+                            <option value="">Any</option>
+                            {theatres.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        ) : (roster.theatre?.name || 'Any')}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {isEditing ? (
+                          <div className="space-y-2 min-w-[220px]">
+                            <input
+                              type="text"
+                              className="input-field"
+                              placeholder="Notes (optional)"
+                              value={editForm.notes}
+                              onChange={(e) => setEditForm((prev) => prev ? { ...prev, notes: e.target.value } : prev)}
+                              title="Edit notes"
+                              aria-label="Edit notes"
+                            />
+                            {changed && (
+                              <div className="rounded-md border border-amber-300 bg-amber-50 p-2">
+                                <label className="label mb-1">Reason for edit <span className="text-red-600">*</span></label>
+                                <textarea
+                                  className="input-field"
+                                  rows={2}
+                                  placeholder="Why are you editing this roster entry?"
+                                  value={editForm.editReason}
+                                  onChange={(e) => setEditForm((prev) => prev ? { ...prev, editReason: e.target.value } : prev)}
+                                  title="Reason for edit"
+                                  aria-label="Reason for edit"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ) : (roster.notes || '-')}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => saveEdit(roster)}
+                              disabled={savingEdit || !changed || editForm.editReason.trim().length < 5}
+                              className="text-green-600 hover:text-green-800 disabled:opacity-40"
+                              title="Save edit"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              disabled={savingEdit}
+                              className="text-gray-600 hover:text-gray-800"
+                              title="Cancel edit"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => startEditing(roster)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Edit roster"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteRoster(roster.id)}
+                              className="text-red-600 hover:text-red-800"
+                              title="Delete roster"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
