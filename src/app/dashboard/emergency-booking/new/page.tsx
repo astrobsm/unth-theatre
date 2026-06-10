@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Siren, Droplet, Users } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText } from 'lucide-react';
 import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPrePackSelectors';
+import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
+import jsPDF from 'jspdf';
 
 type OnDutyMember = {
   userId: string;
@@ -28,6 +30,27 @@ type OnDutyTeam = {
   rostersFound: number;
 };
 
+type TeamRole = 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER';
+
+type TeamMember = {
+  role: TeamRole;
+  name: string;
+  userId?: string | null;
+  staffCode?: string | null;
+};
+
+type Theatre = {
+  id: string;
+  name: string;
+  location: string;
+  status: string;
+  allocations?: Array<{
+    surgicalUnit?: string | null;
+    date: string;
+    startTime: string;
+  }>;
+};
+
 export default function NewEmergencyBookingPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -39,6 +62,8 @@ export default function NewEmergencyBookingPage() {
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
   const [prePack, setPrePack] = useState<PrePackPayload>({ consumableRequests: [], drugDressingRequests: [] });
+  const [theatres, setTheatres] = useState<Theatre[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const [form, setForm] = useState({
     patientName: '',
@@ -52,6 +77,8 @@ export default function NewEmergencyBookingPage() {
     indication: '',
     surgeonId: '',
     anesthetistId: '',
+    theatreId: '',
+    theatreName: '',
     anaesthesiaType: '',
     requiredByTime: '',
     estimatedDuration: '',
@@ -68,9 +95,10 @@ export default function NewEmergencyBookingPage() {
   useEffect(() => {
     async function fetchStaff() {
       try {
-        const [surgeonRes, anesthetistRes] = await Promise.all([
+        const [surgeonRes, anesthetistRes, theatresRes] = await Promise.all([
           fetch('/api/users?role=SURGEON&status=APPROVED'),
           fetch('/api/users?role=ANAESTHETIST&status=APPROVED'),
+          fetch('/api/theatres'),
         ]);
         if (surgeonRes.ok) {
           const data = await surgeonRes.json();
@@ -80,10 +108,122 @@ export default function NewEmergencyBookingPage() {
           const data = await anesthetistRes.json();
           setAnesthetists(Array.isArray(data) ? data : data.users || []);
         }
+        if (theatresRes.ok) {
+          const data = await theatresRes.json();
+          setTheatres(Array.isArray(data) ? data : []);
+        }
       } catch {}
     }
     fetchStaff();
   }, []);
+
+  // Auto-fill theatre from surgical unit + selected date using active theatre allocations.
+  useEffect(() => {
+    if (!form.surgicalUnit || !form.requiredByTime) return;
+    const controller = new AbortController();
+    const run = async () => {
+      try {
+        const date = form.requiredByTime.slice(0, 10);
+        const res = await fetch(`/api/theatres?date=${encodeURIComponent(date)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data: Theatre[] = await res.json();
+        const unit = form.surgicalUnit.trim().toLowerCase();
+        const matched = data.find((t) =>
+          Array.isArray(t.allocations)
+            ? t.allocations.some((a) => (a.surgicalUnit || '').trim().toLowerCase() === unit)
+            : false,
+        );
+        if (matched) {
+          setForm((prev) => ({
+            ...prev,
+            theatreId: matched.id,
+            theatreName: matched.name,
+          }));
+        }
+      } catch {}
+    };
+    run();
+    return () => controller.abort();
+  }, [form.surgicalUnit, form.requiredByTime]);
+
+  const TEAM_ROLE_LABEL: Record<TeamRole, string> = {
+    CONSULTANT: 'Consultant',
+    SENIOR_REGISTRAR: 'Senior Registrar',
+    REGISTRAR: 'Registrar',
+    HOUSE_OFFICER: 'House Officer',
+  };
+
+  const TEAM_ROLE_ROLES: Record<TeamRole, string> = {
+    CONSULTANT: 'SURGEON',
+    SENIOR_REGISTRAR: 'SURGEON',
+    REGISTRAR: 'SURGEON',
+    HOUSE_OFFICER: 'HOUSE_OFFICER',
+  };
+
+  const roleMembers = (role: TeamRole) => teamMembers.filter((m) => m.role === role);
+
+  const addTeamMember = (role: TeamRole) => {
+    if (roleMembers(role).length >= 2) {
+      setError(`Only 2 ${TEAM_ROLE_LABEL[role]}s can be added for a case.`);
+      return;
+    }
+    setError('');
+    setTeamMembers((prev) => [...prev, { role, name: '', userId: null, staffCode: null }]);
+  };
+
+  const updateTeamMember = (index: number, next: TeamMember) => {
+    setTeamMembers((prev) => prev.map((m, i) => (i === index ? next : m)));
+  };
+
+  const removeTeamMember = (index: number) => {
+    setTeamMembers((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const downloadConsentTemplate = () => {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const w = doc.internal.pageSize.getWidth();
+    const margin = 14;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('UNTH EMERGENCY SURGERY CONSENT FORM (TEMPLATE)', w / 2, 16, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text('To be printed, signed by patient/relative and uploaded during booking.', w / 2, 22, { align: 'center' });
+    doc.line(margin, 26, w - margin, 26);
+
+    const lines = [
+      'Patient Name: ____________________________________________   Folder No: ______________________',
+      'Diagnosis: ________________________________________________________________________________',
+      'Proposed Procedure: ________________________________________________________________________',
+      'Surgical Unit: __________________________   Theatre: __________________________',
+      'Date: ____________________   Estimated Start Time: ____________________',
+      '',
+      'I/We have been informed of the diagnosis, procedure, expected benefits, risks, alternatives,',
+      'and possible complications. I/We understand that emergency interventions may be required.',
+      'I/We consent to the above operation and required anaesthesia, blood transfusion, and associated',
+      'life-saving measures as clinically indicated.',
+      '',
+      'Patient / Relative Name: _______________________________________________',
+      'Relationship to patient (if not patient): ___________________________________',
+      'Signature / Thumbprint: ___________________________________   Date: ____________________',
+      '',
+      'Witness (Name): __________________________________________  Signature: ____________________',
+      'Surgeon (Name): __________________________________________  Signature: ____________________',
+      'Anaesthetist (Name): ______________________________________  Signature: ____________________',
+    ];
+
+    doc.setFontSize(10);
+    doc.text(lines, margin, 36);
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text('UNTH ORM Template - Emergency Surgery Consent', w / 2, 290, { align: 'center' });
+    doc.setTextColor(0);
+
+    doc.save('UNTH-Emergency-Surgery-Consent-Template.pdf');
+  };
 
   // Auto-fetch on-duty emergency team whenever the requested date/time changes.
   useEffect(() => {
@@ -159,6 +299,8 @@ export default function NewEmergencyBookingPage() {
         anaesthesiaType: form.anaesthesiaType || undefined,
         requiredByTime: form.requiredByTime || undefined,
         estimatedDuration: form.estimatedDuration ? parseInt(form.estimatedDuration) : undefined,
+        theatreId: form.theatreId || undefined,
+        theatreName: form.theatreName || undefined,
         priority: form.priority,
         classification: form.classification || undefined,
         bloodRequired: form.bloodRequired,
@@ -166,6 +308,12 @@ export default function NewEmergencyBookingPage() {
         bloodUnits: form.bloodRequired && form.bloodUnits ? parseInt(form.bloodUnits) : undefined,
         specialEquipment: form.specialEquipment || undefined,
         specialRequirements: form.specialRequirements || undefined,
+        teamMembers: teamMembers.filter((m) => m.name.trim()).map((m) => ({
+          role: m.role,
+          name: m.name.trim(),
+          userId: m.userId || undefined,
+          staffCode: m.staffCode || undefined,
+        })),
         // Pre-pack shopping lists — pushed to Consumable Pack Provider and Pharmacy with red EMERGENCY tag
         consumableRequests: prePack.consumableRequests,
         drugDressingRequests: prePack.drugDressingRequests,
@@ -275,6 +423,31 @@ export default function NewEmergencyBookingPage() {
               <label className="label">Surgical Unit *</label>
               <input name="surgicalUnit" value={form.surgicalUnit} onChange={handleChange} required className="input-field" placeholder="e.g. General Surgery" />
             </div>
+            <div>
+              <label className="label">Theatre to be used</label>
+              <select
+                name="theatreId"
+                value={form.theatreId}
+                onChange={(e) => {
+                  const theatreId = e.target.value;
+                  const t = theatres.find((x) => x.id === theatreId);
+                  setForm((prev) => ({
+                    ...prev,
+                    theatreId,
+                    theatreName: t?.name || '',
+                  }));
+                }}
+                className="input-field"
+              >
+                <option value="">— Select Theatre —</option>
+                {theatres.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Auto-filled from allocation when surgical unit and date are selected.
+              </p>
+            </div>
             <div className="md:col-span-2">
               <label className="label">Indication (Reason for Emergency) *</label>
               <textarea name="indication" value={form.indication} onChange={handleChange} required className="input-field" rows={2} placeholder="Why is this surgery an emergency?" />
@@ -343,8 +516,90 @@ export default function NewEmergencyBookingPage() {
             <div>
               <label className="label">Estimated Duration (minutes)</label>
               <input name="estimatedDuration" type="number" value={form.estimatedDuration} onChange={handleChange} className="input-field" placeholder="e.g. 90" />
+              <p className="mt-1 text-xs text-gray-500">
+                Scheduling rules: first case starts at 9:00 AM, 35-minute turnover between cases, and all cases must end by 5:00 PM.
+              </p>
             </div>
           </div>
+        </div>
+
+        {/* Surgical Team Members */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">Surgical Team Members</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Add team members for this case. Maximum: 2 per category.
+          </p>
+          {(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER'] as TeamRole[]).map((role) => {
+            const members = roleMembers(role);
+            return (
+              <div key={role} className="mb-5 border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-gray-800">{TEAM_ROLE_LABEL[role]}s</h3>
+                  <button
+                    type="button"
+                    onClick={() => addTeamMember(role)}
+                    disabled={members.length >= 2}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add {TEAM_ROLE_LABEL[role]}
+                  </button>
+                </div>
+                {members.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No {TEAM_ROLE_LABEL[role].toLowerCase()}s added.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {teamMembers.map((member, idx) => {
+                      if (member.role !== role) return null;
+                      return (
+                        <div key={`${role}-${idx}`} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <SurgicalTeamMemberPicker
+                              roles={TEAM_ROLE_ROLES[role]}
+                              value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                              onChange={(next) =>
+                                updateTeamMember(idx, {
+                                  ...member,
+                                  name: next.name,
+                                  userId: next.userId ?? null,
+                                  staffCode: next.staffCode ?? null,
+                                })
+                              }
+                              onRemove={() => removeTeamMember(idx)}
+                              placeholder={`Search ${TEAM_ROLE_LABEL[role]}...`}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeTeamMember(idx)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Remove team member"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Consent template */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold mb-3 text-gray-800">Consent Form Template</h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Download, print, sign, then upload signed consent in the case workflow.
+          </p>
+          <button
+            type="button"
+            onClick={downloadConsentTemplate}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <FileText className="h-4 w-4" />
+            Download Consent Template (PDF)
+          </button>
         </div>
 
         {/* On-Duty Emergency Team — auto-fetched from roster */}

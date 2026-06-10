@@ -36,6 +36,23 @@ const createEmergencyBookingSchema = z.object({
   bloodUnits: z.number().optional(),
   specialEquipment: z.string().optional(),
   specialRequirements: z.string().optional(),
+  teamMembers: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        role: z.enum(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER']),
+        userId: z.string().optional().nullable(),
+        staffCode: z.string().optional().nullable(),
+      })
+    )
+    .optional(),
+  consentFile: z
+    .object({
+      name: z.string().min(1),
+      mimeType: z.string().min(1),
+      base64: z.string().min(10),
+    })
+    .optional(),
   // Pre-pack lists — same shape as /api/surgeries
   consumableRequests: z
     .array(
@@ -72,6 +89,20 @@ const createEmergencyBookingSchema = z.object({
     )
     .optional(),
 });
+
+function getDayBounds(inputDate: Date) {
+  const start = new Date(inputDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(inputDate);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function hhmm(date: Date) {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
 
 // GET - Fetch all emergency bookings
 export async function GET(request: NextRequest) {
@@ -173,6 +204,133 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Enforce max 2 members per surgical-team category.
+    const submittedTeam = validatedData.teamMembers ?? [];
+    const roleCounts: Record<string, number> = {};
+    for (const tm of submittedTeam) {
+      roleCounts[tm.role] = (roleCounts[tm.role] || 0) + 1;
+      if (roleCounts[tm.role] > 2) {
+        return NextResponse.json(
+          { error: `Maximum of 2 team members allowed for role: ${tm.role}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Resolve requested date. Theatre scheduling uses day-level planning.
+    const requestedDate = validatedData.requiredByTime
+      ? new Date(validatedData.requiredByTime)
+      : new Date();
+    const { start: dayStart, end: dayEnd } = getDayBounds(requestedDate);
+
+    // Resolve theatre from surgical-unit allocation if not explicitly supplied.
+    let resolvedTheatreId = validatedData.theatreId || null;
+    let resolvedTheatreName = validatedData.theatreName || null;
+    if (!resolvedTheatreId) {
+      const unitAllocation = await prisma.theatreAllocation.findFirst({
+        where: {
+          surgicalUnit: validatedData.surgicalUnit,
+          date: { gte: dayStart, lte: dayEnd },
+        },
+        include: {
+          theatre: { select: { id: true, name: true } },
+        },
+        orderBy: { startTime: 'asc' },
+      });
+      if (unitAllocation?.theatre) {
+        resolvedTheatreId = unitAllocation.theatre.id;
+        resolvedTheatreName = unitAllocation.theatre.name;
+      }
+    }
+
+    // Scheduling policy for each unit/day:
+    // - first case starts 09:00
+    // - 35-minute turnover between cases
+    // - all cases must finish by 17:00
+    const UNIT_FIRST_CASE_HOUR = 9;
+    const TURNOVER_MINUTES = 35;
+    const END_OF_DAY_HOUR = 17;
+    const newDuration = validatedData.estimatedDuration ?? 60;
+
+    const unitCases = await prisma.surgery.findMany({
+      where: {
+        unit: validatedData.surgicalUnit,
+        scheduledDate: { gte: dayStart, lte: dayEnd },
+        status: { not: 'CANCELLED' },
+      },
+      select: {
+        id: true,
+        scheduledDate: true,
+        scheduledTime: true,
+        estimatedDuration: true,
+      },
+      orderBy: [{ scheduledTime: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const firstCaseStart = new Date(dayStart);
+    firstCaseStart.setHours(UNIT_FIRST_CASE_HOUR, 0, 0, 0);
+    let nextStart = new Date(firstCaseStart);
+
+    if (unitCases.length > 0) {
+      let latestEnd = new Date(firstCaseStart);
+      for (const c of unitCases) {
+        const [hStr, mStr] = (c.scheduledTime || '09:00').split(':');
+        const h = Number(hStr);
+        const m = Number(mStr);
+        const cStart = new Date(dayStart);
+        cStart.setHours(Number.isNaN(h) ? 9 : h, Number.isNaN(m) ? 0 : m, 0, 0);
+        const cEnd = new Date(cStart.getTime() + (c.estimatedDuration || 60) * 60 * 1000);
+        if (cEnd > latestEnd) latestEnd = cEnd;
+      }
+      nextStart = new Date(latestEnd.getTime() + TURNOVER_MINUTES * 60 * 1000);
+    }
+
+    const projectedEnd = new Date(nextStart.getTime() + newDuration * 60 * 1000);
+    const dayCutoff = new Date(dayStart);
+    dayCutoff.setHours(END_OF_DAY_HOUR, 0, 0, 0);
+    if (projectedEnd > dayCutoff) {
+      return NextResponse.json(
+        {
+          error:
+            `Booking rejected: this case would end at ${hhmm(projectedEnd)}, beyond the 5:00 PM cutoff. ` +
+            `Please reduce duration or move to another date/unit.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Team carry-over policy:
+    // if same unit already has a case that day, reuse the first case team for all
+    // subsequent cases.
+    let effectiveTeam = submittedTeam;
+    if (unitCases.length > 0) {
+      const firstCase = await prisma.surgery.findFirst({
+        where: {
+          unit: validatedData.surgicalUnit,
+          scheduledDate: { gte: dayStart, lte: dayEnd },
+          status: { not: 'CANCELLED' },
+        },
+        include: {
+          teamMembers: {
+            select: {
+              role: true,
+              memberName: true,
+              userId: true,
+            },
+          },
+        },
+        orderBy: [{ scheduledTime: 'asc' }, { createdAt: 'asc' }],
+      });
+      if (firstCase?.teamMembers?.length) {
+        effectiveTeam = firstCase.teamMembers.map((m) => ({
+          role: m.role as 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER',
+          name: m.memberName || 'Unnamed',
+          userId: m.userId,
+          staffCode: null,
+        }));
+      }
+    }
+
     // Create the emergency booking
     const booking = await prisma.emergencySurgeryBooking.create({
       data: {
@@ -190,10 +348,10 @@ export async function POST(request: NextRequest) {
         anesthetistId: validatedData.anesthetistId || null,
         anesthetistName: validatedData.anesthetistName || null,
         anaesthesiaType: validatedData.anaesthesiaType || null,
-        requiredByTime: validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : null,
-        estimatedDuration: validatedData.estimatedDuration,
-        theatreId: validatedData.theatreId || null,
-        theatreName: validatedData.theatreName || null,
+        requiredByTime: nextStart,
+        estimatedDuration: newDuration,
+        theatreId: resolvedTheatreId,
+        theatreName: resolvedTheatreName,
         priority: validatedData.priority,
         classification: validatedData.classification,
         bloodRequired: validatedData.bloodRequired,
@@ -232,8 +390,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a surgery record
-    const scheduledDate = validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : new Date();
-    const scheduledTime = scheduledDate.toTimeString().slice(0, 5); // "HH:MM"
+    const scheduledDate = new Date(nextStart);
+    const scheduledTime = hhmm(nextStart);
     const surgery = await prisma.surgery.create({
       data: {
         patientId: patient.id,
@@ -246,11 +404,33 @@ export async function POST(request: NextRequest) {
         anesthetistId: validatedData.anesthetistId || null,
         scheduledDate: scheduledDate,
         scheduledTime: scheduledTime,
+        estimatedDuration: newDuration,
+        theatreId: resolvedTheatreId,
         surgeryType: 'EMERGENCY',
         status: 'SCHEDULED',
         needBloodTransfusion: validatedData.bloodRequired || false,
         otherSpecialNeeds: validatedData.specialEquipment || null,
         remarks: validatedData.specialRequirements || null,
+        ...(validatedData.consentFile
+          ? {
+              consentFileName: validatedData.consentFile.name,
+              consentFileMimeType: validatedData.consentFile.mimeType,
+              consentFileData: validatedData.consentFile.base64.includes(',')
+                ? validatedData.consentFile.base64.split(',').pop() || validatedData.consentFile.base64
+                : validatedData.consentFile.base64,
+              consentUploadedAt: new Date(),
+              consentUploadedById: session.user.id,
+            }
+          : {}),
+        teamMembers: effectiveTeam.length
+          ? {
+              create: effectiveTeam.map((tm) => ({
+                role: tm.role,
+                memberName: tm.name,
+                userId: tm.userId || null,
+              })),
+            }
+          : undefined,
       },
     });
 
@@ -274,9 +454,9 @@ export async function POST(request: NextRequest) {
         surgeonId: surgeonId,
         surgeonName: surgeonName,
         anesthetistId: validatedData.anesthetistId || null,
-        estimatedStartTime: validatedData.requiredByTime ? new Date(validatedData.requiredByTime) : null,
-        theatreId: validatedData.theatreId || null,
-        theatreName: validatedData.theatreName || null,
+        estimatedStartTime: nextStart,
+        theatreId: resolvedTheatreId,
+        theatreName: resolvedTheatreName,
         bloodRequired: validatedData.bloodRequired,
         bloodUnits: validatedData.bloodUnits,
         specialEquipment: validatedData.specialEquipment,
@@ -436,9 +616,9 @@ export async function POST(request: NextRequest) {
       : '';
     await triggerRadio({
       category: 'EMERGENCY',
-      title: `Emergency case booked${validatedData.theatreName ? ' — ' + validatedData.theatreName : ''}`,
-      message: `${validatedData.priority} priority emergency. ${validatedData.procedureName} for ${validatedData.patientName}, folder ${validatedData.folderNumber}. Indication: ${validatedData.indication}.${anaesNote}${validatedData.bloodRequired ? ` Blood required: ${validatedData.bloodUnits ?? ''} unit(s) ${validatedData.bloodType ?? ''}.` : ''}${validatedData.specialEquipment ? ` Special equipment: ${validatedData.specialEquipment}.` : ''} All theatre staff please respond.`,
-      location: validatedData.theatreName ?? null,
+      title: `Emergency case booked${resolvedTheatreName ? ' — ' + resolvedTheatreName : ''}`,
+      message: `${validatedData.priority} priority emergency. ${validatedData.procedureName} for ${validatedData.patientName}, folder ${validatedData.folderNumber}. Indication: ${validatedData.indication}. Start: ${hhmm(nextStart)}.${anaesNote}${validatedData.bloodRequired ? ` Blood required: ${validatedData.bloodUnits ?? ''} unit(s) ${validatedData.bloodType ?? ''}.` : ''}${validatedData.specialEquipment ? ` Special equipment: ${validatedData.specialEquipment}.` : ''} All theatre staff please respond.`,
+      location: resolvedTheatreName ?? null,
       specialty: validatedData.surgicalUnit,
       urgency: validatedData.priority === 'CRITICAL' ? 'CRITICAL' : validatedData.priority === 'HIGH' ? 'HIGH' : 'MEDIUM',
       requireAck: true,
