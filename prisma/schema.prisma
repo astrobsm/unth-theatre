@@ -2754,6 +2754,12 @@ model AnesthesiaSetupLog {
   theatreName  String
   allocationId String? // Link to theatre allocation
 
+  // Assignment & change-of-theatre audit
+  assignedTheatreId   String? // Theatre the technician was rostered/allocated to
+  assignedTheatreName String? // Snapshot of assigned theatre name
+  theatreChanged      Boolean @default(false) // True if technician set up a different theatre than assigned
+  theatreChangeReason String? // Mandatory reason captured when theatre differs from assignment
+
   // Date
   setupDate DateTime @db.Date
 

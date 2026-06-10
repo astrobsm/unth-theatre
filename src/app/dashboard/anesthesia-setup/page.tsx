@@ -37,6 +37,14 @@ export default function AnesthesiaSetupPage() {
   const [message, setMessage] = useState('');
   const [showEquipmentCheck, setShowEquipmentCheck] = useState(false);
 
+  // Assignment / change-of-theatre audit
+  const [assignedTheatreId, setAssignedTheatreId] = useState('');
+  const [assignedTheatreName, setAssignedTheatreName] = useState('');
+  const [assignmentSource, setAssignmentSource] = useState<'ALLOCATION' | 'ROSTER' | null>(null);
+  const [allocationId, setAllocationId] = useState('');
+  const [assignmentLoaded, setAssignmentLoaded] = useState(false);
+  const [theatreChangeReason, setTheatreChangeReason] = useState('');
+
   // Checklist states
   const [checklist, setChecklist] = useState({
     gasSupplyChecked: false,
@@ -67,7 +75,29 @@ export default function AnesthesiaSetupPage() {
 
   useEffect(() => {
     fetchTheatres();
+    fetchMyAssignment();
   }, []);
+
+  const fetchMyAssignment = async () => {
+    try {
+      const response = await fetch('/api/anesthesia-setup/my-assignment');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.assigned && data.theatreId) {
+          setAssignedTheatreId(data.theatreId);
+          setAssignedTheatreName(data.theatreName || '');
+          setAssignmentSource(data.source || null);
+          setAllocationId(data.allocationId || '');
+          // Autofill the theatre the technician is assigned to set up.
+          setSelectedTheatre((prev) => prev || data.theatreId);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching assignment:', error);
+    } finally {
+      setAssignmentLoaded(true);
+    }
+  };
 
   const fetchTheatres = async () => {
     try {
@@ -192,9 +222,17 @@ export default function AnesthesiaSetupPage() {
     });
   };
 
+  const theatreChanged = !!assignedTheatreId && selectedTheatre !== assignedTheatreId;
+
   const startSetup = async () => {
     if (!selectedTheatre) {
       setMessage('Please select a theatre');
+      return;
+    }
+
+    // A change away from the assigned theatre must be justified for audit.
+    if (theatreChanged && theatreChangeReason.trim().length < 5) {
+      setMessage('✗ Please provide a reason (min 5 characters) for changing from your assigned theatre.');
       return;
     }
 
@@ -210,6 +248,10 @@ export default function AnesthesiaSetupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           theatreId: selectedTheatre,
+          allocationId: allocationId || undefined,
+          assignedTheatreId: assignedTheatreId || undefined,
+          assignedTheatreName: assignedTheatreName || undefined,
+          theatreChangeReason: theatreChanged ? theatreChangeReason.trim() : undefined,
           latitude: location.latitude,
           longitude: location.longitude,
           locationName: location.locationName,
@@ -353,12 +395,34 @@ export default function AnesthesiaSetupPage() {
         <div className="card">
           <h2 className="text-xl font-bold mb-4">Start Daily Setup</h2>
           <div className="space-y-4">
+            {assignmentLoaded && assignedTheatreId && (
+              <div className="rounded-lg bg-blue-50 p-4 ring-1 ring-blue-200">
+                <p className="text-sm font-semibold text-blue-800">
+                  📋 Assigned Theatre: {assignedTheatreName || 'Assigned'}
+                </p>
+                <p className="text-xs text-blue-700">
+                  Auto-filled from your {assignmentSource === 'ROSTER' ? 'roster' : 'theatre allocation'} for today.
+                </p>
+              </div>
+            )}
+            {assignmentLoaded && !assignedTheatreId && (
+              <div className="rounded-lg bg-amber-50 p-4 ring-1 ring-amber-200">
+                <p className="text-sm text-amber-800">
+                  ⚠️ No theatre assignment found for you today. Please select the theatre you are setting up.
+                </p>
+              </div>
+            )}
             <div>
               <label className="label">Select Theatre</label>
               <select
                 className="input-field"
                 value={selectedTheatre}
-                onChange={(e) => setSelectedTheatre(e.target.value)}
+                onChange={(e) => {
+                  setSelectedTheatre(e.target.value);
+                  if (!assignedTheatreId || e.target.value === assignedTheatreId) {
+                    setTheatreChangeReason('');
+                  }
+                }}
               >
                 <option value="">-- Select Theatre --</option>
                 {theatres.map((theatre) => (
@@ -369,9 +433,30 @@ export default function AnesthesiaSetupPage() {
               </select>
             </div>
 
+            {theatreChanged && (
+              <div className="rounded-lg bg-orange-50 p-4 ring-1 ring-orange-200">
+                <label className="label text-orange-800">
+                  Reason for changing from assigned theatre
+                  <span className="text-red-600"> *</span>
+                </label>
+                <p className="mb-2 text-xs text-orange-700">
+                  You selected a theatre different from your assignment
+                  {assignedTheatreName ? ` (${assignedTheatreName})` : ''}. This change is
+                  tracked and monitored for audit. Please state why.
+                </p>
+                <textarea
+                  className="input-field"
+                  rows={3}
+                  value={theatreChangeReason}
+                  onChange={(e) => setTheatreChangeReason(e.target.value)}
+                  placeholder="e.g. Reassigned by theatre manager to cover an emergency in this theatre."
+                />
+              </div>
+            )}
+
             <button
               onClick={startSetup}
-              disabled={loading || !selectedTheatre}
+              disabled={loading || !selectedTheatre || (theatreChanged && theatreChangeReason.trim().length < 5)}
               className="btn-primary disabled:opacity-50"
             >
               {loading ? 'Starting...' : '📍 Start Setup (Location Required)'}
