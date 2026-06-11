@@ -440,6 +440,7 @@ interface PerioperativeRecordData {
     redAlerts?: Array<{ time: string; alertType: string; severity: string; description: string; resolved: boolean }>;
   };
   postOpPrescriptions?: Array<{ prescribedAt?: string; prescribedByName?: string; medications?: string; notes?: string }>;
+  postOpNotes?: Array<{ time?: string; author?: string; note: string }>;
 }
 
 export async function generatePatientDischargePDF(data: PerioperativeRecordData) {
@@ -821,6 +822,30 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
       ['Ward Nurse Handover', val(p.wardNurseHandover)],
     ]);
     para('Discharge Notes', p.dischargeNotes);
+  }
+
+  // ── Surgeon's post-operative notes ──────────────────────────────────
+  if (data.postOpNotes && data.postOpNotes.length > 0) {
+    sectionTitle("SURGEON'S POST-OPERATIVE NOTES");
+    for (const n of data.postOpNotes) {
+      const heading = [n.author, fmt(n.time)].filter((s) => s && s !== '—').join('  •  ');
+      if (heading) {
+        ensureSpace(8);
+        doc.setFont(SERIF, 'bold');
+        doc.setFontSize(BODY);
+        doc.text(heading, marginX + 2, y);
+        y += 5.5;
+      }
+      doc.setFont(SERIF, 'normal');
+      doc.setFontSize(BODY);
+      const lines = doc.splitTextToSize(n.note, contentWidth - 4);
+      for (const ln of lines) {
+        ensureSpace(6);
+        doc.text(ln, marginX + 4, y);
+        y += 5.5;
+      }
+      y += 3;
+    }
   }
 
   // ── Post-operative prescriptions ────────────────────────────────────

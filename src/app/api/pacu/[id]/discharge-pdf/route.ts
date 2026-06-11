@@ -61,6 +61,29 @@ export async function GET(
     const anes = surgery.anesthesiaRecord;
     const callUp = surgery.patientCallUps?.[0];
 
+    // ── Surgeon's post-operative notes (stored as audit-log entries) ───────
+    const postOpNoteLogs = await prisma.auditLog.findMany({
+      where: { tableName: 'surgeries', recordId: surgery.id, action: 'POST_OP_NOTE' },
+      include: { user: { select: { fullName: true, username: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const postOpNotes = postOpNoteLogs
+      .map((log) => {
+        let note = '';
+        try {
+          const parsed = JSON.parse(log.changes || '{}');
+          note = String(parsed.note || '').trim();
+        } catch {
+          note = String(log.changes || '').trim();
+        }
+        return {
+          time: iso(log.createdAt),
+          author: log.user?.fullName || log.user?.username || undefined,
+          note,
+        };
+      })
+      .filter((n) => n.note);
+
     // ── Resolve staff IDs to names in a single lookup ──────────────────────
     const idSet = new Set<string>();
     [
@@ -348,6 +371,7 @@ export async function GET(
         medications: p.medications || undefined,
         notes: p.notes || undefined,
       })),
+      postOpNotes,
     };
 
     return NextResponse.json(data);
