@@ -100,11 +100,31 @@ export const CONSUMABLE_SEED: Array<{
   { name: "Patient Return Plate (Diathermy)", category: "DIATHERMY" as any, unit: "piece", defaultQuantity: 1 },
 
   // Anaesthesia / airway
+  { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "5.0", unit: "piece", defaultQuantity: 1 },
+  { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "5.5", unit: "piece", defaultQuantity: 1 },
+  { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "6.0", unit: "piece", defaultQuantity: 1 },
+  { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "6.5", unit: "piece", defaultQuantity: 1 },
   { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "7.0", unit: "piece", defaultQuantity: 1 },
   { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "7.5", unit: "piece", defaultQuantity: 1 },
+  { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "8.0", unit: "piece", defaultQuantity: 1 },
+  { name: "Endotracheal Tube (Cuffed)", category: "ANAESTHESIA_AIRWAY" as any, size: "8.5", unit: "piece", defaultQuantity: 1 },
   { name: "Laryngeal Mask Airway", category: "ANAESTHESIA_AIRWAY" as any, size: "3", unit: "piece", defaultQuantity: 1 },
   { name: "Laryngeal Mask Airway", category: "ANAESTHESIA_AIRWAY" as any, size: "4", unit: "piece", defaultQuantity: 1 },
+  { name: "ECG Leads", category: "ANAESTHESIA_AIRWAY" as any, unit: "set", defaultQuantity: 1 },
+  { name: "HME Filter (Heat & Moisture Exchanger)", category: "ANAESTHESIA_AIRWAY" as any, unit: "piece", defaultQuantity: 1 },
+  { name: "NG Tube (Nasogastric)", category: "ANAESTHESIA_AIRWAY" as any, size: "10 Fr", unit: "piece", defaultQuantity: 1 },
+  { name: "NG Tube (Nasogastric)", category: "ANAESTHESIA_AIRWAY" as any, size: "12 Fr", unit: "piece", defaultQuantity: 1 },
+  { name: "NG Tube (Nasogastric)", category: "ANAESTHESIA_AIRWAY" as any, size: "14 Fr", unit: "piece", defaultQuantity: 1 },
+  { name: "NG Tube (Nasogastric)", category: "ANAESTHESIA_AIRWAY" as any, size: "16 Fr", unit: "piece", defaultQuantity: 1 },
+  { name: "NG Tube (Nasogastric)", category: "ANAESTHESIA_AIRWAY" as any, size: "18 Fr", unit: "piece", defaultQuantity: 1 },
+  { name: "Epidural Kit", category: "ANAESTHESIA_AIRWAY" as any, unit: "kit", defaultQuantity: 1 },
+  { name: "Spinal Needle (Quincke)", category: "ANAESTHESIA_AIRWAY" as any, size: "24 G", unit: "piece", defaultQuantity: 1 },
   { name: "Spinal Needle (Quincke)", category: "ANAESTHESIA_AIRWAY" as any, size: "25 G", unit: "piece", defaultQuantity: 1 },
+  { name: "Spinal Needle (Quincke)", category: "ANAESTHESIA_AIRWAY" as any, size: "26 G", unit: "piece", defaultQuantity: 1 },
+  // Special-case anaesthesia consumables (e.g. tumour surgery)
+  { name: "Central Line Kit", category: "ANAESTHESIA_AIRWAY" as any, unit: "kit", defaultQuantity: 1, notes: "Special case (e.g. tumour surgery)" },
+  { name: "Arterial Line Needle", category: "ANAESTHESIA_AIRWAY" as any, unit: "piece", defaultQuantity: 1, notes: "Special case (e.g. tumour surgery)" },
+  { name: "Pressure Transducer", category: "ANAESTHESIA_AIRWAY" as any, unit: "piece", defaultQuantity: 1, notes: "Special case (e.g. tumour surgery)" },
 
   // PPE
   { name: "Sterile Surgeon Cap (Long)", category: "PPE" as any, unit: "piece", defaultQuantity: 4 },
