@@ -598,8 +598,8 @@ export const DRUG_DRESSING_SEED: Array<{
   // ─────────────────────────────────────────────────────────────────────
   // Oral & Maxillofacial Surgery — drugs / topical agents / LA carpules
   // ─────────────────────────────────────────────────────────────────────
-  { name: "Lidocaine 2% + Adrenaline (Brown Bottle, OMF)", type: "LOCAL_ANAESTHETIC", defaultDosage: "Max 7 mg/kg with adrenaline", defaultRoute: "Infiltration", defaultQuantity: 1, unit: "bottle" },
-  { name: "Lidocaine 2% + Adrenaline Dental Carpule", type: "LOCAL_ANAESTHETIC", defaultDosage: "2.2 ml carpule (1:80,000 adrenaline)", defaultRoute: "Dental Infiltration/Block", defaultQuantity: 2, unit: "carpule" },
+  { name: "Lidocaine 2% + Adrenaline (Brown Bottle, OMF)", type: "ANAESTHETIC_ADJUNCT", defaultDosage: "Max 7 mg/kg with adrenaline", defaultRoute: "Infiltration", defaultQuantity: 1, unit: "bottle" },
+  { name: "Lidocaine 2% + Adrenaline Dental Carpule", type: "ANAESTHETIC_ADJUNCT", defaultDosage: "2.2 ml carpule (1:80,000 adrenaline)", defaultRoute: "Dental Infiltration/Block", defaultQuantity: 2, unit: "carpule" },
   { name: "Carnoy's Solution", type: "OTHER", defaultDosage: "Apply topically with cotton applicator, 3 min × cycles", defaultRoute: "Topical (Bone Cavity)", defaultQuantity: 1, unit: "bottle" },
   { name: "Wosan Antiseptic Cream", type: "ANTISEPTIC", defaultRoute: "Topical", defaultQuantity: 1, unit: "tube" },
   { name: "Hydrogen Peroxide (OMF, 250 ml)", type: "ANTISEPTIC", defaultRoute: "Topical/Wound Irrigation", defaultQuantity: 1, unit: "bottle" },
@@ -620,8 +620,8 @@ export const DRUG_DRESSING_SEED: Array<{
   { name: "Gentamicin 80 mg (Urology)", type: "ANTIBIOTIC", defaultDosage: "80 mg IV/IM", defaultRoute: "IV/IM", defaultQuantity: 2, unit: "ampoule" },
   { name: "Tramadol 100 mg / 2 ml IM (Ampoule)", type: "ANALGESIC", defaultDosage: "50–100 mg IM", defaultRoute: "IM", defaultQuantity: 2, unit: "ampoule" },
   { name: "Frusemide 20 mg / 2 ml (Ampoule)", type: "OTHER", defaultDosage: "20–40 mg IV", defaultRoute: "IV", defaultQuantity: 2, unit: "ampoule" },
-  { name: "Plain Xylocaine (Lidocaine 2% Plain, Urology)", type: "LOCAL_ANAESTHETIC", defaultDosage: "Max 3 mg/kg", defaultRoute: "Local Infiltration / Urethral Gel", defaultQuantity: 1, unit: "vial" },
-  { name: "Lidocaine 2% with Adrenaline (Urology)", type: "LOCAL_ANAESTHETIC", defaultDosage: "Max 7 mg/kg with adrenaline", defaultRoute: "Local Infiltration", defaultQuantity: 1, unit: "vial" },
+  { name: "Plain Xylocaine (Lidocaine 2% Plain, Urology)", type: "ANAESTHETIC_ADJUNCT", defaultDosage: "Max 3 mg/kg", defaultRoute: "Local Infiltration / Urethral Gel", defaultQuantity: 1, unit: "vial" },
+  { name: "Lidocaine 2% with Adrenaline (Urology)", type: "ANAESTHETIC_ADJUNCT", defaultDosage: "Max 7 mg/kg with adrenaline", defaultRoute: "Local Infiltration", defaultQuantity: 1, unit: "vial" },
 ];
 
 export async function seedSurgicalCatalog(prisma: PrismaClient = prismaInstance) {
