@@ -89,7 +89,7 @@ export const MODULES: AppModule[] = [
   { id: 'plumbing-water-supply', label: 'Plumbing & Water', paths: ['/dashboard/plumbing-water-supply'], defaultRoles: ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR'], category: 'Facility' },
   { id: 'power-house', label: 'Power House', paths: ['/dashboard/power-house'], defaultRoles: ['POWER_PLANT_OPERATOR', 'WORKS_SUPERVISOR'], category: 'Facility' },
   { id: 'cssd', label: 'CSSD', paths: ['/dashboard/cssd'], defaultRoles: ['CSSD_STAFF', 'CSSD_SUPERVISOR'], category: 'Facility' },
-  { id: 'laundry', label: 'Laundry', paths: ['/dashboard/laundry-supervisor'], defaultRoles: ['LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Facility' },
+  { id: 'laundry', label: 'Laundry', paths: ['/dashboard/laundry', '/dashboard/laundry-supervisor'], defaultRoles: ['LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Facility' },
   { id: 'oxygen-control', label: 'Oxygen Control', paths: ['/dashboard/oxygen-control', '/dashboard/oxygen-supervisor'], defaultRoles: ['OXYGEN_UNIT_SUPERVISOR'], category: 'Facility' },
   { id: 'works-supervisor', label: 'Works Supervisor', paths: ['/dashboard/works-supervisor'], defaultRoles: ['WORKS_SUPERVISOR', 'PLUMBER', 'POWER_PLANT_OPERATOR'], category: 'Facility' },
 

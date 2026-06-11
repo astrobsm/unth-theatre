@@ -60,6 +60,7 @@ import {
   ChefHat,
   Wind,
   Receipt,
+  Shirt,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -163,6 +164,7 @@ export default function DashboardLayout({
     { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory' },
     { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization' },
     { href: '/dashboard/cssd/readiness', icon: ClipboardCheck, label: 'CSSD Readiness' },
+    { href: '/dashboard/laundry', icon: Shirt, label: 'Laundry' },
 
     // === ALERTS & SAFETY ===
     { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },

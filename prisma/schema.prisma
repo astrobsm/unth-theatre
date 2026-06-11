@@ -3698,6 +3698,15 @@ model CssdReadinessReport {
   equipmentIssues   String?
   actionTaken       String?
 
+  // Structured readiness detail (JSON-encoded arrays)
+  instrumentPacks   String? // JSON: [{ subspecialty, packName, sterilizationStatus, notes }]
+  surgicalMaterials String? // JSON: [{ material, quantity, sterilizationStatus, notes }]
+
+  // First-knife-at-risk escalation
+  machineFaults     String? // Malfunctioning machines / equipment faults
+  blockingReason    String? // Any reason that will stop first knife on skin by 9am
+  redAlertTriggered Boolean @default(false)
+
   reportedById String
   reportedBy   User   @relation(fields: [reportedById], references: [id])
 
@@ -3964,6 +3973,12 @@ model LaundryReadiness {
   // Overall status
   overallReadiness  String // READY, PARTIALLY_READY, NOT_READY, CRITICAL
   criticalShortages String? // Items critically low
+
+  // Theatre items workflow
+  itemsSentForWashing    String? // Theatre items sent to laundry for washing
+  itemsTransferredToCssd String? // Washed items transferred to CSSD for sterilization
+  faultsReported         String? // Faults / machine malfunctions in the laundry
+  redAlertTriggered      Boolean @default(false)
 
   // Collected/Used
   surgicalGownsUsed  Int @default(0)

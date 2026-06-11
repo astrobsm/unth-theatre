@@ -4,7 +4,42 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { SURGICAL_SUBSPECIALTIES } from '@/lib/surgical-instruments-catalog';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
+
+const SURGICAL_MATERIAL_OPTIONS = [
+  'MAJOR BUNDLE',
+  'MINOR BUNDLES',
+  'GAUZE ONLY',
+  'MOBS ONLY',
+  'COTTON WOOL MEDIUM DRUM',
+  'GOWNS',
+  'MACHINTOSH DRUM',
+] as const;
+
+const STERILIZATION_STATUS_OPTIONS = [
+  { value: 'STERILE', label: 'Sterile / Ready' },
+  { value: 'BEING_STERILIZED', label: 'Being Sterilized' },
+  { value: 'AWAITING_STERILIZATION', label: 'Awaiting Sterilization' },
+  { value: 'NOT_STERILE', label: 'Not Sterile' },
+  { value: 'DAMAGED', label: 'Damaged / Faulty' },
+] as const;
+
+interface InstrumentPackRow {
+  subspecialty: string;
+  packName: string;
+  sterilizationStatus: string;
+  notes: string;
+}
+
+interface SurgicalMaterialRow {
+  material: string;
+  quantity: number;
+  sterilizationStatus: string;
+  notes: string;
+}
+
+const SHIFT_OPTIONS = ['MORNING', 'AFTERNOON', 'NIGHT'] as const;
 
 export default function CssdReadinessPage() {
   const { data: session, status } = useSession();
@@ -12,18 +47,41 @@ export default function CssdReadinessPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({
-    totalSterileItems: 0,
-    itemsInSterilization: 0,
-    itemsExpiringSoon: 0,
-    lowStockItems: 0,
-    outOfStockItems: 0,
+    shiftType: 'MORNING',
     readinessStatus: 'READY',
+    machineFaults: '',
+    blockingReason: '',
     issues: '',
     recommendedActions: '',
     notes: '',
   });
+  const [instrumentPacks, setInstrumentPacks] = useState<InstrumentPackRow[]>([]);
+  const [surgicalMaterials, setSurgicalMaterials] = useState<SurgicalMaterialRow[]>([]);
+
+  const addInstrumentPack = () =>
+    setInstrumentPacks((rows) => [
+      ...rows,
+      { subspecialty: SURGICAL_SUBSPECIALTIES[0], packName: '', sterilizationStatus: 'STERILE', notes: '' },
+    ]);
+  const updateInstrumentPack = (index: number, field: keyof InstrumentPackRow, value: string) =>
+    setInstrumentPacks((rows) => rows.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  const removeInstrumentPack = (index: number) =>
+    setInstrumentPacks((rows) => rows.filter((_, i) => i !== index));
+
+  const addSurgicalMaterial = () =>
+    setSurgicalMaterials((rows) => [
+      ...rows,
+      { material: SURGICAL_MATERIAL_OPTIONS[0], quantity: 0, sterilizationStatus: 'STERILE', notes: '' },
+    ]);
+  const updateSurgicalMaterial = (index: number, field: keyof SurgicalMaterialRow, value: string | number) =>
+    setSurgicalMaterials((rows) => rows.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  const removeSurgicalMaterial = (index: number) =>
+    setSurgicalMaterials((rows) => rows.filter((_, i) => i !== index));
+
+  const willTriggerRedAlert = Boolean(formData.machineFaults.trim() || formData.blockingReason.trim());
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -67,15 +125,6 @@ export default function CssdReadinessPage() {
           lowStockItems: lowStock,
           outOfStockItems: outOfStock,
         });
-
-        setFormData(prev => ({
-          ...prev,
-          totalSterileItems: sterile,
-          itemsInSterilization: inSterilization,
-          itemsExpiringSoon: expiringSoon,
-          lowStockItems: lowStock,
-          outOfStockItems: outOfStock,
-        }));
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -86,15 +135,42 @@ export default function CssdReadinessPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
     try {
+      const payload = {
+        shiftType: formData.shiftType,
+        readinessStatus: formData.readinessStatus,
+        instrumentPacks,
+        surgicalMaterials,
+        machineFaults: formData.machineFaults,
+        blockingReason: formData.blockingReason,
+        criticalShortages: formData.issues,
+        actionTaken: formData.recommendedActions,
+        notes: formData.notes,
+      };
       const response = await fetch('/api/cssd-readiness', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
+        const data = await response.json();
+        if (data.redAlertTriggered) {
+          alert('🔴 RED ALERT dispatched to all admins and maintenance staff.');
+        }
         setShowAddModal(false);
+        setFormData({
+          shiftType: 'MORNING',
+          readinessStatus: 'READY',
+          machineFaults: '',
+          blockingReason: '',
+          issues: '',
+          recommendedActions: '',
+          notes: '',
+        });
+        setInstrumentPacks([]);
+        setSurgicalMaterials([]);
         fetchData();
       } else {
         const error = await response.json();
@@ -103,6 +179,8 @@ export default function CssdReadinessPage() {
     } catch (error) {
       console.error('Error creating readiness report:', error);
       alert('Failed to create readiness report');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -154,11 +232,13 @@ export default function CssdReadinessPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sterile Items</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">In Sterilization</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Low Stock</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Out of Stock</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shift</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Readiness</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Major</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Minor</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gowns</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alert</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reported By</th>
             </tr>
           </thead>
@@ -168,20 +248,30 @@ export default function CssdReadinessPage() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(report.reportDate).toLocaleDateString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.totalSterileItems}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.itemsInSterilization}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.lowStockItems}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.outOfStockItems}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.shiftType}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.readinessPercentage}%</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.majorBundlesAvailable}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.minorBundlesAvailable}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.gownsAvailable}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    report.readinessStatus === 'READY' ? 'bg-green-100 text-green-800' :
-                    report.readinessStatus === 'LIMITED' ? 'bg-yellow-100 text-yellow-800' :
+                    report.overallStatus === 'READY' ? 'bg-green-100 text-green-800' :
+                    report.overallStatus === 'PARTIALLY_READY' ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-800'
                   }`}>
-                    {report.readinessStatus}
+                    {report.overallStatus}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.reportedBy?.name || 'Unknown'}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {report.redAlertTriggered ? (
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-600 text-white">
+                      🔴 RED
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.reportedBy?.fullName || 'Unknown'}</td>
               </tr>
             ))}
           </tbody>
@@ -195,59 +285,24 @@ export default function CssdReadinessPage() {
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Total Sterile Items</label>
-                  <input
-                    type="number"
-                    value={formData.totalSterileItems}
-                    onChange={(e) => setFormData({ ...formData, totalSterileItems: parseInt(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Items in Sterilization</label>
-                  <input
-                    type="number"
-                    value={formData.itemsInSterilization}
-                    onChange={(e) => setFormData({ ...formData, itemsInSterilization: parseInt(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Items Expiring Soon</label>
-                  <input
-                    type="number"
-                    value={formData.itemsExpiringSoon}
-                    onChange={(e) => setFormData({ ...formData, itemsExpiringSoon: parseInt(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Low Stock Items</label>
-                  <input
-                    type="number"
-                    value={formData.lowStockItems}
-                    onChange={(e) => setFormData({ ...formData, lowStockItems: parseInt(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Out of Stock Items</label>
-                  <input
-                    type="number"
-                    value={formData.outOfStockItems}
-                    onChange={(e) => setFormData({ ...formData, outOfStockItems: parseInt(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Readiness Status *</label>
+                  <label className="block text-sm font-medium mb-2">Shift *</label>
                   <select
                     required
+                    aria-label="Shift"
+                    value={formData.shiftType}
+                    onChange={(e) => setFormData({ ...formData, shiftType: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2"
+                  >
+                    {SHIFT_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Overall Readiness Status *</label>
+                  <select
+                    required
+                    aria-label="Overall readiness status"
                     value={formData.readinessStatus}
                     onChange={(e) => setFormData({ ...formData, readinessStatus: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2"
@@ -258,9 +313,209 @@ export default function CssdReadinessPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Subspecialty Instrument Packs */}
+              <div className="mt-6">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-semibold">Subspecialty Instrument Packs</label>
+                  <button
+                    type="button"
+                    onClick={addInstrumentPack}
+                    className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg"
+                  >
+                    + Add Pack
+                  </button>
+                </div>
+                {instrumentPacks.length === 0 && (
+                  <p className="text-sm text-gray-400 italic">No instrument packs added yet.</p>
+                )}
+                <div className="space-y-3">
+                  {instrumentPacks.map((row, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end border rounded-lg p-3 bg-gray-50">
+                      <div className="md:col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">Subspecialty</label>
+                        <select
+                          aria-label="Subspecialty"
+                          value={row.subspecialty}
+                          onChange={(e) => updateInstrumentPack(index, 'subspecialty', e.target.value)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        >
+                          {SURGICAL_SUBSPECIALTIES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">Pack Name</label>
+                        <input
+                          type="text"
+                          value={row.packName}
+                          onChange={(e) => updateInstrumentPack(index, 'packName', e.target.value)}
+                          placeholder="e.g. Laparotomy Set"
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">Sterilization Status</label>
+                        <select
+                          aria-label="Pack sterilization status"
+                          value={row.sterilizationStatus}
+                          onChange={(e) => updateInstrumentPack(index, 'sterilizationStatus', e.target.value)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        >
+                          {STERILIZATION_STATUS_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                        <input
+                          type="text"
+                          aria-label="Pack notes"
+                          placeholder="Optional"
+                          value={row.notes}
+                          onChange={(e) => updateInstrumentPack(index, 'notes', e.target.value)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div className="md:col-span-1">
+                        <button
+                          type="button"
+                          onClick={() => removeInstrumentPack(index)}
+                          className="w-full text-red-600 hover:text-red-800 text-sm py-1.5"
+                          aria-label="Remove pack"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Surgical Materials */}
+              <div className="mt-6">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-semibold">Surgical Materials</label>
+                  <button
+                    type="button"
+                    onClick={addSurgicalMaterial}
+                    className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg"
+                  >
+                    + Add Material
+                  </button>
+                </div>
+                {surgicalMaterials.length === 0 && (
+                  <p className="text-sm text-gray-400 italic">No surgical materials added yet.</p>
+                )}
+                <div className="space-y-3">
+                  {surgicalMaterials.map((row, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end border rounded-lg p-3 bg-gray-50">
+                      <div className="md:col-span-4">
+                        <label className="block text-xs text-gray-500 mb-1">Material</label>
+                        <select
+                          aria-label="Surgical material"
+                          value={row.material}
+                          onChange={(e) => updateSurgicalMaterial(index, 'material', e.target.value)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        >
+                          {SURGICAL_MATERIAL_OPTIONS.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Quantity</label>
+                        <input
+                          type="number"
+                          min={0}
+                          aria-label="Material quantity"
+                          placeholder="0"
+                          value={row.quantity}
+                          onChange={(e) => updateSurgicalMaterial(index, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">Sterilization Status</label>
+                        <select
+                          aria-label="Material sterilization status"
+                          value={row.sterilizationStatus}
+                          onChange={(e) => updateSurgicalMaterial(index, 'sterilizationStatus', e.target.value)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        >
+                          {STERILIZATION_STATUS_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                        <input
+                          type="text"
+                          aria-label="Material notes"
+                          placeholder="Optional"
+                          value={row.notes}
+                          onChange={(e) => updateSurgicalMaterial(index, 'notes', e.target.value)}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div className="md:col-span-1">
+                        <button
+                          type="button"
+                          onClick={() => removeSurgicalMaterial(index)}
+                          className="w-full text-red-600 hover:text-red-800 text-sm py-1.5"
+                          aria-label="Remove material"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Faults / First-knife-at-risk escalation */}
+              <div className="mt-6 border-2 border-red-200 rounded-lg p-4 bg-red-50">
+                <h3 className="text-sm font-bold text-red-700 mb-1">⚠️ Faults &amp; First-Knife-at-Risk</h3>
+                <p className="text-xs text-red-600 mb-3">
+                  Any entry below triggers an immediate <strong>RED ALERT</strong> to all admins and maintenance staff.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Faults / Malfunctioning Machines</label>
+                    <textarea
+                      value={formData.machineFaults}
+                      onChange={(e) => setFormData({ ...formData, machineFaults: e.target.value })}
+                      rows={2}
+                      placeholder="Describe any faulty or malfunctioning autoclave/machine..."
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Any reason that will stop first knife on skin by 9AM daily
+                    </label>
+                    <textarea
+                      value={formData.blockingReason}
+                      onChange={(e) => setFormData({ ...formData, blockingReason: e.target.value })}
+                      rows={2}
+                      placeholder="Describe any blocking issue that could delay first knife by 9AM..."
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                  </div>
+                  {willTriggerRedAlert && (
+                    <div className="bg-red-600 text-white text-sm font-semibold rounded-lg px-3 py-2">
+                      🔴 This report will trigger a RED ALERT to all admins and maintenance on submission.
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="mt-4">
                 <SmartTextInput
-                  label="Issues"
+                  label="Critical Shortages / Issues"
                   value={formData.issues}
                   onChange={(val) => setFormData({ ...formData, issues: val })}
                   rows={2}
@@ -304,9 +559,10 @@ export default function CssdReadinessPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  disabled={submitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
-                  Create Report
+                  {submitting ? 'Saving...' : 'Create Report'}
                 </button>
               </div>
             </form>

@@ -59,6 +59,9 @@ export async function POST(request: NextRequest) {
 
     const data = await request.json();
 
+    const faultsReported = (data.faultsReported || '').trim();
+    const redAlertTriggered = Boolean(faultsReported);
+
     const laundryReport = await prisma.laundryReadiness.create({
       data: {
         reportDate: data.reportDate ? new Date(data.reportDate) : new Date(),
@@ -75,6 +78,10 @@ export async function POST(request: NextRequest) {
         theatre4Allocated: data.theatre4Allocated || false,
         overallReadiness: data.overallReadiness,
         criticalShortages: data.criticalShortages,
+        itemsSentForWashing: data.itemsSentForWashing || null,
+        itemsTransferredToCssd: data.itemsTransferredToCssd || null,
+        faultsReported: faultsReported || null,
+        redAlertTriggered,
         surgicalGownsUsed: data.surgicalGownsUsed || 0,
         surgicalDrapesUsed: data.surgicalDrapesUsed || 0,
         patientGownsUsed: data.patientGownsUsed || 0,
@@ -90,6 +97,46 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // RED ALERT fan-out: notify all admins and maintenance staff when a fault is
+    // reported in the laundry workflow.
+    if (redAlertTriggered) {
+      try {
+        const reporterName = laundryReport.reportedBy?.fullName || 'Laundry staff';
+        const recipients = await prisma.user.findMany({
+          where: {
+            status: 'APPROVED',
+            role: {
+              in: [
+                'ADMIN',
+                'SYSTEM_ADMINISTRATOR',
+                'THEATRE_MANAGER',
+                'THEATRE_CHAIRMAN',
+                'CHIEF_MEDICAL_DIRECTOR',
+                'WORKS_SUPERVISOR',
+                'BIOMEDICAL_ENGINEER',
+                'POWER_PLANT_OPERATOR',
+              ],
+            },
+          },
+          select: { id: true },
+        });
+
+        if (recipients.length > 0) {
+          await prisma.notification.createMany({
+            data: recipients.map((u) => ({
+              userId: u.id,
+              type: 'LAUNDRY_RED_ALERT',
+              title: '🔴 LAUNDRY RED ALERT',
+              message: `${reporterName} reported a laundry fault: ${faultsReported}`,
+              link: '/dashboard/laundry',
+            })),
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to dispatch laundry red alert notifications:', notifyError);
+      }
+    }
 
     return NextResponse.json(laundryReport);
   } catch (error) {
