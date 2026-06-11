@@ -97,6 +97,33 @@ interface Stats {
   resolvedToday: number;
 }
 
+interface WaterReadiness {
+  id: string;
+  readinessDate: string;
+  forDate: string;
+  overheadTankLevel: number;
+  groundTankLevel: number;
+  restroomsWaterReady: boolean;
+  scrubbingWaterReady: boolean;
+  theatreActivitiesWaterReady: boolean;
+  noShortageConfirmed: boolean;
+  overallReadiness: string;
+  riskDetails: string | null;
+  actionTaken: string | null;
+  notes: string | null;
+  submittedAt: string;
+  isLate: boolean;
+  disciplinaryQueryIssued: boolean;
+  loggedBy: { fullName: string; role: string };
+  loggedByName: string;
+}
+
+interface ReadinessCompliance {
+  loggedToday: boolean;
+  pastDeadline: boolean;
+  deadlineHourWat: number;
+}
+
 // ===== CONSTANTS =====
 
 const FAULT_STATUS_COLORS: Record<string, string> = {
@@ -154,16 +181,22 @@ const THEATRE_LOCATIONS = [
 
 export default function PlumbingWaterSupplyPage() {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<'status' | 'faults' | 'log'>('status');
+  const [department, setDepartment] = useState<'water' | 'plumbing'>('water');
+  const [activeTab, setActiveTab] = useState<'status' | 'readiness' | 'faults' | 'log'>('status');
   const [faults, setFaults] = useState<PlumbingFault[]>([]);
   const [waterStatuses, setWaterStatuses] = useState<WaterStatus[]>([]);
   const [latestStatus, setLatestStatus] = useState<WaterStatus | null>(null);
   const [stats, setStats] = useState<Stats>({ totalFaults: 0, openFaults: 0, criticalFaults: 0, resolvedToday: 0 });
   const [loading, setLoading] = useState(true);
 
+  // Water-supply daily readiness
+  const [readinessReports, setReadinessReports] = useState<WaterReadiness[]>([]);
+  const [compliance, setCompliance] = useState<ReadinessCompliance>({ loggedToday: false, pastDeadline: false, deadlineHourWat: 17 });
+
   // Modals
   const [showFaultForm, setShowFaultForm] = useState(false);
   const [showStatusForm, setShowStatusForm] = useState(false);
+  const [showReadinessForm, setShowReadinessForm] = useState(false);
   const [showResolveForm, setShowResolveForm] = useState<string | null>(null);
 
   // Filters
@@ -196,19 +229,42 @@ export default function PlumbingWaterSupplyPage() {
     resolutionNotes: '', partsUsed: '', actualCost: '',
   });
 
+  // Daily water-supply readiness form (logged before 5 PM for next day's surgery)
+  const [readinessData, setReadinessData] = useState({
+    forDate: '',
+    overheadTankLevel: 50,
+    groundTankLevel: 50,
+    restroomsWaterReady: true,
+    scrubbingWaterReady: true,
+    theatreActivitiesWaterReady: true,
+    noShortageConfirmed: true,
+    overallReadiness: 'READY',
+    riskDetails: '',
+    actionTaken: '',
+    notes: '',
+  });
+
   // Plumber list for assignment
   const [plumbers, setPlumbers] = useState<{ id: string; fullName: string }[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/plumbing-water-supply?type=all');
+      const [res, readinessRes] = await Promise.all([
+        fetch('/api/plumbing-water-supply?type=all'),
+        fetch('/api/water-supply-readiness'),
+      ]);
       if (res.ok) {
         const data = await res.json();
         setWaterStatuses(data.waterStatuses || []);
         setLatestStatus(data.latestStatus || null);
         setFaults(data.faults || []);
         setStats(data.stats || { totalFaults: 0, openFaults: 0, criticalFaults: 0, resolvedToday: 0 });
+      }
+      if (readinessRes.ok) {
+        const rdata = await readinessRes.json();
+        setReadinessReports(rdata.reports || []);
+        if (rdata.compliance) setCompliance(rdata.compliance);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -293,7 +349,46 @@ export default function PlumbingWaterSupplyPage() {
     }
   };
 
-  const isPlumber = session?.user?.role === 'PLUMBER' || session?.user?.role === 'WORKS_SUPERVISOR';
+  const handleLogReadiness = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/water-supply-readiness', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(readinessData),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.isLate) {
+          alert('⚠️ This readiness report was logged AFTER the 5 PM deadline. A disciplinary query has been raised to management.');
+        }
+        setShowReadinessForm(false);
+        setReadinessData({
+          forDate: '',
+          overheadTankLevel: 50,
+          groundTankLevel: 50,
+          restroomsWaterReady: true,
+          scrubbingWaterReady: true,
+          theatreActivitiesWaterReady: true,
+          noShortageConfirmed: true,
+          overallReadiness: 'READY',
+          riskDetails: '',
+          actionTaken: '',
+          notes: '',
+        });
+        fetchData();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Server error' }));
+        alert(err.error || 'Failed to log readiness. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error logging readiness:', error);
+      alert('Network error. Please check your connection and try again.');
+    }
+  };
+
+  const isWaterSupplyStaff = ['WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(session?.user?.role || '');
+  const isPlumber = ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WORKS_SUPERVISOR'].includes(session?.user?.role || '');
   const isManager = ['THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'CHIEF_MEDICAL_DIRECTOR', 'WORKS_SUPERVISOR'].includes(session?.user?.role || '');
 
   const filteredFaults = faults.filter(f => {
@@ -308,11 +403,16 @@ export default function PlumbingWaterSupplyPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Droplet className="w-8 h-8 text-blue-600" />
-            Plumbing & Water Supply
+            {department === 'water' ? (
+              <><Droplet className="w-8 h-8 text-blue-600" /> Water Supply</>
+            ) : (
+              <><Wrench className="w-8 h-8 text-orange-600" /> Plumbing</>
+            )}
           </h1>
           <p className="text-gray-600 mt-1">
-            Monitor water supply status, manage plumbing faults, and track maintenance
+            {department === 'water'
+              ? 'Daily water-supply readiness for theatre use, tank levels, and supply status'
+              : 'Report plumbing faults, assign work, and log the action taken on each fault'}
           </p>
         </div>
         <div className="flex gap-3">
@@ -322,22 +422,74 @@ export default function PlumbingWaterSupplyPage() {
           >
             <RefreshCw className="w-4 h-4" /> Refresh
           </button>
-          <button
-            onClick={() => setShowFaultForm(true)}
-            className="px-5 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2 font-semibold shadow-lg"
-          >
-            <AlertTriangle className="w-5 h-5" /> Report Fault
-          </button>
-          {isPlumber && (
+          {department === 'plumbing' && (
             <button
-              onClick={() => setShowStatusForm(true)}
-              className="px-5 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 font-semibold shadow-lg"
+              onClick={() => setShowFaultForm(true)}
+              className="px-5 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2 font-semibold shadow-lg"
             >
-              <Plus className="w-5 h-5" /> Log Water Status
+              <AlertTriangle className="w-5 h-5" /> Report Fault
             </button>
+          )}
+          {department === 'water' && isWaterSupplyStaff && (
+            <>
+              <button
+                onClick={() => setShowReadinessForm(true)}
+                className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2 font-semibold shadow-lg"
+              >
+                <CheckCircle className="w-5 h-5" /> Log Daily Readiness
+              </button>
+              <button
+                onClick={() => setShowStatusForm(true)}
+                className="px-5 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 font-semibold shadow-lg"
+              >
+                <Plus className="w-5 h-5" /> Log Water Status
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Department selector — Water Supply and Plumbing are separate departments */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 max-w-md">
+        <button
+          onClick={() => { setDepartment('water'); setActiveTab('status'); }}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+            department === 'water' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Droplet className="w-4 h-4" /> Water Supply
+        </button>
+        <button
+          onClick={() => { setDepartment('plumbing'); setActiveTab('faults'); }}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+            department === 'plumbing' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Wrench className="w-4 h-4" /> Plumbing
+        </button>
+      </div>
+
+      {/* Daily readiness compliance banner (Water Supply department) */}
+      {department === 'water' && (
+        <div className={`rounded-xl border-2 p-4 flex items-center gap-3 ${
+          compliance.loggedToday
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : compliance.pastDeadline
+            ? 'bg-red-50 border-red-300 text-red-800'
+            : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+        }`}>
+          <Clock className="w-6 h-6 flex-shrink-0" />
+          <div className="text-sm">
+            {compliance.loggedToday ? (
+              <span><strong>Today&apos;s water-supply readiness has been logged.</strong> Next-day theatre water supply is on record.</span>
+            ) : compliance.pastDeadline ? (
+              <span><strong>OVERDUE:</strong> The daily water-supply readiness was not logged before the {compliance.deadlineHourWat % 12 || 12} PM deadline. Logging now will raise a disciplinary query.</span>
+            ) : (
+              <span><strong>Action required:</strong> Log today&apos;s water-supply readiness before {compliance.deadlineHourWat % 12 || 12} PM to confirm there will be no water shortage for tomorrow&apos;s surgery.</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -404,11 +556,16 @@ export default function PlumbingWaterSupplyPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {[
-          { key: 'status', label: 'Water Status', icon: Droplet },
-          { key: 'faults', label: 'Plumbing Faults', icon: Wrench },
-          { key: 'log', label: 'Status History', icon: Clock },
-        ].map(tab => (
+        {(department === 'water'
+          ? [
+              { key: 'status', label: 'Water Status', icon: Droplet },
+              { key: 'readiness', label: 'Daily Readiness', icon: CheckCircle },
+              { key: 'log', label: 'Status History', icon: Clock },
+            ]
+          : [
+              { key: 'faults', label: 'Plumbing Faults', icon: Wrench },
+            ]
+        ).map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
@@ -550,6 +707,71 @@ export default function PlumbingWaterSupplyPage() {
                     Last updated: {new Date(latestStatus.statusDate).toLocaleString()} by {latestStatus.loggedBy.fullName} ({latestStatus.shiftType} shift)
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* ===== DAILY READINESS TAB ===== */}
+          {activeTab === 'readiness' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+                Water-supply staff must log readiness <strong>before 5 PM daily</strong>, confirming there will be no water
+                shortage for the next day&apos;s surgery — covering <strong>toilets &amp; all rest rooms</strong>,
+                <strong> surgical scrubbing during surgery</strong>, and <strong>all theatre activities</strong>.
+                Late or missing logs raise a disciplinary query.
+              </div>
+
+              {readinessReports.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-xl shadow-sm border">
+                  <CheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-500">No Readiness Logs</h3>
+                  <p className="text-gray-400">Daily water-supply readiness reports will appear here</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto bg-white rounded-xl shadow-sm border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="text-left p-4 font-semibold">Logged</th>
+                        <th className="text-left p-4 font-semibold">For Surgery Day</th>
+                        <th className="text-left p-4 font-semibold">Readiness</th>
+                        <th className="text-left p-4 font-semibold">Restrooms</th>
+                        <th className="text-left p-4 font-semibold">Scrubbing</th>
+                        <th className="text-left p-4 font-semibold">Theatre Activities</th>
+                        <th className="text-left p-4 font-semibold">On Time</th>
+                        <th className="text-left p-4 font-semibold">Logged By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {readinessReports.map(r => (
+                        <tr key={r.id} className="border-t hover:bg-gray-50">
+                          <td className="p-4">{new Date(r.submittedAt || r.readinessDate).toLocaleString()}</td>
+                          <td className="p-4">{new Date(r.forDate).toLocaleDateString()}</td>
+                          <td className="p-4">
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${
+                              r.overallReadiness === 'READY' ? 'bg-green-100 text-green-800' :
+                              r.overallReadiness === 'AT_RISK' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {r.overallReadiness.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="p-4">{r.restroomsWaterReady ? '✅' : '❌'}</td>
+                          <td className="p-4">{r.scrubbingWaterReady ? '✅' : '❌'}</td>
+                          <td className="p-4">{r.theatreActivitiesWaterReady ? '✅' : '❌'}</td>
+                          <td className="p-4">
+                            {r.isLate ? (
+                              <span className="px-2 py-1 rounded text-xs font-bold bg-red-600 text-white">⚠️ LATE — QUERY</span>
+                            ) : (
+                              <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700">On time</span>
+                            )}
+                          </td>
+                          <td className="p-4">{r.loggedBy?.fullName || r.loggedByName}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
@@ -1060,6 +1282,130 @@ export default function PlumbingWaterSupplyPage() {
                 </button>
                 <button type="submit" className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 font-semibold">
                   <Send className="w-5 h-5" /> Log Status
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DAILY WATER READINESS MODAL ===== */}
+      {showReadinessForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                <CheckCircle className="w-7 h-7 text-emerald-600" />
+                Log Daily Water-Supply Readiness
+              </h2>
+              <button onClick={() => setShowReadinessForm(false)} className="text-gray-400 hover:text-gray-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              Confirm that water supply is assured for the next day&apos;s surgery. Must be logged before 5 PM daily —
+              late logs raise a disciplinary query.
+            </p>
+
+            <form onSubmit={handleLogReadiness} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">For Surgery Day</label>
+                  <input
+                    type="date"
+                    aria-label="For surgery day"
+                    value={readinessData.forDate}
+                    onChange={e => setReadinessData(prev => ({ ...prev, forDate: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Defaults to tomorrow when left blank.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Overall Readiness *</label>
+                  <select
+                    aria-label="Overall readiness"
+                    value={readinessData.overallReadiness}
+                    onChange={e => setReadinessData(prev => ({ ...prev, overallReadiness: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="READY">✅ READY — no shortage expected</option>
+                    <option value="AT_RISK">⚠️ AT RISK — possible shortage</option>
+                    <option value="NOT_READY">🚫 NOT READY — shortage expected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tank levels */}
+              <div className="p-4 bg-cyan-50 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Overhead Tank: {readinessData.overheadTankLevel}%
+                  </label>
+                  <input type="range" min="0" max="100" aria-label="Overhead tank level"
+                    value={readinessData.overheadTankLevel}
+                    onChange={e => setReadinessData(p => ({ ...p, overheadTankLevel: parseInt(e.target.value) }))}
+                    className="w-full" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ground Tank: {readinessData.groundTankLevel}%
+                  </label>
+                  <input type="range" min="0" max="100" aria-label="Ground tank level"
+                    value={readinessData.groundTankLevel}
+                    onChange={e => setReadinessData(p => ({ ...p, groundTankLevel: parseInt(e.target.value) }))}
+                    className="w-full" />
+                </div>
+              </div>
+
+              {/* Readiness confirmations */}
+              <div className="p-4 bg-emerald-50 rounded-xl">
+                <h4 className="font-semibold text-emerald-800 mb-3">Water Availability Confirmation (Next Day)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ToggleField label="Toilets & all rest rooms" checked={readinessData.restroomsWaterReady} onChange={v => setReadinessData(p => ({ ...p, restroomsWaterReady: v }))} />
+                  <ToggleField label="Surgical scrubbing during surgery" checked={readinessData.scrubbingWaterReady} onChange={v => setReadinessData(p => ({ ...p, scrubbingWaterReady: v }))} />
+                  <ToggleField label="All theatre activities" checked={readinessData.theatreActivitiesWaterReady} onChange={v => setReadinessData(p => ({ ...p, theatreActivitiesWaterReady: v }))} />
+                  <ToggleField label="No water shortage confirmed" checked={readinessData.noShortageConfirmed} onChange={v => setReadinessData(p => ({ ...p, noShortageConfirmed: v }))} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Risk Details (if any)</label>
+                <textarea
+                  value={readinessData.riskDetails}
+                  onChange={e => setReadinessData(prev => ({ ...prev, riskDetails: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows={2}
+                  placeholder="Describe any anticipated shortage or risk to water supply..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Action Taken</label>
+                <textarea
+                  value={readinessData.actionTaken}
+                  onChange={e => setReadinessData(prev => ({ ...prev, actionTaken: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows={2}
+                  placeholder="Action taken to ensure water availability (e.g. tankers ordered, pumps run)..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={readinessData.notes}
+                  onChange={e => setReadinessData(prev => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows={2}
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button type="button" onClick={() => setShowReadinessForm(false)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300">
+                  Cancel
+                </button>
+                <button type="submit" className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2 font-semibold">
+                  <Send className="w-5 h-5" /> Submit Readiness
                 </button>
               </div>
             </form>

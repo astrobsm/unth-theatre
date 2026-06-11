@@ -538,6 +538,7 @@ model User {
   plumbingFaultsAcknowledged PlumbingFault[]       @relation("PlumbingFaultAcknowledger")
   plumbingFaultsResolved     PlumbingFault[]       @relation("PlumbingFaultResolver")
   plumbingWaterStatuses      PlumbingWaterStatus[] @relation("PlumbingStatusLogger")
+  waterSupplyReadinessLogs   WaterSupplyReadiness[] @relation("WaterReadinessLogger")
 
   // Nurse Handover Relations
   handoversGiven     NurseHandover[] @relation("HandingOverNurse")
@@ -5645,6 +5646,49 @@ model PlumbingWaterStatus {
   @@index([statusDate])
   @@index([overallStatus])
   @@map("plumbing_water_status")
+}
+
+// ============================================
+// WATER SUPPLY DEPARTMENT — DAILY READINESS
+// (separate department from Plumbing)
+// ============================================
+
+model WaterSupplyReadiness {
+  id String @id @default(uuid())
+
+  readinessDate DateTime @default(now()) // when the report was logged
+  forDate       DateTime // the surgery day this readiness covers (typically next day)
+
+  // Tank levels backing the assurance
+  overheadTankLevel Int @default(0) // Percentage 0-100
+  groundTankLevel   Int @default(0) // Percentage 0-100
+
+  // Readiness confirmations for the next day's surgery
+  restroomsWaterReady         Boolean @default(false) // toilets and all rest rooms
+  scrubbingWaterReady         Boolean @default(false) // surgical scrubbing during surgery
+  theatreActivitiesWaterReady Boolean @default(false) // all other theatre activities
+  noShortageConfirmed         Boolean @default(false)
+
+  overallReadiness String // READY, AT_RISK, NOT_READY
+  riskDetails      String?
+  actionTaken      String?
+  notes            String?
+
+  // Compliance / disciplinary tracking (must be logged before 5pm daily)
+  submittedAt             DateTime @default(now())
+  isLate                  Boolean  @default(false)
+  disciplinaryQueryIssued Boolean  @default(false)
+
+  loggedById   String
+  loggedBy     User   @relation("WaterReadinessLogger", fields: [loggedById], references: [id])
+  loggedByName String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([forDate])
+  @@index([overallReadiness])
+  @@map("water_supply_readiness")
 }
 
 // ============================================
