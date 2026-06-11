@@ -24,7 +24,8 @@ type AuditSourceType =
   | 'mortalities'
   | 'faults'
   | 'anonymous_tips'
-  | 'security_reports';
+  | 'security_reports'
+  | 'late_first_case';
 
 type AuditSectionItem = {
   id: string;
@@ -52,9 +53,10 @@ function mondayOfWeek(date: Date): Date {
 }
 
 function rosterDeadlineForWeek(weekStartMonday: Date): Date {
+  // Deadline for the upcoming week's roster is the Saturday before, 4:00 PM (16:00).
   const deadline = new Date(weekStartMonday);
-  deadline.setDate(deadline.getDate() - 3);
-  deadline.setHours(12, 0, 0, 0);
+  deadline.setDate(deadline.getDate() - 2);
+  deadline.setHours(16, 0, 0, 0);
   return deadline;
 }
 
@@ -187,6 +189,27 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // First knife-on-skin times for the last 60 days, used to evaluate late
+    // theatre starts (first case of each unit beyond 9:25 AM).
+    const firstKnifeWindowStart = new Date();
+    firstKnifeWindowStart.setDate(firstKnifeWindowStart.getDate() - 60);
+    const surgeriesWithKnife = await prisma.surgery.findMany({
+      where: { knifeOnSkinTime: { not: null, gte: firstKnifeWindowStart } },
+      orderBy: { knifeOnSkinTime: 'asc' },
+      select: {
+        id: true,
+        unit: true,
+        location: true,
+        procedureName: true,
+        knifeOnSkinTime: true,
+        scheduledTime: true,
+        surgeonName: true,
+        patient: { select: { name: true, folderNumber: true } },
+        surgeon: { select: { fullName: true } },
+        anesthetist: { select: { fullName: true } },
+      },
+    });
+
     const delayedTaskQueries = disciplinaryQueries.filter((q) =>
       ['READINESS_LATE', 'THEATRE_SETUP_LATE'].includes(q.queryType)
     );
@@ -195,6 +218,26 @@ export async function GET(request: NextRequest) {
       const monday = mondayOfWeek(new Date(r.date));
       const deadline = rosterDeadlineForWeek(monday);
       return r.uploadedAt > deadline;
+    });
+
+    // For each unit, on each day, the FIRST case (earliest knife-on-skin) is the
+    // one evaluated. If it started after 9:25 AM the start is flagged as late.
+    const firstCaseByUnitDay = new Map<string, (typeof surgeriesWithKnife)[number]>();
+    for (const s of surgeriesWithKnife) {
+      if (!s.knifeOnSkinTime) continue;
+      const kos = new Date(s.knifeOnSkinTime);
+      const dayKey = `${(s.unit || 'UNSPECIFIED').trim()}__${kos.getFullYear()}-${kos.getMonth()}-${kos.getDate()}`;
+      const existing = firstCaseByUnitDay.get(dayKey);
+      if (!existing || new Date(existing.knifeOnSkinTime as Date).getTime() > kos.getTime()) {
+        firstCaseByUnitDay.set(dayKey, s);
+      }
+    }
+
+    const lateFirstCaseRows = Array.from(firstCaseByUnitDay.values()).filter((s) => {
+      const kos = new Date(s.knifeOnSkinTime as Date);
+      const cutoff = new Date(kos);
+      cutoff.setHours(9, 25, 0, 0);
+      return kos.getTime() > cutoff.getTime();
     });
 
     const cancellationsItems: AuditSectionItem[] = cancellations.map((c) => ({
@@ -249,6 +292,22 @@ export async function GET(request: NextRequest) {
       audited: false,
       lastRecommendationAt: null,
     }));
+
+    const lateFirstCaseItems: AuditSectionItem[] = lateFirstCaseRows.map((s) => {
+      const kos = new Date(s.knifeOnSkinTime as Date);
+      const startStr = kos.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return {
+        id: s.id,
+        sourceType: 'late_first_case' as const,
+        title: `${s.unit || 'Unspecified Unit'} - First case late start`,
+        summary: `First knife-on-skin at ${startStr} (after 9:25 AM target) for ${s.procedureName}${s.patient?.name ? ` — ${s.patient.name}` : ''}`,
+        status: 'LATE_START',
+        occurredAt: kos.toISOString(),
+        staffInvolved: uniqueNonEmpty([s.surgeon?.fullName, s.surgeonName, s.anesthetist?.fullName]),
+        audited: false,
+        lastRecommendationAt: null,
+      };
+    });
 
     const disciplinaryItems: AuditSectionItem[] = disciplinaryQueries.map((q) => ({
       id: q.id,
@@ -355,6 +414,7 @@ export async function GET(request: NextRequest) {
       ...faultsItems,
       ...anonymousTipItems,
       ...securityReportItems,
+      ...lateFirstCaseItems,
     ];
 
     const reviewMap = await getReviewMap(allForReviews.map((x) => ({ sourceType: x.sourceType, id: x.id })));
@@ -380,6 +440,7 @@ export async function GET(request: NextRequest) {
       faults: withReviewState(faultsItems),
       anonymous_tips: withReviewState(anonymousTipItems),
       security_reports: withReviewState(securityReportItems),
+      late_first_case: withReviewState(lateFirstCaseItems),
     };
 
     if (section && section in sections) {

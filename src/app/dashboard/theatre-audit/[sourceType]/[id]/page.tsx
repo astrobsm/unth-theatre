@@ -59,6 +59,7 @@ const SOURCE_LABELS: Record<string, string> = {
   faults: 'Fault Record',
   anonymous_tips: 'Anonymous Report',
   security_reports: 'Security Report',
+  late_first_case: 'Late First Case (>9:25 AM)',
 };
 
 function formatDateTime(value: string) {

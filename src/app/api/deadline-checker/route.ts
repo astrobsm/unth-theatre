@@ -137,6 +137,105 @@ async function getTheatreSetupStatus(startOfDay: Date, endOfDay: Date) {
   return { delinquent, totalOnRoster: techRoster.length, totalCompleted: setups.length };
 }
 
+// ============================================================
+// WEEKLY DUTY ROSTER (Saturday 4:00 PM deadline)
+// ============================================================
+
+// Staff categories that must have a weekly roster uploaded.
+const ROSTER_CATEGORIES = [
+  'NURSES',
+  'ANAESTHETISTS',
+  'PORTERS',
+  'CLEANERS',
+  'ANAESTHETIC_TECHNICIANS',
+  'PHARMACISTS',
+  'RECOVERY_NURSES',
+] as const;
+
+// Department heads / officers responsible for each roster category, used as a
+// fallback when no previous uploader can be identified.
+const ROSTER_CATEGORY_ROLES: Record<string, string[]> = {
+  ANAESTHETISTS: ['CONSULTANT_ANAESTHETIST'],
+  NURSES: ['THEATRE_MANAGER'],
+  RECOVERY_NURSES: ['THEATRE_MANAGER'],
+  PHARMACISTS: ['PHARMACIST'],
+  ANAESTHETIC_TECHNICIANS: ['ANAESTHETIC_TECHNICIAN'],
+  PORTERS: ['THEATRE_MANAGER'],
+  CLEANERS: ['THEATRE_MANAGER'],
+};
+
+// Monday 00:00 of the week that follows the given date (the upcoming roster week).
+function upcomingWeekStart(from: Date): Date {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0);
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const daysUntilMonday = ((8 - day) % 7) || 7; // always the NEXT Monday
+  d.setDate(d.getDate() + daysUntilMonday);
+  return d;
+}
+
+// Determine which roster categories have NOT been uploaded for the upcoming week,
+// and who is responsible for each.
+async function getRosterSubmissionStatus(now: Date) {
+  const weekStart = upcomingWeekStart(now);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  // Previous week (for identifying the de-facto roster owner per category).
+  const prevWeekStart = new Date(weekStart);
+  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+
+  const missing: Array<{
+    category: string;
+    responsible: Array<{ id: string; fullName: string; role: string }>;
+  }> = [];
+
+  for (const category of ROSTER_CATEGORIES) {
+    const existing = await prisma.roster.count({
+      where: {
+        staffCategory: category as any,
+        date: { gte: weekStart, lt: weekEnd },
+      },
+    });
+
+    if (existing > 0) continue;
+
+    const responsible: Array<{ id: string; fullName: string; role: string }> = [];
+
+    // Identify responsible person(s): prefer whoever uploaded last week's roster.
+    const prevRosters = await prisma.roster.findMany({
+      where: {
+        staffCategory: category as any,
+        date: { gte: prevWeekStart, lt: weekStart },
+      },
+      select: { uploadedBy: true },
+    });
+    const uploaderIds = Array.from(new Set(prevRosters.map(r => r.uploadedBy).filter(Boolean)));
+    if (uploaderIds.length > 0) {
+      const uploaders = await prisma.user.findMany({
+        where: { id: { in: uploaderIds }, status: 'APPROVED' },
+        select: { id: true, fullName: true, role: true },
+      });
+      responsible.push(...uploaders);
+    }
+
+    // Fallback to the configured department-head roles.
+    if (responsible.length === 0) {
+      const roles = ROSTER_CATEGORY_ROLES[category] || [];
+      if (roles.length > 0) {
+        const heads = await prisma.user.findMany({
+          where: { role: { in: roles as any }, status: 'APPROVED' },
+          select: { id: true, fullName: true, role: true },
+        });
+        responsible.push(...heads);
+      }
+    }
+
+    missing.push({ category, responsible });
+  }
+
+  return { missing, weekStart };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -398,6 +497,117 @@ export async function GET(request: NextRequest) {
               type: 'THEATRE_SETUP_LATE',
               escalated: true,
             });
+          }
+        }
+      }
+    }
+
+    // ============================================================
+    // WEEKLY DUTY ROSTER: Upload next week's roster by Saturday 4:00 PM
+    // Reminders from 3:45 PM, Final warning 4:00 PM, Query at 5:00 PM
+    // (Saturday only — getDay() === 6)
+    // ============================================================
+    if (now.getDay() === 6) {
+      const rosterDeadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0);
+
+      // REMINDER + FINAL WARNING PHASE
+      if (action === 'check-reminders' || action === 'check-all') {
+        const isReminderWindow = currentHour === 15 && currentMinute >= 45;
+        const isFinalWarning = currentHour === 16;
+
+        if (isReminderWindow || isFinalWarning) {
+          const { missing } = await getRosterSubmissionStatus(now);
+          for (const { category, responsible } of missing) {
+            const label = category.replace(/_/g, ' ');
+            for (const person of responsible) {
+              try {
+                await prisma.notification.create({
+                  data: {
+                    userId: person.id,
+                    title: isFinalWarning
+                      ? `🚨 FINAL WARNING - ${label} Duty Roster`
+                      : `⚠️ ROSTER REMINDER - ${label}`,
+                    message: isFinalWarning
+                      ? `URGENT: The weekly duty roster for ${label} has NOT been uploaded for next week. The deadline is 4:00 PM today (Saturday). A MANAGEMENT QUERY will be automatically issued at 5:00 PM for non-compliance.`
+                      : `Reminder: The weekly duty roster for ${label} must be uploaded on the app for next week by 4:00 PM today (Saturday). Failure to comply is a queriable offence.`,
+                    type: isFinalWarning ? 'ROSTER_FINAL_WARNING' : 'ROSTER_REMINDER',
+                  },
+                });
+              } catch (e) {}
+              results.reminders.push({
+                unit: 'ROSTER',
+                category,
+                userId: person.id,
+                name: person.fullName,
+                type: isFinalWarning ? 'ROSTER_FINAL_WARNING' : 'ROSTER_REMINDER',
+                time: now.toISOString(),
+              });
+            }
+          }
+        }
+      }
+
+      // QUERY PHASE: 5:00 PM (1-hour grace after the 4:00 PM deadline)
+      if (action === 'check-deadlines' || action === 'check-all') {
+        if (currentHour >= 17) {
+          const { missing } = await getRosterSubmissionStatus(now);
+          for (const { category, responsible } of missing) {
+            const label = category.replace(/_/g, ' ');
+            for (const person of responsible) {
+              // Avoid duplicate query for the same person/category today.
+              const existingQuery = await prisma.disciplinaryQuery.findFirst({
+                where: {
+                  recipientId: person.id,
+                  recipientUnit: `ROSTER_${category}`,
+                  deadlineType: 'ROSTER_WEEKLY_4PM',
+                  createdAt: { gte: startOfDay, lte: endOfDay },
+                },
+              });
+              if (existingQuery) continue;
+
+              const query = await prisma.disciplinaryQuery.create({
+                data: {
+                  referenceNumber: generateRefNumber(),
+                  recipientId: person.id,
+                  recipientName: person.fullName,
+                  recipientRole: person.role,
+                  recipientUnit: `ROSTER_${category}`,
+                  queryType: 'ROSTER_NOT_SUBMITTED',
+                  subject: `Failure to Upload Weekly Duty Roster - ${label}`,
+                  description: `Dear ${person.fullName},\n\nThis is to formally query you for failure to create and upload the weekly duty roster for the ${label} unit on the Theatre Management Application by the stipulated deadline of 4:00 PM on Saturday, ${now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.\n\nAs communicated by Hospital Management, the weekly duty roster must be updated on the Application every Saturday by 4:00 PM. Failure to do so is regarded as an anti-progress action and a queriable offence, as it disrupts the coordination of activities in the Theatre Complex and places patient safety and institutional efficiency at avoidable risk.\n\nYou are hereby required to provide a written explanation for this failure within 24 hours of receipt of this query.\n\nSigned,\nTheatre Management\nUniversity of Nigeria Teaching Hospital, Ituku-Ozalla`,
+                  deadlineTime: rosterDeadline,
+                  deadlineType: 'ROSTER_WEEKLY_4PM',
+                  evidence: JSON.stringify({
+                    expectedAction: `Upload ${label} weekly duty roster`,
+                    deadline: 'Saturday 4:00 PM',
+                    queryIssuedAt: '5:00 PM',
+                    date: now.toISOString(),
+                  }),
+                  issuedByName: 'Theatre Management',
+                  issuedByTitle: 'University of Nigeria Teaching Hospital, Ituku-Ozalla',
+                },
+              });
+
+              try {
+                await prisma.notification.create({
+                  data: {
+                    userId: person.id,
+                    title: `📋 MANAGEMENT QUERY ISSUED - ${label} Roster`,
+                    message: `A management query (Ref: ${query.referenceNumber}) has been issued to you for failure to upload the weekly duty roster for ${label} by the Saturday 4:00 PM deadline. Please respond within 24 hours.`,
+                    type: 'DISCIPLINARY_QUERY',
+                  },
+                });
+              } catch (e) {}
+
+              results.queries.push({
+                unit: 'ROSTER',
+                category,
+                userId: person.id,
+                name: person.fullName,
+                queryRef: query.referenceNumber,
+                type: 'ROSTER_NOT_SUBMITTED',
+              });
+            }
           }
         }
       }

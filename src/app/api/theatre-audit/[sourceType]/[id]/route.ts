@@ -495,8 +495,8 @@ export async function GET(
       monday.setDate(monday.getDate() + diff);
       monday.setHours(0, 0, 0, 0);
       const deadline = new Date(monday);
-      deadline.setDate(deadline.getDate() - 3);
-      deadline.setHours(12, 0, 0, 0);
+      deadline.setDate(deadline.getDate() - 2);
+      deadline.setHours(16, 0, 0, 0);
 
       entry = {
         id: item.id,
@@ -514,7 +514,7 @@ export async function GET(
         {
           id: 'deadline',
           title: 'Roster Submission Deadline',
-          description: 'Thursday 12:00 noon submission cut-off',
+          description: 'Saturday 4:00 PM weekly submission cut-off',
           timestamp: deadline.toISOString(),
         },
         {
@@ -525,6 +525,74 @@ export async function GET(
           actor: item.uploadedBy,
         }
       );
+    } else if (sourceType === 'late_first_case') {
+      const item = await prisma.surgery.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          unit: true,
+          location: true,
+          procedureName: true,
+          scheduledDate: true,
+          scheduledTime: true,
+          knifeOnSkinTime: true,
+          surgeryEndTime: true,
+          surgeonName: true,
+          patient: { select: { name: true, folderNumber: true } },
+          surgeon: { select: { fullName: true } },
+          anesthetist: { select: { fullName: true } },
+        },
+      });
+      if (!item) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
+      if (!item.knifeOnSkinTime) {
+        return NextResponse.json({ error: 'No knife-on-skin time recorded for this case' }, { status: 404 });
+      }
+
+      const kos = new Date(item.knifeOnSkinTime);
+      const target = new Date(kos);
+      target.setHours(9, 25, 0, 0);
+      const minutesLate = Math.max(0, Math.round((kos.getTime() - target.getTime()) / 60000));
+      const startStr = kos.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+      entry = {
+        id: item.id,
+        sourceType,
+        title: `${item.unit || 'Unspecified Unit'} - First case late start`,
+        status: 'LATE_START',
+        occurredAt: item.knifeOnSkinTime,
+        details: {
+          ...item,
+          targetStart: '09:25',
+          actualStart: startStr,
+          minutesLate,
+        },
+      };
+      staffInvolved = [item.surgeon?.fullName, item.surgeonName, item.anesthetist?.fullName].filter(
+        Boolean
+      ) as string[];
+      timeline.push(
+        {
+          id: 'target',
+          title: 'Target First Knife-on-Skin',
+          description: '09:25 AM daily target for the first case of each unit',
+          timestamp: target.toISOString(),
+        },
+        {
+          id: 'knife',
+          title: 'Actual First Knife-on-Skin',
+          description: `${item.procedureName}${item.patient?.name ? ` — ${item.patient.name}` : ''} (${minutesLate} min after target)`,
+          timestamp: item.knifeOnSkinTime.toISOString(),
+        },
+        item.surgeryEndTime
+          ? {
+              id: 'end',
+              title: 'Surgery Ended',
+              description: 'End of first case',
+              timestamp: item.surgeryEndTime.toISOString(),
+            }
+          : null
+      );
+      timeline = timeline.filter(Boolean) as TimelineEvent[];
     } else {
       return NextResponse.json({ error: 'Unsupported source type' }, { status: 400 });
     }

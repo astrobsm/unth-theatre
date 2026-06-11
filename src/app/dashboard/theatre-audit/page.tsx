@@ -13,7 +13,8 @@ type AuditSourceType =
   | 'mortalities'
   | 'faults'
   | 'anonymous_tips'
-  | 'security_reports';
+  | 'security_reports'
+  | 'late_first_case';
 
 type AuditSectionItem = {
   id: string;
@@ -48,6 +49,7 @@ const SECTION_META: Record<AuditSourceType, { label: string; short: string }> = 
   faults: { label: 'Fault Reports', short: 'Faults' },
   anonymous_tips: { label: 'Anonymous Reports', short: 'Anonymous' },
   security_reports: { label: 'Security Reports', short: 'Security' },
+  late_first_case: { label: 'Late First Cases (>9:25 AM)', short: 'Late Starts' },
 };
 
 const SOURCE_ORDER: AuditSourceType[] = [
@@ -60,6 +62,7 @@ const SOURCE_ORDER: AuditSourceType[] = [
   'faults',
   'anonymous_tips',
   'security_reports',
+  'late_first_case',
 ];
 
 function formatDateTime(value: string) {

@@ -26,6 +26,18 @@
     {
       "path": "/api/deadline-checker?action=check-deadlines",
       "schedule": "15 8 * * 1-6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-reminders",
+      "schedule": "45-59 15 * * 6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-reminders",
+      "schedule": "0-59 16 * * 6"
+    },
+    {
+      "path": "/api/deadline-checker?action=check-deadlines",
+      "schedule": "0 17 * * 6"
     }
   ]
 }
