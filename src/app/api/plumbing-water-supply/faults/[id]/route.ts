@@ -191,6 +191,96 @@ export async function PATCH(
         return NextResponse.json({ message: 'Notes updated' });
       }
 
+      // A plumber claims an unassigned fault and takes ownership of the work.
+      case 'CLAIM': {
+        await prisma.plumbingFault.update({
+          where: { id: params.id },
+          data: {
+            assignedToId: session.user.id,
+            assignedToName: session.user.name || '',
+            assignedAt: new Date(),
+            acknowledgedById: session.user.id,
+            acknowledgedAt: new Date(),
+            status: 'IN_PROGRESS',
+          },
+        });
+        return NextResponse.json({ message: 'Fault claimed' });
+      }
+
+      // A plumber logs an action they have taken on the fault. Entries are
+      // appended to the notes field as a timestamped, authored action log so
+      // the full history of work done is preserved.
+      case 'LOG_ACTION': {
+        const actionText = (data.action_taken || data.actionTaken || '').toString().trim();
+        if (!actionText) {
+          return NextResponse.json({ error: 'action_taken text is required' }, { status: 400 });
+        }
+
+        const existing = await prisma.plumbingFault.findUnique({
+          where: { id: params.id },
+          select: { notes: true, status: true },
+        });
+        if (!existing) {
+          return NextResponse.json({ error: 'Fault not found' }, { status: 404 });
+        }
+
+        const author = `${session.user.name || 'Plumber'} (${session.user.role})`;
+        const entry = `[${new Date().toISOString()}] ${author}: ${actionText}`;
+        const updatedNotes = existing.notes ? `${existing.notes}\n${entry}` : entry;
+
+        // Logging an action implies work has started — advance the status so the
+        // fault is no longer sitting as merely REPORTED/ACKNOWLEDGED/ASSIGNED.
+        const shouldStartWork = ['REPORTED', 'ACKNOWLEDGED', 'ASSIGNED'].includes(existing.status);
+
+        await prisma.plumbingFault.update({
+          where: { id: params.id },
+          data: {
+            notes: updatedNotes,
+            ...(shouldStartWork ? { status: 'IN_PROGRESS' } : {}),
+            // Take ownership if not already assigned.
+            ...(data.takeOwnership
+              ? {
+                  assignedToId: session.user.id,
+                  assignedToName: session.user.name || '',
+                  assignedAt: new Date(),
+                }
+              : {}),
+          },
+        });
+
+        return NextResponse.json({ message: 'Action logged' });
+      }
+
+      // Directly set the fault status (any valid PlumbingFaultStatus value).
+      case 'UPDATE_STATUS': {
+        const allowed = [
+          'REPORTED',
+          'ACKNOWLEDGED',
+          'ASSIGNED',
+          'IN_PROGRESS',
+          'PARTS_ORDERED',
+          'RESOLVED',
+          'CLOSED',
+        ];
+        if (!allowed.includes(data.status)) {
+          return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+        }
+
+        const updateData: any = { status: data.status };
+        if (data.status === 'RESOLVED') {
+          updateData.resolvedById = session.user.id;
+          updateData.resolvedByName = session.user.name || '';
+          updateData.resolvedAt = new Date();
+        }
+
+        await prisma.plumbingFault.update({
+          where: { id: params.id },
+          data: updateData,
+        });
+
+        return NextResponse.json({ message: 'Status updated' });
+      }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }

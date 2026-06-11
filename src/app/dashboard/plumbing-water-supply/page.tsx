@@ -21,6 +21,7 @@ import {
   Filter,
   Waves,
   ShowerHead,
+  ClipboardList,
 } from 'lucide-react';
 
 // ===== INTERFACES =====
@@ -198,6 +199,10 @@ export default function PlumbingWaterSupplyPage() {
   const [showStatusForm, setShowStatusForm] = useState(false);
   const [showReadinessForm, setShowReadinessForm] = useState(false);
   const [showResolveForm, setShowResolveForm] = useState<string | null>(null);
+  const [showActionForm, setShowActionForm] = useState<string | null>(null);
+
+  // Log-action (progress note) form
+  const [actionText, setActionText] = useState('');
 
   // Filters
   const [faultStatusFilter, setFaultStatusFilter] = useState('');
@@ -346,6 +351,32 @@ export default function PlumbingWaterSupplyPage() {
       }
     } catch (error) {
       console.error('Error performing action:', error);
+    }
+  };
+
+  const handleLogAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showActionForm || actionText.trim().length < 3) {
+      alert('Please describe the action you have taken.');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/plumbing-water-supply/faults/${showActionForm}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'LOG_ACTION', action_taken: actionText.trim() }),
+      });
+      if (res.ok) {
+        setShowActionForm(null);
+        setActionText('');
+        fetchData();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Server error' }));
+        alert(err.error || 'Failed to log action.');
+      }
+    } catch (error) {
+      console.error('Error logging action:', error);
+      alert('Network error. Please try again.');
     }
   };
 
@@ -853,6 +884,18 @@ export default function PlumbingWaterSupplyPage() {
                       </div>
                     )}
 
+                    {/* Action log — chronological record of actions taken by plumbers */}
+                    {fault.notes && (
+                      <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm">
+                        <p className="font-semibold text-blue-800 mb-1">Action Log</p>
+                        <ul className="space-y-1 text-gray-700">
+                          {fault.notes.split('\n').filter(Boolean).map((line, i) => (
+                            <li key={i} className="border-l-2 border-blue-300 pl-2">{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     {/* Actions */}
                     <div className="flex flex-wrap gap-2 mt-4">
                       {fault.status === 'REPORTED' && (isPlumber || isManager) && (
@@ -863,6 +906,15 @@ export default function PlumbingWaterSupplyPage() {
                           <Eye className="w-3 h-3" /> Acknowledge
                         </button>
                       )}
+                      {/* Plumber claims an unassigned fault to take ownership */}
+                      {fault.status !== 'RESOLVED' && fault.status !== 'CLOSED' && !fault.assignedTo && isPlumber && (
+                        <button
+                          onClick={() => handleFaultAction(fault.id, 'CLAIM')}
+                          className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 flex items-center gap-1"
+                        >
+                          <Wrench className="w-3 h-3" /> Claim &amp; Start
+                        </button>
+                      )}
                       {(fault.status === 'REPORTED' || fault.status === 'ACKNOWLEDGED') && isManager && (
                         <div className="flex items-center gap-2">
                           <select
@@ -871,6 +923,7 @@ export default function PlumbingWaterSupplyPage() {
                             }}
                             className="px-2 py-1.5 border rounded-lg text-sm"
                             defaultValue=""
+                            aria-label="Assign plumber"
                           >
                             <option value="" disabled>Assign to...</option>
                             {plumbers.map(p => (
@@ -886,6 +939,37 @@ export default function PlumbingWaterSupplyPage() {
                         >
                           <Play className="w-3 h-3" /> Start Work
                         </button>
+                      )}
+                      {/* Plumbers log the action they have taken at any open stage */}
+                      {fault.status !== 'RESOLVED' && fault.status !== 'CLOSED' && (isPlumber || isManager) && (
+                        <button
+                          onClick={() => { setShowActionForm(fault.id); setActionText(''); }}
+                          className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-1"
+                        >
+                          <ClipboardList className="w-3 h-3" /> Log Action Taken
+                        </button>
+                      )}
+                      {/* Plumbers/managers can directly update the fault status */}
+                      {fault.status !== 'CLOSED' && (isPlumber || isManager) && (
+                        <select
+                          value={fault.status}
+                          onChange={e => {
+                            const next = e.target.value;
+                            if (next === fault.status) return;
+                            if (next === 'RESOLVED') { setShowResolveForm(fault.id); return; }
+                            handleFaultAction(fault.id, 'UPDATE_STATUS', { status: next });
+                          }}
+                          className="px-2 py-1.5 border rounded-lg text-sm"
+                          aria-label="Update fault status"
+                        >
+                          <option value="REPORTED">Reported</option>
+                          <option value="ACKNOWLEDGED">Acknowledged</option>
+                          <option value="ASSIGNED">Assigned</option>
+                          <option value="IN_PROGRESS">In Progress</option>
+                          <option value="PARTS_ORDERED">Parts Ordered</option>
+                          <option value="RESOLVED">Resolved</option>
+                          <option value="CLOSED">Closed</option>
+                        </select>
                       )}
                       {fault.status === 'IN_PROGRESS' && isPlumber && (
                         <button
@@ -1465,6 +1549,44 @@ export default function PlumbingWaterSupplyPage() {
                 </button>
                 <button type="submit" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
                   Confirm Resolution
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== LOG ACTION TAKEN MODAL ===== */}
+      {showActionForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <ClipboardList className="w-6 h-6 text-indigo-600" />
+              Log Action Taken
+            </h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Record the work you have done on this fault. Each entry is added to the
+              fault&apos;s action log with your name and the time. Logging an action moves
+              the fault to <span className="font-semibold">In Progress</span>.
+            </p>
+            <form onSubmit={handleLogAction} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Action Taken *</label>
+                <textarea
+                  required
+                  value={actionText}
+                  onChange={e => setActionText(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows={4}
+                  placeholder="e.g., Isolated the supply line, replaced the leaking gate valve, awaiting replacement washer..."
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button type="button" onClick={() => { setShowActionForm(null); setActionText(''); }} className="px-4 py-2 bg-gray-200 rounded-lg">
+                  Cancel
+                </button>
+                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4" /> Save Action
                 </button>
               </div>
             </form>
