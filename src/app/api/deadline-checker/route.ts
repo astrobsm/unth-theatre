@@ -72,6 +72,13 @@ async function hasSubmittedToday(unit: string, startOfDay: Date, endOfDay: Date)
       });
       return { submitted: reports.length > 0, staffIds: reports.map(r => r.reportedById) };
     }
+    case 'WATER_SUPPLY': {
+      const reports = await prisma.waterSupplyReadiness.findMany({
+        where: { readinessDate: dateFilter },
+        select: { loggedById: true },
+      });
+      return { submitted: reports.length > 0, staffIds: reports.map(r => r.loggedById) };
+    }
     default:
       return { submitted: true, staffIds: [] };
   }
@@ -84,6 +91,7 @@ async function getResponsibleStaff(unit: string): Promise<Array<{ id: string; fu
     LAUNDRY: ['LAUNDRY_SUPERVISOR', 'LAUNDRY_STAFF'],
     POWER_HOUSE: ['WORKS_SUPERVISOR', 'POWER_PLANT_OPERATOR'],
     OXYGEN: ['OXYGEN_UNIT_SUPERVISOR'],
+    WATER_SUPPLY: ['WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR'],
   };
 
   const roles = roleMap[unit] || [];
@@ -148,7 +156,7 @@ export async function GET(request: NextRequest) {
     // READINESS UNITS: CSSD, Laundry, Power House, Oxygen
     // Deadline: 5:00 PM, Reminders from 4:45 PM, Query at 6:00 PM
     // ============================================================
-    const readinessUnits = ['CSSD', 'LAUNDRY', 'POWER_HOUSE', 'OXYGEN'];
+    const readinessUnits = ['CSSD', 'LAUNDRY', 'POWER_HOUSE', 'OXYGEN', 'WATER_SUPPLY'];
 
     for (const unit of readinessUnits) {
       const { submitted } = await hasSubmittedToday(unit, startOfDay, endOfDay);
