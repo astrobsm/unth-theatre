@@ -82,6 +82,7 @@ export default function PACUAssessmentDetailPage() {
   const params = useParams();
   const [assessment, setAssessment] = useState<PACUAssessment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'aldrete' | 'discharge'>('overview');
   
   // Vital Signs Form
@@ -144,6 +145,7 @@ export default function PACUAssessmentDetailPage() {
     try {
       const response = await fetch(`/api/pacu/${params.id}`);
       if (response.ok) {
+        setNotFound(false);
         const data = await response.json();
         setAssessment(data);
         
@@ -176,6 +178,8 @@ export default function PACUAssessmentDetailPage() {
           dischargeInstructions: '',
           wardNurseHandover: ''
         });
+      } else if (response.status === 404) {
+        setNotFound(true);
       }
     } catch (error) {
       console.error('Error fetching assessment:', error);
@@ -385,10 +389,35 @@ export default function PACUAssessmentDetailPage() {
     }
   };
 
-  if (loading || !assessment) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg">Loading assessment...</div>
+      </div>
+    );
+  }
+
+  if (notFound || !assessment) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-4 text-center">
+        <div className="text-2xl font-semibold text-gray-800">Recovery (PACU) record not found</div>
+        <p className="text-gray-600 max-w-md">
+          This recovery assessment may have been discharged, removed, or the link is no longer valid.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push('/dashboard/pacu')}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            Back to Recovery List
+          </button>
+          <button
+            onClick={() => router.back()}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
