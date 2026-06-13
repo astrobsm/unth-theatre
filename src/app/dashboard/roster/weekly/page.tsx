@@ -21,20 +21,20 @@ const GROUPS: GroupCard[] = [
   { slug: 'recovery-nurses',        title: 'Nurse Anaesthetists',   blurb: 'Morning & Night shifts in PACU.',                               icon: Bed,          color: 'bg-purple-100 text-purple-700 border-purple-200' },
 ];
 
-function nextThursdayDeadline(): { date: Date; isPast: boolean } {
-  // Deadline is THIS week's Thursday at 12:00 noon (local time).
+function nextSaturdayDeadline(): { date: Date; isPast: boolean } {
+  // Deadline is THIS week's Saturday at 5:00 PM (local time).
   const now = new Date();
-  const day = now.getDay(); // 0=Sun .. 4=Thu
-  const offsetToThu = (4 - day + 7) % 7; // days until Thu
-  const thu = new Date(now);
-  thu.setDate(now.getDate() + offsetToThu);
-  thu.setHours(12, 0, 0, 0);
-  const isPast = day > 4 || (day === 4 && now.getHours() >= 12);
-  return { date: thu, isPast };
+  const day = now.getDay(); // 0=Sun .. 6=Sat
+  const offsetToSat = (6 - day + 7) % 7; // days until Sat
+  const sat = new Date(now);
+  sat.setDate(now.getDate() + offsetToSat);
+  sat.setHours(17, 0, 0, 0);
+  const isPast = day === 6 && now.getHours() >= 17;
+  return { date: sat, isPast };
 }
 
 export default function WeeklyRosterHubPage() {
-  const { date, isPast } = nextThursdayDeadline();
+  const { date, isPast } = nextSaturdayDeadline();
   const formatted = date.toLocaleString(undefined, {
     weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
@@ -53,7 +53,7 @@ export default function WeeklyRosterHubPage() {
           Weekly Roster Forms
         </h1>
         <p className="text-gray-600 mt-2">
-          Each unit lead fills the roster for their group <strong>every Thursday before 12:00 noon</strong> for the upcoming week.
+          Each unit lead fills the roster for their group <strong>every Saturday before 5:00 PM</strong> for the upcoming week.
         </p>
       </div>
 

@@ -53,10 +53,10 @@ function mondayOfWeek(date: Date): Date {
 }
 
 function rosterDeadlineForWeek(weekStartMonday: Date): Date {
-  // Deadline for the upcoming week's roster is the Saturday before, 4:00 PM (16:00).
+  // Deadline for the upcoming week's roster is the Saturday before, 5:00 PM (17:00).
   const deadline = new Date(weekStartMonday);
   deadline.setDate(deadline.getDate() - 2);
-  deadline.setHours(16, 0, 0, 0);
+  deadline.setHours(17, 0, 0, 0);
   return deadline;
 }
 

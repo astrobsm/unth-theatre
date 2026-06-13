@@ -138,7 +138,7 @@ async function getTheatreSetupStatus(startOfDay: Date, endOfDay: Date) {
 }
 
 // ============================================================
-// WEEKLY DUTY ROSTER (Saturday 4:00 PM deadline)
+// WEEKLY DUTY ROSTER (Saturday 5:00 PM deadline)
 // ============================================================
 
 // Staff categories that must have a weekly roster uploaded.
@@ -503,17 +503,17 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================================
-    // WEEKLY DUTY ROSTER: Upload next week's roster by Saturday 4:00 PM
-    // Reminders from 3:45 PM, Final warning 4:00 PM, Query at 5:00 PM
+    // WEEKLY DUTY ROSTER: Upload next week's roster by Saturday 5:00 PM
+    // Reminders from 4:45 PM, Final warning 5:00 PM, Query at 6:00 PM
     // (Saturday only — getDay() === 6)
     // ============================================================
     if (now.getDay() === 6) {
-      const rosterDeadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0);
+      const rosterDeadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0, 0);
 
       // REMINDER + FINAL WARNING PHASE
       if (action === 'check-reminders' || action === 'check-all') {
-        const isReminderWindow = currentHour === 15 && currentMinute >= 45;
-        const isFinalWarning = currentHour === 16;
+        const isReminderWindow = currentHour === 16 && currentMinute >= 45;
+        const isFinalWarning = currentHour === 17;
 
         if (isReminderWindow || isFinalWarning) {
           const { missing } = await getRosterSubmissionStatus(now);
@@ -528,8 +528,8 @@ export async function GET(request: NextRequest) {
                       ? `🚨 FINAL WARNING - ${label} Duty Roster`
                       : `⚠️ ROSTER REMINDER - ${label}`,
                     message: isFinalWarning
-                      ? `URGENT: The weekly duty roster for ${label} has NOT been uploaded for next week. The deadline is 4:00 PM today (Saturday). A MANAGEMENT QUERY will be automatically issued at 5:00 PM for non-compliance.`
-                      : `Reminder: The weekly duty roster for ${label} must be uploaded on the app for next week by 4:00 PM today (Saturday). Failure to comply is a queriable offence.`,
+                      ? `URGENT: The weekly duty roster for ${label} has NOT been uploaded for next week. The deadline is 5:00 PM today (Saturday). A MANAGEMENT QUERY will be automatically issued at 6:00 PM for non-compliance.`
+                      : `Reminder: The weekly duty roster for ${label} must be uploaded on the app for next week by 5:00 PM today (Saturday). Failure to comply is a queriable offence.`,
                     type: isFinalWarning ? 'ROSTER_FINAL_WARNING' : 'ROSTER_REMINDER',
                   },
                 });
@@ -547,9 +547,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // QUERY PHASE: 5:00 PM (1-hour grace after the 4:00 PM deadline)
+      // QUERY PHASE: 6:00 PM (1-hour grace after the 5:00 PM deadline)
       if (action === 'check-deadlines' || action === 'check-all') {
-        if (currentHour >= 17) {
+        if (currentHour >= 18) {
           const { missing } = await getRosterSubmissionStatus(now);
           for (const { category, responsible } of missing) {
             const label = category.replace(/_/g, ' ');
@@ -559,7 +559,7 @@ export async function GET(request: NextRequest) {
                 where: {
                   recipientId: person.id,
                   recipientUnit: `ROSTER_${category}`,
-                  deadlineType: 'ROSTER_WEEKLY_4PM',
+                  deadlineType: 'ROSTER_WEEKLY_5PM',
                   createdAt: { gte: startOfDay, lte: endOfDay },
                 },
               });
@@ -574,13 +574,13 @@ export async function GET(request: NextRequest) {
                   recipientUnit: `ROSTER_${category}`,
                   queryType: 'ROSTER_NOT_SUBMITTED',
                   subject: `Failure to Upload Weekly Duty Roster - ${label}`,
-                  description: `Dear ${person.fullName},\n\nThis is to formally query you for failure to create and upload the weekly duty roster for the ${label} unit on the Theatre Management Application by the stipulated deadline of 4:00 PM on Saturday, ${now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.\n\nAs communicated by Hospital Management, the weekly duty roster must be updated on the Application every Saturday by 4:00 PM. Failure to do so is regarded as an anti-progress action and a queriable offence, as it disrupts the coordination of activities in the Theatre Complex and places patient safety and institutional efficiency at avoidable risk.\n\nYou are hereby required to provide a written explanation for this failure within 24 hours of receipt of this query.\n\nSigned,\nTheatre Management\nUniversity of Nigeria Teaching Hospital, Ituku-Ozalla`,
+                  description: `Dear ${person.fullName},\n\nThis is to formally query you for failure to create and upload the weekly duty roster for the ${label} unit on the Theatre Management Application by the stipulated deadline of 5:00 PM on Saturday, ${now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.\n\nAs communicated by Hospital Management, the weekly duty roster must be updated on the Application every Saturday before 5:00 PM. Failure to do so is regarded as an anti-progress action and a queriable offence, as it disrupts the coordination of activities in the Theatre Complex and places patient safety and institutional efficiency at avoidable risk.\n\nYou are hereby required to provide a written explanation for this failure within 24 hours of receipt of this query.\n\nSigned,\nTheatre Management\nUniversity of Nigeria Teaching Hospital, Ituku-Ozalla`,
                   deadlineTime: rosterDeadline,
-                  deadlineType: 'ROSTER_WEEKLY_4PM',
+                  deadlineType: 'ROSTER_WEEKLY_5PM',
                   evidence: JSON.stringify({
                     expectedAction: `Upload ${label} weekly duty roster`,
-                    deadline: 'Saturday 4:00 PM',
-                    queryIssuedAt: '5:00 PM',
+                    deadline: 'Saturday 5:00 PM',
+                    queryIssuedAt: '6:00 PM',
                     date: now.toISOString(),
                   }),
                   issuedByName: 'Theatre Management',
@@ -593,7 +593,7 @@ export async function GET(request: NextRequest) {
                   data: {
                     userId: person.id,
                     title: `📋 MANAGEMENT QUERY ISSUED - ${label} Roster`,
-                    message: `A management query (Ref: ${query.referenceNumber}) has been issued to you for failure to upload the weekly duty roster for ${label} by the Saturday 4:00 PM deadline. Please respond within 24 hours.`,
+                    message: `A management query (Ref: ${query.referenceNumber}) has been issued to you for failure to upload the weekly duty roster for ${label} by the Saturday 5:00 PM deadline. Please respond within 24 hours.`,
                     type: 'DISCIPLINARY_QUERY',
                   },
                 });

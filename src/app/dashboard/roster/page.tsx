@@ -353,7 +353,7 @@ export default function RosterPage() {
             <h2 className="text-lg font-bold text-primary-900">Weekly Roster Forms</h2>
             <p className="text-sm text-primary-800 mt-1">
               Unit leads — submit your group&apos;s weekly roster (Nurses, Anaesthetists, Anaesthetic Technicians,
-              Porters, Cleaners, Pharmacists, Nurse Anaesthetists) <strong>every Thursday before 12:00 noon</strong>.
+              Porters, Cleaners, Pharmacists, Nurse Anaesthetists) <strong>every Saturday before 5:00 PM</strong>.
               Separate forms cover the Main Theatre Complex and the Accident &amp; Emergency Theatre.
             </p>
             <p className="text-xs font-semibold text-primary-700 mt-2">Open weekly forms →</p>

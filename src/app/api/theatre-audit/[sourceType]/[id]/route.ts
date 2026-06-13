@@ -496,7 +496,7 @@ export async function GET(
       monday.setHours(0, 0, 0, 0);
       const deadline = new Date(monday);
       deadline.setDate(deadline.getDate() - 2);
-      deadline.setHours(16, 0, 0, 0);
+      deadline.setHours(17, 0, 0, 0);
 
       entry = {
         id: item.id,
@@ -514,7 +514,7 @@ export async function GET(
         {
           id: 'deadline',
           title: 'Roster Submission Deadline',
-          description: 'Saturday 4:00 PM weekly submission cut-off',
+          description: 'Saturday 5:00 PM weekly submission cut-off',
           timestamp: deadline.toISOString(),
         },
         {

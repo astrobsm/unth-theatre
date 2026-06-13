@@ -12,7 +12,7 @@
  *     bookings must go through the ORM platform. Links to the booking guide.
  *  2. Weekly Roster Upload — to each Head of Department: as directed by Hospital
  *     Management through the CMD, the unit's weekly duty roster must be uploaded
- *     on the Theatre Management Application every Thursday before 12:00 noon.
+ *     on the Theatre Management Application every Saturday before 5:00 PM.
  *     Includes a step-by-step upload guide.
  *
  * Every letter is copied to the CMD, C-MAC and DA.
@@ -55,7 +55,7 @@ const REF_PREFIX = 'UNTH/THTR/ORM';
 const ROSTER_REF_PREFIX = 'UNTH/THTR/ROSTER';
 const EFFECTIVE_DATE = 'Monday, 15th June 2026';
 // User-facing weekly roster upload deadline (see /dashboard/roster/weekly).
-const ROSTER_DEADLINE = 'every Thursday before 12:00 noon';
+const ROSTER_DEADLINE = 'every Saturday before 5:00 PM';
 const TODAY = new Date().toLocaleDateString('en-GB', {
   day: '2-digit',
   month: 'long',

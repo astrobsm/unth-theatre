@@ -241,8 +241,8 @@ export default function HodLetterPrintPage() {
             will be retired thereafter. Heads of Department, Unit Heads and Roster
             Officers are kindly requested to ensure that the roster for the week
             beginning Sunday, 10th May 2026 is published on the platform on or before
-            <strong> Saturday, 9th May 2026, 12:00 noon</strong>, and that subsequent
-            weekly rosters are uploaded every <strong>Thursday before 12:00 noon</strong>
+            <strong> Saturday, 9th May 2026, 5:00 PM</strong>, and that subsequent
+            weekly rosters are uploaded every <strong>Saturday before 5:00 PM</strong>
             as already standardised.
           </p>
         </div>
