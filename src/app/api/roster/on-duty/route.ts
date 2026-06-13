@@ -51,10 +51,12 @@ type StaffEntry = {
  *       anaesthetist: StaffEntry | null,           // first ANAESTHETIST on duty
  *       anaestheticTechnician: StaffEntry | null,  // first ANAESTHETIC_TECHNICIAN
  *       scrubNurse: StaffEntry | null,             // first NURSE on duty
+ *       circulatingNurse: StaffEntry | null,       // second NURSE on duty
  *       cleaner: StaffEntry | null,                // first CLEANER on duty
  *       porter: StaffEntry | null,                 // first PORTER on duty
+ *       pharmacist: StaffEntry | null,             // first PHARMACIST on duty
  *     },
- *     candidates: { anaesthetists: StaffEntry[], anaestheticTechnicians: ..., nurses: ..., cleaners: ..., porters: ... },
+ *     candidates: { anaesthetists: StaffEntry[], anaestheticTechnicians: ..., nurses: ..., cleaners: ..., porters: ..., pharmacists: ... },
  *     rostersFound: number,
  *   }
  */
@@ -146,6 +148,7 @@ export async function GET(request: NextRequest) {
       nurses: [] as StaffEntry[],
       cleaners: [] as StaffEntry[],
       porters: [] as StaffEntry[],
+      pharmacists: [] as StaffEntry[],
     };
 
     for (const r of rosters) {
@@ -165,6 +168,9 @@ export async function GET(request: NextRequest) {
           break;
         case "PORTERS":
           candidates.porters.push(entry);
+          break;
+        case "PHARMACISTS":
+          candidates.pharmacists.push(entry);
           break;
       }
     }
@@ -190,8 +196,10 @@ export async function GET(request: NextRequest) {
       anaesthetist: sortedAnaesthetists[0] ?? null,
       anaestheticTechnician: candidates.anaestheticTechnicians[0] ?? null,
       scrubNurse: candidates.nurses[0] ?? null,
+      circulatingNurse: candidates.nurses[1] ?? null,
       cleaner: candidates.cleaners[0] ?? null,
       porter: candidates.porters[0] ?? null,
+      pharmacist: candidates.pharmacists[0] ?? null,
     };
 
     return NextResponse.json({

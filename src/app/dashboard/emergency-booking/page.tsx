@@ -8,7 +8,7 @@ import { FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
-  User, Building2, Siren, Phone, Calendar, MapPin, Navigation,
+  User, Users, Building2, Siren, Phone, Calendar, MapPin, Navigation,
   Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2
 } from 'lucide-react';
 
@@ -200,6 +200,24 @@ interface EmergencyBooking {
   anesthetist?: { fullName: string; phoneNumber?: string };
 }
 
+interface OnDutyStaff {
+  userId: string;
+  name: string;
+  phoneNumber: string | null;
+}
+
+interface OnDutyTeam {
+  shift: string;
+  rostersFound: number;
+  team: {
+    scrubNurse: OnDutyStaff | null;
+    circulatingNurse: OnDutyStaff | null;
+    porter: OnDutyStaff | null;
+    cleaner: OnDutyStaff | null;
+    pharmacist: OnDutyStaff | null;
+  };
+}
+
 interface TeamMember {
   id: string;
   userName: string;
@@ -283,6 +301,7 @@ export default function EmergencyBookingPage() {
   const [filter, setFilter] = useState<string>('');
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [teamData, setTeamData] = useState<Record<string, TeamMember[]>>({});
+  const [onDutyTeams, setOnDutyTeams] = useState<Record<string, OnDutyTeam>>({});
   const [reviewData, setReviewData] = useState<Record<string, ReviewData[]>>({});
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -387,6 +406,39 @@ export default function EmergencyBookingPage() {
     const interval = setInterval(fetchBookings, 30000);
     return () => clearInterval(interval);
   }, [fetchBookings]);
+
+  // Fetch the on-duty theatre team (scrub/circulating nurse, porter, cleaner,
+  // pharmacist) from the duty roster for each booking's date/shift so the names
+  // can be shown on the booking card.
+  useEffect(() => {
+    const controller = new AbortController();
+    const run = async () => {
+      const results = await Promise.all(
+        bookings.map(async (b) => {
+          const when = b.requiredByTime || b.requestedAt;
+          if (!when) return null;
+          try {
+            const res = await fetch(
+              `/api/roster/on-duty?date=${encodeURIComponent(when)}`,
+              { signal: controller.signal }
+            );
+            if (!res.ok) return null;
+            const data: OnDutyTeam = await res.json();
+            return [b.id, data] as const;
+          } catch {
+            return null;
+          }
+        })
+      );
+      const next: Record<string, OnDutyTeam> = {};
+      for (const r of results) {
+        if (r) next[r[0]] = r[1];
+      }
+      setOnDutyTeams(next);
+    };
+    if (bookings.length) run();
+    return () => controller.abort();
+  }, [bookings]);
 
   // Fetch team availability when a booking is expanded
   const fetchTeamAvailability = useCallback(async (bookingId: string) => {
@@ -717,6 +769,38 @@ export default function EmergencyBookingPage() {
                             <span>Required by: <strong>{new Date(booking.requiredByTime).toLocaleString()}</strong></span>
                           </div>
                         )}
+                        {(() => {
+                          const od = onDutyTeams[booking.id];
+                          const t = od?.team;
+                          if (!t) return null;
+                          const rows: Array<[string, string | undefined]> = [
+                            ['Scrub Nurse', t.scrubNurse?.name],
+                            ['Circulating Nurse', t.circulatingNurse?.name],
+                            ['Porter', t.porter?.name],
+                            ['Cleaner', t.cleaner?.name],
+                            ['Pharmacist', t.pharmacist?.name],
+                          ];
+                          const hasAny = rows.some(([, v]) => v);
+                          return (
+                            <div className="mt-1 pt-1 border-t border-gray-100">
+                              <p className="text-xs font-semibold text-gray-500 mb-0.5">
+                                On-Duty Team{od?.shift ? ` (${od.shift} shift)` : ''}
+                              </p>
+                              {hasAny ? (
+                                rows.map(([label, value]) =>
+                                  value ? (
+                                    <div key={label} className="flex items-center gap-1">
+                                      <Users className="h-4 w-4 text-teal-600" />
+                                      <span>{label}: <strong>{value}</strong></span>
+                                    </div>
+                                  ) : null
+                                )
+                              ) : (
+                                <span className="text-xs text-gray-400">No roster team found for this date/shift.</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
