@@ -298,15 +298,15 @@ export default function SurgeriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Surgery Scheduling</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Surgery Scheduling</h1>
           <p className="text-gray-600 mt-1">Manage surgical procedures and bookings</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           {/* Sync Status Indicator */}
           <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
               !isOnline ? 'bg-gray-100 text-gray-600 border-gray-200' :
               isSyncing ? 'bg-blue-50 text-blue-600 border-blue-200' :
               'bg-green-50 text-green-600 border-green-200'
@@ -337,11 +337,11 @@ export default function SurgeriesPage() {
               <RefreshCw className={`w-5 h-5 text-gray-500 ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
           </div>
-          <Link href="/dashboard/surgeries/completed" className="btn-secondary flex items-center">
+          <Link href="/dashboard/surgeries/completed" className="btn-secondary flex items-center justify-center whitespace-nowrap flex-1 sm:flex-none">
             Completed Surgeries
           </Link>
-          <Link href="/dashboard/surgeries/new" className="btn-primary flex items-center">
-            <Plus className="w-5 h-5 mr-2" />
+          <Link href="/dashboard/surgeries/new" className="btn-primary flex items-center justify-center whitespace-nowrap flex-1 sm:flex-none">
+            <Plus className="w-5 h-5 mr-2 shrink-0" />
             Book Surgery
           </Link>
         </div>

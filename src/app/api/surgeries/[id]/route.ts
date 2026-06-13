@@ -18,94 +18,132 @@ export async function GET(
 
     const { id } = params;
 
-    const surgery = await prisma.surgery.findUnique({
-      where: { id },
-      include: {
-        patient: true,
-        surgeon: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
+    let surgery;
+    try {
+      surgery = await prisma.surgery.findUnique({
+        where: { id },
+        include: {
+          patient: true,
+          surgeon: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
           },
-        },
-        assistantSurgeon: {
-          select: {
-            id: true,
-            fullName: true,
+          assistantSurgeon: {
+            select: {
+              id: true,
+              fullName: true,
+            },
           },
-        },
-        anesthetist: {
-          select: {
-            id: true,
-            fullName: true,
+          anesthetist: {
+            select: {
+              id: true,
+              fullName: true,
+            },
           },
-        },
-        teamMembers: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                fullName: true,
+          teamMembers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                },
               },
             },
           },
-        },
-        items: {
-          include: {
-            item: true,
-          },
-        },
-        whoChecklists: true,
-        cancellation: true,
-        mortality: true,
-        movements: {
-          orderBy: {
-            timestamp: 'desc',
-          },
-        },
-        safetyCheck: true,
-        holdingAreaAssessment: {
-          include: {
-            redAlerts: true,
-          },
-        },
-        intraOperativeRecord: true,
-        pacuAssessment: {
-          include: {
-            vitalSigns: {
-              orderBy: {
-                recordedAt: 'desc',
-              },
-              take: 10,
-            },
-            redAlerts: true,
-          },
-        },
-        surgicalTiming: true,
-        surgicalCount: true,
-        anesthesiaRecord: {
-          include: {
-            vitalSignsRecords: {
-              orderBy: {
-                recordedAt: 'desc',
-              },
-              take: 20,
-            },
-            medicationRecords: {
-              orderBy: {
-                administeredAt: 'desc',
-              },
+          items: {
+            include: {
+              item: true,
             },
           },
+          whoChecklists: true,
+          cancellation: true,
+          mortality: true,
+          movements: {
+            orderBy: {
+              timestamp: 'desc',
+            },
+          },
+          safetyCheck: true,
+          holdingAreaAssessment: {
+            include: {
+              redAlerts: true,
+            },
+          },
+          intraOperativeRecord: true,
+          pacuAssessment: {
+            include: {
+              vitalSigns: {
+                orderBy: {
+                  recordedAt: 'desc',
+                },
+                take: 10,
+              },
+              redAlerts: true,
+            },
+          },
+          surgicalTiming: true,
+          surgicalCount: true,
+          anesthesiaRecord: {
+            include: {
+              vitalSignsRecords: {
+                orderBy: {
+                  recordedAt: 'desc',
+                },
+                take: 20,
+              },
+              medicationRecords: {
+                orderBy: {
+                  administeredAt: 'desc',
+                },
+              },
+            },
+          },
+          preOpReviews: true,
+          prescriptions: true,
+          bloodRequests: true,
+          emergencyAlerts: true,
+          investigations: true,
         },
-        preOpReviews: true,
-        prescriptions: true,
-        bloodRequests: true,
-        emergencyAlerts: true,
-        investigations: true,
-      },
-    });
+      });
+    } catch (richError) {
+      // If a related table/column is out of sync (e.g. a pending migration in
+      // production), the rich query throws. Fall back to a minimal query so the
+      // surgery detail page can still load core information instead of erroring.
+      console.error('Rich surgery fetch failed, falling back to minimal query:', richError);
+      surgery = await prisma.surgery.findUnique({
+        where: { id },
+        include: {
+          patient: true,
+          surgeon: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+          assistantSurgeon: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          anesthetist: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          items: {
+            include: {
+              item: true,
+            },
+          },
+        },
+      });
+    }
 
     if (!surgery) {
       return NextResponse.json({ error: 'Surgery not found' }, { status: 404 });
