@@ -195,7 +195,7 @@ async function buildOrmPdf(unit: SurgicalUnit) {
   doc.setFontSize(10.5);
   doc.text('Signed,', M, y);
   y += 26;
-  doc.text('Director, Theatre Complex', M, y);
+  doc.text('CHAIRMAN THEATRE COMMERCIALIZED UNIT', M, y);
   y += 14;
   doc.setFont('helvetica', 'normal');
   doc.text('University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu.', M, y);
@@ -335,7 +335,7 @@ async function buildRosterPdf(dept: RosterDepartment) {
   doc.setFontSize(10.5);
   doc.text('Signed,', M, y);
   y += 26;
-  doc.text('Director, Theatre Complex', M, y);
+  doc.text('CHAIRMAN THEATRE COMMERCIALIZED UNIT', M, y);
   y += 14;
   doc.setFont('helvetica', 'normal');
   doc.text('University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu.', M, y);
@@ -596,7 +596,7 @@ export default function TheatreLettersPage() {
           <p className="mb-6">Thank you.</p>
 
           <p className="font-semibold">Signed,</p>
-          <p className="mt-4 font-semibold">Director, Theatre Complex</p>
+          <p className="mt-4 font-semibold">CHAIRMAN THEATRE COMMERCIALIZED UNIT</p>
           <p>University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu.</p>
 
           <div className="mt-6">
@@ -671,7 +671,7 @@ export default function TheatreLettersPage() {
           <p className="mb-6">Thank you.</p>
 
           <p className="font-semibold">Signed,</p>
-          <p className="mt-4 font-semibold">Director, Theatre Complex</p>
+          <p className="mt-4 font-semibold">CHAIRMAN THEATRE COMMERCIALIZED UNIT</p>
           <p>University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu.</p>
 
           <div className="mt-6">
