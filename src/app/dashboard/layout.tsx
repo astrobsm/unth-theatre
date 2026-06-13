@@ -181,6 +181,7 @@ export default function DashboardLayout({
 
     // === REPORTS & ADMINISTRATION ===
     { href: '/dashboard/announcements', icon: Volume2, label: 'Announcements', badge: 'NEW' },
+    { href: '/dashboard/unit-booking-letter', icon: FileText, label: 'Official Letters', badge: 'NEW' },
     { href: '/hod-letter', icon: FileText, label: 'HOD Onboarding Letter', badge: 'NEW', external: true },
     { href: '/dashboard/theatre-meals', icon: ChefHat, label: 'Theatre Meals', badge: 'NEW' },
     { href: '/dashboard/meals/order', icon: ChefHat, label: 'Order Meal', badge: 'NEW' },
