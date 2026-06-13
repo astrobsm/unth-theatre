@@ -173,6 +173,83 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Roles allowed to update the status of an emergency booking
+const STATUS_UPDATE_ROLES = [
+  'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN',
+  'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON',
+  'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ADMIN', 'SYSTEM_ADMINISTRATOR',
+  'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR',
+];
+
+const VALID_BOOKING_STATUSES = [
+  'SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED',
+] as const;
+
+const updateStatusSchema = z.object({
+  bookingId: z.string().min(1, 'Booking ID is required'),
+  status: z.enum(VALID_BOOKING_STATUSES),
+});
+
+// PATCH - Update the status of an emergency surgery booking
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const role = session.user?.role;
+    if (!role || !STATUS_UPDATE_ROLES.includes(role)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to update emergency booking status' },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const { bookingId, status } = updateStatusSchema.parse(body);
+
+    const existing = await prisma.emergencySurgeryBooking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, status: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    const booking = await prisma.emergencySurgeryBooking.update({
+      where: { id: bookingId },
+      data: { status: status as any },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'UPDATE',
+        tableName: 'EmergencySurgeryBooking',
+        recordId: bookingId,
+        changes: JSON.stringify({ status: { from: existing.status, to: status } }),
+      },
+    });
+
+    return NextResponse.json({ booking, message: `Status updated to ${status.replace(/_/g, ' ')}` });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.errors },
+        { status: 400 }
+      );
+    }
+    console.error('Error updating emergency booking status:', error);
+    return NextResponse.json(
+      { error: 'Failed to update emergency booking status' },
+      { status: 500 }
+    );
+  }
+}
+
 // POST - Create new emergency surgery booking + auto-trigger emergency alert
 export async function POST(request: NextRequest) {
   try {

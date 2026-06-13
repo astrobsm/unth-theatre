@@ -293,6 +293,19 @@ const EMERGENCY_TEAM_USER_ROLES = [
   'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR',
 ];
 
+// Roles allowed to change the overall status of an emergency booking.
+const STATUS_UPDATE_ROLES = [
+  'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN',
+  'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON',
+  'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ADMIN', 'SYSTEM_ADMINISTRATOR',
+  'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR',
+];
+
+// Selectable statuses for the status-update control on each booking card.
+const BOOKING_STATUS_OPTIONS = [
+  'SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED',
+];
+
 export default function EmergencyBookingPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -304,6 +317,7 @@ export default function EmergencyBookingPage() {
   const [onDutyTeams, setOnDutyTeams] = useState<Record<string, OnDutyTeam>>({});
   const [reviewData, setReviewData] = useState<Record<string, ReviewData[]>>({});
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewBooking, setReviewBooking] = useState<EmergencyBooking | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -477,6 +491,29 @@ export default function EmergencyBookingPage() {
   };
 
   // Respond with availability + geo-location
+  // Update the overall status of an emergency booking (SUBMITTED → APPROVED, etc.)
+  const handleStatusChange = async (bookingId: string, status: string) => {
+    setUpdatingStatus(bookingId);
+    try {
+      const res = await fetch('/api/emergency-booking', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, status }),
+      });
+      if (res.ok) {
+        fetchBookings();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to update status');
+      }
+    } catch (e) {
+      console.error('Error updating status:', e);
+      alert('Failed to update status');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
   const handleRespond = async (bookingId: string, status: string) => {
     setRespondingTo(bookingId);
     try {
@@ -608,6 +645,8 @@ export default function EmergencyBookingPage() {
 
   const isAnaesthetist = session?.user?.role && ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role);
 
+  const canUpdateStatus = session?.user?.role && STATUS_UPDATE_ROLES.includes(session.user.role);
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center h-96">
@@ -699,6 +738,27 @@ export default function EmergencyBookingPage() {
                           <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[booking.status] || ''}`}>
                             {booking.status.replace(/_/g, ' ')}
                           </span>
+                          {canUpdateStatus && (
+                            <label className="flex items-center gap-1 text-xs">
+                              <span className="sr-only">Update status</span>
+                              <select
+                                aria-label={`Update status for ${booking.procedureName}`}
+                                value={booking.status}
+                                disabled={updatingStatus === booking.id}
+                                onChange={(e) => handleStatusChange(booking.id, e.target.value)}
+                                className="border border-gray-300 rounded px-2 py-1 text-xs font-medium bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                              >
+                                {BOOKING_STATUS_OPTIONS.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s.replace(/_/g, ' ')}
+                                  </option>
+                                ))}
+                              </select>
+                              {updatingStatus === booking.id && (
+                                <RefreshCw className="h-3 w-3 animate-spin text-gray-500" />
+                              )}
+                            </label>
+                          )}
                           {booking.bloodRequired && (
                             <span className="px-2 py-1 rounded text-xs font-bold bg-red-600 text-white">
                               BLOOD REQUIRED ({booking.bloodUnits} units)
