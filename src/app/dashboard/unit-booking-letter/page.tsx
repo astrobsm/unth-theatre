@@ -166,7 +166,7 @@ async function buildOrmPdf(unit: SurgicalUnit) {
   // Body
   para(`Dear Head, ${unit.name},`);
   para(
-    `This is to formally notify your unit that, with effect from ${EFFECTIVE_DATE}, the Theatre Complex will no longer recognise or accept any surgery or case booked on paper. All surgical bookings — elective and emergency — must be made through the Operating-Room Management (ORM) platform.`,
+    `This is to formally notify your unit that, with effect from ${EFFECTIVE_DATE}, the Theatre Complex will no longer recognise or accept any surgery or case booked on paper. All surgical bookings — elective and emergency — must be made through the Operative Resource Manager (ORM) platform.`,
   );
   para(
     'Accordingly, kindly inform all your departmental and unit staff that they should no longer receive or type any cases for distribution. Hand-written and typed booking lists circulated for distribution will not be honoured by the theatre, the anaesthesia team or the pharmacy. Every case must instead be entered directly on the ORM platform by the requesting surgical team.',
@@ -561,7 +561,7 @@ export default function TheatreLettersPage() {
           <p className="mb-3">
             This is to formally notify your unit that, with effect from <strong>{EFFECTIVE_DATE}</strong>, the Theatre
             Complex will no longer recognise or accept any surgery or case booked on paper. All surgical bookings —
-            elective and emergency — must be made through the Operating-Room Management (ORM) platform.
+            elective and emergency — must be made through the Operative Resource Manager (ORM) platform.
           </p>
           <p className="mb-3">
             Accordingly, kindly inform all your departmental and unit staff that they should no longer receive or type
