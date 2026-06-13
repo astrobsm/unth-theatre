@@ -46,9 +46,16 @@ type Theatre = {
   status: string;
   allocations?: Array<{
     surgicalUnit?: string | null;
+    surgeryType?: string | null;
     date: string;
     startTime: string;
   }>;
+};
+
+type SurgicalUnitOption = {
+  id: string;
+  name: string;
+  subspecialty: string;
 };
 
 export default function NewEmergencyBookingPage() {
@@ -63,7 +70,11 @@ export default function NewEmergencyBookingPage() {
   const [onDutyError, setOnDutyError] = useState('');
   const [prePack, setPrePack] = useState<PrePackPayload>({ consumableRequests: [], drugDressingRequests: [] });
   const [theatres, setTheatres] = useState<Theatre[]>([]);
+  const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnitOption[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  // Tracks whether the anaesthetist field still reflects the on-call roster
+  // pick (true) or was manually overridden by the user (false).
+  const [anesthetistAuto, setAnesthetistAuto] = useState(true);
 
   const [form, setForm] = useState({
     patientName: '',
@@ -95,10 +106,11 @@ export default function NewEmergencyBookingPage() {
   useEffect(() => {
     async function fetchStaff() {
       try {
-        const [surgeonRes, anesthetistRes, theatresRes] = await Promise.all([
+        const [surgeonRes, anesthetistRes, theatresRes, unitsRes] = await Promise.all([
           fetch('/api/users?role=SURGEON&status=APPROVED'),
           fetch('/api/users?role=ANAESTHETIST&status=APPROVED'),
           fetch('/api/theatres'),
+          fetch('/api/surgical-units?activeOnly=true'),
         ]);
         if (surgeonRes.ok) {
           const data = await surgeonRes.json();
@@ -112,14 +124,20 @@ export default function NewEmergencyBookingPage() {
           const data = await theatresRes.json();
           setTheatres(Array.isArray(data) ? data : []);
         }
+        if (unitsRes.ok) {
+          const data = await unitsRes.json();
+          setSurgicalUnits(Array.isArray(data) ? data : []);
+        }
       } catch {}
     }
     fetchStaff();
   }, []);
 
-  // Auto-fill theatre from surgical unit + selected date using active theatre allocations.
+  // Auto-fill theatre from the allocation designated for EMERGENCY surgeries on
+  // the selected date. Falls back to a theatre allocated to the chosen surgical
+  // unit when no dedicated emergency theatre is rostered that day.
   useEffect(() => {
-    if (!form.surgicalUnit || !form.requiredByTime) return;
+    if (!form.requiredByTime) return;
     const controller = new AbortController();
     const run = async () => {
       try {
@@ -129,12 +147,22 @@ export default function NewEmergencyBookingPage() {
         });
         if (!res.ok) return;
         const data: Theatre[] = await res.json();
-        const unit = form.surgicalUnit.trim().toLowerCase();
-        const matched = data.find((t) =>
+        // 1) Theatre designated for emergency surgeries that day.
+        const emergencyTheatre = data.find((t) =>
           Array.isArray(t.allocations)
-            ? t.allocations.some((a) => (a.surgicalUnit || '').trim().toLowerCase() === unit)
+            ? t.allocations.some((a) => (a.surgeryType || '').toUpperCase() === 'EMERGENCY')
             : false,
         );
+        // 2) Fallback: theatre allocated to the selected surgical unit.
+        const unit = form.surgicalUnit.trim().toLowerCase();
+        const unitTheatre = unit
+          ? data.find((t) =>
+              Array.isArray(t.allocations)
+                ? t.allocations.some((a) => (a.surgicalUnit || '').trim().toLowerCase() === unit)
+                : false,
+            )
+          : undefined;
+        const matched = emergencyTheatre || unitTheatre;
         if (matched) {
           setForm((prev) => ({
             ...prev,
@@ -245,13 +273,14 @@ export default function NewEmergencyBookingPage() {
         }
         const data: OnDutyTeam = await res.json();
         setOnDuty(data);
-        // Auto-select the anaesthetist on duty if one is found and the user
-        // hasn't already picked someone manually.
-        if (data.team.anaesthetist?.userId) {
-          setForm((prev) =>
-            prev.anesthetistId ? prev : { ...prev, anesthetistId: data.team.anaesthetist!.userId }
-          );
-        }
+        // Auto-select the anaesthetist on call duty for the selected day from the
+        // roster. Keep it in sync as the date changes unless the user has manually
+        // overridden the field.
+        setForm((prev) => {
+          if (!anesthetistAuto && prev.anesthetistId) return prev;
+          const onCallId = data.team.anaesthetist?.userId || '';
+          return { ...prev, anesthetistId: onCallId };
+        });
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         setOnDuty(null);
@@ -421,7 +450,17 @@ export default function NewEmergencyBookingPage() {
             </div>
             <div>
               <label className="label">Surgical Unit *</label>
-              <input name="surgicalUnit" value={form.surgicalUnit} onChange={handleChange} required className="input-field" placeholder="e.g. General Surgery" />
+              <select name="surgicalUnit" value={form.surgicalUnit} onChange={handleChange} required className="input-field">
+                <option value="">Select surgical unit</option>
+                {surgicalUnits.map((u) => (
+                  <option key={u.id} value={u.name}>
+                    {u.name}{u.subspecialty ? ` — ${u.subspecialty}` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Selected from the surgical units database.
+              </p>
             </div>
             <div>
               <label className="label">Theatre to be used</label>
@@ -445,7 +484,7 @@ export default function NewEmergencyBookingPage() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Auto-filled from allocation when surgical unit and date are selected.
+                Auto-filled with the theatre designated for emergency surgeries on the selected day.
               </p>
             </div>
             <div className="md:col-span-2">
@@ -466,7 +505,11 @@ export default function NewEmergencyBookingPage() {
               <select
                 name="anesthetistId"
                 value={form.anesthetistId}
-                onChange={handleChange}
+                onChange={(e) => {
+                  // A manual change stops the auto-sync with the on-call roster.
+                  setAnesthetistAuto(false);
+                  handleChange(e);
+                }}
                 disabled={form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE'}
                 className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -474,10 +517,24 @@ export default function NewEmergencyBookingPage() {
                 {anesthetists.map(a => (
                   <option key={a.id} value={a.id}>{a.fullName}</option>
                 ))}
+                {onDuty?.team.anaesthetist?.userId &&
+                  !anesthetists.some((a) => a.id === onDuty.team.anaesthetist!.userId) && (
+                    <option value={onDuty.team.anaesthetist.userId}>
+                      {onDuty.team.anaesthetist.name} (on call)
+                    </option>
+                  )}
               </select>
-              {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') && (
+              {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') ? (
                 <p className="mt-1 text-xs text-green-700">
                   No anaesthetist needed for {form.anaesthesiaType} anaesthesia — anaesthetic review is not required.
+                </p>
+              ) : onDuty?.team.anaesthetist?.userId && anesthetistAuto ? (
+                <p className="mt-1 text-xs text-blue-700">
+                  Auto-filled from the duty roster: {onDuty.team.anaesthetist.name} (on-call anaesthetist for the selected day).
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-gray-500">
+                  Auto-filled from the duty roster as the on-call anaesthetist for the selected day.
                 </p>
               )}
             </div>
