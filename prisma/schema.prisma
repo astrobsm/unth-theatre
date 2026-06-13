@@ -4915,6 +4915,11 @@ model PreOperativeVisit {
   age          Int?
   gender       String?
 
+  // Patient clinical history
+  allergies         String? // Known drug/other allergies (null/empty = none recorded)
+  previousSurgeries String? // Past surgical history, if any
+  comorbidities     String? // Co-existing medical conditions, if any
+
   // Booked surgery details
   procedureName String
   surgicalUnit  String

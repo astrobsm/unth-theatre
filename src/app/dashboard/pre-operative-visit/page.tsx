@@ -44,6 +44,9 @@ interface PreOpVisit {
   overallStatus: string;
   visitDate: string;
   visitedByName: string;
+  allergies: string | null;
+  previousSurgeries: string | null;
+  comorbidities: string | null;
   patientAvailableInWard: boolean;
   surgicalFeePaymentStatus: string;
   consentStatus: string;
@@ -110,6 +113,9 @@ export default function PreOperativeVisitPage() {
 
   // Form state
   const [formData, setFormData] = useState({
+    allergies: '',
+    previousSurgeries: '',
+    comorbidities: '',
     patientAvailableInWard: true,
     surgicalFeePaymentStatus: 'UNKNOWN',
     consentStatus: 'PENDING',
@@ -128,6 +134,9 @@ export default function PreOperativeVisitPage() {
 
   const resetForm = () => {
     setFormData({
+      allergies: '',
+      previousSurgeries: '',
+      comorbidities: '',
       patientAvailableInWard: true,
       surgicalFeePaymentStatus: 'UNKNOWN',
       consentStatus: 'PENDING',
@@ -186,6 +195,9 @@ export default function PreOperativeVisitPage() {
         body: JSON.stringify({
           surgeryId: selectedSurgery.surgeryId,
           ...formData,
+          allergies: formData.allergies || null,
+          previousSurgeries: formData.previousSurgeries || null,
+          comorbidities: formData.comorbidities || null,
           pendingInvestigations: formData.pendingInvestigations || null,
           overallNotes: formData.overallNotes || null,
           nurseSignature: formData.nurseSignature || null,
@@ -333,6 +345,51 @@ export default function PreOperativeVisitPage() {
 
           {/* Assessment Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Allergies */}
+            <div className="space-y-2 md:col-span-2">
+              <label htmlFor="preop-allergies" className="block text-sm font-semibold text-red-700">
+                Allergies (drug / other) — leave blank if none
+              </label>
+              <input
+                id="preop-allergies"
+                type="text"
+                value={formData.allergies}
+                onChange={(e) => setFormData(p => ({ ...p, allergies: e.target.value }))}
+                placeholder="e.g., Penicillin, Latex, Iodine — or 'None known'"
+                className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            {/* Previous Surgeries */}
+            <div className="space-y-2">
+              <label htmlFor="preop-previous-surgeries" className="block text-sm font-semibold text-gray-700">
+                Previous Surgeries (if any)
+              </label>
+              <input
+                id="preop-previous-surgeries"
+                type="text"
+                value={formData.previousSurgeries}
+                onChange={(e) => setFormData(p => ({ ...p, previousSurgeries: e.target.value }))}
+                placeholder="e.g., Appendectomy 2019, CS 2021"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            {/* Co-morbidities */}
+            <div className="space-y-2">
+              <label htmlFor="preop-comorbidities" className="block text-sm font-semibold text-gray-700">
+                Co-morbidities (if any)
+              </label>
+              <input
+                id="preop-comorbidities"
+                type="text"
+                value={formData.comorbidities}
+                onChange={(e) => setFormData(p => ({ ...p, comorbidities: e.target.value }))}
+                placeholder="e.g., Hypertension, Diabetes, Asthma"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
             {/* Patient Available in Ward */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-gray-700">
@@ -780,6 +837,24 @@ export default function PreOperativeVisitPage() {
 
                 {expandedVisit === visit.id && (
                   <div className="px-6 pb-4 border-t border-gray-100 pt-4">
+                    {(visit.allergies || visit.previousSurgeries || visit.comorbidities) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <span className="text-gray-500">Allergies:</span>{' '}
+                          <span className={visit.allergies ? 'text-red-600 font-medium' : 'text-gray-400'}>
+                            {visit.allergies || 'None recorded'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Previous Surgeries:</span>{' '}
+                          <span className="text-gray-700">{visit.previousSurgeries || 'None recorded'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Co-morbidities:</span>{' '}
+                          <span className="text-gray-700">{visit.comorbidities || 'None recorded'}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         {visit.patientAvailableInWard ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
