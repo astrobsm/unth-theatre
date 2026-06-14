@@ -21,6 +21,7 @@ const READ_ROLES = Array.from(new Set([...SURGEON_ROLES, ...PHARMACY_ROLES, "REC
 
 const medicationItemSchema = z.object({
   drugName: z.string().min(1),
+  category: z.string().optional(),
   dosage: z.string().optional(),
   route: z.string().optional(),
   frequency: z.string().optional(),
