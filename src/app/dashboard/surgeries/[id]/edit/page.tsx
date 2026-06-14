@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, Calendar, MapPin, AlertCircle, History } from 'lucide-react';
+import { WARDS } from '@/lib/constants';
 
 interface Theatre { id: string; name: string; location: string }
 interface Surgeon { id: string; fullName: string; role?: string }
@@ -56,6 +57,11 @@ export default function EditSurgeryPage() {
   const [needStirups, setNeedStirups] = useState(false);
   const [needMontrellMattress, setNeedMontrellMattress] = useState(false);
 
+  // Patient ward (the patient may be moved to a different ward after booking)
+  const [patientWard, setPatientWard] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [originalWard, setOriginalWard] = useState('');
+
   // Audit history of reschedules / updates
   const [history, setHistory] = useState<any[]>([]);
 
@@ -90,6 +96,11 @@ export default function EditSurgeryPage() {
         setNeedStereo(!!s.needStereo);
         setNeedStirups(!!s.needStirups);
         setNeedMontrellMattress(!!s.needMontrellMattress);
+
+        const ward = s.patient?.ward || '';
+        setPatientWard(ward);
+        setOriginalWard(ward);
+        setPatientName(s.patient?.name || '');
 
         if (tRes.ok) setTheatres(await tRes.json());
         if (suRes.ok) {
@@ -141,13 +152,15 @@ export default function EditSurgeryPage() {
           needStereo,
           needStirups,
           needMontrellMattress,
+          patientWard,
         }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || 'Failed to update case');
       }
-      setSuccess('Case updated. Date / time / location changes are tracked in the audit log.');
+      setSuccess('Case updated. Ward / location / theatre changes are tracked in the audit log.');
+      setOriginalWard(patientWard);
       // Refresh audit history
       try {
         const a = await fetch(`/api/audit-logs?tableName=surgeries&recordId=${id}`);
@@ -176,7 +189,8 @@ export default function EditSurgeryPage() {
         <div>
           <h1 className="text-2xl font-bold">Edit Booked Case</h1>
           <p className="text-sm text-gray-500">
-            Changes to <strong>date</strong>, <strong>time</strong>, <strong>location</strong> and <strong>theatre</strong> are recorded in the audit log.
+            Update the patient&apos;s <strong>ward</strong> and other booking details. The scheduled
+            <strong> date</strong> and <strong>time</strong> stay fixed, and every change is recorded in the audit log.
           </p>
         </div>
       </div>
@@ -193,25 +207,60 @@ export default function EditSurgeryPage() {
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
+        {/* Patient ward — editable in case the patient is moved after booking */}
+        <div className="card">
+          <h2 className="font-semibold mb-1">Patient Ward / Location</h2>
+          <p className="text-xs text-gray-500 mb-3">
+            {patientName ? <>For <strong>{patientName}</strong>. </> : null}
+            Change the ward if the patient has been transferred since the case was booked.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label" htmlFor="patientWard">Current Ward</label>
+              <select
+                id="patientWard"
+                value={patientWard}
+                onChange={(e) => setPatientWard(e.target.value)}
+                className="input-field"
+              >
+                <option value="">— Select ward —</option>
+                {WARDS.map((w) => <option key={w} value={w}>{w}</option>)}
+                {patientWard && !WARDS.includes(patientWard as any) && (
+                  <option value={patientWard}>{patientWard}</option>
+                )}
+              </select>
+            </div>
+            {patientWard !== originalWard && (
+              <div className="flex items-end">
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 w-full">
+                  Ward will change from <strong>{originalWard || '—'}</strong> to <strong>{patientWard || '—'}</strong> and be logged.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="label flex items-center gap-1"><Calendar className="w-4 h-4" /> Date *</label>
+            <label className="label flex items-center gap-1"><Calendar className="w-4 h-4" /> Date (fixed)</label>
             <input
               type="date"
-              required
               value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
-              className="input-field"
+              readOnly
+              disabled
+              title="The scheduled date cannot be changed here"
+              className="input-field bg-gray-100 cursor-not-allowed text-gray-600"
             />
           </div>
           <div>
-            <label className="label">Time *</label>
+            <label className="label">Time (fixed)</label>
             <input
               type="time"
-              required
               value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-              className="input-field"
+              readOnly
+              disabled
+              title="The scheduled time cannot be changed here"
+              className="input-field bg-gray-100 cursor-not-allowed text-gray-600"
             />
           </div>
 
@@ -393,6 +442,7 @@ const FIELD_LABELS: Record<string, string> = {
   scheduledTime: 'Time',
   location: 'Location',
   theatreId: 'Theatre',
+  patientWard: 'Patient ward',
   unit: 'Surgical unit',
   subspecialty: 'Subspecialty',
   surgeonId: 'Surgeon',

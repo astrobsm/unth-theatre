@@ -173,6 +173,7 @@ export async function PUT(
     // Check if surgery exists
     const existingSurgery = await prisma.surgery.findUnique({
       where: { id },
+      include: { patient: true },
     });
 
     if (!existingSurgery) {
@@ -219,6 +220,7 @@ export async function PUT(
       remarks,
       depositAmount,
       depositConfirmed,
+      patientWard,
     } = body;
 
     const updateData: any = {};
@@ -268,6 +270,23 @@ export async function PUT(
       },
     });
 
+    // Patient ward transfer (the patient may move wards after booking).
+    let wardChange: { from: any; to: any } | null = null;
+    if (
+      patientWard !== undefined &&
+      existingSurgery.patientId &&
+      typeof patientWard === 'string' &&
+      patientWard.trim() &&
+      patientWard.trim() !== (existingSurgery.patient?.ward || '')
+    ) {
+      const newWard = patientWard.trim();
+      await prisma.patient.update({
+        where: { id: existingSurgery.patientId },
+        data: { ward: newWard },
+      });
+      wardChange = { from: existingSurgery.patient?.ward || null, to: newWard };
+    }
+
     // Log the update
     // Detect critical reschedule changes (date, time, location, theatre) and log a dedicated entry
     const reschedule: Record<string, { from: any; to: any }> = {};
@@ -282,6 +301,9 @@ export async function PUT(
     }
     if (theatreId !== undefined && (theatreId || null) !== (existingSurgery.theatreId || null)) {
       reschedule.theatreId = { from: existingSurgery.theatreId, to: theatreId || null };
+    }
+    if (wardChange) {
+      reschedule.patientWard = wardChange;
     }
 
     if (Object.keys(reschedule).length > 0) {
