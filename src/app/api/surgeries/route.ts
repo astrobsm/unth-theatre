@@ -12,8 +12,8 @@ const surgerySchema = z.object({
   surgeonName: z.string(),
   unit: z.string(),
   subspecialty: z.string(),
-  location: z.string().optional(),
-  theatreId: z.string().optional(),
+  location: z.string().nullish(),
+  theatreId: z.string().nullish(),
   indication: z.string(),
   procedureName: z.string(),
   scheduledDate: z.string(),
@@ -25,7 +25,7 @@ const surgerySchema = z.object({
   needDiathermy: z.boolean().default(false),
   needStereo: z.boolean().default(false),
   needMontrellMattress: z.boolean().default(false),
-  otherSpecialNeeds: z.string().optional(),
+  otherSpecialNeeds: z.string().nullish(),
   // Clinical Summary collected on the booking form. Persisted on the Patient record
   // so the Pharmacy page (and other downstream views) can display them.
   comorbiditiesList: z.array(z.string()).optional(),

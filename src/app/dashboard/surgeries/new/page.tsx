@@ -500,12 +500,41 @@ export default function NewSurgeryPage() {
 
       if (response.ok) {
         router.push('/dashboard/surgeries');
-      } else {
-        const error = await response.json();
-        setError(error.error || 'Failed to schedule surgery');
+        return;
       }
+
+      // Read the body safely — the server may return JSON (our handlers) or a
+      // non-JSON platform error (e.g. 413 payload too large, 504 timeout).
+      const raw = await response.text();
+      let message = '';
+      try {
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed) {
+          message = parsed.error || '';
+          if (Array.isArray(parsed.details) && parsed.details.length) {
+            const fields = parsed.details
+              .map((d: any) => (Array.isArray(d.path) ? d.path.join('.') : d.path) + (d.message ? `: ${d.message}` : ''))
+              .filter(Boolean)
+              .join('; ');
+            if (fields) message = `${message ? message + ' — ' : ''}${fields}`;
+          }
+        }
+      } catch {
+        // Body was not JSON — surface a trimmed snippet so the cause is visible.
+        message = raw ? raw.slice(0, 300) : '';
+      }
+
+      if (response.status === 413) {
+        message = 'The uploaded consent file is too large for the server. Please upload a file under 4 MB and try again.';
+      }
+
+      setError(message || `Failed to schedule surgery (HTTP ${response.status}).`);
     } catch (error) {
-      setError('An error occurred while scheduling the surgery');
+      setError(
+        error instanceof Error
+          ? `Network error while scheduling the surgery: ${error.message}`
+          : 'An error occurred while scheduling the surgery'
+      );
     } finally {
       setLoading(false);
     }
