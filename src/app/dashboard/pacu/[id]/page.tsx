@@ -431,7 +431,7 @@ export default function PACUAssessmentDetailPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <button
             onClick={() => router.back()}
@@ -439,7 +439,7 @@ export default function PACUAssessmentDetailPage() {
           >
             ← Back to PACU List
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             PACU Recovery Monitoring
           </h1>
           <p className="text-gray-600 mt-1">
@@ -447,11 +447,11 @@ export default function PACUAssessmentDetailPage() {
           </p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={exportDischargePDF}
             disabled={generatingPDF}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"
+            className="bg-blue-600 text-white px-4 sm:px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium flex-1 sm:flex-none whitespace-nowrap"
           >
             {generatingPDF ? (
               <>
@@ -473,7 +473,7 @@ export default function PACUAssessmentDetailPage() {
           
           <button
             onClick={() => window.print()}
-            className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 flex items-center gap-2 font-medium"
+            className="bg-gray-600 text-white px-4 sm:px-6 py-3 rounded-lg hover:bg-gray-700 flex items-center justify-center gap-2 font-medium flex-1 sm:flex-none whitespace-nowrap"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -570,13 +570,13 @@ export default function PACUAssessmentDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <div className="flex space-x-8">
+      <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+        <div className="flex gap-4 sm:gap-8 min-w-max">
           {(['overview', 'vitals', 'aldrete', 'discharge'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-4 px-2 font-medium border-b-2 transition-colors ${
+              className={`pb-4 px-2 font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'

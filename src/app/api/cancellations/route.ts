@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,6 +141,20 @@ export async function POST(request: NextRequest) {
       });
 
       return cancellation;
+    });
+
+    // Theatre radio: announce the cancelled case (spoken three times).
+    const patientName = result.surgery?.patient?.name || 'patient';
+    const procedure = result.surgery?.procedureName || 'the procedure';
+    const cancelMsg = `Case cancelled. The ${procedure} for patient ${patientName} has been cancelled. Reason: ${reason}. Theatre team, please stand down for this case.`;
+    await triggerRadio({
+      category: 'WORKFLOW',
+      title: `Case cancelled — ${patientName}`,
+      message: speak3(cancelMsg),
+      priority: 82,
+      urgency: 'HIGH',
+      triggeredById: session.user.id,
+      metadata: { source: 'CaseCancellation', surgeryId, kind: 'case_cancelled', tripleRepeat: true },
     });
 
     return NextResponse.json(result, { status: 201 });

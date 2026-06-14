@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { triggerRadio, speak3 } from '@/lib/radioEvents';
+import { triggerRadio, speak3, getOnDutyPortersAndCleaners, namesPhrase } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -258,6 +258,8 @@ export async function PUT(
           select: {
             id: true,
             procedureName: true,
+            theatreId: true,
+            location: true,
             patient: {
               select: {
                 name: true,
@@ -302,6 +304,16 @@ export async function PUT(
     // Real-time radio broadcast: end of surgery -> announce + call porter & cleaner
     if (body.procedureEndTime && !existing.procedureEndTime) {
       const dur = surgicalDuration ? ` Duration: ${surgicalDuration} minutes.` : '';
+      // Fetch the on-duty porters & cleaners from the roster so we can name them
+      // in the invitation announcements.
+      const { porters, cleaners } = await getOnDutyPortersAndCleaners(
+        new Date(),
+        timing.surgery?.theatreId ?? null,
+      );
+      const porterNames = namesPhrase(porters);
+      const cleanerNames = namesPhrase(cleaners);
+      const theatre = timing.surgery?.location || 'theatre';
+
       // 1. End-of-surgery announcement (informational)
       await triggerRadio({
         category: 'WORKFLOW',
@@ -315,10 +327,13 @@ export async function PUT(
 
       // 2. Porter call (3x baked, repeats every 2 min until acknowledged
       //    e.g. by porter starting transport or scrub nurse acknowledging)
-      const porterMsg = `Porter required in theatre. Patient ${patientName} ready for transfer to recovery. Please respond and acknowledge.`;
+      const porterAddress = porterNames
+        ? `Porter ${porterNames}, you are required in ${theatre}.`
+        : `Porter required in ${theatre}.`;
+      const porterMsg = `${porterAddress} Patient ${patientName} ready for transfer to recovery. Please respond and acknowledge.`;
       await triggerRadio({
         category: 'STAFF_REQUEST',
-        title: `Porter required — ${patientName}`,
+        title: porterNames ? `Porter ${porterNames} required — ${patientName}` : `Porter required — ${patientName}`,
         message: speak3(porterMsg),
         priority: 88,
         urgency: 'HIGH',
@@ -331,15 +346,19 @@ export async function PUT(
           surgeryId: params.id,
           kind: 'porter_call',
           tripleRepeat: true,
+          porters: porters.map((p) => ({ name: p.name, staffCode: p.staffCode })),
         },
       });
 
       // 3. Cleaner call (3x baked, repeats every 2 min until acknowledged
       //    by cleaner starting cleaning or scrub nurse acknowledging)
-      const cleanerMsg = `Cleaner required in theatre for case turnover at end of surgery for ${patientName}. Please respond and acknowledge.`;
+      const cleanerAddress = cleanerNames
+        ? `Cleaner ${cleanerNames}, you are required in ${theatre}`
+        : `Cleaner required in ${theatre}`;
+      const cleanerMsg = `${cleanerAddress} for case turnover at end of surgery for ${patientName}. Please prepare the theatre for the next case. Please respond and acknowledge.`;
       await triggerRadio({
         category: 'STAFF_REQUEST',
-        title: `Cleaner required — theatre turnover`,
+        title: cleanerNames ? `Cleaner ${cleanerNames} required — theatre turnover` : `Cleaner required — theatre turnover`,
         message: speak3(cleanerMsg),
         priority: 86,
         urgency: 'HIGH',
@@ -352,6 +371,7 @@ export async function PUT(
           surgeryId: params.id,
           kind: 'cleaner_call',
           tripleRepeat: true,
+          cleaners: cleaners.map((c) => ({ name: c.name, staffCode: c.staffCode })),
         },
       });
     }

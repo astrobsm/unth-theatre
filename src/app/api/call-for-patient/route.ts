@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -293,6 +294,20 @@ export async function POST(request: NextRequest) {
           invitedById: session.user.id,
           invitedByName: session.user.name || 'Unknown',
         },
+      });
+
+      // Theatre radio: call the patient up (spoken three times).
+      const porterLine = porterName ? ` Porter ${porterName}, please dispatch to the ward.` : '';
+      const callMsg = `Calling patient ${surgery.patient.name}, folder number ${surgery.patient.folderNumber}, for ${surgery.procedureName} in ${theatreName}.${porterLine}`;
+      await triggerRadio({
+        category: 'WORKFLOW',
+        title: `Patient call-up — ${surgery.patient.name}`,
+        message: speak3(callMsg),
+        priority: 78,
+        urgency: 'HIGH',
+        location: theatreName,
+        triggeredById: session.user.id,
+        metadata: { source: 'PatientCallUp', surgeryId, kind: 'patient_callup', tripleRepeat: true },
       });
 
       return NextResponse.json(callUp, { status: 201 });

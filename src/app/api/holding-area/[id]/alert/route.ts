@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,18 +83,20 @@ export async function POST(
     const notifications = [];
 
     // Notify surgeon
-    notifications.push(
-      prisma.systemNotification.create({
-        data: {
-          userId: assessment.surgery.surgeonId,
-          type: 'RED_ALERT',
-          title: `Red Alert: ${alertType}`,
-          message: `Holding area red alert for patient ${assessment.patient.name}. ${description}`,
-          priority: severity === 'CRITICAL' ? 'HIGH' : 'MEDIUM',
-          actionUrl: `/dashboard/holding-area/${params.id}`
-        }
-      })
-    );
+    if (assessment.surgery.surgeonId) {
+      notifications.push(
+        prisma.systemNotification.create({
+          data: {
+            userId: assessment.surgery.surgeonId,
+            type: 'RED_ALERT',
+            title: `Red Alert: ${alertType}`,
+            message: `Holding area red alert for patient ${assessment.patient.name}. ${description}`,
+            priority: severity === 'CRITICAL' ? 'HIGH' : 'MEDIUM',
+            actionUrl: `/dashboard/holding-area/${params.id}`
+          }
+        })
+      );
+    }
 
     // Notify anesthetist if assigned
     if (assessment.surgery.anesthetistId) {
@@ -132,6 +135,21 @@ export async function POST(
     }
 
     await Promise.all(notifications);
+
+    // Theatre radio: broadcast the red alert (emergency, spoken three times).
+    const alertMsg = `Red alert in the holding area. ${alertType.replace(/_/g, ' ')}. Patient ${assessment.patient.name}. ${description}. Surgeon and anaesthetist, please respond immediately.`;
+    await triggerRadio({
+      category: 'EMERGENCY',
+      title: `Holding area red alert — ${assessment.patient.name}`,
+      message: speak3(alertMsg),
+      priority: 100,
+      urgency: 'CRITICAL',
+      requireAck: true,
+      repeatUntilAck: true,
+      repeatEverySec: 60,
+      triggeredById: session.user.id,
+      metadata: { source: 'HoldingArea.redAlert', surgeryId: assessment.surgeryId, kind: 'holding_red_alert', tripleRepeat: true },
+    });
 
     return NextResponse.json({
       alert: redAlert,

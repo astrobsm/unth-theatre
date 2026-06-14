@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,6 +168,20 @@ export async function POST(request: NextRequest) {
     await prisma.surgery.update({
       where: { id: surgeryId },
       data: { status: 'IN_HOLDING_AREA' }
+    });
+
+    // Theatre radio: announce arrival at the holding area (spoken three times).
+    const patientName = assessment.patient?.name || 'patient';
+    const procedure = assessment.surgery?.procedureName || 'surgery';
+    const arrivalMsg = `Patient ${patientName} has arrived in the holding area for ${procedure}. Holding area team, please commence verification.`;
+    await triggerRadio({
+      category: 'WORKFLOW',
+      title: `Holding area arrival — ${patientName}`,
+      message: speak3(arrivalMsg),
+      priority: 72,
+      urgency: 'MEDIUM',
+      triggeredById: session.user.id,
+      metadata: { source: 'HoldingArea.arrival', surgeryId, kind: 'holding_arrival', tripleRepeat: true },
     });
 
     return NextResponse.json(assessment, { status: 201 });

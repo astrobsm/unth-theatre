@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,18 @@ export async function POST(
         }
       });
     }
+
+    // Theatre radio: announce the patient is cleared for theatre (spoken three times).
+    const clearedMsg = `Patient ${assessment.patient.name} has been cleared for theatre for ${updated.surgery.procedureName}. Theatre team, please receive the patient.`;
+    await triggerRadio({
+      category: 'WORKFLOW',
+      title: `Cleared for theatre — ${assessment.patient.name}`,
+      message: speak3(clearedMsg),
+      priority: 76,
+      urgency: 'MEDIUM',
+      triggeredById: session.user.id,
+      metadata: { source: 'HoldingArea.cleared', surgeryId: updated.surgeryId, kind: 'holding_cleared', tripleRepeat: true },
+    });
 
     return NextResponse.json({
       assessment: updated,

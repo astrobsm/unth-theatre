@@ -25,20 +25,67 @@ export async function POST(
 
     const body = await request.json();
 
+    // The client form can post fields that don't map 1:1 to the schema
+    // (systolicBP/diastolicBP/nauseaScore) and sends numbers that may arrive as
+    // strings/NaN. Build a clean, type-correct payload to avoid Prisma "Unknown
+    // argument" / type errors that surface as a 500.
+    const toInt = (v: any): number | undefined => {
+      if (v === undefined || v === null || v === '') return undefined;
+      const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const toFloat = (v: any): number | undefined => {
+      if (v === undefined || v === null || v === '') return undefined;
+      const n = typeof v === 'number' ? v : parseFloat(String(v));
+      return Number.isFinite(n) ? n : undefined;
+    };
+
+    // Combine separate systolic/diastolic into the single bloodPressure column.
+    const systolic = toInt(body.systolicBP);
+    const diastolic = toInt(body.diastolicBP);
+    const bloodPressure =
+      body.bloodPressure ??
+      (systolic !== undefined && diastolic !== undefined ? `${systolic}/${diastolic}` : undefined);
+
+    const nauseaScore = toInt(body.nauseaScore);
+    const notesParts: string[] = [];
+    if (body.notes) notesParts.push(String(body.notes));
+    if (nauseaScore !== undefined) notesParts.push(`Nausea score: ${nauseaScore}/10`);
+
+    const VALID_CONSCIOUSNESS = ['ALERT', 'DROWSY', 'RESPONSIVE_TO_VOICE', 'RESPONSIVE_TO_PAIN', 'UNRESPONSIVE'];
+
+    const vitalsData: any = {
+      pacuAssessmentId: params.id,
+      recordedBy: session.user.id,
+    };
+    if (bloodPressure !== undefined) vitalsData.bloodPressure = bloodPressure;
+    const heartRate = toInt(body.heartRate);
+    if (heartRate !== undefined) vitalsData.heartRate = heartRate;
+    const respiratoryRate = toInt(body.respiratoryRate);
+    if (respiratoryRate !== undefined) vitalsData.respiratoryRate = respiratoryRate;
+    const oxygenSaturation = toInt(body.oxygenSaturation);
+    if (oxygenSaturation !== undefined) vitalsData.oxygenSaturation = oxygenSaturation;
+    const temperature = toFloat(body.temperature);
+    if (temperature !== undefined) vitalsData.temperature = temperature;
+    const painScore = toInt(body.painScore);
+    if (painScore !== undefined) vitalsData.painScore = painScore;
+    if (body.consciousnessLevel && VALID_CONSCIOUSNESS.includes(body.consciousnessLevel)) {
+      vitalsData.consciousnessLevel = body.consciousnessLevel;
+    }
+    if (notesParts.length) vitalsData.notes = notesParts.join(' | ');
+    if (typeof body.interventionRequired === 'boolean') vitalsData.interventionRequired = body.interventionRequired;
+    if (body.interventionDetails) vitalsData.interventionDetails = String(body.interventionDetails);
+
     const vitalSigns = await prisma.pACUVitalSigns.create({
-      data: {
-        pacuAssessmentId: params.id,
-        recordedBy: session.user.id,
-        ...body
-      }
+      data: vitalsData,
     });
 
     // Check if vital signs are abnormal and trigger alert if needed
     const abnormalVitals = 
-      (body.heartRate && (body.heartRate < 50 || body.heartRate > 120)) ||
-      (body.oxygenSaturation && body.oxygenSaturation < 92) ||
-      (body.consciousnessLevel && body.consciousnessLevel === 'UNRESPONSIVE') ||
-      (body.painScore && body.painScore > 8);
+      (heartRate !== undefined && (heartRate < 50 || heartRate > 120)) ||
+      (oxygenSaturation !== undefined && oxygenSaturation < 92) ||
+      (vitalsData.consciousnessLevel === 'UNRESPONSIVE') ||
+      (painScore !== undefined && painScore > 8);
 
     if (abnormalVitals) {
       // Get assessment details
@@ -57,14 +104,14 @@ export async function POST(
 
       if (assessment) {
         let alertDescription = 'Abnormal vital signs detected: ';
-        if (body.heartRate && (body.heartRate < 50 || body.heartRate > 120)) {
-          alertDescription += `HR ${body.heartRate}bpm, `;
+        if (heartRate !== undefined && (heartRate < 50 || heartRate > 120)) {
+          alertDescription += `HR ${heartRate}bpm, `;
         }
-        if (body.oxygenSaturation && body.oxygenSaturation < 92) {
-          alertDescription += `SpO2 ${body.oxygenSaturation}%, `;
+        if (oxygenSaturation !== undefined && oxygenSaturation < 92) {
+          alertDescription += `SpO2 ${oxygenSaturation}%, `;
         }
-        if (body.painScore && body.painScore > 8) {
-          alertDescription += `Severe pain (${body.painScore}/10), `;
+        if (painScore !== undefined && painScore > 8) {
+          alertDescription += `Severe pain (${painScore}/10), `;
         }
 
         // Create red alert
@@ -94,18 +141,20 @@ export async function POST(
 
         // Send notifications
         const notifications = [];
-        notifications.push(
-          prisma.systemNotification.create({
-            data: {
-              userId: assessment.surgery.surgeonId,
-              type: 'RED_ALERT',
-              title: 'PACU Red Alert: Abnormal Vitals',
-              message: `Patient ${assessment.patient.name} - ${alertDescription}`,
-              priority: 'HIGH',
-              actionUrl: `/dashboard/pacu/${params.id}`
-            }
-          })
-        );
+        if (assessment.surgery.surgeonId) {
+          notifications.push(
+            prisma.systemNotification.create({
+              data: {
+                userId: assessment.surgery.surgeonId,
+                type: 'RED_ALERT',
+                title: 'PACU Red Alert: Abnormal Vitals',
+                message: `Patient ${assessment.patient.name} - ${alertDescription}`,
+                priority: 'HIGH',
+                actionUrl: `/dashboard/pacu/${params.id}`
+              }
+            })
+          );
+        }
 
         if (assessment.surgery.anesthetistId) {
           notifications.push(
