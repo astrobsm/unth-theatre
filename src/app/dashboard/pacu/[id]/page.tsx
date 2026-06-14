@@ -6,10 +6,12 @@ import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
+const PACUVitalsTrendChart = dynamic(() => import('@/components/PACUVitalsTrendChart'), { ssr: false });
 
 interface VitalSigns {
   id: string;
   recordedAt: string;
+  bloodPressure?: string | null;
   systolicBP: number;
   diastolicBP: number;
   heartRate: number;
@@ -924,6 +926,14 @@ export default function PACUAssessmentDetailPage() {
                 {submitting ? 'Recording...' : 'Record Vitals'}
               </button>
             </form>
+          </div>
+
+          {/* Vital Signs Trend Graph */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
+            <PACUVitalsTrendChart
+              records={assessment.vitalSigns}
+              admissionTimeISO={assessment.admissionTime}
+            />
           </div>
 
           {/* Vital Signs History */}
