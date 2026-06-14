@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Send, Printer } from 'lucide-react';
+import { Plus, Trash2, Send, Printer, ImagePlus, X } from 'lucide-react';
 import { printThermalPrescription } from '@/lib/thermalPrint';
 
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -59,6 +59,7 @@ export default function PostOperativeNotesPage() {
 
   const [surgery, setSurgery] = useState<any>(null);
   const [note, setNote] = useState('');
+  const [noteImages, setNoteImages] = useState<string[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -189,6 +190,42 @@ export default function PostOperativeNotesPage() {
     }
   };
 
+  const MAX_IMAGES = 2;
+  const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+  const onPickImages = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const incoming = Array.from(files);
+    const room = MAX_IMAGES - noteImages.length;
+    if (room <= 0) {
+      alert(`You can attach a maximum of ${MAX_IMAGES} images.`);
+      return;
+    }
+    const selected = incoming.slice(0, room);
+    if (incoming.length > room) {
+      alert(`Only ${room} more image(s) can be added (max ${MAX_IMAGES}).`);
+    }
+    selected.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        alert(`${file.name} is not an image file.`);
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        alert(`${file.name} exceeds the 10 MB limit.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setNoteImages((s) => (s.length >= MAX_IMAGES ? s : [...s, result]));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (idx: number) =>
+    setNoteImages((s) => s.filter((_, i) => i !== idx));
+
   const submit = async () => {
     if (note.trim().length < 5) {
       alert('Please enter a meaningful post-operative note (minimum 5 characters).');
@@ -200,7 +237,7 @@ export default function PostOperativeNotesPage() {
       const res = await fetch(`/api/surgeries/${params.id}/post-op-notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: note.trim() }),
+        body: JSON.stringify({ note: note.trim(), images: noteImages }),
       });
 
       const data = await res.json();
@@ -210,6 +247,7 @@ export default function PostOperativeNotesPage() {
       }
 
       setNote('');
+      setNoteImages([]);
       await fetchData();
       alert('Post-operative note saved successfully.');
     } catch (error) {
@@ -253,6 +291,54 @@ export default function PostOperativeNotesPage() {
           medicalMode
           className="w-full"
         />
+
+        {/* Intra-operative drawings / pictures upload (max 2, ≤ 10 MB each) */}
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 cursor-pointer border border-gray-300 rounded px-3 py-2 text-sm hover:bg-gray-50">
+              <ImagePlus className="w-4 h-4" />
+              Add drawings / intra-op pictures
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={noteImages.length >= MAX_IMAGES}
+                onChange={(e) => {
+                  onPickImages(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            <span className="text-xs text-gray-500">
+              {noteImages.length}/{MAX_IMAGES} attached • max 2 images, 10 MB each
+            </span>
+          </div>
+
+          {noteImages.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {noteImages.map((src, i) => (
+                <div key={i} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`Intra-operative attachment ${i + 1}`}
+                    className="h-24 w-24 object-cover rounded border"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    aria-label="Remove image"
+                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 shadow"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex justify-end">
           <button
             onClick={submit}
@@ -404,6 +490,20 @@ export default function PostOperativeNotesPage() {
                     {new Date(n.createdAt).toLocaleString('en-GB')} • {n.user?.fullName || n.user?.username || 'Unknown'}
                   </p>
                   <p className="text-sm whitespace-pre-wrap">{parsed.note || '-'}</p>
+                  {Array.isArray(parsed.images) && parsed.images.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {parsed.images.map((src: string, i: number) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={src}
+                            alt={`Attachment ${i + 1}`}
+                            className="h-24 w-24 object-cover rounded border hover:opacity-90"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

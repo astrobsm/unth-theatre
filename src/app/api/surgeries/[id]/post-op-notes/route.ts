@@ -53,6 +53,22 @@ export async function POST(
       return NextResponse.json({ error: 'Post-operative note must be at least 5 characters' }, { status: 400 });
     }
 
+    // Optional intra-operative drawings / photos (base64 data URLs).
+    // Max 2 images, each <= 10 MB (≈ 13.7 MB base64-encoded).
+    const MAX_IMAGES = 2;
+    const MAX_BASE64_LEN = Math.ceil((10 * 1024 * 1024 * 4) / 3) + 1024;
+    let images: string[] = Array.isArray(body.images)
+      ? body.images.filter((s: any) => typeof s === 'string' && s.startsWith('data:image/'))
+      : [];
+    if (images.length > MAX_IMAGES) {
+      return NextResponse.json({ error: `A maximum of ${MAX_IMAGES} images is allowed` }, { status: 400 });
+    }
+    for (const img of images) {
+      if (img.length > MAX_BASE64_LEN) {
+        return NextResponse.json({ error: 'Each image must not exceed 10 MB' }, { status: 400 });
+      }
+    }
+
     const surgery = await prisma.surgery.findUnique({
       where: { id: params.id },
       select: { id: true, status: true, remarks: true },
@@ -77,7 +93,7 @@ export async function POST(
         action: 'POST_OP_NOTE',
         tableName: 'surgeries',
         recordId: params.id,
-        changes: JSON.stringify({ note }),
+        changes: JSON.stringify({ note, images }),
       },
       include: {
         user: { select: { id: true, fullName: true, username: true } },
