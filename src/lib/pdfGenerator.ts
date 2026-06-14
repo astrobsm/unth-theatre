@@ -531,7 +531,157 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
     y += 1.5;
   };
 
-  // ── Header band ─────────────────────────────────────────────────────
+  // Draw a compact multi-series line chart panel for vital-sign trends.
+  // Each panel shares a single y-scale; series with null gaps are skipped.
+  const drawTrendPanel = (
+    title: string,
+    labels: string[],
+    series: Array<{ name: string; color: [number, number, number]; data: (number | null)[]; dashed?: boolean }>,
+    yMin: number,
+    yMax: number,
+  ) => {
+    const panelH = 44; // mm plotting height incl. labels
+    ensureSpace(panelH + 14);
+    doc.setFont(SERIF, 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(title, marginX + 2, y);
+    y += 3;
+
+    const plotX = marginX + 16;
+    const plotY = y;
+    const plotW = contentWidth - 18;
+    const plotH = panelH - 14;
+    const plotRight = plotX + plotW;
+    const plotBottom = plotY + plotH;
+
+    // Axes
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.2);
+    doc.line(plotX, plotY, plotX, plotBottom);
+    doc.line(plotX, plotBottom, plotRight, plotBottom);
+
+    // Gridlines + y-axis labels
+    const divs = 4;
+    doc.setFont(SERIF, 'normal');
+    doc.setFontSize(6.5);
+    for (let i = 0; i <= divs; i++) {
+      const v = yMin + ((yMax - yMin) * i) / divs;
+      const gy = plotBottom - (plotH * i) / divs;
+      if (i > 0) {
+        doc.setDrawColor(228, 228, 228);
+        doc.setLineWidth(0.15);
+        doc.line(plotX, gy, plotRight, gy);
+      }
+      doc.setTextColor(120, 120, 120);
+      doc.text(`${Math.round(v)}`, plotX - 2, gy + 1.1, { align: 'right' });
+    }
+
+    const n = labels.length;
+    const xFor = (idx: number) => (n <= 1 ? plotX + plotW / 2 : plotX + (plotW * idx) / (n - 1));
+    const yFor = (v: number) => {
+      const c = Math.max(yMin, Math.min(yMax, v));
+      return plotBottom - (plotH * (c - yMin)) / (yMax - yMin || 1);
+    };
+
+    // Series lines + points
+    for (const s of series) {
+      doc.setDrawColor(s.color[0], s.color[1], s.color[2]);
+      doc.setFillColor(s.color[0], s.color[1], s.color[2]);
+      doc.setLineWidth(0.5);
+      let prevX: number | null = null;
+      let prevY: number | null = null;
+      for (let i = 0; i < s.data.length; i++) {
+        const v = s.data[i];
+        if (v == null || isNaN(v as number)) {
+          prevX = null;
+          prevY = null;
+          continue;
+        }
+        const px = xFor(i);
+        const py = yFor(v as number);
+        if (prevX != null && prevY != null) {
+          if (s.dashed) doc.setLineDashPattern([1, 1], 0);
+          doc.line(prevX, prevY, px, py);
+          if (s.dashed) doc.setLineDashPattern([], 0);
+        }
+        doc.circle(px, py, 0.6, 'F');
+        prevX = px;
+        prevY = py;
+      }
+    }
+
+    // X-axis labels (first / middle / last)
+    doc.setFontSize(6);
+    doc.setTextColor(120, 120, 120);
+    const showIdx = n <= 1 ? [0] : n === 2 ? [0, 1] : [0, Math.floor((n - 1) / 2), n - 1];
+    for (const idx of showIdx) {
+      if (!labels[idx]) continue;
+      doc.text(labels[idx], xFor(idx), plotBottom + 3, { align: 'center' });
+    }
+
+    // Legend
+    let lx = plotX;
+    const ly = plotBottom + 7;
+    doc.setFontSize(6.5);
+    for (const s of series) {
+      doc.setFillColor(s.color[0], s.color[1], s.color[2]);
+      doc.circle(lx + 1, ly - 1, 0.8, 'F');
+      doc.setTextColor(60, 60, 60);
+      doc.text(s.name, lx + 3, ly);
+      lx += doc.getTextWidth(s.name) + 9;
+    }
+    doc.setTextColor(0, 0, 0);
+    y = ly + 6;
+  };
+
+  // Render the PACU vital-sign trend graphs (3 stacked panels).
+  const drawPacuVitalsTrend = (
+    vitals: Array<{ time: string; heartRate?: number; bloodPressure?: string; respiratoryRate?: number; oxygenSaturation?: number; temperature?: number; painScore?: number }>,
+  ) => {
+    if (!vitals || vitals.length < 2) return;
+    const sorted = [...vitals].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    const labels = sorted.map((v) => {
+      const d = new Date(v.time);
+      return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    });
+    const parseBP = (bp?: string) => {
+      if (!bp) return { s: null as number | null, d: null as number | null };
+      const m = bp.match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
+      return m ? { s: parseInt(m[1], 10), d: parseInt(m[2], 10) } : { s: null, d: null };
+    };
+    const hr = sorted.map((v) => (v.heartRate ?? null));
+    const sys = sorted.map((v) => parseBP(v.bloodPressure).s);
+    const dia = sorted.map((v) => parseBP(v.bloodPressure).d);
+    const spo2 = sorted.map((v) => (v.oxygenSaturation ?? null));
+    const rr = sorted.map((v) => (v.respiratoryRate ?? null));
+    const temp = sorted.map((v) => (v.temperature != null ? Number(v.temperature) : null));
+    const pain = sorted.map((v) => (v.painScore ?? null));
+
+    ensureSpace(16);
+    doc.setFont(SERIF, 'bold');
+    doc.setFontSize(BODY);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Recovery Vital Signs — Trend Graphs', marginX + 2, y);
+    y += 6;
+
+    drawTrendPanel('Cardiac — Heart Rate & Blood Pressure (bpm / mmHg)', labels, [
+      { name: 'Heart Rate', color: [220, 38, 38], data: hr },
+      { name: 'Systolic', color: [29, 78, 216], data: sys },
+      { name: 'Diastolic', color: [96, 165, 250], data: dia, dashed: true },
+    ], 40, 200);
+
+    drawTrendPanel('Oxygenation & Respiration — SpO₂ (%) & Resp. Rate (/min)', labels, [
+      { name: 'SpO₂ %', color: [14, 165, 233], data: spo2 },
+      { name: 'Resp. Rate', color: [124, 58, 237], data: rr },
+    ], 0, 100);
+
+    drawTrendPanel('Temperature (°C) & Pain Score (0-10)', labels, [
+      { name: 'Temperature', color: [245, 158, 11], data: temp },
+      { name: 'Pain Score', color: [219, 39, 119], data: pain },
+    ], 0, 40);
+  };
+
   doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
   doc.rect(0, 0, pageWidth, 34, 'F');
   doc.setTextColor(255, 255, 255);
@@ -787,6 +937,9 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
         margin: { left: marginX, right: marginX },
       });
       y = (doc as any).lastAutoTable.finalY + 8;
+
+      // Automated digital trend graphs for the recovery vitals
+      drawPacuVitalsTrend(p.vitalSigns);
     }
 
     if (p.redAlerts && p.redAlerts.length > 0) {

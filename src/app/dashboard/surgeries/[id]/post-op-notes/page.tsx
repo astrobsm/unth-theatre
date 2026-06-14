@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 interface NoteItem {
   id: string;
@@ -93,12 +96,15 @@ export default function PostOperativeNotesPage() {
 
       <div className="bg-white rounded-lg shadow p-4 space-y-3">
         <label className="block text-sm font-semibold text-gray-700">Add New Post-Operative Note</label>
-        <textarea
-          className="w-full border rounded-lg px-3 py-2"
-          rows={6}
-          placeholder="Enter surgeon post-operative notes, findings, instructions, and plan..."
+        <SmartTextInput
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={setNote}
+          rows={6}
+          placeholder="Enter surgeon post-operative notes, findings, instructions, and plan... (tap the mic to dictate)"
+          enableSpeech
+          enableReadBack
+          medicalMode
+          className="w-full"
         />
         <div className="flex justify-end">
           <button
