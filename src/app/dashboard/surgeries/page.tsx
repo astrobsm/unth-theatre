@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -59,6 +59,9 @@ export default function SurgeriesPage() {
   const canAccessTiming = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'].includes(userRole || '');
   const canAccessConsumables = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER'].includes(userRole || '');
   const canAccessBOM = ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
+  // Surgeons (and admins / theatre managers) may close out a case so PACU can admit and the post-op note can be written.
+  const canCompleteSurgery = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
+  const [completingId, setCompletingId] = useState<string | null>(null);
 
   // Monitor online/offline status
   useEffect(() => {
@@ -111,8 +114,6 @@ export default function SurgeriesPage() {
     const interval = setInterval(fetchSurgeries, SYNC_INTERVALS.SURGERIES);
     return () => clearInterval(interval);
   }, [fetchSurgeries]);
-
-  // Refetch when tab becomes visible
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -123,6 +124,26 @@ export default function SurgeriesPage() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchSurgeries]);
+
+  const handleMarkCompleted = async (surgeryId: string) => {
+    if (!window.confirm('Mark this surgery as completed? This lets PACU admit the patient and lets the surgeon write the post-operative note. Date, time and team records are preserved.')) {
+      return;
+    }
+    setCompletingId(surgeryId);
+    try {
+      const response = await fetch(`/api/surgeries/${surgeryId}/complete`, { method: 'POST' });
+      if (response.ok) {
+        await fetchSurgeries();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Failed to mark surgery as completed');
+      }
+    } catch (error) {
+      alert('A network error occurred while completing the surgery');
+    } finally {
+      setCompletingId(null);
+    }
+  };
 
   const filteredSurgeries = Array.isArray(surgeries) ? surgeries.filter(surgery => {
     const patientName = surgery.patient?.name || '';
@@ -540,6 +561,18 @@ export default function SurgeriesPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Link>
+                        )}
+
+                        {/* Mark Completed (surgeon closes the case → PACU can admit + post-op note) */}
+                        {canCompleteSurgery && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => handleMarkCompleted(surgery.id)}
+                            disabled={completingId === surgery.id}
+                            className="inline-flex items-center gap-1 text-green-600 hover:text-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Mark surgery as completed"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
                         )}
 
                         {/* WHO Checklist */}

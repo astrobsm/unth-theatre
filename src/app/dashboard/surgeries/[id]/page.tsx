@@ -60,6 +60,8 @@ export default function SurgeryDetailPage() {
   const { data: session } = useSession();
   const [surgery, setSurgery] = useState<Surgery | null>(null);
   const [loading, setLoading] = useState(true);
+  const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState('');
 
   const surgeryId = params.id as string;
 
@@ -83,6 +85,28 @@ export default function SurgeryDetailPage() {
       console.error('Failed to fetch surgery:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMarkCompleted = async () => {
+    if (!surgery) return;
+    if (!window.confirm('Mark this surgery as completed? This allows PACU to admit the patient and enables the post-operative note. Date, time and team records are preserved.')) {
+      return;
+    }
+    setCompleting(true);
+    setCompleteError('');
+    try {
+      const response = await fetch(`/api/surgeries/${surgeryId}/complete`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        await fetchSurgery();
+      } else {
+        setCompleteError(data.error || 'Failed to mark surgery as completed');
+      }
+    } catch (error) {
+      setCompleteError('A network error occurred while completing the surgery');
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -123,6 +147,8 @@ export default function SurgeryDetailPage() {
   const canAccessTiming = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE'].includes(userRole || '');
   const canAccessConsumables = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'THEATRE_STORE_KEEPER'].includes(userRole || '');
   const canAccessBOM = ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
+  // Surgeons (and admins / theatre managers) may close out a case and write the post-op note.
+  const canCompleteSurgery = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
 
   if (loading) {
     return (
@@ -175,6 +201,59 @@ export default function SurgeryDetailPage() {
           </span>
         </div>
       </div>
+
+      {/* Surgeon case-completion control: marking COMPLETED unlocks PACU admission + post-op note */}
+      {canCompleteSurgery && surgery.status !== 'CANCELLED' && (
+        <div className={`rounded-lg border p-4 ${surgery.status === 'COMPLETED' ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+          {surgery.status === 'COMPLETED' ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-green-900">Surgery completed</h3>
+                  <p className="text-xs text-green-700">The patient can now be admitted to PACU and a post-operative note recorded.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/dashboard/surgeries/${surgery.id}/post-op-notes`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                >
+                  <FileText className="w-4 h-4" />
+                  Write Post-Operative Note
+                </Link>
+                <Link
+                  href={`/dashboard/pacu/new?surgeryId=${surgery.id}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                >
+                  <Activity className="w-4 h-4" />
+                  Admit to PACU
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-900">Close out this case</h3>
+                  <p className="text-xs text-amber-700">Mark the surgery as completed once the operation is finished. This lets the recovery team admit the patient to PACU and lets you write the post-operative note.</p>
+                  {completeError && <p className="text-xs text-red-600 mt-1">{completeError}</p>}
+                </div>
+              </div>
+              <button
+                onClick={handleMarkCompleted}
+                disabled={completing}
+                title="Mark surgery as completed"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {completing ? 'Marking…' : 'Mark as Completed'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Patient & Surgery Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
