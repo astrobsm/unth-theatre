@@ -4,7 +4,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v27';
+const CACHE_VERSION = 'v28';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -104,10 +104,31 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Returns true only when there is a real, authenticated NextAuth session.
+// Used to avoid firing session-protected endpoints (which return 401) while
+// the user is on the login/public screen or after the session has expired —
+// those 401s are harmless to the cache but create alarming console noise.
+async function hasValidSession() {
+  try {
+    const res = await fetch('/api/auth/session', { credentials: 'include' });
+    if (!res.ok) return false;
+    const data = await res.clone().json().catch(() => null);
+    return !!(data && data.user);
+  } catch (e) {
+    return false;
+  }
+}
+
 // Lazy API route caching — 3 at a time with 2s gaps.
 // IMPORTANT: include credentials so session-protected endpoints are cached
 // (otherwise we just cache 401 responses, which then poison offline reads).
 async function lazyCacheApiRoutes() {
+  // Skip entirely when unauthenticated — prevents a burst of 401s against the
+  // auth-protected CRITICAL_API_ROUTES on the login/public screen.
+  if (!(await hasValidSession())) {
+    console.log('[SW] Skipping lazy API caching — no authenticated session yet');
+    return;
+  }
   const cache = await caches.open(DATA_CACHE);
   const BATCH = 3;
   for (let i = 0; i < CRITICAL_API_ROUTES.length; i += BATCH) {
