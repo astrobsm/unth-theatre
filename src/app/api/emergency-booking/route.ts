@@ -259,8 +259,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only surgeons, anesthetists, theatre managers, and admins can create emergency bookings
-    if (!['SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'].includes(session.user.role)) {
+    // Only surgeons, anesthetists, house officers, theatre managers, and admins can create emergency bookings
+    if (!['SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'].includes(session.user.role)) {
       return NextResponse.json(
         { error: 'Insufficient permissions to create emergency booking' },
         { status: 403 }

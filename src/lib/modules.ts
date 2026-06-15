@@ -43,11 +43,11 @@ const ADMIN_VIEWERS = ['CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'];
 export const MODULES: AppModule[] = [
   // Overview
   { id: 'dashboard', label: 'Dashboard (Home)', paths: ['/dashboard'], defaultRoles: ['*'], category: 'Overview' },
-  { id: 'emergency-booking', label: '🚨 Emergency Booking', paths: ['/dashboard/emergency-booking'], defaultRoles: [...CLINICAL_CORE, 'PORTER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'PHARMACIST'], category: 'Overview' },
+  { id: 'emergency-booking', label: '🚨 Emergency Booking', paths: ['/dashboard/emergency-booking'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'PORTER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'PHARMACIST'], category: 'Overview' },
 
   // Patient Registration & Scheduling
-  { id: 'patients', label: 'Patients', paths: ['/dashboard/patients'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
-  { id: 'surgeries', label: 'Surgeries', paths: ['/dashboard/surgeries'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
+  { id: 'patients', label: 'Patients', paths: ['/dashboard/patients'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER'], category: 'Patient' },
+  { id: 'surgeries', label: 'Surgeries', paths: ['/dashboard/surgeries'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER'], category: 'Patient' },
   { id: 'cancellations', label: 'Cancellations', paths: ['/dashboard/cancellations'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
 
   // Pre-operative
