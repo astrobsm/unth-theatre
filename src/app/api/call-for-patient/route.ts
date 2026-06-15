@@ -92,6 +92,27 @@ export async function GET(request: NextRequest) {
       allocationByTheatreUnit[key] = alloc;
     }
 
+    // Resolve theatre names for surgeries that carry a theatre chosen at booking
+    // time (Surgery.theatreId → TheatreSuite) even when no allocation row exists.
+    // Without this, such cases all fall into the "Unassigned" bucket.
+    const suiteIds = Array.from(
+      new Set(
+        surgeries
+          .map((s) => s.theatreId)
+          .filter((id): id is string => !!id)
+      )
+    );
+    const suiteNameById: Record<string, string> = {};
+    if (suiteIds.length > 0) {
+      const suites = await prisma.theatreSuite.findMany({
+        where: { id: { in: suiteIds } },
+        select: { id: true, name: true },
+      });
+      for (const suite of suites) {
+        suiteNameById[suite.id] = suite.name;
+      }
+    }
+
     // Also fetch rosters for today (nurses, porters assigned to theatres)
     const rosters = await prisma.roster.findMany({
       where: {
@@ -118,8 +139,15 @@ export async function GET(request: NextRequest) {
 
     for (const surgery of surgeries) {
       const alloc = allocationBySurgery[surgery.id];
-      const theatreName = alloc?.theatre?.name || 'Unassigned';
-      const theatreId = alloc?.theatreId || null;
+      // Resolve theatre: prefer the explicit allocation, then the theatre chosen
+      // at booking (Surgery.theatreId → TheatreSuite), then the free-text
+      // operating location. Only truly unassigned cases land in "Unassigned".
+      const theatreId = alloc?.theatreId || surgery.theatreId || null;
+      const theatreName =
+        alloc?.theatre?.name ||
+        (surgery.theatreId ? suiteNameById[surgery.theatreId] : null) ||
+        surgery.location ||
+        'Unassigned';
 
       // Find nurse and porter from allocation or roster
       let nurseName = alloc?.scrubNurse?.fullName || alloc?.circulatingNurse?.fullName || null;
