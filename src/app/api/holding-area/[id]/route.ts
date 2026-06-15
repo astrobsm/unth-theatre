@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,10 +72,19 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only holding area nurses can update
-    if (session.user.role !== 'SCRUB_NURSE' && 
-        session.user.role !== 'ADMIN' &&
-        session.user.role !== 'THEATRE_MANAGER') {
+    // Holding-area nurses and theatre clinical staff can update the assessment
+    // (verification, clearance, transfer requests, receiving in theatre).
+    const HOLDING_WRITE_ROLES = [
+      'SCRUB_NURSE',
+      'RECOVERY_ROOM_NURSE',
+      'ANAESTHETIST',
+      'CONSULTANT_ANAESTHETIST',
+      'ANAESTHETIC_TECHNICIAN',
+      'THEATRE_MANAGER',
+      'ADMIN',
+      'SYSTEM_ADMINISTRATOR',
+    ];
+    if (!HOLDING_WRITE_ROLES.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -159,6 +169,83 @@ export async function PUT(
       });
 
       return NextResponse.json(cancelledAssessment);
+    }
+
+    // Request transfer to theatre: holding-area nurse dispatches a cleared patient.
+    // Status becomes ENROUTE_TO_THEATRE; the theatre team then "receives" the patient
+    // (from the Surgeries page) which flips it to TRANSFERRED_TO_THEATRE.
+    if (body.requestTransferToTheatre === true) {
+      const current = await prisma.holdingAreaAssessment.findUnique({
+        where: { id: params.id },
+        select: { surgeryId: true, status: true, clearedForTheatre: true },
+      });
+
+      if (!current) {
+        return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
+      }
+      if (!current.clearedForTheatre && current.status !== 'CLEARED_FOR_THEATRE') {
+        return NextResponse.json(
+          { error: 'Patient must be cleared for theatre before transfer can be requested' },
+          { status: 400 }
+        );
+      }
+
+      await prisma.surgery.update({
+        where: { id: current.surgeryId },
+        data: { status: 'READY_FOR_THEATRE' },
+      });
+
+      await prisma.patientMovement.create({
+        data: {
+          surgeryId: current.surgeryId,
+          phase: 'PORTER_DISPATCHED',
+          recordedBy: session.user.id,
+          notes: 'Transfer to theatre requested — patient en route from holding area',
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'HOLDING_AREA_ENROUTE_TO_THEATRE',
+          tableName: 'holding_area_assessments',
+          recordId: params.id,
+          changes: JSON.stringify({ status: { from: current.status, to: 'ENROUTE_TO_THEATRE' } }),
+        },
+      });
+
+      const enrouteAssessment = await prisma.holdingAreaAssessment.update({
+        where: { id: params.id },
+        data: { status: 'ENROUTE_TO_THEATRE' },
+        include: {
+          patient: true,
+          surgery: {
+            include: {
+              surgeon: { select: { id: true, fullName: true, email: true } },
+              anesthetist: { select: { id: true, fullName: true, email: true } },
+            },
+          },
+          redAlerts: true,
+        },
+      });
+
+      // Theatre radio: announce the patient is en route (spoken three times).
+      try {
+        const enrouteMsg = `Patient ${enrouteAssessment.patient.name} is now en route to theatre for ${enrouteAssessment.surgery.procedureName}. Theatre team, please prepare to receive the patient.`;
+        await triggerRadio({
+          category: 'WORKFLOW',
+          title: `En route to theatre — ${enrouteAssessment.patient.name}`,
+          message: speak3(enrouteMsg),
+          priority: 78,
+          urgency: 'MEDIUM',
+          triggeredById: session.user.id,
+          metadata: { source: 'HoldingArea.enroute', surgeryId: current.surgeryId, kind: 'holding_enroute', tripleRepeat: true },
+        });
+      } catch (e) {
+        console.error('Radio announce (enroute) failed:', e);
+      }
+
+      return NextResponse.json(enrouteAssessment);
     }
 
     // Calculate if all safety checks are complete

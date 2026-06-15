@@ -19,6 +19,7 @@ interface Surgery {
   procedureName: string;
   scheduledDate: string;
   scheduledTime: string;
+  status?: string;
   surgeon: {
     fullName: string;
   };
@@ -118,6 +119,144 @@ export default function HoldingAreaPage() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchAssessments]);
 
+  // Track which assessment is mid-action so its button can show a busy state.
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  // Request transfer of a cleared patient to theatre → status becomes ENROUTE.
+  const requestTransferToTheatre = async (assessment: HoldingAreaAssessment) => {
+    if (!confirm(`Request transfer of ${assessment.patient?.name || 'this patient'} to the operating theatre? The theatre team will be alerted to receive the patient.`)) {
+      return;
+    }
+    setActionId(assessment.id);
+    try {
+      const res = await fetch(`/api/holding-area/${assessment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestTransferToTheatre: true }),
+      });
+      if (res.ok) {
+        printTransferSlip(assessment);
+        await fetchAssessments();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to request transfer to theatre');
+      }
+    } catch {
+      alert('A network error occurred while requesting transfer');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  // Cancelled-in-holding patient → request transfer back to the ward.
+  const transferBackToWard = async (assessment: HoldingAreaAssessment) => {
+    const reason = prompt('Reason for returning this patient to the ward:');
+    if (!reason || reason.trim().length < 5) {
+      alert('A reason (minimum 5 characters) is required to return the patient to the ward.');
+      return;
+    }
+    setActionId(assessment.id);
+    try {
+      const res = await fetch(`/api/holding-area/${assessment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnToWardCancelled: true, cancellationReason: reason.trim() }),
+      });
+      if (res.ok) {
+        printWardReturnSlip(assessment, reason.trim());
+        await fetchAssessments();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to return patient to ward');
+      }
+    } catch {
+      alert('A network error occurred while returning the patient to the ward');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  // Shared 80mm thermal-slip printer (mirrors the Call-for-Patient note style).
+  const printSlip = (title: string, badge: string, bodyHtml: string) => {
+    const win = window.open('', '_blank', 'width=302,height=600');
+    if (!win) {
+      alert('Please allow pop-ups to print the slip.');
+      return;
+    }
+    win.document.write(`<!doctype html><html><head><title>${title}</title>
+      <style>
+        @page { size: 80mm auto; margin: 2mm; }
+        body { font-family: 'Courier New', monospace; width: 76mm; margin: 0 auto; padding: 2mm; font-size: 11px; color: #000; }
+        .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 4px; margin-bottom: 6px; }
+        .hospital-name { font-size: 13px; font-weight: bold; text-transform: uppercase; margin: 2px 0; }
+        .subtitle { font-size: 10px; font-weight: bold; border: 1px solid #000; padding: 2px 6px; display: inline-block; margin: 4px 0; }
+        .field { margin: 3px 0; display: flex; }
+        .field-label { font-weight: bold; min-width: 26mm; }
+        .field-value { flex: 1; }
+        .divider { border-top: 1px dashed #000; margin: 6px 0; }
+        .instruction { font-size: 11px; margin: 6px 0; font-weight: bold; text-align: center; }
+        .timestamp { text-align: center; font-size: 10px; margin-top: 6px; }
+        .sign { margin-top: 10px; font-size: 10px; }
+        .sign-line { border-top: 1px solid #000; margin-top: 16px; padding-top: 2px; }
+        .footer { text-align: center; font-size: 9px; margin-top: 8px; border-top: 2px dashed #000; padding-top: 4px; }
+      </style></head>
+      <body>
+        <div class="header">
+          <div class="hospital-name">UNTH Ituku-Ozalla</div>
+          <div class="subtitle">${badge}</div>
+        </div>
+        ${bodyHtml}
+        <script>window.onload = function() { window.print(); window.close(); }</script>
+      </body></html>`);
+    win.document.close();
+  };
+
+  const printTransferSlip = (a: HoldingAreaAssessment) => {
+    const now = new Date().toLocaleString('en-GB');
+    printSlip(
+      'Transfer to Theatre',
+      'TRANSFER TO THEATRE',
+      `
+        <div class="field"><span class="field-label">Patient:</span><span class="field-value">${a.patient?.name || ''}</span></div>
+        <div class="field"><span class="field-label">Folder No:</span><span class="field-value">${a.patient?.folderNumber || ''}</span></div>
+        <div class="field"><span class="field-label">Age/Sex:</span><span class="field-value">${a.patient?.age ?? ''}yrs / ${a.patient?.gender || ''}</span></div>
+        <div class="field"><span class="field-label">Ward:</span><span class="field-value">${a.patient?.ward || 'N/A'}</span></div>
+        <div class="divider"></div>
+        <div class="field"><span class="field-label">Procedure:</span><span class="field-value">${a.surgery?.procedureName || ''}</span></div>
+        <div class="field"><span class="field-label">Surgeon:</span><span class="field-value">${a.surgery?.surgeon?.fullName || 'N/A'}</span></div>
+        <div class="divider"></div>
+        <div class="instruction">Patient is EN ROUTE to theatre. Theatre team, please receive.</div>
+        <div class="timestamp">Dispatched: ${now}</div>
+        <div class="sign"><div class="sign-line">Holding-area nurse signature</div></div>
+        <div class="sign"><div class="sign-line">Theatre nurse (received by)</div></div>
+        <div class="footer">Operative Resource Manager</div>
+      `
+    );
+  };
+
+  const printWardReturnSlip = (a: HoldingAreaAssessment, reason: string) => {
+    const now = new Date().toLocaleString('en-GB');
+    printSlip(
+      'Return to Ward',
+      'RETURN TO WARD',
+      `
+        <div class="field"><span class="field-label">Patient:</span><span class="field-value">${a.patient?.name || ''}</span></div>
+        <div class="field"><span class="field-label">Folder No:</span><span class="field-value">${a.patient?.folderNumber || ''}</span></div>
+        <div class="field"><span class="field-label">Age/Sex:</span><span class="field-value">${a.patient?.age ?? ''}yrs / ${a.patient?.gender || ''}</span></div>
+        <div class="field"><span class="field-label">Ward:</span><span class="field-value">${a.patient?.ward || 'N/A'}</span></div>
+        <div class="divider"></div>
+        <div class="field"><span class="field-label">Procedure:</span><span class="field-value">${a.surgery?.procedureName || ''}</span></div>
+        <div class="field"><span class="field-label">Reason:</span><span class="field-value">${reason}</span></div>
+        <div class="divider"></div>
+        <div class="instruction">Case CANCELLED in holding area. Ward nurse, please come and receive the patient back to the ward.</div>
+        <div class="timestamp">Issued: ${now}</div>
+        <div class="sign"><div class="sign-line">Holding-area nurse signature</div></div>
+        <div class="sign"><div class="sign-line">Ward nurse (received by)</div></div>
+        <div class="footer">Operative Resource Manager</div>
+      `
+    );
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ARRIVED':
@@ -130,6 +269,8 @@ export default function HoldingAreaPage() {
         return 'bg-red-100 text-red-800 font-bold';
       case 'CLEARED_FOR_THEATRE':
         return 'bg-green-100 text-green-800';
+      case 'ENROUTE_TO_THEATRE':
+        return 'bg-teal-100 text-teal-800 font-semibold';
       case 'TRANSFERRED_TO_THEATRE':
         return 'bg-gray-100 text-gray-800';
       default:
@@ -337,7 +478,15 @@ export default function HoldingAreaPage() {
 
               {/* Action Status */}
               <div className="mt-4 pt-4 border-t border-gray-200">
-                {assessment.clearedForTheatre ? (
+                {assessment.surgery?.status === 'CANCELLED' ? (
+                  <div className="text-red-600 text-sm font-medium">
+                    ✕ Case Cancelled in Holding Area
+                  </div>
+                ) : assessment.status === 'ENROUTE_TO_THEATRE' ? (
+                  <div className="text-teal-600 text-sm font-medium">
+                    🚶 En route to Theatre — awaiting receiving team
+                  </div>
+                ) : assessment.clearedForTheatre ? (
                   <div className="text-green-600 text-sm font-medium">
                     ✓ Cleared for Theatre
                   </div>
@@ -350,6 +499,45 @@ export default function HoldingAreaPage() {
                     ⏳ Verification in Progress
                   </div>
                 )}
+
+                {/* Dynamic workflow actions */}
+                <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                  {/* Cleared → request transfer to theatre */}
+                  {assessment.surgery?.status !== 'CANCELLED' &&
+                    assessment.status === 'CLEARED_FOR_THEATRE' && (
+                      <button
+                        onClick={() => requestTransferToTheatre(assessment)}
+                        disabled={actionId === assessment.id}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                        title="Request transfer of this patient to the operating theatre"
+                      >
+                        {actionId === assessment.id ? 'Requesting…' : 'Request Transfer to Theatre'}
+                      </button>
+                    )}
+
+                  {/* En route → reprint transfer slip */}
+                  {assessment.status === 'ENROUTE_TO_THEATRE' && (
+                    <button
+                      onClick={() => printTransferSlip(assessment)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-100 text-teal-800 text-xs font-semibold rounded-lg hover:bg-teal-200 border border-teal-300"
+                      title="Reprint the theatre transfer slip"
+                    >
+                      Reprint Transfer Slip
+                    </button>
+                  )}
+
+                  {/* Cancelled in holding → transfer back to ward + slip */}
+                  {assessment.surgery?.status === 'CANCELLED' && (
+                    <button
+                      onClick={() => transferBackToWard(assessment)}
+                      disabled={actionId === assessment.id}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                      title="Request the patient be transferred back to the ward and print the ward return slip"
+                    >
+                      {actionId === assessment.id ? 'Processing…' : 'Transfer Back to Ward'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

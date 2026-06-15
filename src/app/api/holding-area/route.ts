@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     if (active) {
       where.status = {
-        in: ['ARRIVED', 'VERIFICATION_IN_PROGRESS', 'DISCREPANCY_FOUND', 'RED_ALERT_ACTIVE']
+        in: ['ARRIVED', 'VERIFICATION_IN_PROGRESS', 'DISCREPANCY_FOUND', 'RED_ALERT_ACTIVE', 'CLEARED_FOR_THEATRE', 'ENROUTE_TO_THEATRE']
       };
     }
 
@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
             procedureName: true,
             scheduledDate: true,
             scheduledTime: true,
+            status: true,
             surgeonId: true,
             surgeon: {
               select: {

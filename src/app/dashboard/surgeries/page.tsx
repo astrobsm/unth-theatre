@@ -38,6 +38,12 @@ interface Surgery {
   needMontrellMattress?: boolean;
   otherSpecialNeeds?: string | null;
   anesthesiaType?: string | null;
+  holdingAreaAssessment?: {
+    id: string;
+    status: string;
+    clearedForTheatre: boolean;
+    transferredToTheatre: boolean;
+  } | null;
 }
 
 export default function SurgeriesPage() {
@@ -142,6 +148,34 @@ export default function SurgeriesPage() {
       alert('A network error occurred while completing the surgery');
     } finally {
       setCompletingId(null);
+    }
+  };
+
+  // Theatre staff confirm an en-route patient has physically arrived in the theatre.
+  const canReceiveInTheatre = ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+
+  const handleReceiveInTheatre = async (assessmentId: string) => {
+    if (!window.confirm('Confirm the patient has arrived and is being received in the theatre?')) {
+      return;
+    }
+    setReceivingId(assessmentId);
+    try {
+      const response = await fetch(`/api/holding-area/${assessmentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transferredToTheatre: true }),
+      });
+      if (response.ok) {
+        await fetchSurgeries();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Failed to receive patient in theatre');
+      }
+    } catch (error) {
+      alert('A network error occurred while receiving the patient');
+    } finally {
+      setReceivingId(null);
     }
   };
 
@@ -574,6 +608,20 @@ export default function SurgeriesPage() {
                             <CheckCircle className="w-4 h-4" />
                           </button>
                         )}
+
+                        {/* Receive in Theatre (en-route patient has arrived) */}
+                        {canReceiveInTheatre &&
+                          surgery.holdingAreaAssessment?.status === 'ENROUTE_TO_THEATRE' && (
+                            <button
+                              onClick={() => handleReceiveInTheatre(surgery.holdingAreaAssessment!.id)}
+                              disabled={receivingId === surgery.holdingAreaAssessment.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Receive this en-route patient in the theatre"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              {receivingId === surgery.holdingAreaAssessment.id ? 'Receiving…' : 'Receive in Theatre'}
+                            </button>
+                          )}
 
                         {/* WHO Checklist */}
                         {canAccessWHOChecklist && (

@@ -358,7 +358,7 @@ export default function RadioPlayer() {
       </button>
     )}
     <div
-      className={`fixed bottom-4 left-4 z-[10005] w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 print:hidden ${
+      className={`fixed bottom-4 right-4 z-[10005] w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 print:hidden ${
         isEmergency
           ? 'bg-red-600 border-red-900 text-white animate-pulse'
           : 'bg-gradient-to-r from-slate-900 to-slate-800 border-primary-600 text-white'

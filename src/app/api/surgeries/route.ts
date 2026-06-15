@@ -150,6 +150,14 @@ export async function GET(request: NextRequest) {
             id: true,
           },
         },
+        holdingAreaAssessment: {
+          select: {
+            id: true,
+            status: true,
+            clearedForTheatre: true,
+            transferredToTheatre: true,
+          },
+        },
       },
       orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }]
     });
@@ -172,17 +180,22 @@ export async function GET(request: NextRequest) {
       theatreName: s.theatreId ? theatreMap.get(s.theatreId)?.name ?? null : null,
     }));
 
-    // For daily planning views, keep output stable by sorting by theatre then unit.
+    // For daily planning views: sort by DATE first, then surgical UNIT, then the
+    // theatre for that day, and finally the scheduled start time within the theatre.
     enriched.sort((a, b) => {
-      const theatreA = (a.theatreName || 'Unassigned Theatre').toLowerCase();
-      const theatreB = (b.theatreName || 'Unassigned Theatre').toLowerCase();
-      if (theatreA < theatreB) return -1;
-      if (theatreA > theatreB) return 1;
+      const dateA = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+      const dateB = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+      if (dateA !== dateB) return dateA - dateB;
 
       const unitA = (a.unit || '').toLowerCase();
       const unitB = (b.unit || '').toLowerCase();
       if (unitA < unitB) return -1;
       if (unitA > unitB) return 1;
+
+      const theatreA = (a.theatreName || 'Unassigned Theatre').toLowerCase();
+      const theatreB = (b.theatreName || 'Unassigned Theatre').toLowerCase();
+      if (theatreA < theatreB) return -1;
+      if (theatreA > theatreB) return 1;
 
       const timeA = (a.scheduledTime || '').toLowerCase();
       const timeB = (b.scheduledTime || '').toLowerCase();
