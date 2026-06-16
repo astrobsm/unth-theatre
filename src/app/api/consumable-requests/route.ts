@@ -69,6 +69,35 @@ export async function GET(req: NextRequest) {
     },
     orderBy: [{ surgery: { scheduledDate: "asc" } }, { createdAt: "asc" }],
   });
+
+  // Fallback: for requests with no linked requester (e.g. older bookings) but a
+  // saved requester name, look up that staff member's profile so the pack
+  // provider still sees the phone number they entered when onboarding.
+  const unlinkedNames = Array.from(
+    new Set(
+      items
+        .filter((it) => !it.requestedBy && it.requestedByName)
+        .map((it) => it.requestedByName!.trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (unlinkedNames.length) {
+    const profiles = await prisma.user.findMany({
+      where: { fullName: { in: unlinkedNames, mode: "insensitive" } },
+      select: { fullName: true, phoneNumber: true },
+    });
+    const byName = new Map(profiles.map((p) => [p.fullName.trim().toLowerCase(), p]));
+    for (const it of items as any[]) {
+      if (!it.requestedBy && it.requestedByName) {
+        const p = byName.get(it.requestedByName.trim().toLowerCase());
+        if (p) {
+          it.requestedBy = { id: null, fullName: p.fullName, phoneNumber: p.phoneNumber };
+        }
+      }
+    }
+  }
+
   return NextResponse.json(items);
 }
 
