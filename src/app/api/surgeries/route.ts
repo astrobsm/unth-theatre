@@ -449,6 +449,8 @@ export async function POST(request: NextRequest) {
           unit: c.unit ?? "piece",
           quantity: c.quantity,
           notes: c.notes ?? null,
+          requestedById: (session.user as any).id,
+          requestedByName: (session.user as any).fullName || (session.user as any).name || null,
         })),
       });
     }

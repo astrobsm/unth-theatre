@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
   const items = await prisma.surgeryConsumableRequest.findMany({
     where,
     include: {
+      requestedBy: { select: { id: true, fullName: true, phoneNumber: true } },
       surgery: {
         select: {
           id: true,

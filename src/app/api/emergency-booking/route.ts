@@ -575,6 +575,8 @@ export async function POST(request: NextRequest) {
           unit: c.unit,
           quantity: c.quantity,
           notes: c.notes ?? null,
+          requestedById: session.user.id,
+          requestedByName: session.user.name || null,
         })),
       });
 

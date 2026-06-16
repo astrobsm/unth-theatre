@@ -552,6 +552,7 @@ model User {
 
   // Pre-pack & post-op pharmacy back-relations
   consumablePacks    SurgeryConsumableRequest[]   @relation("ConsumablePackedBy")
+  consumableRequested SurgeryConsumableRequest[]  @relation("ConsumableRequestedBy")
   drugDressingPacks  SurgeryDrugDressingRequest[] @relation("DrugDressingPackedBy")
   postOpRxPrescribed PostOpPrescription[]         @relation("PostOpPrescribedBy")
   postOpRxPacked     PostOpPrescription[]         @relation("PostOpPackedBy")
@@ -6393,6 +6394,8 @@ model SurgeryConsumableRequest {
   quantity     Int                        @default(1)
   notes        String?
   status       SurgeryPackStatus          @default(REQUESTED)
+  requestedById   String? // User who created/booked this request
+  requestedByName String? // Snapshot of requester name at booking time
   packedById   String?
   packedByName String?
   packedAt     DateTime?
@@ -6403,6 +6406,7 @@ model SurgeryConsumableRequest {
   surgery  Surgery                     @relation("SurgeryConsumableRequests", fields: [surgeryId], references: [id])
   template SurgicalConsumableTemplate? @relation(fields: [templateId], references: [id])
   packedBy User?                       @relation("ConsumablePackedBy", fields: [packedById], references: [id])
+  requestedBy User?                    @relation("ConsumableRequestedBy", fields: [requestedById], references: [id])
 
   @@index([surgeryId])
   @@index([status])

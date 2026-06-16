@@ -15,6 +15,8 @@ interface Item {
   notes?: string | null;
   packedByName?: string | null;
   packedAt?: string | null;
+  requestedByName?: string | null;
+  requestedBy?: { id: string; fullName: string; phoneNumber?: string | null } | null;
   surgery: {
     id: string;
     procedureName: string;
@@ -127,6 +129,9 @@ export default function ConsumablePackProviderPage() {
       {grouped.map((g) => {
         const pendingCount = g.items.filter((i) => i.status === "REQUESTED" || i.status === "PACKING").length;
         const allPacked = pendingCount === 0;
+        const requesterItem = g.items.find((i) => i.requestedBy || i.requestedByName);
+        const requesterName = requesterItem?.requestedBy?.fullName || requesterItem?.requestedByName || null;
+        const requesterPhone = requesterItem?.requestedBy?.phoneNumber || null;
         return (
           <div key={g.surgery.id} className={`card border ${g.surgery.surgeryType === "EMERGENCY" ? "border-red-300 bg-red-50/40" : "border-gray-200"}`}>
             <div className="flex items-start justify-between gap-3">
@@ -144,17 +149,17 @@ export default function ConsumablePackProviderPage() {
                 <div className="font-semibold text-lg">{g.surgery.patient.name}{g.surgery.patient.folderNumber ? ` (${g.surgery.patient.folderNumber})` : ""}</div>
                 <div className="text-sm text-gray-700">{g.surgery.procedureName} — {g.surgery.surgeonName}</div>
 
-                {/* Contacts: requester (surgeon) + patient phones */}
+                {/* Contacts: requester (who created the request) + patient phones */}
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                   <span className="text-gray-600">
                     <span className="font-medium text-gray-700">Requested by:</span>{" "}
-                    {g.surgery.surgeon?.fullName || g.surgery.surgeonName || "—"}
-                    {g.surgery.surgeon?.phoneNumber ? (
+                    {requesterName || "—"}
+                    {requesterPhone ? (
                       <a
-                        href={`tel:${g.surgery.surgeon.phoneNumber.replace(/\s+/g, "")}`}
+                        href={`tel:${requesterPhone.replace(/\s+/g, "")}`}
                         className="ml-1 inline-flex items-center gap-1 text-green-700 hover:underline"
                       >
-                        <Phone className="w-3 h-3" /> {g.surgery.surgeon.phoneNumber}
+                        <Phone className="w-3 h-3" /> {requesterPhone}
                       </a>
                     ) : (
                       <span className="ml-1 text-gray-400">(no phone)</span>

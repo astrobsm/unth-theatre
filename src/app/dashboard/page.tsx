@@ -428,21 +428,22 @@ export default function DashboardPage() {
 
       {/* Analytics Section */}
       <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-3 rounded-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-blue-600 p-3 rounded-lg flex-shrink-0">
               <BarChart3 className="w-6 h-6 text-white" />
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Performance Analytics</h2>
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Performance Analytics</h2>
               <p className="text-sm text-gray-600">Visual insights and trends</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <select
               value={timeRange}
               onChange={(e) => setTimeRange(Number(e.target.value))}
-              className="input-field w-40"
+              className="input-field flex-1 sm:flex-none sm:w-40"
+              aria-label="Analytics time range"
             >
               <option value={7}>Last 7 days</option>
               <option value={30}>Last 30 days</option>
@@ -451,7 +452,7 @@ export default function DashboardPage() {
             <button
               onClick={() => refetchAnalytics()}
               disabled={analyticsLoading}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary flex items-center gap-2 flex-shrink-0"
             >
               <RefreshCw className={`w-4 h-4 ${analyticsLoading ? 'animate-spin' : ''}`} />
               Refresh
