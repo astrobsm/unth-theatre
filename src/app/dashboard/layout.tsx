@@ -270,9 +270,18 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Mobile backdrop — tap to close the sidebar. Only on < lg where the
+          sidebar overlays the content instead of pushing it. */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          aria-hidden
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 bg-gradient-to-b from-primary-800 to-primary-900 text-white shadow-2xl transition-all duration-300 z-40 ${
-        sidebarOpen ? 'w-64' : 'w-0'
+        sidebarOpen ? 'w-64 max-w-[85vw]' : 'w-0'
       }`}>
         <div className={`${sidebarOpen ? 'block' : 'hidden'}`}>
           <div className="p-6 border-b border-primary-700">

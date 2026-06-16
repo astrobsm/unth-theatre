@@ -130,3 +130,56 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------
+ * Global mobile-first safety nets (apply app-wide, every page)
+ * -------------------------------------------------------------*/
+
+/* Never let a stray wide element trigger horizontal scrolling of the
+   whole document on a phone. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Modal overlays — the dashboard uses the common Tailwind pattern
+   `fixed inset-0 ... flex items-center justify-center`. On short
+   phone screens a tall modal would push its action buttons off the
+   bottom with no way to reach them. These rules guarantee every such
+   overlay has a safe gutter and scrolls, and that the panel inside
+   never exceeds the viewport (it scrolls internally instead). */
+.fixed.inset-0.flex.items-center.justify-center {
+  padding: 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.fixed.inset-0.flex.items-center.justify-center > * {
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  max-width: 100%;
+  overflow-y: auto;
+}
+
+/* Tables: wrap-free cells can blow out the layout. Any table that is
+   NOT inside an explicit horizontal scroll container still gets a
+   sane minimum behaviour on phones. Pair a table with a parent that
+   has `overflow-x-auto` for the best experience. */
+@media (max-width: 640px) {
+  .dashboard-main table {
+    font-size: 0.8125rem;
+  }
+  .dashboard-main table th,
+  .dashboard-main table td {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+/* Images and media never overflow their container. */
+.dashboard-main img,
+.dashboard-main video,
+.dashboard-main canvas {
+  max-width: 100%;
+}
+
+
