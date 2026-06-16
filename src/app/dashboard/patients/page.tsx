@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Search, User } from 'lucide-react';
 import Link from 'next/link';
+import ContactName from '@/components/ContactName';
 
 interface Patient {
   id: string;
@@ -125,7 +126,9 @@ export default function PatientsPage() {
                 {filteredPatients.map((patient) => (
                   <tr key={patient.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{patient.name}</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        <ContactName type="patient" id={patient.id} name={patient.name} />
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {patient.folderNumber}

@@ -6,10 +6,12 @@ import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, 
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
+import ContactName from '@/components/ContactName';
 
 interface Surgery {
   id: string;
   patient: {
+    id?: string;
     name: string;
     folderNumber: string;
     age?: number;
@@ -17,6 +19,7 @@ interface Surgery {
     ward?: string;
   };
   surgeon: {
+    id?: string;
     fullName: string;
   } | null;
   surgeonName?: string | null;
@@ -509,7 +512,11 @@ export default function SurgeriesPage() {
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {surgery.patient?.name || 'Unknown Patient'}
+                        {surgery.patient?.name ? (
+                          <ContactName type="patient" id={surgery.patient.id} name={surgery.patient.name} />
+                        ) : (
+                          'Unknown Patient'
+                        )}
                       </div>
                       <div className="text-xs text-gray-500">
                         {surgery.patient?.folderNumber || 'N/A'}
@@ -539,7 +546,13 @@ export default function SurgeriesPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {surgery.surgeon?.fullName || surgery.surgeonName || 'Not assigned'}
+                      {surgery.surgeon?.fullName ? (
+                        <ContactName type="user" id={surgery.surgeon.id} name={surgery.surgeon.fullName} />
+                      ) : surgery.surgeonName ? (
+                        <ContactName type="user" name={surgery.surgeonName} />
+                      ) : (
+                        'Not assigned'
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">

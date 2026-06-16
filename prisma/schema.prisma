@@ -731,6 +731,9 @@ model Patient {
   age          Int
   gender       String
   ward         String
+  phoneNumber       String? // Patient's own phone number for communication
+  caregiverName     String? // Optional next-of-kin / caregiver name
+  caregiverPhone    String? // Optional caregiver phone number to reach for information
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

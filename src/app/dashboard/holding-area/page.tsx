@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { SYNC_INTERVALS } from '@/lib/sync';
+import ContactName from '@/components/ContactName';
 
 interface Patient {
   id: string;
@@ -392,7 +393,11 @@ export default function HoldingAreaPage() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="font-bold text-lg text-gray-900">
-                    {assessment.patient?.name || 'Unknown Patient'}
+                    {assessment.patient?.name ? (
+                      <ContactName type="patient" id={assessment.patient.id} name={assessment.patient.name} />
+                    ) : (
+                      'Unknown Patient'
+                    )}
                   </h3>
                   <p className="text-sm text-gray-600">
                     {assessment.patient?.folderNumber || 'N/A'} • {assessment.patient?.age || 'N/A'}y • {assessment.patient?.gender || 'N/A'}
@@ -415,7 +420,9 @@ export default function HoldingAreaPage() {
               {/* Surgery Details */}
               <div className="mb-4 text-sm">
                 <p className="font-medium text-gray-900">{assessment.surgery?.procedureName}</p>
-                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.fullName || 'N/A'}</p>
+                <p className="text-gray-600">Surgeon: {assessment.surgery?.surgeon?.fullName ? (
+                  <ContactName type="user" name={assessment.surgery.surgeon.fullName} />
+                ) : 'N/A'}</p>
                 <p className="text-gray-600">
                   Scheduled: {new Date(assessment.surgery.scheduledDate).toLocaleDateString()} at {assessment.surgery.scheduledTime}
                 </p>

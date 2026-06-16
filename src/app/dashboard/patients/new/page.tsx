@@ -241,6 +241,9 @@ export default function NewPatientPage() {
       age: parseInt(formData.get('age') as string),
       gender: formData.get('gender'),
       ward: formData.get('ward'),
+      phoneNumber: (formData.get('phoneNumber') as string)?.trim() || null,
+      caregiverName: (formData.get('caregiverName') as string)?.trim() || null,
+      caregiverPhone: (formData.get('caregiverPhone') as string)?.trim() || null,
       
       // DVT Risk Assessment
       dvtRiskScore: dvtScore,
@@ -418,6 +421,38 @@ export default function NewPatientPage() {
                   <option key={ward} value={ward}>{ward}</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="label">Patient Phone Number</label>
+              <input
+                type="tel"
+                name="phoneNumber"
+                inputMode="tel"
+                className="input-field"
+                placeholder="e.g., 0803 123 4567"
+              />
+            </div>
+
+            <div>
+              <label className="label">Caregiver / Next-of-Kin Name (optional)</label>
+              <input
+                type="text"
+                name="caregiverName"
+                className="input-field"
+                placeholder="Person to reach for information"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="label">Caregiver Phone Number (optional)</label>
+              <input
+                type="tel"
+                name="caregiverPhone"
+                inputMode="tel"
+                className="input-field"
+                placeholder="e.g., 0803 765 4321"
+              />
             </div>
           </div>
         </div>

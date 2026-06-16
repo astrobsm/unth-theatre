@@ -18,6 +18,7 @@ const USER_ROLES = [
   'CONSUMABLE_PACK_PROVIDER',
 ] as const;
 import OnboardingSubmissionsPanel from '@/components/OnboardingSubmissionsPanel';
+import ContactName from '@/components/ContactName';
 // XLSX loaded dynamically when needed (export/import actions)
 
 interface User {
@@ -598,7 +599,11 @@ export default function UsersPage() {
                 {pendingUsers.map((user) => (
                   <tr key={user.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {user.fullName || 'Not assigned'}
+                      {user.fullName ? (
+                        <ContactName type="user" id={user.id} name={user.fullName} />
+                      ) : (
+                        'Not assigned'
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {user.username}
@@ -667,7 +672,11 @@ export default function UsersPage() {
               {users.map((user) => (
                 <tr key={user.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {user.fullName || 'Not assigned'}
+                    {user.fullName ? (
+                      <ContactName type="user" id={user.id} name={user.fullName} />
+                    ) : (
+                      'Not assigned'
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {user.username}

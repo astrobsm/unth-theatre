@@ -14,6 +14,9 @@ const patientSchema = z.object({
   age: z.number().int().positive(),
   gender: z.string(),
   ward: z.string(),
+  phoneNumber: z.string().optional().nullable().transform(val => val || null),
+  caregiverName: z.string().optional().nullable().transform(val => val || null),
+  caregiverPhone: z.string().optional().nullable().transform(val => val || null),
   
   // DVT Risk Assessment
   dvtRiskScore: z.number().optional(),
