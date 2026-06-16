@@ -94,6 +94,8 @@ const TRAINING_DEPARTMENTS: RosterDepartment[] = [
   { id: 'biomedical', name: 'Biomedical Engineering', group: 'Biomedical Engineers and Technicians' },
   { id: 'power-house', name: 'Power House / Facilities', group: 'Power House and Facilities Staff' },
   { id: 'oxygen', name: 'Oxygen / Medical Gas Unit', group: 'Medical Gas / Oxygen Staff' },
+  { id: 'plumbing', name: 'Plumbing Unit', group: 'Plumbers and Maintenance Staff' },
+  { id: 'water-supply', name: 'Water Supply Unit', group: 'Water Supply / Reticulation Staff' },
 ];
 
 const TRAINING_AGENDA = [
