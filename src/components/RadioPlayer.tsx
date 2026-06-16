@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2 } from 'lucide-react';
+import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical } from 'lucide-react';
 
 interface Announcement {
   id: string;
@@ -34,6 +34,11 @@ export default function RadioPlayer() {
   const [speaking, setSpeaking] = useState(false);
   const [ackBusy, setAckBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  // User-chosen widget position (top-left px). null = default bottom-right anchor.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
+  const dragOffsetRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playedRecentlyRef = useRef<Map<string, number>>(new Map());
   // IDs the user has acknowledged in this tab. Even if the server hasn't
@@ -85,6 +90,74 @@ export default function RadioPlayer() {
     if (typeof window === 'undefined') return;
     try { window.localStorage.setItem('theatreRadio.muted', muted ? '1' : '0'); } catch {}
   }, [muted]);
+
+  // Restore the user's saved widget position once on mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('theatreRadio.pos');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+          // Clamp into the current viewport in case the window shrank.
+          const x = Math.max(0, Math.min(p.x, window.innerWidth - 80));
+          const y = Math.max(0, Math.min(p.y, window.innerHeight - 40));
+          setPos({ x, y });
+        }
+      }
+    } catch { /* ignore malformed value */ }
+  }, []);
+
+  // Global pointer handlers that drive dragging once a grab has begun.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onMove = (e: PointerEvent) => {
+      if (!draggingRef.current) return;
+      e.preventDefault();
+      const el = dragRef.current;
+      const w = el?.offsetWidth ?? 320;
+      const h = el?.offsetHeight ?? 60;
+      let x = e.clientX - dragOffsetRef.current.dx;
+      let y = e.clientY - dragOffsetRef.current.dy;
+      x = Math.max(0, Math.min(x, window.innerWidth - w));
+      y = Math.max(0, Math.min(y, window.innerHeight - h));
+      setPos({ x, y });
+    };
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.userSelect = '';
+      setPos((p) => {
+        if (p) {
+          try { window.localStorage.setItem('theatreRadio.pos', JSON.stringify(p)); } catch {}
+        }
+        return p;
+      });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
+
+  // Begin a drag from the grip handle.
+  const startDrag = useCallback((e: React.PointerEvent) => {
+    const el = dragRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    dragOffsetRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    draggingRef.current = true;
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  // Double-click the grip to snap back to the default bottom-right corner.
+  const resetPosition = useCallback(() => {
+    setPos(null);
+    try { window.localStorage.removeItem('theatreRadio.pos'); } catch {}
+  }, []);
 
   const markPlayed = useCallback(async (id: string) => {
     try {
@@ -358,13 +431,25 @@ export default function RadioPlayer() {
       </button>
     )}
     <div
-      className={`fixed bottom-4 right-4 z-[10005] w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 print:hidden ${
+      ref={dragRef}
+      style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
+      className={`fixed ${pos ? '' : 'bottom-4 right-4'} z-[10005] w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 print:hidden ${
         isEmergency
           ? 'bg-red-600 border-red-900 text-white animate-pulse'
           : 'bg-gradient-to-r from-slate-900 to-slate-800 border-primary-600 text-white'
       }`}
     >
       <div className="flex items-center px-4 py-2 gap-3">
+        {/* Drag handle — grab to reposition, double-click to reset to corner */}
+        <button
+          onPointerDown={startDrag}
+          onDoubleClick={resetPosition}
+          className="p-1 -ml-2 rounded hover:bg-white/10 cursor-grab active:cursor-grabbing touch-none"
+          title="Drag to move the radio. Double-click to reset to the corner."
+          aria-label="Move theatre radio"
+        >
+          <GripVertical className="w-4 h-4 opacity-70" />
+        </button>
         <button
           onClick={() => {
             if (!enabled) {
