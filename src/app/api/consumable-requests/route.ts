@@ -71,29 +71,32 @@ export async function GET(req: NextRequest) {
   });
 
   // Fallback: for requests with no linked requester (e.g. older bookings) but a
-  // saved requester name, look up that staff member's profile so the pack
+  // saved requester name — or surgeries whose surgeon was typed in as free text
+  // with no linked profile — look up that staff member's profile so the pack
   // provider still sees the phone number they entered when onboarding.
-  const unlinkedNames = Array.from(
-    new Set(
-      items
-        .filter((it) => !it.requestedBy && it.requestedByName)
-        .map((it) => it.requestedByName!.trim())
-        .filter(Boolean)
-    )
-  );
+  const namesToResolve = new Set<string>();
+  for (const it of items as any[]) {
+    if (!it.requestedBy && it.requestedByName) namesToResolve.add(it.requestedByName.trim());
+    const s = it.surgery;
+    if (s && !s.surgeon?.phoneNumber && s.surgeonName) namesToResolve.add(s.surgeonName.trim());
+  }
+  const unlinkedNames = Array.from(namesToResolve).filter(Boolean);
 
   if (unlinkedNames.length) {
     const profiles = await prisma.user.findMany({
       where: { fullName: { in: unlinkedNames, mode: "insensitive" } },
-      select: { fullName: true, phoneNumber: true },
+      select: { id: true, fullName: true, phoneNumber: true },
     });
     const byName = new Map(profiles.map((p) => [p.fullName.trim().toLowerCase(), p]));
     for (const it of items as any[]) {
       if (!it.requestedBy && it.requestedByName) {
         const p = byName.get(it.requestedByName.trim().toLowerCase());
-        if (p) {
-          it.requestedBy = { id: null, fullName: p.fullName, phoneNumber: p.phoneNumber };
-        }
+        if (p) it.requestedBy = { id: p.id, fullName: p.fullName, phoneNumber: p.phoneNumber };
+      }
+      const s = it.surgery;
+      if (s && !s.surgeon?.phoneNumber && s.surgeonName) {
+        const p = byName.get(s.surgeonName.trim().toLowerCase());
+        if (p) s.surgeon = { id: p.id, fullName: p.fullName, phoneNumber: p.phoneNumber };
       }
     }
   }

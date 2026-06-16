@@ -130,8 +130,19 @@ export default function ConsumablePackProviderPage() {
         const pendingCount = g.items.filter((i) => i.status === "REQUESTED" || i.status === "PACKING").length;
         const allPacked = pendingCount === 0;
         const requesterItem = g.items.find((i) => i.requestedBy || i.requestedByName);
-        const requesterName = requesterItem?.requestedBy?.fullName || requesterItem?.requestedByName || null;
-        const requesterPhone = requesterItem?.requestedBy?.phoneNumber || null;
+        // Prefer the actual user who created the request; for older requests with
+        // no creator on file, fall back to the booking surgeon so the pack
+        // provider always has someone to contact.
+        const requesterName =
+          requesterItem?.requestedBy?.fullName ||
+          requesterItem?.requestedByName ||
+          g.surgery.surgeon?.fullName ||
+          g.surgery.surgeonName ||
+          null;
+        const requesterPhone =
+          requesterItem?.requestedBy?.phoneNumber ||
+          g.surgery.surgeon?.phoneNumber ||
+          null;
         return (
           <div key={g.surgery.id} className={`card border ${g.surgery.surgeryType === "EMERGENCY" ? "border-red-300 bg-red-50/40" : "border-gray-200"}`}>
             <div className="flex items-start justify-between gap-3">
