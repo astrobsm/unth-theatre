@@ -8,6 +8,7 @@ import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 import AssistantWidget from '@/components/AssistantWidget';
 import OrmGoLiveBanner from '@/components/OrmGoLiveBanner';
+import CarelineBar from '@/components/CarelineBar';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import {
   LayoutDashboard,
@@ -430,6 +431,7 @@ export default function DashboardLayout({
             the root stacking context.
           */}
           <div className="relative">
+            <CarelineBar />
             <OrmGoLiveBanner />
             {children}
           </div>
