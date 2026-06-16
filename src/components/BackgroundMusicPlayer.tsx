@@ -65,6 +65,11 @@ export default function BackgroundMusicPlayer() {
   const wasPlayingBeforeDuck = useRef(false);
   const fadeTimerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const duckCountRef         = useRef(0); // supports nested/overlapping duck triggers
+  // Music never auto-starts. A freshly opened window/tab always begins paused;
+  // playback only begins after the user explicitly presses Play. This ref
+  // tracks that explicit intent so track changes within a playing session keep
+  // going, while a brand-new page load stays silent.
+  const playIntentRef        = useRef(false);
 
   // Smoothly ramp the audio element volume to `target` over `durationMs`.
   // Cancels any in-flight fade. Calls `onDone` when finished. If the audio
@@ -165,6 +170,12 @@ export default function BackgroundMusicPlayer() {
     a.loop   = false; // playlist auto-advances instead of looping single
     a.volume = ducked ? 0 : volume;
     setError(null);
+    // Do NOT auto-play on mount or initial track load. Only continue playback
+    // if the user has already pressed Play in this session (playIntentRef).
+    if (!playIntentRef.current) {
+      setPlaying(false);
+      return () => { cancelled = true; };
+    }
     a.play()
       .then(() => { if (!cancelled) { setPlaying(true); setError(null); } })
       .catch((e) => {
@@ -243,13 +254,15 @@ export default function BackgroundMusicPlayer() {
   }, []);
 
   const togglePlay = useCallback(async () => {
-    if (!enabled) { setEnabled(true); return; }
+    if (!enabled) { playIntentRef.current = true; setEnabled(true); return; }
     const a = audioRef.current;
     if (!a) return;
     if (a.paused) {
+      playIntentRef.current = true;
       try { await a.play(); setPlaying(true); setError(null); }
       catch (e: any) { setError(e?.message || 'Playback blocked.'); }
     } else {
+      playIntentRef.current = false;
       a.pause(); setPlaying(false);
     }
   }, [enabled]);

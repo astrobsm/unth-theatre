@@ -412,7 +412,12 @@ export default function RadioPlayer() {
 
   if (status !== 'authenticated') return null;
 
-  const top = queue[0];
+  // The "active" announcement is the highest-priority item the user has NOT
+  // already acknowledged in this tab. Skipping suppressed ids here guarantees
+  // the Acknowledge button disappears the instant it is clicked and never
+  // re-appears for an item already dealt with (even if the next server poll
+  // still briefly returns it).
+  const top = queue.find((q) => !suppressedRef.current.has(q.id));
   const isEmergency = top && (top.category === 'EMERGENCY' || top.priority >= 90);
 
   return (
@@ -500,16 +505,6 @@ export default function RadioPlayer() {
                 </span>
               )}
             </div>
-
-            {top?.requireAck && (
-              <button
-                onClick={() => acknowledge(top.id)}
-                disabled={ackBusy}
-                className="relative z-[10010] flex items-center gap-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold disabled:opacity-60"
-              >
-                <CheckCircle2 className="w-4 h-4" /> Acknowledge
-              </button>
-            )}
           </>
         )}
       </div>
