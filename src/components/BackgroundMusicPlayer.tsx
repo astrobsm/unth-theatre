@@ -16,6 +16,7 @@ import {
   Music, Pause, Play, Volume2, VolumeX, ChevronDown,
   SkipForward, SkipBack, Shuffle,
 } from 'lucide-react';
+import { useMediaHub } from '@/components/MediaHub';
 
 const LS_ENABLED   = 'bgMusic.enabled';
 const LS_VOLUME    = 'bgMusic.volume';
@@ -49,6 +50,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 export default function BackgroundMusicPlayer() {
+  const { mode, collapse, setMusicActive } = useMediaHub();
   const [enabled,   setEnabled]   = useState(false);
   const [playing,   setPlaying]   = useState(false);
   const [ducked,    setDucked]    = useState(false);
@@ -293,41 +295,36 @@ export default function BackgroundMusicPlayer() {
 
   const armAutohide = useCallback(() => {
     clearAutohide();
-    autohideTimerRef.current = setTimeout(() => setCollapsed(true), AUTOHIDE_MS);
-  }, [clearAutohide]);
+    autohideTimerRef.current = setTimeout(() => collapse(), AUTOHIDE_MS);
+  }, [clearAutohide, collapse]);
 
-  // Re-arm whenever the panel becomes visible or relevant state changes.
+  // Re-arm whenever the panel is visible (mode === 'music') or relevant state changes.
   useEffect(() => {
-    if (collapsed) { clearAutohide(); return; }
+    if (mode !== 'music') { clearAutohide(); return; }
     armAutohide();
     return clearAutohide;
-  }, [collapsed, enabled, playing, idx, volume, shuffle, armAutohide, clearAutohide]);
+  }, [mode, enabled, playing, idx, volume, shuffle, armAutohide, clearAutohide]);
 
   // Cleanup on unmount
   useEffect(() => clearAutohide, [clearAutohide]);
 
+  // Report active-playing state to the combined media hub so the launcher icon
+  // can reflect it (green music badge).
+  useEffect(() => {
+    setMusicActive(enabled && playing && !ducked);
+  }, [enabled, playing, ducked, setMusicActive]);
+
   return (
     <div
-      className="fixed bottom-20 left-4 z-[10006] print:hidden"
-      onMouseEnter={collapsed ? undefined : clearAutohide}
-      onMouseLeave={collapsed ? undefined : armAutohide}
+      className="fixed bottom-20 right-4 z-[10006] print:hidden"
+      onMouseEnter={clearAutohide}
+      onMouseLeave={armAutohide}
     >
-      {collapsed ? (
-        // Auto-hidden state: tiny floating icon. Click to reveal full controls.
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          title={`Background music — ${headerLabel}`}
-          aria-label={`Background music — ${headerLabel}`}
-          className={`w-9 h-9 rounded-full bg-white border border-gray-200 shadow-lg flex items-center justify-center hover:bg-gray-50 transition-opacity ${enabled && playing ? 'opacity-90' : 'opacity-50 hover:opacity-100'}`}
-        >
-          <Music className={`w-4 h-4 ${ducked ? 'text-amber-500' : enabled && playing ? 'text-green-600' : 'text-gray-400'}`} />
-        </button>
-      ) : (
+      {mode === 'music' && (
         <div className="bg-white border border-gray-200 shadow-lg rounded-xl overflow-hidden">
           <button
             type="button"
-            onClick={() => setCollapsed(true)}
+            onClick={collapse}
             className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-gray-50 max-w-[20rem]"
           >
             <Music className={`w-4 h-4 flex-shrink-0 ${ducked ? 'text-amber-500' : enabled && playing ? 'text-green-600' : 'text-gray-400'}`} />
@@ -336,7 +333,7 @@ export default function BackgroundMusicPlayer() {
             <ChevronDown className="w-3 h-3 text-gray-400" />
           </button>
 
-          <div className="px-3 pb-3 pt-1 space-y-2 w-80" onClick={clearAutohide}>
+          <div className="px-3 pb-3 pt-1 space-y-2 w-80 max-w-[88vw]" onClick={clearAutohide}>
             <div className="text-[11px] text-gray-700 leading-tight min-h-[2.2rem]">
               {currentTrack ? (
                 <>

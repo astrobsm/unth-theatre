@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical } from 'lucide-react';
+import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical, X } from 'lucide-react';
+import { useMediaHub } from '@/components/MediaHub';
 
 interface Announcement {
   id: string;
@@ -27,6 +28,7 @@ const POLL_MS = 7000;
 
 export default function RadioPlayer() {
   const { data: session, status } = useSession();
+  const { mode, collapse, setRadioAlert } = useMediaHub();
   const [enabled, setEnabled] = useState(false);
   const [muted, setMuted] = useState(false);
   const [queue, setQueue] = useState<Announcement[]>([]);
@@ -158,6 +160,25 @@ export default function RadioPlayer() {
     setPos(null);
     try { window.localStorage.removeItem('theatreRadio.pos'); } catch {}
   }, []);
+
+  // Tell the media hub whether an emergency / acknowledgement alert is live so
+  // the combined launcher can pulse and auto-enlarge the radio.
+  useEffect(() => {
+    const t = queue.find((q) => !suppressedRef.current.has(q.id));
+    const hasAlert = !!(t && (t.requireAck || t.category === 'EMERGENCY' || t.priority >= 90));
+    setRadioAlert(hasAlert);
+  }, [queue, setRadioAlert]);
+
+  // Auto-collapse the radio panel back to the combined icon after a short idle
+  // period — but never while an emergency still needs acknowledgement or while
+  // the radio is actively speaking.
+  useEffect(() => {
+    if (mode !== 'radio') return;
+    const t = queue.find((q) => !suppressedRef.current.has(q.id));
+    if (t?.requireAck || speaking) return;
+    const id = setTimeout(() => collapse(), 9000);
+    return () => clearTimeout(id);
+  }, [mode, queue, speaking, collapse]);
 
   const markPlayed = useCallback(async (id: string) => {
     try {
@@ -435,6 +456,7 @@ export default function RadioPlayer() {
         <CheckCircle2 className="w-5 h-5" /> ACKNOWLEDGE
       </button>
     )}
+    {mode === 'radio' && (
     <div
       ref={dragRef}
       style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
@@ -507,6 +529,15 @@ export default function RadioPlayer() {
             </div>
           </>
         )}
+        {/* Collapse back to the combined media hub icon */}
+        <button
+          onClick={collapse}
+          className="p-1 rounded hover:bg-white/10 ml-auto"
+          title="Collapse radio"
+          aria-label="Collapse theatre radio"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       {enabled && !collapsed && queue.length > 1 && (
@@ -519,6 +550,7 @@ export default function RadioPlayer() {
         </div>
       )}
     </div>
+    )}
     </>
   );
 }
