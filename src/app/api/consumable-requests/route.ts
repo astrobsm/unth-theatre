@@ -45,7 +45,16 @@ export async function GET(req: NextRequest) {
       surgery: {
         select: {
           id: true,
-          patient: { select: { name: true, folderNumber: true } },
+          patient: {
+            select: {
+              id: true,
+              name: true,
+              folderNumber: true,
+              phoneNumber: true,
+              caregiverName: true,
+              caregiverPhone: true,
+            },
+          },
           procedureName: true,
           scheduledDate: true,
           scheduledTime: true,
@@ -53,6 +62,7 @@ export async function GET(req: NextRequest) {
           surgeryType: true,
           surgeonName: true,
           location: true,
+          surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         },
       },
     },

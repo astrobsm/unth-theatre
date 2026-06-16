@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone } from "lucide-react";
+import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone, Phone } from "lucide-react";
 
 interface Item {
   id: string;
@@ -24,7 +24,15 @@ interface Item {
     surgeryType: string;
     surgeonName: string;
     location?: string | null;
-    patient: { name: string; folderNumber?: string | null };
+    surgeon?: { id: string; fullName: string; phoneNumber?: string | null } | null;
+    patient: {
+      id?: string;
+      name: string;
+      folderNumber?: string | null;
+      phoneNumber?: string | null;
+      caregiverName?: string | null;
+      caregiverPhone?: string | null;
+    };
   };
 }
 
@@ -135,6 +143,52 @@ export default function ConsumablePackProviderPage() {
                 </div>
                 <div className="font-semibold text-lg">{g.surgery.patient.name}{g.surgery.patient.folderNumber ? ` (${g.surgery.patient.folderNumber})` : ""}</div>
                 <div className="text-sm text-gray-700">{g.surgery.procedureName} — {g.surgery.surgeonName}</div>
+
+                {/* Contacts: requester (surgeon) + patient phones */}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span className="text-gray-600">
+                    <span className="font-medium text-gray-700">Requested by:</span>{" "}
+                    {g.surgery.surgeon?.fullName || g.surgery.surgeonName || "—"}
+                    {g.surgery.surgeon?.phoneNumber ? (
+                      <a
+                        href={`tel:${g.surgery.surgeon.phoneNumber.replace(/\s+/g, "")}`}
+                        className="ml-1 inline-flex items-center gap-1 text-green-700 hover:underline"
+                      >
+                        <Phone className="w-3 h-3" /> {g.surgery.surgeon.phoneNumber}
+                      </a>
+                    ) : (
+                      <span className="ml-1 text-gray-400">(no phone)</span>
+                    )}
+                  </span>
+
+                  <span className="text-gray-600">
+                    <span className="font-medium text-gray-700">Patient:</span>{" "}
+                    {g.surgery.patient.phoneNumber ? (
+                      <a
+                        href={`tel:${g.surgery.patient.phoneNumber.replace(/\s+/g, "")}`}
+                        className="inline-flex items-center gap-1 text-green-700 hover:underline"
+                      >
+                        <Phone className="w-3 h-3" /> {g.surgery.patient.phoneNumber}
+                      </a>
+                    ) : (
+                      <span className="text-gray-400">(no phone)</span>
+                    )}
+                  </span>
+
+                  {g.surgery.patient.caregiverPhone && (
+                    <span className="text-gray-600">
+                      <span className="font-medium text-gray-700">
+                        Caregiver{g.surgery.patient.caregiverName ? ` (${g.surgery.patient.caregiverName})` : ""}:
+                      </span>{" "}
+                      <a
+                        href={`tel:${g.surgery.patient.caregiverPhone.replace(/\s+/g, "")}`}
+                        className="inline-flex items-center gap-1 text-green-700 hover:underline"
+                      >
+                        <Phone className="w-3 h-3" /> {g.surgery.patient.caregiverPhone}
+                      </a>
+                    </span>
+                  )}
+                </div>
               </div>
               {allPacked && (
                 <button onClick={() => broadcast(g.surgery.id)} className="btn-primary text-xs inline-flex items-center gap-1">
