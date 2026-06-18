@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Search, User } from 'lucide-react';
 import Link from 'next/link';
 import ContactName from '@/components/ContactName';
+import { formatAge } from '@/lib/age';
 
 interface Patient {
   id: string;
@@ -11,6 +12,7 @@ interface Patient {
   folderNumber: string;
   ptNumber: string | null;
   age: number;
+  ageUnit?: string;
   gender: string;
   ward: string;
   createdAt: string;
@@ -137,7 +139,7 @@ export default function PatientsPage() {
                       {patient.ptNumber || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {patient.age}
+                      {formatAge(patient.age, patient.ageUnit)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {patient.gender}

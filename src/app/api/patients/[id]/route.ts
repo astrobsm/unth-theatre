@@ -115,6 +115,7 @@ export async function PUT(
 
     if (body.name !== undefined) updateData.name = body.name;
     if (body.age !== undefined) updateData.age = body.age;
+    if (body.ageUnit !== undefined) updateData.ageUnit = body.ageUnit;
     if (body.gender !== undefined) updateData.gender = body.gender;
     if (body.ward !== undefined) updateData.ward = body.ward;
     if (body.ptNumber !== undefined) updateData.ptNumber = body.ptNumber;

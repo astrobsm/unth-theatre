@@ -19,6 +19,7 @@ import {
   Building2
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { formatAge } from '@/lib/age';
 
 interface Patient {
   id: string;
@@ -26,6 +27,7 @@ interface Patient {
   ptNumber?: string;
   name: string;
   age: number;
+  ageUnit?: string;
   gender: string;
   ward: string;
   createdAt: string;
@@ -191,7 +193,7 @@ export default function PatientDetailPage() {
           )}
           <div>
             <label className="text-sm font-medium text-gray-500">Age</label>
-            <p className="text-gray-900">{patient.age} years</p>
+            <p className="text-gray-900">{formatAge(patient.age, patient.ageUnit)}</p>
           </div>
           <div>
             <label className="text-sm font-medium text-gray-500">Gender</label>

@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
+import { formatAge } from '@/lib/age';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -20,6 +21,7 @@ interface Patient {
   folderNumber: string;
   ptNumber: string;
   age: number;
+  ageUnit?: string;
   gender: string;
   ward: string;
 }
@@ -624,7 +626,7 @@ export default function NewSurgeryPage() {
                 <option value="">Select Patient</option>
                 {filteredPatients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
-                    {patient.name} - {patient.folderNumber} ({patient.age}y, {patient.gender})
+                    {patient.name} - {patient.folderNumber} ({formatAge(patient.age, patient.ageUnit)}, {patient.gender})
                   </option>
                 ))}
               </select>

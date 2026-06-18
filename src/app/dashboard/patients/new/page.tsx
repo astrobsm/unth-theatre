@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator } from 'lucide-react';
 import Link from 'next/link';
 import { WARDS } from '@/lib/constants';
+import { AGE_UNITS, ageInYears, type AgeUnit } from '@/lib/age';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -58,6 +59,7 @@ export default function NewPatientPage() {
 
   // Basic Info
   const [age, setAge] = useState(0);
+  const [ageUnit, setAgeUnit] = useState<AgeUnit>('YEARS');
   const [gender, setGender] = useState('');
   
   // SmartTextInput state for voice dictation
@@ -220,11 +222,12 @@ export default function NewPatientPage() {
     }
   }, [nutritionalData]);
 
-  // Sync age across assessments
+  // Sync age (converted to whole years) across the numeric risk assessments
   useEffect(() => {
-    setDvtFactors(prev => ({ ...prev, age }));
-    setBleedingFactors(prev => ({ ...prev, age }));
-  }, [age]);
+    const years = ageInYears(age, ageUnit);
+    setDvtFactors(prev => ({ ...prev, age: years }));
+    setBleedingFactors(prev => ({ ...prev, age: years }));
+  }, [age, ageUnit]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -239,6 +242,7 @@ export default function NewPatientPage() {
       folderNumber: formData.get('folderNumber'),
       ptNumber: formData.get('ptNumber'),
       age: parseInt(formData.get('age') as string),
+      ageUnit: (formData.get('ageUnit') as string) || 'YEARS',
       gender: formData.get('gender'),
       ward: formData.get('ward'),
       phoneNumber: (formData.get('phoneNumber') as string)?.trim() || null,
@@ -386,16 +390,30 @@ export default function NewPatientPage() {
 
             <div>
               <label className="label">Age *</label>
-              <input
-                type="number"
-                name="age"
-                required
-                min="0"
-                max="150"
-                className="input-field"
-                value={age || ''}
-                onChange={(e) => setAge(parseInt(e.target.value) || 0)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  name="age"
+                  required
+                  min="0"
+                  max="150"
+                  className="input-field flex-1"
+                  value={age || ''}
+                  onChange={(e) => setAge(parseInt(e.target.value) || 0)}
+                />
+                <select
+                  name="ageUnit"
+                  aria-label="Age unit"
+                  className="input-field w-32"
+                  value={ageUnit}
+                  onChange={(e) => setAgeUnit(e.target.value as AgeUnit)}
+                >
+                  {AGE_UNITS.map((u) => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">For neonates/infants choose Days, Weeks or Months (e.g. 2 Weeks, 1 Month).</p>
             </div>
 
             <div>

@@ -12,6 +12,7 @@ const patientSchema = z.object({
   folderNumber: z.string().min(1),
   ptNumber: z.string().optional().nullable().transform(val => val || null),
   age: z.number().int().positive(),
+  ageUnit: z.enum(['YEARS', 'MONTHS', 'WEEKS', 'DAYS']).optional().default('YEARS'),
   gender: z.string(),
   ward: z.string(),
   phoneNumber: z.string().optional().nullable().transform(val => val || null),

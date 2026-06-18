@@ -730,6 +730,7 @@ model Patient {
   ptNumber     String?  @unique
   name         String
   age          Int
+  ageUnit      String   @default("YEARS") // YEARS | MONTHS | WEEKS | DAYS — supports neonate/infant ages
   gender       String
   ward         String
   phoneNumber       String? // Patient's own phone number for communication
