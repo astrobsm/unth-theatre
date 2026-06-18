@@ -82,10 +82,7 @@ export default function TheatreSetupPage() {
     const pageWidth = doc.internal.pageSize.width;
 
     // Header
-    doc.setFillColor(46, 187, 112);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('THEATRE SETUP COLLECTION REPORT', pageWidth / 2, 15, { align: 'center' });
@@ -96,6 +93,9 @@ export default function TheatreSetupPage() {
       align: 'center',
     });
     doc.text('Theatre Management System', pageWidth / 2, 32, { align: 'center' });
+    doc.setDrawColor(46, 187, 112);
+    doc.setLineWidth(0.6);
+    doc.line(14, 38, pageWidth - 14, 38);
 
     // Document Info
     let yPos = 50;
@@ -108,8 +108,9 @@ export default function TheatreSetupPage() {
 
     // Setup Information
     yPos += 10;
-    doc.setFillColor(240, 240, 240);
-    doc.rect(14, yPos, pageWidth - 28, 8, 'F');
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.2);
+    doc.rect(14, yPos, pageWidth - 28, 8, 'D');
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('SETUP INFORMATION', 18, yPos + 5);
@@ -138,8 +139,9 @@ export default function TheatreSetupPage() {
 
     // Materials Collected
     yPos += 10;
-    doc.setFillColor(240, 240, 240);
-    doc.rect(14, yPos, pageWidth - 28, 8, 'F');
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.2);
+    doc.rect(14, yPos, pageWidth - 28, 8, 'D');
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('MATERIALS COLLECTED', 18, yPos + 5);
@@ -173,10 +175,12 @@ export default function TheatreSetupPage() {
         item,
         typeof qty === 'number' ? qty.toString() : qty,
       ]),
-      theme: 'striped',
+      theme: 'grid',
       headStyles: {
-        fillColor: [46, 187, 112],
-        textColor: [255, 255, 255],
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        lineColor: [120, 120, 120],
+        lineWidth: 0.1,
         fontStyle: 'bold',
         fontSize: 10,
       },
@@ -191,7 +195,6 @@ export default function TheatreSetupPage() {
       didParseCell: (data: any) => {
         const item = materials[data.row.index]?.[0];
         if (typeof item === 'string' && !item.startsWith('  ') && item !== '') {
-          data.cell.styles.fillColor = [230, 230, 230];
           data.cell.styles.fontStyle = 'bold';
         }
         if (typeof item === 'string' && !item.startsWith('  ')) {
@@ -208,15 +211,14 @@ export default function TheatreSetupPage() {
       setup.cssdCottonQuantity + setup.surgicalBladesQuantity + setup.suctionTubbingsQuantity +
       setup.disposablesQuantity;
 
-    doc.setFillColor(255, 252, 240);
-    doc.setDrawColor(255, 199, 0);
-    doc.setLineWidth(1);
-    doc.rect(14, yPos, pageWidth - 28, 20, 'FD');
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.3);
+    doc.rect(14, yPos, pageWidth - 28, 20, 'D');
 
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
     doc.text('TOTAL ITEMS COLLECTED:', 20, yPos + 8);
-    doc.setTextColor(46, 187, 112);
     doc.setFontSize(16);
     doc.text(totalItems.toString(), pageWidth - 20, yPos + 8, { align: 'right' });
 
@@ -258,10 +260,7 @@ export default function TheatreSetupPage() {
     const pageWidth = doc.internal.pageSize.width;
 
     // Header
-    doc.setFillColor(46, 187, 112);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('THEATRE SETUP SUMMARY REPORT', pageWidth / 2, 15, { align: 'center' });
@@ -272,6 +271,9 @@ export default function TheatreSetupPage() {
       align: 'center',
     });
     doc.text('Theatre Management System', pageWidth / 2, 32, { align: 'center' });
+    doc.setDrawColor(46, 187, 112);
+    doc.setLineWidth(0.6);
+    doc.line(14, 38, pageWidth - 14, 38);
 
     // Document Info
     let yPos = 50;
@@ -304,10 +306,12 @@ export default function TheatreSetupPage() {
       startY: yPos,
       head: [['Date', 'Time', 'Theatre', 'Nurse', 'Items', 'Status']],
       body: tableData,
-      theme: 'striped',
+      theme: 'grid',
       headStyles: {
-        fillColor: [46, 187, 112],
-        textColor: [255, 255, 255],
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        lineColor: [120, 120, 120],
+        lineWidth: 0.1,
         fontStyle: 'bold',
         fontSize: 9,
       },

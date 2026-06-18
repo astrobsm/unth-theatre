@@ -192,7 +192,8 @@ export default function SurgicalCatalogPage() {
           c.specialty || 'all', c.isActive ? 'Yes' : 'No', c.notes || '',
         ]),
         styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
-        headStyles: { fillColor: [37, 99, 235] },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
         columnStyles: { 7: { cellWidth: 160 } },
       });
 
@@ -209,7 +210,8 @@ export default function SurgicalCatalogPage() {
           d.isControlled ? 'YES' : '-', d.isActive ? 'Yes' : 'No', d.notes || '',
         ]),
         styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
-        headStyles: { fillColor: [124, 58, 237] },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
         columnStyles: { 9: { cellWidth: 140 } },
       });
 

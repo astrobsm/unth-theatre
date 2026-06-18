@@ -12,9 +12,7 @@ function buildPdf(): ArrayBuffer {
   let y = margin;
 
   // Header band
-  doc.setFillColor(15, 76, 129); // UNTH blue
-  doc.rect(0, 0, pageW, 28, 'F');
-  doc.setTextColor(255);
+  doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.text('UNTH — THEATRE COMPLEX', margin, 12);
@@ -22,17 +20,19 @@ function buildPdf(): ArrayBuffer {
   doc.setFontSize(10);
   doc.text('Office of the Director, Theatre Complex', margin, 18);
   doc.text('University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu', margin, 23);
+  doc.setDrawColor(15, 76, 129);
+  doc.setLineWidth(0.5);
+  doc.line(margin, 27, pageW - margin, 27);
   doc.setTextColor(0);
   y = 36;
 
   // Title block
-  doc.setFillColor(255, 247, 219);
-  doc.setDrawColor(245, 158, 11);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(margin, y, innerW, 22, 2, 2, 'FD');
+  doc.setDrawColor(120, 120, 120);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, y, innerW, 22, 2, 2, 'D');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.setTextColor(120, 53, 15);
+  doc.setTextColor(0, 0, 0);
   doc.text('OFFICIAL ANNOUNCEMENT', margin + 4, y + 7);
   doc.setFontSize(11);
   doc.text(

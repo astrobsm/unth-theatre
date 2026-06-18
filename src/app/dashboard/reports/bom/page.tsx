@@ -83,10 +83,7 @@ export default function BOMAnalyticsPage() {
     const pageWidth = doc.internal.pageSize.width;
 
     // Header
-    doc.setFillColor(46, 187, 112);
-    doc.rect(0, 0, pageWidth, 35, 'F');
-
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('BOM ANALYTICS REPORT', pageWidth / 2, 15, { align: 'center' });
@@ -96,6 +93,9 @@ export default function BOMAnalyticsPage() {
     doc.text('University of Nigeria Teaching Hospital Ituku Ozalla', pageWidth / 2, 25, {
       align: 'center',
     });
+    doc.setDrawColor(46, 187, 112);
+    doc.setLineWidth(0.6);
+    doc.line(14, 33, pageWidth - 14, 33);
 
     // Summary Stats
     let yPos = 45;
@@ -141,10 +141,13 @@ export default function BOMAnalyticsPage() {
         `₦${cat.totalCost.toLocaleString()}`,
         `${((cat.totalCost / analytics.totalCost) * 100).toFixed(1)}%`,
       ]),
-      theme: 'striped',
+      theme: 'grid',
       headStyles: {
-        fillColor: [46, 187, 112],
-        textColor: [255, 255, 255],
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        lineColor: [120, 120, 120],
+        lineWidth: 0.1,
+        fontStyle: 'bold',
       },
       margin: { left: 14, right: 14 },
     });
@@ -166,10 +169,13 @@ export default function BOMAnalyticsPage() {
         `₦${unit.totalCost.toLocaleString()}`,
         `₦${unit.averageCost.toLocaleString()}`,
       ]),
-      theme: 'striped',
+      theme: 'grid',
       headStyles: {
-        fillColor: [46, 147, 255],
-        textColor: [255, 255, 255],
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        lineColor: [120, 120, 120],
+        lineWidth: 0.1,
+        fontStyle: 'bold',
       },
       margin: { left: 14, right: 14 },
     });

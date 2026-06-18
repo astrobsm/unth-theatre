@@ -433,7 +433,8 @@ export default function UsersPage() {
         head: [[`#`, `${d} (${byDept[d].length})`, 'Phone', 'Role']],
         body,
         styles: { fontSize: 8, cellPadding: 3 },
-        headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
         margin: { left: 40, right: 40 },
       });
       startY = (doc as any).lastAutoTable.finalY + 12;
@@ -445,7 +446,8 @@ export default function UsersPage() {
         head: [[`Users without a phone on file (${withoutPhone.length})`, 'Role', 'Department']],
         body: withoutPhone.map(u => [u.fullName, u.role, u.department]),
         styles: { fontSize: 8, cellPadding: 3 },
-        headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
         margin: { left: 40, right: 40 },
       });
     }

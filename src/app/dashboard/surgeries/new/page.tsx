@@ -126,6 +126,13 @@ const CURRENT_MEDICATION_OPTIONS: string[] = [
   'Herbal / traditional medications',
 ];
 
+// A&E (Accident & Emergency) theatre is the 24/7 emergency location with two
+// suites (North Wing & South Wing) and receives cases from every surgical unit.
+function isAneLocation(loc: string): boolean {
+  const l = (loc || '').toLowerCase();
+  return l.includes('a&e') || l.includes('a & e') || l.includes('accident');
+}
+
 export default function NewSurgeryPage() {
   const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -355,10 +362,12 @@ export default function NewSurgeryPage() {
   };
 
   // When location changes: clear unit/theatre/subspecialty if they no longer match.
+  // A&E is the 24/7 emergency theatre and handles cases from every surgical unit
+  // (across its North Wing and South Wing suites), so any unit stays valid there.
   useEffect(() => {
     if (!selectedLocation) return;
     const current = surgicalUnits.find((u) => u.name === unit);
-    if (current && current.location !== selectedLocation) {
+    if (current && current.location !== selectedLocation && !isAneLocation(selectedLocation)) {
       setUnit('');
       setSubspecialty('');
     }
@@ -700,7 +709,7 @@ export default function NewSurgeryPage() {
                   {selectedLocation ? '— Select Unit —' : '(pick a location first)'}
                 </option>
                 {surgicalUnits
-                  .filter((u) => !selectedLocation || u.location === selectedLocation)
+                  .filter((u) => !selectedLocation || isAneLocation(selectedLocation) || u.location === selectedLocation)
                   .map((u) => (
                     <option key={u.id} value={u.name}>
                       {u.name} · {u.subspecialty}

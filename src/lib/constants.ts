@@ -70,8 +70,9 @@ export const CANONICAL_THEATRES: Array<{ name: string; location: Location; capac
   { name: 'Suite 3', location: 'Professor Ojukwu Theatre Complex' },
   // Location 2 – Eye Theatre
   { name: 'Eye Theatre', location: 'Eye Theatre' },
-  // Location 1 – A&E (24/7 emergency)
-  { name: 'A&E Theatre', location: 'A&E' },
+  // Location 1 – A&E (24/7 emergency) — two suites: North Wing & South Wing
+  { name: 'A&E North Wing Suite', location: 'A&E' },
+  { name: 'A&E South Wing Suite', location: 'A&E' },
   // Location 3 – Cardiothoracic Centre
   { name: 'CTU TH1', location: 'Cardiothoracic Centre' },
 ];

@@ -158,7 +158,8 @@ export function buildRegisterPdf(
     ],
     body: rows,
     styles: { fontSize: 8, cellPadding: 1.5, valign: "top" },
-    headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold" },
+    theme: "grid",
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: "bold" },
     columnStyles: {
       0: { cellWidth: 28 },
       1: { cellWidth: 38 },
@@ -203,7 +204,8 @@ export function buildRegisterPdf(
         .sort((a, b) => b[1] - a[1])
         .map(([k, v]) => [k, v]),
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [185, 28, 28], textColor: 255 },
+      theme: "grid",
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: "bold" },
       tableWidth: 120,
     });
   }
@@ -273,7 +275,8 @@ export function buildPatientPrescriptionPdf(rx: ReportPrescription) {
     head: [["#", "Drug (* = narcotic)", "Dose", "Route", "Frequency", "Timing", "Notes"]],
     body,
     styles: { fontSize: 9, cellPadding: 2, valign: "top" },
-    headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+    theme: "grid",
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: "bold" },
     columnStyles: {
       0: { cellWidth: 8 },
       1: { cellWidth: 50 },
@@ -295,11 +298,12 @@ export function buildPatientPrescriptionPdf(rx: ReportPrescription) {
 
   // Out-of-stock callout
   if (rx.hasOutOfStockItems && rx.outOfStockItems?.length) {
-    doc.setFillColor(254, 226, 226);
-    doc.rect(14, lastY + 4, 182, 14, "F");
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.3);
+    doc.rect(14, lastY + 4, 182, 14, "D");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setTextColor(153, 27, 27);
+    doc.setTextColor(0, 0, 0);
     doc.text("Out-of-stock items (alternatives requested):", 16, lastY + 10);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
@@ -326,7 +330,8 @@ export function buildPatientPrescriptionPdf(rx: ReportPrescription) {
       head: [["Narcotic drug", "Dose", "Dispensed by (sign)", "Collected by (sign)"]],
       body: narcs.map((m) => [m.name, m.dose || "", "", ""]),
       styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [185, 28, 28], textColor: 255 },
+      theme: "grid",
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: "bold" },
     });
   }
 

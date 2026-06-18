@@ -83,10 +83,7 @@ export default function SurgeryBOMPage() {
     const pageWidth = doc.internal.pageSize.width;
 
     // Header
-    doc.setFillColor(46, 187, 112);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
     doc.text('BILL OF MATERIALS (BOM)', pageWidth / 2, 15, { align: 'center' });
@@ -97,6 +94,9 @@ export default function SurgeryBOMPage() {
       align: 'center',
     });
     doc.text('Theatre Management System', pageWidth / 2, 32, { align: 'center' });
+    doc.setDrawColor(46, 187, 112);
+    doc.setLineWidth(0.6);
+    doc.line(14, 38, pageWidth - 14, 38);
 
     // Document info
     let yPos = 50;
@@ -110,8 +110,9 @@ export default function SurgeryBOMPage() {
 
     // Patient & Surgery Information
     yPos += 10;
-    doc.setFillColor(240, 240, 240);
-    doc.rect(14, yPos, pageWidth - 28, 8, 'F');
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.2);
+    doc.rect(14, yPos, pageWidth - 28, 8, 'D');
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('PATIENT & SURGERY INFORMATION', 18, yPos + 5);
@@ -141,8 +142,9 @@ export default function SurgeryBOMPage() {
 
     // Materials/Consumables Table
     yPos += 10;
-    doc.setFillColor(240, 240, 240);
-    doc.rect(14, yPos, pageWidth - 28, 8, 'F');
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.2);
+    doc.rect(14, yPos, pageWidth - 28, 8, 'D');
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('MATERIALS & CONSUMABLES BREAKDOWN', 18, yPos + 5);
@@ -162,10 +164,12 @@ export default function SurgeryBOMPage() {
       startY: yPos,
       head: [['#', 'Item Name', 'Category', 'Qty', 'Unit Cost', 'Total Cost']],
       body: tableData,
-      theme: 'striped',
+      theme: 'grid',
       headStyles: {
-        fillColor: [46, 187, 112],
-        textColor: [255, 255, 255],
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        lineColor: [120, 120, 120],
+        lineWidth: 0.1,
         fontStyle: 'bold',
         fontSize: 10,
       },
@@ -187,10 +191,9 @@ export default function SurgeryBOMPage() {
 
     // Cost Summary Box
     const boxHeight = 50;
-    doc.setFillColor(255, 252, 240);
-    doc.setDrawColor(255, 199, 0);
-    doc.setLineWidth(1);
-    doc.rect(14, yPos, pageWidth - 28, boxHeight, 'FD');
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.3);
+    doc.rect(14, yPos, pageWidth - 28, boxHeight, 'D');
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -209,7 +212,7 @@ export default function SurgeryBOMPage() {
 
     yPos += 8;
     doc.text('Markup (10%):', 20, yPos);
-    doc.setTextColor(255, 140, 0);
+    doc.setTextColor(0, 0, 0);
     doc.text(`₦${markup.toLocaleString()}`, pageWidth - 20, yPos, { align: 'right' });
 
     yPos += 2;
@@ -221,7 +224,6 @@ export default function SurgeryBOMPage() {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
     doc.text('TOTAL COST:', 20, yPos);
-    doc.setTextColor(46, 187, 112);
     doc.text(`₦${total.toLocaleString()}`, pageWidth - 20, yPos, { align: 'right' });
 
     yPos += 8;
@@ -229,7 +231,6 @@ export default function SurgeryBOMPage() {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     doc.text('Patient Charge:', 20, yPos);
-    doc.setTextColor(46, 147, 255);
     doc.text(`₦${(bom.patientCharge || total).toLocaleString()}`, pageWidth - 20, yPos, {
       align: 'right',
     });

@@ -62,6 +62,8 @@ import {
   Wind,
   Receipt,
   Shirt,
+  MessageCircle,
+  Star,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -174,6 +176,7 @@ export default function DashboardLayout({
     { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts' },
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },
     { href: '/dashboard/anonymous-tips', icon: MessageSquareWarning, label: 'Anonymous Tips', badge: 'NEW' },
+    { href: '/dashboard/feedback', icon: MessageCircle, label: 'Feedback', badge: 'NEW' },
     { href: '/dashboard/security-reports', icon: ShieldAlert, label: 'Security Reports', badge: 'NEW' },
 
     // === INVENTORY & SUPPLIES ===
@@ -203,6 +206,7 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/anonymous-tips/view', icon: Eye, label: 'Review Tips', badge: 'ADMIN' });
+    menuItems.push({ href: '/dashboard/feedback/review', icon: Star, label: 'Review Feedback', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/security-reports/view', icon: Eye, label: 'Review Security', badge: 'ADMIN' });
   }
 

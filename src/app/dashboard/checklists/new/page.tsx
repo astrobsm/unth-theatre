@@ -204,10 +204,7 @@ export default function NewChecklistPage() {
     let yPos = 20;
 
     // Header
-    doc.setFillColor(46, 187, 112);
-    doc.rect(0, 0, pageWidth, 35, 'F');
-    
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('WHO SURGICAL SAFETY CHECKLIST', pageWidth / 2, 15, { align: 'center' });
@@ -215,6 +212,9 @@ export default function NewChecklistPage() {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text('University of Nigeria Teaching Hospital Ituku Ozalla', pageWidth / 2, 25, { align: 'center' });
+    doc.setDrawColor(46, 187, 112);
+    doc.setLineWidth(0.6);
+    doc.line(14, 32, pageWidth - 14, 32);
 
     // Patient Information
     yPos = 45;
@@ -249,10 +249,11 @@ export default function NewChecklistPage() {
     yPos += 5;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.setFillColor(46, 147, 255);
-    doc.rect(14, yPos - 5, pageWidth - 28, 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.text('SIGN IN (Before Induction of Anesthesia)', 18, yPos);
+    doc.setTextColor(0, 0, 0);
+    doc.text('SIGN IN (Before Induction of Anesthesia)', 16, yPos);
+    doc.setDrawColor(46, 147, 255);
+    doc.setLineWidth(0.4);
+    doc.line(14, yPos + 2.5, pageWidth - 14, yPos + 2.5);
     
     yPos += 10;
     const signInProgress = getPhaseProgress('signIn');
@@ -272,8 +273,8 @@ export default function NewChecklistPage() {
       startY: yPos,
       head: [['Checklist Item', 'Status']],
       body: signInItems.map(([item, checked]) => [item, checked ? '✓ Yes' : '✗ No']),
-      theme: 'striped',
-      headStyles: { fillColor: [46, 147, 255] },
+      theme: 'grid',
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
       margin: { left: 14, right: 14 },
     });
 
@@ -296,10 +297,11 @@ export default function NewChecklistPage() {
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.setFillColor(255, 199, 0);
-    doc.rect(14, yPos - 5, pageWidth - 28, 8, 'F');
     doc.setTextColor(0, 0, 0);
-    doc.text('TIME OUT (Before Skin Incision)', 18, yPos);
+    doc.text('TIME OUT (Before Skin Incision)', 16, yPos);
+    doc.setDrawColor(255, 199, 0);
+    doc.setLineWidth(0.4);
+    doc.line(14, yPos + 2.5, pageWidth - 14, yPos + 2.5);
     
     yPos += 10;
     doc.setFontSize(10);
@@ -318,8 +320,8 @@ export default function NewChecklistPage() {
       startY: yPos,
       head: [['Checklist Item', 'Status']],
       body: timeOutItems.map(([item, checked]) => [item, checked ? '✓ Yes' : '✗ No']),
-      theme: 'striped',
-      headStyles: { fillColor: [255, 199, 0] },
+      theme: 'grid',
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
       margin: { left: 14, right: 14 },
     });
 
@@ -342,10 +344,11 @@ export default function NewChecklistPage() {
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.setFillColor(46, 187, 112);
-    doc.rect(14, yPos - 5, pageWidth - 28, 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.text('SIGN OUT (Before Patient Leaves Operating Room)', 18, yPos);
+    doc.setTextColor(0, 0, 0);
+    doc.text('SIGN OUT (Before Patient Leaves Operating Room)', 16, yPos);
+    doc.setDrawColor(46, 187, 112);
+    doc.setLineWidth(0.4);
+    doc.line(14, yPos + 2.5, pageWidth - 14, yPos + 2.5);
     
     yPos += 10;
     doc.setTextColor(0, 0, 0);
@@ -364,8 +367,8 @@ export default function NewChecklistPage() {
       startY: yPos,
       head: [['Checklist Item', 'Status']],
       body: signOutItems.map(([item, checked]) => [item, checked ? '✓ Yes' : '✗ No']),
-      theme: 'striped',
-      headStyles: { fillColor: [46, 187, 112] },
+      theme: 'grid',
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
       margin: { left: 14, right: 14 },
     });
 

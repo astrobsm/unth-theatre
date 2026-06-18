@@ -65,16 +65,16 @@ export async function generateWeeklyPDF(data: WeeklySummary) {
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header
-  doc.setFillColor(46, 187, 112); // Primary green
-  doc.rect(0, 0, pageWidth, 40, 'F');
-  
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(0, 0, 0);
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
   doc.text('UNTH ITUKU OZALLA', pageWidth / 2, 15, { align: 'center' });
   
   doc.setFontSize(18);
   doc.text('Theatre Manager - Weekly Summary', pageWidth / 2, 28, { align: 'center' });
+  doc.setDrawColor(46, 187, 112);
+  doc.setLineWidth(0.6);
+  doc.line(14, 34, pageWidth - 14, 34);
 
   // Week Period
   doc.setTextColor(0, 0, 0);
@@ -103,9 +103,8 @@ export async function generateWeeklyPDF(data: WeeklySummary) {
     startY: 70,
     head: [['Unit', 'Booked', 'Completed', 'Cancelled', 'Completion Rate', 'Cancellation Rate']],
     body: unitTableData,
-    theme: 'striped',
-    headStyles: { fillColor: [46, 187, 112], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    theme: 'grid',
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
     styles: { fontSize: 10, cellPadding: 3 },
   });
 
@@ -127,9 +126,8 @@ export async function generateWeeklyPDF(data: WeeklySummary) {
     startY: finalY + 20,
     head: [['Date', 'Booked', 'Completed', 'Cancelled', 'Success Rate']],
     body: dailyTableData,
-    theme: 'striped',
-    headStyles: { fillColor: [46, 147, 255], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    theme: 'grid',
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
     styles: { fontSize: 10, cellPadding: 3 },
   });
 
@@ -141,8 +139,9 @@ export async function generateWeeklyPDF(data: WeeklySummary) {
 
   const summaryY = (doc as any).lastAutoTable.finalY + 15;
   
-  doc.setFillColor(240, 240, 240);
-  doc.rect(14, summaryY, pageWidth - 28, 25, 'F');
+  doc.setDrawColor(120, 120, 120);
+  doc.setLineWidth(0.2);
+  doc.rect(14, summaryY, pageWidth - 28, 25, 'D');
   
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
@@ -172,16 +171,16 @@ export async function generateMonthlyPDF(data: MonthlySummary) {
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header
-  doc.setFillColor(46, 187, 112);
-  doc.rect(0, 0, pageWidth, 40, 'F');
-  
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(0, 0, 0);
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
   doc.text('UNTH ITUKU OZALLA', pageWidth / 2, 15, { align: 'center' });
   
   doc.setFontSize(18);
   doc.text('Theatre Manager - Monthly Analytics', pageWidth / 2, 28, { align: 'center' });
+  doc.setDrawColor(46, 187, 112);
+  doc.setLineWidth(0.6);
+  doc.line(14, 34, pageWidth - 14, 34);
 
   // Month Period
   doc.setTextColor(0, 0, 0);
@@ -208,9 +207,8 @@ export async function generateMonthlyPDF(data: MonthlySummary) {
     startY: 70,
     head: [['Unit', 'Booked', 'Completed', 'Cancelled', 'Success Rate', 'Total Cost']],
     body: unitTableData,
-    theme: 'striped',
-    headStyles: { fillColor: [46, 187, 112], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    theme: 'grid',
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 3 },
     columnStyles: {
       5: { halign: 'right' },
@@ -242,9 +240,8 @@ export async function generateMonthlyPDF(data: MonthlySummary) {
     startY: currentY + 20,
     head: [['Week Period', 'Booked', 'Completed', 'Cancelled', 'Success Rate']],
     body: weeklyTableData,
-    theme: 'striped',
-    headStyles: { fillColor: [46, 147, 255], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    theme: 'grid',
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: 'bold' },
     styles: { fontSize: 10, cellPadding: 3 },
   });
 
@@ -257,8 +254,9 @@ export async function generateMonthlyPDF(data: MonthlySummary) {
 
   const summaryY = (doc as any).lastAutoTable.finalY + 15;
   
-  doc.setFillColor(240, 240, 240);
-  doc.rect(14, summaryY, pageWidth - 28, 35, 'F');
+  doc.setDrawColor(120, 120, 120);
+  doc.setLineWidth(0.2);
+  doc.rect(14, summaryY, pageWidth - 28, 35, 'D');
   
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
@@ -479,13 +477,13 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
 
   const sectionTitle = (title: string) => {
     ensureSpace(16);
-    doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
-    doc.rect(marginX, y, contentWidth, 9, 'F');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(0, 0, 0);
     doc.setFont(SERIF, 'bold');
     doc.setFontSize(BODY);
-    doc.text(title, marginX + 3, y + 6.4);
-    doc.setTextColor(0, 0, 0);
+    doc.text(title, marginX + 1, y + 6);
+    doc.setDrawColor(NAVY[0], NAVY[1], NAVY[2]);
+    doc.setLineWidth(0.4);
+    doc.line(marginX, y + 8.5, marginX + contentWidth, y + 8.5);
     y += 13;
   };
 
@@ -682,9 +680,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
     ], 0, 40);
   };
 
-  doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
-  doc.rect(0, 0, pageWidth, 34, 'F');
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(0, 0, 0);
   doc.setFont(SERIF, 'bold');
   doc.setFontSize(15);
   doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 12, { align: 'center' });
@@ -694,6 +690,9 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
   doc.setFont(SERIF, 'bold');
   doc.setFontSize(13);
   doc.text('PERIOPERATIVE PATIENT RECORD', pageWidth / 2, 28, { align: 'center' });
+  doc.setDrawColor(NAVY[0], NAVY[1], NAVY[2]);
+  doc.setLineWidth(0.6);
+  doc.line(marginX, 33, pageWidth - marginX, 33);
   doc.setTextColor(0, 0, 0);
   y = 42;
 
@@ -735,7 +734,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
       head: [['Role', 'Name']],
       body: data.team.map((t) => [t.role, t.name]),
       theme: 'grid',
-      headStyles: { fillColor: NAVY, textColor: 255, font: SERIF, fontStyle: 'bold', fontSize: 11 },
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, font: SERIF, fontStyle: 'bold', fontSize: 11 },
       styles: { font: SERIF, fontSize: 11, cellPadding: 2 },
       margin: { left: marginX, right: marginX },
     });
@@ -785,7 +784,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
       head: [['From', 'To', 'Type', 'Porter', 'Start', 'End']],
       body: data.transport.map((t) => [t.fromLocation, t.toLocation, t.transportType || '—', t.porterName || '—', fmt(t.startTime), fmt(t.endTime)]),
       theme: 'grid',
-      headStyles: { fillColor: NAVY, textColor: 255, font: SERIF, fontStyle: 'bold', fontSize: 10 },
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, font: SERIF, fontStyle: 'bold', fontSize: 10 },
       styles: { font: SERIF, fontSize: 9, cellPadding: 1.8 },
       margin: { left: marginX, right: marginX },
     });
@@ -868,7 +867,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
           return [fmt(m.time), m.name, dose || '—', m.route, String(m.type).replace(/_/g, ' ')];
         }),
         theme: 'grid',
-        headStyles: { fillColor: NAVY, textColor: 255, font: SERIF, fontStyle: 'bold', fontSize: 10 },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, font: SERIF, fontStyle: 'bold', fontSize: 10 },
         styles: { font: SERIF, fontSize: 9, cellPadding: 1.8 },
         margin: { left: marginX, right: marginX },
       });
@@ -886,7 +885,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
         head: [['Time', 'Phase', 'HR', 'BP', 'SpO2', 'EtCO2', 'Temp']],
         body: a.vitalSigns.map((v) => [fmt(v.time), v.phase || '—', v.heartRate ?? '—', v.bloodPressure || '—', v.spo2 != null ? `${v.spo2}%` : '—', v.etco2 ?? '—', v.temperature != null ? `${v.temperature}` : '—']),
         theme: 'grid',
-        headStyles: { fillColor: NAVY, textColor: 255, font: SERIF, fontStyle: 'bold', fontSize: 10 },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, font: SERIF, fontStyle: 'bold', fontSize: 10 },
         styles: { font: SERIF, fontSize: 9, cellPadding: 1.8 },
         margin: { left: marginX, right: marginX },
       });
@@ -932,7 +931,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
         head: [['Time', 'Conscious', 'HR', 'BP', 'RR', 'SpO2', 'Temp', 'Pain']],
         body: p.vitalSigns.map((v) => [fmt(v.time), (v.consciousnessLevel || '—').replace(/_/g, ' '), v.heartRate ?? '—', v.bloodPressure || '—', v.respiratoryRate ?? '—', v.oxygenSaturation != null ? `${v.oxygenSaturation}%` : '—', v.temperature != null ? `${v.temperature}` : '—', v.painScore != null ? `${v.painScore}/10` : '—']),
         theme: 'grid',
-        headStyles: { fillColor: NAVY, textColor: 255, font: SERIF, fontStyle: 'bold', fontSize: 9 },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, font: SERIF, fontStyle: 'bold', fontSize: 9 },
         styles: { font: SERIF, fontSize: 8.5, cellPadding: 1.6 },
         margin: { left: marginX, right: marginX },
       });
@@ -953,7 +952,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
         head: [['Time', 'Type', 'Severity', 'Description', 'Resolved']],
         body: p.redAlerts.map((al) => [fmt(al.time), al.alertType.replace(/_/g, ' '), al.severity, al.description, al.resolved ? 'Yes' : 'No']),
         theme: 'grid',
-        headStyles: { fillColor: [183, 28, 28], textColor: 255, font: SERIF, fontStyle: 'bold', fontSize: 10 },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, font: SERIF, fontStyle: 'bold', fontSize: 10 },
         styles: { font: SERIF, fontSize: 9, cellPadding: 1.8 },
         margin: { left: marginX, right: marginX },
       });
