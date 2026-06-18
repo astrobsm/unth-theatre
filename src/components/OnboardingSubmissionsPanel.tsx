@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Inbox, RefreshCw, Trash2, UploadCloud, Link as LinkIcon, Copy, Check } from 'lucide-react';
+import PhoneLink from '@/components/PhoneLink';
 
 interface Submission {
   id: string;
@@ -295,7 +296,9 @@ export default function OnboardingSubmissionsPanel({ onImportedRefresh }: { onIm
                   <td className="px-3 py-2 text-gray-700">{s.role}</td>
                   <td className="px-3 py-2 text-gray-700">{s.department || '—'}</td>
                   <td className="px-3 py-2 text-gray-700">{s.email || '—'}</td>
-                  <td className="px-3 py-2 text-gray-700">{s.phoneNumber || '—'}</td>
+                  <td className="px-3 py-2 text-gray-700">
+                    <PhoneLink phone={s.phoneNumber} fallback={<span>—</span>} />
+                  </td>
                   <td className="px-3 py-2 text-gray-500 text-xs">
                     {new Date(s.createdAt).toLocaleString()}
                   </td>

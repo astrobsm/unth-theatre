@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText } from 'lucide-react';
 import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPrePackSelectors';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
+import PhoneLink from '@/components/PhoneLink';
 import jsPDF from 'jspdf';
 
 type OnDutyMember = {
@@ -715,7 +716,9 @@ export default function NewEmergencyBookingPage() {
                           </p>
                           <p className="text-xs text-gray-600">
                             {m.staffCode || m.role.replace(/_/g, ' ')}
-                            {m.phoneNumber && <span className="ml-2">· {m.phoneNumber}</span>}
+                            {m.phoneNumber && (
+                              <span className="ml-2">· <PhoneLink phone={m.phoneNumber} /></span>
+                            )}
                           </p>
                         </>
                       ) : (

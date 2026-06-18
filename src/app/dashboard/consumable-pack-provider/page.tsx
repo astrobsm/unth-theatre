@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone, Phone } from "lucide-react";
+import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone, MessageCircle } from "lucide-react";
+import { whatsappChatLink } from "@/lib/whatsapp";
 
 interface Item {
   id: string;
@@ -167,10 +168,13 @@ export default function ConsumablePackProviderPage() {
                     {requesterName || "—"}
                     {requesterPhone ? (
                       <a
-                        href={`tel:${requesterPhone.replace(/\s+/g, "")}`}
+                        href={whatsappChatLink(requesterPhone) || `tel:${requesterPhone.replace(/\s+/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Chat on WhatsApp"
                         className="ml-1 inline-flex items-center gap-1 text-green-700 hover:underline"
                       >
-                        <Phone className="w-3 h-3" /> {requesterPhone}
+                        <MessageCircle className="w-3 h-3" /> {requesterPhone}
                       </a>
                     ) : (
                       <span className="ml-1 text-gray-400">(no phone)</span>
@@ -181,10 +185,13 @@ export default function ConsumablePackProviderPage() {
                     <span className="font-medium text-gray-700">Patient:</span>{" "}
                     {g.surgery.patient.phoneNumber ? (
                       <a
-                        href={`tel:${g.surgery.patient.phoneNumber.replace(/\s+/g, "")}`}
+                        href={whatsappChatLink(g.surgery.patient.phoneNumber) || `tel:${g.surgery.patient.phoneNumber.replace(/\s+/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Chat on WhatsApp"
                         className="inline-flex items-center gap-1 text-green-700 hover:underline"
                       >
-                        <Phone className="w-3 h-3" /> {g.surgery.patient.phoneNumber}
+                        <MessageCircle className="w-3 h-3" /> {g.surgery.patient.phoneNumber}
                       </a>
                     ) : (
                       <span className="text-gray-400">(no phone)</span>
@@ -197,10 +204,13 @@ export default function ConsumablePackProviderPage() {
                         Caregiver{g.surgery.patient.caregiverName ? ` (${g.surgery.patient.caregiverName})` : ""}:
                       </span>{" "}
                       <a
-                        href={`tel:${g.surgery.patient.caregiverPhone.replace(/\s+/g, "")}`}
+                        href={whatsappChatLink(g.surgery.patient.caregiverPhone) || `tel:${g.surgery.patient.caregiverPhone.replace(/\s+/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Chat on WhatsApp"
                         className="inline-flex items-center gap-1 text-green-700 hover:underline"
                       >
-                        <Phone className="w-3 h-3" /> {g.surgery.patient.caregiverPhone}
+                        <MessageCircle className="w-3 h-3" /> {g.surgery.patient.caregiverPhone}
                       </a>
                     </span>
                   )}

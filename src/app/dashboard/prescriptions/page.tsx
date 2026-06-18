@@ -22,7 +22,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { isNarcotic } from '@/lib/narcotics';
-import { whatsappLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
+import { whatsappLink, whatsappChatLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
 import SurgicalShoppingListsPanel from '@/components/SurgicalShoppingListsPanel';
 import {
   buildRegisterPdf,
@@ -1099,10 +1099,13 @@ export default function PrescriptionsPage() {
             <p className="text-gray-900 font-medium">{contactModal.name}</p>
             {contactModal.phone ? (
               <a
-                href={`tel:${contactModal.phone}`}
-                className="mt-3 inline-flex items-center gap-2 text-blue-700 hover:text-blue-900 hover:underline text-base"
+                href={whatsappChatLink(contactModal.phone) || `tel:${contactModal.phone}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Chat on WhatsApp"
+                className="mt-3 inline-flex items-center gap-2 text-green-700 hover:text-green-900 hover:underline text-base"
               >
-                📞 {contactModal.phone}
+                💬 {contactModal.phone}
               </a>
             ) : (
               <p className="mt-3 text-sm text-gray-500 italic">

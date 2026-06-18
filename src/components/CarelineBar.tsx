@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Phone, Headset, ChevronDown, ChevronUp } from 'lucide-react';
+import { Headset, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
+import { whatsappChatLink } from '@/lib/whatsapp';
 
 // Consumable Pack Provider customer careline numbers — shown on every dashboard.
 const CARELINE_NUMBERS = [
@@ -26,10 +27,13 @@ export default function CarelineBar() {
           {CARELINE_NUMBERS.map((n) => (
             <a
               key={n}
-              href={`tel:${n}`}
+              href={whatsappChatLink(n) || `tel:${n}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Chat on WhatsApp"
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-primary-200 text-primary-700 text-xs font-medium hover:bg-green-50 hover:text-green-700"
             >
-              <Phone className="w-3 h-3" /> {n}
+              <MessageCircle className="w-3 h-3" /> {n}
             </a>
           ))}
         </span>
@@ -49,10 +53,13 @@ export default function CarelineBar() {
           {CARELINE_NUMBERS.map((n) => (
             <a
               key={n}
-              href={`tel:${n}`}
+              href={whatsappChatLink(n) || `tel:${n}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Chat on WhatsApp"
               className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm font-semibold hover:bg-green-100"
             >
-              <Phone className="w-4 h-4" /> {n}
+              <MessageCircle className="w-4 h-4" /> {n}
             </a>
           ))}
         </div>

@@ -347,7 +347,7 @@ export default function ChiefResidentsLetterPage() {
         </p>
         <p className="mb-3">
           Your prompt cooperation will significantly improve the safety, efficiency and cost-effectiveness of surgical
-          care at UNTH. Should you require a brief demonstration for your unit, please contact <strong>Dr. E. C. Nnadi</strong> (Theatre Management Team) on <a href="tel:+2348033328385" className="text-blue-700 hover:underline">08033328385</a>.
+          care at UNTH. Should you require a brief demonstration for your unit, please contact <strong>Dr. E. C. Nnadi</strong> (Theatre Management Team) on <a href="https://wa.me/2348033328385" target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp" className="text-green-700 hover:underline">08033328385</a>.
         </p>
         <p className="mb-6">Thank you for your dedication and leadership.</p>
 
@@ -356,7 +356,7 @@ export default function ChiefResidentsLetterPage() {
         <p className="font-semibold">DR. E. C. NNADI</p>
         <p className="text-sm text-gray-700">For the Theatre Management Team</p>
         <p className="text-sm text-gray-600">UNTH Theatre Complex</p>
-        <p className="text-sm text-gray-600 mb-6">Phone: <a href="tel:+2348033328385" className="text-blue-700 hover:underline">08033328385</a></p>
+        <p className="text-sm text-gray-600 mb-6">Phone: <a href="https://wa.me/2348033328385" target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp" className="text-green-700 hover:underline">08033328385</a></p>
 
         <div className="text-xs text-gray-700 mt-8">
           <p className="font-semibold mb-1">Cc:</p>

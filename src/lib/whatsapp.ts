@@ -23,6 +23,19 @@ export function whatsappLink(phone: string | null | undefined, message: string):
   return `https://wa.me/${n}?text=${encodeURIComponent(message)}`;
 }
 
+// Open a WhatsApp chat with a number (optionally pre-filled with a message) so
+// users can share links, media and notes. Returns null when no valid number.
+export function whatsappChatLink(
+  phone: string | null | undefined,
+  message?: string,
+): string | null {
+  const n = normalisePhone(phone);
+  if (!n) return null;
+  return message
+    ? `https://wa.me/${n}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/${n}`;
+}
+
 export function buildOutOfStockWhatsAppMessage(opts: {
   patientName: string;
   procedureName?: string | null;

@@ -14,7 +14,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Phone, X, Loader2, UserRound } from 'lucide-react';
+import { X, Loader2, UserRound, MessageCircle } from 'lucide-react';
+import { whatsappChatLink } from '@/lib/whatsapp';
 
 interface Contact {
   label: string;
@@ -147,10 +148,13 @@ export default function ContactName({ type, name, id, className }: Props) {
               {info.contacts.map((c, i) => (
                 <li key={i}>
                   <a
-                    href={`tel:${c.phone.replace(/\s+/g, '')}`}
+                    href={whatsappChatLink(c.phone) || `tel:${c.phone.replace(/\s+/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Chat on WhatsApp"
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-800 font-medium"
                   >
-                    <Phone className="w-4 h-4 flex-shrink-0" />
+                    <MessageCircle className="w-4 h-4 flex-shrink-0" />
                     <span className="flex-1 min-w-0">
                       <span className="block text-[11px] text-green-600 leading-tight">{c.label}: {c.name}</span>
                       <span className="block truncate">{c.phone}</span>

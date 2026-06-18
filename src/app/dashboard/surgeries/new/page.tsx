@@ -7,6 +7,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
+import PhoneLink from '@/components/PhoneLink';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -1067,7 +1068,9 @@ export default function NewSurgeryPage() {
                           </p>
                           <p className="text-xs text-gray-600">
                             {m.staffCode || m.role.replace(/_/g, ' ')}
-                            {m.phoneNumber && <span className="ml-2">· {m.phoneNumber}</span>}
+                            {m.phoneNumber && (
+                              <span className="ml-2">· <PhoneLink phone={m.phoneNumber} /></span>
+                            )}
                           </p>
                         </>
                       ) : (
