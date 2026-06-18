@@ -8,6 +8,7 @@ import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 import AssistantWidget from '@/components/AssistantWidget';
 import OrmGoLiveBanner from '@/components/OrmGoLiveBanner';
+import OrmHourlyBroadcast from '@/components/OrmHourlyBroadcast';
 import CarelineBar from '@/components/CarelineBar';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import {
@@ -437,6 +438,7 @@ export default function DashboardLayout({
           <div className="relative">
             <CarelineBar />
             <OrmGoLiveBanner />
+            <OrmHourlyBroadcast />
             {children}
           </div>
         </main>
