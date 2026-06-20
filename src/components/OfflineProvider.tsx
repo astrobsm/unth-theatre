@@ -195,8 +195,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     checkPending();
     syncIntervalRef.current = setInterval(checkPending, 10000);
 
+    // Update immediately whenever a mutation is queued offline by the interceptor
+    const onQueued = () => { checkPending(); };
+    window.addEventListener('orm:offline-queued', onQueued);
+
     return () => {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      window.removeEventListener('orm:offline-queued', onQueued);
     };
   }, []);
 

@@ -46,6 +46,39 @@ function isMutation(init?: RequestInit): boolean {
 }
 
 /**
+ * Ask the browser to flush the offline mutation queue as soon as connectivity
+ * returns — even if the app/tab is closed — via the Background Sync API.
+ * Falls back silently when unsupported (the OfflineProvider's `online` handler
+ * still drains the queue while the app is open).
+ */
+async function requestBackgroundSync(): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (!('SyncManager' in window)) return;
+    const reg = await navigator.serviceWorker.ready;
+    // @ts-ignore — sync is not in the default TS lib types
+    await reg.sync?.register('orm-offline-sync');
+  } catch {
+    // Unsupported or permission denied — safe to ignore
+  }
+}
+
+/**
+ * Notify the rest of the app that a mutation was just queued offline so the
+ * sync indicator / pending count can update immediately instead of waiting
+ * for the next poll.
+ */
+function notifyQueued(entityType: string): void {
+  try {
+    window.dispatchEvent(
+      new CustomEvent('orm:offline-queued', { detail: { entityType, at: Date.now() } })
+    );
+  } catch {
+    // CustomEvent unsupported — non-critical
+  }
+}
+
+/**
  * Install the global fetch interceptor.
  * Call this ONCE from OfflineProvider.
  */
@@ -189,6 +222,11 @@ async function handleMutationFetch(
     });
 
     console.log(`[FetchInterceptor] Queued offline mutation: ${method} ${url}`);
+
+    // Register Background Sync so the queue drains automatically when the
+    // network returns — even if the tab is closed — and tell the UI right away.
+    await requestBackgroundSync();
+    notifyQueued(entityType);
 
     // Return a synthetic success response so the UI doesn't break
     return new Response(
