@@ -27,45 +27,104 @@ const OFFLINE_DATA_ENDPOINTS = [
   { key: 'emergency-booking', url: '/api/emergency-booking', ttl: 15 * 60 * 1000 },
   { key: 'emergency-display', url: '/api/emergency-display', ttl: 5 * 60 * 1000 },
   { key: 'emergency-alerts', url: '/api/emergency-alerts', ttl: 15 * 60 * 1000 },
+  { key: 'blood-bank', url: '/api/blood-bank', ttl: 30 * 60 * 1000 },
+  { key: 'checklists', url: '/api/checklists', ttl: 30 * 60 * 1000 },
 ];
 
-// Dashboard routes to pre-cache as HTML for offline navigation
+// Dashboard routes to pre-cache as HTML for offline navigation.
+// COMPREHENSIVE: every module page the user can reach from the sidebar so the
+// whole app keeps working on an unstable / dropped network connection.
 const APP_SHELL_ROUTES = [
+  // Overview
   '/dashboard',
-  '/dashboard/surgeries',
-  '/dashboard/patients',
-  '/dashboard/inventory',
-  '/dashboard/theatres',
-  '/dashboard/transfers',
-  '/dashboard/alerts',
-  '/dashboard/checklists',
-  '/dashboard/pacu',
-  '/dashboard/holding-area',
-  '/dashboard/reports',
-  '/dashboard/sub-stores',
-  '/dashboard/roster',
-  '/dashboard/theatre-setup',
-  '/dashboard/preop-reviews',
-  '/dashboard/prescriptions',
-  '/dashboard/blood-bank',
-  '/dashboard/cancellations',
-  '/dashboard/mortality',
-  '/dashboard/theatre-readiness',
-  '/dashboard/anesthesia-setup',
-  '/dashboard/power-house/status',
-  '/dashboard/equipment-checkout',
-  '/dashboard/fault-alerts',
-  '/dashboard/emergency-alerts',
+  '/dashboard/live-monitoring',
+  '/dashboard/presentation',
+  '/dashboard/settings',
+  // Emergency
   '/dashboard/emergency-booking',
   '/dashboard/emergency-booking/new',
+  '/dashboard/emergency-alerts',
+  '/dashboard/emergency-lab-workup',
   '/emergency-display',
+  // Patients & scheduling
+  '/dashboard/patients',
+  '/dashboard/patients/new',
+  '/dashboard/surgeries',
+  '/dashboard/surgeries/new',
+  '/dashboard/surgeries/completed',
+  '/dashboard/cancellations',
+  '/dashboard/surgical-unit-calendar',
+  '/dashboard/call-for-patient',
+  // Pre-operative
+  '/dashboard/pre-operative-visit',
+  '/dashboard/patient-payment-guide',
+  '/dashboard/anaesthetist-board',
+  '/dashboard/preop-reviews',
+  '/dashboard/prescription-approvals',
+  '/dashboard/prescriptions',
+  '/dashboard/blood-bank',
+  '/dashboard/anesthesia-setup',
+  '/dashboard/medication-tracking',
+  // Day-of-surgery logistics
+  '/dashboard/roster',
+  '/dashboard/theatres',
+  '/dashboard/theatre-setup',
+  '/dashboard/theatre-readiness',
+  // Intra-operative
+  '/dashboard/holding-area',
+  '/dashboard/checklists',
+  '/dashboard/equipment-checkout',
+  '/dashboard/consumable-pack-provider',
+  // Post-operative
+  '/dashboard/pacu',
+  '/dashboard/nurse-handover',
+  // Facilities & support
+  '/dashboard/power-house/status',
+  '/dashboard/power-house/maintenance',
+  '/dashboard/power-house/readiness',
+  '/dashboard/oxygen-control',
+  '/dashboard/oxygen-supervisor',
+  '/dashboard/cssd/inventory',
+  '/dashboard/cssd/sterilization',
+  '/dashboard/cssd/readiness',
+  '/dashboard/cssd-supervisor',
+  '/dashboard/laundry',
+  '/dashboard/plumbing-water-supply',
+  '/dashboard/works',
+  // Alerts & safety
+  '/dashboard/alerts',
+  '/dashboard/radio',
+  '/dashboard/fault-alerts',
+  '/dashboard/mortality',
+  '/dashboard/incidents',
+  '/dashboard/anonymous-tips',
+  '/dashboard/anonymous-tips/view',
+  '/dashboard/feedback',
+  '/dashboard/feedback/review',
+  '/dashboard/security-reports',
+  '/dashboard/security-reports/view',
+  // Inventory & supplies
+  '/dashboard/inventory',
+  '/dashboard/sub-stores',
+  // Reports & administration
+  '/dashboard/announcements',
+  '/dashboard/unit-booking-letter',
+  '/dashboard/theatre-meals',
+  '/dashboard/meals/order',
+  '/dashboard/reports',
+  '/dashboard/reports/staff-effectiveness',
+  '/dashboard/catalog-contribute',
+  '/dashboard/catalog-letter',
+  '/dashboard/disciplinary-queries',
+  '/dashboard/theatre-audit',
+  '/dashboard/users',
+  '/dashboard/admin/access',
+  '/dashboard/admin/surgical-units',
+  '/dashboard/admin/surgical-catalog',
+  // Executive dashboards
   '/dashboard/cmd',
   '/dashboard/cmac',
   '/dashboard/dc-mac',
-  '/dashboard/laundry-supervisor',
-  '/dashboard/cssd-supervisor',
-  '/dashboard/oxygen-supervisor',
-  '/dashboard/works-supervisor',
 ];
 
 export interface OfflineDataStatus {
@@ -171,6 +230,75 @@ export function precacheAppShell(): void {
 
   // Start after 15 seconds so initial page load is unblocked
   setTimeout(scheduleNext, 15000);
+}
+
+/**
+ * COMPREHENSIVE WARM-UP: cache every module page for offline navigation,
+ * promptly (used right after login). Resolves once all batches have been
+ * handed to the service worker. Safe to call repeatedly.
+ */
+export function precacheAllPages(
+  onProgress?: (done: number, total: number) => void
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      resolve();
+      return;
+    }
+    const total = APP_SHELL_ROUTES.length;
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        const controller = navigator.serviceWorker.controller || reg.active;
+        if (!controller) {
+          resolve();
+          return;
+        }
+        const BATCH = 4;
+        let idx = 0;
+        const next = () => {
+          if (idx >= total) {
+            onProgress?.(total, total);
+            resolve();
+            return;
+          }
+          const batch = APP_SHELL_ROUTES.slice(idx, idx + BATCH);
+          idx += BATCH;
+          controller.postMessage({
+            type: 'PRECACHE_APP_SHELL',
+            payload: { routes: batch },
+          });
+          onProgress?.(Math.min(idx, total), total);
+          // Small gap between batches so we never saturate the network.
+          setTimeout(next, 700);
+        };
+        next();
+      })
+      .catch(() => resolve());
+  });
+}
+
+/**
+ * Full post-login warm-up: cache the session, prefetch all API data into
+ * IndexedDB, and precache every module page. This is what guarantees the user
+ * can keep using the whole app even if the network drops right after login.
+ */
+export async function warmUpEntireApp(
+  onProgress?: (phase: 'session' | 'data' | 'pages', done: number, total: number) => void
+): Promise<OfflineDataStatus | null> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
+  try {
+    onProgress?.('session', 0, 1);
+    await cacheSessionForOffline();
+    onProgress?.('session', 1, 1);
+
+    const status = await prefetchAllOfflineData((d, t) => onProgress?.('data', d, t));
+
+    await precacheAllPages((d, t) => onProgress?.('pages', d, t));
+
+    return status;
+  } catch {
+    return null;
+  }
 }
 
 /**

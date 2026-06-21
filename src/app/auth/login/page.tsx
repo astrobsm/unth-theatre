@@ -139,6 +139,12 @@ export default function LoginPage() {
 
         const userRole = session?.user?.role;
 
+        // Kick off a comprehensive warm-up so the entire app (every module page
+        // + its data) is cached for offline use the moment the user logs in.
+        try {
+          window.dispatchEvent(new Event('orm:app-warmup'));
+        } catch {}
+
         // Role-based navigation
         switch (userRole) {
           case 'ANAESTHETIST':

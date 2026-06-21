@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import {
   prefetchAllOfflineData,
   precacheAppShell,
+  warmUpEntireApp,
   registerPeriodicSync,
   cacheSessionForOffline,
   type OfflineDataStatus,
@@ -65,6 +66,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const prefetchedRef = useRef(false);
   const prefetchingRef = useRef(false);
+  const warmedUpRef = useRef(false);
   const syncingRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout>();
 
@@ -79,7 +81,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         registerServiceWorker().then((reg) => {
           if (reg) {
             setSwRegistered(true);
-            // Pre-cache app shell pages — run after a further delay
+            // Pre-cache the FULL app shell (every module page) + register
+            // periodic sync. Runs after a short delay so the first paint is
+            // unblocked; warmUp also fires this, this is the backstop.
             setTimeout(() => {
               precacheAppShell();
               registerPeriodicSync();
@@ -165,17 +169,55 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Initial prefetch — deferred to avoid blocking initial render
+  // COMPREHENSIVE WARM-UP — caches the session, all API data and every module
+  // page so the entire app keeps working if the network drops after login.
+  const runFullWarmUp = useCallback(async () => {
+    if (warmedUpRef.current) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (!isIndexedDBAvailable()) return;
+    // Only warm up for authenticated users (avoid 401 storms on login screen).
+    try {
+      const sessionRes = await fetch('/api/auth/session');
+      const session = sessionRes.ok ? await sessionRes.json() : null;
+      if (!session?.user) return; // not logged in yet
+    } catch {
+      return;
+    }
+    warmedUpRef.current = true;
+    setIsPrefetching(true);
+    try {
+      const status = await warmUpEntireApp();
+      if (status) {
+        setPrefetchStatus(status);
+        setIsFullyCached(status.isFullyCached);
+      }
+    } catch {
+      warmedUpRef.current = false; // allow a later retry
+    } finally {
+      setIsPrefetching(false);
+    }
+  }, []);
+
+  // Initial warm-up — deferred slightly so the page renders first. Also fires
+  // immediately when the login flow dispatches 'orm:app-warmup'.
   useEffect(() => {
     if (prefetchedRef.current) return;
     prefetchedRef.current = true;
 
-    // Wait 10 seconds so the page renders and becomes interactive first
     const timer = setTimeout(() => {
-      runPrefetch();
-    }, 10000);
+      runFullWarmUp();
+    }, 6000);
 
-    return () => clearTimeout(timer);
+    const onWarmUpRequested = () => {
+      warmedUpRef.current = false; // force a fresh, complete warm-up
+      runFullWarmUp();
+    };
+    window.addEventListener('orm:app-warmup', onWarmUpRequested);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('orm:app-warmup', onWarmUpRequested);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
