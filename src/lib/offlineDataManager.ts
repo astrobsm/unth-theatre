@@ -27,7 +27,7 @@ const OFFLINE_DATA_ENDPOINTS = [
   { key: 'emergency-booking', url: '/api/emergency-booking', ttl: 15 * 60 * 1000 },
   { key: 'emergency-display', url: '/api/emergency-display', ttl: 5 * 60 * 1000 },
   { key: 'emergency-alerts', url: '/api/emergency-alerts', ttl: 15 * 60 * 1000 },
-  { key: 'blood-bank', url: '/api/blood-bank', ttl: 30 * 60 * 1000 },
+  { key: 'blood-requests', url: '/api/blood-requests', ttl: 30 * 60 * 1000 },
   { key: 'checklists', url: '/api/checklists', ttl: 30 * 60 * 1000 },
 ];
 
