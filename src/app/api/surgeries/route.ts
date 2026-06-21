@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { generateUniqueSurgeryCode } from "@/lib/surgeryCodes";
+import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
 
 export const dynamic = 'force-dynamic';
 
@@ -557,7 +558,21 @@ export async function POST(request: NextRequest) {
           displayOnTv: true,
           bloodRequired: validatedData.needBloodTransfusion,
           bloodUnits: validatedData.needBloodTransfusion ? 2 : null, // Default 2 units if blood required
-          alertMessage: `EMERGENCY SURGERY: ${validatedData.procedureName} for ${patient.name}`,
+          alertMessage: buildEmergencyAlertMessage({
+            patientName: patient.name,
+            folderNumber: patient.folderNumber,
+            age: patient.age,
+            gender: patient.gender,
+            procedureName: validatedData.procedureName,
+            surgicalUnit: validatedData.unit,
+            indication: validatedData.indication,
+            surgeonName: validatedData.surgeonName,
+            estimatedStartTime: validatedData.scheduledTime,
+            priority: 'CRITICAL',
+            bloodRequired: validatedData.needBloodTransfusion,
+            bloodUnits: validatedData.needBloodTransfusion ? 2 : null,
+            anaesthesiaType: validatedData.anesthesiaType,
+          }),
           additionalNotes: `Escalation deadline: ${escalationDeadline.toISOString()}`,
         }
       });

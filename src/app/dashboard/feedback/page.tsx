@@ -17,6 +17,7 @@ import {
   Download,
   QrCode,
 } from 'lucide-react';
+import PatientFeedbackShare from '@/components/PatientFeedbackShare';
 
 type Category = 'THEATRE_MANAGEMENT' | 'APPLICATION';
 
@@ -374,6 +375,12 @@ export default function StaffFeedbackPage() {
                 >
                   <Share2 className="w-4 h-4" /> Share
                 </button>
+              </div>
+              <div className="mt-3">
+                <PatientFeedbackShare />
+                <p className="text-xs text-gray-400 mt-1">
+                  Select patients to send each one a personalised feedback link by WhatsApp.
+                </p>
               </div>
               <Link
                 href="/feedback"

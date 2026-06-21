@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
+import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 
 export const dynamic = 'force-dynamic';
 
@@ -538,7 +539,25 @@ export async function POST(request: NextRequest) {
         bloodUnits: validatedData.bloodUnits,
         specialEquipment: validatedData.specialEquipment,
         priority: validatedData.priority,
-        alertMessage: `EMERGENCY BOOKING: ${validatedData.procedureName} for ${validatedData.patientName} - ${validatedData.indication}`,
+        alertMessage: buildEmergencyAlertMessage({
+          patientName: validatedData.patientName,
+          folderNumber: validatedData.folderNumber,
+          age: validatedData.age,
+          gender: validatedData.gender,
+          procedureName: validatedData.procedureName,
+          surgicalUnit: validatedData.surgicalUnit,
+          indication: validatedData.indication,
+          surgeonName: surgeonName,
+          anaesthetistName: validatedData.anesthetistName,
+          theatreName: resolvedTheatreName,
+          estimatedStartTime: hhmm(nextStart),
+          priority: validatedData.priority,
+          bloodRequired: validatedData.bloodRequired,
+          bloodUnits: validatedData.bloodUnits,
+          bloodType: validatedData.bloodType,
+          specialEquipment: validatedData.specialEquipment,
+          anaesthesiaType: validatedData.anaesthesiaType,
+        }),
         additionalNotes: validatedData.specialRequirements,
         status: 'ACTIVE',
         displayOnTv: true,

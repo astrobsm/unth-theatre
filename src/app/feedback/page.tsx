@@ -9,7 +9,7 @@
  * Live at: /feedback  (e.g. https://unth-theatre-mai.vercel.app/feedback)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Heart, Star, CheckCircle2, Loader2, Send } from 'lucide-react';
 
 const JOURNEY_STAGES = [
@@ -98,6 +98,19 @@ export default function PatientFeedbackPage() {
 
   const setRating = (key: keyof Ratings, v: number) =>
     setRatings((r) => ({ ...r, [key]: v }));
+
+  // Prefill patient identity when staff share a personalised link
+  // (e.g. /feedback?name=John%20Doe&folder=UNTH123&phone=080...).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const name = params.get('name');
+    const folder = params.get('folder');
+    const phone = params.get('phone');
+    if (name) setPatientName(name);
+    if (folder) setFolderNumber(folder);
+    if (phone) setPhoneNumber(phone);
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
