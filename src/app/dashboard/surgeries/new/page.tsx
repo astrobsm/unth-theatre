@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -143,6 +143,12 @@ export default function NewSurgeryPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Codes shown to the surgeon after a successful booking, to hand to the patient.
+  const [bookedCodes, setBookedCodes] = useState<{
+    consumablePackCode?: string | null;
+    pharmacyDrugCode?: string | null;
+    patientName?: string | null;
+  } | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
   const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
@@ -511,12 +517,22 @@ export default function NewSurgeryPage() {
       });
 
       if (response.ok) {
-        router.push('/dashboard/surgeries');
-        return;
+        // Show the patient-facing codes so the surgeon can copy them and give
+        // them to the patient before leaving this screen.
+        try {
+          const created = await response.json();
+          setBookedCodes({
+            consumablePackCode: created?.consumablePackCode ?? null,
+            pharmacyDrugCode: created?.pharmacyDrugCode ?? null,
+            patientName: created?.patient?.name ?? null,
+          });
+          setLoading(false);
+          return;
+        } catch {
+          router.push('/dashboard/surgeries');
+          return;
+        }
       }
-
-      // Read the body safely — the server may return JSON (our handlers) or a
-      // non-JSON platform error (e.g. 413 payload too large, 504 timeout).
       const raw = await response.text();
       let message = '';
       try {
@@ -582,6 +598,12 @@ export default function NewSurgeryPage() {
 
   return (
     <div className="space-y-6">
+      {bookedCodes && (
+        <BookingCodesModal
+          codes={bookedCodes}
+          onClose={() => router.push('/dashboard/surgeries')}
+        />
+      )}
       <div className="flex items-center gap-4">
         <Link
           href="/dashboard/surgeries"
@@ -1573,3 +1595,95 @@ export default function NewSurgeryPage() {
     </div>
   );
 }
+
+// Shown after a successful booking. Displays the patient-facing codes the
+// surgeon copies and hands to the patient.
+function BookingCodesModal({
+  codes,
+  onClose,
+}: {
+  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null };
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(value);
+      setTimeout(() => setCopied((c) => (c === value ? null : c)), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  const rows: { label: string; value: string | null | undefined; hint: string }[] = [
+    {
+      label: 'Consumable Pack Code',
+      value: codes.consumablePackCode,
+      hint: 'Patient presents this to the consumable pack provider.',
+    },
+    {
+      label: 'Pharmacy Drug Code',
+      value: codes.pharmacyDrugCode,
+      hint: 'Patient presents this to the pharmacy for packing.',
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="flex items-center gap-2 border-b px-5 py-4">
+          <CheckCircle className="w-6 h-6 text-green-600" />
+          <h2 className="text-lg font-bold text-gray-900">Surgery booked</h2>
+          <button onClick={onClose} aria-label="Close" className="ml-auto p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <p className="text-sm text-gray-600">
+            Give these codes to{codes.patientName ? <> <span className="font-semibold">{codes.patientName}</span></> : ' the patient'}.
+            Keying a code in reveals exactly what was requested so the patient can be costed and pay.
+          </p>
+          {rows.map((r) => (
+            <div key={r.label} className="rounded-lg border border-gray-200 p-3">
+              <div className="text-xs font-semibold text-gray-500">{r.label}</div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-mono text-lg font-bold tracking-wider text-gray-900">
+                  {r.value || '—'}
+                </span>
+                {r.value && (
+                  <button
+                    onClick={() => copy(r.value!)}
+                    className="ml-auto inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+                  >
+                    {copied === r.value ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-green-600" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" /> Copy
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-gray-500">{r.hint}</div>
+            </div>
+          ))}
+          <div className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
+            The <span className="font-semibold">Anaesthesia Drug Code</span> is generated later, after the
+            anaesthetist reviews and prescribes. The surgeon or anaesthetist gives that code to the patient then.
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 border-t px-5 py-4">
+          <button onClick={onClose} className="btn-primary">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

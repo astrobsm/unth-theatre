@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { triggerRadio } from '@/lib/radioEvents';
 import { z } from 'zod';
+import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
 
 export const dynamic = 'force-dynamic';
 
@@ -185,6 +186,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Generate the patient-facing anaesthesia drug code now that the anaesthetist
+    // has prescribed. The surgeon/anaesthetist gives this to the patient for pharmacy.
+    let anaesthesiaDrugCode: string | null = null;
+    if (prescription.surgeryId) {
+      anaesthesiaDrugCode = await ensureAnaesthesiaCodeForSurgery(prisma, prescription.surgeryId);
+    }
+
     // Real-time radio broadcast: prescription submitted
     await triggerRadio({
       category: 'WORKFLOW',
@@ -203,7 +211,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(prescription, { status: 201 });
+    return NextResponse.json({ ...prescription, anaesthesiaDrugCode }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

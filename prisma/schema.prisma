@@ -941,6 +941,13 @@ model Surgery {
   consentUploadedAt   DateTime?
   consentUploadedById String?
 
+  // Patient-facing codes generated at booking. The surgeon (or anaesthetist)
+  // copies these and gives them to the patient, who presents the relevant code
+  // to the provider — keying it in reveals exactly what was requested.
+  consumablePackCode  String? @unique // Consumable Pack Provider keys this in
+  pharmacyDrugCode    String? @unique // Pharmacy keys this in for packing
+  anaesthesiaDrugCode String? @unique // Generated after the anaesthetist prescribes
+
   @@map("surgeries")
 }
 
@@ -4765,6 +4772,10 @@ model EmergencyPrescription {
 
   // Status
   status EmergencyPrescriptionStatus @default(DRAFT)
+
+  // Patient-facing anaesthesia drug code (emergency path). Generated when the
+  // anaesthetist creates this prescription; the patient presents it to pharmacy.
+  anaesthesiaDrugCode String? @unique
 
   // Audit
   createdAt DateTime @default(now())

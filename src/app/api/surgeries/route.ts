@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { generateUniqueSurgeryCode } from "@/lib/surgeryCodes";
 
 export const dynamic = 'force-dynamic';
 
@@ -388,11 +389,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Patient-facing provider codes — always generated at booking so the surgeon
+    // can immediately hand them to the patient (even if the item list is empty,
+    // the provider can still confirm "nothing requested" when the code is keyed in).
+    const consumablePackCode = await generateUniqueSurgeryCode(prisma, 'consumablePackCode', 'consumable');
+    const pharmacyDrugCode = await generateUniqueSurgeryCode(prisma, 'pharmacyDrugCode', 'pharmacy');
+
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
         surgeonName: resolvedSurgeonName,
         surgeonId: resolvedSurgeonId,
+        consumablePackCode,
+        pharmacyDrugCode,
         // Default the surgery anaesthetist to the on-duty anaesthetist for the chosen
         // theatre/date. The Pharmacist sees this name as "To be collected by".
         anesthetistId: resolvedAnaesthetistId,

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { generateUniqueEmergencyAnaesthesiaCode } from '@/lib/surgeryCodes';
 
 export const dynamic = 'force-dynamic';
 
@@ -233,8 +234,20 @@ export async function POST(request: NextRequest) {
           isEmergency: true,
           urgencyNote: `EMERGENCY - ${booking.priority} PRIORITY - IMMEDIATE DISPENSING REQUIRED`,
           status: 'SUBMITTED',
+          anaesthesiaDrugCode: await generateUniqueEmergencyAnaesthesiaCode(prisma),
         },
       });
+
+      // Mirror the code onto the linked Surgery (if one exists) so a single
+      // lookup works whether the patient presents the elective or emergency code.
+      if (booking.surgeryId && prescription.anaesthesiaDrugCode) {
+        try {
+          await prisma.surgery.update({
+            where: { id: booking.surgeryId },
+            data: { anaesthesiaDrugCode: prescription.anaesthesiaDrugCode },
+          });
+        } catch { /* surgery may already have a code; ignore */ }
+      }
 
       // Notify all pharmacists
       try {

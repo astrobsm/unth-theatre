@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { generateUniqueEmergencyAnaesthesiaCode } from '@/lib/surgeryCodes';
 
 export const dynamic = 'force-dynamic';
 
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
           specialInstructions: data.specialInstructions,
           isEmergency: true,
           status: 'SUBMITTED',
+          anaesthesiaDrugCode: await generateUniqueEmergencyAnaesthesiaCode(prisma),
         },
       });
 

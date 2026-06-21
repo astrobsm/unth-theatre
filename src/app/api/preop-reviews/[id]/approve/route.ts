@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,6 +142,11 @@ export async function POST(
             quantity: med.quantity || 1,
           })),
         });
+      }
+
+      // Generate the patient-facing anaesthesia drug code for pharmacy collection.
+      if (existingReview.surgeryId) {
+        await ensureAnaesthesiaCodeForSurgery(prisma, existingReview.surgeryId);
       }
 
       // Create audit logs

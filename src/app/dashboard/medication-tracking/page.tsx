@@ -22,6 +22,7 @@ import {
   Activity,
   Shield,
 } from 'lucide-react';
+import SurgeryCodeLookup from '@/components/SurgeryCodeLookup';
 
 // ===== TYPES =====
 interface UsageRecord {
@@ -1216,6 +1217,12 @@ export default function MedicationTrackingPage() {
         <p className="text-gray-500 mt-1">
           Track medication usage during surgery, reconcile at end of procedure, manage returns and queries
         </p>
+      </div>
+
+      {/* Patient code lookup — pharmacy keys in a drug or anaesthesia code to
+          see exactly what to pack for that patient. */}
+      <div className="mb-6">
+        <SurgeryCodeLookup title="Enter the patient's pharmacy or anaesthesia code" />
       </div>
 
       {/* Tabs */}

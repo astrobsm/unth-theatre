@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone, MessageCircle } from "lucide-react";
 import { whatsappChatLink } from "@/lib/whatsapp";
+import SurgeryCodeLookup from "@/components/SurgeryCodeLookup";
 
 interface Item {
   id: string;
@@ -108,6 +109,11 @@ export default function ConsumablePackProviderPage() {
       <p className="text-sm text-gray-600">
         Pre-pack the consumables required for each booked surgery. Emergency cases are pinned to the top.
       </p>
+
+      <SurgeryCodeLookup
+        expect="CONSUMABLE"
+        title="Enter the patient's consumable pack code"
+      />
 
       <div className="flex gap-2 text-xs">
         {["ALL", "REQUESTED", "PACKING", "PACKED", "DELIVERED"].map((s) => (
