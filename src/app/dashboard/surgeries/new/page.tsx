@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -150,6 +150,7 @@ export default function NewSurgeryPage() {
     patientName?: string | null;
   } | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
   const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
   const [anesthesiaType, setAnesthesiaType] = useState<string>('');
@@ -201,6 +202,14 @@ export default function NewSurgeryPage() {
     fetchSurgicalUnits();
     fetchConsumableTemplates();
     fetchDrugDressingTemplates();
+  }, []);
+
+  // If we returned here right after registering a new patient, pre-select them
+  // so the user can carry on scheduling without searching the list again.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const pid = new URLSearchParams(window.location.search).get('patientId');
+    if (pid) setSelectedPatientId(pid);
   }, []);
 
   async function fetchConsumableTemplates(specialty?: string) {
@@ -633,7 +642,24 @@ export default function NewSurgeryPage() {
             <User className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Patient Information</h2>
           </div>
-          
+
+          <div className="mb-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-4">
+            <p className="text-base font-extrabold uppercase tracking-wide text-amber-900">
+              To book / schedule a patient for surgery, you MUST FIRST REGISTER THE PATIENT.
+            </p>
+            <p className="mt-1 text-sm text-amber-800">
+              If the patient is not in the list below, register them first — you&apos;ll be brought
+              right back here with their details ready to continue scheduling.
+            </p>
+            <Link
+              href="/dashboard/patients/new?returnTo=/dashboard/surgeries/new"
+              className="btn-primary mt-3 inline-flex items-center gap-2"
+            >
+              <UserPlus className="w-4 h-4" />
+              Register New Patient
+            </Link>
+          </div>
+
           <div className="space-y-4">
             <div>
               <label className="label">Search Patient</label>
@@ -644,7 +670,14 @@ export default function NewSurgeryPage() {
                 onChange={(e) => setSearchPatient(e.target.value)}
                 className="input-field mb-2"
               />
-              <select name="patientId" required className="input-field" title="Select Patient">
+              <select
+                name="patientId"
+                required
+                value={selectedPatientId}
+                onChange={(e) => setSelectedPatientId(e.target.value)}
+                className="input-field"
+                title="Select Patient"
+              >
                 <option value="">Select Patient</option>
                 {filteredPatients.map((patient) => (
                   <option key={patient.id} value={patient.id}>

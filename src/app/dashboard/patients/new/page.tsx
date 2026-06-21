@@ -311,7 +311,20 @@ export default function NewPatientPage() {
       });
 
       if (response.ok) {
-        router.push('/dashboard/patients');
+        // If we were sent here from the surgery scheduler, go straight back with
+        // the new patient pre-selected so the user can continue booking.
+        const returnTo =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('returnTo')
+            : null;
+        if (returnTo && returnTo.startsWith('/')) {
+          const created = await response.json().catch(() => null);
+          const sep = returnTo.includes('?') ? '&' : '?';
+          const target = created?.id ? `${returnTo}${sep}patientId=${created.id}` : returnTo;
+          router.push(target);
+        } else {
+          router.push('/dashboard/patients');
+        }
       } else {
         const error = await response.json();
         setError(error.error || 'Failed to register patient');
