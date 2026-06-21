@@ -4,7 +4,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v28';
+const CACHE_VERSION = 'v29';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -376,11 +376,15 @@ async function networkFirstWithCache(request) {
   }
 }
 
-// Navigation handler: serve cached pages, fallback to dashboard shell
+// Navigation handler: serve the EXACT cached route offline.
+// IMPORTANT: never serve a *different* route's HTML (e.g. the /dashboard shell
+// for /dashboard/patients). The Next.js App Router would detect the URL/RSC
+// mismatch and fall into a blank, infinitely-reloading page. When the exact
+// route isn't cached we serve the static, router-free offline page instead.
 async function offlineNavigationHandler(request) {
   const pageCache = await caches.open(PAGE_CACHE);
   const staticCache = await caches.open(STATIC_CACHE);
-  
+
   try {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
@@ -388,32 +392,21 @@ async function offlineNavigationHandler(request) {
     }
     return networkResponse;
   } catch (err) {
-    // Try page cache
-    const cachedPage = await pageCache.match(request);
-    if (cachedPage) return cachedPage;
-    
-    const staticPage = await staticCache.match(request);
-    if (staticPage) return staticPage;
+    // Exact route match only (ignoreSearch handles App Router cache-busting params)
+    const cached =
+      (await pageCache.match(request, { ignoreSearch: true })) ||
+      (await staticCache.match(request, { ignoreSearch: true }));
+    if (cached) return cached;
 
-    // Try matching pathname without query
-    const url = new URL(request.url);
-    const pathRequest = new Request(url.pathname);
-    const cachedPath = await pageCache.match(pathRequest) || await staticCache.match(pathRequest);
-    if (cachedPath) return cachedPath;
-
-    // For dashboard subpages, serve the cached dashboard shell
-    if (url.pathname.startsWith('/dashboard')) {
-      const dashboardPage = await pageCache.match('/dashboard') || await staticCache.match('/dashboard');
-      if (dashboardPage) return dashboardPage;
-    }
-
-    // Serve root if available
-    const rootPage = await pageCache.match('/') || await staticCache.match('/');
-    if (rootPage) return rootPage;
-
-    // Last resort: offline page
-    const offlinePage = await staticCache.match(OFFLINE_PAGE);
-    return offlinePage || new Response('Offline', { status: 503 });
+    // Route not saved for offline use — show the stable offline page.
+    // It is plain static HTML (no Next router) so it cannot reload-loop, and its
+    // "Go Back" button returns the user to the cached dashboard shell.
+    const offlinePage =
+      (await staticCache.match(OFFLINE_PAGE)) || (await caches.match(OFFLINE_PAGE));
+    return (
+      offlinePage ||
+      new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
+    );
   }
 }
 
