@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Heart, Star, CheckCircle2, Loader2, Send } from 'lucide-react';
+import { Star, CheckCircle2, Loader2, Send } from 'lucide-react';
 
 const JOURNEY_STAGES = [
   'Admission / Registration',
@@ -198,8 +198,13 @@ export default function PatientFeedbackPage() {
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <header className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 mb-3">
-            <Heart className="w-7 h-7 text-blue-600" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white shadow-sm border border-blue-100 mb-3 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="UNTH Logo"
+              className="w-16 h-16 object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Share Your Experience</h1>
           <p className="text-gray-600 mt-1 text-sm">

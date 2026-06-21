@@ -58,6 +58,13 @@ const nextConfig = {
     }
     return config;
   },
+  async rewrites() {
+    return [
+      // Short alias for the public patient feedback form so the link we share
+      // with patients stays very short (e.g. https://host/f).
+      { source: '/f', destination: '/feedback' },
+    ];
+  },
   async headers() {
     return [
       {

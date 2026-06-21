@@ -13,22 +13,19 @@ interface Patient {
   caregiverPhone?: string | null;
 }
 
-// Builds a personalised public feedback link that prefills the patient's
-// identity on the form (see /feedback page).
-function buildPatientLink(origin: string, p: Patient): string {
-  const params = new URLSearchParams();
-  if (p.name) params.set('name', p.name);
-  if (p.folderNumber) params.set('folder', p.folderNumber);
-  if (p.phoneNumber) params.set('phone', p.phoneNumber);
-  const qs = params.toString();
-  return `${origin}/feedback${qs ? `?${qs}` : ''}`;
+// Builds the very short public feedback link shared with patients.
+function buildPatientLink(origin: string): string {
+  return `${origin}/f`;
 }
 
 function buildMessage(origin: string, p: Patient): string {
-  const link = buildPatientLink(origin, p);
+  const link = buildPatientLink(origin);
   return (
-    `Dear ${p.name || 'patient'}, thank you for trusting UNTH Theatre with your care. ` +
-    `Please share your experience using this short feedback form: ${link}`
+    `University of Nigeria Teaching Hospital (UNTH) — Theatre Complex\n\n` +
+    `Dear ${p.name || 'patient'},\n` +
+    `Your honest feedback about your surgical journey helps us serve you and other ` +
+    `patients better. It is anonymous unless you choose to share your details.\n\n` +
+    `Share your experience here: ${link}`
   );
 }
 
@@ -85,7 +82,7 @@ export default function PatientFeedbackShare() {
   }, [patients, search]);
 
   async function copyLink(p: Patient) {
-    const link = buildPatientLink(origin, p);
+    const link = buildPatientLink(origin);
     try {
       await navigator.clipboard.writeText(link);
       setCopiedId(p.id);
