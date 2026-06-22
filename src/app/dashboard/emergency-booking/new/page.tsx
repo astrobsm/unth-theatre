@@ -377,7 +377,11 @@ export default function NewEmergencyBookingPage() {
         throw new Error(data.error || 'Failed to submit emergency booking');
       }
 
-      router.push('/dashboard/emergency-booking');
+      // Go straight to the structured consent form so it can be signed (or a
+      // signed scan uploaded) for the just-booked emergency case.
+      const created = await res.json().catch(() => null);
+      const newSurgeryId = created?.surgery?.id;
+      router.push(newSurgeryId ? `/dashboard/surgeries/${newSurgeryId}/consent` : '/dashboard/emergency-booking');
     } catch (err: any) {
       setError(err.message);
     } finally {
