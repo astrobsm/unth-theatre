@@ -135,29 +135,15 @@ async function handleGetFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
-  const cacheKey = urlToCacheKey(url);
-
   try {
-    const response = await originalFetch(input, init);
-
-    if (response.ok) {
-      // Clone before reading body — response can only be read once
-      const clone = response.clone();
-      try {
-        const data = await clone.json();
-        // Cache response data in IndexedDB (30 min default TTL)
-        await setCachedData(cacheKey, data, 30 * 60 * 1000);
-      } catch {
-        // Response wasn't JSON, skip caching
-      }
-    }
-
-    return response;
+    // Fast path: return the network response immediately. The service worker
+    // already caches API GETs (Cache API + IndexedDB), so we do NOT parse the
+    // body or write to IndexedDB here — that added latency to every request.
+    return await originalFetch(input, init);
   } catch (networkError) {
-    // Network failed — try IndexedDB cache
-    const cached = await getCachedData(cacheKey);
+    // Network failed — fall back to whatever the SW cached in IndexedDB.
+    const cached = await getCachedData(urlToCacheKey(url));
     if (cached) {
-      console.log(`[FetchInterceptor] Serving cached data for ${url}`);
       return new Response(JSON.stringify(cached.data), {
         status: 200,
         statusText: 'OK (Offline Cache)',

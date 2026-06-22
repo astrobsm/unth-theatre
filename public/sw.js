@@ -4,7 +4,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v30';
+const CACHE_VERSION = 'v31';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -332,15 +332,10 @@ async function networkFirstWithCache(request) {
   try {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
+      // Store in the Cache API only. We no longer re-parse the body to also
+      // write an IndexedDB copy on every response — that doubled the work on
+      // every API call. The Cache API copy already serves offline fallback.
       cache.put(request, networkResponse.clone());
-      // Also cache in IndexedDB for offline data access
-      const url = new URL(request.url);
-      if (url.pathname.startsWith('/api/')) {
-        try {
-          const data = await networkResponse.clone().json();
-          storeInIndexedDB('cachedData', url.pathname + url.search, data);
-        } catch (e) {}
-      }
     }
     return networkResponse;
   } catch (err) {

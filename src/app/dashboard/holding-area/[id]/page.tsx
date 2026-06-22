@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -91,6 +91,8 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
   const [alertType, setAlertType] = useState('');
   const [alertDescription, setAlertDescription] = useState('');
   const [consentFileAvailable, setConsentFileAvailable] = useState<boolean | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<Partial<Assessment>>({});
 
   useEffect(() => {
     fetchAssessment();
@@ -121,7 +123,10 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
     }
   };
 
-  const updateAssessment = async (updates: Partial<Assessment>) => {
+  const flushAssessment = useCallback(async () => {
+    const updates = pendingRef.current;
+    pendingRef.current = {};
+    if (!updates || Object.keys(updates).length === 0) return;
     setSaving(true);
     try {
       const response = await fetch(`/api/holding-area/${params.id}`, {
@@ -129,17 +134,30 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
-      if (response.ok) {
-        const data = await response.json();
-        setAssessment(data);
-      }
+      if (!response.ok) throw new Error('Failed to save');
+      // Note: we deliberately do NOT overwrite local state with the response so
+      // we never clobber edits the user made while the request was in flight.
     } catch (error) {
       console.error('Error updating assessment:', error);
-      alert('Failed to update assessment');
     } finally {
       setSaving(false);
     }
-  };
+  }, [params.id]);
+
+  // Optimistic + debounced update: the checkbox/field flips instantly in the UI
+  // and the change is persisted in the background, batching rapid edits.
+  const updateAssessment = useCallback((updates: Partial<Assessment>) => {
+    setAssessment((prev) => (prev ? { ...prev, ...updates } : prev));
+    pendingRef.current = { ...pendingRef.current, ...updates };
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { flushAssessment(); }, 500);
+  }, [flushAssessment]);
+
+  // Flush any pending change when leaving the page so nothing is lost.
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    flushAssessment();
+  }, [flushAssessment]);
 
   const triggerRedAlert = async () => {
     if (!alertType || !alertDescription) {

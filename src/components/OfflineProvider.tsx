@@ -3,8 +3,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import {
   prefetchAllOfflineData,
-  precacheAppShell,
-  warmUpEntireApp,
   registerPeriodicSync,
   cacheSessionForOffline,
   type OfflineDataStatus,
@@ -81,11 +79,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         registerServiceWorker().then((reg) => {
           if (reg) {
             setSwRegistered(true);
-            // Pre-cache the FULL app shell (every module page) + register
-            // periodic sync. Runs after a short delay so the first paint is
-            // unblocked; warmUp also fires this, this is the backstop.
+            // Register periodic background sync only. We deliberately do NOT
+            // crawl/precache every module page on load — that request storm
+            // slowed the whole app. The SW caches pages as you actually visit
+            // them, which keeps navigation fast and still works offline.
             setTimeout(() => {
-              precacheAppShell();
               registerPeriodicSync();
             }, 5000);
           }
@@ -109,10 +107,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
     const handleOnline = () => {
       setIsOnline(true);
-      // Auto-sync when back online
+      // Drain any mutations that were queued while offline. We do NOT re-prefetch
+      // all data here — that storm made reconnects (e.g. flaky links) sluggish.
       syncPendingMutations();
-      // Refresh cached data
-      runPrefetch();
     };
 
     const handleOffline = () => setIsOnline(false);
@@ -186,11 +183,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     warmedUpRef.current = true;
     setIsPrefetching(true);
     try {
-      const status = await warmUpEntireApp();
-      if (status) {
-        setPrefetchStatus(status);
-        setIsFullyCached(status.isFullyCached);
-      }
+      // Lightweight warm-up only: cache the session so auth survives a brief
+      // network drop. We intentionally skip prefetching every API endpoint and
+      // crawling every page \u2014 that proactive storm degraded overall speed.
+      await cacheSessionForOffline();
     } catch {
       warmedUpRef.current = false; // allow a later retry
     } finally {
