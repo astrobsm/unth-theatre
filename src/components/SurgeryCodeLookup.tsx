@@ -91,7 +91,13 @@ export default function SurgeryCodeLookup({
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="e.g. CP-7K9QF2"
+            placeholder={
+              expect === "PHARMACY"
+                ? "e.g. PH-7K9QF2"
+                : expect === "ANAESTHESIA"
+                ? "e.g. AN-7K9QF2"
+                : "e.g. CP-7K9QF2"
+            }
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono tracking-wider uppercase"
             autoComplete="off"
           />

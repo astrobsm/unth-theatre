@@ -1219,10 +1219,18 @@ export default function MedicationTrackingPage() {
         </p>
       </div>
 
-      {/* Patient code lookup — pharmacy keys in a drug or anaesthesia code to
-          see exactly what to pack for that patient. */}
-      <div className="mb-6">
-        <SurgeryCodeLookup title="Enter the patient's pharmacy or anaesthesia code" />
+      {/* Patient code lookup — the pharmacist keys in the code the surgeon /
+          anaesthetist generated at booking to see exactly what to dispense for
+          that patient. Two dedicated fields: surgery drugs vs anaesthetic Rx. */}
+      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SurgeryCodeLookup
+          expect="PHARMACY"
+          title="Surgery drugs code (PH-…) — enter the code from the surgeon's booking"
+        />
+        <SurgeryCodeLookup
+          expect="ANAESTHESIA"
+          title="Anaesthetic prescription code (AN-…) — enter the anaesthetist's code"
+        />
       </div>
 
       {/* Tabs */}
