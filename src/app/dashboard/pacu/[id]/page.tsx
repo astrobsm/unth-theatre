@@ -79,13 +79,24 @@ interface PACUAssessment {
   redAlerts: any[];
 }
 
+interface PACUMedication {
+  id: string;
+  administeredAt: string;
+  administeredBy: string;
+  medicationName: string;
+  dose: string;
+  route: string;
+  indication?: string | null;
+  notes?: string | null;
+}
+
 export default function PACUAssessmentDetailPage() {
   const router = useRouter();
   const params = useParams();
   const [assessment, setAssessment] = useState<PACUAssessment | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'aldrete' | 'discharge'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'aldrete' | 'medications' | 'discharge'>('overview');
   
   // Vital Signs Form
   const [vitalForm, setVitalForm] = useState({
@@ -131,11 +142,22 @@ export default function PACUAssessmentDetailPage() {
     wardNurseHandover: ''
   });
   
+  // Medications Administration
+  const [medications, setMedications] = useState<PACUMedication[]>([]);
+  const [medicationForm, setMedicationForm] = useState({
+    medicationName: '',
+    dose: '',
+    route: '',
+    indication: '',
+    notes: ''
+  });
+
   const [submitting, setSubmitting] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
 
   useEffect(() => {
     fetchAssessment();
+    fetchMedications();
     // Auto-refresh every 30 seconds for vital signs
     const interval = setInterval(fetchAssessment, 30000);
     return () => clearInterval(interval);
@@ -187,6 +209,55 @@ export default function PACUAssessmentDetailPage() {
       console.error('Error fetching assessment:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMedications = async () => {
+    try {
+      const response = await fetch(`/api/pacu/${params.id}/medications`);
+      if (response.ok) {
+        const data = await response.json();
+        setMedications(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching medications:', error);
+    }
+  };
+
+  const recordMedication = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!medicationForm.medicationName.trim() || !medicationForm.dose.trim() || !medicationForm.route.trim()) {
+      alert('Medication name, dose and route are required');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/pacu/${params.id}/medications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          medicationName: medicationForm.medicationName.trim(),
+          dose: medicationForm.dose.trim(),
+          route: medicationForm.route.trim(),
+          indication: medicationForm.indication.trim() || undefined,
+          notes: medicationForm.notes.trim() || undefined
+        })
+      });
+
+      if (response.ok) {
+        setMedicationForm({ medicationName: '', dose: '', route: '', indication: '', notes: '' });
+        fetchMedications();
+        alert('Medication recorded successfully');
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to record medication');
+      }
+    } catch (error) {
+      alert('Error recording medication');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -574,7 +645,7 @@ export default function PACUAssessmentDetailPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6 overflow-x-auto">
         <div className="flex gap-4 sm:gap-8 min-w-max">
-          {(['overview', 'vitals', 'aldrete', 'discharge'] as const).map((tab) => (
+          {(['overview', 'vitals', 'aldrete', 'medications', 'discharge'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1272,6 +1343,131 @@ export default function PACUAssessmentDetailPage() {
                 {submitting ? 'Updating Score...' : 'Save Aldrete Score'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'medications' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Record Medication */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Administer Medication</h2>
+            <form onSubmit={recordMedication} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name *</label>
+                <input
+                  type="text"
+                  value={medicationForm.medicationName}
+                  onChange={(e) => setMedicationForm({ ...medicationForm, medicationName: e.target.value })}
+                  placeholder="e.g. Paracetamol, Morphine, Ondansetron"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dose *</label>
+                  <input
+                    type="text"
+                    value={medicationForm.dose}
+                    onChange={(e) => setMedicationForm({ ...medicationForm, dose: e.target.value })}
+                    placeholder="e.g. 1 g, 4 mg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Route *</label>
+                  <select
+                    value={medicationForm.route}
+                    onChange={(e) => setMedicationForm({ ...medicationForm, route: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    required
+                  >
+                    <option value="">Select route</option>
+                    <option value="IV">IV (Intravenous)</option>
+                    <option value="IM">IM (Intramuscular)</option>
+                    <option value="SC">SC (Subcutaneous)</option>
+                    <option value="PO">PO (Oral)</option>
+                    <option value="PR">PR (Rectal)</option>
+                    <option value="SL">SL (Sublingual)</option>
+                    <option value="Inhalation">Inhalation</option>
+                    <option value="Topical">Topical</option>
+                    <option value="Epidural">Epidural</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Indication</label>
+                <input
+                  type="text"
+                  value={medicationForm.indication}
+                  onChange={(e) => setMedicationForm({ ...medicationForm, indication: e.target.value })}
+                  placeholder="e.g. Post-op pain, Nausea, Hypotension"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={medicationForm.notes}
+                  onChange={(e) => setMedicationForm({ ...medicationForm, notes: e.target.value })}
+                  rows={3}
+                  placeholder="Any additional notes (e.g. response, adverse reaction)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 disabled:bg-gray-300 transition-colors"
+              >
+                {submitting ? 'Recording...' : 'Record Medication'}
+              </button>
+            </form>
+          </div>
+
+          {/* Medication History */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Medications Administered ({medications.length})
+            </h2>
+            {medications.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">No medications recorded yet</p>
+            ) : (
+              <div className="space-y-3 max-h-[28rem] overflow-y-auto">
+                {medications.map((med) => (
+                  <div key={med.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-gray-900">{med.medicationName}</p>
+                        <p className="text-sm text-gray-600">
+                          {med.dose} &middot; {med.route}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">
+                        {new Date(med.administeredAt).toLocaleString()}
+                      </span>
+                    </div>
+                    {med.indication && (
+                      <p className="text-sm text-gray-700 mt-2">
+                        <span className="font-medium">Indication:</span> {med.indication}
+                      </p>
+                    )}
+                    {med.notes && (
+                      <p className="text-sm text-gray-700 mt-1">
+                        <span className="font-medium">Notes:</span> {med.notes}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

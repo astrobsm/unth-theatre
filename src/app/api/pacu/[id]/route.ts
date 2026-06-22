@@ -83,6 +83,10 @@ export async function PUT(
     if (body.breathingSpontaneous !== undefined && body.breathingPattern === undefined) {
       body.breathingPattern = body.breathingSpontaneous ? 'Spontaneous' : 'Assisted';
     }
+    // The discharge form labels nausea control "nauseaControlled"; the column is dischargeNauseaFree.
+    if (body.dischargeNauseaControlled !== undefined && body.dischargeNauseaFree === undefined) {
+      body.dischargeNauseaFree = body.dischargeNauseaControlled;
+    }
 
     // Check for conditions requiring red alert
     const shouldTriggerAlert = 
@@ -98,6 +102,8 @@ export async function PUT(
     const ALLOWED_FIELDS = [
       'admissionTime', 'receivedBy', 'handoverFrom',
       'consciousnessLevel', 'airwayStatus', 'breathingPattern', 'oxygenTherapy', 'oxygenFlowRate',
+      'aldreteActivity', 'aldreteRespiration', 'aldreteCirculation', 'aldreteConsciousness',
+      'aldreteOxygenSaturation', 'aldreteTotalScore',
       'heartRateOnAdmission', 'bloodPressureOnAdmission', 'peripheralPerfusion', 'capillaryRefillTime',
       'painScoreOnAdmission', 'painLocation', 'painManagedAdequately',
       'surgicalSiteCondition', 'dressingIntact', 'drainsPresent', 'drainType', 'drainOutput',
@@ -109,13 +115,18 @@ export async function PUT(
       'redAlertResolvedBy', 'redAlertResolvedAt',
       'dischargeReadiness', 'dischargeTime', 'dischargedTo',
       'dischargeVitalsStable', 'dischargePainControlled', 'dischargeFullyConscious', 'dischargeNauseaFree',
+      'dischargeAbleToMobilize', 'dischargeNoActiveBleedingOrOozing',
       'medicationsGivenInPACU', 'totalTimeInPACU', 'dischargeNotes', 'warningSignsExplained', 'wardNurseHandover',
     ] as const;
 
     // Enum columns must not receive empty strings (Prisma throws and returns 500).
     const ENUM_FIELDS = new Set(['consciousnessLevel', 'airwayStatus', 'redAlertType', 'dischargeReadiness']);
     // Integer columns – coerce and drop NaN.
-    const INT_FIELDS = new Set(['heartRateOnAdmission', 'painScoreOnAdmission', 'urineOutput', 'totalTimeInPACU']);
+    const INT_FIELDS = new Set([
+      'heartRateOnAdmission', 'painScoreOnAdmission', 'urineOutput', 'totalTimeInPACU',
+      'aldreteActivity', 'aldreteRespiration', 'aldreteCirculation', 'aldreteConsciousness',
+      'aldreteOxygenSaturation', 'aldreteTotalScore',
+    ]);
     // Decimal columns – coerce to number.
     const FLOAT_FIELDS = new Set(['oxygenFlowRate', 'temperatureOnAdmission']);
 

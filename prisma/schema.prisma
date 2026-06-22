@@ -2205,6 +2205,14 @@ model PACUAssessment {
   oxygenTherapy      Boolean            @default(false)
   oxygenFlowRate     Decimal?           @db.Decimal(4, 1) // L/min
 
+  // Modified Aldrete Score (0-2 each, total /10; >= 9 = ready for discharge)
+  aldreteActivity         Int @default(0)
+  aldreteRespiration      Int @default(0)
+  aldreteCirculation      Int @default(0)
+  aldreteConsciousness    Int @default(0)
+  aldreteOxygenSaturation Int @default(0)
+  aldreteTotalScore       Int @default(0)
+
   // Cardiovascular Status
   heartRateOnAdmission     Int?
   bloodPressureOnAdmission String? // "120/80"
@@ -2258,6 +2266,8 @@ model PACUAssessment {
   dischargePainControlled Boolean                @default(false)
   dischargeFullyConscious Boolean                @default(false)
   dischargeNauseaFree     Boolean                @default(false)
+  dischargeAbleToMobilize          Boolean       @default(false)
+  dischargeNoActiveBleedingOrOozing Boolean      @default(false)
 
   // Final Assessment
   medicationsGivenInPACU String? // JSON array
@@ -2275,6 +2285,7 @@ model PACUAssessment {
   patient    Patient          @relation(fields: [patientId], references: [id])
   vitalSigns PACUVitalSigns[]
   redAlerts  PACURedAlert[]
+  medications PACUMedication[]
 
   @@map("pacu_assessments")
 }
@@ -2333,6 +2344,25 @@ model PACURedAlert {
   pacuAssessment PACUAssessment @relation(fields: [pacuAssessmentId], references: [id])
 
   @@map("pacu_red_alerts")
+}
+
+// Medications administered to the patient while in PACU/recovery.
+model PACUMedication {
+  id               String   @id @default(uuid())
+  pacuAssessmentId String
+  administeredAt   DateTime @default(now())
+  administeredBy   String // Recovery room nurse / clinician ID
+
+  medicationName String
+  dose           String // e.g. "1 g", "10 mg"
+  route          String // e.g. "IV", "IM", "PO", "SC"
+  indication     String? // Reason for administration (e.g. pain, nausea)
+  notes          String?
+
+  // Relations
+  pacuAssessment PACUAssessment @relation(fields: [pacuAssessmentId], references: [id])
+
+  @@map("pacu_medications")
 }
 
 // ==================== SURGICAL COUNT CHECKLIST MODULE ====================

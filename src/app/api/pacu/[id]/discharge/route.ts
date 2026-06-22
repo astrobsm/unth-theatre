@@ -24,7 +24,18 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { dischargedTo, dischargeNotes, wardNurseHandover } = body;
+    const {
+      dischargedTo,
+      dischargeNotes,
+      dischargeInstructions,
+      wardNurseHandover,
+      dischargeVitalsStable,
+      dischargePainControlled,
+      dischargeNauseaControlled,
+      dischargeFullyConscious,
+      dischargeAbleToMobilize,
+      dischargeNoActiveBleedingOrOozing,
+    } = body;
 
     // Get assessment
     const assessment = await prisma.pACUAssessment.findUnique({
@@ -39,11 +50,21 @@ export async function POST(
       return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
     }
 
-    // Check discharge criteria
-    const dischargeCriteriaMet = 
-      assessment.dischargeVitalsStable &&
-      assessment.dischargePainControlled &&
-      assessment.dischargeFullyConscious &&
+    // Honour the criteria the nurse just confirmed in the discharge form. Fall
+    // back to whatever was previously persisted on the assessment if a flag was
+    // not supplied in the request.
+    const vitalsStable = dischargeVitalsStable ?? assessment.dischargeVitalsStable;
+    const painControlled = dischargePainControlled ?? assessment.dischargePainControlled;
+    const fullyConscious = dischargeFullyConscious ?? assessment.dischargeFullyConscious;
+    const nauseaFree = dischargeNauseaControlled ?? assessment.dischargeNauseaFree;
+    const ableToMobilize = dischargeAbleToMobilize ?? assessment.dischargeAbleToMobilize;
+    const noActiveBleeding = dischargeNoActiveBleedingOrOozing ?? assessment.dischargeNoActiveBleedingOrOozing;
+
+    // Core discharge criteria – a red alert always blocks discharge.
+    const dischargeCriteriaMet =
+      vitalsStable &&
+      painControlled &&
+      fullyConscious &&
       !assessment.redAlertTriggered;
 
     if (!dischargeCriteriaMet) {
@@ -65,9 +86,15 @@ export async function POST(
         dischargeReadiness: 'DISCHARGED_TO_WARD',
         dischargeTime,
         dischargedTo,
-        dischargeNotes,
+        dischargeNotes: dischargeNotes ?? dischargeInstructions,
         wardNurseHandover,
-        totalTimeInPACU
+        totalTimeInPACU,
+        dischargeVitalsStable: vitalsStable,
+        dischargePainControlled: painControlled,
+        dischargeFullyConscious: fullyConscious,
+        dischargeNauseaFree: nauseaFree,
+        dischargeAbleToMobilize: ableToMobilize,
+        dischargeNoActiveBleedingOrOozing: noActiveBleeding,
       },
       include: {
         patient: true,
