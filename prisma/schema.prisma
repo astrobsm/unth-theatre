@@ -2691,6 +2691,12 @@ model PatientTransportLog {
   porterCode String // Staff code assigned at profile creation
   porterName String
 
+  // Second porter (trolley partner) — patient transport needs two porters to
+  // push the trolley. Denormalised (no relation) so the User model is untouched.
+  porter2Id   String?
+  porter2Code String?
+  porter2Name String?
+
   // Patient Info
   patientId           String?
   patientName         String

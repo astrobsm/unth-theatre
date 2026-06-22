@@ -16,6 +16,8 @@ const startTransportSchema = z.object({
   equipmentUsed: z.string().optional(),
   surgeryId: z.string().optional(),
   notes: z.string().optional(),
+  // Second porter (trolley partner) staff code — optional.
+  transporter2Code: z.string().optional().nullable(),
 });
 
 export async function POST(request: NextRequest) {
@@ -90,12 +92,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve the optional second porter (trolley partner). Patient transport
+    // needs two porters to push the trolley.
+    let porter2: { id: string; fullName: string; staffCode: string | null } | null = null;
+    const transporter2Code = validatedData.transporter2Code?.trim();
+    if (transporter2Code) {
+      if (transporter2Code === porter.staffCode) {
+        return NextResponse.json(
+          { error: 'The second transporter must be a different porter' },
+          { status: 400 }
+        );
+      }
+      const found = await prisma.user.findUnique({
+        where: { staffCode: transporter2Code },
+        select: { id: true, fullName: true, staffCode: true, role: true, status: true },
+      });
+      if (!found) {
+        return NextResponse.json(
+          { error: 'Second transporter staff code is invalid' },
+          { status: 404 }
+        );
+      }
+      if (found.status !== 'APPROVED') {
+        return NextResponse.json(
+          { error: 'Second transporter account is not approved' },
+          { status: 403 }
+        );
+      }
+      if (found.role !== 'PORTER' && found.role !== 'ADMIN' && found.role !== 'THEATRE_MANAGER') {
+        return NextResponse.json(
+          { error: 'The second transporter must be a porter' },
+          { status: 403 }
+        );
+      }
+      porter2 = { id: found.id, fullName: found.fullName, staffCode: found.staffCode };
+    }
+
     // Create transport log
     const transportLog = await prisma.patientTransportLog.create({
       data: {
         porterId: porter.id,
         porterCode: porter.staffCode!,
         porterName: porter.fullName,
+        porter2Id: porter2?.id,
+        porter2Code: porter2?.staffCode,
+        porter2Name: porter2?.fullName,
         patientId: patient.id,
         patientName: patient.name,
         patientFolderNumber: patient.folderNumber,

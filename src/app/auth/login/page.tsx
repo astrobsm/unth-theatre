@@ -25,10 +25,58 @@ export default function LoginPage() {
   
   // Quick duty logging states
   const [showDutyPanel, setShowDutyPanel] = useState(false);
-  const [dutyAction, setDutyAction] = useState<'cleaning' | 'transport' | 'other' | null>(null);
   const [staffCode, setStaffCode] = useState('');
   const [dutyLoading, setDutyLoading] = useState(false);
   const [dutyMessage, setDutyMessage] = useState('');
+
+  // Dynamic duty-logging options (loaded after a valid staff code is verified)
+  type DutyOptions = {
+    staff: { id: string; name: string; code: string; role: string };
+    patients: { id: string; name: string; folderNumber: string }[];
+    porters: { id: string; name: string; code: string }[];
+    receivingStaff: { id: string; name: string; code: string; role: string }[];
+    theatres: { name: string; location: string | null }[];
+  };
+  const [dutyOptions, setDutyOptions] = useState<DutyOptions | null>(null);
+  const [dutyOptionsLoading, setDutyOptionsLoading] = useState(false);
+  // Which inline form is currently open
+  const [dutyMode, setDutyMode] = useState<
+    | null
+    | 'transport-start'
+    | 'transport-end'
+    | 'cleaning-start'
+    | 'other-start'
+  >(null);
+  // Transport start form
+  const [tPatientFolder, setTPatientFolder] = useState('');
+  const [tFromLocation, setTFromLocation] = useState('');
+  const [tToLocation, setTToLocation] = useState('');
+  const [tTransporter2Code, setTTransporter2Code] = useState('');
+  const [tTransportType, setTTransportType] = useState('');
+  const [tNotes, setTNotes] = useState('');
+  // Transport end form
+  const [tReceivedBy, setTReceivedBy] = useState('');
+  // Cleaning start form
+  const [cTheatreId, setCTheatreId] = useState('');
+  const [cCleaningType, setCCleaningType] = useState('');
+  // Other duty start form
+  const [oDutyType, setODutyType] = useState('');
+  const [oLocation, setOLocation] = useState('');
+
+  // Base locations merged with theatre suites for the from/to dropdowns
+  const BASE_LOCATIONS = [
+    'Holding Area',
+    'PACU / Recovery',
+    'ICU',
+    'A&E / Emergency',
+    'Ward',
+    'Main Theatre',
+    'Day-Case Theatre',
+    'Labour Ward',
+    'Radiology',
+    'CSSD',
+    'Mortuary',
+  ];
 
   // Offline auto-login: if offline and session is cached, redirect to dashboard
   useEffect(() => {
@@ -412,74 +460,360 @@ export default function LoginPage() {
           {showDutyPanel && (
             <div className="mt-4 space-y-4">
               {dutyMessage && (
-                <div className={`px-4 py-3 rounded ${
-                  dutyMessage.includes('success') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                <div className={`px-4 py-3 rounded text-sm ${
+                  dutyMessage.startsWith('✓') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                 }`}>
                   {dutyMessage}
                 </div>
               )}
 
+              {/* Step 1 — verify staff code to unlock the dynamic fields */}
               <div>
                 <label className="label text-sm">Staff Code</label>
-                <input
-                  type="text"
-                  className="input-field text-sm"
-                  placeholder="Enter your staff code"
-                  value={staffCode}
-                  onChange={(e) => setStaffCode(e.target.value)}
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="input-field text-sm flex-1"
+                    placeholder="Enter your staff code"
+                    value={staffCode}
+                    onChange={(e) => {
+                      setStaffCode(e.target.value);
+                      // Invalidate previously loaded options if the code changes
+                      if (dutyOptions) {
+                        setDutyOptions(null);
+                        setDutyMode(null);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={loadDutyOptions}
+                    disabled={!staffCode || dutyOptionsLoading}
+                    className="btn-primary text-xs px-4 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {dutyOptionsLoading ? 'Verifying…' : 'Verify'}
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => handleQuickDutyAction('cleaning', 'start')}
-                  disabled={!staffCode || dutyLoading}
-                  className="btn-secondary text-xs py-2 disabled:opacity-50"
-                >
-                  🧹 Start Cleaning
-                </button>
-                <button
-                  onClick={() => handleQuickDutyAction('cleaning', 'end')}
-                  disabled={!staffCode || dutyLoading}
-                  className="btn-outline text-xs py-2 disabled:opacity-50"
-                >
-                  ✓ End Cleaning
-                </button>
-              </div>
+              {/* Step 2 — once verified, show the staff identity + action buttons */}
+              {dutyOptions && (
+                <>
+                  <div className="text-xs text-gray-600 bg-gray-50 rounded px-3 py-2">
+                    Logged as <span className="font-semibold">{dutyOptions.staff.name}</span>{' '}
+                    ({dutyOptions.staff.role.replace(/_/g, ' ')})
+                  </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleQuickDutyAction('transport', 'start')}
-                  disabled={!staffCode || dutyLoading}
-                  className="btn-secondary text-xs py-2 disabled:opacity-50"
-                >
-                  🚑 Start Transport
-                </button>
-                <button
-                  onClick={() => handleQuickDutyAction('transport', 'end')}
-                  disabled={!staffCode || dutyLoading}
-                  className="btn-outline text-xs py-2 disabled:opacity-50"
-                >
-                  ✓ End Transport
-                </button>
-              </div>
+                  {/* Cleaning */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setDutyMode('cleaning-start'); setDutyMessage(''); }}
+                      disabled={dutyLoading}
+                      className="btn-secondary text-xs py-2 disabled:opacity-50"
+                    >
+                      🧹 Start Cleaning
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDutyAction('cleaning', 'end')}
+                      disabled={dutyLoading}
+                      className="btn-outline text-xs py-2 disabled:opacity-50"
+                    >
+                      ✓ End Cleaning
+                    </button>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleQuickDutyAction('other', 'start')}
-                  disabled={!staffCode || dutyLoading}
-                  className="btn-secondary text-xs py-2 disabled:opacity-50"
-                >
-                  📋 Start Other Duty
-                </button>
-                <button
-                  onClick={() => handleQuickDutyAction('other', 'end')}
-                  disabled={!staffCode || dutyLoading}
-                  className="btn-outline text-xs py-2 disabled:opacity-50"
-                >
-                  ✓ End Other Duty
-                </button>
-              </div>
+                  {/* Transport */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setDutyMode('transport-start'); setDutyMessage(''); }}
+                      disabled={dutyLoading}
+                      className="btn-secondary text-xs py-2 disabled:opacity-50"
+                    >
+                      🚑 Start Transport
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDutyMode('transport-end'); setDutyMessage(''); }}
+                      disabled={dutyLoading}
+                      className="btn-outline text-xs py-2 disabled:opacity-50"
+                    >
+                      ✓ End Transport
+                    </button>
+                  </div>
+
+                  {/* Other duty */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setDutyMode('other-start'); setDutyMessage(''); }}
+                      disabled={dutyLoading}
+                      className="btn-secondary text-xs py-2 disabled:opacity-50"
+                    >
+                      📋 Start Other Duty
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDutyAction('other', 'end')}
+                      disabled={dutyLoading}
+                      className="btn-outline text-xs py-2 disabled:opacity-50"
+                    >
+                      ✓ End Other Duty
+                    </button>
+                  </div>
+
+                  {/* Inline form: Start Transport */}
+                  {dutyMode === 'transport-start' && (
+                    <div className="space-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-700">Patient Transport — two porters required</p>
+
+                      <div>
+                        <label className="label text-xs">Patient</label>
+                        <select
+                          aria-label="Patient"
+                          className="input-field text-sm"
+                          value={tPatientFolder}
+                          onChange={(e) => setTPatientFolder(e.target.value)}
+                        >
+                          <option value="">Select patient…</option>
+                          {dutyOptions.patients.map((p) => (
+                            <option key={p.id} value={p.folderNumber}>
+                              {p.name} — {p.folderNumber}
+                            </option>
+                          ))}
+                        </select>
+                        {dutyOptions.patients.length === 0 && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            No scheduled patients found for today. Use End Transport if returning a patient.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="label text-xs">From</label>
+                          <select
+                            aria-label="From location"
+                            className="input-field text-sm"
+                            value={tFromLocation}
+                            onChange={(e) => setTFromLocation(e.target.value)}
+                          >
+                            <option value="">From…</option>
+                            {locationOptions().map((loc) => (
+                              <option key={`from-${loc}`} value={loc}>{loc}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="label text-xs">To</label>
+                          <select
+                            aria-label="To location"
+                            className="input-field text-sm"
+                            value={tToLocation}
+                            onChange={(e) => setTToLocation(e.target.value)}
+                          >
+                            <option value="">To…</option>
+                            {locationOptions().map((loc) => (
+                              <option key={`to-${loc}`} value={loc}>{loc}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="label text-xs">Transporter 1</label>
+                          <input
+                            type="text"
+                            aria-label="Transporter 1"
+                            className="input-field text-sm bg-gray-100"
+                            value={dutyOptions.staff.name}
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Transporter 2 (trolley partner)</label>
+                          <select
+                            aria-label="Transporter 2"
+                            className="input-field text-sm"
+                            value={tTransporter2Code}
+                            onChange={(e) => setTTransporter2Code(e.target.value)}
+                          >
+                            <option value="">Select porter…</option>
+                            {dutyOptions.porters.map((p) => (
+                              <option key={p.id} value={p.code}>{p.name} ({p.code})</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="label text-xs">Transport type (optional)</label>
+                        <select
+                          aria-label="Transport type"
+                          className="input-field text-sm"
+                          value={tTransportType}
+                          onChange={(e) => setTTransportType(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="TROLLEY">Trolley</option>
+                          <option value="WHEELCHAIR">Wheelchair</option>
+                          <option value="BED">Bed</option>
+                          <option value="WALKING">Walking (assisted)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="label text-xs">Notes (optional)</label>
+                        <input
+                          type="text"
+                          aria-label="Transport notes"
+                          className="input-field text-sm"
+                          placeholder="Any notes"
+                          value={tNotes}
+                          onChange={(e) => setTNotes(e.target.value)}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDutyAction('transport', 'start')}
+                        disabled={dutyLoading || !tPatientFolder || !tFromLocation || !tToLocation}
+                        className="btn-primary w-full text-sm py-2 disabled:opacity-50"
+                      >
+                        {dutyLoading ? 'Starting…' : 'Start Transport'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Inline form: End Transport */}
+                  {dutyMode === 'transport-end' && (
+                    <div className="space-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-700">End Transport</p>
+                      <div>
+                        <label className="label text-xs">Received by</label>
+                        <select
+                          aria-label="Received by"
+                          className="input-field text-sm"
+                          value={tReceivedBy}
+                          onChange={(e) => setTReceivedBy(e.target.value)}
+                        >
+                          <option value="">Select receiving staff…</option>
+                          {dutyOptions.receivingStaff.map((r) => (
+                            <option key={r.id} value={r.name}>
+                              {r.name} ({r.role.replace(/_/g, ' ')})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDutyAction('transport', 'end')}
+                        disabled={dutyLoading}
+                        className="btn-primary w-full text-sm py-2 disabled:opacity-50"
+                      >
+                        {dutyLoading ? 'Ending…' : 'End Transport'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Inline form: Start Cleaning */}
+                  {dutyMode === 'cleaning-start' && (
+                    <div className="space-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-700">Start Cleaning</p>
+                      <div>
+                        <label className="label text-xs">Theatre / Area (optional)</label>
+                        <select
+                          aria-label="Theatre"
+                          className="input-field text-sm"
+                          value={cTheatreId}
+                          onChange={(e) => setCTheatreId(e.target.value)}
+                        >
+                          <option value="">Select area…</option>
+                          {dutyOptions.theatres.map((t) => (
+                            <option key={t.name} value={t.name}>
+                              {t.name}{t.location ? ` — ${t.location}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-xs">Cleaning type</label>
+                        <select
+                          aria-label="Cleaning type"
+                          className="input-field text-sm"
+                          value={cCleaningType}
+                          onChange={(e) => setCCleaningType(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="Post-Surgery">Post-Surgery</option>
+                          <option value="Between-Cases">Between Cases</option>
+                          <option value="Daily">Daily</option>
+                          <option value="Terminal">Terminal / Deep Clean</option>
+                          <option value="Spillage">Spillage</option>
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDutyAction('cleaning', 'start')}
+                        disabled={dutyLoading}
+                        className="btn-primary w-full text-sm py-2 disabled:opacity-50"
+                      >
+                        {dutyLoading ? 'Starting…' : 'Start Cleaning'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Inline form: Start Other Duty */}
+                  {dutyMode === 'other-start' && (
+                    <div className="space-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-700">Start Other Duty</p>
+                      <div>
+                        <label className="label text-xs">Duty type</label>
+                        <select
+                          aria-label="Duty type"
+                          className="input-field text-sm"
+                          value={oDutyType}
+                          onChange={(e) => setODutyType(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="WASHING_MACINTOSH">Washing Macintosh</option>
+                          <option value="EQUIPMENT_STERILIZATION">Equipment Sterilization</option>
+                          <option value="WASTE_DISPOSAL">Waste Disposal</option>
+                          <option value="LINEN_CHANGE">Linen Change</option>
+                          <option value="RESTOCKING">Restocking</option>
+                          <option value="ERRAND">Errand</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-xs">Location (optional)</label>
+                        <select
+                          aria-label="Duty location"
+                          className="input-field text-sm"
+                          value={oLocation}
+                          onChange={(e) => setOLocation(e.target.value)}
+                        >
+                          <option value="">Select area…</option>
+                          {locationOptions().map((loc) => (
+                            <option key={`duty-${loc}`} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDutyAction('other', 'start')}
+                        disabled={dutyLoading || !oDutyType}
+                        className="btn-primary w-full text-sm py-2 disabled:opacity-50"
+                      >
+                        {dutyLoading ? 'Starting…' : 'Start Other Duty'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
 
               <p className="text-xs text-gray-500 text-center mt-2">
                 Quick logging for cleaners and porters to track work hours
@@ -583,6 +917,52 @@ export default function LoginPage() {
     </div>
   );
 
+  // Merge static base locations with theatre suite names for dropdowns
+  function locationOptions(): string[] {
+    const theatreNames = (dutyOptions?.theatres ?? []).map((t) => t.name);
+    return Array.from(new Set([...BASE_LOCATIONS, ...theatreNames]));
+  }
+
+  // Step 1: verify the staff code and load dropdown options
+  async function loadDutyOptions() {
+    setDutyOptionsLoading(true);
+    setDutyMessage('');
+    setDutyMode(null);
+    try {
+      const response = await fetch('/api/duty-logging/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffCode }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setDutyOptions(data);
+      } else {
+        setDutyOptions(null);
+        setDutyMessage(`✗ ${data.error || 'Could not verify staff code'}`);
+      }
+    } catch (error) {
+      setDutyOptions(null);
+      setDutyMessage('✗ An error occurred while verifying');
+    } finally {
+      setDutyOptionsLoading(false);
+    }
+  }
+
+  function resetDutyForms() {
+    setTPatientFolder('');
+    setTFromLocation('');
+    setTToLocation('');
+    setTTransporter2Code('');
+    setTTransportType('');
+    setTNotes('');
+    setTReceivedBy('');
+    setCTheatreId('');
+    setCCleaningType('');
+    setODutyType('');
+    setOLocation('');
+  }
+
   async function handleQuickDutyAction(
     type: 'cleaning' | 'transport' | 'other',
     action: 'start' | 'end'
@@ -597,32 +977,40 @@ export default function LoginPage() {
       if (type === 'cleaning') {
         endpoint = `/api/cleaning/${action}`;
         if (action === 'start') {
-          const theatreId = prompt('Enter Theatre ID (optional):');
-          const cleaningType = prompt('Cleaning Type (e.g., Post-Surgery, Daily):');
-          body = { ...body, theatreId, cleaningType };
+          body = {
+            ...body,
+            theatreId: cTheatreId || undefined,
+            cleaningType: cCleaningType || undefined,
+          };
         }
       } else if (type === 'transport') {
         endpoint = `/api/transport/${action}`;
         if (action === 'start') {
-          const patientFolderNumber = prompt('Enter Patient Folder Number:');
-          if (!patientFolderNumber) {
-            setDutyMessage('Patient folder number is required');
+          if (!tPatientFolder || !tFromLocation || !tToLocation) {
+            setDutyMessage('✗ Patient, from and to locations are required');
             setDutyLoading(false);
             return;
           }
-          const fromLocation = prompt('From Location:');
-          const toLocation = prompt('To Location:');
-          body = { ...body, patientFolderNumber, fromLocation, toLocation };
+          body = {
+            ...body,
+            patientFolderNumber: tPatientFolder,
+            fromLocation: tFromLocation,
+            toLocation: tToLocation,
+            transporter2Code: tTransporter2Code || undefined,
+            transportType: tTransportType || undefined,
+            notes: tNotes || undefined,
+          };
         } else {
-          const receivedBy = prompt('Received by (name):');
-          body = { ...body, receivedBy };
+          body = { ...body, receivedBy: tReceivedBy || undefined };
         }
       } else if (type === 'other') {
         endpoint = `/api/duties/${action}`;
         if (action === 'start') {
-          const dutyType = prompt('Duty Type (e.g., WASHING_MACINTOSH, EQUIPMENT_STERILIZATION):');
-          const location = prompt('Location (optional):');
-          body = { ...body, dutyType: dutyType?.toUpperCase(), location };
+          body = {
+            ...body,
+            dutyType: oDutyType ? oDutyType.toUpperCase() : undefined,
+            location: oLocation || undefined,
+          };
         }
       }
 
@@ -636,7 +1024,8 @@ export default function LoginPage() {
 
       if (response.ok) {
         setDutyMessage(`✓ ${data.message}`);
-        setStaffCode('');
+        setDutyMode(null);
+        resetDutyForms();
       } else {
         setDutyMessage(`✗ ${data.error || 'Action failed'}`);
       }
