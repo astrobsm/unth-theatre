@@ -434,9 +434,15 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
             )}
             {consentFileAvailable === false && (
               <p className="text-xs text-amber-700 mt-2">
-                No consent file has been uploaded for this surgery yet. The surgeon can upload it from the booking form.
+                No consent file has been uploaded for this surgery yet. Complete the UNTH consent form below.
               </p>
             )}
+            <a
+              href={`/dashboard/surgeries/${assessment.surgeryId}/consent`}
+              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 underline"
+            >
+              Open / complete UNTH consent form
+            </a>
           </div>
 
           <div className="space-y-3">

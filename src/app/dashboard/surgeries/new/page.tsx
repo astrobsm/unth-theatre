@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -148,6 +148,7 @@ export default function NewSurgeryPage() {
     consumablePackCode?: string | null;
     pharmacyDrugCode?: string | null;
     patientName?: string | null;
+    surgeryId?: string | null;
   } | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState('');
@@ -534,6 +535,7 @@ export default function NewSurgeryPage() {
             consumablePackCode: created?.consumablePackCode ?? null,
             pharmacyDrugCode: created?.pharmacyDrugCode ?? null,
             patientName: created?.patient?.name ?? null,
+            surgeryId: created?.id ?? null,
           });
           setLoading(false);
           return;
@@ -1635,7 +1637,7 @@ function BookingCodesModal({
   codes,
   onClose,
 }: {
-  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null };
+  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; surgeryId?: string | null };
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -1709,6 +1711,15 @@ function BookingCodesModal({
             The <span className="font-semibold">Anaesthesia Drug Code</span> is generated later, after the
             anaesthetist reviews and prescribes. The surgeon or anaesthetist gives that code to the patient then.
           </div>
+          {codes.surgeryId && (
+            <Link
+              href={`/dashboard/surgeries/${codes.surgeryId}/consent`}
+              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm font-semibold text-indigo-800 hover:bg-indigo-100"
+            >
+              <FileSignature className="w-4 h-4" />
+              Complete the surgical consent form now
+            </Link>
+          )}
         </div>
         <div className="flex justify-end gap-3 border-t px-5 py-4">
           <button onClick={onClose} className="btn-primary">

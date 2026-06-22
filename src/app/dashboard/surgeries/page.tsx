@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -68,6 +68,8 @@ export default function SurgeriesPage() {
   const canAccessTiming = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'].includes(userRole || '');
   const canAccessConsumables = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER'].includes(userRole || '');
   const canAccessBOM = ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
+  // Consent can be completed by the surgical/anaesthetic team or theatre nurses caring for the patient.
+  const canAccessConsent = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'RECOVERY_ROOM_NURSE'].includes(userRole || '');
   // Surgeons (and admins / theatre managers) may close out a case so PACU can admit and the post-op note can be written.
   const canCompleteSurgery = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
   const [completingId, setCompletingId] = useState<string | null>(null);
@@ -635,6 +637,17 @@ export default function SurgeriesPage() {
                               {receivingId === surgery.holdingAreaAssessment.id ? 'Receiving…' : 'Receive in Theatre'}
                             </button>
                           )}
+
+                        {/* Consent Form */}
+                        {canAccessConsent && (
+                          <Link
+                            href={`/dashboard/surgeries/${surgery.id}/consent`}
+                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900"
+                            title="Surgical Consent Form"
+                          >
+                            <FileSignature className="w-4 h-4" />
+                          </Link>
+                        )}
 
                         {/* WHO Checklist */}
                         {canAccessWHOChecklist && (

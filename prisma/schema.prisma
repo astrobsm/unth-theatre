@@ -934,12 +934,20 @@ model Surgery {
   drugDressingRequests SurgeryDrugDressingRequest[] @relation("SurgeryDrugDressingRequests")
   postOpPrescriptions  PostOpPrescription[]         @relation("PostOpPrescriptionsSurgery")
 
-  // Informed-consent file uploaded at booking; visible to holding-area nurse
+  // Informed-consent file uploaded at booking; visible to holding-area nurse.
+  // After the structured UNTH consent form is completed (electronically signed or
+  // a signed paper scanned), the generated/uploaded PDF hard copy is stored here too.
   consentFileName     String?
   consentFileMimeType String?
   consentFileData     String?   @db.Text // base64-encoded file contents
   consentUploadedAt   DateTime?
   consentUploadedById String?
+
+  // Structured UNTH consent form (procedure text, signatures, witness/doctor, etc.).
+  // Stored as JSON so the form can be re-opened/edited and the PDF regenerated.
+  consentFormData             String?   @db.Text
+  consentSignedElectronically Boolean   @default(false)
+  consentCompletedAt          DateTime?
 
   // Patient-facing codes generated at booking. The surgeon (or anaesthetist)
   // copies these and gives them to the patient, who presents the relevant code
