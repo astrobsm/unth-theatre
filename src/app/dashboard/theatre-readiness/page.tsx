@@ -4,15 +4,20 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { THEATRES } from '@/lib/constants';
 
+interface StaffContact {
+  name: string;
+  phone: string | null;
+}
+
 interface StaffAssignments {
-  scrubNurse: string | null;
-  circulatingNurse: string | null;
-  anaestheticTechnician: string | null;
-  anaesthetistConsultant: string | null;
-  anaesthetistSeniorRegistrar: string | null;
-  anaesthetistRegistrar: string | null;
-  cleaner: string | null;
-  porter: string | null;
+  scrubNurse: StaffContact | null;
+  circulatingNurse: StaffContact | null;
+  anaestheticTechnician: StaffContact | null;
+  anaesthetistConsultant: StaffContact | null;
+  anaesthetistSeniorRegistrar: StaffContact | null;
+  anaesthetistRegistrar: StaffContact | null;
+  cleaner: StaffContact | null;
+  porter: StaffContact | null;
   shift: string | null;
   surgicalUnit: string | null;
   startTime: string | null;
@@ -41,6 +46,8 @@ interface TheatreStatus {
   setupNotes: string | null;
   durationMinutes: number | null;
   staffAssignments: StaffAssignments | null;
+  surgeons: StaffContact[];
+  surgeryAnaesthetists: StaffContact[];
   totalAllocations: number;
 }
 
@@ -51,6 +58,30 @@ interface Statistics {
   notStartedTheatres: number;
   blockedTheatres: number;
   totalMalfunctions: number;
+}
+
+// One staff line: role label, name, and a click-to-call phone link.
+function StaffRow({ label, contact, color }: { label: string; contact: StaffContact | null; color: string }) {
+  if (!contact) return null;
+  return (
+    <div className={`flex justify-between items-center gap-2 ${color} px-2 py-1 rounded`}>
+      <span className="text-gray-600 whitespace-nowrap">{label}:</span>
+      <span className="font-semibold text-gray-900 text-right">
+        {contact.name}
+        {contact.phone ? (
+          <a
+            href={`tel:${contact.phone}`}
+            onClick={(e) => e.stopPropagation()}
+            className="ml-2 text-blue-700 hover:underline whitespace-nowrap"
+          >
+            📞 {contact.phone}
+          </a>
+        ) : (
+          <span className="ml-2 text-gray-400 text-[11px]">no phone</span>
+        )}
+      </span>
+    </div>
+  );
 }
 
 export default function TheatreReadinessDashboard() {
@@ -295,78 +326,43 @@ export default function TheatreReadinessDashboard() {
             )}
 
             {/* Staff Assignments for the Day */}
-            {theatre.staffAssignments ? (
+            {theatre.staffAssignments || (theatre.surgeons && theatre.surgeons.length > 0) ? (
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <h4 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-1">
-                  👥 Staff Assignments
-                  {theatre.staffAssignments.shift && (
+                  👥 Theatre Team
+                  {theatre.staffAssignments?.shift && (
                     <span className="ml-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                       {theatre.staffAssignments.shift}
                     </span>
                   )}
                 </h4>
-                {theatre.staffAssignments.surgicalUnit && (
+                {theatre.staffAssignments?.surgicalUnit && (
                   <div className="text-xs mb-2 text-purple-700 font-medium bg-purple-50 px-2 py-1 rounded">
                     🏥 {theatre.staffAssignments.surgicalUnit}
                   </div>
                 )}
-                {theatre.staffAssignments.startTime && theatre.staffAssignments.endTime && (
+                {theatre.staffAssignments?.startTime && theatre.staffAssignments?.endTime && (
                   <div className="text-xs mb-2 text-gray-600">
                     🕐 {new Date(theatre.staffAssignments.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - {new Date(theatre.staffAssignments.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 )}
                 <div className="grid grid-cols-1 gap-1 text-xs">
-                  {theatre.staffAssignments.scrubNurse && (
-                    <div className="flex justify-between bg-blue-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Perioperative Nurse:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.scrubNurse}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.circulatingNurse && (
-                    <div className="flex justify-between bg-blue-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Circulating Nurse:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.circulatingNurse}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.anaestheticTechnician && (
-                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Anaesthetic Technician:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaestheticTechnician}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.anaesthetistConsultant && (
-                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Consultant Anaesthetist:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistConsultant}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.anaesthetistSeniorRegistrar && (
-                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Senior Registrar Anaesthesia:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistSeniorRegistrar}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.anaesthetistRegistrar && (
-                    <div className="flex justify-between bg-green-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Registrar Anaesthesia:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.anaesthetistRegistrar}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.cleaner && (
-                    <div className="flex justify-between bg-gray-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Cleaner:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.cleaner}</span>
-                    </div>
-                  )}
-                  {theatre.staffAssignments.porter && (
-                    <div className="flex justify-between bg-gray-50 px-2 py-1 rounded">
-                      <span className="text-gray-600">Porter:</span>
-                      <span className="font-semibold text-gray-900">{theatre.staffAssignments.porter}</span>
-                    </div>
-                  )}
-                  {!theatre.staffAssignments.scrubNurse && !theatre.staffAssignments.circulatingNurse && !theatre.staffAssignments.anaestheticTechnician && !theatre.staffAssignments.anaesthetistConsultant && !theatre.staffAssignments.cleaner && !theatre.staffAssignments.porter && (
-                    <div className="text-gray-500 text-center py-1">No staff assigned yet</div>
-                  )}
+                  {/* Surgeon(s) — from the day's scheduled surgeries for this theatre */}
+                  {theatre.surgeons && theatre.surgeons.length > 0 && theatre.surgeons.map((s, i) => (
+                    <StaffRow key={`surg-${i}`} label="Surgeon" contact={s} color="bg-rose-50" />
+                  ))}
+                  <StaffRow label="Scrub/Periop Nurse" contact={theatre.staffAssignments?.scrubNurse ?? null} color="bg-blue-50" />
+                  <StaffRow label="Circulating Nurse" contact={theatre.staffAssignments?.circulatingNurse ?? null} color="bg-blue-50" />
+                  <StaffRow label="Anaesthetic Technician" contact={theatre.staffAssignments?.anaestheticTechnician ?? null} color="bg-green-50" />
+                  <StaffRow label="Consultant Anaesthetist" contact={theatre.staffAssignments?.anaesthetistConsultant ?? null} color="bg-green-50" />
+                  <StaffRow label="Senior Reg. Anaesthesia" contact={theatre.staffAssignments?.anaesthetistSeniorRegistrar ?? null} color="bg-green-50" />
+                  <StaffRow label="Registrar Anaesthesia" contact={theatre.staffAssignments?.anaesthetistRegistrar ?? null} color="bg-green-50" />
+                  {/* Anaesthetist(s) named directly on the surgery, if not already in the roster */}
+                  {theatre.surgeryAnaesthetists && theatre.surgeryAnaesthetists.length > 0 && theatre.surgeryAnaesthetists.map((s, i) => (
+                    <StaffRow key={`anae-${i}`} label="Anaesthetist (case)" contact={s} color="bg-green-50" />
+                  ))}
+                  <StaffRow label="Cleaner" contact={theatre.staffAssignments?.cleaner ?? null} color="bg-gray-50" />
+                  <StaffRow label="Porter" contact={theatre.staffAssignments?.porter ?? null} color="bg-gray-50" />
                 </div>
               </div>
             ) : (

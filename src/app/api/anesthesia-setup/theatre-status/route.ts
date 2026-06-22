@@ -67,37 +67,75 @@ export async function GET(request: NextRequest) {
         },
       },
       include: {
-        scrubNurse: { select: { id: true, fullName: true, role: true } },
-        circulatingNurse: { select: { id: true, fullName: true, role: true } },
-        anaestheticTechnician: { select: { id: true, fullName: true, role: true } },
-        anaesthetistConsultant: { select: { id: true, fullName: true, role: true } },
-        anaesthetistSeniorRegistrar: { select: { id: true, fullName: true, role: true } },
-        anaesthetistRegistrar: { select: { id: true, fullName: true, role: true } },
-        cleaner: { select: { id: true, fullName: true, role: true } },
-        porter: { select: { id: true, fullName: true, role: true } },
+        scrubNurse: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        circulatingNurse: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        anaestheticTechnician: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        anaesthetistConsultant: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        anaesthetistSeniorRegistrar: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        anaesthetistRegistrar: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        cleaner: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
+        porter: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
       },
     });
+
+    // Get the day's surgeries (for surgeon + anaesthetist contacts per theatre)
+    const surgeries = await prisma.surgery.findMany({
+      where: {
+        scheduledDate: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        status: { not: 'CANCELLED' },
+      },
+      select: {
+        theatreId: true,
+        surgeonName: true,
+        surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
+        assistantSurgeon: { select: { id: true, fullName: true, phoneNumber: true } },
+        anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
+      },
+    });
+
+    // Helper: shape a User relation into a { name, phone } contact (or null)
+    const contact = (u: { fullName: string; phoneNumber: string | null } | null | undefined) =>
+      u ? { name: u.fullName, phone: u.phoneNumber || null } : null;
 
     // Create theatre status map
     const theatreStatus = theatres.map(theatre => {
       const setupLog = setupLogs.find(log => log.theatreId === theatre.id);
       const theatreAllocations = allocations.filter(a => a.theatreId === theatre.id);
 
-      // Aggregate staff from allocations
-      const staffAssignments = theatreAllocations.length > 0 ? {
-        scrubNurse: theatreAllocations[0].scrubNurse?.fullName || null,
-        circulatingNurse: theatreAllocations[0].circulatingNurse?.fullName || null,
-        anaestheticTechnician: theatreAllocations[0].anaestheticTechnician?.fullName || null,
-        anaesthetistConsultant: theatreAllocations[0].anaesthetistConsultant?.fullName || null,
-        anaesthetistSeniorRegistrar: theatreAllocations[0].anaesthetistSeniorRegistrar?.fullName || null,
-        anaesthetistRegistrar: theatreAllocations[0].anaesthetistRegistrar?.fullName || null,
-        cleaner: theatreAllocations[0].cleaner?.fullName || null,
-        porter: theatreAllocations[0].porter?.fullName || null,
-        shift: theatreAllocations[0].shift || null,
-        surgicalUnit: theatreAllocations[0].surgicalUnit || null,
-        startTime: theatreAllocations[0].startTime || null,
-        endTime: theatreAllocations[0].endTime || null,
+      // Aggregate staff from allocations (name + phone for quick contact)
+      const a0 = theatreAllocations[0];
+      const staffAssignments = a0 ? {
+        scrubNurse: contact(a0.scrubNurse),
+        circulatingNurse: contact(a0.circulatingNurse),
+        anaestheticTechnician: contact(a0.anaestheticTechnician),
+        anaesthetistConsultant: contact(a0.anaesthetistConsultant),
+        anaesthetistSeniorRegistrar: contact(a0.anaesthetistSeniorRegistrar),
+        anaesthetistRegistrar: contact(a0.anaesthetistRegistrar),
+        cleaner: contact(a0.cleaner),
+        porter: contact(a0.porter),
+        shift: a0.shift || null,
+        surgicalUnit: a0.surgicalUnit || null,
+        startTime: a0.startTime || null,
+        endTime: a0.endTime || null,
       } : null;
+
+      // Surgeons (and any surgery-level anaesthetists) scheduled in this theatre
+      const theatreSurgeries = surgeries.filter(s => s.theatreId === theatre.id);
+      const surgeonMap = new Map<string, { name: string; phone: string | null }>();
+      const anaesthetistMap = new Map<string, { name: string; phone: string | null }>();
+      for (const s of theatreSurgeries) {
+        const surgeon = contact(s.surgeon) || (s.surgeonName ? { name: s.surgeonName, phone: null } : null);
+        if (surgeon) surgeonMap.set(surgeon.name + (surgeon.phone || ''), surgeon);
+        const assistant = contact(s.assistantSurgeon);
+        if (assistant) surgeonMap.set(assistant.name + (assistant.phone || ''), assistant);
+        const anaes = contact(s.anesthetist);
+        if (anaes) anaesthetistMap.set(anaes.name + (anaes.phone || ''), anaes);
+      }
+      const surgeons = Array.from(surgeonMap.values());
+      const surgeryAnaesthetists = Array.from(anaesthetistMap.values());
 
       return {
         theatreId: theatre.id,
@@ -121,6 +159,8 @@ export async function GET(request: NextRequest) {
         setupNotes: setupLog?.setupNotes || null,
         durationMinutes: setupLog?.durationMinutes || null,
         staffAssignments,
+        surgeons,
+        surgeryAnaesthetists,
         totalAllocations: theatreAllocations.length,
       };
     });
