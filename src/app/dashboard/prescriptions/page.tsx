@@ -24,6 +24,7 @@ import {
 import { isNarcotic } from '@/lib/narcotics';
 import { whatsappLink, whatsappChatLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
 import SurgicalShoppingListsPanel from '@/components/SurgicalShoppingListsPanel';
+import SurgeryCodeLookup from '@/components/SurgeryCodeLookup';
 import {
   buildRegisterPdf,
   buildPatientPrescriptionPdf,
@@ -480,6 +481,20 @@ export default function PrescriptionsPage() {
           Pack and prepare medications for upcoming surgeries (includes emergency prescriptions). Click a prescriber’s
           name to see their phone number.
         </p>
+      </div>
+
+      {/* Patient code lookup — the pharmacist keys in the code the surgeon /
+          anaesthetist generated at booking to see exactly what to pack for that
+          patient. Two dedicated fields: surgery drugs vs anaesthetic Rx. */}
+      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SurgeryCodeLookup
+          expect="PHARMACY"
+          title="Surgery drugs code (PH-…) — enter the code from the surgeon's booking"
+        />
+        <SurgeryCodeLookup
+          expect="ANAESTHESIA"
+          title="Anaesthetic prescription code (AN-…) — enter the anaesthetist's code"
+        />
       </div>
 
       {/* Date-range PDF export toolbar */}

@@ -32,13 +32,18 @@ interface PACUAssessment {
   dischargeVitalsStable: boolean;
   dischargePainControlled: boolean;
   dischargeFullyConscious: boolean;
+  dischargeTime?: string | null;
+  dischargedTo?: string | null;
+  totalTimeInPACU?: number | null;
+  wardNurseHandover?: string | null;
+  dischargeNotes?: string | null;
 }
 
 export default function PACUPage() {
   const router = useRouter();
   const [assessments, setAssessments] = useState<PACUAssessment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'active'>('active');
+  const [filter, setFilter] = useState<'all' | 'active' | 'discharged'>('active');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -66,8 +71,10 @@ export default function PACUPage() {
     
     setIsSyncing(true);
     try {
-      const url = filter === 'active' 
+      const url = filter === 'active'
         ? '/api/pacu?active=true'
+        : filter === 'discharged'
+        ? '/api/pacu?dischargeReadiness=DISCHARGED_TO_WARD'
         : '/api/pacu';
       
       const response = await fetch(url);
@@ -152,6 +159,73 @@ export default function PACUPage() {
     }
   };
 
+  // 80mm thermal-slip printer (mirrors the Holding-area / Call-for-Patient note style).
+  const printSlip = (title: string, badge: string, bodyHtml: string) => {
+    const win = window.open('', '_blank', 'width=302,height=600');
+    if (!win) {
+      alert('Please allow pop-ups to print the slip.');
+      return;
+    }
+    win.document.write(`<!doctype html><html><head><title>${title}</title>
+      <style>
+        @page { size: 80mm auto; margin: 2mm; }
+        body { font-family: 'Courier New', monospace; width: 76mm; margin: 0 auto; padding: 2mm; font-size: 11px; color: #000; }
+        .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 4px; margin-bottom: 6px; }
+        .hospital-name { font-size: 13px; font-weight: bold; text-transform: uppercase; margin: 2px 0; }
+        .subtitle { font-size: 10px; font-weight: bold; border: 1px solid #000; padding: 2px 6px; display: inline-block; margin: 4px 0; }
+        .field { margin: 3px 0; display: flex; }
+        .field-label { font-weight: bold; min-width: 26mm; }
+        .field-value { flex: 1; }
+        .divider { border-top: 1px dashed #000; margin: 6px 0; }
+        .instruction { font-size: 11px; margin: 6px 0; font-weight: bold; text-align: center; }
+        .timestamp { text-align: center; font-size: 10px; margin-top: 6px; }
+        .sign { margin-top: 10px; font-size: 10px; }
+        .sign-line { border-top: 1px solid #000; margin-top: 16px; padding-top: 2px; }
+        .footer { text-align: center; font-size: 9px; margin-top: 8px; border-top: 2px dashed #000; padding-top: 4px; }
+      </style></head>
+      <body>
+        <div class="header">
+          <div class="hospital-name">UNTH Ituku-Ozalla</div>
+          <div class="subtitle">${badge}</div>
+        </div>
+        ${bodyHtml}
+        <script>window.onload = function() { window.print(); window.close(); }</script>
+      </body></html>`);
+    win.document.close();
+  };
+
+  // Ward transfer slip — sent to the ward so the ward nurse comes to accompany
+  // the porters in transporting the patient from PACU back to the ward.
+  const printWardTransferSlip = (a: PACUAssessment) => {
+    const now = new Date().toLocaleString('en-GB');
+    const discharged = a.dischargeTime ? new Date(a.dischargeTime).toLocaleString('en-GB') : now;
+    const esc = (v: any) => (v == null ? '' : String(v).replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+    printSlip(
+      'PACU → Ward Transfer',
+      'PACU → WARD TRANSFER',
+      `
+        <div class="field"><span class="field-label">Patient:</span><span class="field-value">${esc(a.patient?.name)}</span></div>
+        <div class="field"><span class="field-label">Folder No:</span><span class="field-value">${esc(a.patient?.folderNumber)}</span></div>
+        <div class="field"><span class="field-label">Age/Sex:</span><span class="field-value">${esc(a.patient?.age)}yrs / ${esc(a.patient?.gender)}</span></div>
+        <div class="field"><span class="field-label">Destination Ward:</span><span class="field-value">${esc(a.dischargedTo || a.patient?.ward || 'N/A')}</span></div>
+        <div class="divider"></div>
+        <div class="field"><span class="field-label">Procedure:</span><span class="field-value">${esc(a.surgery?.procedureName)}</span></div>
+        <div class="field"><span class="field-label">Surgeon:</span><span class="field-value">${esc(a.surgery?.surgeon?.fullName || 'N/A')}</span></div>
+        ${a.surgery?.anesthetist ? `<div class="field"><span class="field-label">Anaesthetist:</span><span class="field-value">${esc(a.surgery?.anesthetist?.fullName)}</span></div>` : ''}
+        <div class="divider"></div>
+        ${a.wardNurseHandover ? `<div class="field"><span class="field-label">Handover:</span><span class="field-value">${esc(a.wardNurseHandover)}</span></div>` : ''}
+        ${a.dischargeNotes ? `<div class="field"><span class="field-label">Notes:</span><span class="field-value">${esc(a.dischargeNotes)}</span></div>` : ''}
+        <div class="instruction">Patient DISCHARGED from PACU. Ward nurse, please come and accompany the porters to transport the patient back to the ward.</div>
+        <div class="timestamp">Discharged: ${discharged}</div>
+        <div class="timestamp">Slip issued: ${now}</div>
+        <div class="sign"><div class="sign-line">Recovery (PACU) nurse signature</div></div>
+        <div class="sign"><div class="sign-line">Ward nurse (received by)</div></div>
+        <div class="sign"><div class="sign-line">Porter(s) signature</div></div>
+        <div class="footer">Operative Resource Manager</div>
+      `
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -194,6 +268,16 @@ export default function PACUPage() {
           All Patients
         </button>
         <button
+          onClick={() => setFilter('discharged')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            filter === 'discharged'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Discharged to Ward
+        </button>
+        <button
           onClick={() => router.push('/dashboard/pacu/new')}
           className="ml-auto px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
         >
@@ -204,7 +288,9 @@ export default function PACUPage() {
       {/* Assessments Grid */}
       {assessments.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500 text-lg">No patients in PACU</p>
+          <p className="text-gray-500 text-lg">
+            {filter === 'discharged' ? 'No patients discharged to ward yet' : 'No patients in PACU'}
+          </p>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -313,6 +399,42 @@ export default function PACUPage() {
               {assessment.redAlerts && assessment.redAlerts.length > 0 && (
                 <div className="mt-3 text-red-600 text-sm font-medium">
                   🚨 {assessment.redAlerts.length} Active Alert(s)
+                </div>
+              )}
+
+              {/* Discharged → ward transfer slip */}
+              {assessment.dischargeReadiness === 'DISCHARGED_TO_WARD' && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="text-xs text-gray-600 space-y-1 mb-3">
+                    <p>
+                      <span className="font-medium">Discharged to:</span>{' '}
+                      {assessment.dischargedTo || assessment.patient?.ward || 'Ward'}
+                    </p>
+                    {assessment.dischargeTime && (
+                      <p>
+                        <span className="font-medium">Discharged:</span>{' '}
+                        {formatTime(assessment.dischargeTime)}
+                      </p>
+                    )}
+                    {typeof assessment.totalTimeInPACU === 'number' && (
+                      <p>
+                        <span className="font-medium">Total time in PACU:</span>{' '}
+                        {Math.floor(assessment.totalTimeInPACU / 60)}h {assessment.totalTimeInPACU % 60}m
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      printWardTransferSlip(assessment);
+                    }}
+                    className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                  >
+                    🖨️ Print Ward Transfer Slip
+                  </button>
+                  <p className="text-[11px] text-gray-500 mt-2 text-center">
+                    Send to the ward — ward nurse accompanies porters back to the ward.
+                  </p>
                 </div>
               )}
             </div>
