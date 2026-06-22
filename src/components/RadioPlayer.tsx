@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical, X } from 'lucide-react';
 import { useMediaHub } from '@/components/MediaHub';
+import { speakViaElevenLabs } from '@/lib/radioTts';
 
 interface Announcement {
   id: string;
@@ -260,12 +261,12 @@ export default function RadioPlayer() {
     try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
   }, []);
 
-  const speak = useCallback(
+  // Browser Web-Speech fallback used when ElevenLabs is unavailable.
+  const speakBrowser = useCallback(
     (text: string, onDone?: () => void) => {
-      if (typeof window === 'undefined' || muted) { onDone?.(); return; }
       try {
         const synth = window.speechSynthesis;
-        if (!synth) { onDone?.(); return; }
+        if (!synth) { emitRadioIdle(); onDone?.(); return; }
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.rate = 0.98;
@@ -285,11 +286,31 @@ export default function RadioPlayer() {
         emitRadioActive();
         synth.speak(u);
       } catch {
+        setSpeaking(false);
         emitRadioIdle();
         onDone?.();
       }
     },
-    [muted, emitRadioActive, emitRadioIdle]
+    [emitRadioActive, emitRadioIdle]
+  );
+
+  // Speak via ElevenLabs (natural voice) and gracefully fall back to the
+  // browser's speechSynthesis if the service is unavailable.
+  const speak = useCallback(
+    (text: string, onDone?: () => void) => {
+      if (typeof window === 'undefined' || muted) { onDone?.(); return; }
+      if (!audioRef.current) audioRef.current = new Audio();
+      void speakViaElevenLabs(text, {
+        getAudio: () => audioRef.current as HTMLAudioElement,
+        onStart: () => { setSpeaking(true); emitRadioActive(); },
+        onEnd: () => { setSpeaking(false); emitRadioIdle(); },
+      }).then((ok) => {
+        if (ok) { onDone?.(); return; }
+        // ElevenLabs failed — fall back to the offline browser voice.
+        speakBrowser(text, onDone);
+      });
+    },
+    [muted, emitRadioActive, emitRadioIdle, speakBrowser]
   );
 
   const playAudio = useCallback(

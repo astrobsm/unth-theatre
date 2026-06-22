@@ -109,15 +109,6 @@ async function main() {
 
   // === 3. Theatre suites ===
   const theatres = [
-    { name: 'THEATRE 1 (VAMED)', location: 'VAMED Complex, Ground Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Suction Machine','Electrocautery']), status: 'AVAILABLE' },
-    { name: 'THEATRE 2 (VAMED)', location: 'VAMED Complex, Ground Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Suction Machine','C-Arm']), status: 'AVAILABLE' },
-    { name: 'THEATRE 3 (VAMED)', location: 'VAMED Complex, Ground Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Suction Machine']), status: 'AVAILABLE' },
-    { name: 'THEATRE 4 (VAMED)', location: 'VAMED Complex, Ground Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Suction Machine']), status: 'AVAILABLE' },
-    { name: 'THEATRE 5 (VAMED)', location: 'VAMED Complex, Ground Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Suction Machine']), status: 'AVAILABLE' },
-    { name: 'SUITE 1 (NIGERIAN SIDE)', location: 'Nigerian Complex, 2nd Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights']), status: 'AVAILABLE' },
-    { name: 'SUITE 2 (NIGERIAN SIDE)', location: 'Nigerian Complex, 2nd Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights']), status: 'AVAILABLE' },
-    { name: 'SUITE 3 (NIGERIAN SIDE)', location: 'Nigerian Complex, 2nd Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights']), status: 'AVAILABLE' },
-    { name: 'SUITE 4 (NIGERIAN SIDE)', location: 'Nigerian Complex, 2nd Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights']), status: 'AVAILABLE' },
     { name: 'NEUROSURGERY THEATRE', location: 'Neurosurgery Wing, 1st Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Neurosurgical Microscope','Craniotomy Set']), status: 'AVAILABLE' },
     { name: 'EMERGENCY THEATRE', location: 'Emergency Wing, 1st Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Portable Anesthesia','Patient Monitor','Emergency Cart','Defibrillator']), status: 'AVAILABLE' },
     { name: 'CTU THEATRE', location: 'Cardiothoracic Unit, Ground Floor', capacity: 1, equipment: JSON.stringify(['Operating Table','Anesthesia Machine','Patient Monitor','Surgical Lights','Heart-Lung Machine','TEE Machine']), status: 'AVAILABLE' },

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { speakViaElevenLabs } from '@/lib/radioTts';
 
 // ==================== TYPES ====================
 interface EmergencyItem {
@@ -210,8 +211,18 @@ class AudioAlertEngine {
   // If all audio files fail (offline/not cached), falls back to Speech Synthesis API
   private audioElement: HTMLAudioElement | null = null;
 
-  // Speech Synthesis fallback — works fully offline on most platforms
-  private playSpeechFallback(priority: string): Promise<void> {
+  // Speech Synthesis fallback — works fully offline on most platforms.
+  // Tries ElevenLabs (natural voice) first, then falls back to the browser voice.
+  private async playSpeechFallback(priority: string): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const label = priority === 'CRITICAL' ? 'Critical' : priority === 'HIGH' ? 'High priority' : 'Medium priority';
+    const text = `Attention. ${label} emergency surgery alert. All teams report immediately.`;
+    const ok = await speakViaElevenLabs(text);
+    if (ok) return;
+    return this.playSpeechFallbackBrowser(text);
+  }
+
+  private playSpeechFallbackBrowser(text: string): Promise<void> {
     return new Promise((resolve) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         resolve();
@@ -220,10 +231,7 @@ class AudioAlertEngine {
       try {
         const synth = window.speechSynthesis;
         synth.cancel();
-        const label = priority === 'CRITICAL' ? 'Critical' : priority === 'HIGH' ? 'High priority' : 'Medium priority';
-        const utterance = new SpeechSynthesisUtterance(
-          `Attention. ${label} emergency surgery alert. All teams report immediately.`
-        );
+        const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 0.9;
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
@@ -358,7 +366,15 @@ class AudioAlertEngine {
     return parts.join(' ');
   }
 
-  private speakDetails(text: string): Promise<void> {
+  // Narrate patient/team details. Tries ElevenLabs first, then browser voice.
+  private async speakDetails(text: string): Promise<void> {
+    if (typeof window === 'undefined' || !text.trim()) return;
+    const ok = await speakViaElevenLabs(text);
+    if (ok) return;
+    return this.speakDetailsBrowser(text);
+  }
+
+  private speakDetailsBrowser(text: string): Promise<void> {
     return new Promise((resolve) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) {
         resolve();
