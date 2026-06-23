@@ -17,11 +17,15 @@ import {
   SkipForward, SkipBack, Shuffle,
 } from 'lucide-react';
 import { useMediaHub } from '@/components/MediaHub';
+import { useTabLeader } from '@/lib/useTabLeader';
 
 const LS_ENABLED   = 'bgMusic.enabled';
 const LS_VOLUME    = 'bgMusic.volume';
 const LS_COLLAPSED = 'bgMusic.collapsed';
 const LS_SHUFFLE   = 'bgMusic.shuffle';
+const LS_PLAYING   = 'bgMusic.playing';     // play intent persisted across reloads
+const LS_RESUME_URL  = 'bgMusic.resumeUrl'; // track url to resume after refresh
+const LS_RESUME_TIME = 'bgMusic.resumeTime';// playback position (seconds)
 
 interface Track {
   title:  string;
@@ -51,7 +55,9 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 export default function BackgroundMusicPlayer() {
   const { mode, collapse, setMusicActive } = useMediaHub();
-  const [enabled,   setEnabled]   = useState(false);
+  const isLeader = useTabLeader();
+  // Music is ON by default; only the primary (leader) window actually plays.
+  const [enabled,   setEnabled]   = useState(true);
   const [playing,   setPlaying]   = useState(false);
   const [ducked,    setDucked]    = useState(false);
   const [volume,    setVolume]    = useState(0.25);
@@ -67,11 +73,13 @@ export default function BackgroundMusicPlayer() {
   const wasPlayingBeforeDuck = useRef(false);
   const fadeTimerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const duckCountRef         = useRef(0); // supports nested/overlapping duck triggers
-  // Music never auto-starts. A freshly opened window/tab always begins paused;
-  // playback only begins after the user explicitly presses Play. This ref
-  // tracks that explicit intent so track changes within a playing session keep
-  // going, while a brand-new page load stays silent.
-  const playIntentRef        = useRef(false);
+  // Music auto-starts by default in the primary window. This ref tracks the
+  // user's play/pause intent so it survives track changes and page reloads;
+  // it is cleared only when the user explicitly presses Pause/Off.
+  const playIntentRef        = useRef(true);
+  // Track to resume (and its position) after a page refresh.
+  const resumeRef            = useRef<{ url: string; time: number } | null>(null);
+  const resumedRef           = useRef(false);
 
   // Smoothly ramp the audio element volume to `target` over `durationMs`.
   // Cancels any in-flight fade. Calls `onDone` when finished. If the audio
@@ -111,11 +119,18 @@ export default function BackgroundMusicPlayer() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      if (window.localStorage.getItem(LS_ENABLED) === '1') setEnabled(true);
+      // Default ON: only disable if the user explicitly turned music off.
+      if (window.localStorage.getItem(LS_ENABLED) === '0') setEnabled(false);
       const v = parseFloat(window.localStorage.getItem(LS_VOLUME) || '');
       if (!isNaN(v)) setVolume(Math.min(1, Math.max(0, v)));
       if (window.localStorage.getItem(LS_COLLAPSED) === '0') setCollapsed(false);
       if (window.localStorage.getItem(LS_SHUFFLE) === '0') setShuffle(false);
+      // Default play intent ON; only honor an explicit prior Pause.
+      if (window.localStorage.getItem(LS_PLAYING) === '0') playIntentRef.current = false;
+      // Resume the same track + position after a refresh.
+      const rUrl = window.localStorage.getItem(LS_RESUME_URL) || '';
+      const rTime = parseFloat(window.localStorage.getItem(LS_RESUME_TIME) || '0');
+      if (rUrl) resumeRef.current = { url: rUrl, time: isNaN(rTime) ? 0 : rTime };
     } catch {}
   }, []);
   useEffect(() => { try { window.localStorage.setItem(LS_ENABLED,   enabled   ? '1' : '0'); } catch {} }, [enabled]);
@@ -124,6 +139,21 @@ export default function BackgroundMusicPlayer() {
   useEffect(() => { try { window.localStorage.setItem(LS_SHUFFLE,   shuffle   ? '1' : '0'); } catch {} }, [shuffle]);
 
   // ---- fetch manifest --------------------------------------------------------
+  // Move the resume track (if any, after a refresh) to the front of the list so
+  // playback continues from where it left off before the reload.
+  const orderWithResume = useCallback((list: Track[]): Track[] => {
+    const r = resumeRef.current;
+    if (!r || resumedRef.current) return list;
+    const i = list.findIndex((t) => t.url === r.url);
+    if (i > 0) {
+      const copy = list.slice();
+      const [t] = copy.splice(i, 1);
+      copy.unshift(t);
+      return copy;
+    }
+    return list;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     fetch('/audio/background/manifest.json', { cache: 'no-store' })
@@ -132,7 +162,7 @@ export default function BackgroundMusicPlayer() {
         if (cancelled) return;
         setManifest(m);
         const list = Array.isArray(m.tracks) ? m.tracks : [];
-        setQueue(shuffle ? shuffleArray(list) : list);
+        setQueue(orderWithResume(shuffle ? shuffleArray(list) : list));
         setIdx(0);
       })
       .catch((e) => {
@@ -147,9 +177,9 @@ export default function BackgroundMusicPlayer() {
   useEffect(() => {
     if (!manifest) return;
     const list = manifest.tracks || [];
-    setQueue(shuffle ? shuffleArray(list) : list);
+    setQueue(orderWithResume(shuffle ? shuffleArray(list) : list));
     setIdx(0);
-  }, [shuffle, manifest]);
+  }, [shuffle, manifest, orderWithResume]);
 
   const currentTrack = queue[idx];
 
@@ -160,7 +190,9 @@ export default function BackgroundMusicPlayer() {
 
   // ---- (re)create audio element on track or enable change --------------------
   useEffect(() => {
-    if (!enabled || !currentTrack) {
+    // Only the primary (leader) window plays. Non-leader tabs stay silent so
+    // there is never overlapping audio across windows on the same computer.
+    if (!enabled || !currentTrack || !isLeader) {
       if (audioRef.current) audioRef.current.pause();
       setPlaying(false);
       return;
@@ -172,8 +204,21 @@ export default function BackgroundMusicPlayer() {
     a.loop   = false; // playlist auto-advances instead of looping single
     a.volume = ducked ? 0 : volume;
     setError(null);
-    // Do NOT auto-play on mount or initial track load. Only continue playback
-    // if the user has already pressed Play in this session (playIntentRef).
+
+    // Resume from the saved position after a refresh (once).
+    if (!resumedRef.current && resumeRef.current && currentTrack.url === resumeRef.current.url) {
+      const seek = resumeRef.current.time;
+      const onMeta = () => {
+        try {
+          if (seek > 0 && seek < (a.duration || Infinity)) a.currentTime = seek;
+        } catch {}
+        resumedRef.current = true;
+        a.removeEventListener('loadedmetadata', onMeta);
+      };
+      a.addEventListener('loadedmetadata', onMeta);
+    }
+
+    // Auto-start in the primary window unless the user explicitly paused.
     if (!playIntentRef.current) {
       setPlaying(false);
       return () => { cancelled = true; };
@@ -183,11 +228,50 @@ export default function BackgroundMusicPlayer() {
       .catch((e) => {
         if (cancelled) return;
         setPlaying(false);
-        setError(e?.message || 'Tap "Play" to start music (browser blocks autoplay).');
+        setError(e?.message || 'Tap anywhere to start music (browser blocks autoplay).');
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, currentTrack?.url]);
+  }, [enabled, currentTrack?.url, isLeader]);
+
+  // Persist the current track + position so playback resumes after a refresh.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const a = audioRef.current;
+    if (!a || !currentTrack) return;
+    const save = () => {
+      try {
+        window.localStorage.setItem(LS_RESUME_URL, currentTrack.url);
+        window.localStorage.setItem(LS_RESUME_TIME, String(Math.floor(a.currentTime || 0)));
+      } catch {}
+    };
+    const id = setInterval(save, 3000);
+    a.addEventListener('pause', save);
+    a.addEventListener('ended', save);
+    return () => {
+      clearInterval(id);
+      a.removeEventListener('pause', save);
+      a.removeEventListener('ended', save);
+    };
+  }, [currentTrack?.url]);
+
+  // If the browser blocked autoplay, start music on the first user interaction
+  // in the primary window.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isLeader) return;
+    const tryResume = () => {
+      const a = audioRef.current;
+      if (a && enabled && playIntentRef.current && a.paused) {
+        a.play().then(() => setPlaying(true)).catch(() => {});
+      }
+    };
+    window.addEventListener('pointerdown', tryResume);
+    window.addEventListener('keydown', tryResume);
+    return () => {
+      window.removeEventListener('pointerdown', tryResume);
+      window.removeEventListener('keydown', tryResume);
+    };
+  }, [isLeader, enabled]);
 
   // auto-advance on end
   useEffect(() => {
@@ -256,15 +340,17 @@ export default function BackgroundMusicPlayer() {
   }, []);
 
   const togglePlay = useCallback(async () => {
-    if (!enabled) { playIntentRef.current = true; setEnabled(true); return; }
+    if (!enabled) { playIntentRef.current = true; try { window.localStorage.setItem(LS_PLAYING, '1'); } catch {} setEnabled(true); return; }
     const a = audioRef.current;
     if (!a) return;
     if (a.paused) {
       playIntentRef.current = true;
+      try { window.localStorage.setItem(LS_PLAYING, '1'); } catch {}
       try { await a.play(); setPlaying(true); setError(null); }
       catch (e: any) { setError(e?.message || 'Playback blocked.'); }
     } else {
       playIntentRef.current = false;
+      try { window.localStorage.setItem(LS_PLAYING, '0'); } catch {}
       a.pause(); setPlaying(false);
     }
   }, [enabled]);

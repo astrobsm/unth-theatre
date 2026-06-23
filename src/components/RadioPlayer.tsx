@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical, X } from 'lucide-react';
 import { useMediaHub } from '@/components/MediaHub';
 import { speakViaElevenLabs } from '@/lib/radioTts';
+import { useTabLeader } from '@/lib/useTabLeader';
 
 interface Announcement {
   id: string;
@@ -30,7 +31,9 @@ const POLL_MS = 7000;
 export default function RadioPlayer() {
   const { data: session, status } = useSession();
   const { mode, collapse, setRadioAlert } = useMediaHub();
-  const [enabled, setEnabled] = useState(false);
+  const isLeader = useTabLeader();
+  // Radio service is ON by default; only the primary (leader) window speaks.
+  const [enabled, setEnabled] = useState(true);
   const [muted, setMuted] = useState(false);
   const [queue, setQueue] = useState<Announcement[]>([]);
   const [current, setCurrent] = useState<Announcement | null>(null);
@@ -79,7 +82,8 @@ export default function RadioPlayer() {
     try {
       const e = window.localStorage.getItem('theatreRadio.enabled');
       const m = window.localStorage.getItem('theatreRadio.muted');
-      if (e === '1') setEnabled(true);
+      // Default ON: only disable if the user explicitly turned the radio off.
+      if (e === '0') setEnabled(false);
       if (m === '1') setMuted(true);
     } catch { /* localStorage may be blocked */ }
   }, []);
@@ -363,8 +367,10 @@ export default function RadioPlayer() {
   // Pick the highest-priority announcement and play it. Non-ack items play
   // ONCE (then are marked PLAYED server-side so they leave the queue).
   // requireAck items repeat every `repeatEverySec` until acknowledged.
+  // Audio is produced ONLY in the primary (leader) window so multiple open
+  // tabs on the same computer never speak over each other.
   useEffect(() => {
-    if (!enabled || queue.length === 0) return;
+    if (!enabled || queue.length === 0 || !isLeader) return;
     // Skip any items the user has already acknowledged locally, even if the
     // server hasn't dropped them from the queue yet.
     const top = queue.find((q) => !suppressedRef.current.has(q.id));
@@ -398,7 +404,7 @@ export default function RadioPlayer() {
 
     if (top.audioUrl) playAudio(top.audioUrl, onDone);
     else speak(text, onDone);
-  }, [queue, enabled, speak, playAudio, markPlayed]);
+  }, [queue, enabled, isLeader, speak, playAudio, markPlayed]);
 
   const acknowledge = useCallback(
     async (id: string) => {
