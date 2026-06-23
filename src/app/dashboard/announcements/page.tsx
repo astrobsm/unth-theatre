@@ -73,6 +73,11 @@ export default function AnnouncementsPage() {
   const [description, setDescription] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
+  // Audio source: upload an existing file, or generate speech from text (ElevenLabs).
+  const [audioMode, setAudioMode] = useState<'upload' | 'tts'>('upload');
+  const [ttsText, setTtsText] = useState('');
+  const [ttsLoading, setTtsLoading] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -122,6 +127,43 @@ export default function AnnouncementsPage() {
     setAudioFile(file);
     const url = URL.createObjectURL(file);
     setAudioPreviewUrl(url);
+  };
+
+  // Convert the typed text into an MP3 using the integrated ElevenLabs voice
+  // (via /api/radio/tts) and use it as the announcement's audio file.
+  const generateTts = async () => {
+    const text = ttsText.trim();
+    if (!text) {
+      setTtsError('Enter the text you want converted to speech.');
+      return;
+    }
+    setTtsLoading(true);
+    setTtsError(null);
+    try {
+      const res = await fetch('/api/radio/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Voice service unavailable (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      if (!blob.size) throw new Error('No audio was returned by the voice service.');
+      const fileName = `tts-${Date.now()}.mp3`;
+      const file = new File([blob], fileName, { type: 'audio/mpeg' });
+
+      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      setAudioFile(file);
+      setAudioPreviewUrl(URL.createObjectURL(file));
+      // Prefill the title from the text if the admin hasn't typed one yet.
+      if (!title.trim()) setTitle(text.slice(0, 60));
+    } catch (err: any) {
+      setTtsError(err?.message || 'Failed to generate speech.');
+    } finally {
+      setTtsLoading(false);
+    }
   };
 
   const toggleDay = (day: number) => {
@@ -201,6 +243,10 @@ export default function AnnouncementsPage() {
     setDescription('');
     setAudioFile(null);
     setAudioPreviewUrl(null);
+    setAudioMode('upload');
+    setTtsText('');
+    setTtsError(null);
+    setTtsLoading(false);
     setScheduledDate('');
     setScheduledTime('');
     setEndDate('');
@@ -594,35 +640,86 @@ export default function AnnouncementsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Audio File <span className="text-red-500">*</span>
                 </label>
-                <div
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {audioFile ? (
-                    <div className="flex items-center justify-center gap-3">
-                      <FileAudio className="h-8 w-8 text-blue-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">{audioFile.name}</p>
-                        <p className="text-sm text-gray-500">
-                          {(audioFile.size / (1024 * 1024)).toFixed(2)} MB
-                        </p>
-                      </div>
+
+                {/* Source toggle: upload a file, or generate speech from text */}
+                <div className="inline-flex rounded-lg border border-gray-300 p-0.5 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setAudioMode('upload')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      audioMode === 'upload' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Upload file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAudioMode('tts')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      audioMode === 'tts' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Text to speech
+                  </button>
+                </div>
+
+                {audioMode === 'tts' && (
+                  <div className="space-y-2 mb-3">
+                    <textarea
+                      value={ttsText}
+                      onChange={(e) => setTtsText(e.target.value)}
+                      placeholder="Type the message to be read aloud, e.g. 'Good morning. Theatre lists begin at 9 AM. Please confirm patient readiness.'"
+                      rows={4}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      title="Text to convert to speech"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">{ttsText.trim().length} characters · natural voice (ElevenLabs)</span>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setAudioFile(null); setAudioPreviewUrl(null); }}
-                        className="p-1 hover:bg-red-100 rounded"
-                        title="Remove file"
+                        type="button"
+                        onClick={generateTts}
+                        disabled={ttsLoading || !ttsText.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
                       >
-                        <X className="h-4 w-4 text-red-500" />
+                        {ttsLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
+                        {ttsLoading ? 'Generating…' : audioFile ? 'Regenerate speech' : 'Generate speech'}
                       </button>
                     </div>
-                  ) : (
-                    <>
-                      <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-600">Click to upload audio file</p>
-                      <p className="text-xs text-gray-400 mt-1">MP3, WAV, OGG, AAC, M4A — Max 10MB</p>
-                    </>
-                  )}
-                </div>
+                    {ttsError && <p className="text-xs text-red-600">{ttsError}</p>}
+                  </div>
+                )}
+
+                {audioMode === 'upload' && (
+                  <div
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {audioFile ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <FileAudio className="h-8 w-8 text-blue-600" />
+                        <div>
+                          <p className="font-medium text-gray-900">{audioFile.name}</p>
+                          <p className="text-sm text-gray-500">
+                            {(audioFile.size / (1024 * 1024)).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setAudioFile(null); setAudioPreviewUrl(null); }}
+                          className="p-1 hover:bg-red-100 rounded"
+                          title="Remove file"
+                        >
+                          <X className="h-4 w-4 text-red-500" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-600">Click to upload audio file</p>
+                        <p className="text-xs text-gray-400 mt-1">MP3, WAV, OGG, AAC, M4A — Max 10MB</p>
+                      </>
+                    )}
+                  </div>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -631,6 +728,12 @@ export default function AnnouncementsPage() {
                   className="hidden"
                   title="Upload audio file"
                 />
+                {audioMode === 'tts' && audioFile && (
+                  <div className="flex items-center gap-2 text-sm text-green-700 mb-1">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Speech generated — preview below.</span>
+                  </div>
+                )}
                 {audioPreviewUrl && (
                   <audio controls src={audioPreviewUrl} className="w-full mt-3" />
                 )}
