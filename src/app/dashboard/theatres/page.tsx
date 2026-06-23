@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Calendar, Plus, Trash2, Edit, AlertCircle } from 'lucide-react';
-import { THEATRES } from '@/lib/constants';
 
 interface Theatre {
   id: string;
@@ -738,11 +737,13 @@ export default function TheatresPage() {
                   }}
                 >
                   <option value="">Select Theatre</option>
-                  {THEATRES.map((theatre) => (
-                    <option key={theatre} value={theatre}>
-                      {theatre}
-                    </option>
-                  ))}
+                  {[...theatres]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((theatre) => (
+                      <option key={theatre.id} value={theatre.id}>
+                        {theatre.name}
+                      </option>
+                    ))}
                 </select>
               </div>
               
