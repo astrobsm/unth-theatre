@@ -61,6 +61,10 @@ export default function TheatresPage() {
   const [allocationType, setAllocationType] = useState<string>('SURGERY');
   const [selectedShift, setSelectedShift] = useState<string>('MORNING');
   const [autofilledStaff, setAutofilledStaff] = useState<any>(null);
+  // Rostered anaesthetic staff for the selected theatre/date/shift. The four
+  // anaesthetic dropdowns are populated strictly from these duty-roster lists.
+  type RosterStaffOption = { id: string; name: string; staffCode: string | null };
+  const [rosterStaffOptions, setRosterStaffOptions] = useState<Record<string, RosterStaffOption[]> | null>(null);
   const [allocationDate, setAllocationDate] = useState(
     new Date().toISOString().split('T')[0]
   );
@@ -181,6 +185,13 @@ export default function TheatresPage() {
       if (response.ok) {
         const data = await response.json();
         setAutofilledStaff(data.staffSuggestions);
+        // Populate the four anaesthetic dropdowns strictly from the duty roster.
+        setRosterStaffOptions(data.staffOptions || {
+          anaestheticTechnician: [],
+          anaesthetistConsultant: [],
+          anaesthetistSeniorRegistrar: [],
+          anaesthetistRegistrar: [],
+        });
         
         // Auto-fill ONLY anaesthetist and technician fields from roster
         if (data.staffSuggestions) {
@@ -402,7 +413,11 @@ export default function TheatresPage() {
             </button>
           )}
           <button
-            onClick={() => setShowAddAllocation(true)}
+            onClick={() => {
+              setRosterStaffOptions(null);
+              setAutofilledStaff(null);
+              setShowAddAllocation(true);
+            }}
             className="btn-primary flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
@@ -975,12 +990,20 @@ export default function TheatresPage() {
                     <div>
                       <label className="label">Anaesthetic Technician</label>
                       <select name="anaestheticTechnicianId" className="input-field bg-green-50">
-                        <option value="">Select Anaesthetic Technician</option>
-                        {anaestheticTechnicians.map((tech) => (
-                          <option key={tech.id} value={tech.id}>
-                            {tech.fullName || 'Not assigned'}
-                          </option>
-                        ))}
+                        {!rosterStaffOptions ? (
+                          <option value="">Select theatre, date &amp; shift first</option>
+                        ) : (rosterStaffOptions.anaestheticTechnician?.length ?? 0) === 0 ? (
+                          <option value="">⚠ Yet to submit roster</option>
+                        ) : (
+                          <>
+                            <option value="">Select Anaesthetic Technician</option>
+                            {rosterStaffOptions.anaestheticTechnician.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}{s.staffCode ? ` (${s.staffCode})` : ''}
+                              </option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -988,12 +1011,20 @@ export default function TheatresPage() {
                     <div>
                       <label className="label">Consultant Anaesthetist</label>
                       <select name="anaesthetistConsultantId" className="input-field bg-green-50">
-                        <option value="">Select Consultant Anaesthetist</option>
-                        {anaesthetists.map((anaesthetist) => (
-                          <option key={anaesthetist.id} value={anaesthetist.id}>
-                            {anaesthetist.fullName || 'Not assigned'}
-                          </option>
-                        ))}
+                        {!rosterStaffOptions ? (
+                          <option value="">Select theatre, date &amp; shift first</option>
+                        ) : (rosterStaffOptions.anaesthetistConsultant?.length ?? 0) === 0 ? (
+                          <option value="">⚠ Yet to submit roster</option>
+                        ) : (
+                          <>
+                            <option value="">Select Consultant Anaesthetist</option>
+                            {rosterStaffOptions.anaesthetistConsultant.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}{s.staffCode ? ` (${s.staffCode})` : ''}
+                              </option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -1001,12 +1032,20 @@ export default function TheatresPage() {
                     <div>
                       <label className="label">Senior Registrar Anaesthesia</label>
                       <select name="anaesthetistSeniorRegistrarId" className="input-field bg-green-50">
-                        <option value="">Select Senior Registrar Anaesthesia</option>
-                        {anaesthetists.map((anaesthetist) => (
-                          <option key={anaesthetist.id} value={anaesthetist.id}>
-                            {anaesthetist.fullName || 'Not assigned'}
-                          </option>
-                        ))}
+                        {!rosterStaffOptions ? (
+                          <option value="">Select theatre, date &amp; shift first</option>
+                        ) : (rosterStaffOptions.anaesthetistSeniorRegistrar?.length ?? 0) === 0 ? (
+                          <option value="">⚠ Yet to submit roster</option>
+                        ) : (
+                          <>
+                            <option value="">Select Senior Registrar Anaesthesia</option>
+                            {rosterStaffOptions.anaesthetistSeniorRegistrar.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}{s.staffCode ? ` (${s.staffCode})` : ''}
+                              </option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -1014,12 +1053,20 @@ export default function TheatresPage() {
                     <div>
                       <label className="label">Registrar Anaesthesia</label>
                       <select name="anaesthetistRegistrarId" className="input-field bg-green-50">
-                        <option value="">Select Registrar Anaesthesia</option>
-                        {anaesthetists.map((anaesthetist) => (
-                          <option key={anaesthetist.id} value={anaesthetist.id}>
-                            {anaesthetist.fullName || 'Not assigned'}
-                          </option>
-                        ))}
+                        {!rosterStaffOptions ? (
+                          <option value="">Select theatre, date &amp; shift first</option>
+                        ) : (rosterStaffOptions.anaesthetistRegistrar?.length ?? 0) === 0 ? (
+                          <option value="">⚠ Yet to submit roster</option>
+                        ) : (
+                          <>
+                            <option value="">Select Registrar Anaesthesia</option>
+                            {rosterStaffOptions.anaesthetistRegistrar.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}{s.staffCode ? ` (${s.staffCode})` : ''}
+                              </option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>

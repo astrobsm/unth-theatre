@@ -59,32 +59,67 @@ export async function GET(request: NextRequest) {
       anaesthetistRegistrar: null,
     };
 
+    type StaffOption = { id: string; name: string; staffCode: string | null };
+    // Full list of rostered staff per category so the allocation form can
+    // populate its dropdowns ONLY from the duty roster.
+    const staffOptions: Record<string, StaffOption[]> = {
+      anaestheticTechnician: [],
+      anaesthetistConsultant: [],
+      anaesthetistSeniorRegistrar: [],
+      anaesthetistRegistrar: [],
+    };
+
+    const pushOption = (bucket: keyof typeof staffOptions, roster: (typeof rosters)[number]) => {
+      if (staffOptions[bucket].some((o) => o.id === roster.user.id)) return;
+      staffOptions[bucket].push({
+        id: roster.user.id,
+        name: roster.user.fullName,
+        staffCode: roster.user.staffCode ?? null,
+      });
+    };
+
     rosters.forEach((roster) => {
       switch (roster.staffCategory) {
         case 'ANAESTHETISTS':
           // Use seniorityLevel to distinguish consultant/senior registrar/registrar
-          if (roster.seniorityLevel === 'CONSULTANT' && !staffSuggestions.anaesthetistConsultant) {
-            staffSuggestions.anaesthetistConsultant = roster.user.id;
-            staffDetails.anaesthetistConsultant = { id: roster.user.id, name: roster.user.fullName, role: 'Consultant' };
-          } else if (roster.seniorityLevel === 'SENIOR_REGISTRAR' && !staffSuggestions.anaesthetistSeniorRegistrar) {
-            staffSuggestions.anaesthetistSeniorRegistrar = roster.user.id;
-            staffDetails.anaesthetistSeniorRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Senior Registrar' };
-          } else if (roster.seniorityLevel === 'REGISTRAR' && !staffSuggestions.anaesthetistRegistrar) {
-            staffSuggestions.anaesthetistRegistrar = roster.user.id;
-            staffDetails.anaesthetistRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Registrar' };
-          } else if (!roster.seniorityLevel) {
-            // Legacy data without seniorityLevel — fall back to role-based assignment
-            if (roster.user.role === 'CONSULTANT_ANAESTHETIST' && !staffSuggestions.anaesthetistConsultant) {
+          if (roster.seniorityLevel === 'CONSULTANT') {
+            pushOption('anaesthetistConsultant', roster);
+            if (!staffSuggestions.anaesthetistConsultant) {
               staffSuggestions.anaesthetistConsultant = roster.user.id;
               staffDetails.anaesthetistConsultant = { id: roster.user.id, name: roster.user.fullName, role: 'Consultant' };
-            } else if (!staffSuggestions.anaesthetistRegistrar) {
+            }
+          } else if (roster.seniorityLevel === 'SENIOR_REGISTRAR') {
+            pushOption('anaesthetistSeniorRegistrar', roster);
+            if (!staffSuggestions.anaesthetistSeniorRegistrar) {
+              staffSuggestions.anaesthetistSeniorRegistrar = roster.user.id;
+              staffDetails.anaesthetistSeniorRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Senior Registrar' };
+            }
+          } else if (roster.seniorityLevel === 'REGISTRAR') {
+            pushOption('anaesthetistRegistrar', roster);
+            if (!staffSuggestions.anaesthetistRegistrar) {
               staffSuggestions.anaesthetistRegistrar = roster.user.id;
               staffDetails.anaesthetistRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Registrar' };
+            }
+          } else if (!roster.seniorityLevel) {
+            // Legacy data without seniorityLevel — fall back to role-based assignment
+            if (roster.user.role === 'CONSULTANT_ANAESTHETIST') {
+              pushOption('anaesthetistConsultant', roster);
+              if (!staffSuggestions.anaesthetistConsultant) {
+                staffSuggestions.anaesthetistConsultant = roster.user.id;
+                staffDetails.anaesthetistConsultant = { id: roster.user.id, name: roster.user.fullName, role: 'Consultant' };
+              }
+            } else {
+              pushOption('anaesthetistRegistrar', roster);
+              if (!staffSuggestions.anaesthetistRegistrar) {
+                staffSuggestions.anaesthetistRegistrar = roster.user.id;
+                staffDetails.anaesthetistRegistrar = { id: roster.user.id, name: roster.user.fullName, role: 'Registrar' };
+              }
             }
           }
           break;
         
         case 'ANAESTHETIC_TECHNICIANS':
+          pushOption('anaestheticTechnician', roster);
           if (!staffSuggestions.anaestheticTechnician) {
             staffSuggestions.anaestheticTechnician = roster.user.id;
             staffDetails.anaestheticTechnician = { id: roster.user.id, name: roster.user.fullName, role: 'Anaesthetic Technician' };
@@ -96,6 +131,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       staffSuggestions,
       staffDetails,
+      staffOptions,
       rostersFound: rosters.length,
     });
   } catch (error) {
