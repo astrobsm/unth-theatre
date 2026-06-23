@@ -280,6 +280,87 @@ export async function GET(_req: NextRequest) {
     console.error('[radio/queue] failed to auto-promote emergency events:', err);
   }
 
+  // ----------------------------------------------------------------
+  // Pre-start theatre reminder. For every case that has been CLEARED for
+  // surgery (status READY_FOR_THEATRE) and is due to start within the next
+  // 10 minutes, remind the nurses to transfer the patient now to a ready
+  // theatre. One repeating announcement per case (deduped by surgery id);
+  // it repeats every 2 minutes until acknowledged or auto-expired.
+  // ----------------------------------------------------------------
+  try {
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(now);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const clearedCases = await prisma.surgery.findMany({
+      where: {
+        status: 'READY_FOR_THEATRE',
+        scheduledDate: { gte: dayStart, lte: dayEnd },
+      },
+      select: {
+        id: true,
+        scheduledDate: true,
+        scheduledTime: true,
+        procedureName: true,
+        location: true,
+        patient: { select: { name: true, folderNumber: true, ward: true } },
+      },
+      take: 40,
+    });
+
+    for (const c of clearedCases) {
+      const [hh, mm] = (c.scheduledTime || '09:00').split(':').map((n) => parseInt(n, 10));
+      const start = new Date(c.scheduledDate);
+      start.setHours(
+        Number.isFinite(hh) ? hh : 9,
+        Number.isFinite(mm) ? mm : 0,
+        0,
+        0
+      );
+      const minutesUntilStart = (start.getTime() - now.getTime()) / 60000;
+
+      // Fire only inside the 10-minute pre-start window (small grace either side).
+      if (minutesUntilStart > 10 || minutesUntilStart < -2) continue;
+
+      const dup = await prisma.radioAnnouncement.findFirst({
+        where: { metadata: { contains: `"surgeryReminderId":"${c.id}"` } },
+        select: { id: true },
+      });
+      if (dup) continue;
+
+      const startLabel = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+      const where = c.location ? ` for ${c.location}` : '';
+      const base =
+        `Theatre reminder. Patient ${c.patient?.name ?? ''}, folder ${c.patient?.folderNumber ?? ''}, ` +
+        `is cleared for surgery${where} and is due to start at ${startLabel}. ` +
+        `Nurses, please transfer the patient now to a theatre that is ready and confirm it is prepared.`;
+      const speak2 = (s: string) => `${s} I repeat. ${s}`;
+
+      await prisma.radioAnnouncement.create({
+        data: {
+          category: 'WORKFLOW',
+          title: `Transfer reminder — ${c.patient?.name ?? 'patient'} (${c.procedureName})`,
+          message: speak2(base),
+          priority: 70,
+          location: c.location ?? null,
+          urgency: 'HIGH',
+          triggerSource: 'EVENT',
+          status: 'PENDING',
+          requireAck: true,
+          repeatUntilAck: true,
+          repeatEverySec: 120, // 2 minutes
+          metadata: JSON.stringify({
+            surgeryReminderId: c.id,
+            source: 'SurgeryPreStartReminder',
+          }),
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[radio/queue] failed to emit pre-start theatre reminders:', err);
+  }
+
   // Expire ack-required announcements older than 30 min that nobody acked.
   // EXCEPTION: auto-promoted emergency-surgery / emergency-prescription rows
   // must keep repeating every 5 min until a clinician acknowledges them, so

@@ -292,65 +292,81 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // === 5 PM Cutoff Validation for Elective and Urgent cases ===
+    // === Auto-scheduling + 5 PM Cutoff Validation for Elective and Urgent cases ===
+    //
+    // Scheduling policy (per requirement):
+    //   • The first elective case of the day starts at 09:00.
+    //   • After the surgeon's estimated duration, add a 15-minute grace plus a
+    //     30-minute turnover (move patient out + clean theatre) = 45 min gap.
+    //   • Each subsequent case on the same day/theatre is auto-sequenced after
+    //     the previous one using that 45-minute gap.
+    //   • All cases must still finish by 17:00 (5 PM); otherwise the booking is
+    //     rejected and the user is asked to reschedule.
+    //
+    // ELECTIVE cases get their `scheduledTime` auto-assigned by the server (the
+    // value sent by the client is ignored). URGENT cases keep their chosen time
+    // but are still counted toward the day's capacity.
     if (surgeryType === 'ELECTIVE' || surgeryType === 'URGENT') {
+      const FIRST_CASE_HOUR = 9;                 // 09:00 AM first case
+      const GRACE_MINUTES = 15;                  // post-op grace / handover
+      const TURNOVER_MINUTES = 30;               // patient out + theatre cleaning
+      const TURNAROUND_GAP = GRACE_MINUTES + TURNOVER_MINUTES; // 45 min between cases
+      const END_OF_DAY_MINUTES = 17 * 60;        // 17:00 (1020 min from midnight)
+
       const scheduledDate = new Date(validatedData.scheduledDate);
-      // Get start of day and end of theatre time (5 PM)
       const dayStart = new Date(scheduledDate);
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(scheduledDate);
       dayEnd.setHours(23, 59, 59, 999);
 
-      // Fetch all existing elective and urgent surgeries for this unit on the same day
-      const existingSurgeries = await prisma.surgery.findMany({
-        where: {
-          unit: validatedData.unit,
-          scheduledDate: {
-            gte: dayStart,
-            lte: dayEnd,
-          },
-          surgeryType: {
-            in: ['ELECTIVE', 'URGENT'],
-          },
-          status: {
-            notIn: ['CANCELLED'],
-          },
-        },
-        select: {
-          scheduledTime: true,
-          estimatedDuration: true,
-        },
-      });
-
-      // Calculate cumulative end time
-      // Theatre day starts at 8:00 AM (configurable)
-      const THEATRE_START_HOUR = 8; // 8:00 AM
-      const THEATRE_END_HOUR = 17;  // 5:00 PM
-      const THEATRE_END_MINUTES = THEATRE_END_HOUR * 60; // 1020 minutes from midnight
-
-      // Sum up all existing surgery durations
-      let totalExistingDurationMinutes = 0;
-      for (const s of existingSurgeries) {
-        totalExistingDurationMinutes += (s.estimatedDuration || 60);
+      // Sequence within the assigned theatre when one is chosen; otherwise fall
+      // back to sequencing by surgical unit.
+      const theatreKey = (validatedData.theatreId || '').trim();
+      const sameDayWhere: any = {
+        scheduledDate: { gte: dayStart, lte: dayEnd },
+        surgeryType: { in: ['ELECTIVE', 'URGENT'] },
+        status: { notIn: ['CANCELLED'] },
+      };
+      if (theatreKey) {
+        sameDayWhere.theatreId = theatreKey;
+      } else {
+        sameDayWhere.unit = validatedData.unit;
       }
 
-      // Add the new surgery's duration
-      const newTotalDuration = totalExistingDurationMinutes + (validatedData.estimatedDuration || 60);
+      const existingSurgeries = await prisma.surgery.findMany({
+        where: sameDayWhere,
+        select: { estimatedDuration: true },
+      });
 
-      // Calculate earliest start time (first surgery of the day)
-      // The cumulative end time = theatre start + total duration
-      const cumulativeEndMinutes = (THEATRE_START_HOUR * 60) + newTotalDuration;
+      const priorCount = existingSurgeries.length;
+      const priorDuration = existingSurgeries.reduce(
+        (sum, s) => sum + (s.estimatedDuration || 60),
+        0
+      );
+      const newDuration = validatedData.estimatedDuration || 60;
 
-      if (cumulativeEndMinutes > THEATRE_END_MINUTES) {
-        const hoursOver = Math.floor(cumulativeEndMinutes / 60);
-        const minsOver = cumulativeEndMinutes % 60;
-        const estimatedEndTime = `${hoursOver.toString().padStart(2, '0')}:${minsOver.toString().padStart(2, '0')}`;
+      // Start = 09:00 + (sum of prior durations) + (45-min gap × number of prior cases)
+      const startMinutes = FIRST_CASE_HOUR * 60 + priorDuration + TURNAROUND_GAP * priorCount;
+      const endMinutes = startMinutes + newDuration;
+
+      const fmt = (mins: number) =>
+        `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+      if (endMinutes > END_OF_DAY_MINUTES) {
+        const target = theatreKey ? 'this theatre' : validatedData.unit;
         return NextResponse.json(
           {
-            error: `Booking rejected: The cumulative duration of elective/urgent surgeries for ${validatedData.unit} on this date would exceed the 5:00 PM theatre cutoff time. Estimated end time: ${estimatedEndTime}. Total scheduled: ${newTotalDuration} minutes. Please reschedule to another day or reduce the number of cases.`,
+            error: `Booking rejected: with the 15-minute grace and 30-minute turnover between cases, this case for ${target} would start at ${fmt(startMinutes)} and finish at ${fmt(endMinutes)}, beyond the 5:00 PM theatre cutoff. Please reschedule to another day.`,
           },
           { status: 400 }
         );
+      }
+
+      // Auto-assign the computed start time for ELECTIVE cases.
+      if (surgeryType === 'ELECTIVE') {
+        const computedTime = fmt(startMinutes);
+        (surgeryData as any).scheduledTime = computedTime;
+        validatedData.scheduledTime = computedTime;
       }
     }
 

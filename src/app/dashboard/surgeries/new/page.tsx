@@ -313,6 +313,16 @@ export default function NewSurgeryPage() {
     return () => controller.abort();
   }, [scheduledDate, scheduledTime, selectedTheatreId]);
 
+  // Elective cases are auto-scheduled: the first case of the day starts at 09:00
+  // and each subsequent case is sequenced by the server (15-min grace + 30-min
+  // turnover between cases). Lock the displayed time to 09:00 so the on-duty
+  // team can be resolved; the server assigns the final sequenced start time.
+  useEffect(() => {
+    if (surgeryType === 'ELECTIVE') {
+      setScheduledTime('09:00');
+    }
+  }, [surgeryType]);
+
   const fetchPatients = async () => {
     try {
       const response = await fetch('/api/patients');
@@ -1012,11 +1022,19 @@ export default function NewSurgeryPage() {
                 type="time"
                 name="scheduledTime"
                 required
-                className="input-field"
+                readOnly={surgeryType === 'ELECTIVE'}
+                className={`input-field ${surgeryType === 'ELECTIVE' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 title="Surgery time"
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
               />
+              {surgeryType === 'ELECTIVE' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Auto-scheduled: elective cases start at 09:00 and are sequenced
+                  automatically (15-min grace + 30-min turnover between cases). The
+                  final start time is assigned by the system when you book.
+                </p>
+              )}
             </div>
 
             <div>
