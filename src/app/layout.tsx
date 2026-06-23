@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import ToasterProvider from "@/components/ToasterProvider";
 import InstallAppButton from "@/components/InstallAppButton";
+import ChunkErrorReloader from "@/components/ChunkErrorReloader";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -52,6 +53,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body className={inter.className}>
+        <ChunkErrorReloader />
         <Providers>{children}</Providers>
         <ToasterProvider />
         <InstallAppButton />
