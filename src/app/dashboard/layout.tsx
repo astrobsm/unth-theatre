@@ -4,13 +4,18 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
-import AssistantWidget from '@/components/AssistantWidget';
-import OrmGoLiveBanner from '@/components/OrmGoLiveBanner';
-import OrmHourlyBroadcast from '@/components/OrmHourlyBroadcast';
-import CarelineBar from '@/components/CarelineBar';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
+
+// Non-critical chrome — these are not needed for first paint, so we code-split
+// them out of the layout bundle and mount them after the page is interactive.
+// ssr:false keeps them out of the server payload entirely.
+const AssistantWidget = dynamic(() => import('@/components/AssistantWidget'), { ssr: false });
+const OrmGoLiveBanner = dynamic(() => import('@/components/OrmGoLiveBanner'), { ssr: false });
+const OrmHourlyBroadcast = dynamic(() => import('@/components/OrmHourlyBroadcast'), { ssr: false });
+const CarelineBar = dynamic(() => import('@/components/CarelineBar'), { ssr: false });
 import {
   LayoutDashboard,
   Package,
@@ -343,6 +348,11 @@ export default function DashboardLayout({
                 <Link
                   key={item.href}
                   href={item.href}
+                  // Do NOT eagerly prefetch all ~70 sidebar routes on load —
+                  // that fired a request storm that starved the page the user
+                  // actually opened. Next.js still prefetches on hover/focus,
+                  // so navigation stays instant without the upfront cost.
+                  prefetch={false}
                   className={className}
                   onClick={() => setSidebarOpen(false)}
                 >
