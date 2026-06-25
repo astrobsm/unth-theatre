@@ -85,6 +85,15 @@ export function useTabLeader(): boolean {
     };
     window.addEventListener('storage', onStorage);
 
+    // Allow this tab to forcibly become the leader on an explicit user action
+    // (e.g. pressing Play). This guarantees the playback controls are always
+    // responsive in the window the user is actually interacting with.
+    const onClaim = () => {
+      writeRecord({ id: myId, ts: Date.now() });
+      setIsLeader(true);
+    };
+    window.addEventListener('audio:claim-leadership', onClaim as EventListener);
+
     // Release leadership on close so another tab can take over immediately.
     const onUnload = () => {
       const rec = readRecord();
@@ -102,6 +111,7 @@ export function useTabLeader(): boolean {
     return () => {
       if (timer) clearInterval(timer);
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener('audio:claim-leadership', onClaim as EventListener);
       window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('beforeunload', onUnload);
       onUnload();

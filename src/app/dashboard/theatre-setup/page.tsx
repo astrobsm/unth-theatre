@@ -13,12 +13,17 @@ import {
   TrendingUp,
   AlertCircle,
   Download,
-  FileText
+  FileText,
+  CheckCircle2,
+  Radio,
+  DoorOpen,
+  Megaphone
 } from 'lucide-react';
 // jsPDF loaded dynamically when user clicks download/export
 
 interface TheatreSetup {
   id: string;
+  theatreId: string;
   setupDate: string;
   collectionTime: string;
   status: string;
@@ -30,6 +35,12 @@ interface TheatreSetup {
     fullName: string;
   };
   location: string | null;
+  materialsConfirmed: boolean;
+  radioOnChannel7: boolean;
+  inTheatreReady: boolean;
+  theatreReady: boolean;
+  readyConfirmedAt: string | null;
+  readyAnnouncedAt: string | null;
   spiritQuantity: number;
   savlonQuantity: number;
   povidoneQuantity: number;
@@ -48,6 +59,14 @@ export default function TheatreSetupPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
+
+  // Nurse theatre-readiness confirmation card
+  const [readinessSetupId, setReadinessSetupId] = useState('');
+  const [readyMaterials, setReadyMaterials] = useState(false);
+  const [readyRadio, setReadyRadio] = useState(false);
+  const [readyInTheatre, setReadyInTheatre] = useState(false);
+  const [confirmingReady, setConfirmingReady] = useState(false);
+  const [readyMessage, setReadyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSetups();
@@ -72,6 +91,67 @@ export default function TheatreSetupPage() {
       console.error('Failed to fetch setups:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Today's collection records — the basis for a nurse's readiness confirmation.
+  const todayKey = new Date().toISOString().split('T')[0];
+  const todaySetupsList = Array.isArray(setups)
+    ? setups.filter((s) => (s.setupDate || '').startsWith(todayKey))
+    : [];
+  const selectedReadinessSetup = todaySetupsList.find((s) => s.id === readinessSetupId) || null;
+
+  // When the nurse selects a setup, mirror its current readiness flags.
+  useEffect(() => {
+    if (!selectedReadinessSetup) {
+      setReadyMaterials(false);
+      setReadyRadio(false);
+      setReadyInTheatre(false);
+      return;
+    }
+    setReadyMaterials(selectedReadinessSetup.materialsConfirmed);
+    setReadyRadio(selectedReadinessSetup.radioOnChannel7);
+    setReadyInTheatre(selectedReadinessSetup.inTheatreReady);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readinessSetupId]);
+
+  const confirmReadiness = async () => {
+    if (!readinessSetupId) {
+      setReadyMessage('Select your theatre first.');
+      return;
+    }
+    setConfirmingReady(true);
+    setReadyMessage(null);
+    try {
+      const res = await fetch('/api/theatre-setup/readiness', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          setupId: readinessSetupId,
+          materialsConfirmed: readyMaterials,
+          radioOnChannel7: readyRadio,
+          inTheatreReady: readyInTheatre,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.announced) {
+          setReadyMessage('✅ Theatre marked READY — surgical team alerted by radio (announced 3 times).');
+        } else if (data.setup?.theatreReady) {
+          setReadyMessage('✅ Theatre is ready.');
+        } else {
+          setReadyMessage('Saved. Tick all three confirmations to mark the theatre ready.');
+        }
+        await fetchSetups();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setReadyMessage(err.error || 'Failed to confirm readiness. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error confirming readiness:', error);
+      setReadyMessage('Failed to confirm readiness. Please try again.');
+    } finally {
+      setConfirmingReady(false);
     }
   };
 
@@ -398,6 +478,132 @@ export default function TheatreSetupPage() {
             Collect Materials
           </button>
         </div>
+      </div>
+
+      {/* Nurse Theatre-Readiness Confirmation */}
+      <div className="card border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-11 h-11 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+            <Megaphone className="w-6 h-6 text-green-700" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Confirm Theatre Readiness</h2>
+            <p className="text-sm text-gray-600">
+              Confirm the three steps below for today&apos;s surgery. When all are ticked, the surgical
+              team is alerted by radio that your theatre is ready to receive patients.
+            </p>
+          </div>
+        </div>
+
+        {todaySetupsList.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-gray-600 bg-white/70 rounded-lg px-3 py-3 border border-green-100">
+            <AlertCircle className="w-4 h-4 text-orange-500" />
+            No material collection recorded for today yet. Use{' '}
+            <button
+              onClick={() => router.push('/dashboard/theatre-setup/new')}
+              className="text-green-700 font-semibold hover:underline"
+            >
+              Collect Materials
+            </button>{' '}
+            first, then confirm readiness here.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="label" htmlFor="readiness-theatre">Select your theatre (today)</label>
+              <select
+                id="readiness-theatre"
+                value={readinessSetupId}
+                onChange={(e) => { setReadinessSetupId(e.target.value); setReadyMessage(null); }}
+                className="input-field"
+              >
+                <option value="">— Choose theatre —</option>
+                {todaySetupsList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.theatre?.name || 'Unknown Theatre'}
+                    {s.nurse?.fullName ? ` — ${s.nurse.fullName}` : ''}
+                    {s.theatreReady ? ' (READY)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className={`flex items-start gap-3 rounded-lg border-2 px-3 py-3 cursor-pointer transition-colors ${readyMaterials ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                <input
+                  type="checkbox"
+                  className="mt-1 w-5 h-5 accent-green-600"
+                  checked={readyMaterials}
+                  disabled={!readinessSetupId}
+                  onChange={(e) => setReadyMaterials(e.target.checked)}
+                />
+                <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5 font-semibold text-gray-900 text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" /> Materials collected
+                  </span>
+                  <span className="text-xs text-gray-600">All materials needed for today&apos;s surgery are collected.</span>
+                </span>
+              </label>
+
+              <label className={`flex items-start gap-3 rounded-lg border-2 px-3 py-3 cursor-pointer transition-colors ${readyRadio ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                <input
+                  type="checkbox"
+                  className="mt-1 w-5 h-5 accent-green-600"
+                  checked={readyRadio}
+                  disabled={!readinessSetupId}
+                  onChange={(e) => setReadyRadio(e.target.checked)}
+                />
+                <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5 font-semibold text-gray-900 text-sm">
+                    <Radio className="w-4 h-4 text-green-600" /> Radio on channel 7
+                  </span>
+                  <span className="text-xs text-gray-600">Walkie-talkie signed out and set to channel 7.</span>
+                </span>
+              </label>
+
+              <label className={`flex items-start gap-3 rounded-lg border-2 px-3 py-3 cursor-pointer transition-colors ${readyInTheatre ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                <input
+                  type="checkbox"
+                  className="mt-1 w-5 h-5 accent-green-600"
+                  checked={readyInTheatre}
+                  disabled={!readinessSetupId}
+                  onChange={(e) => setReadyInTheatre(e.target.checked)}
+                />
+                <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5 font-semibold text-gray-900 text-sm">
+                    <DoorOpen className="w-4 h-4 text-green-600" /> In theatre &amp; ready
+                  </span>
+                  <span className="text-xs text-gray-600">In the designated theatre, ready to receive patients.</span>
+                </span>
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={confirmReadiness}
+                disabled={confirmingReady || !readinessSetupId || !(readyMaterials && readyRadio && readyInTheatre)}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Megaphone className="w-5 h-5" />
+                {confirmingReady ? 'Confirming…' : 'Confirm Theatre Ready & Alert Team'}
+              </button>
+              {selectedReadinessSetup?.theatreReady && (
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-700">
+                  <CheckCircle2 className="w-4 h-4" /> Marked ready
+                  {selectedReadinessSetup.readyConfirmedAt
+                    ? ` at ${new Date(selectedReadinessSetup.readyConfirmedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+                    : ''}
+                </span>
+              )}
+            </div>
+
+            {readyMessage && (
+              <div className="text-sm font-medium text-gray-800 bg-white/80 border border-green-100 rounded-lg px-3 py-2">
+                {readyMessage}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Statistics */}

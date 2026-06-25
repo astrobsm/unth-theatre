@@ -1316,6 +1316,14 @@ model TheatreSetup {
   suctionTubbingsQuantity Int @default(0)
   disposablesQuantity     Int @default(0)
 
+  // Nurse theatre-readiness confirmation (shown in Theatre Readiness module)
+  materialsConfirmed Boolean   @default(false) // nurse confirms all materials collected
+  radioOnChannel7    Boolean   @default(false) // walkie-talkie signed out & set to channel 7
+  inTheatreReady     Boolean   @default(false) // nurse is in the designated theatre, ready for patients
+  theatreReady       Boolean   @default(false) // overall ready flag (all three confirmed)
+  readyConfirmedAt   DateTime? // when the nurse confirmed the theatre is ready
+  readyAnnouncedAt   DateTime? // when the radio readiness announcement was raised
+
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

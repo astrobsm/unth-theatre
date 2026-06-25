@@ -60,6 +60,19 @@ interface Statistics {
   totalMalfunctions: number;
 }
 
+// Nurse-confirmed theatre readiness (from the Theatre Setup module).
+interface NurseReadiness {
+  id: string;
+  setupDate: string;
+  materialsConfirmed: boolean;
+  radioOnChannel7: boolean;
+  inTheatreReady: boolean;
+  theatreReady: boolean;
+  readyConfirmedAt: string | null;
+  theatre: { name: string; location: string } | null;
+  nurse: { fullName: string } | null;
+}
+
 // One staff line: role label, name, and a click-to-call phone link.
 function StaffRow({ label, contact, color }: { label: string; contact: StaffContact | null; color: string }) {
   if (!contact) return null;
@@ -87,6 +100,7 @@ function StaffRow({ label, contact, color }: { label: string; contact: StaffCont
 export default function TheatreReadinessDashboard() {
   const [theatreStatus, setTheatreStatus] = useState<TheatreStatus[]>([]);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
+  const [nurseReadiness, setNurseReadiness] = useState<NurseReadiness[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -101,11 +115,18 @@ export default function TheatreReadinessDashboard() {
 
   const fetchTheatreStatus = async () => {
     try {
-      const response = await fetch(`/api/anesthesia-setup/theatre-status?date=${selectedDate}`);
-      if (response.ok) {
-        const data = await response.json();
+      const [statusRes, setupRes] = await Promise.all([
+        fetch(`/api/anesthesia-setup/theatre-status?date=${selectedDate}`),
+        fetch(`/api/theatre-setup?date=${selectedDate}`),
+      ]);
+      if (statusRes.ok) {
+        const data = await statusRes.json();
         setTheatreStatus(data.theatreStatus || []);
         setStatistics(data.statistics || null);
+      }
+      if (setupRes.ok) {
+        const setups = await setupRes.json();
+        setNurseReadiness(Array.isArray(setups) ? setups : []);
       }
     } catch (error) {
       console.error('Error fetching theatre status:', error);
@@ -206,6 +227,64 @@ export default function TheatreReadinessDashboard() {
           </div>
         </div>
       )}
+
+      {/* Nurse-Confirmed Theatre Readiness */}
+      <div className="card">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h2 className="text-xl font-bold text-gray-900">Nurse Theatre Readiness</h2>
+          <span className="text-sm text-gray-500">
+            {nurseReadiness.filter((n) => n.theatreReady).length} ready ·{' '}
+            {nurseReadiness.length} reporting
+          </span>
+        </div>
+        {nurseReadiness.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4 text-center">
+            No nurse readiness confirmations for this date yet.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {nurseReadiness.map((n) => (
+              <div
+                key={n.id}
+                className={`border-2 rounded-lg p-3 ${n.theatreReady ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <div className="font-bold text-gray-900">{n.theatre?.name || 'Unknown Theatre'}</div>
+                    <div className="text-xs text-gray-500">{n.nurse?.fullName || 'Nurse'}</div>
+                  </div>
+                  {n.theatreReady ? (
+                    <span className="bg-green-600 text-white px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                      ✅ READY
+                    </span>
+                  ) : (
+                    <span className="bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                      ⏳ Pending
+                    </span>
+                  )}
+                </div>
+                <ul className="mt-2 space-y-1 text-xs">
+                  <li className={n.materialsConfirmed ? 'text-green-700' : 'text-gray-400'}>
+                    {n.materialsConfirmed ? '✓' : '○'} Materials collected
+                  </li>
+                  <li className={n.radioOnChannel7 ? 'text-green-700' : 'text-gray-400'}>
+                    {n.radioOnChannel7 ? '✓' : '○'} Radio on channel 7
+                  </li>
+                  <li className={n.inTheatreReady ? 'text-green-700' : 'text-gray-400'}>
+                    {n.inTheatreReady ? '✓' : '○'} In theatre &amp; ready
+                  </li>
+                </ul>
+                {n.theatreReady && n.readyConfirmedAt && (
+                  <div className="mt-2 text-[11px] text-green-700 font-medium">
+                    Confirmed at{' '}
+                    {new Date(n.readyConfirmedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Theatre Status Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

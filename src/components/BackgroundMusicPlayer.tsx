@@ -340,10 +340,31 @@ export default function BackgroundMusicPlayer() {
   }, []);
 
   const togglePlay = useCallback(async () => {
-    if (!enabled) { playIntentRef.current = true; try { window.localStorage.setItem(LS_PLAYING, '1'); } catch {} setEnabled(true); return; }
+    // Pressing Play makes THIS window the primary playback window, so the
+    // control always works even when another tab currently holds leadership
+    // (or a stale leader record is lingering).
+    const claimLeadership = () => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('audio:claim-leadership'));
+      }
+    };
+    if (!enabled) {
+      claimLeadership();
+      playIntentRef.current = true; try { window.localStorage.setItem(LS_PLAYING, '1'); } catch {}
+      setEnabled(true);
+      return;
+    }
     const a = audioRef.current;
-    if (!a) return;
+    if (!a) {
+      // Audio element not created yet (this tab wasn't the leader). Claim
+      // leadership and record play intent; the audio effect will create the
+      // element and start playback once leadership is granted.
+      claimLeadership();
+      playIntentRef.current = true; try { window.localStorage.setItem(LS_PLAYING, '1'); } catch {}
+      return;
+    }
     if (a.paused) {
+      claimLeadership();
       playIntentRef.current = true;
       try { window.localStorage.setItem(LS_PLAYING, '1'); } catch {}
       try { await a.play(); setPlaying(true); setError(null); }
