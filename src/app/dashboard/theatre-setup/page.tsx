@@ -796,11 +796,13 @@ export default function TheatreSetupPage() {
                         <span className="text-sm font-semibold text-gray-900">{totalItems}</span>
                         <span className="text-sm text-gray-500"> items</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         {setup.location ? (
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <MapPin className="w-4 h-4 text-green-500" />
-                            <span className="text-xs">Tracked</span>
+                          <div className="flex items-start gap-1 text-sm text-gray-600 max-w-xs">
+                            <MapPin className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                            <span className="text-xs break-words" title={setup.location}>
+                              {setup.location}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-xs text-gray-400">N/A</span>

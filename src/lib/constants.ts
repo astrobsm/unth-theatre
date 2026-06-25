@@ -76,6 +76,58 @@ export const FACILITY_COORDS = {
   name: 'UNTH Ituku-Ozalla, Nkanu West LGA, Enugu',
 } as const;
 
+// Canonical, human-readable address of the hospital. Shown whenever a captured
+// position falls within FACILITY_PROXIMITY_KM of the facility so users see a
+// real address instead of bare coordinates.
+export const FACILITY_ADDRESS =
+  'University of Nigeria Teaching Hospital (UNTH), Enugu - Port Harcourt Expressway, Umuoye, Awgu, Enugu State, Nigeria';
+
+// How close (km) a captured position must be to the facility to be labelled
+// with FACILITY_ADDRESS rather than a reverse-geocoded street address.
+export const FACILITY_PROXIMITY_KM = 3;
+
+/**
+ * Convert raw GPS coordinates into a human-readable street address.
+ * - If the position is within FACILITY_PROXIMITY_KM of UNTH, returns the
+ *   canonical hospital address (no network call needed).
+ * - Otherwise reverse-geocodes via OpenStreetMap Nominatim.
+ * - On any failure, falls back to formatted coordinates so the caller always
+ *   gets a usable string.
+ */
+export async function reverseGeocode(latitude: number, longitude: number): Promise<string> {
+  const coordsLabel = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
+  // Near the hospital → use the known, friendly address.
+  const distanceFromFacility = haversineDistanceKm(
+    latitude,
+    longitude,
+    FACILITY_COORDS.latitude,
+    FACILITY_COORDS.longitude,
+  );
+  if (distanceFromFacility <= FACILITY_PROXIMITY_KM) {
+    return FACILITY_ADDRESS;
+  }
+
+  // Elsewhere → reverse geocode to a real address.
+  try {
+    const url =
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1` +
+      `&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`;
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { display_name?: string };
+      if (data && typeof data.display_name === 'string' && data.display_name.trim()) {
+        return `${data.display_name} (${coordsLabel})`;
+      }
+    }
+  } catch {
+    // ignore and fall back to coordinates
+  }
+  return coordsLabel;
+}
+
 // Haversine distance calculation (returns km)
 export function haversineDistanceKm(
   lat1: number, lon1: number,

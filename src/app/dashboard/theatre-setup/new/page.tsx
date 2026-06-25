@@ -14,6 +14,7 @@ import {
   Scissors,
   Wind,
 } from 'lucide-react';
+import { reverseGeocode } from '@/lib/constants';
 
 interface Theatre {
   id: string;
@@ -168,10 +169,11 @@ export default function NewTheatreSetupPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        
-        // Reverse geocoding (simplified - in production use a real API)
-        const location = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-        
+
+        // Resolve to a real street address (UNTH address when on-site,
+        // otherwise reverse-geocoded). Falls back to coordinates on failure.
+        const location = await reverseGeocode(latitude, longitude);
+
         setGeoLocation({ latitude, longitude, location });
         setGeoLoading(false);
       },
