@@ -95,11 +95,21 @@ export async function POST(request: NextRequest) {
       suctionTubbingsQuantity,
       disposablesQuantity,
       items, // New: array of dynamic inventory items
+      walkieTalkieId, // Mandatory: walkie-talkie signed out for this theatre
       notes,
     } = body;
 
     if (!theatreId || !setupDate) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // The walkie-talkie must be signed out & picked up (set to channel 7) before
+    // materials can be collected for a designated theatre.
+    if (!walkieTalkieId || !String(walkieTalkieId).trim()) {
+      return NextResponse.json(
+        { error: 'Walkie-talkie sign-out is required. Enter the walkie-talkie ID and confirm it is set to channel 7.' },
+        { status: 400 }
+      );
     }
 
     // Create theatre setup record with dynamic items
@@ -122,6 +132,10 @@ export async function POST(request: NextRequest) {
         surgicalBladesQuantity: surgicalBladesQuantity || 0,
         suctionTubbingsQuantity: suctionTubbingsQuantity || 0,
         disposablesQuantity: disposablesQuantity || 0,
+        // Mandatory walkie-talkie sign-out recorded at collection
+        walkieTalkieId: String(walkieTalkieId).trim(),
+        walkieTalkieSignedOutAt: new Date(),
+        radioOnChannel7: true,
         notes,
         status: 'COLLECTED',
         // Create related items

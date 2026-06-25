@@ -80,7 +80,55 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    return NextResponse.json(alerts);
+    // Resolve "Created by" from the audit log (the model has no creator FK).
+    // The POST handler writes an AuditLog (action CREATE, tableName
+    // EmergencySurgeryAlert, recordId = alert.id, userId = creator).
+    const alertIds = alerts.map((a) => a.id);
+    const creatorByAlert: Record<string, string> = {};
+    if (alertIds.length > 0) {
+      try {
+        const creationLogs = await prisma.auditLog.findMany({
+          where: {
+            tableName: 'EmergencySurgeryAlert',
+            action: 'CREATE',
+            recordId: { in: alertIds },
+          },
+          select: { recordId: true, userId: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        const userIds = Array.from(new Set(creationLogs.map((l) => l.userId).filter(Boolean)));
+        const users = userIds.length
+          ? await prisma.user.findMany({
+              where: { id: { in: userIds as string[] } },
+              select: { id: true, fullName: true },
+            })
+          : [];
+        const nameById = new Map(users.map((u) => [u.id, u.fullName]));
+        for (const log of creationLogs) {
+          if (log.recordId && !creatorByAlert[log.recordId] && log.userId) {
+            const name = nameById.get(log.userId);
+            if (name) creatorByAlert[log.recordId] = name;
+          }
+        }
+      } catch {
+        // Audit lookup is best-effort; fall back to surgeon name below.
+      }
+    }
+
+    // Shape each alert so the UI's expected fields (createdBy, diagnosis,
+    // estimatedDuration) are populated instead of showing "Not assigned".
+    const shaped = alerts.map((a) => {
+      const creatorName = creatorByAlert[a.id] || a.surgeonName || null;
+      const durationMin = a.surgery?.estimatedDuration;
+      return {
+        ...a,
+        diagnosis: a.indication,
+        estimatedDuration: durationMin ? `${durationMin} min` : '',
+        createdBy: creatorName ? { fullName: creatorName } : null,
+      };
+    });
+
+    return NextResponse.json(shaped);
   } catch (error) {
     console.error('Error fetching emergency alerts:', error);
     // Return empty array instead of error if table doesn't exist yet

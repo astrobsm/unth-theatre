@@ -13,6 +13,7 @@ import {
   Shield,
   Scissors,
   Wind,
+  Radio,
 } from 'lucide-react';
 import { reverseGeocode } from '@/lib/constants';
 
@@ -75,6 +76,9 @@ export default function NewTheatreSetupPage() {
     location: string;
   } | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
+  // Mandatory walkie-talkie sign-out for the designated theatre
+  const [walkieTalkieId, setWalkieTalkieId] = useState('');
+  const [walkieSignedOut, setWalkieSignedOut] = useState(false);
   const [stock, setStock] = useState<InventoryStock>({
     spirit: 100,
     savlon: 100,
@@ -255,6 +259,11 @@ export default function NewTheatreSetupPage() {
       return;
     }
 
+    if (!walkieTalkieId.trim() || !walkieSignedOut) {
+      alert('Walkie-talkie sign-out is mandatory: enter the walkie-talkie ID and confirm you have picked it up and set it to channel 7.');
+      return;
+    }
+
     const totalItems = Object.entries(formData)
       .filter(([key]) => key.includes('Quantity'))
       .reduce((sum, [, value]) => sum + (value as number), 0);
@@ -278,6 +287,7 @@ export default function NewTheatreSetupPage() {
           latitude: geoLocation?.latitude,
           longitude: geoLocation?.longitude,
           location: geoLocation?.location,
+          walkieTalkieId: walkieTalkieId.trim(),
           items: selectedItems.map(item => ({
             inventoryItemId: item.inventoryItemId,
             quantityTaken: item.quantityTaken
@@ -456,6 +466,44 @@ export default function NewTheatreSetupPage() {
                 Location: {geoLocation.location}
               </p>
             )}
+          </div>
+
+          {/* Mandatory Walkie-Talkie Sign-Out */}
+          <div className={`mt-4 p-4 rounded-lg border-2 ${walkieTalkieId.trim() && walkieSignedOut ? 'border-green-400 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Radio className={`w-5 h-5 ${walkieTalkieId.trim() && walkieSignedOut ? 'text-green-600' : 'text-amber-600'}`} />
+              <span className="font-semibold text-gray-900">Walkie-Talkie Sign-Out <span className="text-red-600">*</span></span>
+            </div>
+            <p className="text-xs text-gray-600 mb-3">
+              Before collecting materials you must sign out and pick up the walkie-talkie for this
+              designated theatre and set it to <strong>channel 7</strong>. This is mandatory.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="walkie-id">Walkie-talkie ID / number</label>
+                <input
+                  id="walkie-id"
+                  type="text"
+                  value={walkieTalkieId}
+                  onChange={(e) => setWalkieTalkieId(e.target.value)}
+                  placeholder="e.g. WT-07 or device serial"
+                  className="input-field"
+                  required
+                />
+              </div>
+              <label className={`flex items-start gap-3 rounded-lg border-2 px-3 py-3 cursor-pointer transition-colors ${walkieSignedOut ? 'border-green-400 bg-white' : 'border-gray-200 bg-white'}`}>
+                <input
+                  type="checkbox"
+                  className="mt-1 w-5 h-5 accent-green-600"
+                  checked={walkieSignedOut}
+                  onChange={(e) => setWalkieSignedOut(e.target.checked)}
+                />
+                <span className="flex flex-col">
+                  <span className="font-semibold text-gray-900 text-sm">Signed out &amp; set to channel 7</span>
+                  <span className="text-xs text-gray-600">I have physically picked up this walkie-talkie and set it to channel 7.</span>
+                </span>
+              </label>
+            </div>
           </div>
 
           {/* Scrub Nurse Info */}

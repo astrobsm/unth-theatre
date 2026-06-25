@@ -1324,6 +1324,10 @@ model TheatreSetup {
   readyConfirmedAt   DateTime? // when the nurse confirmed the theatre is ready
   readyAnnouncedAt   DateTime? // when the radio readiness announcement was raised
 
+  // Mandatory walkie-talkie sign-out (captured at material collection)
+  walkieTalkieId          String?   // serial/number of the walkie-talkie signed out for this theatre
+  walkieTalkieSignedOutAt DateTime? // when the nurse signed out & picked up the walkie-talkie
+
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
