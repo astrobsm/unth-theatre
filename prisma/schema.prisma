@@ -956,7 +956,51 @@ model Surgery {
   pharmacyDrugCode    String? @unique // Pharmacy keys this in for packing
   anaesthesiaDrugCode String? @unique // Generated after the anaesthetist prescribes
 
+  // Scrub-nurse theatre reception & between-case workflow
+  caseFlow TheatreCaseFlow? @relation("SurgeryCaseFlow")
+
   @@map("surgeries")
+}
+
+// Scrub / circulating nurse theatre reception and between-case workflow.
+// One row per surgery: tracks receiving the patient from the holding area,
+// completing the surgery, and the between-case cleaning cycle.
+model TheatreCaseFlow {
+  id          String  @id @default(uuid())
+  surgeryId   String  @unique
+  theatreId   String?
+  theatreName String?
+
+  // 1. Patient reception (handover from holding area)
+  patientReceived   Boolean   @default(false)
+  patientReceivedAt DateTime?
+  receivedById      String? // scrub nurse who received the patient
+  porterNames       String? // JSON array of porter names who brought the patient
+  porterIds         String? // JSON array of porter user ids
+
+  // 2. Surgery completion (intra-op count/timing live in their own modules)
+  surgeryCompleted     Boolean   @default(false)
+  surgeryCompletedAt   DateTime?
+  surgeryCompletedById String?
+
+  // 3. Between-case cleaning cycle
+  cleaningCalled        Boolean   @default(false)
+  cleaningCalledAt      DateTime?
+  cleaningCalledById    String?
+  cleanersStarted       Boolean   @default(false)
+  cleanersStartedAt     DateTime?
+  cleanerNames          String? // JSON array of cleaner names
+  cleanerIds            String? // JSON array of cleaner user ids
+  cleaningCompleted     Boolean   @default(false)
+  cleaningCompletedAt   DateTime?
+  cleaningCompletedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  surgery Surgery @relation("SurgeryCaseFlow", fields: [surgeryId], references: [id])
+
+  @@map("theatre_case_flows")
 }
 
 model SurgicalTeamMember {
