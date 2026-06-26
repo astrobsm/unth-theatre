@@ -148,6 +148,7 @@ export default function DashboardLayout({
     { href: '/dashboard/call-for-patient', icon: Phone, label: 'Call for Patient', badge: 'NEW' },
 
     // === INTRA-OPERATIVE ===
+    { href: '/dashboard/theatre-reception', icon: ClipboardCheck, label: 'Theatre Reception', badge: 'NEW' },
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
