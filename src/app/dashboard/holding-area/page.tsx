@@ -588,42 +588,56 @@ export default function HoldingAreaPage() {
                       <p className="text-xs font-medium text-gray-700 mb-1.5">
                         Porter(s) who transported the patient:
                       </p>
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {porters.length === 0 ? (
-                          <span className="text-xs text-gray-400">
-                            No porters found
-                          </span>
-                        ) : (
-                          porters.map((p) => {
-                            const sel = (porterSel[assessment.id] || []).includes(
-                              p.id,
-                            );
+                      {porters.length === 0 ? (
+                        <span className="text-xs text-gray-400">
+                          No porters found
+                        </span>
+                      ) : (
+                        <div className="flex flex-col gap-2 mb-2">
+                          {[0, 1].map((slot) => {
+                            const sel = porterSel[assessment.id] || [];
+                            const value = sel[slot] || '';
+                            const otherSlot = slot === 0 ? 1 : 0;
+                            const otherId = sel[otherSlot] || '';
                             return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => {
-                                  const cur = porterSel[assessment.id] || [];
-                                  const next = cur.includes(p.id)
-                                    ? cur.filter((x) => x !== p.id)
-                                    : [...cur, p.id];
+                              <select
+                                key={slot}
+                                value={value}
+                                aria-label={`Porter ${slot + 1}`}
+                                onChange={(e) => {
+                                  const next = [...(porterSel[assessment.id] || [])];
+                                  if (e.target.value) next[slot] = e.target.value;
+                                  else delete next[slot];
+                                  // Remove empties and duplicates while preserving order.
+                                  const cleaned = next
+                                    .filter(Boolean)
+                                    .filter((v, i, a) => a.indexOf(v) === i);
                                   setPorterSel({
                                     ...porterSel,
-                                    [assessment.id]: next,
+                                    [assessment.id]: cleaned,
                                   });
                                 }}
-                                className={`text-xs px-2 py-0.5 rounded-full border ${
-                                  sel
-                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                    : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-400'
-                                }`}
+                                className="text-xs px-2 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 focus:border-emerald-400 focus:outline-none"
                               >
-                                {p.fullName}
-                              </button>
+                                <option value="">
+                                  {slot === 0
+                                    ? '— Select porter —'
+                                    : '— Select 2nd porter (optional) —'}
+                                </option>
+                                {porters
+                                  .filter(
+                                    (p) => p.id === value || p.id !== otherId,
+                                  )
+                                  .map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.fullName}
+                                    </option>
+                                  ))}
+                              </select>
                             );
-                          })
-                        )}
-                      </div>
+                          })}
+                        </div>
+                      )}
                       <button
                         onClick={() => recordTransportPorters(assessment)}
                         disabled={actionId === assessment.id}
