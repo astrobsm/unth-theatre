@@ -44,6 +44,9 @@ interface HoldingAreaAssessment {
   clearedForTheatre: boolean;
   redAlertTriggered: boolean;
   redAlerts: any[];
+  transportPorterIds?: string | null;
+  transportPorterNames?: string | null;
+  transportRecordedAt?: string | null;
 }
 
 export default function HoldingAreaPage() {
@@ -54,6 +57,34 @@ export default function HoldingAreaPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+
+  // Porter transport tracking (who carried the patient to the holding area).
+  const [porters, setPorters] = useState<{ id: string; fullName: string }[]>([]);
+  const [porterSel, setPorterSel] = useState<Record<string, string[]>>({});
+
+  // Fetch porters once for the transport selector.
+  useEffect(() => {
+    fetch('/api/users?role=PORTER')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setPorters(
+            data.map((u: any) => ({ id: u.id, fullName: u.fullName })),
+          );
+        }
+      })
+      .catch(() => setPorters([]));
+  }, []);
+
+  const parsePorterList = (s?: string | null): string[] => {
+    if (!s) return [];
+    try {
+      const v = JSON.parse(s);
+      return Array.isArray(v) ? v.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
 
   // Monitor online/offline status
   useEffect(() => {
@@ -177,7 +208,39 @@ export default function HoldingAreaPage() {
     }
   };
 
-  // Shared 80mm thermal-slip printer (mirrors the Call-for-Patient note style).
+  // Record the porter(s) who transported the patient to the holding area.
+  const recordTransportPorters = async (assessment: HoldingAreaAssessment) => {
+    const ids = porterSel[assessment.id] || [];
+    if (ids.length === 0) {
+      alert('Select at least one porter who transported the patient.');
+      return;
+    }
+    const names = porters
+      .filter((p) => ids.includes(p.id))
+      .map((p) => p.fullName);
+    setActionId(assessment.id);
+    try {
+      const res = await fetch(`/api/holding-area/${assessment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordTransportPorters: true,
+          transportPorterIds: ids,
+          transportPorterNames: names,
+        }),
+      });
+      if (res.ok) {
+        await fetchAssessments();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to record transport porters');
+      }
+    } catch {
+      alert('A network error occurred while recording transport porters');
+    } finally {
+      setActionId(null);
+    }
+  };
   const printSlip = (title: string, badge: string, bodyHtml: string) => {
     const win = window.open('', '_blank', 'width=302,height=600');
     if (!win) {
@@ -506,6 +569,74 @@ export default function HoldingAreaPage() {
                     ⏳ Verification in Progress
                   </div>
                 )}
+
+                {/* Patient transport — porter(s) who brought the patient */}
+                <div
+                  className="mt-3 pt-3 border-t border-dashed border-gray-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {parsePorterList(assessment.transportPorterNames).length > 0 ? (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+                      <span>🧑‍🦽</span>
+                      <span className="font-medium">Transported by:</span>
+                      <span>
+                        {parsePorterList(assessment.transportPorterNames).join(', ')}
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs font-medium text-gray-700 mb-1.5">
+                        Porter(s) who transported the patient:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {porters.length === 0 ? (
+                          <span className="text-xs text-gray-400">
+                            No porters found
+                          </span>
+                        ) : (
+                          porters.map((p) => {
+                            const sel = (porterSel[assessment.id] || []).includes(
+                              p.id,
+                            );
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  const cur = porterSel[assessment.id] || [];
+                                  const next = cur.includes(p.id)
+                                    ? cur.filter((x) => x !== p.id)
+                                    : [...cur, p.id];
+                                  setPorterSel({
+                                    ...porterSel,
+                                    [assessment.id]: next,
+                                  });
+                                }}
+                                className={`text-xs px-2 py-0.5 rounded-full border ${
+                                  sel
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-400'
+                                }`}
+                              >
+                                {p.fullName}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                      <button
+                        onClick={() => recordTransportPorters(assessment)}
+                        disabled={actionId === assessment.id}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                        title="Record the porter(s) who carried the patient — credits them for a cafeteria meal task"
+                      >
+                        {actionId === assessment.id
+                          ? 'Saving…'
+                          : 'Record Transport Porters'}
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Dynamic workflow actions */}
                 <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>

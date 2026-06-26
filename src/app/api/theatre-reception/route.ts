@@ -145,7 +145,12 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ cases, porters, cleaners });
+    return NextResponse.json({
+      cases,
+      porters,
+      cleaners,
+      userRole: (session.user as any).role || null,
+    });
   } catch (err) {
     console.error('[theatre-reception] GET failed:', err);
     return NextResponse.json(

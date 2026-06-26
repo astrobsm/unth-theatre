@@ -39,23 +39,44 @@ export async function GET(request: NextRequest) {
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
 
-    const [roster, surgicalMembership] = await Promise.all([
-      prisma.roster.findFirst({
-        where: { userId, date: { gte: start, lt: end } },
-        select: { id: true, shift: true, staffCategory: true, location: true },
-      }),
-      prisma.surgicalTeamMember.findFirst({
-        where: {
-          userId,
-          surgery: { scheduledDate: { gte: start, lt: end } },
-        },
-        select: {
-          id: true,
-          role: true,
-          surgery: { select: { procedureName: true, scheduledTime: true } },
-        },
-      }),
-    ]);
+    const [roster, surgicalMembership, transportCredit, theatreTaskCredit] =
+      await Promise.all([
+        prisma.roster.findFirst({
+          where: { userId, date: { gte: start, lt: end } },
+          select: { id: true, shift: true, staffCategory: true, location: true },
+        }),
+        prisma.surgicalTeamMember.findFirst({
+          where: {
+            userId,
+            surgery: { scheduledDate: { gte: start, lt: end } },
+          },
+          select: {
+            id: true,
+            role: true,
+            surgery: { select: { procedureName: true, scheduledTime: true } },
+          },
+        }),
+        // Porter transported a patient to the holding area today.
+        prisma.holdingAreaAssessment.findFirst({
+          where: {
+            transportRecordedAt: { gte: start, lt: end },
+            transportPorterIds: { contains: userId },
+          },
+          select: { id: true, transportRecordedAt: true },
+        }),
+        // Porter / cleaner carried out a theatre task today (received patient
+        // or cleaned the theatre between cases).
+        prisma.theatreCaseFlow.findFirst({
+          where: {
+            updatedAt: { gte: start, lt: end },
+            OR: [
+              { porterIds: { contains: userId } },
+              { cleanerIds: { contains: userId } },
+            ],
+          },
+          select: { id: true, theatreName: true },
+        }),
+      ]);
 
     if (roster) {
       return NextResponse.json({
@@ -76,6 +97,23 @@ export async function GET(request: NextRequest) {
           role: surgicalMembership.role,
           procedure: surgicalMembership.surgery.procedureName,
           time: surgicalMembership.surgery.scheduledTime,
+        },
+      });
+    }
+    if (transportCredit) {
+      return NextResponse.json({
+        eligible: true,
+        source: "PATIENT_TRANSPORT",
+        details: { task: "Transported a patient to the holding area" },
+      });
+    }
+    if (theatreTaskCredit) {
+      return NextResponse.json({
+        eligible: true,
+        source: "THEATRE_TASK",
+        details: {
+          task: "Theatre reception / cleaning task",
+          theatre: theatreTaskCredit.theatreName,
         },
       });
     }

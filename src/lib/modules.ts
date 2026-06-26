@@ -68,7 +68,7 @@ export const MODULES: AppModule[] = [
   { id: 'call-for-patient', label: 'Call for Patient', paths: ['/dashboard/call-for-patient'], defaultRoles: ['PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Logistics' },
 
   // Intra-operative
-  { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Intra-Op' },
+  { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
   { id: 'holding-area', label: 'Holding Area', paths: ['/dashboard/holding-area'], defaultRoles: ['SCRUB_NURSE', 'PORTER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'], category: 'Intra-Op' },
   { id: 'ward-entries', label: 'Ward Escort Log', paths: ['/dashboard/holding-area/ward-entries'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Intra-Op' },
   { id: 'checklists', label: 'WHO Checklists', paths: ['/dashboard/checklists'], defaultRoles: ['SCRUB_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },

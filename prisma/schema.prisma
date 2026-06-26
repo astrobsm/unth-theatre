@@ -1695,6 +1695,14 @@ model HoldingAreaAssessment {
   receivedBy  String // Holding area nurse ID
   status      HoldingAreaStatus @default(ARRIVED)
 
+  // Patient transport credit — porter(s) who brought the patient to the
+  // holding area. Recorded so the cafeteria recognises them as having
+  // carried out a task (feeds meal eligibility).
+  transportPorterIds    String? // JSON array of porter user ids
+  transportPorterNames  String? // JSON array of porter names
+  transportRecordedAt   DateTime?
+  transportRecordedById String?
+
   // RECEPTION CHECKLIST - PHASE 1: IDENTIFICATION
   patientIdentityConfirmed   Boolean @default(false)
   patientStatedName          Boolean @default(false) // Patient states his/her name

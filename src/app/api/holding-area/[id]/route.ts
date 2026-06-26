@@ -248,6 +248,57 @@ export async function PUT(
       return NextResponse.json(enrouteAssessment);
     }
 
+    // Record the porter(s) who transported the patient to the holding area.
+    // This credits those porters with a completed task so the cafeteria
+    // recognises them for meal eligibility.
+    if (body.recordTransportPorters === true) {
+      const porterIds: string[] = Array.isArray(body.transportPorterIds)
+        ? body.transportPorterIds.filter(Boolean)
+        : [];
+      const porterNames: string[] = Array.isArray(body.transportPorterNames)
+        ? body.transportPorterNames.filter(Boolean)
+        : [];
+
+      if (porterIds.length === 0 && porterNames.length === 0) {
+        return NextResponse.json(
+          { error: 'Select at least one porter who transported the patient' },
+          { status: 400 },
+        );
+      }
+
+      const updated = await prisma.holdingAreaAssessment.update({
+        where: { id: params.id },
+        data: {
+          transportPorterIds: JSON.stringify(porterIds),
+          transportPorterNames: JSON.stringify(porterNames),
+          transportRecordedAt: new Date(),
+          transportRecordedById: session.user.id,
+        },
+        include: {
+          patient: true,
+          surgery: {
+            include: {
+              surgeon: { select: { id: true, fullName: true, email: true } },
+              anesthetist: { select: { id: true, fullName: true, email: true } },
+            },
+          },
+          redAlerts: true,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'HOLDING_AREA_TRANSPORT_PORTERS',
+          tableName: 'holding_area_assessments',
+          recordId: params.id,
+          changes: JSON.stringify({ porterIds, porterNames }),
+        },
+      });
+
+      return NextResponse.json(updated);
+    }
+
     // Calculate if all safety checks are complete
     const allChecksComplete = 
       body.patientIdentityConfirmed === true &&

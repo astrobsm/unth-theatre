@@ -13,6 +13,10 @@ import {
   ListChecks,
   Timer,
   ArrowRight,
+  Building2,
+  Stethoscope,
+  FileText,
+  Pill,
 } from 'lucide-react';
 
 interface StaffOption {
@@ -61,9 +65,38 @@ export default function TheatreReceptionPage() {
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [porters, setPorters] = useState<StaffOption[]>([]);
   const [cleaners, setCleaners] = useState<StaffOption[]>([]);
+  const [userRole, setUserRole] = useState<string>('');
+  const [theatreFilter, setTheatreFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
+
+  // Restore the last-selected theatre for this device.
+  useEffect(() => {
+    const saved =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('orm.receptionTheatre')
+        : null;
+    if (saved) setTheatreFilter(saved);
+  }, []);
+
+  const selectTheatre = (name: string) => {
+    setTheatreFilter(name);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orm.receptionTheatre', name);
+    }
+  };
+
+  // Roles allowed to run the scrub-nurse workflow (receive / complete / clean).
+  const NURSE_ROLES = ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'];
+  const FULL_ACCESS = [
+    'ADMIN',
+    'SYSTEM_ADMINISTRATOR',
+    'THEATRE_MANAGER',
+    'THEATRE_CHAIRMAN',
+  ];
+  const canRunWorkflow =
+    !userRole || NURSE_ROLES.includes(userRole) || FULL_ACCESS.includes(userRole);
 
   // Per-case local selections
   const [porterSel, setPorterSel] = useState<Record<string, string[]>>({});
@@ -82,6 +115,7 @@ export default function TheatreReceptionPage() {
       setCases(data.cases || []);
       setPorters(data.porters || []);
       setCleaners(data.cleaners || []);
+      if (data.userRole) setUserRole(data.userRole);
     } catch (e) {
       showToast('Could not load cases', false);
     } finally {
@@ -166,6 +200,40 @@ export default function TheatreReceptionPage() {
   const fmtTime = (iso: string | null) =>
     iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
+  // Distinct theatres present in today's list, for the theatre picker.
+  const theatreOptions = Array.from(
+    new Set(cases.map((c) => c.theatreName).filter(Boolean)),
+  ).sort();
+  const visibleCases = theatreFilter
+    ? cases.filter((c) => c.theatreName === theatreFilter)
+    : cases;
+
+  // Role-appropriate "perform your duty" links for a case.
+  const dutyLinks = (surgeryId: string) => {
+    const base = `/dashboard/surgeries/${surgeryId}`;
+    const links: { href: string; label: string; icon: any }[] = [];
+    const isAnaesthetist =
+      userRole === 'ANAESTHETIST' || userRole === 'CONSULTANT_ANAESTHETIST';
+    const isSurgeon = userRole === 'SURGEON';
+    const isNurse = NURSE_ROLES.includes(userRole);
+    const all = !userRole || FULL_ACCESS.includes(userRole);
+
+    if (all || isNurse) {
+      links.push({ href: `${base}/count`, label: 'Surgical Count', icon: ListChecks });
+      links.push({ href: `${base}/timing`, label: 'Surgical Timing', icon: Timer });
+    }
+    if (all || isAnaesthetist) {
+      links.push({ href: `${base}/anesthesia`, label: 'Anaesthesia', icon: Stethoscope });
+    }
+    if (all || isSurgeon) {
+      links.push({ href: `${base}/post-op-notes`, label: 'Operation Notes', icon: FileText });
+    }
+    if (all || isSurgeon || isAnaesthetist) {
+      links.push({ href: `${base}/post-op-prescription`, label: 'Post-op Rx', icon: Pill });
+    }
+    return links;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-gray-500">
@@ -195,6 +263,36 @@ export default function TheatreReceptionPage() {
         </button>
       </div>
 
+      {/* Theatre selector — show only the cases for your theatre */}
+      <div className="mb-5 flex items-center gap-2 flex-wrap">
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <Building2 className="w-4 h-4 text-emerald-600" /> Theatre:
+        </span>
+        <button
+          onClick={() => selectTheatre('')}
+          className={`text-sm px-3 py-1.5 rounded-lg border ${
+            theatreFilter === ''
+              ? 'bg-emerald-600 text-white border-emerald-600'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-400'
+          }`}
+        >
+          All
+        </button>
+        {theatreOptions.map((t) => (
+          <button
+            key={t}
+            onClick={() => selectTheatre(t)}
+            className={`text-sm px-3 py-1.5 rounded-lg border ${
+              theatreFilter === t
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-400'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
       {toast && (
         <div
           className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm text-white ${
@@ -205,13 +303,15 @@ export default function TheatreReceptionPage() {
         </div>
       )}
 
-      {cases.length === 0 ? (
+      {visibleCases.length === 0 ? (
         <div className="text-center py-16 text-gray-500 bg-white rounded-xl border border-gray-200">
-          No cases scheduled for today.
+          {theatreFilter
+            ? `No cases for ${theatreFilter} today.`
+            : 'No cases scheduled for today.'}
         </div>
       ) : (
         <div className="space-y-5">
-          {cases.map((c) => {
+          {visibleCases.map((c) => {
             const f = c.flow;
             const received = f?.patientReceived;
             const surgeryDone = f?.surgeryCompleted;
@@ -282,7 +382,7 @@ export default function TheatreReceptionPage() {
 
                 <div className="p-4 space-y-4">
                   {/* Step 1: Receive patient */}
-                  {!received ? (
+                  {!received && canRunWorkflow ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                       <div className="flex items-center gap-2 text-amber-800 font-medium mb-2">
                         <UserCheck className="w-4 h-4" /> Step 1 — Receive patient
@@ -335,7 +435,7 @@ export default function TheatreReceptionPage() {
                         Announce
                       </button>
                     </div>
-                  ) : (
+                  ) : received ? (
                     <div className="flex items-center gap-2 text-sm text-emerald-700">
                       <CheckCircle2 className="w-4 h-4" /> Patient received
                       {f?.porterNames?.length
@@ -345,47 +445,54 @@ export default function TheatreReceptionPage() {
                         · {fmtTime(f?.patientReceivedAt || null)}
                       </span>
                     </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Clock className="w-4 h-4" /> Awaiting reception by the scrub
+                      nurse.
+                    </div>
                   )}
 
                   {/* Step 2: Intra-op roles + complete */}
                   {received && (
                     <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                       <div className="flex items-center gap-2 text-blue-800 font-medium mb-2">
-                        <ListChecks className="w-4 h-4" /> Step 2 — Scrub /
-                        circulating roles
+                        <ListChecks className="w-4 h-4" /> Step 2 — Perform your
+                        duties
                       </div>
                       <div className="flex flex-wrap gap-2 mb-3">
-                        <a
-                          href={`/dashboard/surgeries/${c.surgeryId}/count`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-blue-300 text-blue-700 hover:bg-blue-100"
-                        >
-                          <ListChecks className="w-3.5 h-3.5" /> Surgical Count
-                        </a>
-                        <a
-                          href={`/dashboard/surgeries/${c.surgeryId}/timing`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-blue-300 text-blue-700 hover:bg-blue-100"
-                        >
-                          <Timer className="w-3.5 h-3.5" /> Surgical Timing
-                        </a>
+                        {dutyLinks(c.surgeryId).map((l) => {
+                          const Icon = l.icon;
+                          return (
+                            <a
+                              key={l.href}
+                              href={l.href}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-blue-300 text-blue-700 hover:bg-blue-100"
+                            >
+                              <Icon className="w-3.5 h-3.5" /> {l.label}
+                            </a>
+                          );
+                        })}
                       </div>
                       {!surgeryDone ? (
-                        <button
-                          onClick={() =>
-                            post(
-                              {
-                                action: 'complete-surgery',
-                                surgeryId: c.surgeryId,
-                                theatreName: c.theatreName,
-                              },
-                              c.surgeryId,
-                            )
-                          }
-                          disabled={busy}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          <CheckCircle2 className="w-4 h-4" /> Mark Surgery
-                          Completed
-                        </button>
+                        canRunWorkflow ? (
+                          <button
+                            onClick={() =>
+                              post(
+                                {
+                                  action: 'complete-surgery',
+                                  surgeryId: c.surgeryId,
+                                  theatreName: c.theatreName,
+                                },
+                                c.surgeryId,
+                              )
+                            }
+                            disabled={busy}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Mark Surgery
+                            Completed
+                          </button>
+                        ) : null
                       ) : (
                         <div className="flex items-center gap-2 text-sm text-blue-700">
                           <CheckCircle2 className="w-4 h-4" /> Surgery completed
@@ -398,7 +505,7 @@ export default function TheatreReceptionPage() {
                   )}
 
                   {/* Step 3: Between-case cleaning */}
-                  {surgeryDone && (
+                  {surgeryDone && canRunWorkflow && (
                     <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
                       <div className="flex items-center gap-2 text-purple-800 font-medium mb-2">
                         <Sparkles className="w-4 h-4" /> Step 3 — Between-case
