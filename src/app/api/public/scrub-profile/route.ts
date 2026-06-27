@@ -83,6 +83,8 @@ export async function GET(request: NextRequest) {
       role,
       scrubColor: colorForRole(role),
       scrubSize: profile?.scrubSize || null,
+      topSize: profile?.topSize || profile?.scrubSize || null,
+      pantsSize: profile?.pantsSize || profile?.scrubSize || null,
       footwearSize: profile?.footwearSize || null,
       hasProfile: !!profile,
       notes: profile?.notes || null,
@@ -100,7 +102,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const staffCode = String(body.staffCode || '').trim().toUpperCase();
-    const scrubSize = String(body.scrubSize || '').trim().toUpperCase();
+    // Top size is the primary scrub size; pants defaults to it when omitted.
+    const topSize = String(body.topSize || body.scrubSize || '')
+      .trim()
+      .toUpperCase();
+    const pantsSize = String(body.pantsSize || topSize || '')
+      .trim()
+      .toUpperCase();
     const footwearSize = String(body.footwearSize || '').trim();
     const notes =
       typeof body.notes === 'string' && body.notes.trim()
@@ -113,9 +121,15 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    if (!SCRUB_SIZES.includes(scrubSize)) {
+    if (!SCRUB_SIZES.includes(topSize)) {
       return NextResponse.json(
-        { error: `Scrub size must be one of ${SCRUB_SIZES.join(', ')}` },
+        { error: `Scrub top size must be one of ${SCRUB_SIZES.join(', ')}` },
+        { status: 400 },
+      );
+    }
+    if (!SCRUB_SIZES.includes(pantsSize)) {
+      return NextResponse.json(
+        { error: `Scrub pants size must be one of ${SCRUB_SIZES.join(', ')}` },
         { status: 400 },
       );
     }
@@ -136,14 +150,18 @@ export async function POST(request: NextRequest) {
       where: { staffCode },
       create: {
         staffCode,
-        scrubSize,
+        scrubSize: topSize, // legacy single size = top size
+        topSize,
+        pantsSize,
         footwearSize,
         notes,
         fullName: user?.fullName || null,
         role: user?.role || null,
       },
       update: {
-        scrubSize,
+        scrubSize: topSize,
+        topSize,
+        pantsSize,
         footwearSize,
         notes,
         // Refresh snapshot if the staff code now resolves to a user.
@@ -157,6 +175,8 @@ export async function POST(request: NextRequest) {
       success: true,
       staffCode: profile.staffCode,
       scrubSize: profile.scrubSize,
+      topSize: profile.topSize,
+      pantsSize: profile.pantsSize,
       footwearSize: profile.footwearSize,
       scrubColor: colorForRole(profile.role),
       role: profile.role,

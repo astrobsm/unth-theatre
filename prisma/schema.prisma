@@ -6911,9 +6911,16 @@ enum ScrubShiftType {
   NIGHT
 }
 
+enum ScrubGarment {
+  SET // legacy / combined top+pants tracked as one
+  TOP // scrub top only (shelf side: tops)
+  PANTS // scrub pants only (shelf side: pants)
+}
+
 model ScrubSet {
   id           String         @id @default(uuid())
   serialNumber String         @unique
+  garment      ScrubGarment   @default(SET) // TOP or PANTS for shelf-separated stock
   color        ScrubColor
   size         String         @default("M") // S | M | L | XL | XXL
   status       ScrubSetStatus @default(AVAILABLE)
@@ -7095,7 +7102,9 @@ model StaffScrubProfile {
   fullName String?
   role     String?
 
-  scrubSize    String // XS | S | M | L | XL | XXL
+  scrubSize    String // legacy single size (kept = top size for back-compat)
+  topSize      String? // scrub top size (shelf side: tops)
+  pantsSize    String? // scrub pants size (shelf side: pants)
   footwearSize String // EU shoe size, e.g. 42
 
   notes String?
@@ -7106,4 +7115,40 @@ model StaffScrubProfile {
   @@index([staffCode])
   @@map("staff_scrub_profiles")
 }
+
+// Daily handout of a scrub top + pants (+ footwear) to a staff member, with the
+// exact serial codes entered by the scrub-care provider at pickup.
+model ScrubPickup {
+  id        String @id @default(uuid())
+  staffCode String
+
+  // Snapshot of who collected
+  fullName String?
+  role     String?
+  color    String? // role-based scrub colour at time of pickup
+
+  topSerial    String? // serial code of the scrub top handed out
+  pantsSerial  String? // serial code of the scrub pants handed out
+  footwearSerial String?
+
+  topSize      String?
+  pantsSize    String?
+  footwearSize String?
+
+  // Who issued it (scrub-care provider)
+  pickedUpById   String?
+  pickedUpByName String?
+  pickedUpAt     DateTime @default(now())
+
+  returned   Boolean   @default(false)
+  returnedAt DateTime?
+  notes      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([staffCode, pickedUpAt])
+  @@index([pickedUpAt])
+  @@map("scrub_pickups")
+}
+
 

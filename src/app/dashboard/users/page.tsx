@@ -275,6 +275,92 @@ export default function UsersPage() {
     }
   };
 
+  const exportStaffByDepartment = async () => {
+    if (users.length === 0) {
+      alert('No staff to export yet.');
+      return;
+    }
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+
+    // Group staff by department (fall back to role, then "Unassigned")
+    const groups: Record<string, User[]> = {};
+    for (const u of users) {
+      const dept =
+        (u.department && u.department.trim()) || u.role || 'Unassigned';
+      (groups[dept] ||= []).push(u);
+    }
+
+    const toRow = (u: User) => ({
+      'Department': u.department || '',
+      'Full Name': u.fullName,
+      'Staff Code': u.staffCode || '',
+      'Role': u.role,
+      'Username': u.username,
+      'Phone Number': u.phoneNumber || '',
+      'Email': u.email || '',
+      'Status': u.status,
+    });
+
+    // Summary sheet: count of staff per department
+    const summary: { Department: string; 'Staff Count': number }[] = Object.keys(
+      groups,
+    )
+      .sort()
+      .map((dept) => ({ Department: dept, 'Staff Count': groups[dept].length }));
+    summary.push({ Department: 'TOTAL', 'Staff Count': users.length });
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(summary),
+      'Summary',
+    );
+
+    // All-staff sheet sorted by department then name
+    const allRows = [...users]
+      .sort(
+        (a, b) =>
+          (a.department || a.role || 'zzz').localeCompare(
+            b.department || b.role || 'zzz',
+          ) || a.fullName.localeCompare(b.fullName),
+      )
+      .map(toRow);
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(allRows),
+      'All Staff',
+    );
+
+    // One sheet per department
+    const usedNames = new Set<string>(['summary', 'all staff']);
+    const sanitize = (name: string) => {
+      // Excel sheet names: max 31 chars, no : \ / ? * [ ]
+      const base =
+        name.replace(/[:\\/?*[\]]/g, ' ').trim().slice(0, 28) || 'Dept';
+      let candidate = base;
+      let i = 2;
+      while (usedNames.has(candidate.toLowerCase())) {
+        candidate = `${base.slice(0, 25)} ${i++}`;
+      }
+      usedNames.add(candidate.toLowerCase());
+      return candidate;
+    };
+    Object.keys(groups)
+      .sort()
+      .forEach((dept) => {
+        const rows = groups[dept]
+          .sort((a, b) => a.fullName.localeCompare(b.fullName))
+          .map(toRow);
+        XLSX.utils.book_append_sheet(
+          wb,
+          XLSX.utils.json_to_sheet(rows),
+          sanitize(dept),
+        );
+      });
+
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `staff_by_department_${today}.xlsx`);
+  };
+
   const downloadTemplate = async () => {
     const template = [
       {
@@ -505,6 +591,13 @@ export default function UsersPage() {
           >
             <Download className="w-4 h-4 mr-2" />
             Download Template
+          </button>
+          <button
+            onClick={exportStaffByDepartment}
+            className="btn-secondary inline-flex items-center"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Staff by Department
           </button>
         </div>
 

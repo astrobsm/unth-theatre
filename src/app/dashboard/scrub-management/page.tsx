@@ -24,6 +24,7 @@ import {
 interface ScrubSet {
   id: string;
   serialNumber: string;
+  garment?: string;
   color: string;
   size: string;
   status: string;
@@ -313,14 +314,28 @@ export default function ScrubManagementPage() {
 function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{
     fullName: string | null;
     role: string | null;
     scrubColor: string;
     scrubSize: string | null;
+    topSize: string | null;
+    pantsSize: string | null;
     footwearSize: string | null;
     hasProfile: boolean;
   } | null>(null);
+
+  // Serial codes entered at the counter for the actual garments handed out.
+  const [topSerial, setTopSerial] = useState('');
+  const [pantsSerial, setPantsSerial] = useState('');
+  const [footwearSerial, setFootwearSerial] = useState('');
+
+  const resetSerials = () => {
+    setTopSerial('');
+    setPantsSerial('');
+    setFootwearSerial('');
+  };
 
   const lookup = async () => {
     const c = code.trim().toUpperCase();
@@ -330,6 +345,7 @@ function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
     }
     setBusy(true);
     setResult(null);
+    resetSerials();
     try {
       const res = await fetch(
         `/api/public/scrub-profile?staffCode=${encodeURIComponent(c)}`,
@@ -350,6 +366,42 @@ function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
     }
   };
 
+  const recordPickup = async () => {
+    const c = code.trim().toUpperCase();
+    if (!c) {
+      flash('err', 'Look up a staff code first');
+      return;
+    }
+    if (!topSerial.trim() && !pantsSerial.trim()) {
+      flash('err', 'Enter at least a top or pants serial code');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/scrubs/pickup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffCode: c,
+          topSerial: topSerial.trim() || undefined,
+          pantsSerial: pantsSerial.trim() || undefined,
+          footwearSerial: footwearSerial.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        flash('err', data.error || 'Failed to record pickup');
+      } else {
+        flash('ok', `Pickup recorded for ${c}`);
+        resetSerials();
+      }
+    } catch {
+      flash('err', 'Network error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="grid lg:grid-cols-2 gap-5">
       {/* Lookup */}
@@ -358,8 +410,8 @@ function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
           <Footprints className="w-5 h-5 text-teal-600" /> Daily pickup lookup
         </h2>
         <p className="text-xs text-gray-500 mb-4">
-          Enter a staff code to see the scrub colour, scrub size and footwear
-          size to pick up for that staff member.
+          Enter a staff code to see the scrub colour, top &amp; pants sizes and
+          footwear size to pick up for that staff member.
         </p>
 
         <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -429,23 +481,32 @@ function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-center">
-                <Shirt className="w-5 h-5 text-teal-600 mx-auto mb-1" />
-                <div className="text-2xl font-bold text-gray-900">
-                  {result.scrubSize || '—'}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
+                <Shirt className="w-4 h-4 text-teal-600 mx-auto mb-1" />
+                <div className="text-xl font-bold text-gray-900">
+                  {result.topSize || result.scrubSize || '—'}
                 </div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-400">
-                  Scrub size
+                <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                  Top
                 </div>
               </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-center">
-                <Footprints className="w-5 h-5 text-teal-600 mx-auto mb-1" />
-                <div className="text-2xl font-bold text-gray-900">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
+                <Shirt className="w-4 h-4 text-teal-600 mx-auto mb-1" />
+                <div className="text-xl font-bold text-gray-900">
+                  {result.pantsSize || result.scrubSize || '—'}
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                  Pants
+                </div>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
+                <Footprints className="w-4 h-4 text-teal-600 mx-auto mb-1" />
+                <div className="text-xl font-bold text-gray-900">
                   {result.footwearSize || '—'}
                 </div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-400">
-                  Footwear size
+                <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                  Footwear
                 </div>
               </div>
             </div>
@@ -462,9 +523,68 @@ function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
                 result.scrubColor,
               )}`}
             >
-              Pick up a {result.scrubColor} scrub (size{' '}
-              {result.scrubSize || '?'}) + footwear size{' '}
+              Pick a {result.scrubColor} top (size{' '}
+              {result.topSize || result.scrubSize || '?'}) + pants (size{' '}
+              {result.pantsSize || result.scrubSize || '?'}) + footwear{' '}
               {result.footwearSize || '?'}
+            </div>
+
+            {/* Serial entry at the counter */}
+            <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+              <p className="text-xs font-semibold text-gray-700 mb-2">
+                Enter the serial codes handed out
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                    Top serial (shelf: tops)
+                  </label>
+                  <input
+                    value={topSerial}
+                    onChange={(e) => setTopSerial(e.target.value.toUpperCase())}
+                    placeholder="e.g. TOP-GRN-L-0007"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                    Pants serial (shelf: pants)
+                  </label>
+                  <input
+                    value={pantsSerial}
+                    onChange={(e) =>
+                      setPantsSerial(e.target.value.toUpperCase())
+                    }
+                    placeholder="e.g. PNT-GRN-M-0011"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                    Footwear serial (optional)
+                  </label>
+                  <input
+                    value={footwearSerial}
+                    onChange={(e) =>
+                      setFootwearSerial(e.target.value.toUpperCase())
+                    }
+                    placeholder="e.g. FW-45-0003"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={recordPickup}
+                disabled={saving}
+                className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {saving ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                Record pickup
+              </button>
             </div>
           </div>
         )}
@@ -729,11 +849,13 @@ function InventoryTab({
   reload: () => void;
 }) {
   const [serial, setSerial] = useState('');
+  const [garment, setGarment] = useState('TOP');
   const [color, setColor] = useState('GREEN');
   const [size, setSize] = useState('M');
   const [ownerId, setOwnerId] = useState('');
   const [filterColor, setFilterColor] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterGarment, setFilterGarment] = useState('');
 
   const register = async () => {
     if (!serial.trim()) {
@@ -747,6 +869,7 @@ function InventoryTab({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           serialNumber: serial.trim(),
+          garment,
           color,
           size,
           ownerId: ownerId || undefined,
@@ -770,7 +893,8 @@ function InventoryTab({
   const filtered = sets.filter(
     (s) =>
       (!filterColor || s.color === filterColor) &&
-      (!filterStatus || s.status === filterStatus),
+      (!filterStatus || s.status === filterStatus) &&
+      (!filterGarment || (s.garment || 'SET') === filterGarment),
   );
 
   return (
@@ -780,7 +904,7 @@ function InventoryTab({
         <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
           <PackagePlus className="w-5 h-5 text-teal-600" /> Register a scrub set
         </h2>
-        <div className="grid sm:grid-cols-5 gap-3">
+        <div className="grid sm:grid-cols-6 gap-3">
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Serial number
@@ -788,9 +912,23 @@ function InventoryTab({
             <input
               value={serial}
               onChange={(e) => setSerial(e.target.value.toUpperCase())}
-              placeholder="SCR-GRN-0042"
+              placeholder="TOP-GRN-L-0042"
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Garment (shelf)
+            </label>
+            <select
+              value={garment}
+              onChange={(e) => setGarment(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+            >
+              <option value="TOP">Top</option>
+              <option value="PANTS">Pants</option>
+              <option value="SET">Set (top+pants)</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -843,8 +981,9 @@ function InventoryTab({
           </div>
         </div>
         <p className="text-[11px] text-gray-400 mt-2">
-          Tip: allocate at least 3 sets per staff member — one in use, one in
-          cleaning, one in reserve.
+          Tip: register tops and pants separately (own serial each) so the
+          shelves stay side-by-side by size. Allocate at least 3 of each per
+          staff member — one in use, one in cleaning, one in reserve.
         </p>
         <button
           onClick={register}
@@ -885,6 +1024,16 @@ function InventoryTab({
               </option>
             ))}
           </select>
+          <select
+            value={filterGarment}
+            onChange={(e) => setFilterGarment(e.target.value)}
+            className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs"
+          >
+            <option value="">All garments</option>
+            <option value="TOP">Tops</option>
+            <option value="PANTS">Pants</option>
+            <option value="SET">Sets</option>
+          </select>
         </div>
 
         {filtered.length === 0 ? (
@@ -897,6 +1046,7 @@ function InventoryTab({
               <thead>
                 <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
                   <th className="py-2 pr-3">Serial</th>
+                  <th className="py-2 pr-3">Garment</th>
                   <th className="py-2 pr-3">Color</th>
                   <th className="py-2 pr-3">Size</th>
                   <th className="py-2 pr-3">Status</th>
@@ -912,6 +1062,11 @@ function InventoryTab({
                   >
                     <td className="py-2 pr-3 font-medium text-gray-900">
                       {s.serialNumber}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                        {s.garment || 'SET'}
+                      </span>
                     </td>
                     <td className="py-2 pr-3">
                       <span

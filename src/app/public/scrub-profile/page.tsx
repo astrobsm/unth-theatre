@@ -35,13 +35,16 @@ interface Lookup {
   role: string | null;
   scrubColor: string;
   scrubSize: string | null;
+  topSize: string | null;
+  pantsSize: string | null;
   footwearSize: string | null;
   hasProfile: boolean;
 }
 
 export default function PublicScrubProfilePage() {
   const [staffCode, setStaffCode] = useState('');
-  const [scrubSize, setScrubSize] = useState('M');
+  const [topSize, setTopSize] = useState('M');
+  const [pantsSize, setPantsSize] = useState('M');
   const [footwearSize, setFootwearSize] = useState('');
   const [busy, setBusy] = useState(false);
   const [looking, setLooking] = useState(false);
@@ -72,7 +75,10 @@ export default function PublicScrubProfilePage() {
         flash('err', data.error || 'No record found for that staff code');
       } else {
         setLookup(data);
-        if (data.scrubSize) setScrubSize(data.scrubSize);
+        if (data.topSize) setTopSize(data.topSize);
+        else if (data.scrubSize) setTopSize(data.scrubSize);
+        if (data.pantsSize) setPantsSize(data.pantsSize);
+        else if (data.scrubSize) setPantsSize(data.scrubSize);
         if (data.footwearSize) setFootwearSize(data.footwearSize);
         flash(
           'ok',
@@ -105,7 +111,8 @@ export default function PublicScrubProfilePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           staffCode: code,
-          scrubSize,
+          topSize,
+          pantsSize,
           footwearSize: footwearSize.trim(),
         }),
       });
@@ -119,6 +126,8 @@ export default function PublicScrubProfilePage() {
           role: data.role,
           scrubColor: data.scrubColor,
           scrubSize: data.scrubSize,
+          topSize: data.topSize,
+          pantsSize: data.pantsSize,
           footwearSize: data.footwearSize,
           hasProfile: true,
         });
@@ -215,19 +224,41 @@ export default function PublicScrubProfilePage() {
             </div>
           )}
 
-          {/* Scrub size */}
+          {/* Scrub top size */}
           <label className="block text-xs font-medium text-gray-600 mb-1.5">
             <Shirt className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
-            Scrub size
+            Scrub top size
           </label>
           <div className="flex flex-wrap gap-1.5 mb-4">
             {SCRUB_SIZES.map((s) => (
               <button
                 key={s}
                 type="button"
-                onClick={() => setScrubSize(s)}
+                onClick={() => setTopSize(s)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
-                  scrubSize === s
+                  topSize === s
+                    ? 'bg-teal-600 text-white border-teal-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-teal-400'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Scrub pants size */}
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            <Shirt className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+            Scrub pants size
+          </label>
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {SCRUB_SIZES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setPantsSize(s)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                  pantsSize === s
                     ? 'bg-teal-600 text-white border-teal-600'
                     : 'bg-white text-gray-700 border-gray-300 hover:border-teal-400'
                 }`}

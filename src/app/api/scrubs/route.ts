@@ -142,9 +142,14 @@ export async function POST(request: NextRequest) {
     const color =
       body.color || colorForRole(ownerRole) || 'BLACK';
 
+    const garment = ['TOP', 'PANTS', 'SET'].includes(body.garment)
+      ? body.garment
+      : 'SET';
+
     const set = await prisma.scrubSet.create({
       data: {
         serialNumber,
+        garment,
         color,
         size: body.size || 'M',
         status: body.ownerId ? 'RESERVE' : 'AVAILABLE',
