@@ -47,6 +47,7 @@ enum UserRole {
   LABORATORY_STAFF
   HOUSE_OFFICER
   CONSUMABLE_PACK_PROVIDER
+  SCRUB_CARE_PROVIDER
 }
 
 enum UserStatus {
@@ -7080,3 +7081,29 @@ model ScrubShift {
   @@index([shiftDate])
   @@map("scrub_shifts")
 }
+
+// Self-declared scrub & footwear sizes for a staff member, keyed by their
+// staff code. Filled in via a public, no-login page so staff can record their
+// sizes once. When a scrub-care provider enters the staff code at pickup, the
+// stored sizes (plus the role-based scrub colour) are shown so the right scrub
+// set and footwear can be handed over quickly.
+model StaffScrubProfile {
+  id        String @id @default(uuid())
+  staffCode String @unique
+
+  // Snapshot of the matched user (resolved from staffCode when available)
+  fullName String?
+  role     String?
+
+  scrubSize    String // XS | S | M | L | XL | XXL
+  footwearSize String // EU shoe size, e.g. 42
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffCode])
+  @@map("staff_scrub_profiles")
+}
+

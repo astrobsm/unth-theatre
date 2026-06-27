@@ -29,6 +29,7 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   { value: 'PROCUREMENT_OFFICER',      label: 'Procurement Officer',              prefix: 'PRO' },
   { value: 'PORTER',                   label: 'Porter',                           prefix: 'PRT' },
   { value: 'CLEANER',                  label: 'Cleaner',                          prefix: 'CLN' },
+  { value: 'SCRUB_CARE_PROVIDER',      label: 'Scrub Care Provider',              prefix: 'SCP' },
 
   // Heads of Department / Supervisors
   { value: 'OXYGEN_UNIT_SUPERVISOR',   label: 'Oxygen Tech HOD',                  prefix: 'OXH' },

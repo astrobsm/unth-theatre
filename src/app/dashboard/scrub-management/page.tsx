@@ -16,6 +16,8 @@ import {
   Clock,
   Users,
   ShieldAlert,
+  Footprints,
+  ExternalLink,
 } from 'lucide-react';
 
 // ----------------------------------------------------------------- types
@@ -137,6 +139,7 @@ function colorChip(color: string) {
 }
 
 const TABS = [
+  { id: 'pickup', label: 'Daily Pickup', icon: Footprints },
   { id: 'desk', label: 'Sign Out / Return', icon: ArrowRightLeft },
   { id: 'inventory', label: 'Inventory', icon: Shirt },
   { id: 'laundry', label: 'Laundry', icon: WashingMachine },
@@ -145,7 +148,7 @@ const TABS = [
 ];
 
 export default function ScrubManagementPage() {
-  const [tab, setTab] = useState('desk');
+  const [tab, setTab] = useState('pickup');
 
   // shared inventory data
   const [sets, setSets] = useState<ScrubSet[]>([]);
@@ -276,6 +279,7 @@ export default function ScrubManagementPage() {
         </div>
       ) : (
         <>
+          {tab === 'pickup' && <PickupTab flash={flash} />}
           {tab === 'desk' && (
             <DeskTab
               sets={sets}
@@ -301,6 +305,170 @@ export default function ScrubManagementPage() {
           {tab === 'reports' && <ReportTab flash={flash} />}
         </>
       )}
+    </div>
+  );
+}
+
+// ================================================================ Daily Pickup
+function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{
+    fullName: string | null;
+    role: string | null;
+    scrubColor: string;
+    scrubSize: string | null;
+    footwearSize: string | null;
+    hasProfile: boolean;
+  } | null>(null);
+
+  const lookup = async () => {
+    const c = code.trim().toUpperCase();
+    if (!c) {
+      flash('err', 'Enter a staff code');
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch(
+        `/api/public/scrub-profile?staffCode=${encodeURIComponent(c)}`,
+      );
+      const data = await res.json();
+      if (!res.ok || !data.found) {
+        flash('err', data.error || 'No staff found for that code');
+      } else {
+        setResult(data);
+        if (!data.hasProfile) {
+          flash('err', 'Staff has not recorded sizes yet');
+        }
+      }
+    } catch {
+      flash('err', 'Network error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      {/* Lookup */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+        <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <Footprints className="w-5 h-5 text-teal-600" /> Daily pickup lookup
+        </h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Enter a staff code to see the scrub colour, scrub size and footwear
+          size to pick up for that staff member.
+        </p>
+
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          Staff code
+        </label>
+        <div className="flex gap-2 mb-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && lookup()}
+              placeholder="e.g. UNTH-1234"
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={lookup}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50"
+          >
+            {busy ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+            Find
+          </button>
+        </div>
+
+        <a
+          href="/public/scrub-profile"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-teal-700 hover:underline"
+        >
+          <ExternalLink className="w-3.5 h-3.5" /> Staff sizing form (no login)
+        </a>
+      </div>
+
+      {/* Result */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+        {!result ? (
+          <div className="h-full flex flex-col items-center justify-center text-center py-10 text-gray-400">
+            <Footprints className="w-8 h-8 mb-2" />
+            <p className="text-sm">
+              Pickup details will appear here after lookup.
+            </p>
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="min-w-0">
+                <div className="text-base font-bold text-gray-900 truncate">
+                  {result.fullName || 'Staff member'}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {result.role || 'Role not set'}
+                </div>
+              </div>
+              <span
+                className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${colorChip(
+                  result.scrubColor,
+                )}`}
+              >
+                {result.scrubColor}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-center">
+                <Shirt className="w-5 h-5 text-teal-600 mx-auto mb-1" />
+                <div className="text-2xl font-bold text-gray-900">
+                  {result.scrubSize || '—'}
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-400">
+                  Scrub size
+                </div>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-center">
+                <Footprints className="w-5 h-5 text-teal-600 mx-auto mb-1" />
+                <div className="text-2xl font-bold text-gray-900">
+                  {result.footwearSize || '—'}
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-400">
+                  Footwear size
+                </div>
+              </div>
+            </div>
+
+            {!result.hasProfile && (
+              <p className="mt-3 text-xs text-amber-600 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> No saved sizes — ask
+                staff to fill the sizing form.
+              </p>
+            )}
+
+            <div
+              className={`mt-4 rounded-xl border p-3 text-sm font-medium text-center ${colorChip(
+                result.scrubColor,
+              )}`}
+            >
+              Pick up a {result.scrubColor} scrub (size{' '}
+              {result.scrubSize || '?'}) + footwear size{' '}
+              {result.footwearSize || '?'}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

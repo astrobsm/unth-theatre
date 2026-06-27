@@ -31,6 +31,7 @@ export type UserRole =
   | 'POWER_PLANT_OPERATOR'
   | 'THEATRE_CAFETERIA_MANAGER'
   | 'LAUNDRY_STAFF'
+  | 'SCRUB_CARE_PROVIDER'
   | 'PLUMBER'
   | 'LABORATORY_STAFF'
   | 'CONSUMABLE_PACK_PROVIDER';
@@ -360,6 +361,7 @@ export function getRoleName(role: UserRole): string {
     POWER_PLANT_OPERATOR: 'Power Plant Operator',
     THEATRE_CAFETERIA_MANAGER: 'Theatre Cafeteria Manager',
     LAUNDRY_STAFF: 'Laundry Staff',
+    SCRUB_CARE_PROVIDER: 'Scrub Care Provider',
     PLUMBER: 'Plumber',
     LABORATORY_STAFF: 'Laboratory Staff',
     CONSUMABLE_PACK_PROVIDER: 'Consumable Pack Provider',
@@ -401,6 +403,7 @@ export function getRoleDashboard(role: UserRole): string {
     POWER_PLANT_OPERATOR: '/dashboard/power-house/status',
     THEATRE_CAFETERIA_MANAGER: '/dashboard/theatre-meals',
     LAUNDRY_STAFF: '/dashboard/laundry',
+    SCRUB_CARE_PROVIDER: '/dashboard/scrub-management',
     PLUMBER: '/dashboard/water-supply',
     LABORATORY_STAFF: '/dashboard/emergency-lab-workup',
     CONSUMABLE_PACK_PROVIDER: '/dashboard/consumable-pack-provider',

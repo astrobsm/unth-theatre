@@ -15,7 +15,7 @@ const USER_ROLES = [
   'POWER_PLANT_OPERATOR', 'THEATRE_CAFETERIA_MANAGER', 'LAUNDRY_STAFF',
   'PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR',
   'EMERGENCY_LAB_SCIENTIST', 'LABORATORY_STAFF', 'HOUSE_OFFICER',
-  'CONSUMABLE_PACK_PROVIDER',
+  'CONSUMABLE_PACK_PROVIDER', 'SCRUB_CARE_PROVIDER',
 ] as const;
 import OnboardingSubmissionsPanel from '@/components/OnboardingSubmissionsPanel';
 import ContactName from '@/components/ContactName';
