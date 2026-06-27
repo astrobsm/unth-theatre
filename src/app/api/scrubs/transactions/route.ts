@@ -109,6 +109,8 @@ export async function POST(request: NextRequest) {
       const dueBack = new Date();
       dueBack.setHours(dueBack.getHours() + (body.shiftHours || 12));
 
+      const footwearSerial = (body.footwearSerial || '').trim() || null;
+
       const txn = await prisma.scrubTransaction.create({
         data: {
           scrubSetId: set.id,
@@ -122,6 +124,9 @@ export async function POST(request: NextRequest) {
           issuedByName: actorName,
           dueBack,
           notes: body.notes || null,
+          footwearSerial,
+          footwearSize: (body.footwearSize || '').trim() || null,
+          footwearIssued: !!footwearSerial,
         },
       });
 
@@ -157,6 +162,11 @@ export async function POST(request: NextRequest) {
           returnedAt: new Date(),
           returnedById: actorId,
           returnedByName: actorName,
+          // Clean footwear comes back with the scrub.
+          footwearReturned: openTxn.footwearIssued
+            ? body.footwearReturned !== false
+            : false,
+          footwearReturnedAt: openTxn.footwearIssued ? new Date() : null,
         },
       });
 

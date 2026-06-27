@@ -129,6 +129,11 @@ export async function GET(request: NextRequest) {
       orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
     });
 
+    // ---- Footwear still out with a scrub ----------------------------------
+    const footwearOutstanding = openTxns.filter(
+      (t) => t.footwearIssued && !t.footwearReturned,
+    ).length;
+
     return NextResponse.json({
       date: start,
       summary: {
@@ -138,6 +143,7 @@ export async function GET(request: NextRequest) {
         outstanding: openTxns.length,
         overdueCount: overdue.length,
         lowInventoryOwners: lowInventory.length,
+        footwearOutstanding,
       },
       byStatus,
       byColor,

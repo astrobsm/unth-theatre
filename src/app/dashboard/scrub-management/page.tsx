@@ -58,6 +58,9 @@ interface Txn {
   issuedAt: string;
   dueBack: string | null;
   returnedAt: string | null;
+  footwearSerial?: string | null;
+  footwearSize?: string | null;
+  footwearReturned?: boolean;
 }
 
 interface LaundryItem {
@@ -320,6 +323,8 @@ function DeskTab({
 }) {
   const [serial, setSerial] = useState('');
   const [wearerId, setWearerId] = useState('');
+  const [footwearSerial, setFootwearSerial] = useState('');
+  const [footwearSize, setFootwearSize] = useState('42');
   const [openTxns, setOpenTxns] = useState<Txn[]>([]);
 
   const loadOpen = useCallback(async () => {
@@ -350,6 +355,10 @@ function DeskTab({
           action,
           serialNumber: serial.trim(),
           userId: action === 'issue' ? wearerId || undefined : undefined,
+          footwearSerial:
+            action === 'issue' ? footwearSerial.trim() || undefined : undefined,
+          footwearSize:
+            action === 'issue' ? footwearSize || undefined : undefined,
         }),
       });
       const data = await res.json();
@@ -364,6 +373,7 @@ function DeskTab({
         );
         setSerial('');
         setWearerId('');
+        setFootwearSerial('');
         loadOpen();
         reload();
       }
@@ -413,6 +423,39 @@ function DeskTab({
             </option>
           ))}
         </select>
+
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Clean footwear serial (issued with scrub)
+            </label>
+            <input
+              value={footwearSerial}
+              onChange={(e) => setFootwearSerial(e.target.value.toUpperCase())}
+              placeholder="e.g. CLG-GRN-0042"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Size (EU)
+            </label>
+            <select
+              value={footwearSize}
+              onChange={(e) => setFootwearSize(e.target.value)}
+              title="Footwear size"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+            >
+              {['36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'].map(
+                (z) => (
+                  <option key={z} value={z}>
+                    {z}
+                  </option>
+                ),
+              )}
+            </select>
+          </div>
+        </div>
 
         <div className="flex gap-2">
           <button
@@ -470,6 +513,12 @@ function DeskTab({
                     <div className="text-xs text-gray-500 truncate">
                       {t.userName}
                     </div>
+                    {t.footwearSerial && (
+                      <div className="text-[11px] text-teal-700 truncate">
+                        👟 {t.footwearSerial}
+                        {t.footwearSize ? ` · sz ${t.footwearSize}` : ''}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {isOverdue(t) ? (
@@ -1231,6 +1280,7 @@ function ReportTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
             { l: 'Outstanding', v: report.summary.outstanding },
             { l: 'Overdue', v: report.summary.overdueCount },
             { l: 'Low inventory', v: report.summary.lowInventoryOwners },
+            { l: 'Footwear out', v: report.summary.footwearOutstanding ?? 0 },
           ].map((t) => (
             <div key={t.l} className="bg-gray-50 rounded-lg p-3 text-center">
               <div className="text-xl font-bold text-gray-900">{t.v}</div>

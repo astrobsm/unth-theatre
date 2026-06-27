@@ -6968,6 +6968,14 @@ model ScrubTransaction {
   dueBack DateTime? // expected return (end of shift)
   notes   String?
 
+  // Clean theatre footwear issued together with the scrub set. Each pair is
+  // serial/size tracked and must come back with the scrub.
+  footwearSerial     String?
+  footwearSize       String?
+  footwearIssued     Boolean   @default(false)
+  footwearReturned   Boolean   @default(false)
+  footwearReturnedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
