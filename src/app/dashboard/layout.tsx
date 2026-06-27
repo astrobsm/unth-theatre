@@ -146,6 +146,7 @@ export default function DashboardLayout({
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
     { href: '/dashboard/call-for-patient', icon: Phone, label: 'Call for Patient', badge: 'NEW' },
+    { href: '/dashboard/scrub-management', icon: Shirt, label: 'Scrub Management', badge: 'NEW' },
 
     // === INTRA-OPERATIVE ===
     { href: '/dashboard/theatre-reception', icon: ClipboardCheck, label: 'Theatre Reception', badge: 'NEW' },

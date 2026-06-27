@@ -66,6 +66,7 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-setup', label: 'Theatre Setup', paths: ['/dashboard/theatre-setup'], defaultRoles: ['SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN', 'THEATRE_STORE_KEEPER'], category: 'Logistics' },
   { id: 'theatre-readiness', label: 'Theatre Readiness', paths: ['/dashboard/theatre-readiness'], defaultRoles: ['*'], category: 'Logistics' },
   { id: 'call-for-patient', label: 'Call for Patient', paths: ['/dashboard/call-for-patient'], defaultRoles: ['PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Logistics' },
+  { id: 'scrub-management', label: 'Scrub Management', paths: ['/dashboard/scrub-management'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Logistics' },
 
   // Intra-operative
   { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },

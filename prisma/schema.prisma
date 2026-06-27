@@ -6865,3 +6865,210 @@ model MealOrderItem {
   @@index([menuItemId])
   @@map("meal_order_items")
 }
+
+// ===========================================================================
+// SCRUB MANAGEMENT MODULE
+// Color-coded, serial-numbered scrub sets signed out by theatre staff, with a
+// laundry workflow (receive → confirm → ready), missing-item alerts, daily
+// reports, and a laundry shift roster (morning/night) with a manager.
+// ===========================================================================
+
+enum ScrubColor {
+  GREEN // Surgeons
+  BLUE // Anaesthetists / Consultant Anaesthetists
+  MAROON // Scrub & Recovery Room Nurses
+  TEAL // Anaesthetic Technicians
+  GREY // Porters & Support Staff
+  BLACK // General / Other
+}
+
+enum ScrubSetStatus {
+  AVAILABLE // unassigned, in central pool
+  RESERVE // assigned to a staff member, kept as spare
+  IN_USE // signed out / currently worn
+  IN_CLEANING // sent to laundry
+  MISSING // not returned / lost
+  RETIRED // damaged or decommissioned
+}
+
+enum ScrubTxnStatus {
+  ISSUED
+  RETURNED
+  OVERDUE
+  LOST
+}
+
+enum ScrubLaundryStatus {
+  RECEIVED
+  IN_PROGRESS
+  READY
+  INCOMPLETE
+}
+
+enum ScrubShiftType {
+  MORNING
+  NIGHT
+}
+
+model ScrubSet {
+  id           String         @id @default(uuid())
+  serialNumber String         @unique
+  color        ScrubColor
+  size         String         @default("M") // S | M | L | XL | XXL
+  status       ScrubSetStatus @default(AVAILABLE)
+
+  // Owner — each staff member is allocated >= 3 sets (in-use / cleaning / reserve)
+  ownerId   String?
+  ownerName String?
+  ownerRole String?
+
+  // Current holder of a signed-out set (normally the owner)
+  currentHolderId   String?
+  currentHolderName String?
+
+  condition     String?
+  retiredAt     DateTime?
+  retiredReason String?
+
+  transactions ScrubTransaction[]
+  laundryItems ScrubLaundryItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([color])
+  @@map("scrub_sets")
+}
+
+model ScrubTransaction {
+  id String @id @default(uuid())
+
+  scrubSetId   String
+  scrubSet     ScrubSet   @relation(fields: [scrubSetId], references: [id])
+  serialNumber String // snapshot
+  color        ScrubColor
+
+  // Who signed it out
+  userId   String
+  userName String
+  userRole String?
+
+  status ScrubTxnStatus @default(ISSUED)
+
+  issuedAt     DateTime  @default(now())
+  issuedById   String?
+  issuedByName String?
+
+  returnedAt     DateTime?
+  returnedById   String?
+  returnedByName String?
+
+  dueBack DateTime? // expected return (end of shift)
+  notes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, issuedAt])
+  @@index([scrubSetId])
+  @@index([status])
+  @@map("scrub_transactions")
+}
+
+model ScrubLaundryBatch {
+  id        String             @id @default(uuid())
+  batchDate DateTime           @default(now()) // operating day this batch serves
+  shift     ScrubShiftType     @default(MORNING)
+  status    ScrubLaundryStatus @default(RECEIVED)
+
+  receivedById   String?
+  receivedByName String?
+  managerId      String?
+  managerName    String?
+
+  expectedCount Int @default(0)
+  receivedCount Int @default(0)
+  readyCount    Int @default(0)
+  missingCount  Int @default(0)
+
+  readyForNextDay Boolean   @default(false)
+  readyReportedAt DateTime?
+  notes           String?
+
+  items ScrubLaundryItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([batchDate, shift])
+  @@index([status])
+  @@map("scrub_laundry_batches")
+}
+
+model ScrubLaundryItem {
+  id String @id @default(uuid())
+
+  batchId String
+  batch   ScrubLaundryBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  scrubSetId   String?
+  scrubSet     ScrubSet?  @relation(fields: [scrubSetId], references: [id])
+  serialNumber String
+  color        ScrubColor
+
+  received   Boolean   @default(false)
+  receivedAt DateTime?
+  ready      Boolean   @default(false)
+  readyAt    DateTime?
+  missing    Boolean   @default(false)
+  condition  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([serialNumber])
+  @@map("scrub_laundry_items")
+}
+
+model ScrubAlert {
+  id           String    @id @default(uuid())
+  type         String // MISSING_ITEM | OVERDUE_RETURN | LOW_INVENTORY | INCOMPLETE_BATCH
+  severity     String    @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  message      String
+  serialNumber String?
+  scrubSetId   String?
+  userId       String?
+  userName     String?
+  resolved     Boolean   @default(false)
+  resolvedAt   DateTime?
+  resolvedById String?
+  createdAt    DateTime  @default(now())
+
+  @@index([resolved, createdAt])
+  @@index([type])
+  @@map("scrub_alerts")
+}
+
+model ScrubShift {
+  id          String         @id @default(uuid())
+  shiftDate   DateTime
+  shiftType   ScrubShiftType
+  managerId   String?
+  managerName String?
+  staffIds    String         @default("[]") // JSON array of laundry staff user ids
+  staffNames  String         @default("[]") // JSON array of laundry staff names
+
+  targetStaffCount   Int @default(0) // 4–5 (morning) | 2 (night)
+  theatreStaffServed Int @default(300)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shiftDate, shiftType])
+  @@index([shiftDate])
+  @@map("scrub_shifts")
+}
