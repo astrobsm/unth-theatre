@@ -68,6 +68,11 @@ export default function BackgroundMusicPlayer() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [queue,    setQueue]    = useState<Track[]>([]);
   const [idx,      setIdx]      = useState(0);
+  // Music network/audio work is deferred until the user actually wants it
+  // (opens the music panel, presses play, or was actively playing before a
+  // refresh). This keeps the manifest fetch + audio buffering off the hot
+  // path of every page load.
+  const [wantsMusic, setWantsMusic] = useState(false);
 
   const audioRef             = useRef<HTMLAudioElement | null>(null);
   const wasPlayingBeforeDuck = useRef(false);
@@ -80,6 +85,7 @@ export default function BackgroundMusicPlayer() {
   // Track to resume (and its position) after a page refresh.
   const resumeRef            = useRef<{ url: string; time: number } | null>(null);
   const resumedRef           = useRef(false);
+  const manifestFetchedRef   = useRef(false);
 
   // Smoothly ramp the audio element volume to `target` over `durationMs`.
   // Cancels any in-flight fade. Calls `onDone` when finished. If the audio
@@ -127,6 +133,9 @@ export default function BackgroundMusicPlayer() {
       if (window.localStorage.getItem(LS_SHUFFLE) === '0') setShuffle(false);
       // Default play intent ON; only honor an explicit prior Pause.
       if (window.localStorage.getItem(LS_PLAYING) === '0') playIntentRef.current = false;
+      // Only resume (and therefore load) music automatically for users who
+      // were actively listening before the refresh — never for first loads.
+      else if (window.localStorage.getItem(LS_PLAYING) === '1') setWantsMusic(true);
       // Resume the same track + position after a refresh.
       const rUrl = window.localStorage.getItem(LS_RESUME_URL) || '';
       const rTime = parseFloat(window.localStorage.getItem(LS_RESUME_TIME) || '0');
@@ -155,8 +164,12 @@ export default function BackgroundMusicPlayer() {
   }, []);
 
   useEffect(() => {
+    if (!wantsMusic || manifestFetchedRef.current) return;
+    manifestFetchedRef.current = true;
     let cancelled = false;
-    fetch('/audio/background/manifest.json', { cache: 'no-store' })
+    // Allow normal HTTP/service-worker caching — the manifest is a static
+    // build artefact, so there is no need to bypass the cache on every load.
+    fetch('/audio/background/manifest.json')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((m: Manifest) => {
         if (cancelled) return;
@@ -169,9 +182,14 @@ export default function BackgroundMusicPlayer() {
         if (!cancelled) setError(`Music library not available: ${e?.message || e}`);
       });
     return () => { cancelled = true; };
-    // run once on mount; shuffle handled by separate effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [wantsMusic]);
+
+  // The user opening the music (or split) panel counts as intent to listen, so
+  // begin loading the library at that point.
+  useEffect(() => {
+    if (mode === 'music' || mode === 'split') setWantsMusic(true);
+  }, [mode]);
 
   // re-shuffle when toggle changes or manifest reloads
   useEffect(() => {
@@ -340,6 +358,8 @@ export default function BackgroundMusicPlayer() {
   }, []);
 
   const togglePlay = useCallback(async () => {
+    // Pressing Play is explicit intent to listen — make sure the library loads.
+    setWantsMusic(true);
     // Pressing Play makes THIS window the primary playback window, so the
     // control always works even when another tab currently holds leadership
     // (or a stale leader record is lingering).
