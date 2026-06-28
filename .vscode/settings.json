@@ -1,0 +1,6 @@
+{
+  // The Microsoft Edge Tools extension bundles a webhint linter that duplicates
+  // the project's ESLint jsx-a11y rules and flags dynamic inline styles as false
+  // positives. Disable its in-editor diagnostics; accessibility is enforced via ESLint.
+  "vscode-edge-devtools.webhint": false
+}

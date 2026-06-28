@@ -413,8 +413,9 @@ export default function AnesthesiaSetupPage() {
               </div>
             )}
             <div>
-              <label className="label">Select Theatre</label>
+              <label className="label" htmlFor="anes-theatre">Select Theatre</label>
               <select
+                id="anes-theatre"
                 className="input-field"
                 value={selectedTheatre}
                 onChange={(e) => {
@@ -544,8 +545,9 @@ export default function AnesthesiaSetupPage() {
               <div className="border-t pt-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label text-sm">Equipment Name*</label>
+                    <label className="label text-sm" htmlFor="anes-equip-name">Equipment Name*</label>
                     <input
+                      id="anes-equip-name"
                       type="text"
                       className="input-field"
                       value={equipmentCheck.equipmentName}
@@ -553,8 +555,9 @@ export default function AnesthesiaSetupPage() {
                     />
                   </div>
                   <div>
-                    <label className="label text-sm">Type*</label>
+                    <label className="label text-sm" htmlFor="anes-equip-type">Type*</label>
                     <select
+                      id="anes-equip-type"
                       className="input-field"
                       value={equipmentCheck.equipmentType}
                       onChange={(e) => setEquipmentCheck({ ...equipmentCheck, equipmentType: e.target.value })}
@@ -569,8 +572,9 @@ export default function AnesthesiaSetupPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="label text-sm">Serial Number</label>
+                    <label className="label text-sm" htmlFor="anes-equip-serial">Serial Number</label>
                     <input
+                      id="anes-equip-serial"
                       type="text"
                       className="input-field"
                       value={equipmentCheck.serialNumber}
@@ -578,8 +582,9 @@ export default function AnesthesiaSetupPage() {
                     />
                   </div>
                   <div>
-                    <label className="label text-sm">Condition*</label>
+                    <label className="label text-sm" htmlFor="anes-equip-condition">Condition*</label>
                     <select
+                      id="anes-equip-condition"
                       className="input-field"
                       value={equipmentCheck.condition}
                       onChange={(e) => setEquipmentCheck({ ...equipmentCheck, condition: e.target.value as any })}
@@ -607,8 +612,9 @@ export default function AnesthesiaSetupPage() {
                 {!equipmentCheck.isFunctional && (
                   <>
                     <div>
-                      <label className="label text-sm">Malfunction Description</label>
+                      <label className="label text-sm" htmlFor="anes-malfunction-desc">Malfunction Description</label>
                       <textarea
+                        id="anes-malfunction-desc"
                         className="input-field"
                         rows={2}
                         value={equipmentCheck.malfunctionDescription}
@@ -617,8 +623,9 @@ export default function AnesthesiaSetupPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="label text-sm">Severity</label>
+                        <label className="label text-sm" htmlFor="anes-severity">Severity</label>
                         <select
+                          id="anes-severity"
                           className="input-field"
                           value={equipmentCheck.malfunctionSeverity}
                           onChange={(e) => setEquipmentCheck({ ...equipmentCheck, malfunctionSeverity: e.target.value })}

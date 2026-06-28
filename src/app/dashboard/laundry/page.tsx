@@ -251,8 +251,9 @@ export default function LaundrySupervisorDashboardPage() {
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Shift *</label>
+                  <label htmlFor="laundry-shift" className="block text-sm font-medium mb-1">Shift *</label>
                   <select
+                    id="laundry-shift"
                     required
                     aria-label="Shift"
                     value={formData.shiftType}
@@ -265,8 +266,9 @@ export default function LaundrySupervisorDashboardPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Overall Readiness *</label>
+                  <label htmlFor="laundry-readiness" className="block text-sm font-medium mb-1">Overall Readiness *</label>
                   <select
+                    id="laundry-readiness"
                     required
                     aria-label="Overall readiness"
                     value={formData.overallReadiness}
@@ -309,8 +311,10 @@ export default function LaundrySupervisorDashboardPage() {
               </div>
 
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-1">Theatre Items Sent to Laundry for Washing</label>
+                <label htmlFor="laundry-items-washing" className="block text-sm font-medium mb-1">Theatre Items Sent to Laundry for Washing</label>
                 <textarea
+                  id="laundry-items-washing"
+                  aria-label="Theatre items sent to laundry for washing"
                   value={formData.itemsSentForWashing}
                   onChange={(e) => setFormData({ ...formData, itemsSentForWashing: e.target.value })}
                   rows={2}
@@ -320,8 +324,10 @@ export default function LaundrySupervisorDashboardPage() {
               </div>
 
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-1">Washed Items Transferred to CSSD for Sterilization</label>
+                <label htmlFor="laundry-items-cssd" className="block text-sm font-medium mb-1">Washed Items Transferred to CSSD for Sterilization</label>
                 <textarea
+                  id="laundry-items-cssd"
+                  aria-label="Washed items transferred to CSSD for sterilization"
                   value={formData.itemsTransferredToCssd}
                   onChange={(e) => setFormData({ ...formData, itemsTransferredToCssd: e.target.value })}
                   rows={2}
@@ -331,8 +337,10 @@ export default function LaundrySupervisorDashboardPage() {
               </div>
 
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-1">Critical Shortages (optional)</label>
+                <label htmlFor="laundry-shortages" className="block text-sm font-medium mb-1">Critical Shortages (optional)</label>
                 <textarea
+                  id="laundry-shortages"
+                  aria-label="Critical shortages"
                   value={formData.criticalShortages}
                   onChange={(e) => setFormData({ ...formData, criticalShortages: e.target.value })}
                   rows={2}
@@ -342,11 +350,13 @@ export default function LaundrySupervisorDashboardPage() {
               </div>
 
               <div className="mt-4 border-2 border-red-200 rounded-lg p-4 bg-red-50">
-                <label className="block text-sm font-bold text-red-700 mb-1">⚠️ Faults / Malfunctions</label>
+                <label htmlFor="laundry-faults" className="block text-sm font-bold text-red-700 mb-1">⚠️ Faults / Malfunctions</label>
                 <p className="text-xs text-red-600 mb-2">
                   Any entry here triggers an immediate <strong>RED ALERT</strong> to all admins and maintenance staff.
                 </p>
                 <textarea
+                  id="laundry-faults"
+                  aria-label="Faults or malfunctions"
                   value={formData.faultsReported}
                   onChange={(e) => setFormData({ ...formData, faultsReported: e.target.value })}
                   rows={2}
@@ -361,8 +371,10 @@ export default function LaundrySupervisorDashboardPage() {
               </div>
 
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+                <label htmlFor="laundry-notes" className="block text-sm font-medium mb-1">Notes (optional)</label>
                 <textarea
+                  id="laundry-notes"
+                  aria-label="Notes"
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={2}

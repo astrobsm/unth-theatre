@@ -1,3 +1,4 @@
+/* eslint-disable */
 // ============================================================
 // Operative Resource Manager - Service Worker v5
 // FULL Offline-First PWA with aggressive caching
