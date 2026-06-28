@@ -609,7 +609,8 @@ function DeskTab({
   flash: (k: 'ok' | 'err', t: string) => void;
   reload: () => void;
 }) {
-  const [serial, setSerial] = useState('');
+  const [topSerial, setTopSerial] = useState('');
+  const [pantsSerial, setPantsSerial] = useState('');
   const [wearerId, setWearerId] = useState('');
   const [footwearSerial, setFootwearSerial] = useState('');
   const [footwearSize, setFootwearSize] = useState('42');
@@ -630,41 +631,52 @@ function DeskTab({
   }, [loadOpen]);
 
   const submit = async (action: 'issue' | 'return') => {
-    if (!serial.trim()) {
-      flash('err', 'Enter a scrub serial number');
+    const serials = [topSerial.trim(), pantsSerial.trim()].filter(Boolean);
+    if (serials.length === 0) {
+      flash('err', 'Enter a top and/or pants serial number');
       return;
     }
     setBusy(true);
     try {
-      const res = await fetch('/api/scrubs/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          serialNumber: serial.trim(),
-          userId: action === 'issue' ? wearerId || undefined : undefined,
-          footwearSerial:
-            action === 'issue' ? footwearSerial.trim() || undefined : undefined,
-          footwearSize:
-            action === 'issue' ? footwearSize || undefined : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        flash('err', data.error || 'Action failed');
-      } else {
+      let okCount = 0;
+      const errs: string[] = [];
+      for (let i = 0; i < serials.length; i++) {
+        const sn = serials[i];
+        const res = await fetch('/api/scrubs/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action,
+            serialNumber: sn,
+            userId: action === 'issue' ? wearerId || undefined : undefined,
+            // attach footwear once, alongside the first garment signed out
+            footwearSerial:
+              action === 'issue' && i === 0
+                ? footwearSerial.trim() || undefined
+                : undefined,
+            footwearSize:
+              action === 'issue' && i === 0 ? footwearSize || undefined : undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) errs.push(`${sn}: ${data.error || 'failed'}`);
+        else okCount++;
+      }
+      if (okCount > 0) {
         flash(
           'ok',
           action === 'issue'
-            ? `Signed out ${serial.trim()}`
-            : `Returned ${serial.trim()} → laundry`,
+            ? `Signed out ${okCount} garment${okCount > 1 ? 's' : ''}`
+            : `Returned ${okCount} garment${okCount > 1 ? 's' : ''} → laundry`,
         );
-        setSerial('');
-        setWearerId('');
+        setTopSerial('');
+        setPantsSerial('');
         setFootwearSerial('');
+        setWearerId('');
         loadOpen();
         reload();
       }
+      if (errs.length) flash('err', errs.join(' · '));
     } catch {
       flash('err', 'Network error');
     } finally {
@@ -684,14 +696,27 @@ function DeskTab({
         </p>
 
         <label className="block text-xs font-medium text-gray-600 mb-1">
-          Scrub serial number
+          Top serial number
         </label>
         <div className="relative mb-3">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
-            value={serial}
-            onChange={(e) => setSerial(e.target.value.toUpperCase())}
-            placeholder="e.g. SCR-GRN-0042"
+            value={topSerial}
+            onChange={(e) => setTopSerial(e.target.value.toUpperCase())}
+            placeholder="e.g. TOP-GRN-L-0007"
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
+          />
+        </div>
+
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          Pants serial number
+        </label>
+        <div className="relative mb-3">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+          <input
+            value={pantsSerial}
+            onChange={(e) => setPantsSerial(e.target.value.toUpperCase())}
+            placeholder="e.g. PNT-GRN-M-0011"
             className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:border-teal-500 focus:outline-none"
           />
         </div>
@@ -816,7 +841,8 @@ function DeskTab({
                 ) : (
                   <button
                     onClick={() => {
-                      setSerial(t.serialNumber);
+                      if (!topSerial.trim()) setTopSerial(t.serialNumber);
+                      else setPantsSerial(t.serialNumber);
                     }}
                     className="text-[11px] text-teal-700 hover:underline"
                   >
