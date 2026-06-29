@@ -90,7 +90,7 @@ export default function WardEntriesPage() {
 
   useEffect(() => {
     fetchCallUps();
-    const t = setInterval(fetchCallUps, 30000);
+    const t = setInterval(fetchCallUps, 30 * 60 * 1000);
     return () => clearInterval(t);
   }, [fetchCallUps]);
 

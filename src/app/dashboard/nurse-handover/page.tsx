@@ -382,7 +382,7 @@ export default function NurseHandoverPage() {
 
   // Auto-refresh every 30s
   useEffect(() => {
-    const interval = setInterval(fetchHandovers, 30000);
+    const interval = setInterval(fetchHandovers, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchHandovers]);
 

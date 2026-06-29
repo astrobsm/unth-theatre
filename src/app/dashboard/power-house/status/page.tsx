@@ -39,7 +39,7 @@ export default function PowerHouseStatusPage() {
       router.push('/auth/signin');
     } else if (authStatus === 'authenticated') {
       fetchData();
-      const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+      const interval = setInterval(fetchData, 30 * 60 * 1000); // Refresh every 30 minutes
       return () => clearInterval(interval);
     }
   }, [authStatus, router]);

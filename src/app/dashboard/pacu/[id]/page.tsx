@@ -159,7 +159,7 @@ export default function PACUAssessmentDetailPage() {
     fetchAssessment();
     fetchMedications();
     // Auto-refresh every 30 seconds for vital signs
-    const interval = setInterval(fetchAssessment, 30000);
+    const interval = setInterval(fetchAssessment, 30 * 60 * 1000);
     return () => clearInterval(interval);
     // Re-fetch only when route id changes
     // eslint-disable-next-line react-hooks/exhaustive-deps

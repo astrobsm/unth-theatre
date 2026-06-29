@@ -29,7 +29,7 @@ export default function TransfersPage() {
   useEffect(() => {
     fetchTransfers();
     // Auto-refresh every 30 seconds for cross-device sync
-    const interval = setInterval(fetchTransfers, 30000);
+    const interval = setInterval(fetchTransfers, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 

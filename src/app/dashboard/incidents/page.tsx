@@ -48,7 +48,7 @@ export default function IncidentsPage() {
   useEffect(() => {
     fetchIncidents();
     // Auto-refresh every 60 seconds for cross-device sync
-    const interval = setInterval(fetchIncidents, 60000);
+    const interval = setInterval(fetchIncidents, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 

@@ -291,7 +291,7 @@ export default function PlumbingWaterSupplyPage() {
   useEffect(() => {
     fetchData();
     fetchPlumbers();
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchData, fetchPlumbers]);
 

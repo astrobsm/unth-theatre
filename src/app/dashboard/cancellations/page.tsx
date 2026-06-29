@@ -34,7 +34,7 @@ export default function CancellationsPage() {
   useEffect(() => {
     fetchCancellations();
     // Auto-refresh every 60 seconds for cross-device sync
-    const interval = setInterval(fetchCancellations, 60000);
+    const interval = setInterval(fetchCancellations, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 

@@ -86,7 +86,7 @@ export default function CallForPatientPage() {
 
   useEffect(() => {
     fetchCases();
-    const interval = setInterval(fetchCases, 30000);
+    const interval = setInterval(fetchCases, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchCases]);
 

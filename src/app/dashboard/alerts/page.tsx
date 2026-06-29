@@ -41,7 +41,7 @@ export default function AlertsDashboardPage() {
   useEffect(() => {
     fetchAlerts();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchAlerts, 30000);
+    const interval = setInterval(fetchAlerts, 30 * 60 * 1000);
     return () => clearInterval(interval);
     // fetchAlerts is stable closure over `filter`; intentionally re-runs only when filter changes
     // eslint-disable-next-line react-hooks/exhaustive-deps

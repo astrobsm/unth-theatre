@@ -106,7 +106,7 @@ export default function PrescriptionApprovalsPage() {
 
   useEffect(() => {
     fetchPrescriptions();
-    const interval = setInterval(fetchPrescriptions, 30000);
+    const interval = setInterval(fetchPrescriptions, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchPrescriptions]);
 

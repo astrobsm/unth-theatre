@@ -107,7 +107,7 @@ export default function TheatreReadinessDashboard() {
   useEffect(() => {
     fetchTheatreStatus();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchTheatreStatus, 30000);
+    const interval = setInterval(fetchTheatreStatus, 30 * 60 * 1000);
     return () => clearInterval(interval);
     // Re-fetch when selectedDate changes
     // eslint-disable-next-line react-hooks/exhaustive-deps

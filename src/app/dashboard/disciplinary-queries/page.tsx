@@ -86,7 +86,7 @@ export default function DisciplinaryQueriesPage() {
 
   useEffect(() => {
     fetchQueries();
-    const interval = setInterval(fetchQueries, 60000);
+    const interval = setInterval(fetchQueries, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchQueries]);
 

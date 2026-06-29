@@ -125,7 +125,7 @@ export default function TheatreReceptionPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 20000); // keep flow state fresh
+    const t = setInterval(load, 30 * 60 * 1000); // keep flow state fresh
     return () => clearInterval(t);
   }, [load]);
 

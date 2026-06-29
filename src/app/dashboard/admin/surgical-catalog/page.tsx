@@ -139,7 +139,7 @@ export default function SurgicalCatalogPage() {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       return;
     }
-    pollRef.current = setInterval(() => { refresh(); }, 20_000);
+    pollRef.current = setInterval(() => { refresh(); }, 30 * 60 * 1000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [autoRefresh, refresh]);
 
@@ -335,7 +335,7 @@ export default function SurgicalCatalogPage() {
           </button>
           <label className="px-3 py-2 bg-white border border-gray-300 rounded-lg inline-flex items-center text-sm cursor-pointer">
             <input type="checkbox" className="mr-2" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
-            Live (20s)
+            Live (30m)
           </label>
           <button
             onClick={exportPdf}

@@ -388,17 +388,18 @@ export default function HoldingAreaPage() {
               ) : (
                 <>
                   <Wifi className="w-4 h-4" />
-                  <span>Live (15s)</span>
+                  <span>Synced</span>
                 </>
               )}
             </div>
             <button
               onClick={fetchAssessments}
               disabled={isSyncing || !isOnline}
-              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Refresh data"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Sync latest data now"
             >
-              <RefreshCw className={`w-5 h-5 text-gray-500 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Sync now</span>
             </button>
           </div>
           <button

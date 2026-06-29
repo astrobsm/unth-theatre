@@ -55,7 +55,9 @@ export default function SurgeriesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [dateFilter, setDateFilter] = useState('');
+  // Default to today's list so only the current day's cases load (lighter payload
+  // for poor connections). An empty value means "all scheduled dates".
+  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -96,7 +98,10 @@ export default function SurgeriesPage() {
   const fetchSurgeries = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const response = await fetch('/api/surgeries');
+      // Only fetch the selected day's cases when a date is chosen so we transfer
+      // a small payload. An empty dateFilter loads every scheduled date.
+      const url = dateFilter ? `/api/surgeries?date=${dateFilter}` : '/api/surgeries';
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) {
@@ -117,11 +122,11 @@ export default function SurgeriesPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, []);
+  }, [dateFilter]);
 
   useEffect(() => {
     fetchSurgeries();
-    // Auto-refresh every 30 seconds for cross-device sync
+    // Auto-refresh on a relaxed cadence for cross-device sync (manual Refresh available)
     const interval = setInterval(fetchSurgeries, SYNC_INTERVALS.SURGERIES);
     return () => clearInterval(interval);
   }, [fetchSurgeries]);
@@ -384,17 +389,18 @@ export default function SurgeriesPage() {
               ) : (
                 <>
                   <Wifi className="w-4 h-4" />
-                  <span>Live (30s)</span>
+                  <span>Synced</span>
                 </>
               )}
             </div>
             <button
               onClick={fetchSurgeries}
               disabled={isSyncing || !isOnline}
-              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Refresh data"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Sync latest data now"
             >
-              <RefreshCw className={`w-5 h-5 text-gray-500 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Sync now</span>
             </button>
           </div>
           <Link href="/dashboard/surgeries/completed" className="btn-secondary flex items-center justify-center whitespace-nowrap flex-1 sm:flex-none">
@@ -443,16 +449,25 @@ export default function SurgeriesPage() {
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-gray-600">
             Showing <strong>{filteredSurgeries.length}</strong> case{filteredSurgeries.length === 1 ? '' : 's'}
-            {dateFilter && <> on <strong>{new Date(dateFilter).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></>}
+            {dateFilter
+              ? <> on <strong>{new Date(dateFilter).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></>
+              : <> across <strong>all dates</strong></>}
           </p>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 underline"
+            >
+              Today
+            </button>
             {dateFilter && (
               <button
                 type="button"
                 onClick={() => setDateFilter('')}
                 className="text-xs text-gray-600 hover:text-gray-800 underline"
               >
-                Clear date
+                All dates
               </button>
             )}
             <button

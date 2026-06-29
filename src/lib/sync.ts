@@ -316,34 +316,41 @@ export async function syncFetch<T>(
   return data;
 }
 
-// Auto-refresh configuration for different modules
+// Auto-refresh configuration for different modules.
+//
+// To minimise network usage (especially on poor connections) every module now
+// polls at a relaxed 30-minute cadence. Users can pull fresh data at any time
+// via the per-page "Sync now" / Refresh control, and a sync is also triggered
+// automatically whenever a tab becomes visible again.
+const THIRTY_MINUTES = 30 * 60 * 1000; // 1,800,000 ms
+
 export const SYNC_INTERVALS = {
-  // Critical patient safety modules - 15 seconds
-  HOLDING_AREA: 15000,
-  PACU: 15000,
-  EMERGENCY_ALERTS: 15000,
-  
-  // High priority modules - 30 seconds
-  BLOOD_BANK: 30000,
-  FAULT_ALERTS: 30000,
-  SURGERIES: 30000,
-  CHECKLISTS: 30000,
-  OXYGEN_CONTROL: 30000,
-  
-  // Standard modules - 45 seconds
-  PREOP_REVIEWS: 45000,
-  PRESCRIPTIONS: 45000,
-  TRANSFERS: 45000,
-  EQUIPMENT_CHECKOUT: 45000,
-  
-  // Lower priority modules - 60 seconds
-  INVENTORY: 60000,
-  PATIENTS: 60000,
-  ROSTER: 60000,
-  USERS: 60000,
-  THEATRE_SETUP: 60000,
-  INCIDENTS: 60000,
-  CANCELLATIONS: 60000,
+  // Patient-safety modules
+  HOLDING_AREA: THIRTY_MINUTES,
+  PACU: THIRTY_MINUTES,
+  EMERGENCY_ALERTS: THIRTY_MINUTES,
+
+  // High priority modules
+  BLOOD_BANK: THIRTY_MINUTES,
+  FAULT_ALERTS: THIRTY_MINUTES,
+  SURGERIES: THIRTY_MINUTES,
+  CHECKLISTS: THIRTY_MINUTES,
+  OXYGEN_CONTROL: THIRTY_MINUTES,
+
+  // Standard modules
+  PREOP_REVIEWS: THIRTY_MINUTES,
+  PRESCRIPTIONS: THIRTY_MINUTES,
+  TRANSFERS: THIRTY_MINUTES,
+  EQUIPMENT_CHECKOUT: THIRTY_MINUTES,
+
+  // Lower priority modules
+  INVENTORY: THIRTY_MINUTES,
+  PATIENTS: THIRTY_MINUTES,
+  ROSTER: THIRTY_MINUTES,
+  USERS: THIRTY_MINUTES,
+  THEATRE_SETUP: THIRTY_MINUTES,
+  INCIDENTS: THIRTY_MINUTES,
+  CANCELLATIONS: THIRTY_MINUTES,
 };
 
 export default syncManager;

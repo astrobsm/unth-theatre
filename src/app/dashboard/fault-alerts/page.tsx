@@ -63,7 +63,7 @@ export default function FaultAlertsPage() {
     }
     fetchAlerts();
     // Auto-refresh every 30 seconds for equipment fault monitoring
-    const interval = setInterval(fetchAlerts, 30000);
+    const interval = setInterval(fetchAlerts, 30 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);

@@ -63,7 +63,7 @@ export default function OxygenControlPage() {
   useEffect(() => {
     fetchData();
     // Refresh every 30 seconds for real-time monitoring
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 

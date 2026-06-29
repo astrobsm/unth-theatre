@@ -417,7 +417,7 @@ export default function EmergencyBookingPage() {
 
   useEffect(() => {
     fetchBookings();
-    const interval = setInterval(fetchBookings, 30000);
+    const interval = setInterval(fetchBookings, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchBookings]);
 
