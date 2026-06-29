@@ -5,7 +5,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v32';
+const CACHE_VERSION = 'v33';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -207,7 +207,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API routes: Network-first with IndexedDB + Cache API fallback
+  // API routes: fast-cache first paint, then revalidate. On a healthy network
+  // we still return fresh data; on a slow/poor network we fall back to the last
+  // cached copy after a short timeout so pages render instantly instead of
+  // hanging. The cache is always refreshed in the background when the network
+  // eventually responds, so the next read only reflects recent changes.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstWithCache(request));
     return;
@@ -330,24 +334,50 @@ async function networkFirstSession(request) {
 // Network-first: Try network, fall back to cache for API data
 async function networkFirstWithCache(request) {
   const cache = await caches.open(DATA_CACHE);
-  try {
-    const networkResponse = await fetch(request);
-    if (networkResponse.ok) {
-      // Store in the Cache API only. We no longer re-parse the body to also
-      // write an IndexedDB copy on every response — that doubled the work on
-      // every API call. The Cache API copy already serves offline fallback.
-      cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
-  } catch (err) {
-    // Try Cache API first
-    const cached = await cache.match(request);
-    if (cached) {
+
+  // How long we wait for the network before showing the cached copy. Keeps
+  // pages responsive on poor connections; the network request keeps running in
+  // the background and refreshes the cache when it finally resolves.
+  const NETWORK_TIMEOUT_MS = 3000;
+
+  const networkPromise = fetch(request)
+    .then((networkResponse) => {
+      if (networkResponse.ok) {
+        // Store in the Cache API only. We no longer re-parse the body to also
+        // write an IndexedDB copy on every response — that doubled the work on
+        // every API call. The Cache API copy already serves offline fallback.
+        cache.put(request, networkResponse.clone());
+      }
+      return networkResponse;
+    });
+
+  const cached = await cache.match(request);
+
+  if (cached) {
+    // Race the network against a short timeout. If the network wins quickly we
+    // return the fresh response; otherwise we serve the cached copy immediately
+    // (and the background fetch above still refreshes the cache for next time).
+    const timeoutFallback = new Promise((resolve) => {
+      setTimeout(() => {
+        const headers = new Headers(cached.headers);
+        headers.set('X-ORM-Cache', 'true');
+        resolve(new Response(cached.body, { status: cached.status, headers }));
+      }, NETWORK_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([networkPromise, timeoutFallback]);
+    } catch (err) {
       const headers = new Headers(cached.headers);
       headers.set('X-ORM-Cache', 'true');
       headers.set('X-ORM-Offline', 'true');
       return new Response(cached.body, { status: cached.status, headers });
     }
+  }
+
+  // No cached copy yet (first ever load of this endpoint) — wait for the network.
+  try {
+    return await networkPromise;
+  } catch (err) {
     // Try IndexedDB
     const url = new URL(request.url);
     const idbData = await getFromIndexedDB('cachedData', url.pathname + url.search);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature } from 'lucide-react';
 import Link from 'next/link';
@@ -202,6 +202,48 @@ export default function SurgeriesPage() {
     );
     return matchesSearch && matchesStatus && matchesDate;
   }) : [];
+
+  // Resolve a human-friendly theatre label for a case.
+  const theatreOf = (s: Surgery) =>
+    s.theatre?.name || s.theatreName || s.location || 'Unassigned theatre';
+
+  // Group the filtered cases by day, then by theatre, so each day's schedule is
+  // laid out theatre-by-theatre. Cases inside a theatre are ordered by start time;
+  // "Unassigned theatre" always sinks to the bottom of each day.
+  const groupedSchedule = (() => {
+    const sorted = [...filteredSurgeries].sort((a, b) => {
+      const dateA = (a.scheduledDate || '').slice(0, 10);
+      const dateB = (b.scheduledDate || '').slice(0, 10);
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      const thA = theatreOf(a);
+      const thB = theatreOf(b);
+      const unA = thA.toLowerCase().startsWith('unassigned') ? 1 : 0;
+      const unB = thB.toLowerCase().startsWith('unassigned') ? 1 : 0;
+      if (unA !== unB) return unA - unB;
+      if (thA.toLowerCase() !== thB.toLowerCase()) return thA.localeCompare(thB);
+      return (a.scheduledTime || '').localeCompare(b.scheduledTime || '');
+    });
+    const groups: { key: string; dateLabel: string; theatre: string; rows: Surgery[] }[] = [];
+    for (const s of sorted) {
+      const dayKey = (s.scheduledDate || '').slice(0, 10);
+      const theatre = theatreOf(s);
+      const key = `${dayKey}__${theatre}`;
+      const last = groups[groups.length - 1];
+      if (!last || last.key !== key) {
+        groups.push({
+          key,
+          theatre,
+          dateLabel: s.scheduledDate
+            ? new Date(s.scheduledDate).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })
+            : '',
+          rows: [s],
+        });
+      } else {
+        last.rows.push(s);
+      }
+    }
+    return groups;
+  })();
 
   const summariseSpecialNeeds = (s: Surgery): string[] => {
     const tags: string[] = [];
@@ -525,7 +567,22 @@ export default function SurgeriesPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredSurgeries.map((surgery) => (
+                {groupedSchedule.map((group) => (
+                  <Fragment key={group.key}>
+                    <tr className="bg-indigo-50/70">
+                      <td colSpan={8} className="px-6 py-2">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-800">
+                          {!dateFilter && group.dateLabel && (
+                            <span className="text-indigo-500">{group.dateLabel}</span>
+                          )}
+                          <span>{group.theatre}</span>
+                          <span className="text-indigo-400 font-medium normal-case">
+                            · {group.rows.length} case{group.rows.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {group.rows.map((surgery) => (
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
@@ -743,6 +800,8 @@ export default function SurgeriesPage() {
                       </div>
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
