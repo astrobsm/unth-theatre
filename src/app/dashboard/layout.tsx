@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
+import { getCachedData, setCachedData } from '@/lib/offlineStore';
 
 // Non-critical chrome — these are not needed for first paint, so we code-split
 // them out of the layout bundle and mount them after the page is interactive.
@@ -77,12 +78,40 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { data: session, status } = useSession();
+  const { data: realSession, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  // Optimistic shell: the last-known signed-in user, cached in IndexedDB. Lets us
+  // paint the dashboard chrome instantly on a slow network instead of blocking on
+  // the /api/auth/session round-trip. NextAuth still validates in the background.
+  const [cachedUser, setCachedUser] = useState<any>(null);
   // Default: collapsed on phones (<1024px), expanded on desktop. Avoids the
   // sidebar covering the page on first load on small screens.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getCachedData('currentUser')
+      .then((rec) => {
+        // Only trust a cached identity that has the role we render the shell from.
+        if (active && rec?.data && (rec.data as any).role) setCachedUser(rec.data);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Use the live session once available; otherwise fall back to the cached user.
+  const session: any = realSession ?? (cachedUser ? { user: cachedUser } : null);
+
+  // Persist the signed-in identity so the NEXT load can paint the shell instantly
+  // from cache (optimistic shell) instead of waiting on /api/auth/session.
+  useEffect(() => {
+    if (realSession?.user) {
+      setCachedData('currentUser', realSession.user, 7 * 24 * 60 * 60 * 1000).catch(() => {});
+    }
+  }, [realSession]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -103,7 +132,9 @@ export default function DashboardLayout({
     }
   }, [status, router]);
 
-  if (status === 'loading') {
+  // Only block on the spinner when we have NOTHING to show yet: the session is
+  // still validating AND we have no cached identity to render the shell from.
+  if (status === 'loading' && !cachedUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
