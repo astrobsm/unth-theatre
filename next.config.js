@@ -74,8 +74,14 @@ const nextConfig = {
           { key: 'Access-Control-Allow-Origin', value: '*' },
           { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT,OPTIONS' },
           { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization' },
-          // Cache GET API responses at CDN/browser for 60s, serve stale while revalidating
-          { key: 'Cache-Control', value: 'public, s-maxage=60, stale-while-revalidate=300' },
+          // SECURITY: API responses are session/role specific. Mark them `private`
+          // so they are NEVER cached on shared CDN/proxy infrastructure (which could
+          // otherwise serve one user's data to another). Per-device offline speed is
+          // provided by the service worker + IndexedDB cache, not the CDN, so this
+          // does not slow page loads. `no-store` keeps authenticated data out of the
+          // browser's shared HTTP cache while the SW still caches for offline use.
+          { key: 'Cache-Control', value: 'private, no-store, must-revalidate' },
+          { key: 'Vary', value: 'Cookie, Authorization' },
         ],
       },
       {
