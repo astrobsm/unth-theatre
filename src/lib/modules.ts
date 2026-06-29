@@ -51,7 +51,7 @@ export const MODULES: AppModule[] = [
   { id: 'cancellations', label: 'Cancellations', paths: ['/dashboard/cancellations'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
 
   // Pre-operative
-  { id: 'pre-operative-visit', label: 'Pre-Op Visit', paths: ['/dashboard/pre-operative-visit'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Pre-Op' },
+  { id: 'pre-operative-visit', label: 'Pre-Op Visit', paths: ['/dashboard/pre-operative-visit'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'HOUSE_OFFICER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Pre-Op' },
   { id: 'patient-payment-guide', label: 'Patient Payment Guide', paths: ['/dashboard/patient-payment-guide'], defaultRoles: ['SURGEON', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', ...ADMIN_VIEWERS], category: 'Pre-Op' },
   { id: 'anaesthetist-board', label: 'Anaesthetist Review Board', paths: ['/dashboard/anaesthetist-board'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
   { id: 'preop-reviews', label: 'Pre-op Reviews', paths: ['/dashboard/preop-reviews'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'], category: 'Pre-Op' },
