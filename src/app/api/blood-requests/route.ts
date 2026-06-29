@@ -160,6 +160,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Prevent multiple blood submissions for the same patient on the same day.
+    // Cancelled requests are ignored so a re-submission after cancellation is allowed.
+    {
+      const sDay = new Date(validatedData.scheduledSurgeryDate);
+      const sStart = new Date(sDay); sStart.setHours(0, 0, 0, 0);
+      const sEnd = new Date(sDay); sEnd.setHours(23, 59, 59, 999);
+      const existingBlood = await prisma.bloodRequest.findFirst({
+        where: {
+          patientId: validatedData.patientId,
+          scheduledSurgeryDate: { gte: sStart, lte: sEnd },
+          status: { not: 'CANCELLED' },
+        },
+        select: { id: true },
+      });
+      if (existingBlood) {
+        return NextResponse.json(
+          { error: `Blood already requested for this patient on ${sStart.toLocaleDateString()}.` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Create blood request
     const bloodRequest = await prisma.bloodRequest.create({
       data: {

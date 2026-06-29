@@ -267,6 +267,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
+    // Prevent double-booking: a patient already scheduled for surgery on the same
+    // day cannot be booked again. Cancelled cases are ignored so a re-book after a
+    // cancellation is still allowed.
+    {
+      const bookDate = new Date(validatedData.scheduledDate);
+      const bDayStart = new Date(bookDate); bDayStart.setHours(0, 0, 0, 0);
+      const bDayEnd = new Date(bookDate); bDayEnd.setHours(23, 59, 59, 999);
+      const existingForPatient = await prisma.surgery.findFirst({
+        where: {
+          patientId: patient.id,
+          scheduledDate: { gte: bDayStart, lte: bDayEnd },
+          status: { notIn: ['CANCELLED'] },
+        },
+        select: { id: true },
+      });
+      if (existingForPatient) {
+        return NextResponse.json(
+          { error: `Patient already booked for surgery on ${bDayStart.toLocaleDateString()}.` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Persist Clinical Summary (comorbidities + current medications) on the Patient record
     // so the Pharmacist can read it on every prescription. We replace prior values to reflect
     // the most recent assessment by the booking clinician.

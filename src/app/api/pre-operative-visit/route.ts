@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
           surgeonName: s.surgeonName || s.surgeon?.fullName || 'TBD',
           hasPreOpVisit: s.preOperativeVisits.length > 0,
           latestVisitStatus: s.preOperativeVisits[0]?.overallStatus || null,
+          latestVisit: s.preOperativeVisits[0] || null,
         })),
         date: targetDate.toISOString(),
       });

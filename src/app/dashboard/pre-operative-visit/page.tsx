@@ -31,6 +31,7 @@ interface PendingSurgery {
   surgeonName: string;
   hasPreOpVisit: boolean;
   latestVisitStatus: string | null;
+  latestVisit: PreOpVisit | null;
 }
 
 interface PreOpVisit {
@@ -104,6 +105,7 @@ export default function PreOperativeVisitPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [selectedSurgery, setSelectedSurgery] = useState<PendingSurgery | null>(null);
+  const [issuesSurgery, setIssuesSurgery] = useState<PendingSurgery | null>(null);
   const [expandedVisit, setExpandedVisit] = useState<string | null>(null);
   const [targetDate, setTargetDate] = useState(() => {
     const tomorrow = new Date();
@@ -170,20 +172,23 @@ export default function PreOperativeVisitPage() {
 
   const fetchCompletedVisits = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await fetch(`/api/pre-operative-visit?date=${today}`);
+      const res = await fetch(`/api/pre-operative-visit?date=${targetDate}`);
       if (!res.ok) throw new Error('Failed to fetch visits');
       const json = await res.json();
       setCompletedVisits(json);
     } catch (err: any) {
       setError(err.message);
     }
-  }, []);
+  }, [targetDate]);
+
+  // Load both lists in parallel for the fastest possible render.
+  const refresh = useCallback(() => {
+    void Promise.all([fetchPendingSurgeries(), fetchCompletedVisits()]);
+  }, [fetchPendingSurgeries, fetchCompletedVisits]);
 
   useEffect(() => {
-    fetchPendingSurgeries();
-    fetchCompletedVisits();
-  }, [fetchPendingSurgeries, fetchCompletedVisits]);
+    refresh();
+  }, [refresh]);
 
   const handleSubmit = async () => {
     if (!selectedSurgery) return;
@@ -211,14 +216,31 @@ export default function PreOperativeVisitPage() {
       setTimeout(() => setSuccessMsg(null), 4000);
       setSelectedSurgery(null);
       resetForm();
-      fetchPendingSurgeries();
-      fetchCompletedVisits();
+      refresh();
     } catch (err: any) {
       setError(err.message);
       setTimeout(() => setError(null), 4000);
     } finally {
       setSaving(false);
     }
+  };
+
+  // Derive the human-readable list of issues that are blocking surgical clearance.
+  const getBlockingIssues = (v: PreOpVisit | null): string[] => {
+    if (!v) return [];
+    const issues: string[] = [];
+    if (v.patientAvailableInWard === false) issues.push('Patient NOT available in ward');
+    if (v.consentStatus === 'NOT_OBTAINED') issues.push('Surgical consent not obtained');
+    if (v.consentStatus === 'REFUSED') issues.push('Surgical consent refused');
+    if (v.surgicalFeePaymentStatus === 'NOT_PAID') issues.push('Surgical fee not paid');
+    if (v.preAnaestheticReviewDone === false) issues.push('Pre-anaesthetic review not done');
+    if (v.npoStatus === 'NOT_FASTING') issues.push('Patient not fasting (NPO breach)');
+    if (v.investigationsComplete === false)
+      issues.push(`Investigations incomplete${v.pendingInvestigations ? ` — ${v.pendingInvestigations}` : ''}`);
+    if (v.patientEmotionalReadiness === 'REFUSED') issues.push('Patient refusing surgery');
+    if (v.surgicalItemsAvailable === false) issues.push('Surgical items not available');
+    if (v.bloodReady === false) issues.push('Blood not ready');
+    return issues;
   };
 
   const getStatusBadge = (status: string | null) => {
@@ -286,7 +308,7 @@ export default function PreOperativeVisitPage() {
               />
             </div>
             <button
-              onClick={() => { fetchPendingSurgeries(); fetchCompletedVisits(); }}
+              onClick={refresh}
               disabled={loading}
               className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition"
             >
@@ -294,6 +316,33 @@ export default function PreOperativeVisitPage() {
               Refresh
             </button>
           </div>
+        </div>
+        {/* Quick day selectors — one tap to jump between days */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            { label: 'Today', offset: 0 },
+            { label: 'Tomorrow', offset: 1 },
+            { label: 'In 2 days', offset: 2 },
+            { label: 'In 3 days', offset: 3 },
+          ].map(({ label, offset }) => {
+            const d = new Date();
+            d.setDate(d.getDate() + offset);
+            const iso = d.toISOString().split('T')[0];
+            const active = targetDate === iso;
+            return (
+              <button
+                key={label}
+                onClick={() => setTargetDate(iso)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                  active
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -311,6 +360,51 @@ export default function PreOperativeVisitPage() {
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
           <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
           {successMsg}
+        </div>
+      )}
+
+      {/* Blocking Issues Modal — why a case is Not Cleared */}
+      {issuesSurgery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setIssuesSurgery(null)}>
+          <div className="bg-white rounded-xl shadow-2xl border-2 border-red-200 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-red-700 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" /> Blocking Issues
+              </h2>
+              <button onClick={() => setIssuesSurgery(null)} className="text-gray-400 hover:text-gray-600" title="Close">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="mb-3">
+                <div className="font-semibold text-gray-900">{issuesSurgery.patientName}</div>
+                <div className="text-sm text-gray-500">{issuesSurgery.folderNumber} · {issuesSurgery.procedureName}</div>
+              </div>
+              {getBlockingIssues(issuesSurgery.latestVisit).length > 0 ? (
+                <ul className="space-y-2">
+                  {getBlockingIssues(issuesSurgery.latestVisit).map((issue, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>{issue}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">No specific issues recorded. Re-assess the patient to update readiness.</p>
+              )}
+              {issuesSurgery.latestVisit?.overallNotes && (
+                <div className="mt-4 text-sm text-gray-700">
+                  <span className="font-semibold">Notes:</span> {issuesSurgery.latestVisit.overallNotes}
+                </div>
+              )}
+              <button
+                onClick={() => { const s = issuesSurgery; setIssuesSurgery(null); setSelectedSurgery(s); resetForm(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition"
+              >
+                <ClipboardCheck className="w-4 h-4" /> Re-assess patient
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -720,6 +814,15 @@ export default function PreOperativeVisitPage() {
                   <ClipboardCheck className="w-4 h-4" />
                   {s.hasPreOpVisit ? 'Re-assess Patient' : 'Start Assessment'}
                 </button>
+                {s.latestVisitStatus === 'NOT_CLEARED' && (
+                  <button
+                    onClick={() => setIssuesSurgery(s)}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-700 border border-red-300 text-sm font-semibold rounded-lg hover:bg-red-100 transition"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    View blocking issues
+                  </button>
+                )}
               </div>
             ))}
             {filteredSurgeries.length === 0 && (
@@ -775,17 +878,29 @@ export default function PreOperativeVisitPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => {
-                          setSelectedSurgery(s);
-                          resetForm();
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition"
-                      >
-                        <ClipboardCheck className="w-3 h-3" />
-                        {s.hasPreOpVisit ? 'Re-assess' : 'Assess'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedSurgery(s);
+                            resetForm();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition"
+                        >
+                          <ClipboardCheck className="w-3 h-3" />
+                          {s.hasPreOpVisit ? 'Re-assess' : 'Assess'}
+                        </button>
+                        {s.latestVisitStatus === 'NOT_CLEARED' && (
+                          <button
+                            onClick={() => setIssuesSurgery(s)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 border border-red-300 text-xs font-medium rounded-lg hover:bg-red-100 transition"
+                            title="View blocking issues"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            Issues
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
