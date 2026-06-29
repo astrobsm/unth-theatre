@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { jsonWithETag } from "@/lib/etag";
 export const dynamic = 'force-dynamic';
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -56,7 +57,7 @@ export async function GET() {
     });
     const lowStockItems = inventoryItems.filter(item => item.quantity <= item.reorderLevel).length;
 
-    return NextResponse.json({
+    return jsonWithETag(request, {
       totalSurgeries,
       scheduledSurgeries,
       totalPatients,

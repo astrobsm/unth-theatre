@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { triggerRadio, speak3 } from '@/lib/radioEvents';
+import { jsonWithETag } from '@/lib/etag';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    return NextResponse.json(assessments);
+    // ETag/304: unchanged holding-area list replies 304 (empty body).
+    return jsonWithETag(request, assessments);
   } catch (error) {
     console.error('Error fetching holding area assessments:', error);
     return NextResponse.json(

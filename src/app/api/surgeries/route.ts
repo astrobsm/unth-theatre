@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { generateUniqueSurgeryCode } from "@/lib/surgeryCodes";
 import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
+import { jsonWithETag } from "@/lib/etag";
 
 export const dynamic = 'force-dynamic';
 
@@ -206,7 +207,8 @@ export async function GET(request: NextRequest) {
       return 0;
     });
 
-    return NextResponse.json(enriched);
+    // ETag/304: when this day's schedule is unchanged, reply 304 (empty body).
+    return jsonWithETag(request, enriched);
 
   } catch (error) {
     console.error("Surgeries fetch error:", error);

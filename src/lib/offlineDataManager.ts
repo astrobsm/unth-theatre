@@ -341,9 +341,30 @@ export async function offlineAwareFetch<T = unknown>(
   error: string | null;
 }> {
   const { cacheTtl = 30 * 60 * 1000, fallback, transform } = options;
+  const etagKey = `${cacheKey}__etag`;
+
+  // Replay the previously stored ETag so the server can answer 304 when unchanged.
+  let storedEtag: string | null = null;
+  try {
+    const etagRec = await getCachedData<string>(etagKey);
+    storedEtag = etagRec?.data ?? null;
+  } catch {
+    storedEtag = null;
+  }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(
+      url,
+      storedEtag ? { headers: { 'If-None-Match': storedEtag } } : undefined
+    );
+
+    // 304 Not Modified — reuse the cached copy, nothing transferred.
+    if (response.status === 304) {
+      const cached = await getCachedData<T>(cacheKey);
+      if (cached) {
+        return { data: cached.data, isOffline: false, isStale: cached.isStale, isCached: true, error: null };
+      }
+    }
 
     if (response.ok) {
       const json = await response.json();
@@ -351,6 +372,8 @@ export async function offlineAwareFetch<T = unknown>(
 
       // Cache the fresh data
       await setCachedData(cacheKey, data, cacheTtl);
+      const etag = response.headers.get('etag');
+      if (etag) await setCachedData(etagKey, etag, cacheTtl);
 
       return { data: data as T, isOffline: false, isStale: false, isCached: false, error: null };
     }
@@ -413,31 +436,59 @@ export async function cacheFirstFetch<T = unknown>(
   error: string | null;
 }> {
   const { cacheTtl = 30 * 60 * 1000, transform, onCachedData } = options;
+  const etagKey = `${cacheKey}__etag`;
 
   // 1) Serve cache immediately (if any) so the page can render without waiting.
+  let cachedSnapshot: { data: T; isStale: boolean } | null = null;
   try {
     const cached = await getCachedData<T>(cacheKey);
-    if (cached && onCachedData) {
-      onCachedData(cached.data, { isStale: cached.isStale });
+    if (cached) {
+      cachedSnapshot = { data: cached.data, isStale: cached.isStale };
+      if (onCachedData) onCachedData(cached.data, { isStale: cached.isStale });
     }
   } catch {
     // Ignore cache read errors — proceed to network.
   }
 
+  // Replay the previously stored ETag so the server can answer 304 (empty body)
+  // when nothing changed — the core "transfer only recent changes" optimisation.
+  let storedEtag: string | null = null;
+  try {
+    const etagRec = await getCachedData<string>(etagKey);
+    storedEtag = etagRec?.data ?? null;
+  } catch {
+    storedEtag = null;
+  }
+
   // 2) Revalidate from the network in the foreground; resolve with fresh data.
   try {
-    const response = await fetch(url);
+    const response = await fetch(
+      url,
+      storedEtag ? { headers: { 'If-None-Match': storedEtag } } : undefined
+    );
+
+    // 304 Not Modified — keep the cached copy, nothing transferred.
+    if (response.status === 304 && cachedSnapshot) {
+      return {
+        data: cachedSnapshot.data,
+        isOffline: false,
+        isStale: false,
+        isCached: true,
+        error: null,
+      };
+    }
 
     if (response.ok) {
       const json = await response.json();
       const data = transform ? transform(json) : json;
       await setCachedData(cacheKey, data, cacheTtl);
+      const etag = response.headers.get('etag');
+      if (etag) await setCachedData(etagKey, etag, cacheTtl);
       return { data: data as T, isOffline: false, isStale: false, isCached: false, error: null };
     }
 
-    const cached = await getCachedData<T>(cacheKey);
-    if (cached) {
-      return { data: cached.data, isOffline: false, isStale: cached.isStale, isCached: true, error: null };
+    if (cachedSnapshot) {
+      return { data: cachedSnapshot.data, isOffline: false, isStale: cachedSnapshot.isStale, isCached: true, error: null };
     }
     return {
       data: null,
@@ -447,9 +498,8 @@ export async function cacheFirstFetch<T = unknown>(
       error: `Server returned ${response.status}`,
     };
   } catch {
-    const cached = await getCachedData<T>(cacheKey);
-    if (cached) {
-      return { data: cached.data, isOffline: true, isStale: cached.isStale, isCached: true, error: null };
+    if (cachedSnapshot) {
+      return { data: cachedSnapshot.data, isOffline: true, isStale: cachedSnapshot.isStale, isCached: true, error: null };
     }
     return {
       data: null,
