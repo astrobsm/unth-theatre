@@ -12,6 +12,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Optional cap so dashboard widgets fetch a small payload (1..100).
+    const limitParam = new URL(request.url).searchParams.get('limit');
+    const limit = limitParam
+      ? Math.min(Math.max(parseInt(limitParam, 10) || 0, 1), 100)
+      : null;
+
     const incidents = await prisma.incidentReport.findMany({
       include: {
         reportedBy: {
@@ -39,6 +45,7 @@ export async function GET(request: NextRequest) {
       orderBy: {
         incidentDate: 'desc',
       },
+      ...(limit ? { take: limit } : {}),
     });
 
     return NextResponse.json(incidents);

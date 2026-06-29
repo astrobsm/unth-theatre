@@ -113,6 +113,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const date = searchParams.get('date');
+    // Optional cap so dashboard widgets (e.g. CMAC/CMD "recent surgeries") fetch a
+    // small, bounded payload instead of the entire surgery history. 1..100.
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam
+      ? Math.min(Math.max(parseInt(limitParam, 10) || 0, 1), 100)
+      : null;
 
     const where: any = {};
     if (status) {
@@ -162,7 +168,12 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }]
+      // When a limit is requested return the most-recently booked cases; otherwise
+      // keep the day-planning order (date, then time).
+      orderBy: limit
+        ? [{ createdAt: 'desc' }]
+        : [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }],
+      ...(limit ? { take: limit } : {}),
     });
 
     // Resolve theatre names (theatreId is a string FK-style, no Prisma relation)
@@ -185,27 +196,30 @@ export async function GET(request: NextRequest) {
 
     // For daily planning views: sort by DATE first, then surgical UNIT, then the
     // theatre for that day, and finally the scheduled start time within the theatre.
-    enriched.sort((a, b) => {
-      const dateA = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
-      const dateB = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
-      if (dateA !== dateB) return dateA - dateB;
+    // Skipped when a limit was requested (those callers want most-recent-first).
+    if (!limit) {
+      enriched.sort((a, b) => {
+        const dateA = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+        const dateB = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+        if (dateA !== dateB) return dateA - dateB;
 
-      const unitA = (a.unit || '').toLowerCase();
-      const unitB = (b.unit || '').toLowerCase();
-      if (unitA < unitB) return -1;
-      if (unitA > unitB) return 1;
+        const unitA = (a.unit || '').toLowerCase();
+        const unitB = (b.unit || '').toLowerCase();
+        if (unitA < unitB) return -1;
+        if (unitA > unitB) return 1;
 
-      const theatreA = (a.theatreName || 'Unassigned Theatre').toLowerCase();
-      const theatreB = (b.theatreName || 'Unassigned Theatre').toLowerCase();
-      if (theatreA < theatreB) return -1;
-      if (theatreA > theatreB) return 1;
+        const theatreA = (a.theatreName || 'Unassigned Theatre').toLowerCase();
+        const theatreB = (b.theatreName || 'Unassigned Theatre').toLowerCase();
+        if (theatreA < theatreB) return -1;
+        if (theatreA > theatreB) return 1;
 
-      const timeA = (a.scheduledTime || '').toLowerCase();
-      const timeB = (b.scheduledTime || '').toLowerCase();
-      if (timeA < timeB) return -1;
-      if (timeA > timeB) return 1;
-      return 0;
-    });
+        const timeA = (a.scheduledTime || '').toLowerCase();
+        const timeB = (b.scheduledTime || '').toLowerCase();
+        if (timeA < timeB) return -1;
+        if (timeA > timeB) return 1;
+        return 0;
+      });
+    }
 
     // ETag/304: when this day's schedule is unchanged, reply 304 (empty body).
     return jsonWithETag(request, enriched);
