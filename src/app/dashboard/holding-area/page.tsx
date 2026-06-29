@@ -54,6 +54,7 @@ export default function HoldingAreaPage() {
   const [assessments, setAssessments] = useState<HoldingAreaAssessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active'>('active');
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -109,9 +110,10 @@ export default function HoldingAreaPage() {
     
     setIsSyncing(true);
     try {
-      const url = filter === 'active' 
-        ? '/api/holding-area?active=true'
-        : '/api/holding-area';
+      const params = new URLSearchParams();
+      if (filter === 'active') params.set('active', 'true');
+      if (selectedDate) params.set('date', selectedDate);
+      const url = `/api/holding-area?${params.toString()}`;
       
       const response = await fetch(url);
       if (response.ok) {
@@ -130,7 +132,7 @@ export default function HoldingAreaPage() {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [filter]);
+  }, [filter, selectedDate]);
 
   useEffect(() => {
     fetchAssessments();
@@ -416,7 +418,7 @@ export default function HoldingAreaPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-6 flex gap-4">
+      <div className="mb-6 flex flex-wrap items-center gap-3 sm:gap-4">
         <button
           onClick={() => setFilter('active')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -437,6 +439,24 @@ export default function HoldingAreaPage() {
         >
           All Patients
         </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <label htmlFor="ha-date" className="text-sm text-gray-600">Date</label>
+          <input
+            id="ha-date"
+            type="date"
+            value={selectedDate}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            title="Holding area date"
+          />
+          <button
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+          >
+            Today
+          </button>
+        </div>
       </div>
 
       {/* Assessments Grid */}

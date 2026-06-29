@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const active = searchParams.get('active') === 'true';
+    const dateParam = searchParams.get('date'); // YYYY-MM-DD; defaults to today
 
     const where: any = {};
     
@@ -28,6 +29,16 @@ export async function GET(request: NextRequest) {
       where.status = {
         in: ['ARRIVED', 'VERIFICATION_IN_PROGRESS', 'DISCREPANCY_FOUND', 'RED_ALERT_ACTIVE', 'CLEARED_FOR_THEATRE', 'ENROUTE_TO_THEATRE']
       };
+    }
+
+    // Scope to a single day by arrival time. Default to today's admissions so the
+    // page is not flooded with every historical record; selecting a date loads
+    // previous days. Pass date=all to skip the day filter entirely.
+    if (dateParam !== 'all') {
+      const day = dateParam ? new Date(dateParam) : new Date();
+      const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(day); dayEnd.setHours(23, 59, 59, 999);
+      where.arrivalTime = { gte: dayStart, lte: dayEnd };
     }
 
     const assessments = await prisma.holdingAreaAssessment.findMany({
