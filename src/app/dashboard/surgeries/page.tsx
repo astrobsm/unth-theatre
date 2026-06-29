@@ -6,6 +6,8 @@ import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, 
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
+import { cacheFirstFetch } from '@/lib/offlineDataManager';
+import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 
 interface Surgery {
@@ -101,23 +103,24 @@ export default function SurgeriesPage() {
       // Only fetch the selected day's cases when a date is chosen so we transfer
       // a small payload. An empty dateFilter loads every scheduled date.
       const url = dateFilter ? `/api/surgeries?date=${dateFilter}` : '/api/surgeries';
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          setSurgeries(data);
-          setLastSyncTime(Date.now());
-        } else {
-          console.error('API returned non-array data:', data);
-          setSurgeries([]);
-        }
-      } else {
-        console.error('Failed to fetch surgeries:', response.status);
-        setSurgeries([]);
+      const cacheKey = `surgeries-day-${dateFilter || 'all'}`;
+      // Cache-first: paint last-known cases instantly, then revalidate from network.
+      const result = await cacheFirstFetch<Surgery[]>(url, cacheKey, {
+        onCachedData: (cached) => {
+          if (Array.isArray(cached)) {
+            setSurgeries(cached);
+            setLoading(false);
+          }
+        },
+      });
+      if (Array.isArray(result.data)) {
+        setSurgeries(result.data);
+        setLastSyncTime(Date.now());
+      } else if (result.error && !result.isCached) {
+        console.error('Failed to fetch surgeries:', result.error);
       }
     } catch (error) {
       console.error('Failed to fetch surgeries:', error);
-      setSurgeries([]);
     } finally {
       setLoading(false);
       setIsSyncing(false);
@@ -529,7 +532,7 @@ export default function SurgeriesPage() {
       {/* Surgeries Table */}
       <div className="card">
         {loading ? (
-          <div className="text-center py-8">Loading surgeries...</div>
+          <TableSkeleton rows={6} columns={8} />
         ) : filteredSurgeries.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />

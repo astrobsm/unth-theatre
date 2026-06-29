@@ -386,6 +386,82 @@ export async function offlineAwareFetch<T = unknown>(
 }
 
 /**
+ * Cache-first (stale-while-revalidate) fetch for fast perceived load on poor networks.
+ *
+ * Unlike `offlineAwareFetch` (network-first, which blocks on a slow request), this:
+ *   1. Reads the IndexedDB cache FIRST and, if present, hands it back immediately via
+ *      `onCachedData` so the page can paint instantly with last-known data.
+ *   2. Then performs the network request in the background and resolves with fresh
+ *      data (also re-caching it). The caller updates the UI again when it resolves.
+ *
+ * Result: on a slow/unstable connection the user sees content instantly instead of a
+ * blocking spinner, and it silently refreshes once the network responds.
+ */
+export async function cacheFirstFetch<T = unknown>(
+  url: string,
+  cacheKey: string,
+  options: {
+    cacheTtl?: number;
+    transform?: (data: unknown) => T;
+    onCachedData?: (data: T, meta: { isStale: boolean }) => void;
+  } = {}
+): Promise<{
+  data: T | null;
+  isOffline: boolean;
+  isStale: boolean;
+  isCached: boolean;
+  error: string | null;
+}> {
+  const { cacheTtl = 30 * 60 * 1000, transform, onCachedData } = options;
+
+  // 1) Serve cache immediately (if any) so the page can render without waiting.
+  try {
+    const cached = await getCachedData<T>(cacheKey);
+    if (cached && onCachedData) {
+      onCachedData(cached.data, { isStale: cached.isStale });
+    }
+  } catch {
+    // Ignore cache read errors — proceed to network.
+  }
+
+  // 2) Revalidate from the network in the foreground; resolve with fresh data.
+  try {
+    const response = await fetch(url);
+
+    if (response.ok) {
+      const json = await response.json();
+      const data = transform ? transform(json) : json;
+      await setCachedData(cacheKey, data, cacheTtl);
+      return { data: data as T, isOffline: false, isStale: false, isCached: false, error: null };
+    }
+
+    const cached = await getCachedData<T>(cacheKey);
+    if (cached) {
+      return { data: cached.data, isOffline: false, isStale: cached.isStale, isCached: true, error: null };
+    }
+    return {
+      data: null,
+      isOffline: false,
+      isStale: false,
+      isCached: false,
+      error: `Server returned ${response.status}`,
+    };
+  } catch {
+    const cached = await getCachedData<T>(cacheKey);
+    if (cached) {
+      return { data: cached.data, isOffline: true, isStale: cached.isStale, isCached: true, error: null };
+    }
+    return {
+      data: null,
+      isOffline: true,
+      isStale: false,
+      isCached: false,
+      error: 'Offline with no cached data',
+    };
+  }
+}
+
+/**
  * Register periodic background sync if browser supports it
  */
 export async function registerPeriodicSync(): Promise<void> {

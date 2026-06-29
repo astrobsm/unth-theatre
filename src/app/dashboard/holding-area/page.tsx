@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { SYNC_INTERVALS } from '@/lib/sync';
+import { cacheFirstFetch } from '@/lib/offlineDataManager';
+import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 
 interface Patient {
@@ -114,17 +116,21 @@ export default function HoldingAreaPage() {
       if (filter === 'active') params.set('active', 'true');
       if (selectedDate) params.set('date', selectedDate);
       const url = `/api/holding-area?${params.toString()}`;
-      
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          setAssessments(data);
-          setLastSyncTime(Date.now());
-        } else {
-          console.error('API returned non-array data:', data);
-          setAssessments([]);
-        }
+      const cacheKey = `holding-area-${filter}-${selectedDate || 'all'}`;
+      // Cache-first: paint last-known assessments instantly, then revalidate.
+      const result = await cacheFirstFetch<HoldingAreaAssessment[]>(url, cacheKey, {
+        onCachedData: (cached) => {
+          if (Array.isArray(cached)) {
+            setAssessments(cached);
+            setLoading(false);
+          }
+        },
+      });
+      if (Array.isArray(result.data)) {
+        setAssessments(result.data);
+        setLastSyncTime(Date.now());
+      } else if (result.error && !result.isCached) {
+        console.error('Error fetching assessments:', result.error);
       }
     } catch (error) {
       console.error('Error fetching assessments:', error);
@@ -350,8 +356,8 @@ export default function HoldingAreaPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading holding area assessments...</div>
+      <div className="container mx-auto px-4 py-8">
+        <TableSkeleton rows={6} columns={6} />
       </div>
     );
   }
