@@ -637,7 +637,7 @@ export default function EmergencyBookingPage() {
   };
 
   const canCreateBooking = session?.user?.role && [
-    'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER',
+    'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER',
     'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'
   ].includes(session.user.role);
 
