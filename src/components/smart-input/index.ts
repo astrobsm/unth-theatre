@@ -1,19 +1,14 @@
 /**
  * Smart Input Components Index
- * 
- * Export all OCR and Speech-to-Text components for easy import
+ *
+ * Exports the SmartTextInput component only. The OCR (TensorFlow.js / Tesseract)
+ * and Speech utilities are intentionally NOT re-exported here: doing so created a
+ * static dependency chain that risked pulling those heavy modules into any bundle
+ * importing this barrel. Import them directly from their libs where they are
+ * lazy-loaded on demand:
+ *   import { initializeTensorFlow } from '@/lib/tensorflow-ocr';
+ *   import { createSpeechRecognition } from '@/lib/speech-recognition';
  */
 
 export { SmartTextInput } from './SmartTextInput';
 export type { SmartTextInputProps } from './SmartTextInput';
-
-// Re-export utilities
-export { SpeechRecognitionService, createSpeechRecognition } from '@/lib/speech-recognition';
-export { 
-  initializeTensorFlow, 
-  preprocessImage, 
-  applyImageEnhancements,
-  detectTextRegions,
-  cleanupTensors,
-  getMemoryStats 
-} from '@/lib/tensorflow-ocr';
