@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -76,7 +76,14 @@ export default function SurgeriesPage() {
   const canAccessConsent = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'RECOVERY_ROOM_NURSE'].includes(userRole || '');
   // Surgeons (and admins / theatre managers) may close out a case so PACU can admit and the post-op note can be written.
   const canCompleteSurgery = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
+  // Perioperative nurses and admins can re-assign / change the theatre a booked case is allocated to.
+  const canReassignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'].includes(userRole || '');
   const [completingId, setCompletingId] = useState<string | null>(null);
+  // Quick "change theatre" modal state.
+  const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
+  const [reassignSurgery, setReassignSurgery] = useState<Surgery | null>(null);
+  const [reassignTheatreId, setReassignTheatreId] = useState<string>('');
+  const [savingTheatre, setSavingTheatre] = useState(false);
 
   // Monitor online/offline status
   useEffect(() => {
@@ -189,6 +196,55 @@ export default function SurgeriesPage() {
       alert('A network error occurred while receiving the patient');
     } finally {
       setReceivingId(null);
+    }
+  };
+
+  // Load the list of theatres once for the "change theatre" picker (periop nurse / admin only).
+  useEffect(() => {
+    if (!canReassignTheatre) return;
+    let active = true;
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (active && Array.isArray(data)) {
+          setTheatres(data.map((t: any) => ({ id: t.id, name: t.name, location: t.location })));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [canReassignTheatre]);
+
+  const openReassign = (surgery: Surgery) => {
+    setReassignSurgery(surgery);
+    setReassignTheatreId(surgery.theatreId || surgery.theatre?.id || '');
+  };
+
+  const handleSaveTheatre = async () => {
+    if (!reassignSurgery) return;
+    setSavingTheatre(true);
+    try {
+      const selected = theatres.find((t) => t.id === reassignTheatreId);
+      const response = await fetch(`/api/surgeries/${reassignSurgery.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theatreId: reassignTheatreId || null,
+          location: selected?.name || null,
+        }),
+      });
+      if (response.ok) {
+        setReassignSurgery(null);
+        await fetchSurgeries();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Failed to change theatre');
+      }
+    } catch (error) {
+      alert('A network error occurred while changing the theatre');
+    } finally {
+      setSavingTheatre(false);
     }
   };
 
@@ -687,6 +743,17 @@ export default function SurgeriesPage() {
                           </Link>
                         )}
 
+                        {/* Change / assign theatre (perioperative nurse + admin) */}
+                        {canReassignTheatre && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => openReassign(surgery)}
+                            className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-800"
+                            title="Change / assign theatre"
+                          >
+                            <Building2 className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {/* Mark Completed (surgeon closes the case → PACU can admit + post-op note) */}
                         {canCompleteSurgery && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
                           <button
@@ -811,6 +878,74 @@ export default function SurgeriesPage() {
           </div>
         )}
       </div>
+
+      {/* Change-theatre modal (periop nurse / admin) */}
+      {reassignSurgery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-teal-600" />
+                Change Theatre
+              </h2>
+              <button
+                onClick={() => setReassignSurgery(null)}
+                className="text-gray-400 hover:text-gray-600"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div className="text-sm text-gray-600">
+                <div className="font-medium text-gray-900">{reassignSurgery.patient?.name}</div>
+                <div>{reassignSurgery.procedureName}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Currently:{' '}
+                  {reassignSurgery.theatreName ||
+                    reassignSurgery.theatre?.name ||
+                    reassignSurgery.location ||
+                    'Unassigned'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Assign to theatre</label>
+                <select
+                  value={reassignTheatreId}
+                  onChange={(e) => setReassignTheatreId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                >
+                  <option value="">Unassigned</option>
+                  {theatres.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {t.location ? ` — ${t.location}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {theatres.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">No theatres available to choose from.</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t">
+              <button
+                onClick={() => setReassignSurgery(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveTheatre}
+                disabled={savingTheatre}
+                className="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {savingTheatre ? 'Saving…' : 'Save theatre'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
