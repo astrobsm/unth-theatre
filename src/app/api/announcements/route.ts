@@ -149,6 +149,18 @@ export async function PATCH(request: NextRequest) {
       updateData.repeatDays = JSON.stringify(updateData.repeatDays);
     }
 
+    // Coerce numeric fields the form may send as strings (Prisma expects Int).
+    if ('customIntervalMin' in updateData) {
+      updateData.customIntervalMin = updateData.customIntervalMin
+        ? parseInt(updateData.customIntervalMin)
+        : null;
+    }
+    if ('audioDurationSec' in updateData) {
+      updateData.audioDurationSec = updateData.audioDurationSec
+        ? parseInt(updateData.audioDurationSec)
+        : null;
+    }
+
     updateData.updatedById = session.user.id;
     updateData.updatedByName = session.user.name || '';
 

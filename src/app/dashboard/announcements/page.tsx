@@ -19,6 +19,7 @@ import {
   FileAudio,
   Radio,
   StopCircle,
+  Pencil,
 } from 'lucide-react';
 
 interface Announcement {
@@ -65,6 +66,8 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // When set, the modal is editing this announcement instead of creating a new one.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'played' | 'expired'>('all');
   const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -172,73 +175,126 @@ export default function AnnouncementsPage() {
     );
   };
 
-  const handleCreate = async () => {
-    if (!title.trim() || !audioFile || !scheduledDate || !scheduledTime) {
-      alert('Please fill in title, upload audio, and set schedule date/time');
+  // Open the modal pre-filled to edit an existing announcement's schedule,
+  // frequency, interval, start/end etc. Audio is optional when editing.
+  const openEdit = (a: Announcement) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setEditingId(a.id);
+    setTitle(a.title);
+    setDescription(a.description || '');
+    setAudioFile(null);
+    setAudioPreviewUrl(a.audioData || null);
+    setAudioMode('upload');
+    setTtsText('');
+    setTtsError(null);
+
+    const d = new Date(a.scheduledDate);
+    setScheduledDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    setScheduledTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+
+    if (a.endDate) {
+      const e = new Date(a.endDate);
+      setEndDate(`${e.getFullYear()}-${pad(e.getMonth() + 1)}-${pad(e.getDate())}`);
+    } else {
+      setEndDate('');
+    }
+
+    setFrequency(a.frequency);
+    try {
+      setRepeatDays(a.repeatDays ? JSON.parse(a.repeatDays) : []);
+    } catch {
+      setRepeatDays([]);
+    }
+    setCustomIntervalMin(a.customIntervalMin != null ? String(a.customIntervalMin) : '');
+    setShowCreateModal(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !scheduledDate || !scheduledTime) {
+      alert('Please fill in title and set schedule date/time');
+      return;
+    }
+    // Audio is required when creating; when editing we keep the existing audio
+    // unless the admin uploads/generates a new one.
+    if (!editingId && !audioFile) {
+      alert('Please upload audio or generate speech');
       return;
     }
 
     setSubmitting(true);
     try {
-      // Convert file to base64
-      const reader = new FileReader();
-      const audioData = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(audioFile);
-      });
-
-      // Get audio duration
-      let audioDurationSec: number | null = null;
-      if (audioPreviewUrl) {
-        const tempAudio = new Audio(audioPreviewUrl);
-        audioDurationSec = await new Promise<number>((resolve) => {
-          tempAudio.addEventListener('loadedmetadata', () => {
-            resolve(Math.round(tempAudio.duration));
-          });
-          tempAudio.addEventListener('error', () => resolve(0));
-          // Timeout fallback
-          setTimeout(() => resolve(0), 3000);
+      // Encode a newly selected audio file (always for create, optional for edit).
+      let audioFields: Record<string, unknown> = {};
+      if (audioFile) {
+        const reader = new FileReader();
+        const audioData = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(audioFile);
         });
-      }
 
-      const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+        let audioDurationSec: number | null = null;
+        if (audioPreviewUrl) {
+          const tempAudio = new Audio(audioPreviewUrl);
+          audioDurationSec = await new Promise<number>((resolve) => {
+            tempAudio.addEventListener('loadedmetadata', () => {
+              resolve(Math.round(tempAudio.duration));
+            });
+            tempAudio.addEventListener('error', () => resolve(0));
+            setTimeout(() => resolve(0), 3000);
+          });
+        }
 
-      const res = await fetch('/api/announcements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || null,
+        audioFields = {
           audioFileName: audioFile.name,
           audioData,
           audioMimeType: audioFile.type || 'audio/mpeg',
           audioDurationSec,
-          scheduledDate: scheduledDateTime.toISOString(),
-          endDate: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : null,
-          frequency,
-          repeatDays: frequency === 'WEEKLY' ? repeatDays : null,
-          customIntervalMin: frequency === 'CUSTOM_INTERVAL' ? customIntervalMin : null,
-        }),
-      });
+        };
+      }
+
+      const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || null,
+        scheduledDate: scheduledDateTime.toISOString(),
+        endDate: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : null,
+        frequency,
+        repeatDays: frequency === 'WEEKLY' ? repeatDays : null,
+        customIntervalMin: frequency === 'CUSTOM_INTERVAL' ? customIntervalMin : null,
+        ...audioFields,
+      };
+
+      const res = editingId
+        ? await fetch('/api/announcements', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: editingId, ...payload }),
+          })
+        : await fetch('/api/announcements', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
 
       if (res.ok) {
         resetForm();
         setShowCreateModal(false);
         fetchAnnouncements();
       } else {
-        const err = await res.json();
-        alert(err.error || 'Failed to create announcement');
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || `Failed to ${editingId ? 'update' : 'create'} announcement`);
       }
     } catch (error) {
-      console.error('Error creating announcement:', error);
-      alert('An error occurred while creating the announcement');
+      console.error('Error saving announcement:', error);
+      alert('An error occurred while saving the announcement');
     } finally {
       setSubmitting(false);
     }
   };
 
   const resetForm = () => {
+    setEditingId(null);
     setTitle('');
     setDescription('');
     setAudioFile(null);
@@ -374,7 +430,7 @@ export default function AnnouncementsPage() {
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => { resetForm(); setShowCreateModal(true); }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             title="Create new announcement"
           >
@@ -551,6 +607,13 @@ export default function AnnouncementsPage() {
                   >
                     {playingId === a.id ? <StopCircle className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                   </button>
+                  <button
+                    onClick={() => openEdit(a)}
+                    className="p-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200"
+                    title="Edit schedule, interval, start/end"
+                  >
+                    <Pencil className="h-5 w-5" />
+                  </button>
                   {['SCHEDULED', 'ACTIVE'].includes(a.status) && (
                     <button
                       onClick={() => handlePlayNow(a)}
@@ -599,7 +662,7 @@ export default function AnnouncementsPage() {
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Volume2 className="h-6 w-6" />
-                New Announcement
+                {editingId ? 'Edit Announcement' : 'New Announcement'}
               </h2>
               <button onClick={() => { setShowCreateModal(false); resetForm(); }} className="p-2 hover:bg-gray-100 rounded-lg" title="Close">
                 <X className="h-5 w-5" />
@@ -856,20 +919,20 @@ export default function AnnouncementsPage() {
                 Cancel
               </button>
               <button
-                onClick={handleCreate}
-                disabled={submitting || !title.trim() || !audioFile || !scheduledDate || !scheduledTime}
+                onClick={handleSubmit}
+                disabled={submitting || !title.trim() || (!editingId && !audioFile) || !scheduledDate || !scheduledTime}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 title="Schedule announcement"
               >
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Scheduling...
+                    {editingId ? 'Saving...' : 'Scheduling...'}
                   </>
                 ) : (
                   <>
                     <Calendar className="h-4 w-4" />
-                    Schedule Announcement
+                    {editingId ? 'Save Changes' : 'Schedule Announcement'}
                   </>
                 )}
               </button>
