@@ -37,42 +37,47 @@ export async function POST(req: NextRequest) {
   }
   const { announcementId, code, notes } = parsed.data;
 
-  const ann = await prisma.radioAnnouncement.findUnique({
-    where: { id: announcementId },
-  });
-  if (!ann) {
-    return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
+  try {
+    const ann = await prisma.radioAnnouncement.findUnique({
+      where: { id: announcementId },
+    });
+    if (!ann) {
+      return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
+    }
+
+    if (ann.ackCode && ann.ackCode !== code) {
+      return NextResponse.json({ error: 'Invalid acknowledgment code' }, { status: 403 });
+    }
+
+    const responseSecs = Math.max(
+      0,
+      Math.floor((Date.now() - ann.createdAt.getTime()) / 1000)
+    );
+
+    await prisma.radioAcknowledgment.create({
+      data: {
+        announcementId: ann.id,
+        userId,
+        userName,
+        userRole,
+        responseSecs,
+        codeUsed: code,
+        notes,
+      },
+    });
+
+    await prisma.radioAnnouncement.update({
+      where: { id: ann.id },
+      data: {
+        status: 'ACKNOWLEDGED',
+        acknowledgedAt: new Date(),
+        acknowledgedById: userId,
+      },
+    });
+
+    return NextResponse.json({ ok: true, responseSecs });
+  } catch (error) {
+    console.error('Radio acknowledge error:', error);
+    return NextResponse.json({ error: 'Failed to record acknowledgment' }, { status: 500 });
   }
-
-  if (ann.ackCode && ann.ackCode !== code) {
-    return NextResponse.json({ error: 'Invalid acknowledgment code' }, { status: 403 });
-  }
-
-  const responseSecs = Math.max(
-    0,
-    Math.floor((Date.now() - ann.createdAt.getTime()) / 1000)
-  );
-
-  await prisma.radioAcknowledgment.create({
-    data: {
-      announcementId: ann.id,
-      userId,
-      userName,
-      userRole,
-      responseSecs,
-      codeUsed: code,
-      notes,
-    },
-  });
-
-  await prisma.radioAnnouncement.update({
-    where: { id: ann.id },
-    data: {
-      status: 'ACKNOWLEDGED',
-      acknowledgedAt: new Date(),
-      acknowledgedById: userId,
-    },
-  });
-
-  return NextResponse.json({ ok: true, responseSecs });
 }
