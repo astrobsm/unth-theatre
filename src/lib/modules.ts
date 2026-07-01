@@ -113,6 +113,7 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-meals', label: 'Theatre Meals', paths: ['/dashboard/theatre-meals'], defaultRoles: ['THEATRE_CAFETERIA_MANAGER'], category: 'Reports' },
   { id: 'staff-effectiveness', label: 'Staff Effectiveness', paths: ['/dashboard/reports/staff-effectiveness'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'reports', label: 'Reports & Analytics', paths: ['/dashboard/reports'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
+  { id: 'research', label: 'Research & Analytics', paths: ['/dashboard/research'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Reports' },
   { id: 'presentation', label: 'Presentation', paths: ['/dashboard/presentation'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'training', label: 'Staff Training', paths: ['/training'], defaultRoles: ['*'], category: 'Reports' },
   { id: 'settings', label: 'Settings', paths: ['/dashboard/settings'], defaultRoles: ['*'], category: 'Reports' },

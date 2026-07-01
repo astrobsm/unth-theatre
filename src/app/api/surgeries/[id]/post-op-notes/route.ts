@@ -82,9 +82,34 @@ export async function POST(
     const author = session.user.name || session.user.email || 'Surgeon';
     const nextRemarks = `${surgery.remarks || ''}\n\n[POST-OP NOTE ${stamp} - ${author}]\n${note}`.trim();
 
+    // Optional surgical complexity assessment captured at the end of the note.
+    const complexityUpdate: {
+      complexityScore?: number;
+      complexityClass?: string;
+      complexityData?: string;
+      complexityAssessedAt?: Date;
+      complexityAssessedBy?: string;
+    } = {};
+    if (body.complexity && typeof body.complexity === 'object') {
+      const rawScore = Number(body.complexityScore);
+      if (Number.isFinite(rawScore)) {
+        complexityUpdate.complexityScore = Math.max(0, Math.min(100, Math.round(rawScore)));
+      }
+      if (typeof body.complexityClass === 'string') {
+        complexityUpdate.complexityClass = body.complexityClass.slice(0, 40);
+      }
+      try {
+        complexityUpdate.complexityData = JSON.stringify(body.complexity);
+      } catch {
+        // ignore malformed complexity payloads
+      }
+      complexityUpdate.complexityAssessedAt = new Date();
+      complexityUpdate.complexityAssessedBy = author;
+    }
+
     await prisma.surgery.update({
       where: { id: params.id },
-      data: { remarks: nextRemarks },
+      data: { remarks: nextRemarks, ...complexityUpdate },
     });
 
     const audit = await prisma.auditLog.create({
@@ -93,7 +118,7 @@ export async function POST(
         action: 'POST_OP_NOTE',
         tableName: 'surgeries',
         recordId: params.id,
-        changes: JSON.stringify({ note, images }),
+        changes: JSON.stringify({ note, images, complexity: body.complexity, complexityScore: complexityUpdate.complexityScore, complexityClass: complexityUpdate.complexityClass }),
       },
       include: {
         user: { select: { id: true, fullName: true, username: true } },

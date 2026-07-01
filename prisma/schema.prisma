@@ -873,6 +873,15 @@ model Surgery {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // Surgical Complexity Score (captured at the end of the post-operative note).
+  // complexityData holds the raw 8-criteria JSON; score is the 0-100 weighted
+  // result and complexityClass the derived band (Minor/Intermediate/Major/Supermajor).
+  complexityScore      Int?
+  complexityClass      String?
+  complexityData       String?   @db.Text
+  complexityAssessedAt DateTime?
+  complexityAssessedBy String?
+
   // Relations
   patient               Patient                     @relation(fields: [patientId], references: [id])
   surgeon               User?                       @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])

@@ -5,6 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Plus, Trash2, Send, Printer, ImagePlus, X } from 'lucide-react';
 import { printThermalPrescription } from '@/lib/thermalPrint';
+import {
+  autofillCriteria,
+  computeComplexity,
+  classifyScore,
+  COMPLEXITY_OPTIONS,
+  DEFAULT_CRITERIA,
+  type ComplexityCriteria,
+} from '@/lib/complexityScore';
 
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -71,6 +79,10 @@ export default function PostOperativeNotesPage() {
   const [sendingRx, setSendingRx] = useState(false);
   const [drugDb, setDrugDb] = useState<{ name: string; type: string }[]>([]);
 
+  // Surgical Complexity Score — completed at the end of the note before submit.
+  const [complexity, setComplexity] = useState<ComplexityCriteria>(DEFAULT_CRITERIA);
+  const [autofilled, setAutofilled] = useState<Partial<Record<keyof ComplexityCriteria, boolean>>>({});
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -78,7 +90,25 @@ export default function PostOperativeNotesPage() {
         fetch(`/api/surgeries/${params.id}`),
         fetch(`/api/surgeries/${params.id}/post-op-notes`),
       ]);
-      if (sRes.ok) setSurgery(await sRes.json());
+      if (sRes.ok) {
+        const s = await sRes.json();
+        setSurgery(s);
+        // If a complexity assessment already exists, load it; otherwise auto-fill
+        // from documented case data.
+        if (s?.complexityData) {
+          try {
+            setComplexity({ ...DEFAULT_CRITERIA, ...JSON.parse(s.complexityData) });
+          } catch {
+            const { criteria, autofilled: af } = autofillCriteria(s);
+            setComplexity(criteria);
+            setAutofilled(af);
+          }
+        } else {
+          const { criteria, autofilled: af } = autofillCriteria(s);
+          setComplexity(criteria);
+          setAutofilled(af);
+        }
+      }
       if (nRes.ok) setNotes(await nRes.json());
     } finally {
       setLoading(false);
@@ -234,10 +264,17 @@ export default function PostOperativeNotesPage() {
 
     setSaving(true);
     try {
+      const complexityResult = computeComplexity(complexity);
       const res = await fetch(`/api/surgeries/${params.id}/post-op-notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: note.trim(), images: noteImages }),
+        body: JSON.stringify({
+          note: note.trim(),
+          images: noteImages,
+          complexity,
+          complexityScore: complexityResult.score,
+          complexityClass: complexityResult.classification,
+        }),
       });
 
       const data = await res.json();
@@ -260,6 +297,32 @@ export default function PostOperativeNotesPage() {
   if (loading) {
     return <div className="p-6">Loading...</div>;
   }
+
+  const liveComplexity = computeComplexity(complexity);
+  const complexityBand = classifyScore(liveComplexity.score);
+  const bandColor =
+    complexityBand === 'Minor'
+      ? 'bg-green-100 text-green-800 border-green-300'
+      : complexityBand === 'Intermediate'
+      ? 'bg-blue-100 text-blue-800 border-blue-300'
+      : complexityBand === 'Major'
+      ? 'bg-amber-100 text-amber-800 border-amber-300'
+      : 'bg-red-100 text-red-800 border-red-300';
+
+  const complexityFields: {
+    key: keyof ComplexityCriteria;
+    label: string;
+    options: readonly { value: string; label: string }[];
+  }[] = [
+    { key: 'operativeTime', label: 'Operative time', options: COMPLEXITY_OPTIONS.operativeTime },
+    { key: 'bloodLoss', label: 'Estimated blood loss', options: COMPLEXITY_OPTIONS.bloodLoss },
+    { key: 'anaesthesia', label: 'Anaesthesia', options: COMPLEXITY_OPTIONS.anaesthesia },
+    { key: 'bodyCavity', label: 'Body cavity entered', options: COMPLEXITY_OPTIONS.bodyCavity },
+    { key: 'physiologicalStress', label: 'Physiological stress', options: COMPLEXITY_OPTIONS.physiologicalStress },
+    { key: 'hospitalStay', label: 'Expected hospital stay', options: COMPLEXITY_OPTIONS.hospitalStay },
+    { key: 'icuRequirement', label: 'ICU requirement', options: COMPLEXITY_OPTIONS.icuRequirement },
+    { key: 'mdtRequirement', label: 'Multidisciplinary team', options: COMPLEXITY_OPTIONS.mdtRequirement },
+  ];
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -347,6 +410,58 @@ export default function PostOperativeNotesPage() {
           >
             {saving ? 'Saving...' : 'Save Post-Op Note'}
           </button>
+        </div>
+      </div>
+
+      {/* Surgical Complexity Score — auto-classifies the procedure (0-100). */}
+      <div className="bg-white rounded-lg shadow p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Surgical Complexity Score</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Fields already documented for this case are auto-filled. Review and adjust before saving —
+              this is recorded with the post-operative note and feeds the Research &amp; Analytics module.
+            </p>
+          </div>
+          <div className={`flex items-center gap-3 rounded-lg border px-4 py-2 ${bandColor}`}>
+            <span className="text-3xl font-extrabold tabular-nums">{liveComplexity.score}</span>
+            <div className="leading-tight">
+              <div className="text-[10px] uppercase tracking-wide opacity-70">Score / 100</div>
+              <div className="text-sm font-bold">{complexityBand}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {complexityFields.map((f) => (
+            <div key={f.key}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {f.label}
+                {autofilled[f.key] && (
+                  <span className="ml-2 text-[10px] font-semibold text-green-600">• auto-filled</span>
+                )}
+              </label>
+              <select
+                className="w-full border rounded px-2 py-1.5 text-sm"
+                aria-label={f.label}
+                value={complexity[f.key]}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setComplexity((prev) => ({ ...prev, [f.key]: v }));
+                  setAutofilled((prev) => ({ ...prev, [f.key]: false }));
+                }}
+              >
+                {f.options.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Bands: 0-20 Minor · 21-40 Intermediate · 41-70 Major · 71-100 Supermajor.
+          The score is saved when you tap <span className="font-semibold">Save Post-Op Note</span> above.
         </div>
       </div>
 
