@@ -63,6 +63,12 @@ export async function GET(request: NextRequest) {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        // Latest pre-op visit determines whether the patient is cleared for surgery.
+        preOperativeVisits: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { overallStatus: true },
+        },
       },
       orderBy: [{ scheduledTime: 'asc' }],
     });
@@ -133,6 +139,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Porters available to be selected as patient transporters at invite time.
+    const porters = await prisma.user.findMany({
+      where: { role: 'PORTER', status: 'APPROVED' },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+
     // Group surgeries by theatre
     const theatreGroups: Record<string, any> = {};
     const unassigned: any[] = [];
@@ -178,6 +191,10 @@ export async function GET(request: NextRequest) {
 
       const existingCallUp = surgery.patientCallUps?.[0] || null;
 
+      // A patient is cleared for surgery once the latest pre-operative visit
+      // assessment marks them CLEARED. Only cleared patients may be invited.
+      const cleared = surgery.preOperativeVisits?.[0]?.overallStatus === 'CLEARED';
+
       const caseData = {
         surgeryId: surgery.id,
         patientName: surgery.patient.name,
@@ -197,6 +214,7 @@ export async function GET(request: NextRequest) {
         porterName,
         porterId,
         status: surgery.status,
+        cleared,
         existingCallUp,
       };
 
@@ -213,6 +231,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       theatreGroups: Object.values(theatreGroups),
       unassigned,
+      porters,
       date: targetDate.toISOString(),
       totalCases: surgeries.length,
     });
@@ -231,7 +250,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { surgeryId, action, rejectionReason } = body;
+    const { surgeryId, action, rejectionReason, porterNames } = body;
 
     if (!surgeryId || !action) {
       return NextResponse.json({ error: 'surgeryId and action are required' }, { status: 400 });
@@ -299,7 +318,29 @@ export async function POST(request: NextRequest) {
     const theatreName = allocation?.theatre?.name || body.theatreName || 'Unassigned';
     const theatreId = allocation?.theatreId || body.theatreId || null;
 
+    // Porters chosen at invite time (transporters) override the roster default.
+    if (action === 'invite' && Array.isArray(porterNames) && porterNames.length > 0) {
+      porterName = porterNames.filter((n: any) => typeof n === 'string' && n.trim()).join(', ');
+      porterId = null; // multiple porters — no single FK
+    }
+
     if (action === 'invite') {
+      // Only patients cleared at the pre-operative assessment may be invited.
+      const latestVisit = await prisma.preOperativeVisit.findFirst({
+        where: { surgeryId },
+        orderBy: { createdAt: 'desc' },
+        select: { overallStatus: true },
+      });
+      if (latestVisit?.overallStatus !== 'CLEARED') {
+        return NextResponse.json(
+          {
+            error:
+              'Patient is not cleared for surgery. Complete the pre-operative assessment and clear the patient before inviting.',
+          },
+          { status: 400 }
+        );
+      }
+
       const callUp = await prisma.patientCallUp.create({
         data: {
           surgeryId,

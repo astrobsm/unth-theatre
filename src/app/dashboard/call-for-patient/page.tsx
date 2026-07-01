@@ -33,6 +33,7 @@ interface CaseData {
   porterName: string | null;
   porterId: string | null;
   status: string;
+  cleared: boolean;
   existingCallUp: {
     id: string;
     status: string;
@@ -53,6 +54,7 @@ interface TheatreGroup {
 interface ApiResponse {
   theatreGroups: TheatreGroup[];
   unassigned: CaseData[];
+  porters: { id: string; fullName: string }[];
   date: string;
   totalCases: number;
 }
@@ -67,6 +69,9 @@ export default function CallForPatientPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [printData, setPrintData] = useState<any | null>(null);
+  // Invite flow: choose the porter(s) who will transport the patient.
+  const [invitingCase, setInvitingCase] = useState<CaseData | null>(null);
+  const [selectedPorterNames, setSelectedPorterNames] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
 
   const fetchCases = useCallback(async () => {
@@ -90,7 +95,7 @@ export default function CallForPatientPage() {
     return () => clearInterval(interval);
   }, [fetchCases]);
 
-  const handleInvite = async (caseItem: CaseData) => {
+  const handleInvite = async (caseItem: CaseData, porterNames: string[] = []) => {
     setActionLoading(caseItem.surgeryId);
     try {
       const res = await fetch('/api/call-for-patient', {
@@ -101,6 +106,7 @@ export default function CallForPatientPage() {
           action: 'invite',
           theatreName: caseItem.theatreName,
           theatreId: caseItem.theatreId,
+          porterNames,
         }),
       });
       if (!res.ok) {
@@ -108,6 +114,8 @@ export default function CallForPatientPage() {
         throw new Error(err.error || 'Failed to invite patient');
       }
       const callUp = await res.json();
+      setInvitingCase(null);
+      setSelectedPorterNames([]);
       setSuccessMsg(`Patient ${caseItem.patientName} has been invited!`);
       setTimeout(() => setSuccessMsg(null), 4000);
 
@@ -134,6 +142,21 @@ export default function CallForPatientPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // Open the porter-selection dialog before inviting. Only cleared patients qualify.
+  const openInvite = (caseItem: CaseData) => {
+    setInvitingCase(caseItem);
+    // Pre-select any porter(s) already recorded for the case.
+    setSelectedPorterNames(
+      caseItem.porterName ? caseItem.porterName.split(',').map((s) => s.trim()).filter(Boolean) : []
+    );
+  };
+
+  const togglePorter = (name: string) => {
+    setSelectedPorterNames((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
   };
 
   const handleReject = async (caseItem: CaseData) => {
@@ -181,7 +204,9 @@ export default function CallForPatientPage() {
           <title>Call-Up Note</title>
           <style>
             @page { size: 80mm auto; margin: 2mm; }
-            body { font-family: 'Courier New', monospace; width: 76mm; margin: 0 auto; padding: 2mm; font-size: 11px; color: #000; }
+            /* Policy: all 80mm thermal print text is bold, 16px. */
+            * { font-size: 16px !important; font-weight: bold !important; }
+            body { font-family: 'Courier New', monospace; width: 76mm; margin: 0 auto; padding: 2mm; font-size: 16px; color: #000; }
             .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 4px; margin-bottom: 6px; }
             .logo { width: 40mm; height: auto; margin: 0 auto; display: block; }
             .hospital-name { font-size: 13px; font-weight: bold; text-transform: uppercase; margin: 4px 0 2px; }
@@ -382,18 +407,28 @@ export default function CallForPatientPage() {
                           <div className="flex items-center gap-2">
                             {/* Invite Button */}
                             {(!caseItem.existingCallUp || caseItem.existingCallUp.status === 'REJECTED') && (
-                              <button
-                                onClick={() => handleInvite(caseItem)}
-                                disabled={actionLoading === caseItem.surgeryId}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-                              >
-                                {actionLoading === caseItem.surgeryId ? (
-                                  <RefreshCw className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <Phone className="w-3 h-3" />
-                                )}
-                                Invite
-                              </button>
+                              caseItem.cleared ? (
+                                <button
+                                  onClick={() => openInvite(caseItem)}
+                                  disabled={actionLoading === caseItem.surgeryId}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+                                >
+                                  {actionLoading === caseItem.surgeryId ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Phone className="w-3 h-3" />
+                                  )}
+                                  Invite
+                                </button>
+                              ) : (
+                                <span
+                                  title="Patient not cleared for surgery. Complete the pre-operative assessment and clear the patient first."
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-medium rounded-lg cursor-not-allowed"
+                                >
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Not cleared
+                                </span>
+                              )
                             )}
 
                             {/* Reject Button */}
@@ -533,13 +568,22 @@ export default function CallForPatientPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {(!caseItem.existingCallUp || caseItem.existingCallUp.status === 'REJECTED') && (
-                            <button
-                              onClick={() => handleInvite(caseItem)}
-                              disabled={actionLoading === caseItem.surgeryId}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-                            >
-                              <Phone className="w-3 h-3" /> Invite
-                            </button>
+                            caseItem.cleared ? (
+                              <button
+                                onClick={() => openInvite(caseItem)}
+                                disabled={actionLoading === caseItem.surgeryId}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+                              >
+                                <Phone className="w-3 h-3" /> Invite
+                              </button>
+                            ) : (
+                              <span
+                                title="Patient not cleared for surgery. Complete the pre-operative assessment and clear the patient first."
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-medium rounded-lg cursor-not-allowed"
+                              >
+                                <AlertTriangle className="w-3 h-3" /> Not cleared
+                              </span>
+                            )
                           )}
                         </div>
                       </td>
@@ -558,6 +602,86 @@ export default function CallForPatientPage() {
           <User className="w-16 h-16 text-gray-300 mx-auto" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">No Cases Today</h3>
           <p className="mt-2 text-sm text-gray-500">No surgeries are scheduled for today.</p>
+        </div>
+      )}
+
+      {/* Invite dialog — choose the porter(s) transporting the patient */}
+      {invitingCase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Phone className="w-5 h-5 text-green-600" />
+                Invite Patient
+              </h2>
+              <button
+                onClick={() => { setInvitingCase(null); setSelectedPorterNames([]); }}
+                className="text-gray-400 hover:text-gray-600"
+                title="Close"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div className="text-sm text-gray-600">
+                <div className="font-medium text-gray-900">{invitingCase.patientName}</div>
+                <div>{invitingCase.procedureName}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {invitingCase.theatreName} · {invitingCase.scheduledTime || 'TBD'}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <User className="w-4 h-4 text-gray-500" />
+                  Porter(s) transporting the patient
+                </label>
+                <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {(data?.porters || []).length === 0 && (
+                    <div className="px-3 py-3 text-xs text-gray-400">No porters available on the system.</div>
+                  )}
+                  {(data?.porters || []).map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedPorterNames.includes(p.fullName)}
+                        onChange={() => togglePorter(p.fullName)}
+                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      {p.fullName}
+                    </label>
+                  ))}
+                </div>
+                {selectedPorterNames.length > 0 && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Selected: {selectedPorterNames.join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t">
+              <button
+                onClick={() => { setInvitingCase(null); setSelectedPorterNames([]); }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleInvite(invitingCase, selectedPorterNames)}
+                disabled={actionLoading === invitingCase.surgeryId}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {actionLoading === invitingCase.surgeryId ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Phone className="w-4 h-4" />
+                )}
+                Confirm &amp; Invite
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

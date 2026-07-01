@@ -85,6 +85,8 @@ export function printThermalPrescription(data: ThermalPrescriptionData) {
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; }
+  /* Policy: all 80mm thermal print text is bold, 16px. */
+  body * { font-size: 16px !important; font-weight: bold !important; }
   html, body { margin: 0; padding: 0; }
   body {
     width: 80mm;

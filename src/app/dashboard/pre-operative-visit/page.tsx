@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   ClipboardCheck,
   RefreshCw,
@@ -32,6 +33,7 @@ interface PendingSurgery {
   hasPreOpVisit: boolean;
   latestVisitStatus: string | null;
   latestVisit: PreOpVisit | null;
+  consentOnFile: boolean;
 }
 
 interface PreOpVisit {
@@ -98,6 +100,7 @@ const EMOTIONAL_OPTIONS = [
 export default function PreOperativeVisitPage() {
   const [pendingSurgeries, setPendingSurgeries] = useState<PendingSurgery[]>([]);
   const [completedVisits, setCompletedVisits] = useState<PreOpVisit[]>([]);
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -106,6 +109,7 @@ export default function PreOperativeVisitPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [selectedSurgery, setSelectedSurgery] = useState<PendingSurgery | null>(null);
   const [issuesSurgery, setIssuesSurgery] = useState<PendingSurgery | null>(null);
+  const [issueResolutions, setIssueResolutions] = useState<Record<number, string>>({});
   const [expandedVisit, setExpandedVisit] = useState<string | null>(null);
   const [targetDate, setTargetDate] = useState(() => {
     const tomorrow = new Date();
@@ -154,6 +158,29 @@ export default function PreOperativeVisitPage() {
       overallNotes: '',
       nurseSignature: '',
     });
+  };
+
+  // Open the assessment form for a surgery. If a signed informed consent is
+  // already on file from the booking form, the consent status is pre-set to
+  // "Obtained" so the nurse doesn't have to re-enter it. When re-assessing a
+  // blocked patient, a summary of the actions taken can be pre-filled.
+  const openAssessment = (s: PendingSurgery, resolutionNote?: string) => {
+    setSelectedSurgery(s);
+    resetForm();
+    if (s.consentOnFile || resolutionNote) {
+      setFormData((prev) => ({
+        ...prev,
+        ...(s.consentOnFile ? { consentStatus: 'OBTAINED' } : {}),
+        ...(resolutionNote ? { overallNotes: resolutionNote } : {}),
+      }));
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Open the blocking-issues modal and reset any prior resolution entries.
+  const openIssues = (s: PendingSurgery) => {
+    setIssuesSurgery(s);
+    setIssueResolutions({});
   };
 
   const fetchPendingSurgeries = useCallback(async () => {
@@ -381,14 +408,28 @@ export default function PreOperativeVisitPage() {
                 <div className="text-sm text-gray-500">{issuesSurgery.folderNumber} · {issuesSurgery.procedureName}</div>
               </div>
               {getBlockingIssues(issuesSurgery.latestVisit).length > 0 ? (
-                <ul className="space-y-2">
-                  {getBlockingIssues(issuesSurgery.latestVisit).map((issue, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                      <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>{issue}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className="text-xs text-gray-500 mb-2">
+                    For each blocking issue, record what was done to resolve it before re-assessing.
+                  </p>
+                  <ul className="space-y-3">
+                    {getBlockingIssues(issuesSurgery.latestVisit).map((issue, i) => (
+                      <li key={i} className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                        <div className="flex items-start gap-2 text-sm text-red-700">
+                          <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                          <span>{issue}</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={issueResolutions[i] || ''}
+                          onChange={(e) => setIssueResolutions(prev => ({ ...prev, [i]: e.target.value }))}
+                          placeholder="What was done to resolve this?"
+                          className="mt-2 w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-800 bg-white focus:ring-2 focus:ring-purple-500"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : (
                 <p className="text-sm text-gray-500">No specific issues recorded. Re-assess the patient to update readiness.</p>
               )}
@@ -398,7 +439,22 @@ export default function PreOperativeVisitPage() {
                 </div>
               )}
               <button
-                onClick={() => { const s = issuesSurgery; setIssuesSurgery(null); setSelectedSurgery(s); resetForm(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                onClick={() => {
+                  const s = issuesSurgery;
+                  const issues = getBlockingIssues(s.latestVisit);
+                  const resolved = issues
+                    .map((issue, i) => {
+                      const r = issueResolutions[i]?.trim();
+                      return r ? `• ${issue} -> Action taken: ${r}` : null;
+                    })
+                    .filter(Boolean)
+                    .join('\n');
+                  const note = resolved
+                    ? `Re-assessment by ${session?.user?.name || 'clinician'} — actions taken to resolve blocking issues:\n${resolved}\n\n`
+                    : '';
+                  setIssuesSurgery(null);
+                  openAssessment(s, note);
+                }}
                 className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition"
               >
                 <ClipboardCheck className="w-4 h-4" /> Re-assess patient
@@ -533,6 +589,12 @@ export default function PreOperativeVisitPage() {
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {selectedSurgery?.consentOnFile && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Signed consent on file from booking — status pre-set to Obtained.
+                </p>
+              )}
             </div>
 
             {/* Surgical Items Available */}
@@ -708,15 +770,16 @@ export default function PreOperativeVisitPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
               />
             </div>
-            <div className="max-w-xs">
+            <div className="max-w-md">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Nurse Signature</label>
-              <input
-                type="text"
-                value={formData.nurseSignature}
-                onChange={(e) => setFormData(p => ({ ...p, nurseSignature: e.target.value }))}
-                placeholder="Type your name as signature"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-              />
+              <div className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-800 flex items-center gap-2">
+                <User className="w-4 h-4 text-purple-500" />
+                <span className="font-medium">{session?.user?.name || 'Signed-in nurse'}</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Auto-signed as the logged-in nurse. Your name and registered phone number
+                are recorded from your profile as the electronic signature.
+              </p>
             </div>
           </div>
 
@@ -805,9 +868,7 @@ export default function PreOperativeVisitPage() {
                 </div>
                 <button
                   onClick={() => {
-                    setSelectedSurgery(s);
-                    resetForm();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    openAssessment(s);
                   }}
                   className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 active:bg-purple-800 transition"
                 >
@@ -816,7 +877,7 @@ export default function PreOperativeVisitPage() {
                 </button>
                 {s.latestVisitStatus === 'NOT_CLEARED' && (
                   <button
-                    onClick={() => setIssuesSurgery(s)}
+                    onClick={() => openIssues(s)}
                     className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-700 border border-red-300 text-sm font-semibold rounded-lg hover:bg-red-100 transition"
                   >
                     <AlertTriangle className="w-4 h-4" />
@@ -881,9 +942,7 @@ export default function PreOperativeVisitPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
-                            setSelectedSurgery(s);
-                            resetForm();
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            openAssessment(s);
                           }}
                           className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition"
                         >
@@ -892,7 +951,7 @@ export default function PreOperativeVisitPage() {
                         </button>
                         {s.latestVisitStatus === 'NOT_CLEARED' && (
                           <button
-                            onClick={() => setIssuesSurgery(s)}
+                            onClick={() => openIssues(s)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 border border-red-300 text-xs font-medium rounded-lg hover:bg-red-100 transition"
                             title="View blocking issues"
                           >

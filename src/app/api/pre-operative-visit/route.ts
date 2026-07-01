@@ -74,6 +74,9 @@ export async function GET(request: NextRequest) {
           hasPreOpVisit: s.preOperativeVisits.length > 0,
           latestVisitStatus: s.preOperativeVisits[0]?.overallStatus || null,
           latestVisit: s.preOperativeVisits[0] || null,
+          // A signed informed consent from the booking form (uploaded scan or
+          // completed electronic form) pre-sets the assessment consent status.
+          consentOnFile: Boolean(s.consentUploadedAt || s.consentCompletedAt || s.consentSignedElectronically),
         })),
         date: targetDate.toISOString(),
       });
@@ -160,6 +163,16 @@ export async function POST(request: NextRequest) {
       overallStatus = body.overallStatus as PreOpVisitStatus;
     }
 
+    // Nurse signature is taken from the logged-in user's profile (name + phone
+    // number) so it is authoritative and cannot be spoofed by free text.
+    const nurseUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { fullName: true, phoneNumber: true },
+    });
+    const nurseSignature = nurseUser
+      ? `${nurseUser.fullName}${nurseUser.phoneNumber ? ` — ${nurseUser.phoneNumber}` : ''}`
+      : session.user.name || null;
+
     const visit = await prisma.preOperativeVisit.create({
       data: {
         surgeryId,
@@ -193,7 +206,7 @@ export async function POST(request: NextRequest) {
         skinPrepDone: body.skinPrepDone ?? false,
         overallStatus,
         overallNotes: body.overallNotes || null,
-        nurseSignature: body.nurseSignature || session.user.name || null,
+        nurseSignature,
       },
     });
 

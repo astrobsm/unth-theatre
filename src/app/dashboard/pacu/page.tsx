@@ -169,7 +169,9 @@ export default function PACUPage() {
     win.document.write(`<!doctype html><html><head><title>${title}</title>
       <style>
         @page { size: 80mm auto; margin: 2mm; }
-        body { font-family: 'Courier New', monospace; width: 76mm; margin: 0 auto; padding: 2mm; font-size: 11px; color: #000; }
+        /* Policy: all 80mm thermal print text is bold, 16px. */
+        * { font-size: 16px !important; font-weight: bold !important; }
+        body { font-family: 'Courier New', monospace; width: 76mm; margin: 0 auto; padding: 2mm; font-size: 16px; color: #000; }
         .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 4px; margin-bottom: 6px; }
         .hospital-name { font-size: 13px; font-weight: bold; text-transform: uppercase; margin: 2px 0; }
         .subtitle { font-size: 10px; font-weight: bold; border: 1px solid #000; padding: 2px 6px; display: inline-block; margin: 4px 0; }

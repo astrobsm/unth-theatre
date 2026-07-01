@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -1464,12 +1464,41 @@ export default function NewSurgeryPage() {
         <div className="card">
           <div className="flex items-center gap-3 mb-2">
             <FileText className="w-6 h-6 text-primary-600" />
-            <h2 className="text-xl font-semibold">Informed Consent</h2>
+            <h2 className="text-xl font-semibold">Surgical Consent Form</h2>
             <span className="ml-auto text-xs text-gray-500">Required for holding-area clearance.</span>
           </div>
+
+          {/* Consumable Pack Provider Careline — patients/relatives can reach the
+              provider on WhatsApp to arrange the consumable pack before surgery. */}
+          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3">
+            <p className="text-sm font-semibold text-green-800 mb-2">
+              Consumable Pack Provider Careline
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: '0808 689 4420', wa: '2348086894420' },
+                { label: '0818 784 6315', wa: '2348187846315' },
+                { label: '0817 125 4557', wa: '2348171254557' },
+                { label: '0818 989 3738', wa: '2348189893738' },
+              ].map((c) => (
+                <a
+                  key={c.wa}
+                  href={`https://wa.me/${c.wa}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white border border-green-300 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100 transition"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  {c.label}
+                </a>
+              ))}
+            </div>
+          </div>
+
           <p className="text-sm text-gray-600 mb-3">
             Upload the signed informed consent (PDF or image, ≤ 10 MB). The Holding Area Nurse will review it
-            before transferring the patient to theatre.
+            before transferring the patient to theatre. Once a signed consent is attached here, the patient's
+            pre-operative assessment consent status is automatically set to <span className="font-medium">Obtained</span>.
           </p>
           <input
             aria-label="Upload signed informed consent file"
