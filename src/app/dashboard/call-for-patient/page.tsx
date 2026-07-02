@@ -34,6 +34,7 @@ interface CaseData {
   porterId: string | null;
   status: string;
   cleared: boolean;
+  isDayCase?: boolean;
   existingCallUp: {
     id: string;
     status: string;
@@ -498,6 +499,13 @@ export default function CallForPatientPage() {
                             </div>
                           ) : (
                             <span className="text-xs text-gray-400">Pending</span>
+                          )}
+                          {caseItem.isDayCase && (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-100 text-teal-700">
+                                Day case — no pre-op clearance required
+                              </span>
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-3">

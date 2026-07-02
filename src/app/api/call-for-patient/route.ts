@@ -192,8 +192,11 @@ export async function GET(request: NextRequest) {
       const existingCallUp = surgery.patientCallUps?.[0] || null;
 
       // A patient is cleared for surgery once the latest pre-operative visit
-      // assessment marks them CLEARED. Only cleared patients may be invited.
-      const cleared = surgery.preOperativeVisits?.[0]?.overallStatus === 'CLEARED';
+      // assessment marks them CLEARED. Day cases are exempt — they can be
+      // invited without a pre-operative visit clearance.
+      const cleared =
+        surgery.isDayCase === true ||
+        surgery.preOperativeVisits?.[0]?.overallStatus === 'CLEARED';
 
       const caseData = {
         surgeryId: surgery.id,
@@ -215,6 +218,7 @@ export async function GET(request: NextRequest) {
         porterId,
         status: surgery.status,
         cleared,
+        isDayCase: surgery.isDayCase === true,
         existingCallUp,
       };
 
@@ -325,20 +329,23 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'invite') {
-      // Only patients cleared at the pre-operative assessment may be invited.
-      const latestVisit = await prisma.preOperativeVisit.findFirst({
-        where: { surgeryId },
-        orderBy: { createdAt: 'desc' },
-        select: { overallStatus: true },
-      });
-      if (latestVisit?.overallStatus !== 'CLEARED') {
-        return NextResponse.json(
-          {
-            error:
-              'Patient is not cleared for surgery. Complete the pre-operative assessment and clear the patient before inviting.',
-          },
-          { status: 400 }
-        );
+      // Only patients cleared at the pre-operative assessment may be invited —
+      // except day cases, which do not require a pre-operative visit clearance.
+      if (!surgery.isDayCase) {
+        const latestVisit = await prisma.preOperativeVisit.findFirst({
+          where: { surgeryId },
+          orderBy: { createdAt: 'desc' },
+          select: { overallStatus: true },
+        });
+        if (latestVisit?.overallStatus !== 'CLEARED') {
+          return NextResponse.json(
+            {
+              error:
+                'Patient is not cleared for surgery. Complete the pre-operative assessment and clear the patient before inviting.',
+            },
+            { status: 400 }
+          );
+        }
       }
 
       const callUp = await prisma.patientCallUp.create({
