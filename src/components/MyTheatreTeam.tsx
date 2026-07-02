@@ -24,6 +24,9 @@ interface Allocation {
   scrubNurse: string | null;
   circulatingNurse: string | null;
   notes: string | null;
+  teamAssigned?: boolean;
+  surgeons?: string | null;
+  caseCount?: number | null;
 }
 
 interface SurgicalUnit {
@@ -127,7 +130,8 @@ export default function MyTheatreTeam() {
       {allocations !== null && !loading && (
         allocations.length === 0 ? (
           <div className="p-4 bg-white border border-gray-200 rounded-lg text-center text-gray-500 text-sm">
-            No theatre allocation found for {unit ? `“${unit}”` : 'any unit'} on {new Date(`${date}T00:00:00`).toLocaleDateString()}.
+            No cases or theatre allocation found for {unit ? `“${unit}”` : 'any unit'} on {new Date(`${date}T00:00:00`).toLocaleDateString()}.
+            {unit ? ' Check the unit name and date, or confirm cases have been booked for this day.' : ''}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -144,6 +148,21 @@ export default function MyTheatreTeam() {
                     {a.surgeryType && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">{a.surgeryType}</span>}
                   </div>
                 </div>
+
+                {(a.surgeons || a.caseCount != null) && (
+                  <div className="mb-3 text-xs text-gray-600">
+                    {a.caseCount != null && (
+                      <span className="font-medium text-gray-700">{a.caseCount} case{a.caseCount === 1 ? '' : 's'}</span>
+                    )}
+                    {a.surgeons && <span> · Surgeon(s): {a.surgeons}</span>}
+                  </div>
+                )}
+
+                {a.teamAssigned === false && (
+                  <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                    Team not yet allocated for this theatre on this date. Check back once the duty roster / theatre allocation is published.
+                  </div>
+                )}
 
                 <div className="space-y-2 text-sm">
                   <div className="flex items-start gap-2">
