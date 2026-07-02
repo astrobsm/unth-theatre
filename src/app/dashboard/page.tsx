@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
+import MyTheatreTeam from '@/components/MyTheatreTeam';
 
 // Dynamic imports for chart components (client-side only)
 const SurgeryTrendChart = dynamic(() => import('@/components/charts/SurgeryTrendChart'), {
@@ -425,6 +426,9 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* My Theatre Team — surgeon unit + date lookup */}
+      <MyTheatreTeam />
 
       {/* Analytics Section */}
       <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
