@@ -36,6 +36,7 @@ interface Surgery {
   theatreId?: string | null;
   theatreName?: string | null;
   theatre?: { id: string; name: string; location: string } | null;
+  supervisingConsultantName?: string | null;
   needBloodTransfusion?: boolean;
   needDiathermy?: boolean;
   needStereo?: boolean;
@@ -310,7 +311,7 @@ export default function SurgeriesPage() {
     if (s.needDiathermy) tags.push('Diathermy');
     if (s.needStirups || s.needStereo) tags.push('Stirrups');
     if (s.needMontrellMattress) tags.push('Montrell');
-    if (s.otherSpecialNeeds && s.otherSpecialNeeds.trim()) tags.push('Other');
+    if (s.otherSpecialNeeds && s.otherSpecialNeeds.trim()) tags.push(`Other: ${s.otherSpecialNeeds.trim()}`);
     return tags;
   };
 
@@ -386,7 +387,7 @@ export default function SurgeriesPage() {
           <td>${escape(s.procedureName)}</td>
           <td>${escape(s.indication || '—')}</td>
           <td>${escape(s.surgeon?.fullName || s.surgeonName || 'Not assigned')}</td>
-          <td>${escape(theatreLabel)}</td>
+          <td>${escape(theatreLabel)}${s.supervisingConsultantName ? `<br/><span class="sub">Consultant: ${escape(s.supervisingConsultantName)}</span>` : ''}</td>
           <td>${escape(formatDate(s.scheduledDate))}<br/><span class="sub">${escape(s.scheduledTime || '')}</span></td>
           <td>${escape(formatAnaesthesia(s.anesthesiaType))}</td>
           <td>${needs.length === 0 ? '<span class="sub">—</span>' : needs.map(n => `<span class="badge">${escape(n)}</span>`).join(' ')}</td>
@@ -677,6 +678,11 @@ export default function SurgeriesPage() {
                       <div className="text-xs text-gray-500">
                         {surgery.theatreName || surgery.theatre?.name || (surgery.location || 'No theatre')}
                       </div>
+                      {surgery.supervisingConsultantName && (
+                        <div className="text-xs text-indigo-600 mt-0.5">
+                          Consultant: {surgery.supervisingConsultantName}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {surgery.surgeon?.fullName ? (

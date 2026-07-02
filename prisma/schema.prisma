@@ -888,6 +888,11 @@ model Surgery {
   postOpDestination String?
   isDayCase         Boolean @default(false)
 
+  // Unit supervising consultant (chosen from surgeons). Displayed as a caption
+  // beside the theatre / unit on booked-surgery views.
+  supervisingConsultantId   String?
+  supervisingConsultantName String?
+
   // Relations
   patient               Patient                     @relation(fields: [patientId], references: [id])
   surgeon               User?                       @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Building2, Stethoscope, Wrench, UserRound, Users2, Search, RefreshCw } from 'lucide-react';
+import ContactName from '@/components/ContactName';
 
 interface Anaesthetist {
   id: string;
@@ -21,8 +22,11 @@ interface Allocation {
   endTime: string;
   anaesthetists: Anaesthetist[];
   anaestheticTechnician: string | null;
+  anaestheticTechnicianId?: string | null;
   scrubNurse: string | null;
+  scrubNurseId?: string | null;
   circulatingNurse: string | null;
+  circulatingNurseId?: string | null;
   notes: string | null;
   teamAssigned?: boolean;
   surgeons?: string | null;
@@ -172,7 +176,10 @@ export default function MyTheatreTeam() {
                       {a.anaesthetists.length ? (
                         <ul className="text-gray-800">
                           {a.anaesthetists.map((an) => (
-                            <li key={an.id}>{an.fullName} <span className="text-xs text-gray-400">({an.tier})</span></li>
+                            <li key={an.id}>
+                              <ContactName type="user" id={an.id} name={an.fullName} />{' '}
+                              <span className="text-xs text-gray-400">({an.tier})</span>
+                            </li>
                           ))}
                         </ul>
                       ) : <p className="text-gray-400">Not assigned</p>}
@@ -183,7 +190,9 @@ export default function MyTheatreTeam() {
                     <Wrench className="w-4 h-4 text-teal-600 flex-shrink-0" />
                     <div>
                       <span className="text-xs text-gray-500">Anaesthetic Technician: </span>
-                      <span className="text-gray-800">{a.anaestheticTechnician || <span className="text-gray-400">Not assigned</span>}</span>
+                      <span className="text-gray-800">{a.anaestheticTechnician
+                        ? <ContactName type="user" id={a.anaestheticTechnicianId || undefined} name={a.anaestheticTechnician} />
+                        : <span className="text-gray-400">Not assigned</span>}</span>
                     </div>
                   </div>
 
@@ -191,7 +200,9 @@ export default function MyTheatreTeam() {
                     <UserRound className="w-4 h-4 text-blue-600 flex-shrink-0" />
                     <div>
                       <span className="text-xs text-gray-500">Scrub Nurse: </span>
-                      <span className="text-gray-800">{a.scrubNurse || <span className="text-gray-400">Not assigned</span>}</span>
+                      <span className="text-gray-800">{a.scrubNurse
+                        ? <ContactName type="user" id={a.scrubNurseId || undefined} name={a.scrubNurse} />
+                        : <span className="text-gray-400">Not assigned</span>}</span>
                     </div>
                   </div>
 
@@ -200,7 +211,9 @@ export default function MyTheatreTeam() {
                       <UserRound className="w-4 h-4 text-cyan-600 flex-shrink-0" />
                       <div>
                         <span className="text-xs text-gray-500">Circulating Nurse: </span>
-                        <span className="text-gray-800">{a.circulatingNurse}</span>
+                        <span className="text-gray-800">
+                          <ContactName type="user" id={a.circulatingNurseId || undefined} name={a.circulatingNurse} />
+                        </span>
                       </div>
                     </div>
                   )}

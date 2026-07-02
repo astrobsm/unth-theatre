@@ -33,6 +33,9 @@ const surgerySchema = z.object({
   // and whether it is a same-day (day-case) procedure.
   postOpDestination: z.string().nullish(),
   isDayCase: z.boolean().default(false),
+  // Unit supervising consultant (chosen from the surgeon list).
+  supervisingConsultantId: z.string().nullish(),
+  supervisingConsultantName: z.string().nullish(),
   // Clinical Summary collected on the booking form. Persisted on the Patient record
   // so the Pharmacy page (and other downstream views) can display them.
   comorbiditiesList: z.array(z.string()).optional(),

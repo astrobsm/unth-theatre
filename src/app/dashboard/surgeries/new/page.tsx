@@ -163,6 +163,7 @@ export default function NewSurgeryPage() {
   const [unit, setUnit] = useState('');
   const [subspecialty, setSubspecialty] = useState('');
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
+  const [supervisingConsultantId, setSupervisingConsultantId] = useState('');
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
   const [locations, setLocations] = useState<string[]>([]);
@@ -447,11 +448,14 @@ export default function NewSurgeryPage() {
     const formData = new FormData(e.currentTarget);
 
     const chosenSurgeon = surgeons.find((s) => s.id === selectedSurgeonId);
+    const chosenConsultant = surgeons.find((s) => s.id === supervisingConsultantId);
 
     const data = {
       patientId: formData.get('patientId'),
       surgeonId: selectedSurgeonId || null,
       surgeonName: chosenSurgeon?.fullName || formData.get('surgeonName'),
+      supervisingConsultantId: supervisingConsultantId || null,
+      supervisingConsultantName: chosenConsultant?.fullName || null,
       unit: formData.get('unit'),
       subspecialty: formData.get('subspecialty'),
       location: selectedLocation || null,
@@ -737,6 +741,26 @@ export default function NewSurgeryPage() {
               )}
               {/* Hidden field keeps the surgeon name in the form payload for legacy validation */}
               <input type="hidden" name="surgeonName" value={surgeons.find((s) => s.id === selectedSurgeonId)?.fullName || ''} />
+            </div>
+
+            <div>
+              <label className="label">Unit Supervising Consultant</label>
+              <select
+                value={supervisingConsultantId}
+                onChange={(e) => setSupervisingConsultantId(e.target.value)}
+                className="input-field"
+                title="Select the unit's supervising consultant"
+              >
+                <option value="">— Select Consultant —</option>
+                {surgeons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Chosen from the surgeon database. Displayed beside the theatre and unit on the schedule.
+              </p>
             </div>
 
             <div>
