@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
 import { ROLE_VALUES, prefixForRole } from '@/lib/onboarding-roles';
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
     const title       = clean(body.title, 30);
     const notes       = clean(body.notes, 500);
     const isContractStaff = body.isContractStaff === true;
+    // Staff now choose their own password during onboarding; the account is
+    // activated (APPROVED) immediately so they can sign in right away.
+    const password    = String(body.password ?? '');
 
     // House Officer rotation
     const rotationSpecialty = clean(body.rotationSpecialty, 60).toUpperCase();
@@ -73,6 +77,8 @@ export async function POST(request: NextRequest) {
       errors.push('Phone must be 11 digits starting with 0, or +234XXXXXXXXXX');
     if (!isContractStaff && !staffId)
       errors.push('Staff ID is required (tick "Contract staff" if you do not have one)');
+    if (!password || password.length < 6)
+      errors.push('Password is required and must be at least 6 characters');
 
     if (role === 'HOUSE_OFFICER') {
       if (!rotationSpecialty || !VALID_HO_SPECIALTIES.includes(rotationSpecialty))
@@ -89,10 +95,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', details: errors }, { status: 400 });
     }
 
+    // Reject duplicates up-front (case-insensitive username / email) so we
+    // never create an un-loginnable account.
+    const dupErrors: string[] = [];
+    const existingUser = await prisma.user.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existingUser) dupErrors.push('That username is already taken. Please choose another.');
+    if (email) {
+      const existingEmail = await prisma.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (existingEmail) dupErrors.push('That email is already registered.');
+    }
+    if (dupErrors.length) {
+      return NextResponse.json({ error: 'Validation failed', details: dupErrors }, { status: 400 });
+    }
+
     // Auto-generate the staff code from the role prefix when none was supplied
     if (!staffCode) {
       const prefix = prefixForRole(role);
       if (prefix) staffCode = await generateStaffCode(prefix);
+    }
+
+    // A supplied staff code that clashes with an existing user is dropped so it
+    // can be regenerated below, avoiding a hard failure.
+    if (staffCode) {
+      const clash = await prisma.user.findUnique({ where: { staffCode }, select: { id: true } });
+      if (clash) {
+        const prefix = prefixForRole(role);
+        staffCode = prefix ? await generateStaffCode(prefix) : '';
+      }
+    }
+
+    // A staff ID that is already registered is left blank; the user can set it
+    // on first login via the existing set-staff-id flow.
+    let finalStaffId: string | null = staffId || null;
+    if (finalStaffId) {
+      const clashId = await prisma.user.findUnique({ where: { staffId: finalStaffId }, select: { id: true } });
+      if (clashId) finalStaffId = null;
     }
 
     const ipAddress =
@@ -107,11 +150,37 @@ export async function POST(request: NextRequest) {
         phoneNumber: phoneNumber || null,
         department: department || null,
         staffCode: staffCode || null,
-        staffId: staffId || null,
+        staffId: finalStaffId,
         title: title || null,
         notes: notes || null,
         isContractStaff,
         ipAddress, userAgent,
+        status: 'IMPORTED',
+        importedAt: new Date(),
+        rotationSpecialty: role === 'HOUSE_OFFICER' ? (rotationSpecialty || null) : null,
+        rotationStartDate: role === 'HOUSE_OFFICER' ? rotationStartDate : null,
+        rotationEndDate:   role === 'HOUSE_OFFICER' ? rotationEndDate   : null,
+      },
+    });
+
+    // Create the account immediately with the staff-chosen password and
+    // APPROVED status so they can sign in without waiting for an admin.
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        fullName,
+        email: email || null,
+        role: role as any,
+        phoneNumber: phoneNumber || null,
+        department: department || null,
+        staffCode: staffCode || null,
+        staffId: finalStaffId,
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        isFirstLogin: false,
+        mustChangePassword: false,
         rotationSpecialty: role === 'HOUSE_OFFICER' ? (rotationSpecialty || null) : null,
         rotationStartDate: role === 'HOUSE_OFFICER' ? rotationStartDate : null,
         rotationEndDate:   role === 'HOUSE_OFFICER' ? rotationEndDate   : null,
@@ -121,8 +190,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message:
-        'Thank you! Your details have been recorded. ' +
-        'The ORM administrator will activate your account shortly.',
+        'Your account has been created and approved. ' +
+        'You can now sign in with your username and password.',
       id: submission.id,
       staffCode: submission.staffCode,
     });

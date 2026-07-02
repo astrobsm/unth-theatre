@@ -52,6 +52,8 @@ type FormState = {
   staffId: string;
   notes: string;
   isContractStaff: boolean;
+  password: string;
+  confirmPassword: string;
   // House Officer rotation (only when role === 'HOUSE_OFFICER')
   rotationSpecialty: string;
   rotationStartDate: string;
@@ -62,6 +64,7 @@ const EMPTY: FormState = {
   title: '', fullName: '', username: '', email: '', role: '',
   phoneNumber: '', department: '', staffCode: '', staffId: '', notes: '',
   isContractStaff: false,
+  password: '', confirmPassword: '',
   rotationSpecialty: '', rotationStartDate: '', rotationEndDate: '',
 };
 
@@ -117,6 +120,10 @@ export default function StaffOnboardingPage() {
       errs.phoneNumber = 'Use 11 digits starting with 0, or +234XXXXXXXXXX';
     if (!data.isContractStaff && !data.staffId.trim())
       errs.staffId = 'Staff ID is required (tick "Contract staff" if you have none)';
+    if (!data.password || data.password.length < 6)
+      errs.password = 'Choose a password of at least 6 characters';
+    if (data.confirmPassword !== data.password)
+      errs.confirmPassword = 'Passwords do not match';
     if (data.role === 'HOUSE_OFFICER') {
       if (!data.rotationSpecialty) errs.rotationSpecialty = 'Select your rotation specialty';
       if (!data.rotationStartDate) errs.rotationStartDate = 'Required';
@@ -150,6 +157,7 @@ export default function StaffOnboardingPage() {
           staffCode: data.staffCode.trim(),
           staffId: data.staffId.trim(),
           isContractStaff: data.isContractStaff,
+          password: data.password,
           rotationSpecialty: data.role === 'HOUSE_OFFICER' ? data.rotationSpecialty : null,
           rotationStartDate: data.role === 'HOUSE_OFFICER' ? data.rotationStartDate : null,
           rotationEndDate:   data.role === 'HOUSE_OFFICER' ? data.rotationEndDate   : null,
@@ -250,17 +258,22 @@ export default function StaffOnboardingPage() {
                 <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-green-700 mb-2">Submission received</h2>
+            <h2 className="text-xl font-bold text-green-700 mb-2">Account created</h2>
             <p className="text-gray-700">
-              Thank you. Your details have been recorded. The ORM administrator will activate
-              your account shortly. You will be able to log in with your chosen username; initial
-              password is the same as the username (you will be forced to change it).
+              Your account has been created and approved. You can sign in right now with your
+              username and the password you just chose.
             </p>
+            <a
+              href="/auth/login"
+              className="inline-block mt-6 px-5 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700"
+            >
+              Go to sign in
+            </a>
             <button
               onClick={reset}
-              className="mt-6 px-5 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+              className="mt-6 sm:ml-3 px-5 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
             >
-              Submit another staff member
+              Register another staff member
             </button>
           </div>
         ) : (
@@ -480,10 +493,39 @@ export default function StaffOnboardingPage() {
               />
             </Field>
 
+            <SectionHeader>Create your password</SectionHeader>
+
+            <Field label="Password *" error={fieldErrors.password}
+              hint="At least 6 characters. You will use this with your username to sign in.">
+              <input
+                type="password"
+                className={inputCls}
+                value={data.password}
+                onChange={e => set('password', e.target.value)}
+                placeholder="Choose a password"
+                autoComplete="new-password"
+                minLength={6}
+                required
+              />
+            </Field>
+
+            <Field label="Confirm password *" error={fieldErrors.confirmPassword}>
+              <input
+                type="password"
+                className={inputCls}
+                value={data.confirmPassword}
+                onChange={e => set('confirmPassword', e.target.value)}
+                placeholder="Re-enter your password"
+                autoComplete="new-password"
+                minLength={6}
+                required
+              />
+            </Field>
+
             <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
               <p className="text-xs text-gray-500">
                 By submitting you confirm the details above are correct.
-                Initial password = username. You will be required to change it on first login.
+                Your account is activated immediately — sign in with your username and chosen password.
               </p>
               <button
                 type="submit"

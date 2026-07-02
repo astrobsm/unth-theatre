@@ -153,6 +153,8 @@ export default function NewSurgeryPage() {
   const [searchPatient, setSearchPatient] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
+  const [postOpDestination, setPostOpDestination] = useState('');
+  const [isDayCase, setIsDayCase] = useState(false);
   const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
   const [anesthesiaType, setAnesthesiaType] = useState<string>('');
   const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
@@ -466,6 +468,8 @@ export default function NewSurgeryPage() {
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
       otherSpecialNeeds: otherSpecialNeeds,
+      postOpDestination: postOpDestination || null,
+      isDayCase: isDayCase,
       // Clinical summary persisted on the Patient record so the Pharmacist sees it on every prescription.
       comorbiditiesList: comorbidities,
       otherComorbidities: otherComorbidities.trim() || null,
@@ -1214,6 +1218,46 @@ export default function NewSurgeryPage() {
               enableOCR={true}
               medicalMode={true}
             />
+          </div>
+
+          {/* Post-operative disposition */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Post-op destination
+              </label>
+              <select
+                value={postOpDestination}
+                onChange={(e) => setPostOpDestination(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                aria-label="Post-operative destination"
+              >
+                <option value="">Select where the patient goes after surgery…</option>
+                <option value="GENERAL_WARD">General Ward</option>
+                <option value="ICU">Intensive Care Unit (ICU)</option>
+                <option value="HDU">High Dependency Unit (HDU)</option>
+                <option value="RECOVERY_THEN_WARD">Recovery, then Ward</option>
+                <option value="DAY_CASE_DISCHARGE">Day-case discharge (home same day)</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">Planned disposition; the recovery team confirms this at discharge.</p>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isDayCase}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsDayCase(checked);
+                    // A day case implies a same-day discharge destination.
+                    if (checked && !postOpDestination) setPostOpDestination('DAY_CASE_DISCHARGE');
+                  }}
+                  className="w-5 h-5 text-primary-600 rounded"
+                />
+                <span className="text-gray-700">Day case (admitted &amp; discharged same day)</span>
+              </label>
+            </div>
           </div>
         </div>
 

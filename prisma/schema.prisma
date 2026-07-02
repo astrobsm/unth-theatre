@@ -882,6 +882,12 @@ model Surgery {
   complexityAssessedAt DateTime?
   complexityAssessedBy String?
 
+  // Post-operative disposition planned at booking.
+  // postOpDestination: where the patient goes after surgery (General Ward, ICU,
+  // HDU, Day-case discharge, Other). isDayCase flags a same-day discharge case.
+  postOpDestination String?
+  isDayCase         Boolean @default(false)
+
   // Relations
   patient               Patient                     @relation(fields: [patientId], references: [id])
   surgeon               User?                       @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])
@@ -2349,6 +2355,11 @@ model PACUAssessment {
   dischargeNotes         String?
   warningSignsExplained  Boolean @default(false)
   wardNurseHandover      String? // Nurse receiving patient on ward
+
+  // Intra-operative handover summary captured at PACU admission (JSON):
+  // scrub nurse, anaesthetist, anaesthesia type, diagnosis, procedure done,
+  // knife-on-skin / end-of-surgery times, estimated blood loss, special notes.
+  intraOpSummary String? @db.Text
 
   // Audit Trail
   createdAt DateTime @default(now())

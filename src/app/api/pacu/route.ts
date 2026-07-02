@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
     if (body.catheterInSitu !== undefined) assessmentData.catheterInSitu = body.catheterInSitu;
     if (body.nauseaPresent !== undefined) assessmentData.nauseaPresent = body.nauseaPresent;
     if (body.vomitingOccurred !== undefined) assessmentData.vomitingOccurred = body.vomitingOccurred;
+    // Intra-operative handover summary (JSON string) captured at admission.
+    if (body.intraOpSummary) assessmentData.intraOpSummary = body.intraOpSummary;
 
     console.log('Creating PACU assessment with data:', JSON.stringify(assessmentData, null, 2));
 

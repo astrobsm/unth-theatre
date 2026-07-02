@@ -29,6 +29,10 @@ const surgerySchema = z.object({
   needStereo: z.boolean().default(false),
   needMontrellMattress: z.boolean().default(false),
   otherSpecialNeeds: z.string().nullish(),
+  // Planned post-operative disposition (where the patient goes after surgery)
+  // and whether it is a same-day (day-case) procedure.
+  postOpDestination: z.string().nullish(),
+  isDayCase: z.boolean().default(false),
   // Clinical Summary collected on the booking form. Persisted on the Patient record
   // so the Pharmacy page (and other downstream views) can display them.
   comorbiditiesList: z.array(z.string()).optional(),

@@ -47,6 +47,32 @@ export default function NewPACUAssessment() {
     vomitingOccurred: false
   });
 
+  // Intra-operative handover summary — auto-filled from the selected surgery,
+  // editable by the recovery nurse before admission.
+  const [intraOp, setIntraOp] = useState({
+    diagnosis: '',
+    procedureDone: '',
+    scrubNurse: '',
+    anaesthetist: '',
+    anaesthesiaType: '',
+    knifeOnSkin: '',
+    endOfSurgery: '',
+    estimatedBloodLoss: '',
+    patientAge: '',
+    patientGender: '',
+    specialConditions: '',
+  });
+  const [scrubNurses, setScrubNurses] = useState<{ id: string; fullName: string }[]>([]);
+
+  // Convert an ISO timestamp to the value a <input type="datetime-local"> expects.
+  const toLocalInput = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
+  };
+
   useEffect(() => {
     fetchCompletedSurgeries();
     const presetSurgeryId = searchParams.get('surgeryId');
@@ -54,6 +80,42 @@ export default function NewPACUAssessment() {
       setSelectedSurgeryId(presetSurgeryId);
     }
   }, [searchParams]);
+
+  // Load approved scrub nurses for the handover dropdown.
+  useEffect(() => {
+    fetch('/api/users?role=SCRUB_NURSE&status=APPROVED')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setScrubNurses(Array.isArray(data) ? data.map((u: any) => ({ id: u.id, fullName: u.fullName })) : []))
+      .catch(() => {});
+  }, []);
+
+  // Auto-fill the intra-operative summary from the selected surgery's record.
+  useEffect(() => {
+    if (!selectedSurgeryId) return;
+    let cancelled = false;
+    fetch(`/api/surgeries/${selectedSurgeryId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (cancelled || !s) return;
+        setIntraOp((prev) => ({
+          ...prev,
+          diagnosis: s.indication || prev.diagnosis,
+          procedureDone: s.procedureName || prev.procedureDone,
+          anaesthetist: s.anesthetist?.fullName || prev.anaesthetist,
+          anaesthesiaType: s.anesthesiaType || prev.anaesthesiaType,
+          knifeOnSkin: toLocalInput(s.knifeOnSkinTime) || prev.knifeOnSkin,
+          endOfSurgery: toLocalInput(s.surgeryEndTime) || prev.endOfSurgery,
+          estimatedBloodLoss:
+            s.intraOperativeRecord?.estimatedBloodLoss != null
+              ? String(s.intraOperativeRecord.estimatedBloodLoss)
+              : prev.estimatedBloodLoss,
+          patientAge: s.patient?.age != null ? String(s.patient.age) : prev.patientAge,
+          patientGender: s.patient?.gender || prev.patientGender,
+        }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedSurgeryId]);
 
   const fetchCompletedSurgeries = async () => {
     try {
@@ -107,7 +169,8 @@ export default function NewPACUAssessment() {
           ivFluidsRunning: formData.ivFluidsRunning,
           catheterInSitu: formData.catheterInSitu,
           nauseaPresent: formData.nauseaPresent,
-          vomitingOccurred: formData.vomitingOccurred
+          vomitingOccurred: formData.vomitingOccurred,
+          intraOpSummary: JSON.stringify(intraOp),
         })
       });
 
@@ -173,6 +236,144 @@ export default function NewPACUAssessment() {
 
         {selectedSurgeryId && (
           <>
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-1">Intra-operative Handover Summary</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Auto-filled from the surgery record where available — review and complete before admission.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis</label>
+                  <input
+                    type="text"
+                    value={intraOp.diagnosis}
+                    onChange={(e) => setIntraOp({ ...intraOp, diagnosis: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="Clinical diagnosis"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Surgery done</label>
+                  <input
+                    type="text"
+                    value={intraOp.procedureDone}
+                    onChange={(e) => setIntraOp({ ...intraOp, procedureDone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="Procedure performed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Scrub nurse</label>
+                  <input
+                    list="pacu-scrub-nurses"
+                    value={intraOp.scrubNurse}
+                    onChange={(e) => setIntraOp({ ...intraOp, scrubNurse: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="Select or type the scrub nurse"
+                  />
+                  <datalist id="pacu-scrub-nurses">
+                    {scrubNurses.map((n) => <option key={n.id} value={n.fullName} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthetist</label>
+                  <input
+                    type="text"
+                    value={intraOp.anaesthetist}
+                    onChange={(e) => setIntraOp({ ...intraOp, anaesthetist: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="Anaesthetist name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthesia type</label>
+                  <select
+                    value={intraOp.anaesthesiaType}
+                    onChange={(e) => setIntraOp({ ...intraOp, anaesthesiaType: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    aria-label="Anaesthesia type"
+                  >
+                    <option value="">Select…</option>
+                    <option value="GENERAL">General</option>
+                    <option value="SPINAL">Spinal</option>
+                    <option value="EPIDURAL">Epidural</option>
+                    <option value="COMBINED_SPINAL_EPIDURAL">Combined spinal-epidural</option>
+                    <option value="REGIONAL">Regional</option>
+                    <option value="LOCAL">Local</option>
+                    <option value="SEDATION">Sedation</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Estimated blood loss (mL)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={intraOp.estimatedBloodLoss}
+                    onChange={(e) => setIntraOp({ ...intraOp, estimatedBloodLoss: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="e.g. 250"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Knife on skin</label>
+                  <input
+                    type="datetime-local"
+                    value={intraOp.knifeOnSkin}
+                    onChange={(e) => setIntraOp({ ...intraOp, knifeOnSkin: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    aria-label="Knife on skin time"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End of surgery</label>
+                  <input
+                    type="datetime-local"
+                    value={intraOp.endOfSurgery}
+                    onChange={(e) => setIntraOp({ ...intraOp, endOfSurgery: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    aria-label="End of surgery time"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Patient age</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={intraOp.patientAge}
+                    onChange={(e) => setIntraOp({ ...intraOp, patientAge: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="Age"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Patient gender</label>
+                  <select
+                    value={intraOp.patientGender}
+                    onChange={(e) => setIntraOp({ ...intraOp, patientGender: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    aria-label="Patient gender"
+                  >
+                    <option value="">Select…</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Any other special condition</label>
+                <textarea
+                  value={intraOp.specialConditions}
+                  onChange={(e) => setIntraOp({ ...intraOp, specialConditions: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="Allergies, difficult airway, implants, isolation precautions, etc."
+                />
+              </div>
+            </div>
+
             <div className="border-t pt-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Initial Assessment on Arrival</h3>
               

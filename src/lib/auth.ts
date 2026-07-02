@@ -16,8 +16,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid credentials");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { username: credentials.username }
+        // Username matching is case-insensitive: staff can sign in with any
+        // capitalisation (e.g. "AstroDouglas" == "astrodouglas").
+        const user = await prisma.user.findFirst({
+          where: { username: { equals: credentials.username.trim(), mode: 'insensitive' } }
         });
 
         if (!user) {

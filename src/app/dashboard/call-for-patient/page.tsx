@@ -277,6 +277,23 @@ export default function CallForPatientPage() {
     );
   };
 
+  // A case is "already called" once it has an active call-up (invited / en route
+  // / arrived). Rejected & cancelled cases return to the to-call list.
+  const CALLED_STATUSES = ['INVITED', 'PATIENT_EN_ROUTE', 'PATIENT_ARRIVED'];
+  const isCalled = (c: CaseData) =>
+    !!c.existingCallUp && CALLED_STATUSES.includes(c.existingCallUp.status);
+
+  // Only cases still awaiting a call show in the theatre to-call tables.
+  const pendingCases = (cases: CaseData[]) => filterCases(cases).filter((c) => !isCalled(c));
+
+  // Flat list of every already-called case (across theatres + unassigned).
+  const calledCases: CaseData[] = data
+    ? filterCases([
+        ...data.theatreGroups.flatMap((g) => g.cases),
+        ...(data.unassigned || []),
+      ]).filter(isCalled)
+    : [];
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -340,9 +357,89 @@ export default function CallForPatientPage() {
         </div>
       )}
 
+      {/* Already Called / Invited Patients — cases move here once called */}
+      {calledCases.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            <h2 className="text-xl font-bold text-gray-800">Already Called</h2>
+            <span className="text-sm text-gray-500">({calledCases.length})</span>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-green-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">S/N</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Folder No.</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Theatre</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Procedure</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Porter(s)</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {calledCases.map((caseItem, idx) => (
+                    <tr key={caseItem.surgeryId} className="hover:bg-green-50/50">
+                      <td className="px-4 py-3 text-sm text-gray-600">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{caseItem.patientName}</div>
+                        <div className="text-xs text-gray-500">{caseItem.age}yrs / {caseItem.gender}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{caseItem.folderNumber}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{caseItem.theatreName || 'Unassigned'}</td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-gray-900">{caseItem.procedureName}</div>
+                        <div className="text-xs text-gray-500">{caseItem.surgeonName}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{caseItem.porterName || <span className="text-gray-400">—</span>}</td>
+                      <td className="px-4 py-3">
+                        {getStatusBadge(caseItem.existingCallUp)}
+                        {caseItem.existingCallUp?.invitedAt && (
+                          <div className="text-xs text-gray-500 mt-1">{formatDateTime(caseItem.existingCallUp.invitedAt)}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => {
+                            setPrintData({
+                              ...caseItem.existingCallUp,
+                              patientName: caseItem.patientName,
+                              folderNumber: caseItem.folderNumber,
+                              ward: caseItem.ward,
+                              age: caseItem.age,
+                              gender: caseItem.gender,
+                              theatreName: caseItem.theatreName,
+                              assignedNurseName: caseItem.nurseName,
+                              assignedPorterName: caseItem.porterName,
+                              surgeonName: caseItem.surgeonName,
+                              procedureName: caseItem.procedureName,
+                              diagnosis: caseItem.diagnosis,
+                              surgicalUnit: caseItem.surgicalUnit,
+                              scheduledTime: caseItem.scheduledTime,
+                            });
+                            setTimeout(() => handlePrint(), 300);
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-200 transition"
+                        >
+                          <Printer className="w-3 h-3" />
+                          Print
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Theatre Groups */}
       {data?.theatreGroups.map((group) => {
-        const filtered = filterCases(group.cases);
+        const filtered = pendingCases(group.cases);
         if (filtered.length === 0 && searchTerm) return null;
         return (
           <div key={group.theatreName} className="mb-8">
@@ -518,13 +615,13 @@ export default function CallForPatientPage() {
       })}
 
       {/* Unassigned Theatre Cases */}
-      {data?.unassigned && filterCases(data.unassigned).length > 0 && (
+      {data?.unassigned && pendingCases(data.unassigned).length > 0 && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-5 h-5 text-amber-500" />
             <h2 className="text-xl font-bold text-gray-800">Unassigned Theatre</h2>
             <span className="text-sm text-gray-500">
-              ({filterCases(data.unassigned).length} cases)
+              ({pendingCases(data.unassigned).length} cases)
             </span>
           </div>
 
@@ -545,7 +642,7 @@ export default function CallForPatientPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filterCases(data.unassigned).map((caseItem, idx) => (
+                  {pendingCases(data.unassigned).map((caseItem, idx) => (
                     <tr key={caseItem.surgeryId} className="hover:bg-amber-50/50">
                       <td className="px-4 py-3 text-sm text-gray-600">{idx + 1}</td>
                       <td className="px-4 py-3">

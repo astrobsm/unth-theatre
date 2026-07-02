@@ -56,6 +56,7 @@ export default function UsersPage() {
   const [roleUserId, setRoleUserId] = useState<string | null>(null);
   const [newRole, setNewRole] = useState('');
   const [roleLoading, setRoleLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -553,6 +554,16 @@ export default function UsersPage() {
   const approvedUsers = Array.isArray(users) ? users.filter(u => u.status === 'APPROVED') : [];
   const approvedWithPhone = approvedUsers.filter(u => !!u.phoneNumber).length;
 
+  // Case-insensitive search across name, username and staff code for the All Users table.
+  const userQuery = userSearch.trim().toLowerCase();
+  const filteredUsers = Array.isArray(users)
+    ? (userQuery
+        ? users.filter(u =>
+            [u.fullName, u.username, u.staffCode, u.email]
+              .some(v => (v || '').toLowerCase().includes(userQuery)))
+        : users)
+    : [];
+
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
@@ -735,7 +746,26 @@ export default function UsersPage() {
 
       {/* Approved Users */}
       <div className="card">
-        <h2 className="text-xl font-semibold mb-4">All Users</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-xl font-semibold">All Users</h2>
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Search by name, username or staff code…"
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              aria-label="Search users"
+            />
+            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          Showing {filteredUsers.length} of {users.length} user{users.length === 1 ? '' : 's'}
+          {userQuery ? ` matching “${userSearch.trim()}”` : ''}.
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -764,7 +794,7 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <tr key={user.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {user.fullName ? (
