@@ -60,6 +60,13 @@ interface BookedSurgery {
   theatreName?: string | null;
 }
 
+// Local (not UTC) yyyy-mm-dd for the date input, so "today" matches the user's day.
+function todayIso(): string {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
 export default function PreOpReviewsPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -67,7 +74,8 @@ export default function PreOpReviewsPage() {
   const [bookedSurgeries, setBookedSurgeries] = useState<BookedSurgery[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [dateFilter, setDateFilter] = useState<string>('');
+  // Default to today's booked cases; the date picker lets the user view other days.
+  const [dateFilter, setDateFilter] = useState<string>(todayIso());
 
   useEffect(() => {
     fetchPageData();
@@ -343,21 +351,21 @@ export default function PreOpReviewsPage() {
               <input
                 type="date"
                 value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
+                onChange={(e) => setDateFilter(e.target.value || todayIso())}
                 className="border border-gray-300 rounded-md px-3 py-2"
                 title="Filter by surgery date"
               />
             </div>
           </div>
-          {(statusFilter !== 'ALL' || dateFilter) && (
+          {(statusFilter !== 'ALL' || dateFilter !== todayIso()) && (
             <button
               onClick={() => {
                 setStatusFilter('ALL');
-                setDateFilter('');
+                setDateFilter(todayIso());
               }}
               className="text-blue-600 hover:text-blue-700 text-sm font-medium"
             >
-              Clear Filters
+              Reset to today
             </button>
           )}
         </div>
