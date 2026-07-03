@@ -25,6 +25,7 @@ import { isNarcotic } from '@/lib/narcotics';
 import { whatsappLink, whatsappChatLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
 import SurgicalShoppingListsPanel from '@/components/SurgicalShoppingListsPanel';
 import SurgeryCodeLookup from '@/components/SurgeryCodeLookup';
+import PostOpPrescriptionsPanel from '@/components/PostOpPrescriptionsPanel';
 import {
   buildRegisterPdf,
   buildPatientPrescriptionPdf,
@@ -546,6 +547,11 @@ export default function PrescriptionsPage() {
         fromDate={exportFrom}
         toDate={exportTo}
         canPack={['PHARMACIST', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(((session?.user as any)?.role) || '')}
+      />
+
+      {/* Post-Operative Prescriptions — sent from the surgeon's post-op notes */}
+      <PostOpPrescriptionsPanel
+        canPack={['PHARMACIST', 'ADMIN', 'SYSTEM_ADMINISTRATOR'].includes(((session?.user as any)?.role) || '')}
       />
 
       {/* Filter Tabs */}

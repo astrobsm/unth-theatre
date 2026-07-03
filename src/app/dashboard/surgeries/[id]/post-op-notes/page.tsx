@@ -78,6 +78,8 @@ export default function PostOperativeNotesPage() {
   const [hasDyspepsia, setHasDyspepsia] = useState(false);
   const [sendingRx, setSendingRx] = useState(false);
   const [drugDb, setDrugDb] = useState<{ name: string; type: string }[]>([]);
+  // Post-op prescriptions already sent to pharmacy for this case.
+  const [sentRx, setSentRx] = useState<any[]>([]);
 
   // Surgical Complexity Score — completed at the end of the note before submit.
   const [complexity, setComplexity] = useState<ComplexityCriteria>(DEFAULT_CRITERIA);
@@ -115,8 +117,22 @@ export default function PostOperativeNotesPage() {
     }
   };
 
+  // Load post-op prescriptions already sent to pharmacy for this surgery.
+  const fetchSentRx = async () => {
+    try {
+      const res = await fetch(`/api/post-op-prescriptions?surgeryId=${params.id}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setSentRx(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchSentRx();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
@@ -213,6 +229,7 @@ export default function PostOperativeNotesPage() {
       alert('Prescription sent to pharmacy for dispensing.');
       setRxMeds([emptyMed()]);
       setRxNotes('');
+      fetchSentRx();
     } catch {
       alert('Failed to send prescription to pharmacy.');
     } finally {
@@ -586,6 +603,42 @@ export default function PostOperativeNotesPage() {
             <Send className="w-4 h-4" /> {sendingRx ? 'Sending...' : 'Send to Pharmacy'}
           </button>
         </div>
+
+        {/* Prescriptions already sent to pharmacy for this case */}
+        {sentRx.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <h3 className="text-sm font-bold text-gray-800 mb-2">Sent to Pharmacy ({sentRx.length})</h3>
+            <div className="space-y-2">
+              {sentRx.map((rx) => {
+                let meds: any[] = [];
+                try { meds = Array.isArray(rx.medications) ? rx.medications : JSON.parse(rx.medications || '[]'); } catch {}
+                return (
+                  <div key={rx.id} className="border rounded-lg p-3 bg-gray-50 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <span className="font-medium text-gray-800">
+                        {new Date(rx.prescribedAt || rx.createdAt).toLocaleString('en-GB')} · {rx.prescribedByName || 'Surgeon'}
+                      </span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        {String(rx.status || '').replace(/_/g, ' ') || 'Sent'}
+                      </span>
+                    </div>
+                    <ul className="list-disc pl-5 text-gray-700">
+                      {meds.map((m: any, i: number) => (
+                        <li key={i}>
+                          {m.drugName}
+                          {m.dosage ? ` ${m.dosage}` : ''}{m.route ? ` ${m.route}` : ''}
+                          {m.frequency ? ` ${m.frequency}` : ''}{m.duration ? ` × ${m.duration}` : ''}
+                          {m.isControlled ? ' (controlled)' : ''}
+                        </li>
+                      ))}
+                    </ul>
+                    {rx.notes && <p className="mt-1 text-xs text-gray-500">Note: {rx.notes}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow p-4">

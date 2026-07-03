@@ -3307,6 +3307,15 @@ model PreOperativeAnestheticReview {
   reviewNotes     String?
   recommendations String?
 
+  // Anaesthesia consent (WHO-aligned legal text) — signed electronically by the
+  // patient/representative or an uploaded photo/scan of the signed form.
+  anaesthesiaConsentText      String?   @db.Text
+  anaesthesiaConsentSignature String?   @db.Text // base64 signature/scan (data URL)
+  anaesthesiaConsentSignedBy  String?
+  anaesthesiaConsentRelation  String? // Self / Representative relationship
+  anaesthesiaConsentMethod    String? // ELECTRONIC | UPLOADED
+  anaesthesiaConsentSignedAt  DateTime?
+
   // Audit
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

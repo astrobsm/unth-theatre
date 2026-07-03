@@ -13,6 +13,8 @@ import {
   CONSUMABLE_CATEGORY_SPECIAL,
   type AnaesthesiaConsumable,
 } from '@/lib/anaesthesia-consumables';
+import SignaturePad from '@/components/SignaturePad';
+import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaesthesiaConsent';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 // Comprehensive Anesthetic Medications Database
@@ -261,6 +263,13 @@ export default function NewPreOpReviewPage() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [recommendations, setRecommendations] = useState('');
 
+  // Anaesthesia consent (WHO-aligned) — electronic signature or uploaded scan.
+  const [consentMethod, setConsentMethod] = useState<'ELECTRONIC' | 'UPLOADED'>('ELECTRONIC');
+  const [consentSignature, setConsentSignature] = useState<string | null>(null);
+  const [consentSignedBy, setConsentSignedBy] = useState('');
+  const [consentRelation, setConsentRelation] = useState('Self');
+  const [consentError, setConsentError] = useState('');
+
   // Anesthetic Prescription states
   const [prescribedMedications, setPrescribedMedications] = useState<PrescribedMedication[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -449,6 +458,16 @@ export default function NewPreOpReviewPage() {
       // Review Notes
       reviewNotes: formData.get('reviewNotes'),
       recommendations: formData.get('recommendations'),
+      // Anaesthesia consent (WHO-aligned)
+      anaesthesiaConsent: consentSignature
+        ? {
+            text: ANAESTHESIA_CONSENT_TEXT,
+            signature: consentSignature,
+            signedBy: consentSignedBy.trim() || patientName,
+            relation: consentRelation,
+            method: consentMethod,
+          }
+        : undefined,
       // Anesthetic Prescription data
       prescription: prescribedMedications.length > 0 ? {
         medications: prescribedMedications,
@@ -616,6 +635,96 @@ export default function NewPreOpReviewPage() {
                   helpText="Dictate recommendations - use read back to verify"
                 />
               </div>
+            </div>
+
+            {/* Anaesthesia Consent (WHO-aligned) */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Syringe className="w-6 h-6 text-indigo-600" />
+                <h2 className="text-xl font-semibold">{ANAESTHESIA_CONSENT_TITLE}</h2>
+              </div>
+              <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 text-xs text-gray-700 whitespace-pre-wrap mb-4">
+                {ANAESTHESIA_CONSENT_TEXT}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Signed by</label>
+                  <input
+                    type="text"
+                    value={consentSignedBy}
+                    onChange={(e) => setConsentSignedBy(e.target.value)}
+                    placeholder="Patient or representative name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relationship to patient</label>
+                  <select
+                    value={consentRelation}
+                    onChange={(e) => setConsentRelation(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    aria-label="Relationship to patient"
+                  >
+                    <option value="Self">Self (patient)</option>
+                    <option value="Parent/Guardian">Parent / Guardian</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Next of kin">Next of kin</option>
+                    <option value="Legal representative">Legal representative</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mb-3 text-sm">
+                <button
+                  type="button"
+                  onClick={() => { setConsentMethod('ELECTRONIC'); setConsentSignature(null); }}
+                  className={`px-3 py-1.5 rounded-lg border ${consentMethod === 'ELECTRONIC' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                >
+                  Sign electronically
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setConsentMethod('UPLOADED'); setConsentSignature(null); }}
+                  className={`px-3 py-1.5 rounded-lg border ${consentMethod === 'UPLOADED' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                >
+                  Upload signed form
+                </button>
+              </div>
+
+              {consentMethod === 'ELECTRONIC' ? (
+                <SignaturePad
+                  label="Patient / representative signature"
+                  value={consentSignature}
+                  onChange={setConsentSignature}
+                />
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    aria-label="Upload signed anaesthesia consent"
+                    onChange={(e) => {
+                      setConsentError('');
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 10 * 1024 * 1024) { setConsentError('File must be ≤ 10 MB.'); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => setConsentSignature(reader.result as string);
+                      reader.onerror = () => setConsentError('Failed to read file.');
+                      reader.readAsDataURL(file);
+                    }}
+                    className="block text-sm"
+                  />
+                  {consentSignature && (
+                    <p className="text-xs text-green-600 mt-2">Signed consent attached.</p>
+                  )}
+                </div>
+              )}
+              {consentError && <p className="text-xs text-red-600 mt-2">{consentError}</p>}
+              <p className="text-xs text-gray-500 mt-2">
+                The patient (or their representative) should read the statement above before signing. Signing is optional to save the review but is required before anaesthesia proceeds.
+              </p>
             </div>
 
             {/* Risk Assessment */}

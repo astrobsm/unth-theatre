@@ -72,6 +72,14 @@ const createPreOpReviewSchema = z.object({
     specialInstructions: z.string().optional(),
     allergyAlerts: z.string().optional(),
   }).optional(),
+  // Anaesthesia consent (WHO-aligned) — electronic signature or uploaded scan.
+  anaesthesiaConsent: z.object({
+    text: z.string(),
+    signature: z.string(),
+    signedBy: z.string().optional(),
+    relation: z.string().optional(),
+    method: z.string().optional(),
+  }).optional(),
 });
 
 // GET - Fetch all pre-op reviews or filtered by surgery
@@ -183,7 +191,7 @@ export async function POST(request: NextRequest) {
     const validatedData = createPreOpReviewSchema.parse(body);
 
     // Extract prescription data before creating review
-    const { prescription, ...reviewData } = validatedData;
+    const { prescription, anaesthesiaConsent, ...reviewData } = validatedData;
 
     // Check if review already exists for this surgery
     const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
@@ -206,6 +214,16 @@ export async function POST(request: NextRequest) {
         anesthetistId: session.user.id,
         anesthetistName: session.user.name || '',
         status: 'IN_PROGRESS',
+        ...(anaesthesiaConsent
+          ? {
+              anaesthesiaConsentText: anaesthesiaConsent.text,
+              anaesthesiaConsentSignature: anaesthesiaConsent.signature,
+              anaesthesiaConsentSignedBy: anaesthesiaConsent.signedBy || null,
+              anaesthesiaConsentRelation: anaesthesiaConsent.relation || null,
+              anaesthesiaConsentMethod: anaesthesiaConsent.method || null,
+              anaesthesiaConsentSignedAt: new Date(),
+            }
+          : {}),
       } as any,
       include: {
         surgery: true,
