@@ -107,6 +107,9 @@ const surgerySchema = z.object({
     mimeType: z.string().min(1),
     base64: z.string().min(10), // base64 payload (no "data:" prefix expected, but tolerated)
   }).optional(),
+
+  // ── Electronic UNTH consent form captured & signed at booking ──
+  consentForm: z.any().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -264,6 +267,7 @@ export async function POST(request: NextRequest) {
       consumableRequests,
       drugDressingRequests,
       consentFile,
+      consentForm,
       ...surgeryData
     } = validatedData;
 
@@ -482,6 +486,21 @@ export async function POST(request: NextRequest) {
               consentUploadedAt: new Date(),
               consentUploadedById: (session.user as any).id,
             }
+          : {}),
+        // Electronic UNTH consent form captured & signed at booking. Stored as
+        // JSON so every consent-aware view (holding area, pre-op, consent page)
+        // can read it. A signed form marks the case as consented electronically.
+        ...(consentForm && typeof consentForm === 'object'
+          ? (() => {
+              const signed = consentForm.useRepresentative
+                ? !!consentForm.representativeSignature && !!consentForm.repDoctorSignature
+                : !!consentForm.patientSignature && !!consentForm.doctorSignature;
+              return {
+                consentFormData: JSON.stringify(consentForm),
+                consentSignedElectronically: signed,
+                ...(signed ? { consentCompletedAt: new Date() } : {}),
+              };
+            })()
           : {}),
         // Create team members if provided
         teamMembers: teamMembers && teamMembers.length > 0 ? {

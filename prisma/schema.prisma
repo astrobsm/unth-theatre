@@ -2829,6 +2829,31 @@ model PatientTransportLog {
   @@map("patient_transport_logs")
 }
 
+// Walkie-talkie radio pickup / return log for porters and cleaners.
+// One row per pickup; returnAt is set when the device is handed back at the
+// end of the shift. Location is stamped to the UNTH Ituku-Ozalla campus.
+model WalkieTalkieLog {
+  id           String    @id @default(uuid())
+  deviceSerial String // e.g. "PRT1", "PRT2"
+  staffId      String?
+  staffName    String
+  staffRole    String? // PORTER | CLEANER | ...
+  location     String    @default("UNTH Ituku-Ozalla (Enugu–Port Harcourt Expressway)")
+  status       String    @default("OUT") // OUT | RETURNED
+  pickupAt     DateTime  @default(now())
+  pickupById   String? // user who recorded the pickup
+  returnAt     DateTime?
+  returnById   String? // user who recorded the return
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
+  @@index([deviceSerial])
+  @@index([pickupAt])
+  @@map("walkie_talkie_logs")
+}
+
 model StaffDutyLog {
   id String @id @default(uuid())
 

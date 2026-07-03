@@ -211,6 +211,7 @@ export default function DashboardLayout({
     // === ALERTS & SAFETY ===
     { href: '/dashboard/alerts', icon: AlertTriangle, label: 'Alerts' },
     { href: '/dashboard/radio', icon: Volume2, label: 'Theatre Radio' },
+    { href: '/dashboard/walkie-talkies', icon: Volume2, label: 'Walkie-Talkie Radios', badge: 'NEW' },
     { href: '/dashboard/fault-alerts', icon: AlertOctagon, label: 'Fault Alerts' },
     { href: '/dashboard/emergency-alerts', icon: AlertOctagon, label: 'Emergency Alerts' },
     { href: '/dashboard/mortality', icon: Heart, label: 'Mortality Registry' },

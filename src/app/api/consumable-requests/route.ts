@@ -101,6 +101,58 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Attach the scrub nurse (and circulating nurse) assigned to each surgery's
+  // theatre so the pack provider knows who to hand the pack to. Packs must NOT
+  // be given to patients — patients only present evidence of payment.
+  const surgeryMap = new Map<string, any>();
+  for (const it of items as any[]) {
+    if (it.surgery?.id) surgeryMap.set(it.surgery.id, it.surgery);
+  }
+  const surgeries = Array.from(surgeryMap.values());
+  const surgeryIds = surgeries.map((s) => s.id);
+  if (surgeryIds.length) {
+    const dayKeys = Array.from(
+      new Set(surgeries.map((s) => new Date(s.scheduledDate).toISOString().slice(0, 10)))
+    );
+    const dayStarts = dayKeys.map((d) => new Date(`${d}T00:00:00`).getTime());
+    const minDay = new Date(Math.min(...dayStarts));
+    const maxDay = new Date(Math.max(...dayStarts));
+    maxDay.setDate(maxDay.getDate() + 1);
+
+    const allocations = await prisma.theatreAllocation.findMany({
+      where: {
+        OR: [{ surgeryId: { in: surgeryIds } }, { date: { gte: minDay, lt: maxDay } }],
+      },
+      include: {
+        theatre: { select: { name: true } },
+        scrubNurse: { select: { fullName: true, phoneNumber: true } },
+        circulatingNurse: { select: { fullName: true, phoneNumber: true } },
+      },
+    });
+    const bySurgeryId = new Map<string, (typeof allocations)[number]>();
+    const byTheatreDay = new Map<string, (typeof allocations)[number]>();
+    for (const a of allocations) {
+      if (a.surgeryId) bySurgeryId.set(a.surgeryId, a);
+      if (a.theatre?.name) {
+        byTheatreDay.set(`${a.theatre.name.toLowerCase()}|${new Date(a.date).toISOString().slice(0, 10)}`, a);
+      }
+    }
+    for (const it of items as any[]) {
+      const s = it.surgery;
+      if (!s) continue;
+      let a = bySurgeryId.get(s.id);
+      if (!a && s.location) {
+        a = byTheatreDay.get(`${s.location.toLowerCase()}|${new Date(s.scheduledDate).toISOString().slice(0, 10)}`);
+      }
+      s.scrubNurse = a?.scrubNurse
+        ? { fullName: a.scrubNurse.fullName, phoneNumber: a.scrubNurse.phoneNumber }
+        : null;
+      s.circulatingNurse = a?.circulatingNurse
+        ? { fullName: a.circulatingNurse.fullName, phoneNumber: a.circulatingNurse.phoneNumber }
+        : null;
+    }
+  }
+
   return NextResponse.json(items);
 }
 

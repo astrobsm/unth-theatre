@@ -29,6 +29,8 @@ interface Item {
     surgeonName: string;
     location?: string | null;
     surgeon?: { id: string; fullName: string; phoneNumber?: string | null } | null;
+    scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
+    circulatingNurse?: { fullName: string; phoneNumber?: string | null } | null;
     patient: {
       id?: string;
       name: string;
@@ -110,6 +112,21 @@ export default function ConsumablePackProviderPage() {
         Pre-pack the consumables required for each booked surgery. Emergency cases are pinned to the top.
       </p>
 
+      {/* Hand-over policy notice */}
+      <div className="rounded-lg border-2 border-red-300 bg-red-50 p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-red-800">
+            <p className="font-bold text-red-900 mb-1">Do NOT hand consumable packs to patients or relatives.</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Patients go to theatre with their <span className="font-semibold">evidence of payment only</span>.</li>
+              <li>Hand the consumable pack directly to the <span className="font-semibold">scrub nurse assigned to that patient&apos;s theatre</span>.</li>
+              <li>Use the scrub nurse&apos;s phone number shown on each case to confirm hand-over.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <SurgeryCodeLookup
         expect="CONSUMABLE"
         title="Enter the patient's consumable pack code"
@@ -166,6 +183,48 @@ export default function ConsumablePackProviderPage() {
                 </div>
                 <div className="font-semibold text-lg">{g.surgery.patient.name}{g.surgery.patient.folderNumber ? ` (${g.surgery.patient.folderNumber})` : ""}</div>
                 <div className="text-sm text-gray-700">{g.surgery.procedureName} — {g.surgery.surgeonName}</div>
+
+                {/* Hand the pack to the scrub nurse assigned to this theatre */}
+                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
+                  <span className="font-semibold text-blue-900">Hand pack to scrub nurse: </span>
+                  {g.surgery.scrubNurse?.fullName ? (
+                    <>
+                      <span className="text-gray-800">{g.surgery.scrubNurse.fullName}</span>
+                      {g.surgery.scrubNurse.phoneNumber ? (
+                        <a
+                          href={whatsappChatLink(g.surgery.scrubNurse.phoneNumber) || `tel:${g.surgery.scrubNurse.phoneNumber.replace(/\s+/g, "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Chat / call the scrub nurse"
+                          className="ml-2 inline-flex items-center gap-1 text-green-700 hover:underline font-medium"
+                        >
+                          <MessageCircle className="w-3 h-3" /> {g.surgery.scrubNurse.phoneNumber}
+                        </a>
+                      ) : (
+                        <span className="ml-1 text-gray-400">(no phone on file)</span>
+                      )}
+                      {g.surgery.circulatingNurse?.fullName && (
+                        <span className="ml-3 text-gray-600">
+                          Circulating: {g.surgery.circulatingNurse.fullName}
+                          {g.surgery.circulatingNurse.phoneNumber ? (
+                            <a
+                              href={whatsappChatLink(g.surgery.circulatingNurse.phoneNumber) || `tel:${g.surgery.circulatingNurse.phoneNumber.replace(/\s+/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-1 inline-flex items-center gap-1 text-green-700 hover:underline"
+                            >
+                              <MessageCircle className="w-3 h-3" /> {g.surgery.circulatingNurse.phoneNumber}
+                            </a>
+                          ) : null}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-500">
+                      Not yet assigned{g.surgery.location ? ` for ${g.surgery.location}` : ""}. Confirm the theatre allocation / duty roster.
+                    </span>
+                  )}
+                </div>
 
                 {/* Contacts: requester (who created the request) + patient phones */}
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">

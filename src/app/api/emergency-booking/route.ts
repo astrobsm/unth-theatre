@@ -89,6 +89,8 @@ const createEmergencyBookingSchema = z.object({
       })
     )
     .optional(),
+  // Electronic UNTH consent form captured & signed inline at emergency booking.
+  consentForm: z.any().optional(),
 });
 
 function getDayBounds(inputDate: Date) {
@@ -499,6 +501,19 @@ export async function POST(request: NextRequest) {
               consentUploadedAt: new Date(),
               consentUploadedById: session.user.id,
             }
+          : {}),
+        ...(validatedData.consentForm && typeof validatedData.consentForm === 'object'
+          ? (() => {
+              const cf: any = validatedData.consentForm;
+              const signed = cf.useRepresentative
+                ? !!cf.representativeSignature && !!cf.repDoctorSignature
+                : !!cf.patientSignature && !!cf.doctorSignature;
+              return {
+                consentFormData: JSON.stringify(cf),
+                consentSignedElectronically: signed,
+                ...(signed ? { consentCompletedAt: new Date() } : {}),
+              };
+            })()
           : {}),
         teamMembers: effectiveTeam.length
           ? {

@@ -192,10 +192,11 @@ export async function GET(request: NextRequest) {
       const existingCallUp = surgery.patientCallUps?.[0] || null;
 
       // A patient is cleared for surgery once the latest pre-operative visit
-      // assessment marks them CLEARED. Day cases are exempt — they can be
-      // invited without a pre-operative visit clearance.
+      // assessment marks them CLEARED. Day cases and emergency surgeries are
+      // exempt — they can be invited without a pre-operative visit clearance.
       const cleared =
         surgery.isDayCase === true ||
+        surgery.surgeryType === 'EMERGENCY' ||
         surgery.preOperativeVisits?.[0]?.overallStatus === 'CLEARED';
 
       const caseData = {
@@ -330,8 +331,9 @@ export async function POST(request: NextRequest) {
 
     if (action === 'invite') {
       // Only patients cleared at the pre-operative assessment may be invited —
-      // except day cases, which do not require a pre-operative visit clearance.
-      if (!surgery.isDayCase) {
+      // except day cases and emergency surgeries, which do not require a
+      // pre-operative visit clearance.
+      if (!surgery.isDayCase && surgery.surgeryType !== 'EMERGENCY') {
         const latestVisit = await prisma.preOperativeVisit.findFirst({
           where: { surgeryId },
           orderBy: { createdAt: 'desc' },

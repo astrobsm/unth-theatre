@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText
 import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPrePackSelectors';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
+import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import jsPDF from 'jspdf';
 
 type OnDutyMember = {
@@ -73,6 +74,7 @@ export default function NewEmergencyBookingPage() {
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnitOption[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
   // Tracks whether the anaesthetist field still reflects the on-call roster
   // pick (true) or was manually overridden by the user (false).
   const [anesthetistAuto, setAnesthetistAuto] = useState(true);
@@ -347,6 +349,10 @@ export default function NewEmergencyBookingPage() {
         // Pre-pack shopping lists — pushed to Consumable Pack Provider and Pharmacy with red EMERGENCY tag
         consumableRequests: prePack.consumableRequests,
         drugDressingRequests: prePack.drugDressingRequests,
+        // Electronic UNTH consent captured & signed inline at emergency booking.
+        consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
+          ? consentForm
+          : undefined,
         // Auto-fetched on-duty emergency team (advisory — backend may use to notify)
         onDutyTeam: onDuty
           ? {
@@ -648,20 +654,21 @@ export default function NewEmergencyBookingPage() {
           })}
         </div>
 
-        {/* Consent template */}
+        {/* Consent form — UNTH consent captured & signed inline */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-3 text-gray-800">Consent Form Template</h2>
-          <p className="text-sm text-gray-600 mb-3">
-            Download, print, sign, then upload signed consent in the case workflow.
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-lg font-semibold text-gray-800">Consent Form</h2>
+            {isConsentSigned(consentForm) && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                Signed
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Complete and sign the UNTH consent form here. Once signed, it is stored with the case and
+            recognised across the app.
           </p>
-          <button
-            type="button"
-            onClick={downloadConsentTemplate}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <FileText className="h-4 w-4" />
-            Download Consent Template (PDF)
-          </button>
+          <ConsentFormFields value={consentForm} onChange={setConsentForm} />
         </div>
 
         {/* On-Duty Emergency Team — auto-fetched from roster */}

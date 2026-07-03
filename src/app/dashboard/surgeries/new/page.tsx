@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
+import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { formatAge } from '@/lib/age';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
@@ -164,6 +165,7 @@ export default function NewSurgeryPage() {
   const [subspecialty, setSubspecialty] = useState('');
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
   const [supervisingConsultantId, setSupervisingConsultantId] = useState('');
+  const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
   const [locations, setLocations] = useState<string[]>([]);
@@ -456,6 +458,9 @@ export default function NewSurgeryPage() {
       surgeonName: chosenSurgeon?.fullName || formData.get('surgeonName'),
       supervisingConsultantId: supervisingConsultantId || null,
       supervisingConsultantName: chosenConsultant?.fullName || null,
+      consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
+        ? consentForm
+        : undefined,
       unit: formData.get('unit'),
       subspecialty: formData.get('subspecialty'),
       location: selectedLocation || null,
@@ -1283,6 +1288,24 @@ export default function NewSurgeryPage() {
               </label>
             </div>
           </div>
+        </div>
+
+        {/* Informed / Electronic Consent — UNTH consent form captured at booking */}
+        <div className="card">
+          <div className="flex items-center gap-3 mb-2">
+            <FileSignature className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Consent Form</h2>
+            {isConsentSigned(consentForm) && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                <CheckCircle className="w-3.5 h-3.5" /> Signed
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Complete and sign the UNTH consent form here. Once signed, the consent is stored with the case and
+            recognised across the app (holding area, pre-op assessment, etc.).
+          </p>
+          <ConsentFormFields value={consentForm} onChange={setConsentForm} />
         </div>
 
         {/* Clinical Summary — Comorbidities & Current Medications */}

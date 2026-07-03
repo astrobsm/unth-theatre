@@ -79,12 +79,20 @@ export default function SurgeriesPage() {
   const canCompleteSurgery = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
   // Perioperative nurses and admins can re-assign / change the theatre a booked case is allocated to.
   const canReassignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'].includes(userRole || '');
+  // Surgeons (and admins / theatre managers) can reschedule a case to another day
+  // when it could not be performed on the set date.
+  const canReschedule = ['SURGEON', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
   const [completingId, setCompletingId] = useState<string | null>(null);
   // Quick "change theatre" modal state.
   const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
   const [reassignSurgery, setReassignSurgery] = useState<Surgery | null>(null);
   const [reassignTheatreId, setReassignTheatreId] = useState<string>('');
   const [savingTheatre, setSavingTheatre] = useState(false);
+  // Reschedule modal state.
+  const [rescheduleSurgery, setRescheduleSurgery] = useState<Surgery | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
+  const [savingReschedule, setSavingReschedule] = useState(false);
 
   // Monitor online/offline status
   useEffect(() => {
@@ -246,6 +254,53 @@ export default function SurgeriesPage() {
       alert('A network error occurred while changing the theatre');
     } finally {
       setSavingTheatre(false);
+    }
+  };
+
+  const openReschedule = (surgery: Surgery) => {
+    setRescheduleSurgery(surgery);
+    setRescheduleDate((surgery.scheduledDate || '').slice(0, 10));
+    setRescheduleReason('');
+  };
+
+  const handleReschedule = async () => {
+    if (!rescheduleSurgery) return;
+    if (!rescheduleDate) {
+      alert('Please choose the new surgery date.');
+      return;
+    }
+    if (!rescheduleReason.trim()) {
+      alert('Please give the reason the surgery could not be done on the set day.');
+      return;
+    }
+    setSavingReschedule(true);
+    try {
+      const stamp = new Date().toLocaleString('en-GB');
+      const author = session?.user?.name || 'Surgeon';
+      const note = `[RESCHEDULED ${stamp} by ${author}] Moved from ${(rescheduleSurgery.scheduledDate || '').slice(0, 10)} to ${rescheduleDate}. Reason: ${rescheduleReason.trim()}`;
+      const nextRemarks = `${(rescheduleSurgery as any).remarks || ''}\n\n${note}`.trim();
+      const response = await fetch(`/api/surgeries/${rescheduleSurgery.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduledDate: rescheduleDate,
+          // Re-open the case for scheduling on the new day.
+          status: 'SCHEDULED',
+          remarks: nextRemarks,
+        }),
+      });
+      if (response.ok) {
+        setRescheduleSurgery(null);
+        setRescheduleReason('');
+        await fetchSurgeries();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Failed to reschedule the surgery');
+      }
+    } catch (error) {
+      alert('A network error occurred while rescheduling');
+    } finally {
+      setSavingReschedule(false);
     }
   };
 
@@ -760,6 +815,17 @@ export default function SurgeriesPage() {
                           </button>
                         )}
 
+                        {/* Reschedule to another day (surgeon + admin) */}
+                        {canReschedule && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => openReschedule(surgery)}
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                            title="Reschedule to another day"
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {/* Mark Completed (surgeon closes the case → PACU can admit + post-op note) */}
                         {canCompleteSurgery && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
                           <button
@@ -947,6 +1013,71 @@ export default function SurgeriesPage() {
                 className="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {savingTheatre ? 'Saving…' : 'Save theatre'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule modal */}
+      {rescheduleSurgery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-600" />
+                Reschedule Surgery
+              </h2>
+              <button
+                onClick={() => setRescheduleSurgery(null)}
+                className="text-gray-400 hover:text-gray-600"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div className="text-sm text-gray-600">
+                <div className="font-medium text-gray-900">{rescheduleSurgery.patient?.name}</div>
+                <div>{rescheduleSurgery.procedureName}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Currently set for {(rescheduleSurgery.scheduledDate || '').slice(0, 10) || 'N/A'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New surgery date *</label>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="New surgery date"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for rescheduling *</label>
+                <textarea
+                  value={rescheduleReason}
+                  onChange={(e) => setRescheduleReason(e.target.value)}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Why couldn't the surgery be done on the set day? (e.g. patient not optimised, theatre overran, equipment unavailable)"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t">
+              <button
+                onClick={() => setRescheduleSurgery(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReschedule}
+                disabled={savingReschedule}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {savingReschedule ? 'Rescheduling…' : 'Reschedule'}
               </button>
             </div>
           </div>
