@@ -888,6 +888,11 @@ model Surgery {
   postOpDestination String?
   isDayCase         Boolean @default(false)
 
+  // Manual ordering of a unit's cases within the booked-surgery list. Lower =
+  // earlier. Null falls back to scheduledTime. Surgeons/nurses set this via the
+  // up/down controls on the surgery list.
+  listOrder Int?
+
   // Unit supervising consultant (chosen from surgeons). Displayed as a caption
   // beside the theatre / unit on booked-surgery views.
   supervisingConsultantId   String?

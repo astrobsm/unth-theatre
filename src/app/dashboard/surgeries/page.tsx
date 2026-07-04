@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -30,6 +30,7 @@ interface Surgery {
   scheduledDate: string;
   scheduledTime: string;
   status: string;
+  listOrder?: number | null;
   subspecialty: string;
   unit?: string;
   location?: string | null;
@@ -82,6 +83,9 @@ export default function SurgeriesPage() {
   // Surgeons (and admins / theatre managers) can reschedule a case to another day
   // when it could not be performed on the set date.
   const canReschedule = ['SURGEON', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
+  // Surgeons & perioperative nurses can change the order a unit's cases are listed.
+  const canReorder = ['SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
+  const [reordering, setReordering] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
   // Quick "change theatre" modal state.
   const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
@@ -304,6 +308,42 @@ export default function SurgeriesPage() {
     }
   };
 
+  // Move a case up/down within its displayed theatre/unit group and persist the
+  // new order for the whole group.
+  const moveCase = async (rows: Surgery[], index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= rows.length) return;
+    const reordered = [...rows];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    // Assign sequential listOrder to the whole group in the new order.
+    const orders = reordered.map((s, i) => ({ id: s.id, listOrder: i }));
+    // Optimistic local update so the row moves immediately.
+    setSurgeries((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      const map = new Map(orders.map((o) => [o.id, o.listOrder]));
+      return prev.map((s) => (map.has(s.id) ? { ...s, listOrder: map.get(s.id)! } : s));
+    });
+    setReordering(true);
+    try {
+      const res = await fetch('/api/surgeries/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to save the new order');
+        await fetchSurgeries();
+      }
+    } catch {
+      alert('A network error occurred while saving the order');
+      await fetchSurgeries();
+    } finally {
+      setReordering(false);
+    }
+  };
+
   const filteredSurgeries = Array.isArray(surgeries) ? surgeries.filter(surgery => {
     const patientName = surgery.patient?.name || '';
     const folderNumber = surgery.patient?.folderNumber || '';
@@ -336,6 +376,11 @@ export default function SurgeriesPage() {
       const unB = thB.toLowerCase().startsWith('unassigned') ? 1 : 0;
       if (unA !== unB) return unA - unB;
       if (thA.toLowerCase() !== thB.toLowerCase()) return thA.localeCompare(thB);
+      // Manual order (listOrder) takes precedence within a theatre/unit list;
+      // cases without an explicit order fall back to their scheduled time.
+      const loA = a.listOrder ?? Number.MAX_SAFE_INTEGER;
+      const loB = b.listOrder ?? Number.MAX_SAFE_INTEGER;
+      if (loA !== loB) return loA - loB;
       return (a.scheduledTime || '').localeCompare(b.scheduledTime || '');
     });
     const groups: { key: string; dateLabel: string; theatre: string; rows: Surgery[] }[] = [];
@@ -697,7 +742,7 @@ export default function SurgeriesPage() {
                         </div>
                       </td>
                     </tr>
-                    {group.rows.map((surgery) => (
+                    {group.rows.map((surgery, rowIndex) => (
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
@@ -783,6 +828,29 @@ export default function SurgeriesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2 flex-wrap">
+                        {/* Reorder within the unit/theatre list (surgeon / nurse) */}
+                        {canReorder && group.rows.length > 1 && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
+                          <span className="inline-flex items-center">
+                            <button
+                              onClick={() => moveCase(group.rows, rowIndex, -1)}
+                              disabled={rowIndex === 0 || reordering}
+                              className="p-1 text-gray-500 hover:text-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move earlier in the list"
+                              aria-label="Move case up"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => moveCase(group.rows, rowIndex, 1)}
+                              disabled={rowIndex === group.rows.length - 1 || reordering}
+                              className="p-1 text-gray-500 hover:text-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move later in the list"
+                              aria-label="Move case down"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </span>
+                        )}
                         {/* View Details - Always visible */}
                         <Link
                           href={`/dashboard/surgeries/${surgery.id}`}
