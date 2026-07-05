@@ -70,7 +70,10 @@ export async function GET(request: NextRequest) {
           select: { overallStatus: true },
         },
       },
-      orderBy: [{ scheduledTime: 'asc' }],
+      // Manual list order (set by surgeons/nurses) first, then scheduled time.
+      // Postgres sorts NULL listOrder last on ASC, so unordered cases fall back
+      // to time within each theatre group.
+      orderBy: [{ listOrder: 'asc' }, { scheduledTime: 'asc' }],
     });
 
     // Fetch theatre allocations for today to get theatre assignments + nurse/porter

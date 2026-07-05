@@ -50,6 +50,7 @@ interface BookedSurgery {
   scheduledDate: string;
   scheduledTime?: string | null;
   status: string;
+  listOrder?: number | null;
   patient: {
     name: string;
     folderNumber?: string | null;
@@ -133,6 +134,18 @@ export default function PreOpReviewsPage() {
       const filtered = (Array.isArray(data) ? data : []).filter(
         (s: BookedSurgery) => s.status !== 'CANCELLED'
       );
+      // Sort by theatre, then surgical unit, then the manual list order set by
+      // surgeons/nurses (listOrder), falling back to scheduled time.
+      const theatreKey = (s: BookedSurgery) => (s.theatreName || 'Unassigned theatre').toLowerCase();
+      filtered.sort((a: BookedSurgery, b: BookedSurgery) => {
+        const t = theatreKey(a).localeCompare(theatreKey(b));
+        if (t !== 0) return t;
+        const u = (a.unit || '').localeCompare(b.unit || '');
+        if (u !== 0) return u;
+        const lo = (a.listOrder ?? Number.MAX_SAFE_INTEGER) - (b.listOrder ?? Number.MAX_SAFE_INTEGER);
+        if (lo !== 0) return lo;
+        return (a.scheduledTime || '').localeCompare(b.scheduledTime || '');
+      });
       setBookedSurgeries(filtered);
     } catch (error) {
       console.error('Error fetching booked surgeries:', error);
