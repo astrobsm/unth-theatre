@@ -470,17 +470,20 @@ export default function RadioPlayer() {
 
   return (
     <>
-    {/* Floating, always-on-top Acknowledge button. Sits above the install
-        prompt (z-[9999/10000]) and any site footer so a single click is
-        guaranteed to land. */}
+    {/* Floating, always-on-top Acknowledge button. Placed at the bottom CENTRE
+        so it never overlaps the media-hub launcher / assistant widgets that
+        cluster in the bottom-right corner (which previously intercepted taps
+        and looked like a duplicate control). Highest z-index guarantees the
+        click lands. */}
     {top?.requireAck && (
       <button
         onClick={() => acknowledge(top.id)}
         disabled={ackBusy}
         title="Acknowledge emergency announcement"
-        className="fixed bottom-20 right-4 z-[10010] flex items-center gap-2 px-4 py-3 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold shadow-2xl ring-4 ring-green-300/60 disabled:opacity-60 print:hidden animate-pulse"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[10030] flex items-center gap-2 px-6 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-base shadow-2xl ring-4 ring-green-300/70 disabled:opacity-60 print:hidden animate-pulse pointer-events-auto"
       >
-        <CheckCircle2 className="w-5 h-5" /> ACKNOWLEDGE
+        {ackBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+        {ackBusy ? 'ACKNOWLEDGING…' : 'ACKNOWLEDGE EMERGENCY'}
       </button>
     )}
     {mode === 'radio' && (

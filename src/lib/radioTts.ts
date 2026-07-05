@@ -16,7 +16,12 @@ async function getAudioUrl(text: string): Promise<string | null> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Surface a clear, one-time reason so the natural voice not working is
+      // easy to diagnose (almost always a missing/invalid ELEVENLABS_API_KEY).
+      warnTtsUnavailableOnce(res.status);
+      return null;
+    }
     const blob = await res.blob();
     if (!blob || blob.size === 0) return null;
     const url = URL.createObjectURL(blob);
@@ -34,6 +39,17 @@ async function getAudioUrl(text: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+let ttsWarned = false;
+function warnTtsUnavailableOnce(status: number): void {
+  if (ttsWarned) return;
+  ttsWarned = true;
+  const reason =
+    status === 503
+      ? 'ElevenLabs is not configured on the server — set ELEVENLABS_API_KEY (and optionally ELEVENLABS_VOICE_ID / ELEVENLABS_MODEL_ID) in the deployment environment.'
+      : `ElevenLabs TTS request failed (HTTP ${status}). The API key may be invalid, out of quota, or the voice ID rejected.`;
+  console.warn(`[radio] Natural voice unavailable — falling back to the built-in browser voice. ${reason}`);
 }
 
 export interface SpeakHooks {
