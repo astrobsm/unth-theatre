@@ -31,7 +31,7 @@ interface SurgicalUnit {
   active: boolean;
 }
 
-type LetterType = 'ORM_BOOKING' | 'ROSTER_UPLOAD' | 'TRAINING_INVITE';
+type LetterType = 'ORM_BOOKING' | 'ROSTER_UPLOAD' | 'TRAINING_INVITE' | 'CUSTOM';
 
 interface RosterDepartment {
   id: string;
@@ -595,6 +595,129 @@ async function buildTrainingPdf(dept: RosterDepartment, details: TrainingDetails
   return { doc, blob, filename };
 }
 
+interface CustomLetterInput {
+  recipient: string; // addressee block (multi-line)
+  subject: string;
+  body: string; // free text; blank lines separate paragraphs
+  signatory: string;
+}
+
+// A free-form official letter rendered with the same UNTH/ORM letterhead,
+// footer and CC block so any custom notice looks official.
+async function buildCustomPdf(input: CustomLetterInput) {
+  const { default: jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 56;
+  let y = M;
+
+  const ensure = (needed: number) => {
+    if (y + needed > H - M - 40) { doc.addPage(); y = M; }
+  };
+  const para = (text: string, opts?: { bold?: boolean; size?: number; gap?: number }) => {
+    doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
+    doc.setFontSize(opts?.size ?? 10.5);
+    const lines = doc.splitTextToSize(text, W - M * 2);
+    ensure(lines.length * 13 + (opts?.gap ?? 8));
+    doc.text(lines, M, y);
+    y += lines.length * 13 + (opts?.gap ?? 8);
+  };
+
+  // Letterhead
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL (UNTH), ITUKU-OZALLA', W / 2, y, { align: 'center' });
+  y += 16;
+  doc.setFontSize(11);
+  doc.text('THEATRE COMPLEX', W / 2, y, { align: 'center' });
+  y += 18;
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(1);
+  doc.line(M, y, W - M, y);
+  y += 18;
+
+  // Ref + date
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const ref = `Ref: ${REF_PREFIX}/2026/CUSTOM`;
+  doc.text(ref, M, y);
+  doc.text(`Date: ${TODAY}`, W - M, y, { align: 'right' });
+  y += 22;
+
+  // Addressee (multi-line)
+  if (input.recipient.trim()) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    input.recipient.split('\n').forEach((line) => {
+      ensure(16);
+      doc.text(line, M, y);
+      y += 14;
+    });
+    y += 8;
+  }
+
+  // Subject
+  if (input.subject.trim()) {
+    doc.setFont('helvetica', 'bold');
+    const subj = `SUBJECT: ${input.subject.trim().toUpperCase()}`;
+    const subjLines = doc.splitTextToSize(subj, W - M * 2);
+    ensure(subjLines.length * 13 + 12);
+    doc.text(subjLines, M, y);
+    y += subjLines.length * 13 + 12;
+  }
+
+  // Body — blank lines separate paragraphs; single newlines join within a paragraph.
+  const paragraphs = input.body.replace(/\r\n/g, '\n').split(/\n{2,}/);
+  paragraphs.forEach((p) => {
+    const text = p.split('\n').map((s) => s.trim()).filter(Boolean).join(' ');
+    if (text) para(text);
+    else y += 6;
+  });
+
+  // Sign-off
+  ensure(60);
+  y += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.text('Signed,', M, y);
+  y += 26;
+  (input.signatory || 'CHAIRMAN, THEATRE COMMERCIALIZED UNIT').split('\n').forEach((line) => {
+    ensure(16);
+    doc.text(line, M, y);
+    y += 14;
+  });
+  doc.setFont('helvetica', 'normal');
+  doc.text('University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu.', M, y);
+  y += 24;
+
+  // CC
+  ensure(20 + CC_LIST.length * 13);
+  doc.setFont('helvetica', 'bold');
+  doc.text('cc:', M, y);
+  y += 14;
+  doc.setFont('helvetica', 'normal');
+  CC_LIST.forEach((c) => {
+    doc.text(`\u2022 ${c}`, M + 14, y);
+    y += 13;
+  });
+
+  // Footer
+  const pageCount = (doc as any).getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(140);
+    doc.text(`Page ${i} of ${pageCount}  \u2022  UNTH Theatre Complex  \u2022  Official Letter`, W / 2, H - 24, { align: 'center' });
+    doc.setTextColor(0);
+  }
+
+  const blob = doc.output('blob');
+  const safe = (input.subject || 'Letter').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  const filename = `UNTH-Theatre-Letter-${safe || 'Custom'}.pdf`;
+  return { doc, blob, filename };
+}
+
 export default function TheatreLettersPage() {
   const [letterType, setLetterType] = useState<LetterType>('ORM_BOOKING');
   const [units, setUnits] = useState<SurgicalUnit[]>([]);
@@ -604,6 +727,11 @@ export default function TheatreLettersPage() {
   const [trainingTime, setTrainingTime] = useState('');
   const [trainingVenue, setTrainingVenue] = useState('Theatre Complex Conference Room, UNTH Ituku-Ozalla');
   const [busy, setBusy] = useState(false);
+  // Custom letter fields
+  const [customRecipient, setCustomRecipient] = useState('');
+  const [customSubject, setCustomSubject] = useState('');
+  const [customBody, setCustomBody] = useState('');
+  const [customSignatory, setCustomSignatory] = useState('CHAIRMAN, THEATRE COMMERCIALIZED UNIT');
 
   useEffect(() => {
     (async () => {
@@ -646,6 +774,8 @@ export default function TheatreLettersPage() {
       ? !!selectedUnit
       : letterType === 'ROSTER_UPLOAD'
       ? !!selectedDept
+      : letterType === 'CUSTOM'
+      ? customBody.trim().length > 0
       : trainingReady;
 
   const generate = async (mode: 'download' | 'open') => {
@@ -656,6 +786,13 @@ export default function TheatreLettersPage() {
           ? selectedUnit && (await buildOrmPdf(selectedUnit))
           : letterType === 'ROSTER_UPLOAD'
           ? selectedDept && (await buildRosterPdf(selectedDept))
+          : letterType === 'CUSTOM'
+          ? (await buildCustomPdf({
+              recipient: customRecipient,
+              subject: customSubject,
+              body: customBody,
+              signatory: customSignatory,
+            }))
           : selectedTrainingDept &&
             (await buildTrainingPdf(selectedTrainingDept, {
               dateLabel: trainingDateLabel,
@@ -707,9 +844,57 @@ export default function TheatreLettersPage() {
             <option value="ORM_BOOKING">ORM Mandatory Booking (to surgical units)</option>
             <option value="ROSTER_UPLOAD">Weekly Roster Upload Directive (to departments)</option>
             <option value="TRAINING_INVITE">ORM Physical Guide &amp; Training Invitation (to departments)</option>
+            <option value="CUSTOM">Custom Letter (write your own body)</option>
           </select>
         </div>
 
+        {letterType === 'CUSTOM' ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Recipient / addressee</label>
+              <textarea
+                value={customRecipient}
+                onChange={(e) => setCustomRecipient(e.target.value)}
+                rows={3}
+                placeholder={'The Head of Department,\nDepartment of …,\nUNTH, Ituku-Ozalla, Enugu.'}
+                className="input-field font-mono text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">One line per line — appears as the addressee block.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+              <input
+                type="text"
+                value={customSubject}
+                onChange={(e) => setCustomSubject(e.target.value)}
+                placeholder="e.g. Notice of theatre maintenance shutdown"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Body of the letter</label>
+              <textarea
+                value={customBody}
+                onChange={(e) => setCustomBody(e.target.value)}
+                rows={10}
+                placeholder={'Dear Sir/Madam,\n\nWrite the letter here. Leave a blank line between paragraphs.\n\nThank you.'}
+                className="input-field text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">Leave a blank line between paragraphs. The UNTH/ORM letterhead, signatory and CC are added automatically.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Signatory</label>
+              <input
+                type="text"
+                value={customSignatory}
+                onChange={(e) => setCustomSignatory(e.target.value)}
+                placeholder="e.g. CHAIRMAN, THEATRE COMMERCIALIZED UNIT"
+                className="input-field"
+              />
+            </div>
+          </div>
+        ) : (
+        <>
         <div>
           <label htmlFor="recipient-select" className="block text-sm font-medium text-gray-700 mb-1">
             {letterType === 'ORM_BOOKING' ? 'Select surgical unit' : 'Select department'}
@@ -801,6 +986,8 @@ export default function TheatreLettersPage() {
               />
             </div>
           </div>
+        )}
+        </>
         )}
 
         <div className="flex flex-wrap gap-2">

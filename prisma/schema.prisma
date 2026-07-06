@@ -3321,6 +3321,10 @@ model PreOperativeAnestheticReview {
   anaesthesiaConsentMethod    String? // ELECTRONIC | UPLOADED
   anaesthesiaConsentSignedAt  DateTime?
 
+  // Was the patient physically present in the ward at the planned review time?
+  patientInWardAtReview Boolean?
+  patientAbsenceNote    String? // e.g. "away for imaging", "not admitted yet"
+
   // Audit
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

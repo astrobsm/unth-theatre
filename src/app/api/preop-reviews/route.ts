@@ -56,6 +56,9 @@ const createPreOpReviewSchema = z.object({
   riskFactors: optStr,
   reviewNotes: optStr,
   recommendations: optStr,
+  // Ward presence at the planned review time.
+  patientInWardAtReview: z.boolean().optional().nullable(),
+  patientAbsenceNote: optStr,
   // Prescription data
   prescription: z.object({
     medications: z.array(z.object({

@@ -21,6 +21,7 @@ export const WARDS = [
   'PSYCHIATRIC WARD',
   'POSTNATAL WARD',
   'CHILDREN EMERGENCY WARD (CHER)',
+  'SPECIAL CARE WARD',
   'ICU',
   'OTHERS (SPECIFY)',
 ] as const;

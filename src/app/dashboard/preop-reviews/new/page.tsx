@@ -15,6 +15,7 @@ import {
 } from '@/lib/anaesthesia-consumables';
 import SignaturePad from '@/components/SignaturePad';
 import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaesthesiaConsent';
+import ContactName from '@/components/ContactName';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 // Comprehensive Anesthetic Medications Database
@@ -270,6 +271,10 @@ export default function NewPreOpReviewPage() {
   const [consentRelation, setConsentRelation] = useState('Self');
   const [consentError, setConsentError] = useState('');
 
+  // Was the patient in the ward at the planned review time?
+  const [patientInWard, setPatientInWard] = useState<boolean>(true);
+  const [patientAbsenceNote, setPatientAbsenceNote] = useState('');
+
   // Anesthetic Prescription states
   const [prescribedMedications, setPrescribedMedications] = useState<PrescribedMedication[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -458,6 +463,9 @@ export default function NewPreOpReviewPage() {
       // Review Notes
       reviewNotes: formData.get('reviewNotes'),
       recommendations: formData.get('recommendations'),
+      // Ward presence at planned review time
+      patientInWardAtReview: patientInWard,
+      patientAbsenceNote: !patientInWard ? (patientAbsenceNote.trim() || null) : null,
       // Anaesthesia consent (WHO-aligned)
       anaesthesiaConsent: consentSignature
         ? {
@@ -593,6 +601,52 @@ export default function NewPreOpReviewPage() {
                 <div className="col-span-2">
                   <span className="font-medium">Procedure:</span> {selectedSurgery.procedureName}
                 </div>
+                {selectedSurgery.patient?.id && (
+                  <div className="col-span-2">
+                    <span className="font-medium">Contact patient:</span>{' '}
+                    <ContactName
+                      type="patient"
+                      id={selectedSurgery.patient.id}
+                      name={selectedSurgery.patient?.name || 'Patient'}
+                      className="text-indigo-700 font-medium underline"
+                    />
+                    <span className="ml-1 text-xs text-gray-500">(tap for phone / WhatsApp)</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Was the patient in the ward at the planned review time? */}
+              <div className="mt-4 border-t border-indigo-200 pt-3">
+                <p className="text-sm font-medium text-gray-800 mb-2">
+                  Was the patient in the ward at the planned review time?
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPatientInWard(true)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${patientInWard ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                  >
+                    Yes, present
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPatientInWard(false)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${!patientInWard ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                  >
+                    No, not in ward
+                  </button>
+                </div>
+                {!patientInWard && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      value={patientAbsenceNote}
+                      onChange={(e) => setPatientAbsenceNote(e.target.value)}
+                      placeholder="Note (e.g. away for imaging, not yet admitted) — reach the patient on WhatsApp above"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
