@@ -304,7 +304,7 @@ export default function DashboardLayout({
     return null;
   };
 
-  const filteredMenuItems = isFullAccessRole(userRole)
+  const filteredMenuItems = (isFullAccessRole(userRole)
     ? menuItems
     : menuItems.filter((item) => {
         // External links (e.g. /training/) bypass module gating.
@@ -312,7 +312,18 @@ export default function DashboardLayout({
         const mod = findModule(item.href);
         if (!mod) return true; // unmapped paths default to visible
         return allowedModuleIds.has(mod.id);
-      });
+      })
+  )
+    // Arrange the sidebar alphabetically by label so items are easy to find.
+    // "Dashboard" is pinned to the very top as the home entry. Leading emojis /
+    // symbols are ignored when comparing labels.
+    .slice()
+    .sort((a, b) => {
+      if (a.href === '/dashboard') return -1;
+      if (b.href === '/dashboard') return 1;
+      const norm = (s: string) => s.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      return norm(a.label).localeCompare(norm(b.label));
+    });
 
   return (
     <div className="min-h-screen bg-gray-50">

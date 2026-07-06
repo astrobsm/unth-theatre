@@ -1,63 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
-  Package,
   Calendar,
   Users,
   AlertCircle,
-  TrendingUp,
   Activity,
-  Building2,
-  ArrowLeftRight,
-  Heart,
-  ClipboardList,
-  FileText,
-  Gauge,
-  BriefcaseMedical,
-  ClipboardCheck,
-  Sparkles,
   RefreshCw,
-  BarChart3,
   WifiOff,
   Siren,
-  AlertTriangle,
-  AlertOctagon,
-  FlaskConical,
   Phone,
-  Droplet,
-  ShieldAlert,
-  Zap,
-  Monitor,
-  MessageSquareWarning,
-  Eye,
-  ShieldCheck,
 } from 'lucide-react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import MyTheatreTeam from '@/components/MyTheatreTeam';
-
-// Dynamic imports for chart components (client-side only)
-const SurgeryTrendChart = dynamic(() => import('@/components/charts/SurgeryTrendChart'), {
-  ssr: false,
-  loading: () => <div className="h-80 flex items-center justify-center">Loading chart...</div>,
-});
-
-const CostBreakdownChart = dynamic(() => import('@/components/charts/CostBreakdownChart'), {
-  ssr: false,
-  loading: () => <div className="h-80 flex items-center justify-center">Loading chart...</div>,
-});
-
-const TheatreUtilizationChart = dynamic(
-  () => import('@/components/charts/TheatreUtilizationChart'),
-  {
-    ssr: false,
-    loading: () => <div className="h-80 flex items-center justify-center">Loading chart...</div>,
-  }
-);
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -68,41 +25,17 @@ interface DashboardStats {
   todaySurgeries: number;
 }
 
-interface AnalyticsData {
-  surgeryTrend: {
-    labels: string[];
-    scheduled: number[];
-    completed: number[];
-    cancelled: number[];
-  };
-  costBreakdown: {
-    labels: string[];
-    values: number[];
-  };
-  theatreUtilization: {
-    theatres: string[];
-    utilization: number[];
-  };
-  summary: {
-    totalSurgeries: number;
-    completedSurgeries: number;
-    cancelledSurgeries: number;
-    totalCost: number;
-  };
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const { isOnline } = useOfflineContext();
-  const [timeRange, setTimeRange] = useState(30);
 
-  // Offline-aware data fetching — automatically falls back to IndexedDB when offline
+  // Offline-aware stats fetch. The heavy analytics/charts were removed so the
+  // dashboard renders instantly from a single lightweight stats call.
   const {
     data: stats,
     loading,
     isCached: statsCached,
     isOffline: statsOffline,
-    refetch: refetchStats,
   } = useOfflineData<DashboardStats>('/api/dashboard/stats', {
     cacheKey: 'dashboard-stats',
     cacheTtl: 60 * 60 * 1000, // 1 hour
@@ -128,18 +61,7 @@ export default function DashboardPage() {
         todaySurgeries: 0,
       };
     },
-    refetchInterval: 60000, // Refresh every minute when online
-  });
-
-  const {
-    data: analytics,
-    loading: analyticsLoading,
-    isCached: analyticsCached,
-    refetch: refetchAnalytics,
-  } = useOfflineData<AnalyticsData>(`/api/analytics/dashboard?days=${timeRange}`, {
-    cacheKey: `analytics-dashboard-${timeRange}`,
-    cacheTtl: 30 * 60 * 1000,
-    deps: [timeRange],
+    refetchInterval: 120000,
   });
 
   const statCards = [
@@ -213,197 +135,23 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* 🚨 Emergency Alert Quick Access */}
-      <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        {/* Animated pulse background */}
-        <div className="absolute inset-0 bg-red-400 opacity-10 animate-pulse rounded-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-              <Siren className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white">🚨 Emergency Alert Quick Access</h2>
-              <p className="text-red-100 text-sm">Rapid navigation to all emergency, alert, and critical modules</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {/* Emergency Booking */}
-            <Link
-              href="/dashboard/emergency-booking"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-red-700/50 p-3 rounded-lg group-hover:bg-red-700/70 transition">
-                <AlertOctagon className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Emergency Booking</span>
-              <span className="text-[10px] bg-red-900/50 px-2 py-0.5 rounded-full font-bold">URGENT</span>
-            </Link>
-
-            {/* Emergency Lab Workup */}
-            <Link
-              href="/dashboard/emergency-lab-workup"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-purple-700/50 p-3 rounded-lg group-hover:bg-purple-700/70 transition">
-                <FlaskConical className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Emergency Lab Workup</span>
-              <span className="text-[10px] bg-purple-900/50 px-2 py-0.5 rounded-full font-bold">LAB</span>
-            </Link>
-
-            {/* Emergency Alerts */}
-            <Link
-              href="/dashboard/emergency-alerts"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-orange-700/50 p-3 rounded-lg group-hover:bg-orange-700/70 transition">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Emergency Alerts</span>
-              <span className="text-[10px] bg-orange-900/50 px-2 py-0.5 rounded-full font-bold">CRITICAL</span>
-            </Link>
-
-            {/* Alerts */}
-            <Link
-              href="/dashboard/alerts"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-yellow-700/50 p-3 rounded-lg group-hover:bg-yellow-700/70 transition">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Alerts</span>
-            </Link>
-
-            {/* Fault Alerts */}
-            <Link
-              href="/dashboard/fault-alerts"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-amber-700/50 p-3 rounded-lg group-hover:bg-amber-700/70 transition">
-                <AlertOctagon className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Fault Alerts</span>
-            </Link>
-
-            {/* Blood Bank */}
-            <Link
-              href="/dashboard/blood-bank"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-rose-700/50 p-3 rounded-lg group-hover:bg-rose-700/70 transition">
-                <Droplet className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Blood Bank</span>
-            </Link>
-
-            {/* Mortality Registry */}
-            <Link
-              href="/dashboard/mortality"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-gray-700/50 p-3 rounded-lg group-hover:bg-gray-700/70 transition">
-                <Heart className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Mortality Registry</span>
-            </Link>
-
-            {/* Cancellations */}
-            <Link
-              href="/dashboard/cancellations"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-pink-700/50 p-3 rounded-lg group-hover:bg-pink-700/70 transition">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Cancellations</span>
-            </Link>
-
-            {/* Call for Patient */}
-            <Link
-              href="/dashboard/call-for-patient"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-teal-700/50 p-3 rounded-lg group-hover:bg-teal-700/70 transition">
-                <Phone className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Call for Patient</span>
-            </Link>
-
-            {/* Power Status */}
-            <Link
-              href="/dashboard/power-house/status"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-yellow-600/50 p-3 rounded-lg group-hover:bg-yellow-600/70 transition">
-                <Zap className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Power Status</span>
-            </Link>
-
-            {/* TV Kiosk Display */}
-            <Link
-              href="/emergency-display"
-              target="_blank"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-cyan-700/50 p-3 rounded-lg group-hover:bg-cyan-700/70 transition">
-                <Monitor className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">TV Display</span>
-              <span className="text-[10px] bg-cyan-900/50 px-2 py-0.5 rounded-full font-bold">KIOSK</span>
-            </Link>
-
-            {/* Anonymous Tips */}
-            <Link
-              href="/dashboard/anonymous-tips"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-indigo-700/50 p-3 rounded-lg group-hover:bg-indigo-700/70 transition">
-                <MessageSquareWarning className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Anonymous Tips</span>
-              <span className="text-[10px] bg-indigo-900/50 px-2 py-0.5 rounded-full font-bold">REPORT</span>
-            </Link>
-
-            {/* Security Reports */}
-            <Link
-              href="/dashboard/security-reports"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-red-800/50 p-3 rounded-lg group-hover:bg-red-800/70 transition">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Security Reports</span>
-              <span className="text-[10px] bg-red-900/50 px-2 py-0.5 rounded-full font-bold">SECURITY</span>
-            </Link>
-
-            {/* Review Tips (Admin) */}
-            <Link
-              href="/dashboard/anonymous-tips/view"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-violet-700/50 p-3 rounded-lg group-hover:bg-violet-700/70 transition">
-                <Eye className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Review Tips</span>
-              <span className="text-[10px] bg-violet-900/50 px-2 py-0.5 rounded-full font-bold">ADMIN</span>
-            </Link>
-
-            {/* Review Security (Admin) */}
-            <Link
-              href="/dashboard/security-reports/view"
-              className="flex flex-col items-center gap-2 bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-all duration-200 rounded-xl p-4 text-white group border border-white/20 hover:border-white/40 hover:scale-105"
-            >
-              <div className="bg-rose-800/50 p-3 rounded-lg group-hover:bg-rose-800/70 transition">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold text-center leading-tight">Review Security</span>
-              <span className="text-[10px] bg-rose-900/50 px-2 py-0.5 rounded-full font-bold">ADMIN</span>
-            </Link>
-          </div>
-        </div>
+      {/* Compact emergency access — the two most critical links only. The large
+          multi-button quick-access grid and charts were removed for speed. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Link
+          href="/dashboard/emergency-booking"
+          className="flex items-center gap-3 bg-gradient-to-r from-red-600 to-orange-500 text-white rounded-xl p-4 shadow hover:opacity-95 transition"
+        >
+          <Siren className="w-6 h-6 flex-shrink-0" />
+          <span className="font-semibold">Emergency Booking</span>
+        </Link>
+        <Link
+          href="/dashboard/call-for-patient"
+          className="flex items-center gap-3 bg-gradient-to-r from-teal-600 to-cyan-500 text-white rounded-xl p-4 shadow hover:opacity-95 transition"
+        >
+          <Phone className="w-6 h-6 flex-shrink-0" />
+          <span className="font-semibold">Call for Patient</span>
+        </Link>
       </div>
 
       {/* Stats Grid */}
@@ -429,257 +177,6 @@ export default function DashboardPage() {
 
       {/* My Theatre Team — surgeon unit + date lookup */}
       <MyTheatreTeam />
-
-      {/* Analytics Section */}
-      <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-blue-600 p-3 rounded-lg flex-shrink-0">
-              <BarChart3 className="w-6 h-6 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Performance Analytics</h2>
-              <p className="text-sm text-gray-600">Visual insights and trends</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(Number(e.target.value))}
-              className="input-field flex-1 sm:flex-none sm:w-40"
-              aria-label="Analytics time range"
-            >
-              <option value={7}>Last 7 days</option>
-              <option value={30}>Last 30 days</option>
-              <option value={90}>Last 90 days</option>
-            </select>
-            <button
-              onClick={() => refetchAnalytics()}
-              disabled={analyticsLoading}
-              className="btn-secondary flex items-center gap-2 flex-shrink-0"
-            >
-              <RefreshCw className={`w-4 h-4 ${analyticsLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {analyticsLoading ? (
-          <div className="flex items-center justify-center h-80">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading analytics...</p>
-            </div>
-          </div>
-        ) : analytics ? (
-          <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-lg p-4 shadow">
-                <p className="text-sm text-gray-600">Total Surgeries</p>
-                <p className="text-2xl font-bold text-blue-600">{analytics?.summary?.totalSurgeries ?? 0}</p>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow">
-                <p className="text-sm text-gray-600">Completed</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {analytics?.summary?.completedSurgeries ?? 0}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow">
-                <p className="text-sm text-gray-600">Cancelled</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {analytics?.summary?.cancelledSurgeries ?? 0}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow">
-                <p className="text-sm text-gray-600">Total Cost</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  ₦{(analytics?.summary?.totalCost ?? 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {analytics?.surgeryTrend && (
-                <div className="bg-white rounded-lg p-6 shadow">
-                  <SurgeryTrendChart data={analytics.surgeryTrend} />
-                </div>
-              )}
-              {analytics?.theatreUtilization && (
-                <div className="bg-white rounded-lg p-6 shadow">
-                  <TheatreUtilizationChart data={analytics.theatreUtilization} />
-                </div>
-              )}
-            </div>
-
-            {analytics?.costBreakdown?.labels?.length > 0 && (
-              <div className="bg-white rounded-lg p-6 shadow mt-6">
-                <CostBreakdownChart data={analytics.costBreakdown} />
-              </div>
-            )}
-          </>
-        ) : (
-          <p className="text-center text-gray-600">No analytics data available</p>
-        )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="card">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <button 
-            onClick={() => router.push('/dashboard/surgeries/new')}
-            className="btn-primary flex items-center justify-center space-x-2"
-          >
-            <Calendar className="w-5 h-5" />
-            <span>Schedule Surgery</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/patients/new')}
-            className="btn-primary flex items-center justify-center space-x-2"
-          >
-            <Users className="w-5 h-5" />
-            <span>Add Patient</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/transfers/new')}
-            className="btn-primary flex items-center justify-center space-x-2"
-          >
-            <ArrowLeftRight className="w-5 h-5" />
-            <span>Record Transfer</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/inventory/new')}
-            className="btn-primary flex items-center justify-center space-x-2"
-          >
-            <Package className="w-5 h-5" />
-            <span>Add Inventory</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/theatres')}
-            className="btn-secondary flex items-center justify-center space-x-2"
-          >
-            <Building2 className="w-5 h-5" />
-            <span>Theatre Allocation</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/theatre-readiness')}
-            className="btn-secondary flex items-center justify-center space-x-2 relative"
-          >
-            <Gauge className="w-5 h-5" />
-            <span>Theatre Readiness</span>
-            <span className="absolute -top-1 -right-1 bg-accent-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">NEW</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/anesthesia-setup')}
-            className="btn-secondary flex items-center justify-center space-x-2 relative"
-          >
-            <BriefcaseMedical className="w-5 h-5" />
-            <span>Anesthesia Setup</span>
-            <span className="absolute -top-1 -right-1 bg-accent-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">NEW</span>
-          </button>
-          <button 
-            onClick={() => router.push('/dashboard/reports/staff-effectiveness')}
-            className="btn-secondary flex items-center justify-center space-x-2 relative"
-          >
-            <TrendingUp className="w-5 h-5" />
-            <span>Staff Analytics</span>
-            <span className="absolute -top-1 -right-1 bg-accent-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">NEW</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Duty Logging for Cleaners & Porters */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <ClipboardCheck className="w-6 h-6 text-blue-600" />
-              Quick Duty Logging
-            </h3>
-            <span className="badge badge-primary">Cleaners & Porters</span>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Staff can quickly log their cleaning, transport, and other duties using their staff codes
-          </p>
-          <Link href="/auth/login" className="btn-primary inline-flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            Go to Quick Logging
-          </Link>
-        </div>
-
-        <div className="card bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <Activity className="w-6 h-6 text-purple-600" />
-              Staff Effectiveness
-            </h3>
-            <span className="badge badge-secondary">Analytics</span>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            View performance metrics, work logs, and productivity analytics for cleaning and porter staff
-          </p>
-          <Link href="/dashboard/reports/staff-effectiveness" className="btn-secondary inline-flex items-center gap-2">
-            <TrendingUp className="w-4 h-4" />
-            View Analytics
-          </Link>
-        </div>
-      </div>
-
-      {/* Module Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="bg-green-600 p-3 rounded-lg">
-              <Gauge className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-800">Theatre Readiness</h3>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Real-time status of all theatres with setup completion, location tracking, and equipment readiness
-          </p>
-          <Link href="/dashboard/theatre-readiness" className="text-green-600 hover:text-green-700 font-semibold text-sm flex items-center gap-1">
-            View Status Dashboard →
-          </Link>
-        </div>
-
-        <div className="card bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="bg-orange-600 p-3 rounded-lg">
-              <BriefcaseMedical className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-800">Anesthesia Setup</h3>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Daily equipment checks, setup logging with geolocation, and malfunction alerts for technicians
-          </p>
-          <Link href="/dashboard/anesthesia-setup" className="text-orange-600 hover:text-orange-700 font-semibold text-sm flex items-center gap-1">
-            Start Setup Logging →
-          </Link>
-        </div>
-
-        <div className="card bg-gradient-to-br from-cyan-50 to-sky-50 border-2 border-cyan-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="bg-cyan-600 p-3 rounded-lg">
-              <ClipboardCheck className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-800">Staff Duty Tracking</h3>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Track cleaning sessions, patient transports, and other duties with timestamps and performance metrics
-          </p>
-          <Link href="/dashboard/reports/staff-effectiveness" className="text-cyan-600 hover:text-cyan-700 font-semibold text-sm flex items-center gap-1">
-            View Work Logs →
-          </Link>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="card">
-        <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-        <p className="text-gray-500">No recent activity to display</p>
-      </div>
     </div>
   );
 }

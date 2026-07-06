@@ -168,13 +168,32 @@ export default function PACUAssessmentDetailPage() {
     notes: '',
   });
 
-  // Load approved porters for the transport dropdowns.
+  // Load porters ON DUTY for the day for the transport dropdowns; fall back to
+  // the full approved list only when no roster is uploaded for the shift.
   useEffect(() => {
-    fetch('/api/users?role=PORTER&status=APPROVED')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setPorters(Array.isArray(data)
-        ? data.map((u: any) => ({ id: u.id, fullName: u.fullName, staffCode: u.staffCode }))
-        : []))
+    const today = new Date().toISOString();
+    fetch(`/api/roster/on-duty?date=${encodeURIComponent(today)}&theatreId=all`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const onDuty = Array.isArray(data?.candidates?.porters) ? data.candidates.porters : [];
+        if (onDuty.length > 0) {
+          setPorters(
+            onDuty.map((u: any) => ({ id: u.userId, fullName: u.name, staffCode: u.staffCode }))
+          );
+          return;
+        }
+        // Fallback: full approved porter list.
+        fetch('/api/users?role=PORTER&status=APPROVED')
+          .then((r) => (r.ok ? r.json() : []))
+          .then((list) =>
+            setPorters(
+              Array.isArray(list)
+                ? list.map((u: any) => ({ id: u.id, fullName: u.fullName, staffCode: u.staffCode }))
+                : []
+            )
+          )
+          .catch(() => {});
+      })
       .catch(() => {});
   }, []);
 
@@ -473,8 +492,37 @@ export default function PACUAssessmentDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Failed to start transfer');
-        return;
+        // The porter still has an unfinished transport. Offer to force-end it
+        // and start this new one instead of blocking.
+        if (data.canForce) {
+          const proceed = window.confirm(
+            `${data.error}\n\nForce-end the porter's previous transport and start this one now?`
+          );
+          if (!proceed) return;
+          const forced = await fetch('/api/transport/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              staffCode: porter1.staffCode,
+              transporter2Code: porter2?.staffCode || null,
+              patientFolderNumber: assessment?.patient?.folderNumber,
+              fromLocation: 'PACU',
+              toLocation: transferForm.destination,
+              transportType: 'Post-Op Transfer',
+              surgeryId: assessment?.surgeryId,
+              notes: noteParts.join(' • ') || undefined,
+              force: true,
+            }),
+          });
+          const forcedData = await forced.json();
+          if (!forced.ok) {
+            alert(forcedData.error || 'Failed to start transfer');
+            return;
+          }
+        } else {
+          alert(data.error || 'Failed to start transfer');
+          return;
+        }
       }
       // Record the destination + accompanying nurse on the PACU assessment.
       await fetch(`/api/pacu/${params.id}`, {

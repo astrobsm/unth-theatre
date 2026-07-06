@@ -6,6 +6,7 @@ import {
   triggerRadio,
   speak3,
   acknowledgeRadioByMetadata,
+  getOnDutyPortersCleanersWithIds,
 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const [surgeries, allocations, theatres, porters, cleaners] =
+    const [surgeries, allocations, theatres, onDuty] =
       await Promise.all([
         prisma.surgery.findMany({
           where: {
@@ -83,17 +84,30 @@ export async function GET(request: NextRequest) {
           include: { theatre: { select: { id: true, name: true } } },
         }),
         prisma.theatreSuite.findMany({ select: { id: true, name: true } }),
-        prisma.user.findMany({
-          where: { role: 'PORTER' },
-          select: { id: true, fullName: true, staffCode: true },
-          orderBy: { fullName: 'asc' },
-        }),
-        prisma.user.findMany({
-          where: { role: 'CLEANER' },
-          select: { id: true, fullName: true, staffCode: true },
-          orderBy: { fullName: 'asc' },
-        }),
+        // Porters & cleaners ON DUTY for the target day/shift.
+        getOnDutyPortersCleanersWithIds(targetDate),
       ]);
+
+    // Use the on-duty staff; fall back to the full approved list only when no
+    // roster has been uploaded for the shift (so reception is never blocked).
+    let porters: { id: string; fullName: string; staffCode: string | null }[] =
+      onDuty.porters.map((p) => ({ id: p.id, fullName: p.fullName, staffCode: p.staffCode }));
+    let cleaners: { id: string; fullName: string; staffCode: string | null }[] =
+      onDuty.cleaners.map((c) => ({ id: c.id, fullName: c.fullName, staffCode: c.staffCode }));
+    if (porters.length === 0) {
+      porters = await prisma.user.findMany({
+        where: { role: 'PORTER' },
+        select: { id: true, fullName: true, staffCode: true },
+        orderBy: { fullName: 'asc' },
+      });
+    }
+    if (cleaners.length === 0) {
+      cleaners = await prisma.user.findMany({
+        where: { role: 'CLEANER' },
+        select: { id: true, fullName: true, staffCode: true },
+        orderBy: { fullName: 'asc' },
+      });
+    }
 
     const theatreNameById: Record<string, string> = {};
     for (const t of theatres) theatreNameById[t.id] = t.name;

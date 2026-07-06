@@ -159,6 +159,62 @@ export function namesPhrase(staff: OnDutyStaff[]): string {
 }
 
 /**
+ * On-duty porters and cleaners for a moment, including the linked user id so
+ * pages can use them in selection dropdowns. Falls back to nothing on error.
+ * When no roster is uploaded for the day, the arrays come back empty and the
+ * caller should decide whether to fall back to the full approved list.
+ */
+export interface OnDutyStaffWithId {
+  id: string;
+  fullName: string;
+  staffCode: string | null;
+  phoneNumber: string | null;
+}
+
+export async function getOnDutyPortersCleanersWithIds(
+  when: Date = new Date(),
+): Promise<{ porters: OnDutyStaffWithId[]; cleaners: OnDutyStaffWithId[] }> {
+  try {
+    const shift = shiftFromDate(when);
+    const dateOnly = new Date(
+      Date.UTC(when.getFullYear(), when.getMonth(), when.getDate()),
+    );
+    const rosters = await prisma.roster.findMany({
+      where: {
+        date: dateOnly,
+        shift,
+        staffCategory: { in: ['PORTERS', 'CLEANERS'] },
+      },
+      include: {
+        user: { select: { id: true, fullName: true, staffCode: true, phoneNumber: true } },
+      },
+      orderBy: { uploadedAt: 'desc' },
+    });
+    const porters: OnDutyStaffWithId[] = [];
+    const cleaners: OnDutyStaffWithId[] = [];
+    const seen = new Set<string>();
+    for (const r of rosters) {
+      if (!r.user) continue;
+      const key = `${r.staffCategory}:${r.user.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const entry: OnDutyStaffWithId = {
+        id: r.user.id,
+        fullName: r.staffName || r.user.fullName,
+        staffCode: r.user.staffCode ?? null,
+        phoneNumber: r.user.phoneNumber ?? null,
+      };
+      if (r.staffCategory === 'PORTERS') porters.push(entry);
+      else cleaners.push(entry);
+    }
+    return { porters, cleaners };
+  } catch (err) {
+    console.error('[radioEvents] failed to fetch on-duty porters/cleaners with ids:', err);
+    return { porters: [], cleaners: [] };
+  }
+}
+
+/**
  * Mark every PENDING / PLAYING radio announcement whose metadata JSON
  * contains the given key/value pair as ACKNOWLEDGED, so the radio service
  * stops looping it. Fire-and-forget — never throws.

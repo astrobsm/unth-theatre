@@ -10,7 +10,7 @@ import {
   BarChart3, Bell, Camera, Mic, History, Zap, Gauge, ListChecks
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
-
+import StaffComboInput from '@/components/StaffComboInput';
 interface Handover {
   id: string;
   handoverPhase: string;
@@ -248,6 +248,20 @@ export default function NurseHandoverPage() {
   const [activeTab, setActiveTab] = useState<'list' | 'dashboard'>('list');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  // Surgeon / anaesthetist suggestions from the database (type-ahead + free text).
+  const [surgeonOpts, setSurgeonOpts] = useState<{ id: string; fullName: string; staffCode?: string | null; role?: string | null }[]>([]);
+  const [anaesthetistOpts, setAnaesthetistOpts] = useState<{ id: string; fullName: string; staffCode?: string | null; role?: string | null }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/users?roles=SURGEON,HOUSE_OFFICER&limit=300')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setSurgeonOpts(Array.isArray(d) ? d : d.users || []))
+      .catch(() => {});
+    fetch('/api/users?roles=ANAESTHETIST,CONSULTANT_ANAESTHETIST&limit=300')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setAnaesthetistOpts(Array.isArray(d) ? d : d.users || []))
+      .catch(() => {});
+  }, []);
 
   // Form state
   const [form, setForm] = useState({
@@ -1336,8 +1350,14 @@ export default function NurseHandoverPage() {
                   <SectionHeader icon={<Stethoscope className="h-4 w-4" />} title="S — Situation" color="text-teal-700" />
                   <FormInput label="Procedure Performed" value={form.procedurePerformed} onChange={v => setForm({ ...form, procedurePerformed: v })} />
                   <div className="grid grid-cols-2 gap-4">
-                    <FormInput label="Surgeon" value={form.surgeonName} onChange={v => setForm({ ...form, surgeonName: v })} />
-                    <FormInput label="Anaesthetist" value={form.anesthetistName} onChange={v => setForm({ ...form, anesthetistName: v })} />
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Surgeon</label>
+                      <StaffComboInput value={form.surgeonName} onChange={v => setForm({ ...form, surgeonName: v })} options={surgeonOpts} placeholder="Select or type surgeon" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthetist</label>
+                      <StaffComboInput value={form.anesthetistName} onChange={v => setForm({ ...form, anesthetistName: v })} options={anaesthetistOpts} placeholder="Select or type anaesthetist" />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthesia Type</label>

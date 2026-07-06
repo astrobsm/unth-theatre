@@ -18,6 +18,9 @@ const startTransportSchema = z.object({
   notes: z.string().optional(),
   // Second porter (trolley partner) staff code — optional.
   transporter2Code: z.string().optional().nullable(),
+  // When true, auto-end any existing IN_PROGRESS transport for this porter
+  // instead of blocking the new one.
+  force: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -69,10 +72,33 @@ export async function POST(request: NextRequest) {
     });
 
     if (activeTransport) {
-      return NextResponse.json(
-        { error: 'You have an active transport session. Please end it first.' },
-        { status: 400 }
+      if (!validatedData.force) {
+        return NextResponse.json(
+          {
+            error: 'You have an active transport session. Please end it first.',
+            canForce: true,
+            activeTransportId: activeTransport.id,
+          },
+          { status: 409 }
+        );
+      }
+      // Force requested: auto-complete the previous transport so a new one can start.
+      const endTime = new Date();
+      const durationMinutes = Math.floor(
+        (endTime.getTime() - activeTransport.startTime.getTime()) / 60000
       );
+      await prisma.patientTransportLog.update({
+        where: { id: activeTransport.id },
+        data: {
+          endTime,
+          durationMinutes,
+          status: 'COMPLETED',
+          receivedAt: endTime,
+          notes: [activeTransport.notes, 'Auto-ended: a new transport was force-started by the porter.']
+            .filter(Boolean)
+            .join(' • '),
+        },
+      });
     }
 
     // Find patient

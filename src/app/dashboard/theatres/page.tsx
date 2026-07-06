@@ -161,18 +161,37 @@ export default function TheatresPage() {
         }
       }
 
-      // Fetch cleaners
-      const cleanerResponse = await fetch('/api/users?role=CLEANER&status=APPROVED');
-      if (cleanerResponse.ok) {
-        const data = await cleanerResponse.json();
-        setCleaners(Array.isArray(data) ? data : data.users || []);
+      // Fetch cleaners & porters ON DUTY for today; fall back to the full
+      // approved list only when no roster is uploaded for the shift.
+      const onDutyRes = await fetch(
+        `/api/roster/on-duty?date=${encodeURIComponent(new Date().toISOString())}&theatreId=all`
+      );
+      const onDuty = onDutyRes.ok ? await onDutyRes.json() : null;
+      const onDutyCleaners = Array.isArray(onDuty?.candidates?.cleaners)
+        ? onDuty.candidates.cleaners.map((u: any) => ({ id: u.userId, fullName: u.name, staffCode: u.staffCode }))
+        : [];
+      const onDutyPorters = Array.isArray(onDuty?.candidates?.porters)
+        ? onDuty.candidates.porters.map((u: any) => ({ id: u.userId, fullName: u.name, staffCode: u.staffCode }))
+        : [];
+
+      if (onDutyCleaners.length > 0) {
+        setCleaners(onDutyCleaners);
+      } else {
+        const cleanerResponse = await fetch('/api/users?role=CLEANER&status=APPROVED');
+        if (cleanerResponse.ok) {
+          const data = await cleanerResponse.json();
+          setCleaners(Array.isArray(data) ? data : data.users || []);
+        }
       }
 
-      // Fetch porters
-      const porterResponse = await fetch('/api/users?role=PORTER&status=APPROVED');
-      if (porterResponse.ok) {
-        const data = await porterResponse.json();
-        setPorters(Array.isArray(data) ? data : data.users || []);
+      if (onDutyPorters.length > 0) {
+        setPorters(onDutyPorters);
+      } else {
+        const porterResponse = await fetch('/api/users?role=PORTER&status=APPROVED');
+        if (porterResponse.ok) {
+          const data = await porterResponse.json();
+          setPorters(Array.isArray(data) ? data : data.users || []);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch staff:', error);

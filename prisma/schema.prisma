@@ -5048,6 +5048,13 @@ model PatientCallUp {
   sendingMinutesLate Int? // minutes past 07:00 at invite time (negative = early)
   lateSendingReason  String?
 
+  // Forced invite of a patient who was NOT cleared at the pre-operative visit.
+  // Requires an override reason recorded by the inviter.
+  forcedUncleared       Boolean @default(false)
+  forcedUnclearedReason String?
+  forcedUnclearedById   String?
+  forcedUnclearedByName String?
+
   // Audit
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

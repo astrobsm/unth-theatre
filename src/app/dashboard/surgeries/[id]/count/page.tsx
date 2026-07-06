@@ -7,6 +7,7 @@ import {
   searchInstruments,
   type SurgicalInstrument,
 } from '@/lib/surgical-instruments-catalog';
+import StaffComboInput from '@/components/StaffComboInput';
 
 /* ============================================================
    Phase 8 — Surgical Count Checklist (3-column model)
@@ -998,40 +999,26 @@ function InitDialog({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Perioperative Nurse 1 (Scrub) *
             </label>
-            <select
+            <StaffComboInput
               aria-label="Perioperative Nurse 1 (Scrub)"
               value={initData.scrubNurseName}
-              onChange={(e) => setInitData({ ...initData, scrubNurseName: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2"
+              onChange={(v) => setInitData({ ...initData, scrubNurseName: v })}
+              options={nurses}
+              placeholder={nursesLoading ? 'Loading nurses…' : 'Select or type a nurse…'}
               required
-            >
-              <option value="">{nursesLoading ? 'Loading nurses…' : 'Select nurse…'}</option>
-              {nurses.map((n) => (
-                <option key={n.id} value={n.fullName}>
-                  {n.fullName}
-                  {n.staffCode ? ` (${n.staffCode})` : ''} — {n.role}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Perioperative Nurse 2 (Circulating)
             </label>
-            <select
+            <StaffComboInput
               aria-label="Perioperative Nurse 2 (Circulating)"
               value={initData.circulatingNurseName}
-              onChange={(e) => setInitData({ ...initData, circulatingNurseName: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2"
-            >
-              <option value="">{nursesLoading ? 'Loading nurses…' : 'Select nurse…'}</option>
-              {nurses.map((n) => (
-                <option key={n.id} value={n.fullName}>
-                  {n.fullName}
-                  {n.staffCode ? ` (${n.staffCode})` : ''} — {n.role}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setInitData({ ...initData, circulatingNurseName: v })}
+              options={nurses}
+              placeholder={nursesLoading ? 'Loading nurses…' : 'Select or type a nurse…'}
+            />
           </div>
         </div>
 

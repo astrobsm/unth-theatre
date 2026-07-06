@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { triggerRadio, speak3 } from '@/lib/radioEvents';
+import { triggerRadio, speak3, getOnDutyPortersCleanersWithIds } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,11 +149,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Porters available to be selected as patient transporters at invite time.
-    const porters = await prisma.user.findMany({
-      where: { role: 'PORTER', status: 'APPROVED' },
-      select: { id: true, fullName: true },
-      orderBy: { fullName: 'asc' },
-    });
+    // Prefer the porters ON DUTY for the day; fall back to the full approved
+    // list only when no roster has been uploaded for the shift.
+    const onDuty = await getOnDutyPortersCleanersWithIds(new Date());
+    let porters: { id: string; fullName: string }[] = onDuty.porters.map((p) => ({
+      id: p.id,
+      fullName: p.fullName,
+    }));
+    if (porters.length === 0) {
+      porters = await prisma.user.findMany({
+        where: { role: 'PORTER', status: 'APPROVED' },
+        select: { id: true, fullName: true },
+        orderBy: { fullName: 'asc' },
+      });
+    }
 
     // Nurses that may be recorded as the holding-area / first-case sending
     // nurse(s) for the day.
@@ -301,7 +310,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { surgeryId, action, rejectionReason, porterNames, localMinutes, lateReason } = body;
-
     // Record the holding-area / first-case sending nurse(s) for a day.
     if (action === 'set-sending-nurses') {
       const nurses = Array.isArray(body.nurses)
@@ -408,7 +416,14 @@ export async function POST(request: NextRequest) {
     if (action === 'invite') {
       // Only patients cleared at the pre-operative assessment may be invited —
       // except day cases and emergency surgeries, which do not require a
-      // pre-operative visit clearance.
+      // pre-operative visit clearance. A patient who is not cleared may still be
+      // force-invited, but only with an override reason.
+      const forceInvite = body.forceInvite === true;
+      const forceReason =
+        typeof body.forceReason === 'string' && body.forceReason.trim()
+          ? body.forceReason.trim()
+          : null;
+      let forcedUncleared = false;
       if (!surgery.isDayCase && surgery.surgeryType !== 'EMERGENCY') {
         const latestVisit = await prisma.preOperativeVisit.findFirst({
           where: { surgeryId },
@@ -416,13 +431,28 @@ export async function POST(request: NextRequest) {
           select: { overallStatus: true },
         });
         if (latestVisit?.overallStatus !== 'CLEARED') {
-          return NextResponse.json(
-            {
-              error:
-                'Patient is not cleared for surgery. Complete the pre-operative assessment and clear the patient before inviting.',
-            },
-            { status: 400 }
-          );
+          if (!forceInvite) {
+            return NextResponse.json(
+              {
+                error:
+                  'Patient is not cleared for surgery. Complete the pre-operative assessment and clear the patient before inviting.',
+                canForceInvite: true,
+              },
+              { status: 400 }
+            );
+          }
+          if (!forceReason) {
+            return NextResponse.json(
+              {
+                error:
+                  'A reason is required to force-invite a patient who is not cleared for surgery.',
+                canForceInvite: true,
+                requiresForceReason: true,
+              },
+              { status: 400 }
+            );
+          }
+          forcedUncleared = true;
         }
       }
 
@@ -485,6 +515,10 @@ export async function POST(request: NextRequest) {
           isFirstCaseOfDay,
           sendingMinutesLate: isFirstCaseOfDay ? minutesLate : null,
           lateSendingReason: isFirstCaseOfDay ? trimmedLateReason : null,
+          forcedUncleared,
+          forcedUnclearedReason: forcedUncleared ? forceReason : null,
+          forcedUnclearedById: forcedUncleared ? session.user.id : null,
+          forcedUnclearedByName: forcedUncleared ? session.user.name || 'Unknown' : null,
           invitedById: session.user.id,
           invitedByName: session.user.name || 'Unknown',
         },

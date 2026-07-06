@@ -7,6 +7,7 @@ import {
   ArrowLeft, FileText, PenLine, Upload, Download, Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2,
 } from 'lucide-react';
 import SignaturePad from '@/components/SignaturePad';
+import StaffComboInput from '@/components/StaffComboInput';
 import { formatAge } from '@/lib/age';
 
 interface PatientInfo {
@@ -98,6 +99,16 @@ export default function SurgeryConsentPage() {
   const [error, setError] = useState('');
   const [completedAt, setCompletedAt] = useState<string | null>(null);
   const [signedElectronically, setSignedElectronically] = useState(false);
+  // Surgeons from the database — used as type-ahead suggestions while still
+  // allowing a brand-new (visiting/locum) surgeon name to be typed.
+  const [surgeons, setSurgeons] = useState<{ id: string; fullName: string; staffCode?: string | null; role?: string | null }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/users?roles=SURGEON&limit=300')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setSurgeons(Array.isArray(data) ? data : data.users || []))
+      .catch(() => {});
+  }, []);
 
   const set = <K extends keyof ConsentForm>(key: K, value: ConsentForm[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -418,7 +429,7 @@ export default function SurgeryConsentPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Authorising Doctor (Dr.)</label>
-            <input value={form.surgeonName} onChange={(e) => set('surgeonName', e.target.value)} className={inputCls} placeholder="Surgeon name" />
+            <StaffComboInput value={form.surgeonName} onChange={(v) => set('surgeonName', v)} options={surgeons} className={inputCls} placeholder="Select or type surgeon name" />
           </div>
         </div>
 

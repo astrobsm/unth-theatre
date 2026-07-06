@@ -92,6 +92,8 @@ export default function CallForPatientPage() {
   const [invitingCase, setInvitingCase] = useState<CaseData | null>(null);
   const [selectedPorterNames, setSelectedPorterNames] = useState<string[]>([]);
   const [lateReason, setLateReason] = useState('');
+  // Reason for force-inviting a patient who was NOT cleared at the pre-op visit.
+  const [forceReason, setForceReason] = useState('');
   // Holding-area / first-case sending nurse editor.
   const [editingSendingNurses, setEditingSendingNurses] = useState(false);
   const [sendingNurseRows, setSendingNurseRows] = useState<SendingNurse[]>([]);
@@ -135,6 +137,9 @@ export default function CallForPatientPage() {
           porterNames,
           localMinutes: now.getHours() * 60 + now.getMinutes(),
           lateReason: lateReason.trim() || undefined,
+          // Force-invite an uncleared patient with a recorded reason.
+          forceInvite: !caseItem.cleared,
+          forceReason: !caseItem.cleared ? forceReason.trim() || undefined : undefined,
         }),
       });
       if (!res.ok) {
@@ -145,6 +150,7 @@ export default function CallForPatientPage() {
       setInvitingCase(null);
       setSelectedPorterNames([]);
       setLateReason('');
+      setForceReason('');
       setSuccessMsg(`Patient ${caseItem.patientName} has been invited!`);
       setTimeout(() => setSuccessMsg(null), 4000);
 
@@ -173,10 +179,12 @@ export default function CallForPatientPage() {
     }
   };
 
-  // Open the porter-selection dialog before inviting. Only cleared patients qualify.
+  // Open the porter-selection dialog before inviting. Cleared patients invite
+  // directly; uncleared patients require a force-reason inside the dialog.
   const openInvite = (caseItem: CaseData) => {
     setInvitingCase(caseItem);
     setLateReason('');
+    setForceReason('');
     // Pre-select any porter(s) already recorded for the case.
     setSelectedPorterNames(
       caseItem.porterName ? caseItem.porterName.split(',').map((s) => s.trim()).filter(Boolean) : []
@@ -696,13 +704,15 @@ export default function CallForPatientPage() {
                                   Invite
                                 </button>
                               ) : (
-                                <span
-                                  title="Patient not cleared for surgery. Complete the pre-operative assessment and clear the patient first."
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-medium rounded-lg cursor-not-allowed"
+                                <button
+                                  onClick={() => openInvite(caseItem)}
+                                  disabled={actionLoading === caseItem.surgeryId}
+                                  title="Patient not cleared at the pre-operative visit. You can force an invite with a reason."
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600 disabled:opacity-50 transition"
                                 >
                                   <AlertTriangle className="w-3 h-3" />
-                                  Not cleared
-                                </span>
+                                  Force invite
+                                </button>
                               )
                             )}
 
@@ -852,12 +862,14 @@ export default function CallForPatientPage() {
                                 <Phone className="w-3 h-3" /> Invite
                               </button>
                             ) : (
-                              <span
-                                title="Patient not cleared for surgery. Complete the pre-operative assessment and clear the patient first."
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-medium rounded-lg cursor-not-allowed"
+                              <button
+                                onClick={() => openInvite(caseItem)}
+                                disabled={actionLoading === caseItem.surgeryId}
+                                title="Patient not cleared at the pre-operative visit. You can force an invite with a reason."
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600 disabled:opacity-50 transition"
                               >
-                                <AlertTriangle className="w-3 h-3" /> Not cleared
-                              </span>
+                                <AlertTriangle className="w-3 h-3" /> Force invite
+                              </button>
                             )
                           )}
                         </div>
@@ -1015,6 +1027,27 @@ export default function CallForPatientPage() {
                   {invitingCase.theatreName} · {invitingCase.scheduledTime || 'TBD'}
                 </div>
               </div>
+
+              {/* Force-invite of an uncleared patient — reason required. */}
+              {!invitingCase.cleared && (
+                <div className="rounded-lg p-3 border bg-red-50 border-red-200">
+                  <p className="text-xs font-semibold text-red-800 flex items-center gap-1 mb-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Patient NOT cleared at the pre-operative visit
+                  </p>
+                  <p className="text-xs text-red-700 mb-2">
+                    You are forcing an invite. State the reason for overriding the
+                    pre-operative clearance (required).
+                  </p>
+                  <textarea
+                    value={forceReason}
+                    onChange={(e) => setForceReason(e.target.value)}
+                    rows={2}
+                    placeholder="Reason for forcing this invite (required)…"
+                    className="w-full text-sm border border-red-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+              )}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                   <User className="w-4 h-4 text-gray-500" />
@@ -1096,6 +1129,7 @@ export default function CallForPatientPage() {
                 onClick={() => handleInvite(invitingCase, selectedPorterNames)}
                 disabled={
                   actionLoading === invitingCase.surgeryId ||
+                  (!invitingCase.cleared && !forceReason.trim()) ||
                   (isFirstCaseForUnit(invitingCase) &&
                     currentMinutesLate() > 15 &&
                     !lateReason.trim())
