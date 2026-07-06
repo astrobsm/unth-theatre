@@ -6,6 +6,12 @@ import { triggerRadio, speak3 } from '@/lib/radioEvents';
 
 export const dynamic = 'force-dynamic';
 
+// Nigeria (WAT) is UTC+1 with no DST. Build a yyyy-mm-dd key in clinic-local time.
+function watDateKey(d: Date): string {
+  const wat = new Date(d.getTime() + 60 * 60 * 1000);
+  return wat.toISOString().slice(0, 10);
+}
+
 // GET: Fetch today's booked cases grouped by theatre, plus call-up history
 export async function GET(request: NextRequest) {
   try {
@@ -149,6 +155,39 @@ export async function GET(request: NextRequest) {
       orderBy: { fullName: 'asc' },
     });
 
+    // Nurses that may be recorded as the holding-area / first-case sending
+    // nurse(s) for the day.
+    const nurseOptions = await prisma.user.findMany({
+      where: {
+        role: { in: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'] },
+        status: 'APPROVED',
+      },
+      select: { id: true, fullName: true, phoneNumber: true },
+      orderBy: { fullName: 'asc' },
+    });
+
+    // Today's recorded holding-area / first-case sending nurse(s).
+    const dateKey = watDateKey(targetDate);
+    const sendingRecord = await prisma.dailyFirstCaseSending.findUnique({
+      where: { dateKey },
+    });
+    let sendingNurses: any = null;
+    if (sendingRecord) {
+      let parsed: any[] = [];
+      try {
+        parsed = JSON.parse(sendingRecord.nurses);
+      } catch {
+        parsed = [];
+      }
+      sendingNurses = {
+        dateKey: sendingRecord.dateKey,
+        nurses: Array.isArray(parsed) ? parsed : [],
+        notes: sendingRecord.notes,
+        recordedByName: sendingRecord.recordedByName,
+        updatedAt: sendingRecord.updatedAt,
+      };
+    }
+
     // Group surgeries by theatre
     const theatreGroups: Record<string, any> = {};
     const unassigned: any[] = [];
@@ -240,6 +279,9 @@ export async function GET(request: NextRequest) {
       theatreGroups: Object.values(theatreGroups),
       unassigned,
       porters,
+      nurseOptions,
+      sendingNurses,
+      dateKey,
       date: targetDate.toISOString(),
       totalCases: surgeries.length,
     });
@@ -258,7 +300,38 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { surgeryId, action, rejectionReason, porterNames } = body;
+    const { surgeryId, action, rejectionReason, porterNames, localMinutes, lateReason } = body;
+
+    // Record the holding-area / first-case sending nurse(s) for a day.
+    if (action === 'set-sending-nurses') {
+      const nurses = Array.isArray(body.nurses)
+        ? body.nurses
+            .map((n: any) => ({
+              name: typeof n?.name === 'string' ? n.name.trim() : '',
+              phone: typeof n?.phone === 'string' ? n.phone.trim() : '',
+              userId: typeof n?.userId === 'string' ? n.userId : undefined,
+            }))
+            .filter((n: any) => n.name)
+        : [];
+      const dateKey: string = body.dateKey || watDateKey(new Date());
+      const record = await prisma.dailyFirstCaseSending.upsert({
+        where: { dateKey },
+        create: {
+          dateKey,
+          nurses: JSON.stringify(nurses),
+          notes: typeof body.notes === 'string' ? body.notes : null,
+          recordedById: session.user.id,
+          recordedByName: session.user.name || 'Unknown',
+        },
+        update: {
+          nurses: JSON.stringify(nurses),
+          notes: typeof body.notes === 'string' ? body.notes : null,
+          recordedById: session.user.id,
+          recordedByName: session.user.name || 'Unknown',
+        },
+      });
+      return NextResponse.json({ ...record, nurses });
+    }
 
     if (!surgeryId || !action) {
       return NextResponse.json({ error: 'surgeryId and action are required' }, { status: 400 });
@@ -353,6 +426,43 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // First-case-of-the-day punctuality. The first case invited for a surgical
+      // unit (team) is the day's first case. Target invite time is 07:00; after
+      // 07:15 a reason for the late sending is required.
+      const existingUnitCallUps = await prisma.patientCallUp.count({
+        where: {
+          surgicalUnit: surgery.unit,
+          invitedAt: { gte: today, lte: endOfDay },
+          status: { notIn: ['REJECTED', 'CANCELLED'] },
+        },
+      });
+      const isFirstCaseOfDay = existingUnitCallUps === 0;
+
+      // Minutes since local midnight at invite time. The client sends its local
+      // time; fall back to server time converted to WAT (UTC+1).
+      let mins: number;
+      if (typeof localMinutes === 'number' && localMinutes >= 0 && localMinutes < 1440) {
+        mins = Math.round(localMinutes);
+      } else {
+        const watNow = new Date(Date.now() + 60 * 60 * 1000);
+        mins = watNow.getUTCHours() * 60 + watNow.getUTCMinutes();
+      }
+      const minutesLate = mins - 7 * 60; // negative = early
+
+      const trimmedLateReason =
+        typeof lateReason === 'string' && lateReason.trim() ? lateReason.trim() : null;
+
+      if (isFirstCaseOfDay && minutesLate > 15 && !trimmedLateReason) {
+        return NextResponse.json(
+          {
+            error:
+              'This is the first case of the day for this team and is being sent after 07:15. Please provide a reason for the late sending.',
+            requiresLateReason: true,
+          },
+          { status: 400 }
+        );
+      }
+
       const callUp = await prisma.patientCallUp.create({
         data: {
           surgeryId,
@@ -372,6 +482,9 @@ export async function POST(request: NextRequest) {
           assignedPorterId: porterId,
           surgeonName: surgery.surgeonName || surgery.surgeon?.fullName || 'N/A',
           status: 'INVITED',
+          isFirstCaseOfDay,
+          sendingMinutesLate: isFirstCaseOfDay ? minutesLate : null,
+          lateSendingReason: isFirstCaseOfDay ? trimmedLateReason : null,
           invitedById: session.user.id,
           invitedByName: session.user.name || 'Unknown',
         },

@@ -5042,6 +5042,12 @@ model PatientCallUp {
   // Call-up note reference number
   callUpNoteNumber String @unique @default(uuid())
 
+  // First-case-of-the-day punctuality tracking. The target time to invite the
+  // first case of a team for the day is 07:00; after 07:15 a reason is required.
+  isFirstCaseOfDay   Boolean @default(false)
+  sendingMinutesLate Int? // minutes past 07:00 at invite time (negative = early)
+  lateSendingReason  String?
+
   // Audit
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5050,6 +5056,21 @@ model PatientCallUp {
   @@index([status])
   @@index([invitedAt])
   @@map("patient_call_ups")
+}
+
+// Daily record of the holding-area nurse(s) in charge / responsible for sending
+// the first cases of the day. Displayed on the Call for Patient page.
+model DailyFirstCaseSending {
+  id             String   @id @default(uuid())
+  dateKey        String   @unique // yyyy-mm-dd (local day)
+  nurses         String   @db.Text // JSON array of { name, phone, userId? }
+  notes          String?
+  recordedById   String?
+  recordedByName String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("daily_first_case_sending")
 }
 
 // ==========================================

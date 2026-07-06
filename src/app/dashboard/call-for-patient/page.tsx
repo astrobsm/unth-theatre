@@ -43,6 +43,9 @@ interface CaseData {
     rejectedAt: string | null;
     rejectionReason: string | null;
     callUpNoteNumber: string | null;
+    isFirstCaseOfDay?: boolean;
+    sendingMinutesLate?: number | null;
+    lateSendingReason?: string | null;
   } | null;
 }
 
@@ -52,10 +55,25 @@ interface TheatreGroup {
   cases: CaseData[];
 }
 
+interface SendingNurse {
+  name: string;
+  phone?: string;
+  userId?: string;
+}
+
 interface ApiResponse {
   theatreGroups: TheatreGroup[];
   unassigned: CaseData[];
   porters: { id: string; fullName: string }[];
+  nurseOptions: { id: string; fullName: string; phoneNumber: string | null }[];
+  sendingNurses: {
+    dateKey: string;
+    nurses: SendingNurse[];
+    notes: string | null;
+    recordedByName: string | null;
+    updatedAt: string;
+  } | null;
+  dateKey: string;
   date: string;
   totalCases: number;
 }
@@ -73,6 +91,12 @@ export default function CallForPatientPage() {
   // Invite flow: choose the porter(s) who will transport the patient.
   const [invitingCase, setInvitingCase] = useState<CaseData | null>(null);
   const [selectedPorterNames, setSelectedPorterNames] = useState<string[]>([]);
+  const [lateReason, setLateReason] = useState('');
+  // Holding-area / first-case sending nurse editor.
+  const [editingSendingNurses, setEditingSendingNurses] = useState(false);
+  const [sendingNurseRows, setSendingNurseRows] = useState<SendingNurse[]>([]);
+  const [sendingNotes, setSendingNotes] = useState('');
+  const [savingSending, setSavingSending] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const fetchCases = useCallback(async () => {
@@ -99,6 +123,7 @@ export default function CallForPatientPage() {
   const handleInvite = async (caseItem: CaseData, porterNames: string[] = []) => {
     setActionLoading(caseItem.surgeryId);
     try {
+      const now = new Date();
       const res = await fetch('/api/call-for-patient', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,6 +133,8 @@ export default function CallForPatientPage() {
           theatreName: caseItem.theatreName,
           theatreId: caseItem.theatreId,
           porterNames,
+          localMinutes: now.getHours() * 60 + now.getMinutes(),
+          lateReason: lateReason.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -117,6 +144,7 @@ export default function CallForPatientPage() {
       const callUp = await res.json();
       setInvitingCase(null);
       setSelectedPorterNames([]);
+      setLateReason('');
       setSuccessMsg(`Patient ${caseItem.patientName} has been invited!`);
       setTimeout(() => setSuccessMsg(null), 4000);
 
@@ -148,6 +176,7 @@ export default function CallForPatientPage() {
   // Open the porter-selection dialog before inviting. Only cleared patients qualify.
   const openInvite = (caseItem: CaseData) => {
     setInvitingCase(caseItem);
+    setLateReason('');
     // Pre-select any porter(s) already recorded for the case.
     setSelectedPorterNames(
       caseItem.porterName ? caseItem.porterName.split(',').map((s) => s.trim()).filter(Boolean) : []
@@ -158,6 +187,70 @@ export default function CallForPatientPage() {
     setSelectedPorterNames((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
+  };
+
+  // Would inviting `caseItem` be the first case of the day for its team (unit)?
+  // True when no other case in the same surgical unit already has an active
+  // (non-rejected/cancelled) call-up.
+  const isFirstCaseForUnit = (caseItem: CaseData): boolean => {
+    if (!data) return false;
+    const allCases: CaseData[] = [
+      ...data.theatreGroups.flatMap((g) => g.cases),
+      ...data.unassigned,
+    ];
+    return !allCases.some(
+      (c) =>
+        c.surgeryId !== caseItem.surgeryId &&
+        c.surgicalUnit === caseItem.surgicalUnit &&
+        c.existingCallUp &&
+        !['REJECTED', 'CANCELLED'].includes(c.existingCallUp.status)
+    );
+  };
+
+  // Minutes past 07:00 right now (clinic local time). Negative = before 07:00.
+  const currentMinutesLate = (): number => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes() - 7 * 60;
+  };
+
+  // Open the holding-area / first-case sending nurse editor.
+  const openSendingEditor = () => {
+    const existing = data?.sendingNurses?.nurses || [];
+    setSendingNurseRows(existing.length > 0 ? existing.map((n) => ({ ...n })) : [{ name: '', phone: '' }]);
+    setSendingNotes(data?.sendingNurses?.notes || '');
+    setEditingSendingNurses(true);
+  };
+
+  const saveSendingNurses = async () => {
+    setSavingSending(true);
+    try {
+      const nurses = sendingNurseRows
+        .map((n) => ({ name: n.name.trim(), phone: (n.phone || '').trim(), userId: n.userId }))
+        .filter((n) => n.name);
+      const res = await fetch('/api/call-for-patient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'set-sending-nurses',
+          dateKey: data?.dateKey,
+          nurses,
+          notes: sendingNotes.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to save sending nurses');
+      }
+      setEditingSendingNurses(false);
+      setSuccessMsg('Holding-area / first-case sending nurse(s) saved.');
+      setTimeout(() => setSuccessMsg(null), 4000);
+      fetchCases();
+    } catch (err: any) {
+      setError(err.message);
+      setTimeout(() => setError(null), 4000);
+    } finally {
+      setSavingSending(false);
+    }
   };
 
   const handleReject = async (caseItem: CaseData) => {
@@ -266,7 +359,34 @@ export default function CallForPatientPage() {
     );
   };
 
-  // Filter cases by search term
+  // Punctuality badge for a first-case-of-the-day call-up.
+  const getLatenessBadge = (callUp: CaseData['existingCallUp']) => {
+    if (!callUp || !callUp.isFirstCaseOfDay || callUp.sendingMinutesLate == null) return null;
+    const late = callUp.sendingMinutesLate;
+    let color: string;
+    let label: string;
+    if (late <= 0) {
+      color = 'bg-green-100 text-green-800';
+      label = `1st case · ${Math.abs(late)} min early`;
+    } else if (late <= 15) {
+      color = 'bg-yellow-100 text-yellow-800';
+      label = `1st case · ${late} min past 07:00`;
+    } else {
+      color = 'bg-red-100 text-red-800';
+      label = `1st case · ${late} min late`;
+    }
+    return (
+      <div className="mt-1">
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
+          <Clock className="w-3 h-3" />
+          {label}
+        </span>
+        {callUp.lateSendingReason && (
+          <div className="text-xs text-red-600 mt-0.5">Reason: {callUp.lateSendingReason}</div>
+        )}
+      </div>
+    );
+  };
   const filterCases = (cases: CaseData[]) => {
     if (!searchTerm.trim()) return cases;
     const term = searchTerm.toLowerCase();
@@ -344,6 +464,54 @@ export default function CallForPatientPage() {
         </div>
       </div>
 
+      {/* Holding-area / first-case sending nurse(s) */}
+      <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-[240px]">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <User className="w-4 h-4 text-blue-600" />
+              Holding-Area / First-Case Sending Nurse(s)
+            </h2>
+            {data?.sendingNurses && data.sendingNurses.nurses.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {data.sendingNurses.nurses.map((n, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5"
+                  >
+                    <span className="font-medium text-gray-900">{n.name}</span>
+                    {n.phone ? (
+                      <a
+                        href={`tel:${n.phone}`}
+                        className="text-blue-700 text-sm inline-flex items-center gap-1 hover:underline"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        {n.phone}
+                      </a>
+                    ) : (
+                      <span className="text-gray-400 text-xs">no phone</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-gray-500">
+                No sending nurse(s) recorded for today yet.
+              </p>
+            )}
+            {data?.sendingNurses?.notes && (
+              <p className="mt-2 text-xs text-gray-600">Note: {data.sendingNurses.notes}</p>
+            )}
+          </div>
+          <button
+            onClick={openSendingEditor}
+            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition whitespace-nowrap"
+          >
+            {data?.sendingNurses ? 'Edit' : 'Record'} Sending Nurse(s)
+          </button>
+        </div>
+      </div>
+
       {/* Alerts */}
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
@@ -401,6 +569,7 @@ export default function CallForPatientPage() {
                         {caseItem.existingCallUp?.invitedAt && (
                           <div className="text-xs text-gray-500 mt-1">{formatDateTime(caseItem.existingCallUp.invitedAt)}</div>
                         )}
+                        {getLatenessBadge(caseItem.existingCallUp)}
                       </td>
                       <td className="px-4 py-3">
                         <button
@@ -491,6 +660,7 @@ export default function CallForPatientPage() {
                                   {formatDateTime(caseItem.existingCallUp.invitedAt)}
                                 </div>
                               )}
+                              {getLatenessBadge(caseItem.existingCallUp)}
                               {caseItem.existingCallUp.rejectionReason && (
                                 <div className="text-xs text-red-500 mt-1">
                                   {caseItem.existingCallUp.rejectionReason}
@@ -710,6 +880,116 @@ export default function CallForPatientPage() {
         </div>
       )}
 
+      {/* Holding-area / first-case sending nurse editor */}
+      {editingSendingNurses && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <User className="w-5 h-5 text-blue-600" />
+                Holding-Area / First-Case Sending Nurse(s)
+              </h2>
+              <button
+                onClick={() => setEditingSendingNurses(false)}
+                className="text-gray-400 hover:text-gray-600"
+                title="Close"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-gray-500">
+                Record the nurse(s) in charge of the pre-operative holding area / responsible for
+                sending the first cases for the day. Their name and phone number are shown on this
+                page.
+              </p>
+              {sendingNurseRows.map((row, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    list="sending-nurse-options"
+                    value={row.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const match = (data?.nurseOptions || []).find((o) => o.fullName === name);
+                      setSendingNurseRows((prev) =>
+                        prev.map((r, i) =>
+                          i === idx
+                            ? {
+                                ...r,
+                                name,
+                                userId: match?.id,
+                                phone: match?.phoneNumber || r.phone,
+                              }
+                            : r
+                        )
+                      );
+                    }}
+                    placeholder="Nurse name"
+                    className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <input
+                    value={row.phone || ''}
+                    onChange={(e) =>
+                      setSendingNurseRows((prev) =>
+                        prev.map((r, i) => (i === idx ? { ...r, phone: e.target.value } : r))
+                      )
+                    }
+                    placeholder="Phone"
+                    className="w-36 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <button
+                    onClick={() =>
+                      setSendingNurseRows((prev) => prev.filter((_, i) => i !== idx))
+                    }
+                    className="text-red-500 hover:text-red-700 p-1"
+                    title="Remove"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <datalist id="sending-nurse-options">
+                {(data?.nurseOptions || []).map((o) => (
+                  <option key={o.id} value={o.fullName} />
+                ))}
+              </datalist>
+              <button
+                onClick={() => setSendingNurseRows((prev) => [...prev, { name: '', phone: '' }])}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                + Add another nurse
+              </button>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Notes (optional)</label>
+                <textarea
+                  value={sendingNotes}
+                  onChange={(e) => setSendingNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Any note about today's holding-area sending…"
+                  className="mt-1 w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t">
+              <button
+                onClick={() => setEditingSendingNurses(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveSendingNurses}
+                disabled={savingSending}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingSending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Invite dialog — choose the porter(s) transporting the patient */}
       {invitingCase && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -765,6 +1045,45 @@ export default function CallForPatientPage() {
                   </p>
                 )}
               </div>
+
+              {/* First-case-of-the-day punctuality. Target invite time is 07:00;
+                  a reason is required when the day's first case for the team is
+                  sent after 07:15. */}
+              {isFirstCaseForUnit(invitingCase) && (
+                <div
+                  className={`rounded-lg p-3 border ${
+                    currentMinutesLate() > 15
+                      ? 'bg-amber-50 border-amber-200'
+                      : 'bg-green-50 border-green-200'
+                  }`}
+                >
+                  <p className="text-xs font-semibold flex items-center gap-1 mb-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    First case of the day for {invitingCase.surgicalUnit}
+                  </p>
+                  {currentMinutesLate() > 15 ? (
+                    <>
+                      <p className="text-xs text-amber-800 mb-2">
+                        This case is being sent {currentMinutesLate()} min after the 07:00 target
+                        (after 07:15). Please state why the sending is late.
+                      </p>
+                      <textarea
+                        value={lateReason}
+                        onChange={(e) => setLateReason(e.target.value)}
+                        rows={2}
+                        placeholder="Reason for late sending (required)…"
+                        className="w-full text-sm border border-amber-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                      />
+                    </>
+                  ) : (
+                    <p className="text-xs text-green-800">
+                      {currentMinutesLate() <= 0
+                        ? `On time — ${Math.abs(currentMinutesLate())} min before the 07:00 target.`
+                        : `Within the 07:00–07:15 window (${currentMinutesLate()} min past 07:00).`}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t">
               <button
@@ -775,7 +1094,12 @@ export default function CallForPatientPage() {
               </button>
               <button
                 onClick={() => handleInvite(invitingCase, selectedPorterNames)}
-                disabled={actionLoading === invitingCase.surgeryId}
+                disabled={
+                  actionLoading === invitingCase.surgeryId ||
+                  (isFirstCaseForUnit(invitingCase) &&
+                    currentMinutesLate() > 15 &&
+                    !lateReason.trim())
+                }
                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {actionLoading === invitingCase.surgeryId ? (
