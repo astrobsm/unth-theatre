@@ -59,6 +59,15 @@ async function getKokoro(): Promise<any> {
     if (!KokoroTTS || typeof KokoroTTS.from_pretrained !== 'function') {
       throw new Error('kokoro-js module did not expose KokoroTTS');
     }
+    // Quieten the ONNX runtime. It routes benign "warning" notices (e.g. some
+    // shape ops assigned to CPU) through console.error, which looks alarming
+    // but is harmless. Raising the log level to "error" keeps the console clean.
+    try {
+      const env = mod.env || mod.default?.env;
+      if (env?.backends?.onnx) env.backends.onnx.logLevel = 'error';
+      if (env?.backends?.onnx?.wasm) env.backends.onnx.wasm.logLevel = 'error';
+    } catch { /* best-effort — never block TTS */ }
+
     // Prefer WebGPU (much faster) when available; otherwise fall back to WASM,
     // which is universally supported.
     const hasWebGPU =
