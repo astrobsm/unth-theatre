@@ -19,9 +19,10 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Voice ID from https://elevenlabs.io/app/voice-library?voiceId=WjrbdoJBxxaidWT9VRDg
+// Voice ID from https://elevenlabs.io/app/voice-library?voiceId=ygEVplYAGZ9epkJkyj4V
 // Voice IDs are shareable identifiers (not secrets); the API key is the secret.
-const DEFAULT_VOICE_ID = 'WjrbdoJBxxaidWT9VRDg';
+// Overridable per-deployment via the ELEVENLABS_VOICE_ID env var.
+const DEFAULT_VOICE_ID = 'ygEVplYAGZ9epkJkyj4V';
 const DEFAULT_MODEL_ID = 'eleven_multilingual_v2';
 
 // Small in-memory LRU cache. Radio announcements repeat (e.g. emergency calls
