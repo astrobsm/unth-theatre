@@ -11,7 +11,11 @@ import {
   WifiOff,
   Siren,
   Phone,
+  DownloadCloud,
+  CheckCircle2,
+  CloudOff,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import MyTheatreTeam from '@/components/MyTheatreTeam';
@@ -27,7 +31,16 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { isOnline } = useOfflineContext();
+  const { isOnline, downloadAppShellNow, isDownloadingShell, isFullyCached } = useOfflineContext();
+  // Local feedback shown briefly after a manual full download completes.
+  const [downloadDone, setDownloadDone] = useState(false);
+
+  const handleDownloadShell = async () => {
+    setDownloadDone(false);
+    await downloadAppShellNow();
+    setDownloadDone(true);
+    setTimeout(() => setDownloadDone(false), 6000);
+  };
 
   // Offline-aware stats fetch. The heavy analytics/charts were removed so the
   // dashboard renders instantly from a single lightweight stats call.
@@ -133,6 +146,50 @@ export default function DashboardPage() {
         <p className="text-primary-100 mt-2 text-lg">
           Theatre management system for University of Nigeria Teaching Hospital Ituku Ozalla
         </p>
+      </div>
+
+      {/* Manual full download — precache every module & form for instant, offline
+          loading on this device, and sync any pending changes to the cloud. */}
+      <div className="bg-white border-2 border-indigo-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="bg-indigo-600 p-3 rounded-xl flex-shrink-0">
+            <DownloadCloud className="w-6 h-6 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">Download app for offline use</h2>
+            <p className="text-sm text-gray-600">
+              Cache all modules &amp; forms on this phone for fast loading, then sync new data with the cloud.
+            </p>
+            {downloadDone && (
+              <p className="text-xs text-green-700 font-medium mt-1 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Download complete — all modules are ready offline.
+              </p>
+            )}
+            {isFullyCached && !downloadDone && !isDownloadingShell && (
+              <p className="text-xs text-gray-500 mt-1">Data is cached for offline use. Tap to refresh &amp; cache all forms.</p>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={handleDownloadShell}
+          disabled={isDownloadingShell || !isOnline}
+          className="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold px-5 py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition whitespace-nowrap"
+          title={!isOnline ? 'Connect to the internet to download' : 'Download all modules and forms for offline use'}
+        >
+          {isDownloadingShell ? (
+            <>
+              <RefreshCw className="w-5 h-5 animate-spin" /> Downloading…
+            </>
+          ) : !isOnline ? (
+            <>
+              <CloudOff className="w-5 h-5" /> Offline
+            </>
+          ) : (
+            <>
+              <DownloadCloud className="w-5 h-5" /> Download all
+            </>
+          )}
+        </button>
       </div>
 
       {/* Compact emergency access — the two most critical links only. The large

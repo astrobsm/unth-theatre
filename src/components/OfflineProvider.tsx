@@ -57,6 +57,10 @@ interface OfflineContextValue {
   syncNow: () => Promise<void>;
   /** Whether currently syncing */
   isSyncing: boolean;
+  /** Download the entire app shell (all module pages) + all data for offline use */
+  downloadAppShellNow: () => Promise<void>;
+  /** Whether the full app-shell download is in progress */
+  isDownloadingShell: boolean;
 }
 
 const OfflineContext = createContext<OfflineContextValue>({
@@ -69,6 +73,8 @@ const OfflineContext = createContext<OfflineContextValue>({
   prefetchNow: async () => {},
   syncNow: async () => {},
   isSyncing: false,
+  downloadAppShellNow: async () => {},
+  isDownloadingShell: false,
 });
 
 export function useOfflineContext() {
@@ -86,6 +92,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [prefetchStatus, setPrefetchStatus] = useState<OfflineDataStatus | null>(null);
   const [swRegistered, setSwRegistered] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDownloadingShell, setIsDownloadingShell] = useState(false);
   const prefetchedRef = useRef(false);
   const prefetchingRef = useRef(false);
   const warmedUpRef = useRef(false);
@@ -198,6 +205,28 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       setIsSyncing(false);
     }
   }, []);
+
+  // MANUAL FULL DOWNLOAD — user-triggered from the dashboard button. Precaches
+  // every module page (the app shell), prefetches all API data into IndexedDB,
+  // and drains any pending offline mutations. After this completes the whole
+  // app (all modules + forms) loads instantly and works offline.
+  const downloadAppShellNow = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    setIsDownloadingShell(true);
+    try {
+      // 1) Cache the app shell (all module routes) via the service worker.
+      await warmUpOfflineRoutes();
+      // 2) Prefetch all API data (surgeries, patients, inventory, etc.).
+      await runPrefetch();
+      // 3) Push up anything queued while offline so the cloud is in sync.
+      await syncPendingMutations();
+    } catch {
+      /* best-effort — never throw to the UI */
+    } finally {
+      setIsDownloadingShell(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runPrefetch, syncPendingMutations]);
 
   // COMPREHENSIVE WARM-UP — caches the session, all API data and every module
   // page so the entire app keeps working if the network drops after login.
@@ -312,6 +341,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     prefetchNow: runPrefetch,
     syncNow: syncPendingMutations,
     isSyncing,
+    downloadAppShellNow,
+    isDownloadingShell,
   };
 
   return (
