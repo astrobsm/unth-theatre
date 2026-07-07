@@ -164,7 +164,8 @@ export default function NewSurgeryPage() {
   const [unit, setUnit] = useState('');
   const [subspecialty, setSubspecialty] = useState('');
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
-  const [supervisingConsultantId, setSupervisingConsultantId] = useState('');
+  // One or more unit supervising consultants may be attached to a booking.
+  const [supervisingConsultantIds, setSupervisingConsultantIds] = useState<string[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
@@ -450,14 +451,14 @@ export default function NewSurgeryPage() {
     const formData = new FormData(e.currentTarget);
 
     const chosenSurgeon = surgeons.find((s) => s.id === selectedSurgeonId);
-    const chosenConsultant = surgeons.find((s) => s.id === supervisingConsultantId);
+    const chosenConsultants = surgeons.filter((s) => supervisingConsultantIds.includes(s.id));
 
     const data = {
       patientId: formData.get('patientId'),
       surgeonId: selectedSurgeonId || null,
       surgeonName: chosenSurgeon?.fullName || formData.get('surgeonName'),
-      supervisingConsultantId: supervisingConsultantId || null,
-      supervisingConsultantName: chosenConsultant?.fullName || null,
+      supervisingConsultantId: supervisingConsultantIds.length ? supervisingConsultantIds.join(',') : null,
+      supervisingConsultantName: chosenConsultants.length ? chosenConsultants.map((c) => c.fullName).join(', ') : null,
       consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
         ? consentForm
         : undefined,
@@ -749,22 +750,54 @@ export default function NewSurgeryPage() {
             </div>
 
             <div>
-              <label className="label">Unit Supervising Consultant</label>
+              <label className="label">Unit Supervising Consultant(s)</label>
               <select
-                value={supervisingConsultantId}
-                onChange={(e) => setSupervisingConsultantId(e.target.value)}
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (id && !supervisingConsultantIds.includes(id)) {
+                    setSupervisingConsultantIds((prev) => [...prev, id]);
+                  }
+                }}
                 className="input-field"
-                title="Select the unit's supervising consultant"
+                title="Add a unit supervising consultant (you can add more than one)"
               >
-                <option value="">— Select Consultant —</option>
-                {surgeons.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
-                  </option>
-                ))}
+                <option value="">— Add Consultant —</option>
+                {surgeons
+                  .filter((s) => !supervisingConsultantIds.includes(s.id))
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
+                    </option>
+                  ))}
               </select>
+              {supervisingConsultantIds.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {supervisingConsultantIds.map((id) => {
+                    const c = surgeons.find((s) => s.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 bg-primary-50 border border-primary-200 text-primary-800 text-xs font-medium rounded-full px-3 py-1"
+                      >
+                        {c?.fullName || 'Unknown'}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSupervisingConsultantIds((prev) => prev.filter((x) => x !== id))
+                          }
+                          className="text-primary-500 hover:text-red-600"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               <p className="text-xs text-gray-500 mt-1">
-                Chosen from the surgeon database. Displayed beside the theatre and unit on the schedule.
+                Chosen from the surgeon database. You can add more than one. Displayed beside the theatre and unit on the schedule.
               </p>
             </div>
 

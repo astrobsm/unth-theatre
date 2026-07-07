@@ -15,6 +15,7 @@ import {
 } from '@/lib/complexityScore';
 
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
+import StaffComboInput from '@/components/StaffComboInput';
 
 interface NoteItem {
   id: string;
@@ -71,6 +72,10 @@ export default function PostOperativeNotesPage() {
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // The operating surgeon can be corrected while writing the post-op note.
+  const [surgeonName, setSurgeonName] = useState('');
+  const [surgeonId, setSurgeonId] = useState<string | null>(null);
+  const [surgeonOpts, setSurgeonOpts] = useState<{ id: string; fullName: string; staffCode?: string | null; role?: string | null }[]>([]);
 
   // Post-operative medication prescription
   const [rxMeds, setRxMeds] = useState<RxMed[]>([emptyMed()]);
@@ -95,6 +100,8 @@ export default function PostOperativeNotesPage() {
       if (sRes.ok) {
         const s = await sRes.json();
         setSurgery(s);
+        setSurgeonName(s?.surgeonName || s?.surgeon?.fullName || '');
+        setSurgeonId(s?.surgeonId || s?.surgeon?.id || null);
         // If a complexity assessment already exists, load it; otherwise auto-fill
         // from documented case data.
         if (s?.complexityData) {
@@ -146,6 +153,14 @@ export default function PostOperativeNotesPage() {
           setDrugDb(data.map((d: any) => ({ name: d.name, type: d.type })));
         }
       })
+      .catch(() => {});
+  }, []);
+
+  // Surgeon suggestions for the editable surgeon field (DB + free-type).
+  useEffect(() => {
+    fetch('/api/users?roles=SURGEON,HOUSE_OFFICER&limit=300')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setSurgeonOpts(Array.isArray(d) ? d : d.users || []))
       .catch(() => {});
   }, []);
 
@@ -291,6 +306,9 @@ export default function PostOperativeNotesPage() {
           complexity,
           complexityScore: complexityResult.score,
           complexityClass: complexityResult.classification,
+          // Persist any correction to the operating surgeon.
+          surgeonName: surgeonName.trim() || undefined,
+          surgeonId: surgeonId || undefined,
         }),
       });
 
@@ -361,6 +379,23 @@ export default function PostOperativeNotesPage() {
 
       <div className="bg-white rounded-lg shadow p-4 space-y-3">
         <label className="block text-sm font-semibold text-gray-700">Add New Post-Operative Note</label>
+
+        {/* Operating surgeon — editable while writing the note. Pick from the
+            database or type a new (visiting) surgeon. */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Operating Surgeon</label>
+          <StaffComboInput
+            value={surgeonName}
+            onChange={(v) => {
+              setSurgeonName(v);
+              const match = surgeonOpts.find((o) => o.fullName === v);
+              setSurgeonId(match ? match.id : null);
+            }}
+            options={surgeonOpts}
+            placeholder="Select or type the operating surgeon"
+          />
+        </div>
+
         <SmartTextInput
           value={note}
           onChange={setNote}

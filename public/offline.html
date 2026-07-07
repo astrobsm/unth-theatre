@@ -167,6 +167,8 @@
 
   <script>
     function goBack() {
+      // The dashboard shell is precached and works offline, so it is a safe
+      // landing spot even when the previous route was never cached.
       if (window.history.length > 1) window.history.back();
       else window.location.href = '/dashboard';
     }

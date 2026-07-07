@@ -10,6 +10,30 @@ import {
 import { registerServiceWorker } from '@/lib/pwa';
 import { getOfflineQueueCount, processOfflineQueue, isIndexedDBAvailable } from '@/lib/offlineStore';
 import { installFetchInterceptor, uninstallFetchInterceptor } from '@/lib/globalFetchInterceptor';
+import { MODULES } from '@/lib/modules';
+
+// Precache the app's module routes for full offline use, in small batches well
+// after first paint so it never causes a request storm. Runs once per session.
+async function warmUpOfflineRoutes() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sw = reg.active || navigator.serviceWorker.controller;
+    if (!sw) return;
+    // Unique route list from the module catalog + the app shell.
+    const routes = Array.from(
+      new Set<string>(['/dashboard', ...MODULES.flatMap((m) => m.paths)])
+    ).filter((p) => p.startsWith('/dashboard'));
+    const BATCH = 4;
+    for (let i = 0; i < routes.length; i += BATCH) {
+      sw.postMessage({ type: 'PRECACHE_PAGES', urls: routes.slice(i, i + BATCH) });
+      // Space the batches out so the network is never saturated.
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  } catch {
+    /* best-effort precache — never block the app */
+  }
+}
 
 // ============================================================
 // Offline Context
@@ -86,6 +110,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
             setTimeout(() => {
               registerPeriodicSync();
             }, 5000);
+            // One-time, heavily-deferred, batched warm-up so the installed app
+            // has every module route available offline. Runs long after first
+            // paint and only when online, so it never slows the initial load.
+            if (!warmedUpRef.current && navigator.onLine) {
+              warmedUpRef.current = true;
+              setTimeout(() => {
+                warmUpOfflineRoutes();
+              }, 20000);
+            }
           }
         }).catch(() => {
           // SW registration failed — silently continue without offline support

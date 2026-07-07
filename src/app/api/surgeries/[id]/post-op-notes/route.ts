@@ -82,6 +82,16 @@ export async function POST(
     const author = session.user.name || session.user.email || 'Surgeon';
     const nextRemarks = `${surgery.remarks || ''}\n\n[POST-OP NOTE ${stamp} - ${author}]\n${note}`.trim();
 
+    // The operating surgeon may be corrected while writing the post-op note.
+    // A linked staff id can be supplied, or a free-typed name for a visiting
+    // surgeon. Only apply when a non-empty name is provided.
+    const surgeonUpdate: { surgeonName?: string; surgeonId?: string | null } = {};
+    if (typeof body.surgeonName === 'string' && body.surgeonName.trim()) {
+      surgeonUpdate.surgeonName = body.surgeonName.trim();
+      surgeonUpdate.surgeonId =
+        typeof body.surgeonId === 'string' && body.surgeonId ? body.surgeonId : null;
+    }
+
     // Optional surgical complexity assessment captured at the end of the note.
     const complexityUpdate: {
       complexityScore?: number;
@@ -109,7 +119,7 @@ export async function POST(
 
     await prisma.surgery.update({
       where: { id: params.id },
-      data: { remarks: nextRemarks, ...complexityUpdate },
+      data: { remarks: nextRemarks, ...complexityUpdate, ...surgeonUpdate },
     });
 
     const audit = await prisma.auditLog.create({

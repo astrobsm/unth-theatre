@@ -5,7 +5,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v33';
+const CACHE_VERSION = 'v34';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -14,6 +14,8 @@ const OFFLINE_PAGE = '/offline.html';
 // Static assets to pre-cache on install (ONLY truly static, no auth required)
 const PRECACHE_ASSETS = [
   '/',
+  '/dashboard',
+  '/auth/login',
   '/offline.html',
   '/logo.png',
   '/icon-192.png',
@@ -418,15 +420,33 @@ async function offlineNavigationHandler(request) {
     }
     return networkResponse;
   } catch (err) {
-    // Exact route match only (ignoreSearch handles App Router cache-busting params)
+    // 1) Exact route match (ignoreSearch handles App Router cache-busting params).
     const cached =
       (await pageCache.match(request, { ignoreSearch: true })) ||
       (await staticCache.match(request, { ignoreSearch: true }));
     if (cached) return cached;
 
-    // Route not saved for offline use — show the stable offline page.
-    // It is plain static HTML (no Next router) so it cannot reload-loop, and its
-    // "Go Back" button returns the user to the cached dashboard shell.
+    // 2) App-shell fallback. This is a client-rendered SPA (Next.js App Router):
+    //    serving the cached dashboard/home shell lets the client router boot and
+    //    render the requested route from cached data — instead of the dead-end
+    //    offline page. Only routes under /dashboard get the dashboard shell so
+    //    the sidebar layout matches; everything else gets the root shell.
+    const url = new URL(request.url);
+    const shellCandidates = url.pathname.startsWith('/dashboard')
+      ? ['/dashboard', '/']
+      : ['/', '/dashboard'];
+    for (const shell of shellCandidates) {
+      const shellRes =
+        (await pageCache.match(shell, { ignoreSearch: true })) ||
+        (await staticCache.match(shell, { ignoreSearch: true }));
+      if (shellRes) {
+        const headers = new Headers(shellRes.headers);
+        headers.set('X-ORM-Offline-Shell', 'true');
+        return new Response(shellRes.body, { status: shellRes.status, headers });
+      }
+    }
+
+    // 3) Last resort — the stable static offline page.
     const offlinePage =
       (await staticCache.match(OFFLINE_PAGE)) || (await caches.match(OFFLINE_PAGE));
     return (
