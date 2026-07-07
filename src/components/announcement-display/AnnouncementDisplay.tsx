@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { speakViaElevenLabs } from '@/lib/radioTts';
+import { speakAnnouncement } from '@/lib/radioTts';
 
 // ============================================================================
 // Generic Announcement TV Kiosk
@@ -168,7 +168,7 @@ export default function AnnouncementDisplay({
 
   // Voice the announcement via ElevenLabs, falling back to the browser voice.
   const speak = useCallback(async (text: string): Promise<void> => {
-    const ok = await speakViaElevenLabs(text);
+    const ok = await speakAnnouncement(text);
     if (!ok) await speakBrowser(text);
   }, [speakBrowser]);
 

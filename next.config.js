@@ -31,6 +31,15 @@ const nextConfig = {
   },
   // Exclude massive optional packages from server bundle
   webpack: (config, { isServer }) => {
+    // kokoro-js / @huggingface/transformers reference Node-only optional deps
+    // (sharp, onnxruntime-node) that are irrelevant in the browser build. Alias
+    // them to false so webpack doesn't try to bundle/resolve them and fail.
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      sharp$: false,
+      'onnxruntime-node$': false,
+    };
     // Split large vendor chunks so the browser can cache them independently
     if (!isServer) {
       // Split large vendor chunks so the browser can cache them independently

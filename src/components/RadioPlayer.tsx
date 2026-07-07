@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical, X } from 'lucide-react';
 import { useMediaHub } from '@/components/MediaHub';
-import { speakViaElevenLabs } from '@/lib/radioTts';
+import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
 import { useTabLeader } from '@/lib/useTabLeader';
 
 interface Announcement {
@@ -97,6 +97,14 @@ export default function RadioPlayer() {
     if (typeof window === 'undefined') return;
     try { window.localStorage.setItem('theatreRadio.muted', muted ? '1' : '0'); } catch {}
   }, [muted]);
+
+  // Warm up the free in-browser Kokoro voice shortly after the radio is enabled
+  // so the first workflow announcement plays without the model-download delay.
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return;
+    const t = setTimeout(() => { preloadKokoro(); }, 8000);
+    return () => clearTimeout(t);
+  }, [enabled]);
 
   // Restore the user's saved widget position once on mount.
   useEffect(() => {
@@ -304,7 +312,7 @@ export default function RadioPlayer() {
     (text: string, onDone?: () => void) => {
       if (typeof window === 'undefined' || muted) { onDone?.(); return; }
       if (!audioRef.current) audioRef.current = new Audio();
-      void speakViaElevenLabs(text, {
+      void speakAnnouncement(text, {
         getAudio: () => audioRef.current as HTMLAudioElement,
         onStart: () => { setSpeaking(true); emitRadioActive(); },
         onEnd: () => { setSpeaking(false); emitRadioIdle(); },

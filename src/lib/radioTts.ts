@@ -1,7 +1,15 @@
-// Client-side helper for voicing announcements through the ElevenLabs proxy
-// (/api/radio/tts). Every radio + emergency announcement tries ElevenLabs
-// first; if the API key is missing, quota is exhausted, the device is offline,
-// or anything else fails, callers fall back to the browser's speechSynthesis.
+// Client-side helper for voicing announcements.
+// -----------------------------------------------
+// Every radio / emergency / workflow announcement is voiced by, in order:
+//   1) Kokoro TTS   — free, in-browser neural voice (PRIMARY, see kokoroTts.ts)
+//   2) ElevenLabs   — server proxy (/api/radio/tts), only if a key is configured
+//   3) speechSynthesis — the built-in robotic browser voice (caller fallback)
+// This makes natural speech work with no paid credits, while keeping graceful
+// degradation on old browsers / blocked model downloads.
+
+import { speakViaKokoro, isKokoroAvailable, preloadKokoro, type KokoroSpeakHooks } from './kokoroTts';
+
+export { preloadKokoro };
 
 // Per-text in-flight object URL cache so repeated announcements reuse the blob.
 const urlCache = new Map<string, string>();
@@ -97,4 +105,37 @@ export async function speakViaElevenLabs(text: string, hooks: SpeakHooks = {}): 
       finish(false);
     }
   });
+}
+
+/**
+ * Voice `text` for a radio / workflow / emergency announcement using the best
+ * available engine: Kokoro (free, in-browser) first, then the ElevenLabs proxy,
+ * resolving `false` only when BOTH fail (the caller then uses speechSynthesis).
+ *
+ * Hooks (`onStart`/`onEnd`, ducking volume, shared <audio>) are forwarded to
+ * whichever engine actually plays, so audio ducking stays balanced.
+ */
+export async function speakAnnouncement(
+  text: string,
+  hooks: SpeakHooks & KokoroSpeakHooks = {}
+): Promise<boolean> {
+  const clean = (text || '').trim();
+  if (!clean || typeof window === 'undefined') return false;
+
+  // 1) Kokoro — free neural voice. Only try while it is still viable.
+  if (isKokoroAvailable()) {
+    try {
+      const ok = await speakViaKokoro(clean, hooks);
+      if (ok) return true;
+    } catch { /* fall through to ElevenLabs */ }
+  }
+
+  // 2) ElevenLabs proxy (only does anything if a key is configured server-side).
+  try {
+    const ok = await speakViaElevenLabs(clean, hooks);
+    if (ok) return true;
+  } catch { /* fall through */ }
+
+  // 3) Signal the caller to use the built-in browser voice.
+  return false;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { speakViaElevenLabs } from '@/lib/radioTts';
+import { speakAnnouncement } from '@/lib/radioTts';
 
 // ==================== TYPES ====================
 interface EmergencyItem {
@@ -217,7 +217,7 @@ class AudioAlertEngine {
     if (typeof window === 'undefined') return;
     const label = priority === 'CRITICAL' ? 'Critical' : priority === 'HIGH' ? 'High priority' : 'Medium priority';
     const text = `Attention. ${label} emergency surgery alert. All teams report immediately.`;
-    const ok = await speakViaElevenLabs(text);
+    const ok = await speakAnnouncement(text);
     if (ok) return;
     return this.playSpeechFallbackBrowser(text);
   }
@@ -369,7 +369,7 @@ class AudioAlertEngine {
   // Narrate patient/team details. Tries ElevenLabs first, then browser voice.
   private async speakDetails(text: string): Promise<void> {
     if (typeof window === 'undefined' || !text.trim()) return;
-    const ok = await speakViaElevenLabs(text);
+    const ok = await speakAnnouncement(text);
     if (ok) return;
     return this.speakDetailsBrowser(text);
   }
