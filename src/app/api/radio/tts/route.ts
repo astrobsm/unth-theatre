@@ -144,3 +144,81 @@ export async function POST(req: NextRequest) {
     },
   });
 }
+
+/**
+ * GET /api/radio/tts  — diagnostic (no audio).
+ *
+ * Reports whether the natural (ElevenLabs) voice is actually usable right now,
+ * WITHOUT ever exposing the secret API key. Open this URL in the browser (while
+ * signed in) to find out why announcements are using the robotic browser voice.
+ *
+ * Returns JSON like:
+ *   { configured: true, ok: true,  voiceId, modelId }                      → natural voice working
+ *   { configured: false, ok: false, reason: "ELEVENLABS_API_KEY not set" } → key missing on server
+ *   { configured: true,  ok: false, upstreamStatus: 401, detail: "..." }   → key invalid / quota / voice rejected
+ */
+export async function GET() {
+  const key = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;
+  const modelId = process.env.ELEVENLABS_MODEL_ID || DEFAULT_MODEL_ID;
+
+  if (!key) {
+    return NextResponse.json({
+      configured: false,
+      ok: false,
+      voiceId,
+      modelId,
+      reason:
+        'ELEVENLABS_API_KEY is not set on the server. All announcements fall back to the built-in robotic browser voice until it is configured in the deployment (e.g. Vercel → Settings → Environment Variables) and the app is redeployed.',
+    });
+  }
+
+  // Tiny live probe so we can distinguish "key present but rejected" (invalid /
+  // out of quota / bad voice) from a genuinely working configuration.
+  try {
+    const endpoint = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`;
+    const upstream = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': key,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
+      },
+      body: JSON.stringify({ text: 'test', model_id: modelId }),
+      cache: 'no-store',
+    });
+    if (upstream.ok) {
+      return NextResponse.json({
+        configured: true,
+        ok: true,
+        voiceId,
+        modelId,
+        keyLength: key.length, // length only — never the value
+        message: 'ElevenLabs is configured and responding. The natural voice is active.',
+      });
+    }
+    const detail = await upstream.text().catch(() => '');
+    return NextResponse.json({
+      configured: true,
+      ok: false,
+      voiceId,
+      modelId,
+      upstreamStatus: upstream.status,
+      detail: detail.slice(0, 500),
+      reason:
+        upstream.status === 401
+          ? 'ElevenLabs rejected the API key (invalid or revoked). Announcements will use the robotic browser voice until a valid key is set.'
+          : upstream.status === 429
+          ? 'ElevenLabs quota/credits exhausted (HTTP 429). Announcements will use the robotic browser voice until the plan is topped up or reset.'
+          : `ElevenLabs rejected the request (HTTP ${upstream.status}). Check the API key, plan, and voice ID.`,
+    });
+  } catch (err: any) {
+    return NextResponse.json({
+      configured: true,
+      ok: false,
+      voiceId,
+      modelId,
+      reason: `Could not reach ElevenLabs: ${err?.message || 'network error'}.`,
+    });
+  }
+}
