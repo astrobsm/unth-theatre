@@ -47,6 +47,8 @@ export default function ConsumablePackProviderPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<string>("ALL");
+  // Search by patient PT / folder number (also matches patient name).
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
@@ -64,20 +66,31 @@ export default function ConsumablePackProviderPage() {
   useEffect(() => { load(); }, []);
 
   const grouped = useMemo(() => {
+    const q = search.trim().toLowerCase();
     const g: Record<string, { surgery: Item["surgery"]; items: Item[] }> = {};
     for (const it of items) {
       if (filter !== "ALL" && it.status !== filter) continue;
+      // Search by PT / folder number (primary) or patient name.
+      if (q) {
+        const folder = (it.surgery.patient.folderNumber || "").toLowerCase();
+        const name = (it.surgery.patient.name || "").toLowerCase();
+        if (!folder.includes(q) && !name.includes(q)) continue;
+      }
       const key = it.surgeryId;
       if (!g[key]) g[key] = { surgery: it.surgery, items: [] };
       g[key].items.push(it);
     }
     return Object.values(g).sort((a, b) => {
-      // Emergency first, then earliest date
+      // Emergency first, then by patient PT / folder number (ascending).
       if (a.surgery.surgeryType === "EMERGENCY" && b.surgery.surgeryType !== "EMERGENCY") return -1;
       if (b.surgery.surgeryType === "EMERGENCY" && a.surgery.surgeryType !== "EMERGENCY") return 1;
+      const fa = a.surgery.patient.folderNumber || "";
+      const fb = b.surgery.patient.folderNumber || "";
+      const byFolder = fa.localeCompare(fb, undefined, { numeric: true, sensitivity: "base" });
+      if (byFolder !== 0) return byFolder;
       return new Date(a.surgery.scheduledDate).getTime() - new Date(b.surgery.scheduledDate).getTime();
     });
-  }, [items, filter]);
+  }, [items, filter, search]);
 
   async function patch(id: string, action: "PACKED" | "DELIVERED" | "START_PACKING" | "CANCEL") {
     const r = await fetch("/api/consumable-requests", {
@@ -131,6 +144,24 @@ export default function ConsumablePackProviderPage() {
         expect="CONSUMABLE"
         title="Enter the patient's consumable pack code"
       />
+
+      {/* Search / sort by patient PT (folder) number */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by PT / folder number or patient name…"
+          className="input-field flex-1"
+          aria-label="Search by patient PT number"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="btn-secondary text-sm whitespace-nowrap">
+            Clear
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-gray-500">Cases are sorted by patient PT number (emergencies pinned to the top).</p>
 
       <div className="flex gap-2 text-xs">
         {["ALL", "REQUESTED", "PACKING", "PACKED", "DELIVERED"].map((s) => (

@@ -211,20 +211,20 @@ class AudioAlertEngine {
   // If all audio files fail (offline/not cached), falls back to Speech Synthesis API
   private audioElement: HTMLAudioElement | null = null;
 
-  // Speech Synthesis fallback — works fully offline on most platforms.
-  // Tries ElevenLabs (natural voice) first, then falls back to the browser voice.
-  private async playSpeechFallback(priority: string): Promise<void> {
-    if (typeof window === 'undefined') return;
-    const label = priority === 'CRITICAL' ? 'Critical' : priority === 'HIGH' ? 'High priority' : 'Medium priority';
-    const text = `Attention. ${label} emergency surgery alert. All teams report immediately.`;
+  // Unified narration path. EVERY spoken announcement on this display goes
+  // through here so the alert banner and the patient/team details are never
+  // voiced as two separate, overlapping announcements. Tries the natural voice
+  // (Kokoro → ElevenLabs, globally serialised) first, then the browser voice.
+  private async announce(text: string): Promise<void> {
+    if (typeof window === 'undefined' || !text.trim()) return;
     const ok = await speakAnnouncement(text);
     if (ok) return;
-    return this.playSpeechFallbackBrowser(text);
+    return this.speakBrowser(text);
   }
 
-  private playSpeechFallbackBrowser(text: string): Promise<void> {
+  private speakBrowser(text: string): Promise<void> {
     return new Promise((resolve) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) {
         resolve();
         return;
       }
@@ -232,28 +232,32 @@ class AudioAlertEngine {
         const synth = window.speechSynthesis;
         synth.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.9;
+        utterance.rate = 0.92;
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
         utterance.lang = 'en-US';
         const voices = synth.getVoices();
         const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+          || voices.find(v => v.name.includes('Microsoft') && v.lang.startsWith('en'))
           || voices.find(v => v.lang.startsWith('en-'));
         if (preferred) utterance.voice = preferred;
-        const timeout = setTimeout(() => { synth.cancel(); resolve(); }, 15000);
+        // Safety: allow up to 30s for the (possibly long combined) narration.
+        const timeout = setTimeout(() => { synth.cancel(); resolve(); }, 30000);
         utterance.onend = () => { clearTimeout(timeout); resolve(); };
         utterance.onerror = () => { clearTimeout(timeout); resolve(); };
         synth.speak(utterance);
-        console.log('[AudioEngine] Speech synthesis fallback');
+        console.log('[AudioEngine] Browser speech narration');
       } catch { resolve(); }
     });
   }
 
-  private playAnnouncement(priority: string): Promise<void> {
+  // Play the recorded alert MP3. Resolves `true` if a recording played, or
+  // `false` if all audio files failed (offline) — the caller then narrates the
+  // alert + details via a single spoken announcement instead.
+  private playAnnouncement(priority: string): Promise<boolean> {
     return new Promise((resolve) => {
       if (typeof window === 'undefined') {
-        this.playing = false;
-        resolve();
+        resolve(false);
         return;
       }
 
@@ -278,29 +282,26 @@ class AudioAlertEngine {
       audio.src = priorityFile;
       audio.volume = 1.0;
 
-      const cleanup = () => {
-        this.playing = false;
-        resolve();
-      };
-
-      // When all audio files fail (offline), fall back to speech synthesis
-      const speechThenCleanup = () => {
-        this.playSpeechFallback(priority).then(cleanup);
+      let settled = false;
+      const done = (played: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(played);
       };
 
       // Safety timeout: 3 minutes max
-      const safetyTimeout = setTimeout(cleanup, 180000);
+      const safetyTimeout = setTimeout(() => done(true), 180000);
 
-      audio.onended = () => { clearTimeout(safetyTimeout); cleanup(); };
+      audio.onended = () => { clearTimeout(safetyTimeout); done(true); };
       audio.onerror = (e) => {
         console.error('[AudioEngine] Audio error:', e);
         if (audio.src !== new URL(fallbackFile, window.location.origin).href) {
           console.log('[AudioEngine] Trying fallback:', fallbackFile);
           audio.src = fallbackFile;
-          audio.play().catch(() => { clearTimeout(safetyTimeout); speechThenCleanup(); });
+          audio.play().catch(() => { clearTimeout(safetyTimeout); done(false); });
         } else {
           clearTimeout(safetyTimeout);
-          speechThenCleanup();
+          done(false);
         }
       };
 
@@ -312,10 +313,10 @@ class AudioAlertEngine {
         if (audio.src !== new URL(fallbackFile, window.location.origin).href) {
           console.log('[AudioEngine] Trying fallback:', fallbackFile);
           audio.src = fallbackFile;
-          audio.play().catch(() => { clearTimeout(safetyTimeout); speechThenCleanup(); });
+          audio.play().catch(() => { clearTimeout(safetyTimeout); done(false); });
         } else {
           clearTimeout(safetyTimeout);
-          speechThenCleanup();
+          done(false);
         }
       });
     });
@@ -366,44 +367,10 @@ class AudioAlertEngine {
     return parts.join(' ');
   }
 
-  // Narrate patient/team details. Tries ElevenLabs first, then browser voice.
-  private async speakDetails(text: string): Promise<void> {
-    if (typeof window === 'undefined' || !text.trim()) return;
-    const ok = await speakAnnouncement(text);
-    if (ok) return;
-    return this.speakDetailsBrowser(text);
-  }
-
-  private speakDetailsBrowser(text: string): Promise<void> {
-    return new Promise((resolve) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) {
-        resolve();
-        return;
-      }
-      try {
-        const synth = window.speechSynthesis;
-        synth.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.92;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        utterance.lang = 'en-US';
-        const voices = synth.getVoices();
-        const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
-          || voices.find(v => v.name.includes('Microsoft') && v.lang.startsWith('en'))
-          || voices.find(v => v.lang.startsWith('en-'));
-        if (preferred) utterance.voice = preferred;
-        // Safety: allow up to 30s for the narration
-        const timeout = setTimeout(() => { synth.cancel(); resolve(); }, 30000);
-        utterance.onend = () => { clearTimeout(timeout); resolve(); };
-        utterance.onerror = () => { clearTimeout(timeout); resolve(); };
-        synth.speak(utterance);
-        console.log('[AudioEngine] Speaking patient details');
-      } catch { resolve(); }
-    });
-  }
-
-  // Full alert sequence: chime → short pause → recorded voice announcement → patient/team narration
+  // Full alert sequence: chime → short pause → recorded voice announcement →
+  // ONE combined narration (alert banner if the MP3 couldn't play + patient /
+  // team details). Everything is spoken through the single serialised
+  // `announce()` path so announcements never overlap.
   async playVoiceAlert(priority = 'HIGH', details?: AlertDetails | null) {
     if (!this.enabled || this.playing) return;
 
@@ -424,15 +391,24 @@ class AudioAlertEngine {
       await this.playChime(priority);
       // Brief pause between chime and voice — tight coupling for synchronized alert
       await new Promise(r => setTimeout(r, 250));
-      await this.playAnnouncement(priority);
-      // After the recorded MP3 ends, narrate the operating team, blood need,
-      // ward location, age and gender via Speech Synthesis.
+      const mp3Played = await this.playAnnouncement(priority);
+
+      // Build a SINGLE narration. If the recorded alert MP3 could not play
+      // (e.g. offline / not cached), prepend the spoken alert banner; then add
+      // the operating team, blood need, ward location, age and gender.
+      const parts: string[] = [];
+      if (!mp3Played) {
+        const label = priority === 'CRITICAL' ? 'Critical' : priority === 'HIGH' ? 'High priority' : 'Medium priority';
+        parts.push(`Attention. ${label} emergency surgery alert. All teams report immediately.`);
+      }
       if (activeDetails) {
         const script = this.buildDetailsScript(activeDetails);
-        if (script) {
-          await new Promise(r => setTimeout(r, 400));
-          await this.speakDetails(script);
-        }
+        if (script) parts.push(script);
+      }
+      const narration = parts.join(' ');
+      if (narration) {
+        await new Promise(r => setTimeout(r, 400));
+        await this.announce(narration);
       }
     } catch {
       // ignore

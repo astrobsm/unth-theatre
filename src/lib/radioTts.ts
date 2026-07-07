@@ -112,12 +112,17 @@ export async function speakViaElevenLabs(text: string, hooks: SpeakHooks = {}): 
  * available engine: Kokoro (free, in-browser) first, then the ElevenLabs proxy,
  * resolving `false` only when BOTH fail (the caller then uses speechSynthesis).
  *
- * Hooks (`onStart`/`onEnd`, ducking volume, shared <audio>) are forwarded to
- * whichever engine actually plays, so audio ducking stays balanced.
+ * All calls are GLOBALLY SERIALISED through a single queue, so no matter how
+ * many surfaces (theatre radio, emergency display, announcement kiosk) fire at
+ * once, announcements never overlap or talk over each other — each one waits
+ * for the previous to finish. Hooks (`onStart`/`onEnd`, ducking volume, shared
+ * <audio>) are forwarded to whichever engine actually plays.
  */
-export async function speakAnnouncement(
+let speechChain: Promise<unknown> = Promise.resolve();
+
+async function speakAnnouncementNow(
   text: string,
-  hooks: SpeakHooks & KokoroSpeakHooks = {}
+  hooks: SpeakHooks & KokoroSpeakHooks
 ): Promise<boolean> {
   const clean = (text || '').trim();
   if (!clean || typeof window === 'undefined') return false;
@@ -138,4 +143,19 @@ export async function speakAnnouncement(
 
   // 3) Signal the caller to use the built-in browser voice.
   return false;
+}
+
+export async function speakAnnouncement(
+  text: string,
+  hooks: SpeakHooks & KokoroSpeakHooks = {}
+): Promise<boolean> {
+  // Chain this announcement after any currently-playing/queued one so they are
+  // spoken strictly one at a time (never simultaneously).
+  const run = speechChain.then(() => speakAnnouncementNow(text, hooks));
+  // Keep the chain alive regardless of this call's success/failure.
+  speechChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
 }

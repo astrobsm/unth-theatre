@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { 
   Pill, 
@@ -102,6 +102,8 @@ export default function PrescriptionsPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'needsPacking' | 'all' | 'packed' | 'partiallyPacked'>('needsPacking');
+  // Search by patient PT / folder number (also matches patient name).
+  const [search, setSearch] = useState('');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
   const [showPackModal, setShowPackModal] = useState(false);
   const [packingNotes, setPackingNotes] = useState('');
@@ -233,6 +235,39 @@ export default function PrescriptionsPage() {
       return [];
     }
   };
+
+  // Patient PT / folder number for a prescription (emergency stores it at the
+  // top level; regular prescriptions carry it on the linked surgery's patient).
+  const folderOf = (p: Prescription): string =>
+    ((p as any).folderNumber || (p as any).surgery?.patient?.folderNumber || '') as string;
+  const patientNameOf = (p: Prescription): string =>
+    (p.patientName || (p as any).surgery?.patient?.name || '') as string;
+
+  // Prescriptions filtered by the PT-number search and sorted by PT number
+  // (emergencies stay pinned to the top so they are never missed).
+  const visiblePrescriptions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q
+      ? prescriptions.filter(
+          (p) =>
+            folderOf(p).toLowerCase().includes(q) ||
+            patientNameOf(p).toLowerCase().includes(q)
+        )
+      : [...prescriptions];
+    return list.sort((a, b) => {
+      if (a.urgency === 'EMERGENCY' && b.urgency !== 'EMERGENCY') return -1;
+      if (b.urgency === 'EMERGENCY' && a.urgency !== 'EMERGENCY') return 1;
+      const byFolder = folderOf(a).localeCompare(folderOf(b), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      if (byFolder !== 0) return byFolder;
+      return (
+        new Date(a.scheduledSurgeryDate).getTime() -
+        new Date(b.scheduledSurgeryDate).getTime()
+      );
+    });
+  }, [prescriptions, search]);
 
   // ---- PDF export helpers ----
   const toReportPrescription = (p: Prescription): ReportPrescription => {
@@ -669,7 +704,35 @@ export default function PrescriptionsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {prescriptions.map((prescription) => {
+          {/* Search / sort by patient PT (folder) number */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by PT / folder number or patient name…"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              aria-label="Search prescriptions by patient PT number"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 whitespace-nowrap"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Sorted by patient PT number (emergencies pinned to the top).
+          </p>
+
+          {visiblePrescriptions.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center text-gray-500">
+              No prescriptions match “{search}”.
+            </div>
+          ) : (
+            visiblePrescriptions.map((prescription) => {
             const medications = parseMedications(prescription.medications);
             const hoursUntilSurgery = timeUntilSurgery(prescription.scheduledSurgeryDate);
 
@@ -923,7 +986,8 @@ export default function PrescriptionsPage() {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       )}
 
