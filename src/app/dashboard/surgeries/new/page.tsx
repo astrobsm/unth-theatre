@@ -149,6 +149,7 @@ export default function NewSurgeryPage() {
     consumablePackCode?: string | null;
     pharmacyDrugCode?: string | null;
     patientName?: string | null;
+    folderNumber?: string | null;
     surgeryId?: string | null;
   } | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
@@ -559,6 +560,7 @@ export default function NewSurgeryPage() {
             consumablePackCode: created?.consumablePackCode ?? null,
             pharmacyDrugCode: created?.pharmacyDrugCode ?? null,
             patientName: created?.patient?.name ?? null,
+            folderNumber: created?.patient?.folderNumber ?? null,
             surgeryId: created?.id ?? null,
           });
           setLoading(false);
@@ -1808,7 +1810,7 @@ function BookingCodesModal({
   codes,
   onClose,
 }: {
-  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; surgeryId?: string | null };
+  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; folderNumber?: string | null; surgeryId?: string | null };
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -1851,6 +1853,17 @@ function BookingCodesModal({
             Give these codes to{codes.patientName ? <> <span className="font-semibold">{codes.patientName}</span></> : ' the patient'}.
             Keying a code in reveals exactly what was requested so the patient can be costed and pay.
           </p>
+
+          {/* Payment instruction for the patient */}
+          <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-bold text-amber-900 mb-1">Tell the patient / relative:</p>
+            <p className="text-sm text-amber-800">
+              Please go to the <span className="font-semibold">Theatre Pharmacy</span> and the{' '}
+              <span className="font-semibold">Consumable Shop</span> with your{' '}
+              <span className="font-semibold">PT number{codes.folderNumber ? ` (${codes.folderNumber})` : ''}</span>{' '}
+              to pay for your items before the surgery.
+            </p>
+          </div>
           {rows.map((r) => (
             <div key={r.label} className="rounded-lg border border-gray-200 p-3">
               <div className="text-xs font-semibold text-gray-500">{r.label}</div>

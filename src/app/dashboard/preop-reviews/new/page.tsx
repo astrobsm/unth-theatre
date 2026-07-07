@@ -256,6 +256,9 @@ export default function NewPreOpReviewPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Payment-instruction feedback shown after an anaesthetic prescription is
+  // submitted (patient goes to pay with their PT number).
+  const [paymentInfo, setPaymentInfo] = useState<{ patientName: string; folderNumber: string; hasRx: boolean } | null>(null);
   
   // Smart text input states for dictation/OCR fields
   const [anestheticPlan, setAnestheticPlan] = useState('');
@@ -492,7 +495,13 @@ export default function NewPreOpReviewPage() {
       });
 
       if (response.ok) {
-        router.push('/dashboard/preop-reviews');
+        // Feedback: remind the anaesthetist to send the patient to pay for the
+        // prescribed drugs/items with their PT number before surgery.
+        setPaymentInfo({
+          patientName,
+          folderNumber,
+          hasRx: prescribedMedications.length > 0,
+        });
       } else {
         let msg = 'Failed to create pre-operative review';
         try {
@@ -523,6 +532,41 @@ export default function NewPreOpReviewPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {paymentInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+            <div className="flex items-center gap-2 border-b px-5 py-4">
+              <Syringe className="w-6 h-6 text-green-600" />
+              <h2 className="text-lg font-bold text-gray-900">Anaesthetic review saved</h2>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-gray-600">
+                Review recorded for <span className="font-semibold">{paymentInfo.patientName}</span>.
+              </p>
+              <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3">
+                <p className="text-sm font-bold text-amber-900 mb-1">Tell the patient / relative:</p>
+                <p className="text-sm text-amber-800">
+                  Please go to the <span className="font-semibold">Theatre Pharmacy</span> and the{' '}
+                  <span className="font-semibold">Consumable Shop</span> with your{' '}
+                  <span className="font-semibold">PT number ({paymentInfo.folderNumber})</span> to pay
+                  for your {paymentInfo.hasRx ? 'anaesthetic drugs and items' : 'items'} before the surgery.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t px-5 py-4">
+              <button
+                onClick={() => {
+                  setPaymentInfo(null);
+                  router.push('/dashboard/preop-reviews');
+                }}
+                className="btn-primary"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-6 flex items-center gap-4">
         <Link
           href="/dashboard/preop-reviews"
