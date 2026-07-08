@@ -68,6 +68,9 @@ export default function PostOperativeNotesPage() {
 
   const [surgery, setSurgery] = useState<any>(null);
   const [note, setNote] = useState('');
+  // Post-operative plan (management plan / instructions) — a distinct section
+  // saved together with the operation note.
+  const [plan, setPlan] = useState('');
   const [noteImages, setNoteImages] = useState<string[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -297,11 +300,16 @@ export default function PostOperativeNotesPage() {
     setSaving(true);
     try {
       const complexityResult = computeComplexity(complexity);
+      // Combine the operation note with the post-op plan into one saved note,
+      // keeping the plan as a clearly-labelled section.
+      const combinedNote = plan.trim()
+        ? `${note.trim()}\n\nPOST-OP PLAN:\n${plan.trim()}`
+        : note.trim();
       const res = await fetch(`/api/surgeries/${params.id}/post-op-notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          note: note.trim(),
+          note: combinedNote,
           images: noteImages,
           complexity,
           complexityScore: complexityResult.score,
@@ -319,6 +327,7 @@ export default function PostOperativeNotesPage() {
       }
 
       setNote('');
+      setPlan('');
       setNoteImages([]);
       await fetchData();
       alert('Post-operative note saved successfully.');
@@ -406,6 +415,21 @@ export default function PostOperativeNotesPage() {
           medicalMode
           className="w-full"
         />
+
+        {/* Post-Op Plan — management plan / instructions saved with the note. */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Post-Op Plan</label>
+          <SmartTextInput
+            value={plan}
+            onChange={setPlan}
+            rows={4}
+            placeholder="Post-operative plan: monitoring, medications, wound care, feeding, mobilisation, follow-up, etc. (tap the mic to dictate)"
+            enableSpeech
+            enableReadBack
+            medicalMode
+            className="w-full"
+          />
+        </div>
 
         {/* Intra-operative drawings / pictures upload (max 2, ≤ 10 MB each) */}
         <div>

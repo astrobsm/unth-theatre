@@ -28,11 +28,17 @@ export default function CompletedSurgeriesPage() {
   const [items, setItems] = useState<SurgeryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  // Only load completed surgeries for the selected day (defaults to today).
+  const [date, setDate] = useState<string>(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/surgeries?status=COMPLETED');
+      const res = await fetch(`/api/surgeries?status=COMPLETED&date=${encodeURIComponent(date)}`);
       if (res.ok) {
         const data = await res.json();
         setItems(Array.isArray(data) ? data : []);
@@ -44,7 +50,8 @@ export default function CompletedSurgeriesPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -103,19 +110,37 @@ export default function CompletedSurgeriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Completed Surgeries</h1>
-          <p className="text-gray-600 mt-1">Select patient to write post-operative notes or admit to PACU</p>
+          <p className="text-gray-600 mt-1">Completed cases for the selected day — select a patient to write post-operative notes or admit to PACU</p>
         </div>
         <Link href="/dashboard/surgeries" className="btn-secondary">Back to Surgeries</Link>
       </div>
 
-      <div className="card">
+      <div className="card flex flex-col sm:flex-row gap-3 sm:items-center">
         <input
           type="text"
-          className="input-field"
+          className="input-field flex-1"
           placeholder="Search by patient, folder number, procedure"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <div className="flex items-center gap-2">
+          <label htmlFor="completedDate" className="text-sm text-gray-600 whitespace-nowrap">Day:</label>
+          <input
+            id="completedDate"
+            type="date"
+            className="input-field"
+            value={date}
+            max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => setDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))}
+            className="btn-secondary text-sm whitespace-nowrap"
+          >
+            Today
+          </button>
+        </div>
       </div>
 
       {loading ? (

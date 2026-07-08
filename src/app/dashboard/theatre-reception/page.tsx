@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ClipboardCheck,
   UserCheck,
@@ -62,6 +63,7 @@ interface CaseItem {
 }
 
 export default function TheatreReceptionPage() {
+  const router = useRouter();
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [porters, setPorters] = useState<StaffOption[]>([]);
   const [cleaners, setCleaners] = useState<StaffOption[]>([]);
@@ -233,6 +235,32 @@ export default function TheatreReceptionPage() {
     }
     return links;
   };
+
+  // While online, precache every case's duty pages (Surgical Timing, Count,
+  // Anaesthesia, Operation Notes, Post-op Rx) so staff can still open them in
+  // theatre after the network drops — without being bounced back to the
+  // dashboard. Runs whenever the case list or role changes.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.onLine) return;
+    if (!('serviceWorker' in navigator) || cases.length === 0) return;
+    const urls = Array.from(
+      new Set(cases.flatMap((c) => dutyLinks(c.surgeryId).map((l) => l.href)))
+    );
+    if (urls.length === 0) return;
+    // Prefetch each route so Next.js caches its JS chunks + RSC (needed to
+    // render offline), then ask the service worker to cache the page document.
+    urls.forEach((u) => { try { router.prefetch(u); } catch {} });
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        const sw = reg.active || navigator.serviceWorker.controller;
+        if (!sw) return;
+        for (let i = 0; i < urls.length; i += 5) {
+          sw.postMessage({ type: 'PRECACHE_PAGES', urls: urls.slice(i, i + 5) });
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cases, userRole]);
 
   if (loading) {
     return (
