@@ -35,53 +35,108 @@ export function setKokoroVoice(voice: string) {
   if (voice && typeof voice === 'string') KOKORO_VOICE = voice;
 }
 
-// Whether Kokoro has been permanently disabled this session (e.g. the model
-// failed to load). Prevents repeated slow load attempts on every announcement.
-let kokoroDisabled = false;
+// Kokoro load-failure handling. Rather than disabling permanently after a
+// single transient blip (which would leave every announcement on the robotic
+// voice for the whole session), we retry a few times with a cool-down and only
+// give up after repeated failures.
+let kokoroFailures = 0;
+let kokoroRetryAt = 0; // epoch ms before which we won't re-attempt a load
+const KOKORO_MAX_FAILURES = 4;
+const KOKORO_RETRY_COOLDOWN_MS = 30_000;
+
+function kokoroGivenUp(): boolean {
+  return kokoroFailures >= KOKORO_MAX_FAILURES;
+}
+function kokoroInCooldown(): boolean {
+  return Date.now() < kokoroRetryAt;
+}
 
 // Singleton model promise so the ~80 MB model is only downloaded / initialised
 // once per page session.
 let ttsPromise: Promise<any> | null = null;
 
+// CDN sources for kokoro-js (native ESM, incl. transformers.js + onnxruntime).
+// jsdelivr first, esm.sh as a fallback if the first host is blocked/slow.
+const KOKORO_CDN_URLS = [
+  'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm',
+  'https://esm.sh/kokoro-js@1.2.1',
+];
+
+async function importKokoroModule(): Promise<any> {
+  let lastErr: unknown = null;
+  for (const url of KOKORO_CDN_URLS) {
+    try {
+      const mod: any = await import(/* webpackIgnore: true */ url);
+      const KokoroTTS = mod.KokoroTTS || mod.default?.KokoroTTS || mod.default;
+      if (KokoroTTS && typeof KokoroTTS.from_pretrained === 'function') {
+        return mod;
+      }
+      lastErr = new Error('kokoro-js module did not expose KokoroTTS');
+    } catch (e) {
+      lastErr = e;
+      console.warn('[kokoro] CDN load failed, trying next source:', url, e);
+    }
+  }
+  throw lastErr || new Error('kokoro-js could not be loaded from any CDN');
+}
+
 async function getKokoro(): Promise<any> {
-  if (kokoroDisabled) throw new Error('Kokoro disabled');
+  if (kokoroGivenUp()) throw new Error('Kokoro unavailable this session');
+  if (kokoroInCooldown()) throw new Error('Kokoro cooling down after a failure');
   if (ttsPromise) return ttsPromise;
   ttsPromise = (async () => {
-    // Load kokoro-js (and its heavy deps: transformers.js + onnxruntime-web) as
-    // native ESM from a CDN at runtime. We deliberately do NOT bundle it: the
-    // onnxruntime WASM build uses `import.meta`, which breaks webpack/Terser at
-    // build time. `webpackIgnore` keeps the bundler out of it entirely; the
-    // browser fetches the module directly (and the browser + transformers.js
-    // cache it afterwards, so later loads are fast and work offline).
-    const cdnUrl = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm';
-    const mod: any = await import(/* webpackIgnore: true */ cdnUrl);
+    // Load kokoro-js as native ESM from a CDN at runtime. We deliberately do
+    // NOT bundle it: the onnxruntime WASM build uses `import.meta`, which breaks
+    // webpack/Terser at build time. `webpackIgnore` keeps the bundler out of it
+    // entirely; the browser fetches + caches the module for later fast loads.
+    const mod: any = await importKokoroModule();
     const KokoroTTS = mod.KokoroTTS || mod.default?.KokoroTTS || mod.default;
-    if (!KokoroTTS || typeof KokoroTTS.from_pretrained !== 'function') {
-      throw new Error('kokoro-js module did not expose KokoroTTS');
-    }
-    // Quieten the ONNX runtime. It routes benign "warning" notices (e.g. some
-    // shape ops assigned to CPU) through console.error, which looks alarming
-    // but is harmless. Raising the log level to "error" keeps the console clean.
+
+    // Quieten the ONNX runtime's benign "warning" notices (routed through
+    // console.error), so they don't look like failures.
     try {
       const env = mod.env || mod.default?.env;
       if (env?.backends?.onnx) env.backends.onnx.logLevel = 'error';
       if (env?.backends?.onnx?.wasm) env.backends.onnx.wasm.logLevel = 'error';
-    } catch { /* best-effort — never block TTS */ }
+    } catch { /* best-effort */ }
 
-    // Prefer WebGPU (much faster) when available; otherwise fall back to WASM,
-    // which is universally supported.
-    const hasWebGPU =
-      typeof navigator !== 'undefined' && (navigator as any).gpu != null;
-    const tts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-      dtype: hasWebGPU ? 'fp32' : 'q8',
-      device: hasWebGPU ? 'webgpu' : 'wasm',
-    });
-    return tts;
+    // Try each execution config in order and use the FIRST that loads. WASM
+    // (q8) is listed first because it works on every device/browser reliably;
+    // WebGPU is faster but flaky (adapter/driver issues) and previously caused
+    // the engine to be disabled on devices where it half-initialised — which is
+    // why every device fell back to the robotic voice. Loading a working
+    // engine here guarantees the natural voice works everywhere.
+    const configs: Array<{ device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp32' }> = [
+      { device: 'wasm', dtype: 'q8' },
+    ];
+    // Offer WebGPU as a secondary (faster) attempt only if present.
+    if (typeof navigator !== 'undefined' && (navigator as any).gpu != null) {
+      configs.push({ device: 'webgpu', dtype: 'fp32' });
+    }
+
+    let lastErr: unknown = null;
+    for (const cfg of configs) {
+      try {
+        const tts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, cfg);
+        console.info(`[kokoro] TTS engine ready (${cfg.device}/${cfg.dtype}).`);
+        return tts;
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[kokoro] from_pretrained failed for ${cfg.device}/${cfg.dtype}, trying next.`, e);
+      }
+    }
+    throw lastErr || new Error('Kokoro model failed to load');
   })().catch((err) => {
-    // Reset so a later attempt can retry, but mark disabled to avoid hammering.
+    // Reset so a later attempt can retry after a cool-down; only give up after
+    // several failures so a transient CDN/network blip doesn't force the
+    // robotic voice for the whole session.
     ttsPromise = null;
-    kokoroDisabled = true;
-    console.warn('[kokoro] Failed to initialise in-browser TTS — falling back.', err);
+    kokoroFailures += 1;
+    kokoroRetryAt = Date.now() + KOKORO_RETRY_COOLDOWN_MS;
+    console.warn(
+      `[kokoro] Init failed (attempt ${kokoroFailures}/${KOKORO_MAX_FAILURES}) — using browser voice meanwhile.`,
+      err
+    );
     throw err;
   });
   return ttsPromise;
@@ -92,13 +147,14 @@ async function getKokoro(): Promise<any> {
  * announcement display) so the first real announcement plays without delay.
  */
 export function preloadKokoro(): void {
-  if (kokoroDisabled || ttsPromise) return;
+  if (kokoroGivenUp() || kokoroInCooldown() || ttsPromise) return;
   // Fire and forget — never throws to the caller.
   getKokoro().catch(() => {});
 }
 
 export function isKokoroAvailable(): boolean {
-  return !kokoroDisabled;
+  // Available unless we've given up for the session or are briefly cooling down.
+  return !kokoroGivenUp() && !kokoroInCooldown();
 }
 
 // Cache rendered audio object URLs by text so repeated announcements (emergency
@@ -156,7 +212,7 @@ export async function speakViaKokoro(
   hooks: KokoroSpeakHooks = {}
 ): Promise<boolean> {
   const clean = (text || '').trim();
-  if (!clean || typeof window === 'undefined' || kokoroDisabled) return false;
+  if (!clean || typeof window === 'undefined' || kokoroGivenUp()) return false;
 
   const url = await getKokoroAudioUrl(clean);
   if (!url) return false;
