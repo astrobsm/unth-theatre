@@ -102,17 +102,26 @@ export default function ChunkErrorReloader() {
     const onError = (e: ErrorEvent) => {
       const err: any = e?.error;
       const msgs = [e?.message, err?.name, err?.message];
-      // Definite stale-build errors always reload once; soft import failures
-      // only when online + under the session cap (handled inside triggerReload).
-      if (msgs.some((m) => isDefiniteChunkError(m)) || msgs.some((m) => isSoftImportError(m))) {
+      // ONLY reload for definite stale-build chunk errors (old app shell after a
+      // deploy). Soft dynamic-import failures are usually transient network /
+      // CDN / WASM blips (e.g. the Kokoro TTS model loading) — reloading for
+      // those caused the app to "refresh on its own", so we now ignore them.
+      if (msgs.some((m) => isDefiniteChunkError(m))) {
         void triggerReload();
+      } else if (msgs.some((m) => isSoftImportError(m))) {
+        console.warn('[ChunkErrorReloader] Transient dynamic-import failure ignored (no reload):', e?.message);
       }
     };
 
     const onRejection = (e: PromiseRejectionEvent) => {
       const r: any = e?.reason;
       const msg = (r && (r.message || r.name)) || (typeof r === 'string' ? r : '');
-      if (isDefiniteChunkError(msg) || isSoftImportError(msg)) void triggerReload();
+      // Same policy: only stale-build chunk errors force a reload.
+      if (isDefiniteChunkError(msg)) {
+        void triggerReload();
+      } else if (isSoftImportError(msg)) {
+        console.warn('[ChunkErrorReloader] Transient dynamic-import rejection ignored (no reload):', msg);
+      }
     };
 
     window.addEventListener('error', onError);

@@ -261,15 +261,28 @@ export default function BackgroundMusicPlayer() {
       try {
         window.localStorage.setItem(LS_RESUME_URL, currentTrack.url);
         window.localStorage.setItem(LS_RESUME_TIME, String(Math.floor(a.currentTime || 0)));
+        // Persist the play intent too, so the track auto-resumes after a refresh.
+        if (playIntentRef.current && !a.paused) {
+          window.localStorage.setItem(LS_PLAYING, '1');
+        }
       } catch {}
     };
+    // Save on a light interval AND right before the page unloads / is hidden,
+    // so a refresh resumes from the exact position with no gap.
+    const onHide = () => { if (document.visibilityState === 'hidden') save(); };
     const id = setInterval(save, 3000);
     a.addEventListener('pause', save);
     a.addEventListener('ended', save);
+    window.addEventListener('pagehide', save);
+    window.addEventListener('beforeunload', save);
+    document.addEventListener('visibilitychange', onHide);
     return () => {
       clearInterval(id);
       a.removeEventListener('pause', save);
       a.removeEventListener('ended', save);
+      window.removeEventListener('pagehide', save);
+      window.removeEventListener('beforeunload', save);
+      document.removeEventListener('visibilitychange', onHide);
     };
   }, [currentTrack?.url]);
 
