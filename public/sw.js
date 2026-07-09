@@ -5,10 +5,14 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v36';
+const CACHE_VERSION = 'v37';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
+// RSC (App Router flight) payloads live in their OWN cache so the navigation
+// handler (which matches PAGE_CACHE with ignoreSearch) can never accidentally
+// serve a raw RSC payload as an HTML document.
+const RSC_CACHE = `orm-rsc-${CACHE_VERSION}`;
 const OFFLINE_PAGE = '/offline.html';
 
 // Static assets to pre-cache on install (ONLY truly static, no auth required)
@@ -85,7 +89,7 @@ self.addEventListener('install', (event) => {
 // ACTIVATE - Clean old caches, claim clients immediately
 // ============================================================
 self.addEventListener('activate', (event) => {
-  const currentCaches = [STATIC_CACHE, DATA_CACHE, PAGE_CACHE];
+  const currentCaches = [STATIC_CACHE, DATA_CACHE, PAGE_CACHE, RSC_CACHE];
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
@@ -165,8 +169,17 @@ self.addEventListener('message', (event) => {
       await Promise.allSettled(
         data.urls.map(async (url) => {
           try {
-            const res = await fetch(url, { credentials: 'include' });
-            if (res.ok) await cache.put(new Request(url), res.clone());
+            // Request an HTML document explicitly, and only cache it if the
+            // response is actually HTML — never an RSC/JSON payload (which would
+            // otherwise be served as a broken document offline).
+            const res = await fetch(url, {
+              credentials: 'include',
+              headers: { Accept: 'text/html' },
+            });
+            const ct = res.headers.get('Content-Type') || '';
+            if (res.ok && ct.includes('text/html')) {
+              await cache.put(new Request(url), res.clone());
+            }
           } catch (e) {
             console.log('[SW] PRECACHE_PAGES failed for', url, e);
           }
@@ -427,13 +440,11 @@ async function networkFirstWithCache(request) {
 // immediate even on a poor network), refreshing it in the background. Only the
 // very first visit to a route waits on the network.
 async function rscNetworkFirst(request) {
-  const cache = await caches.open(PAGE_CACHE);
+  const cache = await caches.open(RSC_CACHE);
   const url = new URL(request.url);
-  // Normalise the key: drop the volatile `_rsc` cache-buster and tag it so RSC
-  // payloads never collide with the plain-HTML page cache for the same URL.
+  // Normalise the key: drop the volatile `_rsc` cache-buster.
   const keyUrl = new URL(url.href);
   keyUrl.searchParams.delete('_rsc');
-  keyUrl.searchParams.set('__orm_rsc', '1');
   const key = keyUrl.href;
 
   const cached = await cache.match(key);
@@ -461,18 +472,27 @@ async function offlineNavigationHandler(request) {
   const pageCache = await caches.open(PAGE_CACHE);
   const staticCache = await caches.open(STATIC_CACHE);
 
+  // A navigation must ONLY ever be answered with a real HTML document — never
+  // an RSC/flight payload or JSON (which the browser would render as raw text
+  // and which breaks hydration). This guard makes that impossible.
+  const isHtmlDoc = (res) => {
+    if (!res) return false;
+    const ct = res.headers.get('Content-Type') || '';
+    return ct.includes('text/html');
+  };
+
   try {
     const networkResponse = await fetch(request);
-    if (networkResponse.ok) {
+    if (networkResponse.ok && isHtmlDoc(networkResponse)) {
       pageCache.put(request, networkResponse.clone());
     }
     return networkResponse;
   } catch (err) {
     // 1) Exact route match (ignoreSearch handles App Router cache-busting params).
-    const cached =
+    const exact =
       (await pageCache.match(request, { ignoreSearch: true })) ||
       (await staticCache.match(request, { ignoreSearch: true }));
-    if (cached) return cached;
+    if (isHtmlDoc(exact)) return exact;
 
     // 2) App-shell fallback. This is a client-rendered SPA (Next.js App Router):
     //    serving the cached dashboard/home shell lets the client router boot and
@@ -487,7 +507,7 @@ async function offlineNavigationHandler(request) {
       const shellRes =
         (await pageCache.match(shell, { ignoreSearch: true })) ||
         (await staticCache.match(shell, { ignoreSearch: true }));
-      if (shellRes) {
+      if (isHtmlDoc(shellRes)) {
         const headers = new Headers(shellRes.headers);
         headers.set('X-ORM-Offline-Shell', 'true');
         return new Response(shellRes.body, { status: shellRes.status, headers });
