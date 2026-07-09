@@ -71,6 +71,8 @@ import {
   Shirt,
   MessageCircle,
   Star,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -88,6 +90,8 @@ export default function DashboardLayout({
   // Default: collapsed on phones (<1024px), expanded on desktop. Avoids the
   // sidebar covering the page on first load on small screens.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Which collapsible sidebar groups the user has manually toggled (label -> open).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let active = true;
@@ -304,7 +308,7 @@ export default function DashboardLayout({
     return null;
   };
 
-  const filteredMenuItems = (isFullAccessRole(userRole)
+  const filteredMenuItems = isFullAccessRole(userRole)
     ? menuItems
     : menuItems.filter((item) => {
         // External links (e.g. /training/) bypass module gating.
@@ -312,18 +316,196 @@ export default function DashboardLayout({
         const mod = findModule(item.href);
         if (!mod) return true; // unmapped paths default to visible
         return allowedModuleIds.has(mod.id);
-      })
-  )
-    // Arrange the sidebar alphabetically by label so items are easy to find.
-    // "Dashboard" is pinned to the very top as the home entry. Leading emojis /
-    // symbols are ignored when comparing labels.
-    .slice()
-    .sort((a, b) => {
-      if (a.href === '/dashboard') return -1;
-      if (b.href === '/dashboard') return 1;
-      const norm = (s: string) => s.replace(/[^a-z0-9]/gi, '').toLowerCase();
-      return norm(a.label).localeCompare(norm(b.label));
-    });
+      });
+
+  // ---- Grouped sidebar layout -------------------------------------------
+  // The sidebar is organised into ordered top-level links and collapsible
+  // groups. Groups start collapsed (fewer DOM nodes = faster paint) and only
+  // the group containing the active route auto-expands.
+  const itemByHref = new Map(filteredMenuItems.map((it) => [it.href, it] as const));
+  const usedHrefs = new Set<string>();
+  const take = (href: string) => {
+    const it = itemByHref.get(href);
+    if (it) usedHrefs.add(href);
+    return it;
+  };
+
+  type NavEntry =
+    | { type: 'single'; href: string }
+    | { type: 'group'; label: string; icon: any; hrefs: string[] };
+  const NAV_LAYOUT: NavEntry[] = [
+    { type: 'single', href: '/dashboard' },
+    { type: 'single', href: '/dashboard/roster' },
+    { type: 'single', href: '/dashboard/emergency-booking' },
+    { type: 'group', label: 'Alerts', icon: AlertTriangle, hrefs: [
+      '/dashboard/alerts',
+      '/dashboard/emergency-alerts',
+      '/dashboard/emergency-lab-workup',
+      '/dashboard/fault-alerts',
+    ] },
+    { type: 'group', label: 'Surgeries', icon: Calendar, hrefs: [
+      '/dashboard/surgeries',
+      '/dashboard/cancellations',
+      '/dashboard/surgeries/completed',
+      '/dashboard/admin/surgical-catalog',
+      '/dashboard/surgical-unit-calendar',
+      '/dashboard/admin/surgical-units',
+      '/dashboard/mortality',
+      '/dashboard/patients',
+    ] },
+    { type: 'group', label: 'Nurses Board', icon: UserCheck, hrefs: [
+      '/dashboard/nurse-handover',
+      '/dashboard/pre-operative-visit',
+      '/dashboard/checklists',
+      '/dashboard/theatre-reception',
+      '/dashboard/holding-area',
+      '/dashboard/call-for-patient',
+      '/dashboard/theatres',
+      '/dashboard/theatre-setup',
+      '/dashboard/walkie-talkies',
+      '/dashboard/inventory',
+      '/dashboard/equipment-checkout',
+      '/dashboard/sub-stores',
+      '/dashboard/transfers',
+    ] },
+    { type: 'single', href: '/dashboard/theatre-readiness' },
+    { type: 'group', label: 'Anaesthetist Board', icon: Stethoscope, hrefs: [
+      '/dashboard/anaesthetist-board',
+      '/dashboard/preop-reviews',
+      '/dashboard/anesthesia-setup',
+      '/dashboard/prescription-approvals',
+    ] },
+    { type: 'single', href: '/dashboard/pacu' },
+    { type: 'group', label: 'Pharmacy', icon: Pill, hrefs: [
+      '/dashboard/prescriptions',
+      '/announcement-display/pharmacy',
+      '/dashboard/medication-tracking',
+    ] },
+    { type: 'single', href: '/announcement-display/lab' },
+    { type: 'group', label: 'Blood Bank', icon: Droplet, hrefs: [
+      '/dashboard/blood-bank',
+      '/announcement-display/blood-bank',
+    ] },
+    { type: 'group', label: 'Admin Board', icon: Shield, hrefs: [
+      '/dashboard/admin/access',
+      '/dashboard/announcements',
+      '/dashboard/unit-booking-letter',
+      '/dashboard/patient-payment-guide',
+      '/dashboard/presentation',
+      '/dashboard/reports',
+      '/dashboard/research',
+      '/dashboard/feedback/review',
+      '/dashboard/security-reports/view',
+      '/dashboard/anonymous-tips/view',
+      '/dashboard/reports/staff-effectiveness',
+      '/training/',
+      '/training/downloads.html',
+      '/dashboard/disciplinary-queries',
+      '/hod-letter',
+      '/dashboard/live-monitoring',
+      '/dashboard/theatre-audit',
+      '/dashboard/users',
+      '/role-guide',
+    ] },
+    { type: 'group', label: 'Theatre Annex', icon: Building2, hrefs: [
+      '/dashboard/oxygen-control',
+      '/dashboard/meals/order',
+      '/dashboard/plumbing-water-supply',
+      '/dashboard/power-house/maintenance',
+      '/dashboard/power-house/readiness',
+      '/dashboard/power-house/status',
+      '/dashboard/cssd/inventory',
+      '/dashboard/cssd/readiness',
+      '/dashboard/cssd/sterilization',
+    ] },
+    { type: 'single', href: '/dashboard/theatre-meals' },
+    { type: 'group', label: 'Theatre Logistics', icon: Volume2, hrefs: [
+      '/dashboard/radio',
+      '/dashboard/scrub-management',
+    ] },
+    { type: 'group', label: 'Anonymous Tips', icon: MessageSquareWarning, hrefs: [
+      '/dashboard/anonymous-tips',
+      '/dashboard/security-reports',
+    ] },
+    { type: 'group', label: 'Consumable Packs', icon: PackageCheck, hrefs: [
+      '/dashboard/consumable-pack-provider',
+      '/dashboard/catalog-contribute',
+    ] },
+    { type: 'single', href: '/dashboard/feedback' },
+    { type: 'single', href: '/dashboard/laundry' },
+    { type: 'single', href: '/dashboard/settings' },
+  ];
+
+  type NavItemT = (typeof filteredMenuItems)[number];
+  const navSections = NAV_LAYOUT.map((entry) => {
+    if (entry.type === 'single') {
+      const it = take(entry.href);
+      return it ? { kind: 'single' as const, item: it } : null;
+    }
+    const items = entry.hrefs.map((h) => take(h)).filter(Boolean) as NavItemT[];
+    return items.length
+      ? { kind: 'group' as const, label: entry.label, icon: entry.icon, items }
+      : null;
+  }).filter(Boolean) as Array<
+    | { kind: 'single'; item: NavItemT }
+    | { kind: 'group'; label: string; icon: any; items: NavItemT[] }
+  >;
+
+  // Anything not placed in the layout still shows, under a trailing "More".
+  const leftovers = filteredMenuItems.filter((it) => !usedHrefs.has(it.href));
+  if (leftovers.length) {
+    navSections.push({ kind: 'group', label: 'More', icon: Menu, items: leftovers });
+  }
+
+  const isItemActive = (href: string) =>
+    pathname === href || pathname?.startsWith(href + '/');
+  const groupHasActive = (items: NavItemT[]) => items.some((it) => isItemActive(it.href));
+
+  const renderNavItem = (item: NavItemT, nested = false) => {
+    const isActive = isItemActive(item.href);
+    const pad = nested ? 'pl-12 pr-4' : 'px-6';
+    const className = `flex items-center ${pad} py-3 transition-all duration-200 relative ${
+      isActive
+        ? 'bg-primary-700 border-l-4 border-accent-500 text-white'
+        : 'text-primary-100 hover:bg-primary-700 hover:border-l-4 hover:border-accent-500'
+    }`;
+    const inner = (
+      <>
+        <item.icon className="w-5 h-5 mr-3 flex-shrink-0" />
+        <span className="flex-1 truncate">{item.label}</span>
+        {item.badge && (
+          <span className="ml-2 px-2 py-0.5 bg-accent-500 text-white text-xs font-bold rounded-full">
+            {item.badge}
+          </span>
+        )}
+      </>
+    );
+    if ((item as any).external) {
+      return (
+        <a
+          key={item.href}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={className}
+          onClick={() => setSidebarOpen(false)}
+        >
+          {inner}
+        </a>
+      );
+    }
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        prefetch={false}
+        className={className}
+        onClick={() => setSidebarOpen(false)}
+      >
+        {inner}
+      </Link>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -358,52 +540,37 @@ export default function DashboardLayout({
           </div>
 
           <nav className="mt-6 pb-48 overflow-y-auto sidebar-nav">
-            {filteredMenuItems.map((item) => {
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-              const className = `flex items-center px-6 py-3 transition-all duration-200 relative ${
-                isActive
-                  ? 'bg-primary-700 border-l-4 border-accent-500 text-white'
-                  : 'text-primary-100 hover:bg-primary-700 hover:border-l-4 hover:border-accent-500'
-              }`;
-              const inner = (
-                <>
-                  <item.icon className="w-5 h-5 mr-3" />
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <span className="ml-2 px-2 py-0.5 bg-accent-500 text-white text-xs font-bold rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </>
-              );
-              if ((item as any).external) {
-                return (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={className}
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    {inner}
-                  </a>
-                );
+            {navSections.map((section) => {
+              if (section.kind === 'single') {
+                return renderNavItem(section.item);
               }
+              const open = openGroups[section.label] ?? groupHasActive(section.items);
+              const GroupIcon = section.icon;
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  // Do NOT eagerly prefetch all ~70 sidebar routes on load —
-                  // that fired a request storm that starved the page the user
-                  // actually opened. Next.js still prefetches on hover/focus,
-                  // so navigation stays instant without the upfront cost.
-                  prefetch={false}
-                  className={className}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  {inner}
-                </Link>
+                <div key={section.label}>
+                  <button
+                    onClick={() =>
+                      setOpenGroups((g) => ({ ...g, [section.label]: !open }))
+                    }
+                    className="w-full flex items-center px-6 py-3 text-primary-100 hover:bg-primary-700 transition-colors"
+                    aria-expanded={open}
+                  >
+                    <GroupIcon className="w-5 h-5 mr-3 flex-shrink-0" />
+                    <span className="flex-1 text-left font-semibold text-xs uppercase tracking-wider">
+                      {section.label}
+                    </span>
+                    {open ? (
+                      <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                    )}
+                  </button>
+                  {open && (
+                    <div className="bg-primary-900/40">
+                      {section.items.map((it) => renderNavItem(it, true))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
@@ -468,15 +635,21 @@ export default function DashboardLayout({
 
         <main
           className="dashboard-main p-4 sm:p-8 min-h-screen relative"
-          style={{
-            backgroundColor: '#f9fafb',
-            backgroundImage: "url('/unth-orm-logo.png')",
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center center',
-            backgroundSize: '520px 520px',
-            backgroundAttachment: 'fixed',
-          }}
+          style={{ backgroundColor: '#f9fafb' }}
         >
+          {/* Fixed watermark logo. Using a position:fixed layer (instead of
+              background-attachment:fixed on this scrolling element) avoids the
+              costly full-page repaints that caused scroll jank on phones. */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0"
+            style={{
+              backgroundImage: "url('/unth-orm-logo.png')",
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center center',
+              backgroundSize: '520px 520px',
+            }}
+          />
           {/* watermark veil — keeps content readable over logo */}
           <div
             aria-hidden

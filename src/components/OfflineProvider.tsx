@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   prefetchAllOfflineData,
   registerPeriodicSync,
@@ -12,18 +13,20 @@ import { getOfflineQueueCount, processOfflineQueue, isIndexedDBAvailable } from 
 import { installFetchInterceptor, uninstallFetchInterceptor } from '@/lib/globalFetchInterceptor';
 import { MODULES } from '@/lib/modules';
 
-// Precache the app's module routes for full offline use, in small batches well
-// after first paint so it never causes a request storm. Runs once per session.
+// The module routes to make available offline (unique, dashboard-scoped).
+const OFFLINE_ROUTES = Array.from(
+  new Set<string>(['/dashboard', ...MODULES.flatMap((m) => m.paths)])
+).filter((p) => p.startsWith('/dashboard'));
+
+// Precache the app's module route DOCUMENTS (HTML) via the service worker, in
+// small batches well after first paint so it never causes a request storm.
 async function warmUpOfflineRoutes() {
   try {
     if (!('serviceWorker' in navigator)) return;
     const reg = await navigator.serviceWorker.ready;
     const sw = reg.active || navigator.serviceWorker.controller;
     if (!sw) return;
-    // Unique route list from the module catalog + the app shell.
-    const routes = Array.from(
-      new Set<string>(['/dashboard', ...MODULES.flatMap((m) => m.paths)])
-    ).filter((p) => p.startsWith('/dashboard'));
+    const routes = OFFLINE_ROUTES;
     const BATCH = 4;
     for (let i = 0; i < routes.length; i += BATCH) {
       sw.postMessage({ type: 'PRECACHE_PAGES', urls: routes.slice(i, i + BATCH) });
@@ -85,6 +88,7 @@ export function useOfflineContext() {
 // OfflineProvider Component
 // ============================================================
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [isOnline, setIsOnline] = useState(true);
   const [isFullyCached, setIsFullyCached] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
@@ -206,15 +210,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // MANUAL FULL DOWNLOAD — user-triggered from the dashboard button. Precaches
-  // every module page (the app shell), prefetches all API data into IndexedDB,
-  // and drains any pending offline mutations. After this completes the whole
-  // app (all modules + forms) loads instantly and works offline.
+  // MANUAL FULL DOWNLOAD — user-triggered from the dashboard button. Caches
+  // every module page (HTML + JS chunks + RSC), prefetches all API data into
+  // IndexedDB, and drains any pending offline mutations. After this completes
+  // the whole app (all modules + forms) loads instantly and works offline.
   const downloadAppShellNow = useCallback(async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     setIsDownloadingShell(true);
     try {
-      // 1) Cache the app shell (all module routes) via the service worker.
+      // 1) Prefetch each route so Next.js downloads its JS chunks + RSC payload
+      //    (the service worker caches those), then cache the page document via
+      //    the SW. Both are needed for a page to actually render offline.
+      for (let i = 0; i < OFFLINE_ROUTES.length; i += 4) {
+        OFFLINE_ROUTES.slice(i, i + 4).forEach((u) => {
+          try { router.prefetch(u); } catch { /* ignore */ }
+        });
+        await new Promise((r) => setTimeout(r, 300));
+      }
       await warmUpOfflineRoutes();
       // 2) Prefetch all API data (surgeries, patients, inventory, etc.).
       await runPrefetch();

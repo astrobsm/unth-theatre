@@ -160,8 +160,9 @@ export default function PostOperativeNotesPage() {
   }, []);
 
   // Surgeon suggestions for the editable surgeon field (DB + free-type).
+  // Fetch the FULL surgeon list (no small cap) so every surgeon is selectable.
   useEffect(() => {
-    fetch('/api/users?roles=SURGEON,HOUSE_OFFICER&limit=300')
+    fetch('/api/users?roles=SURGEON,HOUSE_OFFICER&limit=1000')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setSurgeonOpts(Array.isArray(d) ? d : d.users || []))
       .catch(() => {});

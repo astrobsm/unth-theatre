@@ -5,7 +5,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v34';
+const CACHE_VERSION = 'v35';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -219,6 +219,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // React Server Component (App Router) navigation / prefetch payloads. These
+  // are how client-side sidebar navigation fetches a page's content. Cache them
+  // (network-first) so once a route has been visited or prefetched it keeps
+  // working offline instead of bouncing the user to the dashboard.
+  const isRSC =
+    request.headers.get('RSC') === '1' ||
+    request.headers.get('Next-Router-Prefetch') === '1' ||
+    url.searchParams.has('_rsc');
+  if (isRSC) {
+    event.respondWith(rscNetworkFirst(request));
+    return;
+  }
+
   // Navigation: serve cached pages offline
   if (request.mode === 'navigate') {
     event.respondWith(offlineNavigationHandler(request));
@@ -409,6 +422,33 @@ async function networkFirstWithCache(request) {
 // for /dashboard/patients). The Next.js App Router would detect the URL/RSC
 // mismatch and fall into a blank, infinitely-reloading page. When the exact
 // route isn't cached we serve the static, router-free offline page instead.
+// React Server Component (App Router) flight payloads. Network-first so online
+// navigation is always fresh; when offline we serve the last cached payload for
+// that route so client-side navigation keeps rendering the correct page.
+async function rscNetworkFirst(request) {
+  const cache = await caches.open(PAGE_CACHE);
+  const url = new URL(request.url);
+  // Normalise the key: drop the volatile `_rsc` cache-buster and tag it so RSC
+  // payloads never collide with the plain-HTML page cache for the same URL.
+  const keyUrl = new URL(url.href);
+  keyUrl.searchParams.delete('_rsc');
+  keyUrl.searchParams.set('__orm_rsc', '1');
+  const key = keyUrl.href;
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) {
+      cache.put(key, res.clone());
+    }
+    return res;
+  } catch (err) {
+    const cached = await cache.match(key);
+    if (cached) return cached;
+    // No cached RSC — 404 makes the Next.js client fall back to a full-page
+    // navigation, which the navigation handler serves from the page cache.
+    return new Response('', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+  }
+}
+
 async function offlineNavigationHandler(request) {
   const pageCache = await caches.open(PAGE_CACHE);
   const staticCache = await caches.open(STATIC_CACHE);

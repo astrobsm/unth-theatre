@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const q = (searchParams.get('q') || '').trim();
     const limitParam = parseInt(searchParams.get('limit') || '', 10);
     const limit = Number.isFinite(limitParam) && limitParam > 0
-      ? Math.min(limitParam, 100)
+      ? Math.min(limitParam, 1000)
       : undefined;
 
     // Build filter
