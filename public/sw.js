@@ -90,19 +90,24 @@ self.addEventListener('install', (event) => {
 // ============================================================
 self.addEventListener('activate', (event) => {
   const currentCaches = [STATIC_CACHE, DATA_CACHE, PAGE_CACHE, RSC_CACHE];
+  // Caches we must NEVER delete on version bumps. `transformers-cache` holds the
+  // downloaded Kokoro TTS model (~86 MB) — deleting it would force a slow
+  // re-download of the natural voice after every deploy.
+  const preservedCaches = (key) =>
+    /transformers/i.test(key) || /kokoro/i.test(key) || /^workbox/i.test(key);
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
         keys
-          .filter((key) => !currentCaches.includes(key))
+          .filter((key) => !currentCaches.includes(key) && !preservedCaches(key))
           .map((key) => {
-            console.log('[SW v5] Deleting old cache:', key);
+            console.log('[SW] Deleting old cache:', key);
             return caches.delete(key);
           })
       ))
       .then(() => self.clients.claim())
       .then(() => {
-        console.log('[SW v5] Activated and claimed clients');
+        console.log('[SW] Activated and claimed clients');
         // Lazy-cache API data: wait 20s then fetch 3 at a time
         setTimeout(() => {
           lazyCacheApiRoutes();

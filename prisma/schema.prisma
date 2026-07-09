@@ -5080,6 +5080,19 @@ model DailyFirstCaseSending {
   @@map("daily_first_case_sending")
 }
 
+// Hospital wards, editable by admins. Seeded from the built-in ward list on
+// first use; the app merges these with the static defaults so custom wards
+// (e.g. new private rooms) appear in every ward dropdown.
+model Ward {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("wards")
+}
+
 // ==========================================
 // PRE-OPERATIVE VISIT MODULE
 // ==========================================

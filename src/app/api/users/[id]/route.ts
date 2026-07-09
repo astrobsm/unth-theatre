@@ -12,6 +12,10 @@ const ROLE_VALUES = Object.values(UserRole) as [string, ...string[]];
 const updateUserSchema = z.object({
   staffCode: z.string().optional().nullable(),
   role: z.enum(ROLE_VALUES).optional(),
+  fullName: z.string().trim().min(2).optional(),
+  phoneNumber: z.string().trim().optional().nullable(),
+  email: z.string().trim().email().optional().nullable(),
+  department: z.string().trim().optional().nullable(),
 });
 
 export async function PATCH(
@@ -61,12 +65,38 @@ export async function PATCH(
       }
     }
 
-    const data: { staffCode?: string | null; role?: UserRole } = {};
+    const data: {
+      staffCode?: string | null;
+      role?: UserRole;
+      fullName?: string;
+      phoneNumber?: string | null;
+      email?: string | null;
+      department?: string | null;
+    } = {};
     if (body.staffCode !== undefined) {
       data.staffCode = validatedData.staffCode || null;
     }
     if (validatedData.role !== undefined) {
       data.role = validatedData.role as UserRole;
+    }
+    // Editable profile fields (name, phone, email, department).
+    if (validatedData.fullName !== undefined) data.fullName = validatedData.fullName;
+    if (body.phoneNumber !== undefined) data.phoneNumber = validatedData.phoneNumber || null;
+    if (body.email !== undefined) data.email = validatedData.email || null;
+    if (body.department !== undefined) data.department = validatedData.department || null;
+
+    // Guard against email collisions with another user.
+    if (data.email) {
+      const clash = await prisma.user.findFirst({
+        where: { email: data.email, NOT: { id: params.id } },
+        select: { id: true },
+      });
+      if (clash) {
+        return NextResponse.json(
+          { error: "That email is already used by another user." },
+          { status: 400 }
+        );
+      }
     }
 
     const updatedUser = await prisma.user.update({
@@ -78,6 +108,9 @@ export async function PATCH(
         fullName: true,
         role: true,
         staffCode: true,
+        phoneNumber: true,
+        email: true,
+        department: true,
       },
     });
 

@@ -37,6 +37,14 @@ export default function EditSurgeryPage() {
   const [surgeons, setSurgeons] = useState<Surgeon[]>([]);
   const [units, setUnits] = useState<SurgicalUnit[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
+  // Ward list (built-in defaults + custom wards created by admins).
+  const [wards, setWards] = useState<string[]>([...WARDS]);
+  useEffect(() => {
+    fetch('/api/wards')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (Array.isArray(d?.wards) && d.wards.length) setWards(d.wards); })
+      .catch(() => {});
+  }, []);
 
   // Editable fields
   const [scheduledDate, setScheduledDate] = useState('');
@@ -224,8 +232,8 @@ export default function EditSurgeryPage() {
                 className="input-field"
               >
                 <option value="">— Select ward —</option>
-                {WARDS.map((w) => <option key={w} value={w}>{w}</option>)}
-                {patientWard && !WARDS.includes(patientWard as any) && (
+                {wards.map((w) => <option key={w} value={w}>{w}</option>)}
+                {patientWard && !wards.includes(patientWard) && (
                   <option value={patientWard}>{patientWard}</option>
                 )}
               </select>

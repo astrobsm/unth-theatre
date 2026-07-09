@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Shield, Search, Save, RefreshCw, Users, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { Shield, Search, Save, RefreshCw, Users, CheckCircle2, AlertTriangle, XCircle, Building2, Plus } from 'lucide-react';
 
 interface UserRow {
   id: string;
@@ -47,6 +47,19 @@ export default function ModuleAccessAdminPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Group (role-based) grant state.
+  const [showGroup, setShowGroup] = useState(false);
+  const [groupRoles, setGroupRoles] = useState<string[]>([]);
+  const [groupModuleIds, setGroupModuleIds] = useState<Set<string>>(new Set());
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupMsg, setGroupMsg] = useState<string | null>(null);
+
+  // Ward management state.
+  const [showWards, setShowWards] = useState(false);
+  const [wardList, setWardList] = useState<{ id: string; name: string; active: boolean }[]>([]);
+  const [newWardName, setNewWardName] = useState('');
+  const [wardBusy, setWardBusy] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -176,6 +189,110 @@ export default function ModuleAccessAdminPage() {
     }
   };
 
+  // ---- Group (role-based) grant handlers ----
+  const toggleGroupRole = (r: string) =>
+    setGroupRoles((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
+  const toggleGroupModule = (id: string) =>
+    setGroupModuleIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
+  const applyGroupGrant = async (mode: 'add' | 'remove') => {
+    if (groupRoles.length === 0 || groupModuleIds.size === 0) {
+      setGroupMsg('Select at least one staff group and one module.');
+      return;
+    }
+    setGroupBusy(true);
+    setGroupMsg(null);
+    try {
+      const res = await fetch('/api/admin/user-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roles: groupRoles, moduleIds: Array.from(groupModuleIds), mode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Group grant failed');
+      setGroupMsg(
+        `${mode === 'add' ? 'Granted' : 'Revoked'} ${groupModuleIds.size} module(s) for ${data.affectedUsers} user(s).`
+      );
+      await loadList();
+    } catch (e: any) {
+      setGroupMsg(e.message || String(e));
+    } finally {
+      setGroupBusy(false);
+    }
+  };
+
+  // ---- Ward management handlers ----
+  const loadWards = useCallback(async () => {
+    try {
+      const res = await fetch('/api/wards?admin=1', { cache: 'no-store' });
+      if (res.ok) {
+        const d = await res.json();
+        setWardList(Array.isArray(d.wards) ? d.wards : []);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showWards) loadWards();
+  }, [showWards, loadWards]);
+
+  const createWard = async () => {
+    const name = newWardName.trim();
+    if (name.length < 2) return;
+    setWardBusy(true);
+    try {
+      const res = await fetch('/api/wards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const d = await res.json();
+      if (!res.ok) { alert(d.error || 'Failed to create ward'); return; }
+      setNewWardName('');
+      await loadWards();
+    } finally {
+      setWardBusy(false);
+    }
+  };
+
+  const toggleWard = async (w: { id: string; active: boolean }) => {
+    setWardBusy(true);
+    try {
+      const res = await fetch('/api/wards', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: w.id, active: !w.active }),
+      });
+      if (res.ok) await loadWards();
+    } finally {
+      setWardBusy(false);
+    }
+  };
+
+  const renameWard = async (w: { id: string; name: string }) => {
+    const name = prompt('New ward name:', w.name);
+    if (!name || name.trim().length < 2) return;
+    setWardBusy(true);
+    try {
+      const res = await fetch('/api/wards', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: w.id, name: name.trim() }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(d.error || 'Failed to rename ward'); return; }
+      await loadWards();
+    } finally {
+      setWardBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -202,6 +319,149 @@ export default function ModuleAccessAdminPage() {
             <AlertTriangle className="w-4 h-4" /> Error
           </p>
           <p className="text-sm break-all">{error}</p>
+        </div>
+      )}
+
+      {/* Quick actions: group access + ward management */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setShowGroup((s) => !s)}
+          className={`btn-secondary inline-flex items-center gap-2 h-10 ${showGroup ? 'ring-2 ring-indigo-400' : ''}`}
+        >
+          <Users className="w-4 h-4" /> Group Access (by staff group)
+        </button>
+        <button
+          onClick={() => setShowWards((s) => !s)}
+          className={`btn-secondary inline-flex items-center gap-2 h-10 ${showWards ? 'ring-2 ring-indigo-400' : ''}`}
+        >
+          <Building2 className="w-4 h-4" /> Manage Wards
+        </button>
+      </div>
+
+      {/* GROUP ACCESS — grant/revoke a module for a whole staff group at once */}
+      {showGroup && (
+        <div className="card p-4 border-2 border-indigo-200">
+          <h2 className="font-semibold text-gray-900 inline-flex items-center gap-2 mb-1">
+            <Users className="w-4 h-4 text-indigo-700" /> Group Access
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Grant (or revoke) one or more modules for <span className="font-semibold">every approved user</span> of the
+            selected staff group(s) at once — e.g. give all Surgeons and Scrub Nurses access to Theatre Allocation.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">1. Staff group(s)</p>
+              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+                {allRoles.map((r) => (
+                  <label key={r} className="flex items-center gap-2 text-sm px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={groupRoles.includes(r)}
+                      onChange={() => toggleGroupRole(r)}
+                    />
+                    {formatRole(r)}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">2. Module(s)</p>
+              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+                {modules.map((m) => (
+                  <label key={m.id} className="flex items-center gap-2 text-sm px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={groupModuleIds.has(m.id)}
+                      onChange={() => toggleGroupModule(m.id)}
+                    />
+                    <span className="flex-1">{m.label}</span>
+                    {m.category && <span className="text-[10px] text-gray-400">{m.category}</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <button
+              onClick={() => applyGroupGrant('add')}
+              disabled={groupBusy}
+              className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
+            >
+              {groupBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+              Grant access
+            </button>
+            <button
+              onClick={() => applyGroupGrant('remove')}
+              disabled={groupBusy}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              Revoke access
+            </button>
+            {groupMsg && <span className="text-sm text-gray-700">{groupMsg}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* WARD MANAGEMENT — create / rename / activate wards */}
+      {showWards && (
+        <div className="card p-4 border-2 border-emerald-200">
+          <h2 className="font-semibold text-gray-900 inline-flex items-center gap-2 mb-1">
+            <Building2 className="w-4 h-4 text-emerald-700" /> Ward Management
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Add custom wards or deactivate ones no longer in use. These appear in every ward dropdown across the app
+            (patient registration, surgery booking, etc.) alongside the built-in wards.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <input
+              type="text"
+              value={newWardName}
+              onChange={(e) => setNewWardName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') createWard(); }}
+              placeholder="New ward name (e.g. PRIVATE WARD - GREEN ROOM)"
+              className="input h-10 text-sm flex-1 min-w-[240px]"
+            />
+            <button
+              onClick={createWard}
+              disabled={wardBusy || newWardName.trim().length < 2}
+              className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" /> Add Ward
+            </button>
+          </div>
+          {wardList.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">No custom wards yet. Built-in wards are always available.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+              {wardList.map((w) => (
+                <li key={w.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className={`text-sm font-medium ${w.active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>
+                    {w.name}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <button
+                      onClick={() => renameWard(w)}
+                      disabled={wardBusy}
+                      className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      onClick={() => toggleWard(w)}
+                      disabled={wardBusy}
+                      className={`text-xs px-2 py-1 rounded border disabled:opacity-50 ${
+                        w.active
+                          ? 'border-red-300 text-red-700 hover:bg-red-50'
+                          : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      {w.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil } from 'lucide-react';
 
 const USER_ROLES = [
   'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
@@ -57,6 +57,10 @@ export default function UsersPage() {
   const [newRole, setNewRole] = useState('');
   const [roleLoading, setRoleLoading] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  // Edit-profile modal state.
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: '', phoneNumber: '', email: '', department: '' });
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -192,6 +196,40 @@ export default function UsersPage() {
       alert('Failed to update role');
     } finally {
       setRoleLoading(false);
+    }
+  };
+
+  const handleEditProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editUserId) return;
+    if (!editForm.fullName.trim() || editForm.fullName.trim().length < 2) {
+      alert('Please enter a valid full name (at least 2 characters).');
+      return;
+    }
+    setEditLoading(true);
+    try {
+      const response = await fetch(`/api/users/${editUserId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: editForm.fullName.trim(),
+          phoneNumber: editForm.phoneNumber.trim() || null,
+          email: editForm.email.trim() || null,
+          department: editForm.department.trim() || null,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setEditUserId(null);
+        fetchUsers();
+      } else {
+        alert(data.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      alert('Failed to update profile');
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -846,6 +884,21 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
+                    <button
+                      onClick={() => {
+                        setEditUserId(user.id);
+                        setEditForm({
+                          fullName: user.fullName || '',
+                          phoneNumber: user.phoneNumber || '',
+                          email: user.email || '',
+                          department: user.department || '',
+                        });
+                      }}
+                      className="text-emerald-600 hover:text-emerald-900"
+                      title="Edit profile (name, phone, email, department)"
+                    >
+                      <Pencil className="w-5 h-5 inline" />
+                    </button>
                     {session?.user.role === 'ADMIN' && session.user.id !== user.id && (
                       <button
                         onClick={() => {
@@ -885,6 +938,74 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+      {editUserId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <form
+            onSubmit={handleEditProfile}
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4"
+          >
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-emerald-600" /> Edit Profile
+            </h3>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full name *</label>
+              <input
+                type="text"
+                value={editForm.fullName}
+                onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone number</label>
+              <input
+                type="tel"
+                value={editForm.phoneNumber}
+                onChange={(e) => setEditForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                placeholder="e.g. 0803..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+              <input
+                type="text"
+                value={editForm.department}
+                onChange={(e) => setEditForm((f) => ({ ...f, department: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditUserId(null)}
+                className="px-4 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={editLoading}
+                className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {editLoading ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Change Role Modal */}
       {roleUserId && (

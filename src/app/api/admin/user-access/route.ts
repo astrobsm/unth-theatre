@@ -160,6 +160,75 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ ok: true, grants: cleanIds });
 }
 
+// GROUP GRANT (POST) — grant or remove one or more modules for EVERY approved
+// user of the given role(s) at once. Body:
+//   { roles: string[], moduleIds: string[], mode?: 'add' | 'remove' }
+export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireAdmin(session.user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  let body: { roles?: string[]; moduleIds?: string[]; mode?: "add" | "remove" };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const roles = Array.isArray(body.roles) ? body.roles.filter(Boolean) : [];
+  const mode = body.mode === "remove" ? "remove" : "add";
+  const grantableIds = new Set(GRANTABLE_MODULES.map((m) => m.id));
+  const moduleIds = Array.isArray(body.moduleIds)
+    ? Array.from(new Set(body.moduleIds.filter((id) => grantableIds.has(id))))
+    : [];
+
+  if (roles.length === 0 || moduleIds.length === 0) {
+    return NextResponse.json(
+      { error: "roles[] and moduleIds[] are required" },
+      { status: 400 }
+    );
+  }
+
+  // Target only approved, non-full-access users of the chosen roles.
+  const targets = await prisma.user.findMany({
+    where: { status: "APPROVED", role: { in: roles as any } },
+    select: { id: true, role: true },
+  });
+  const applicable = targets.filter((u) => !isFullAccessRole(u.role));
+
+  if (applicable.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      affectedUsers: 0,
+      note: "No applicable users (full-access roles already see everything).",
+    });
+  }
+
+  if (mode === "add") {
+    const data = applicable.flatMap((u) =>
+      moduleIds.map((moduleId) => ({ userId: u.id, moduleId, grantedById: session.user.id }))
+    );
+    await prisma.userModuleGrant.createMany({ data, skipDuplicates: true });
+  } else {
+    await prisma.userModuleGrant.deleteMany({
+      where: { userId: { in: applicable.map((u) => u.id) }, moduleId: { in: moduleIds } },
+    });
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: mode === "add" ? "GROUP_GRANT_MODULES" : "GROUP_REVOKE_MODULES",
+      tableName: "user_module_grants",
+      recordId: roles.join(","),
+      changes: JSON.stringify({ roles, moduleIds, mode, affectedUsers: applicable.length }),
+    },
+  });
+
+  return NextResponse.json({ ok: true, affectedUsers: applicable.length, mode, moduleIds });
+}
+
 // Convenience: bulk reset (DELETE) — clears all grants for a user.
 export async function DELETE(request: NextRequest) {
   const session = await getServerSession(authOptions);

@@ -56,6 +56,14 @@ export default function NewPatientPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Ward list (built-in defaults + any custom wards created by admins).
+  const [wards, setWards] = useState<string[]>([...WARDS]);
+  useEffect(() => {
+    fetch('/api/wards')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (Array.isArray(d?.wards) && d.wards.length) setWards(d.wards); })
+      .catch(() => {});
+  }, []);
 
   // Basic Info
   const [age, setAge] = useState(0);
@@ -448,7 +456,7 @@ export default function NewPatientPage() {
               <label className="label">Ward *</label>
               <select name="ward" required className="input-field">
                 <option value="">Select Ward</option>
-                {WARDS.map((ward) => (
+                {wards.map((ward) => (
                   <option key={ward} value={ward}>{ward}</option>
                 ))}
               </select>
