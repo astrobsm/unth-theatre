@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import OfflineIndicator from '@/components/OfflineIndicator';
@@ -92,6 +92,8 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Which collapsible sidebar groups the user has manually toggled (label -> open).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // Routes we've already asked Next.js to prefetch, so we never re-request them.
+  const prefetchedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -134,6 +136,44 @@ export default function DashboardLayout({
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     }
+  }, [status, router]);
+
+  // Warm the always-visible top-level routes shortly after load so the very
+  // first tap on them is instant. Kept small + deferred (idle) so it never
+  // causes a request storm; the rest warm on hover / touch / group-expand.
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const singles = [
+      '/dashboard',
+      '/dashboard/roster',
+      '/dashboard/emergency-booking',
+      '/dashboard/theatre-readiness',
+      '/dashboard/pacu',
+      '/dashboard/theatre-meals',
+      '/dashboard/feedback',
+      '/dashboard/laundry',
+      '/dashboard/settings',
+    ];
+    const w = window as any;
+    const run = () => {
+      for (const h of singles) {
+        if (!prefetchedRef.current.has(h)) {
+          prefetchedRef.current.add(h);
+          try { router.prefetch(h); } catch { /* ignore */ }
+        }
+      }
+    };
+    const id =
+      typeof w.requestIdleCallback === 'function'
+        ? w.requestIdleCallback(run, { timeout: 4000 })
+        : setTimeout(run, 3000);
+    return () => {
+      if (typeof w.cancelIdleCallback === 'function' && typeof id === 'number') {
+        w.cancelIdleCallback(id);
+      } else {
+        clearTimeout(id as any);
+      }
+    };
   }, [status, router]);
 
   // Only block on the spinner when we have NOTHING to show yet: the session is
@@ -461,6 +501,16 @@ export default function DashboardLayout({
     pathname === href || pathname?.startsWith(href + '/');
   const groupHasActive = (items: NavItemT[]) => items.some((it) => isItemActive(it.href));
 
+  // Prefetch a route just-in-time (on hover / focus / touch / group-expand) so
+  // the click navigates INSTANTLY, without the upfront storm of prefetching all
+  // ~70 routes at once. Internal routes only; each route prefetched at most once.
+  const prefetchHref = (href: string, external?: boolean) => {
+    if (external || !href.startsWith('/')) return;
+    if (prefetchedRef.current.has(href)) return;
+    prefetchedRef.current.add(href);
+    try { router.prefetch(href); } catch { /* ignore */ }
+  };
+
   const renderNavItem = (item: NavItemT, nested = false) => {
     const isActive = isItemActive(item.href);
     const pad = nested ? 'pl-12 pr-4' : 'px-6';
@@ -500,6 +550,11 @@ export default function DashboardLayout({
         href={item.href}
         prefetch={false}
         className={className}
+        // Warm the route the instant the user shows intent, so the click is
+        // immediate even on a slow network.
+        onPointerEnter={() => prefetchHref(item.href)}
+        onFocus={() => prefetchHref(item.href)}
+        onTouchStart={() => prefetchHref(item.href)}
         onClick={() => setSidebarOpen(false)}
       >
         {inner}
@@ -546,12 +601,17 @@ export default function DashboardLayout({
               }
               const open = openGroups[section.label] ?? groupHasActive(section.items);
               const GroupIcon = section.icon;
+              const warmGroup = () =>
+                section.items.forEach((it) => prefetchHref(it.href, (it as any).external));
               return (
                 <div key={section.label}>
                   <button
-                    onClick={() =>
-                      setOpenGroups((g) => ({ ...g, [section.label]: !open }))
-                    }
+                    onClick={() => {
+                      const willOpen = !open;
+                      setOpenGroups((g) => ({ ...g, [section.label]: willOpen }));
+                      if (willOpen) warmGroup();
+                    }}
+                    onPointerEnter={warmGroup}
                     className="w-full flex items-center px-6 py-3 text-primary-100 hover:bg-primary-700 transition-colors"
                     aria-expanded={open}
                   >
