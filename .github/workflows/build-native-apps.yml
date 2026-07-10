@@ -11,6 +11,9 @@ name: Build native apps
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -64,7 +67,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Attach to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -115,7 +118,7 @@ jobs:
       - name: Collect debug APK
         run: |
           mkdir -p dist-apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist-apk/ORM-UNTH-debug-${{ github.event.release.tag_name || github.sha }}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist-apk/ORM-UNTH-debug-${{ github.event.release.tag_name || github.ref_name }}.apk"
 
       # --- Signed release AAB + APK (only when keystore secrets exist) ---------
       - name: Configure release signing
@@ -157,7 +160,7 @@ jobs:
       - name: Collect signed release artifacts
         if: env.HAS_KEYSTORE == 'true'
         run: |
-          TAG="${{ github.event.release.tag_name || github.sha }}"
+          TAG="${{ github.event.release.tag_name || github.ref_name }}"
           cp android/app/build/outputs/bundle/release/app-release.aab "dist-apk/ORM-UNTH-$TAG.aab"
           cp android/app/build/outputs/apk/release/app-release.apk "dist-apk/ORM-UNTH-$TAG.apk"
 
@@ -169,7 +172,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach Android builds to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist-apk/*
