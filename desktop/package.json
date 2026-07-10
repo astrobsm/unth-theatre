@@ -17,6 +17,9 @@
     "dist:mac": "electron-builder --mac",
     "dist:linux": "electron-builder --linux"
   },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "devDependencies": {
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3"
@@ -25,6 +28,14 @@
     "appId": "ng.edu.unth.orm",
     "productName": "ORM - UNTH",
     "copyright": "UNTH Ituku Ozalla",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "astrobsm",
+        "repo": "unth-theatre",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build"

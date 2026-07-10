@@ -17,6 +17,8 @@ const MediaHubLauncher = dynamic(() => import("@/components/MediaHub").then((m) 
 const PushNotificationRegistrar = dynamic(() => import("@/components/PushNotificationRegistrar"), { ssr: false });
 // Native offline-first warm-up — auto-caches the whole app on the device (native only).
 const NativeOfflineWarmup = dynamic(() => import("@/components/NativeOfflineWarmup"), { ssr: false });
+// Native shell auto-update check — prompts to install a newer APK (native only).
+const NativeUpdateChecker = dynamic(() => import("@/components/NativeUpdateChecker"), { ssr: false });
 
 // Mounts its children only once the browser is idle after first paint, so the
 // media widgets (radio poll, music manifest, launcher) never compete with the
@@ -55,6 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <MediaHubLauncher />
             <PushNotificationRegistrar />
             <NativeOfflineWarmup />
+            <NativeUpdateChecker />
           </DeferUntilIdle>
         </MediaHubProvider>
       </OfflineProvider>

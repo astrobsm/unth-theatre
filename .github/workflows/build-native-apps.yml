@@ -47,13 +47,25 @@ jobs:
         working-directory: desktop
         run: npm install
 
+      - name: Set desktop version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        working-directory: desktop
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          echo "Setting desktop version to $VER"
+          npm version "$VER" --no-git-tag-version --allow-same-version
+
       - name: Build installer
         working-directory: desktop
         env:
           # Skip macOS code-signing (no certificate on CI). Produces an unsigned
           # build suitable for internal distribution.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run ${{ matrix.script }}
+          # Lets electron-builder publish installers + update metadata
+          # (latest*.yml) to the GitHub release so the app can auto-update.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run ${{ matrix.script }} -- --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
@@ -66,15 +78,9 @@ jobs:
             desktop/release/*.deb
           if-no-files-found: warn
 
-      - name: Attach to release
-        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            desktop/release/*.exe
-            desktop/release/*.dmg
-            desktop/release/*.AppImage
-            desktop/release/*.deb
+      # Desktop installers AND the auto-update metadata (latest*.yml) are
+      # published to the GitHub release by electron-builder itself (see the
+      # `--publish` flag above), so no separate attach step is needed here.
 
   # ---------------------------------------------------------------------------
   # Android APK (debug — installable directly; enable signing for Play Store)
@@ -107,6 +113,17 @@ jobs:
         run: |
           npx cap add android || echo "android project already exists"
           npx cap sync android
+
+      - name: Set Android version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          # versionCode must be a monotonically increasing integer: MMmmpp.
+          CODE=$(echo "$VER" | awk -F. '{printf "%d%02d%02d", $1, $2, ($3==""?0:$3)}')
+          echo "Setting Android versionName=$VER versionCode=$CODE"
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$VER\"/" android/app/build.gradle
+          sed -i "s/versionCode [0-9][0-9]*/versionCode $CODE/" android/app/build.gradle
 
       - name: Generate app launcher icons
         run: |

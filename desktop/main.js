@@ -9,8 +9,9 @@
 // Override the URL for local/staging with the CAP_SERVER_URL env var, e.g.
 //   set CAP_SERVER_URL=http://localhost:3000 && npm start
 // ============================================================
-const { app, BrowserWindow, shell, Menu } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
 
 const SERVER_URL = process.env.CAP_SERVER_URL || 'https://unth-theatre-mai.vercel.app';
 const APP_HOSTS = ['unth-theatre-mai.vercel.app', 'localhost', '127.0.0.1'];
@@ -93,6 +94,94 @@ function createWindow() {
   });
 }
 
+// ============================================================
+// Auto-update (electron-updater via GitHub Releases)
+// ------------------------------------------------------------
+// On launch (and every 6 hours) the packaged app checks the GitHub release
+// feed, silently downloads any newer version in the background, and prompts the
+// user to restart once it is ready. Works for the Windows (nsis) and Linux
+// (AppImage) builds. Unsigned macOS builds cannot self-update (macOS blocks
+// unsigned updates) — those users re-download from the release page.
+// ============================================================
+let updatePromptShown = false;
+
+function setupAutoUpdate() {
+  // Never run the updater in unpackaged/dev mode — there is nothing to update.
+  if (!app.isPackaged) return;
+  try {
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-downloaded', (info) => {
+      if (updatePromptShown || !mainWindow) return;
+      updatePromptShown = true;
+      dialog
+        .showMessageBox(mainWindow, {
+          type: 'info',
+          buttons: ['Restart now', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+          title: 'Update ready',
+          message: `A new version (${info.version}) of ORM - UNTH has been downloaded.`,
+          detail: 'Restart the app now to apply the update.',
+        })
+        .then((res) => {
+          if (res.response === 0) autoUpdater.quitAndInstall();
+        })
+        .catch(() => {});
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('Auto-update error:', err == null ? 'unknown' : err.message || err);
+    });
+
+    // Initial check shortly after launch, then every 6 hours while running.
+    autoUpdater.checkForUpdates().catch(() => {});
+    setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 6 * 60 * 60 * 1000);
+  } catch (e) {
+    console.error('Auto-update setup failed:', e && e.message ? e.message : e);
+  }
+}
+
+// Manual "Check for Updates…" — surfaces the result to the user.
+function checkForUpdatesManually() {
+  if (!app.isPackaged) {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Updates',
+      message: 'Update checks are only available in the installed app.',
+    });
+    return;
+  }
+  autoUpdater
+    .checkForUpdates()
+    .then((result) => {
+      const info = result && result.updateInfo;
+      if (info && info.version && info.version !== app.getVersion()) {
+        // update-downloaded handler will prompt to restart once ready.
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'Updating',
+          message: `Downloading version ${info.version}…`,
+          detail: 'You will be prompted to restart when it is ready.',
+        });
+      } else {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'Up to date',
+          message: `You are on the latest version (${app.getVersion()}).`,
+        });
+      }
+    })
+    .catch(() => {
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Update check failed',
+        message: 'Could not check for updates right now. Please try again later.',
+      });
+    });
+}
+
 // A minimal, familiar app menu (retry, back/forward, zoom, fullscreen, quit).
 function buildMenu() {
   const isMac = process.platform === 'darwin';
@@ -117,6 +206,11 @@ function buildMenu() {
           click: () => mainWindow && mainWindow.webContents.canGoForward() && mainWindow.webContents.goForward(),
         },
         { type: 'separator' },
+        {
+          label: 'Check for Updates…',
+          click: () => checkForUpdatesManually(),
+        },
+        { type: 'separator' },
         { role: 'quit' },
       ],
     },
@@ -137,6 +231,7 @@ function buildMenu() {
 app.whenReady().then(() => {
   buildMenu();
   createWindow();
+  setupAutoUpdate();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
