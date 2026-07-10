@@ -85,6 +85,8 @@ jobs:
     env:
       # True only when the release-signing keystore secrets are configured.
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      # True only when the Firebase config (for push notifications) is provided.
+      HAS_FIREBASE: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -114,6 +116,24 @@ jobs:
             --iconBackgroundColor '#ffffff' \
             --iconBackgroundColorDark '#1e40af' \
             --splashBackgroundColor '#1e40af' || echo "icon generation skipped"
+
+      # --- Firebase / FCM push (only when the google-services secret exists) ---
+      - name: Configure Firebase (push notifications)
+        if: env.HAS_FIREBASE == 'true'
+        run: |
+          # Write the Firebase Android config into the app module.
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+          # Add the Google Services Gradle plugin classpath (project build.gradle)
+          # right after the Android Gradle plugin classpath, if not already there.
+          if ! grep -q "com.google.gms:google-services" android/build.gradle; then
+            sed -i "/com.android.tools.build:gradle/a\        classpath 'com.google.gms:google-services:4.4.2'" android/build.gradle
+          fi
+          # Apply the plugin in the app module (must be after the Android plugin).
+          if ! grep -q "com.google.gms.google-services" android/app/build.gradle; then
+            echo "" >> android/app/build.gradle
+            echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+          fi
+          echo "Firebase configured for the Android build."
 
       # --- Debug APK (always) — quick internal installs ------------------------
       - name: Build debug APK
