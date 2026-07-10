@@ -17,13 +17,13 @@
 
 import { useEffect } from 'react';
 
+// Persisted in localStorage (NOT sessionStorage) so the cool-down survives page
+// reloads, new tabs and app restarts — this is what makes a reload LOOP
+// impossible: at most one automatic recovery reload per device in the window.
 const RELOAD_KEY = '__chunkReloadAt';
-const RELOAD_COUNT_KEY = '__chunkReloadCount';
-// Only auto-reload at most this many times per browser session, and never more
-// than once inside the cool-down window. Prevents reload loops / "reloading on
-// its own" on flaky networks.
-const RELOAD_WINDOW_MS = 60000;
-const MAX_RELOADS_PER_SESSION = 2;
+// Minimum time between automatic recovery reloads. Generous so that even across
+// frequent deploys the user never experiences "repeated refreshing".
+const RELOAD_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 // Definitive stale-build signatures: after a new deployment the old app shell
 // references hashed chunk files that no longer exist. These ALWAYS warrant a
@@ -51,34 +51,32 @@ function isSoftImportError(message?: string | null): boolean {
 
 export default function ChunkErrorReloader() {
   useEffect(() => {
-    const recentlyReloaded = () => {
+    const lastReloadAt = () => {
       try {
-        const t = Number(window.sessionStorage.getItem(RELOAD_KEY) || '0');
-        return Date.now() - t < RELOAD_WINDOW_MS;
-      } catch {
-        return false;
-      }
-    };
-
-    const reloadCount = () => {
-      try {
-        return Number(window.sessionStorage.getItem(RELOAD_COUNT_KEY) || '0');
+        return Number(window.localStorage.getItem(RELOAD_KEY) || '0');
       } catch {
         return 0;
       }
     };
+    const withinCooldown = () => Date.now() - lastReloadAt() < RELOAD_WINDOW_MS;
 
     let reloading = false;
     const triggerReload = async () => {
       // Never reload while offline (the reload would just fail again), never
-      // loop, and never exceed the per-session cap.
-      if (reloading || recentlyReloaded()) return;
+      // loop, and never reload more than once per cool-down window. When we're
+      // still inside the cool-down, surface a gentle manual prompt instead of
+      // silently refreshing — so the user is never caught in a refresh loop.
+      if (reloading) return;
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-      if (reloadCount() >= MAX_RELOADS_PER_SESSION) return;
+      if (withinCooldown()) {
+        try {
+          window.dispatchEvent(new CustomEvent('orm:update-available'));
+        } catch { /* ignore */ }
+        return;
+      }
       reloading = true;
       try {
-        window.sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-        window.sessionStorage.setItem(RELOAD_COUNT_KEY, String(reloadCount() + 1));
+        window.localStorage.setItem(RELOAD_KEY, String(Date.now()));
       } catch {
         /* ignore */
       }
@@ -89,7 +87,7 @@ export default function ChunkErrorReloader() {
           const keys = await caches.keys();
           await Promise.all(
             keys
-              .filter((k) => /orm-(static|pages)-/i.test(k))
+              .filter((k) => /orm-(static|pages|rsc)-/i.test(k))
               .map((k) => caches.delete(k))
           );
         }

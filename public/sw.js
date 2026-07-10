@@ -80,8 +80,13 @@ self.addEventListener('install', (event) => {
         })
       );
       const cached = results.filter(r => r.status === 'fulfilled' && r.value).length;
-      console.log(`[SW v5] Precached ${cached}/${PRECACHE_ASSETS.length} assets`);
-    }).then(() => self.skipWaiting())
+      console.log(`[SW] Precached ${cached}/${PRECACHE_ASSETS.length} assets`);
+    })
+    // NOTE: we deliberately do NOT call self.skipWaiting() here. Auto-activating
+    // a new service worker mid-session lets it hot-swap the cached assets under
+    // the running page, which can cause chunk mismatches and self-refreshes.
+    // The new worker stays WAITING and is applied only when the user taps
+    // "Reload now" in the update prompt (which posts SKIP_WAITING).
   );
 });
 
