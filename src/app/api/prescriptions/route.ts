@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { triggerRadio } from '@/lib/radioEvents';
+import { sendPushToRoles } from '@/lib/fcm';
 import { z } from 'zod';
 import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
 
@@ -209,6 +210,15 @@ export async function POST(request: NextRequest) {
         prescriptionId: prescription.id,
         patientId: validatedData.patientId,
       },
+    });
+
+    // Native push to pharmacy so they are alerted even when the app is closed.
+    // No-ops when FCM is not configured.
+    void sendPushToRoles(['PHARMACIST'], {
+      title: '💊 New prescription to review',
+      body: `Anaesthetic prescription for ${prescription.patientName ?? validatedData.patientName}. Pharmacy, please review and pack.`,
+      link: '/dashboard/prescriptions',
+      data: { prescriptionId: prescription.id, kind: 'prescription_ready' },
     });
 
     return NextResponse.json({ ...prescription, anaesthesiaDrugCode }, { status: 201 });

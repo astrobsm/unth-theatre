@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { triggerRadio, speak3, getOnDutyPortersCleanersWithIds } from '@/lib/radioEvents';
+import { sendPushToUsers, sendPushToRoles } from '@/lib/fcm';
 
 export const dynamic = 'force-dynamic';
 
@@ -537,6 +538,21 @@ export async function POST(request: NextRequest) {
         triggeredById: session.user.id,
         metadata: { source: 'PatientCallUp', surgeryId, kind: 'patient_callup', tripleRepeat: true },
       });
+
+      // Native push to the porter(s) so they are alerted even when the app is
+      // closed. Prefer the specifically assigned porter; otherwise notify all
+      // on-duty porters. No-ops when FCM is not configured.
+      const pushPayload = {
+        title: '🧑\u200d⚕️ Patient call-up',
+        body: `${surgery.patient.name} (folder ${surgery.patient.folderNumber}) for ${surgery.procedureName} in ${theatreName}. Please dispatch to the ward.`,
+        link: '/dashboard/call-for-patient',
+        data: { surgeryId, callUpId: callUp.id, kind: 'patient_callup' },
+      };
+      if (porterId) {
+        void sendPushToUsers([porterId], pushPayload);
+      } else {
+        void sendPushToRoles(['PORTER'], pushPayload);
+      }
 
       return NextResponse.json(callUp, { status: 201 });
     }

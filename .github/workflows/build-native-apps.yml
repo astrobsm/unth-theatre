@@ -85,8 +85,6 @@ jobs:
     env:
       # True only when the release-signing keystore secrets are configured.
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-      # True only when the Firebase config (for push notifications) is provided.
-      HAS_FIREBASE: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -117,14 +115,23 @@ jobs:
             --iconBackgroundColorDark '#1e40af' \
             --splashBackgroundColor '#1e40af' || echo "icon generation skipped"
 
-      # --- Firebase / FCM push (only when the google-services secret exists) ---
+      # --- Firebase / FCM push -------------------------------------------------
+      # Uses the committed firebase/google-services.json when present (safe for
+      # VCS — its API key is app-restricted and ships inside every APK), else
+      # falls back to a base64 secret. Self-skips when neither is available.
       - name: Configure Firebase (push notifications)
-        if: env.HAS_FIREBASE == 'true'
         run: |
-          # Write the Firebase Android config into the app module.
-          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
-          # Add the Google Services Gradle plugin classpath (project build.gradle)
-          # right after the Android Gradle plugin classpath, if not already there.
+          if [ -f firebase/google-services.json ]; then
+            cp firebase/google-services.json android/app/google-services.json
+            echo "Using committed firebase/google-services.json"
+          elif [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+            echo "Using google-services.json from secret"
+          else
+            echo "No Firebase config found — skipping push setup."
+            exit 0
+          fi
+          # Add the Google Services Gradle plugin classpath (project build.gradle).
           if ! grep -q "com.google.gms:google-services" android/build.gradle; then
             sed -i "/com.android.tools.build:gradle/a\        classpath 'com.google.gms:google-services:4.4.2'" android/build.gradle
           fi
