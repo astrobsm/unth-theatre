@@ -3,7 +3,10 @@
   "productName": "ORM - UNTH",
   "version": "1.0.0",
   "description": "Operative Resource Manager — UNTH Ituku Ozalla (Desktop). A native desktop shell that loads the live web app.",
-  "author": "UNTH Ituku Ozalla",
+  "author": {
+    "name": "UNTH Ituku Ozalla",
+    "email": "orm@unth.edu.ng"
+  },
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -53,7 +56,7 @@
       "target": ["AppImage", "deb"],
       "category": "Office",
       "icon": "build/icon.png",
-      "maintainer": "UNTH Ituku Ozalla"
+      "maintainer": "UNTH Ituku Ozalla <orm@unth.edu.ng>"
     }
   }
 }
