@@ -5093,6 +5093,24 @@ model Ward {
   @@map("wards")
 }
 
+// Native mobile push tokens (Firebase Cloud Messaging). One row per device so
+// the server can deliver real-time push notifications to the installed Android
+// (and iOS) apps even when they are closed.
+model DeviceToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  platform   String   @default("android") // android | ios | web
+  userId     String? // owning user (plain id — no FK so tokens survive user edits)
+  userRole   String?
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userRole])
+  @@map("device_tokens")
+}
+
 // ==========================================
 // PRE-OPERATIVE VISIT MODULE
 // ==========================================

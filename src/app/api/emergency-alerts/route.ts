@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { sendPushToRoles } from '@/lib/fcm';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -268,6 +269,20 @@ export async function POST(request: NextRequest) {
         tvLocation: 'All Theatre Locations',
       },
     });
+
+    // Real-time push to the installed native apps — reaches theatre staff even
+    // when the app is fully closed. No-ops if FCM isn't configured yet.
+    const notifyRoles = [
+      'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
+      'SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER',
+      'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST',
+    ];
+    void sendPushToRoles(notifyRoles, {
+      title: '🚨 Emergency Surgery Alert',
+      body: `${validatedData.procedureName} — ${validatedData.patientName}. All teams report immediately.`,
+      link: '/dashboard/emergency-alerts',
+      data: { alertId: alert.id, kind: 'emergency_surgery' },
+    }).catch(() => {});
 
     return NextResponse.json(alert, { status: 201 });
   } catch (error) {

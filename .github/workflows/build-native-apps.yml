@@ -108,6 +108,13 @@ jobs:
           npx cap add android || echo "android project already exists"
           npx cap sync android
 
+      - name: Generate app launcher icons
+        run: |
+          npx capacitor-assets generate --android \
+            --iconBackgroundColor '#ffffff' \
+            --iconBackgroundColorDark '#1e40af' \
+            --splashBackgroundColor '#1e40af' || echo "icon generation skipped"
+
       # --- Debug APK (always) — quick internal installs ------------------------
       - name: Build debug APK
         working-directory: android

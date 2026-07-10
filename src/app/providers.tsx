@@ -13,6 +13,10 @@ import { MediaHubProvider } from "@/components/MediaHub";
 const RadioPlayer = dynamic(() => import("@/components/RadioPlayer"), { ssr: false });
 const BackgroundMusicPlayer = dynamic(() => import("@/components/BackgroundMusicPlayer"), { ssr: false });
 const MediaHubLauncher = dynamic(() => import("@/components/MediaHub").then((m) => m.MediaHubLauncher), { ssr: false });
+// Native push registration — no-op on web; only active inside the installed app.
+const PushNotificationRegistrar = dynamic(() => import("@/components/PushNotificationRegistrar"), { ssr: false });
+// Native offline-first warm-up — auto-caches the whole app on the device (native only).
+const NativeOfflineWarmup = dynamic(() => import("@/components/NativeOfflineWarmup"), { ssr: false });
 
 // Mounts its children only once the browser is idle after first paint, so the
 // media widgets (radio poll, music manifest, launcher) never compete with the
@@ -49,6 +53,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <RadioPlayer />
             <BackgroundMusicPlayer />
             <MediaHubLauncher />
+            <PushNotificationRegistrar />
+            <NativeOfflineWarmup />
           </DeferUntilIdle>
         </MediaHubProvider>
       </OfflineProvider>
