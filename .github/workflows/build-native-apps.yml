@@ -77,8 +77,11 @@ jobs:
   # Android APK (debug — installable directly; enable signing for Play Store)
   # ---------------------------------------------------------------------------
   android:
-    name: Android APK
+    name: Android APK / AAB
     runs-on: ubuntu-latest
+    env:
+      # True only when the release-signing keystore secrets are configured.
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -102,26 +105,71 @@ jobs:
           npx cap add android || echo "android project already exists"
           npx cap sync android
 
+      # --- Debug APK (always) — quick internal installs ------------------------
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Rename APK
+      - name: Collect debug APK
         run: |
           mkdir -p dist-apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist-apk/ORM-UNTH-${{ github.event.release.tag_name || github.sha }}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist-apk/ORM-UNTH-debug-${{ github.event.release.tag_name || github.sha }}.apk"
 
-      - name: Upload APK artifact
+      # --- Signed release AAB + APK (only when keystore secrets exist) ---------
+      - name: Configure release signing
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          # Decode the keystore into the app module.
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          # Append an additive `android {}` block that wires the release signing
+          # config using env vars (Android Gradle merges multiple android blocks).
+          cat >> android/app/build.gradle <<'GRADLE'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file("release.keystore")
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          GRADLE
+
+      - name: Build signed release AAB + APK
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew bundleRelease assembleRelease --no-daemon
+
+      - name: Collect signed release artifacts
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          TAG="${{ github.event.release.tag_name || github.sha }}"
+          cp android/app/build/outputs/bundle/release/app-release.aab "dist-apk/ORM-UNTH-$TAG.aab"
+          cp android/app/build/outputs/apk/release/app-release.apk "dist-apk/ORM-UNTH-$TAG.apk"
+
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: dist-apk/*.apk
+          name: android
+          path: dist-apk/*
           if-no-files-found: error
 
-      - name: Attach APK to release
+      - name: Attach Android builds to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist-apk/*.apk
+          files: dist-apk/*
