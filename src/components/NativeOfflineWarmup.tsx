@@ -10,8 +10,9 @@
  *
  * This is the practical equivalent of "bundling the web app on the phone": the
  * front-end lives on the device; only live data is fetched from the server (and
- * that is cached + queued when offline). It runs ONLY inside the native app
- * (Capacitor) — on the web it is a no-op, since browsers cache on demand.
+ * that is cached + queued when offline). It runs inside the native app
+ * (Capacitor) AND the desktop app (Electron) — on the plain web it is a no-op,
+ * since browsers cache on demand.
  */
 
 import { useEffect, useRef } from 'react';
@@ -31,8 +32,13 @@ export default function NativeOfflineWarmup() {
     (async () => {
       try {
         const { Capacitor } = await import('@capacitor/core');
-        // Native app only — the browser/PWA caches on demand already.
-        if (!Capacitor?.isNativePlatform?.()) return;
+        const isNative = !!Capacitor?.isNativePlatform?.();
+        // Detect the Electron desktop wrapper via its user agent.
+        const isElectron =
+          typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
+        // Installed native (Capacitor) or desktop (Electron) only — the
+        // browser/PWA caches on demand already.
+        if (!isNative && !isElectron) return;
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
         // Only auto-download the full shell once per install (heavy, one-time).
         try {

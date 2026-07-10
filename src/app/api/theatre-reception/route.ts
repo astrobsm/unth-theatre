@@ -8,6 +8,7 @@ import {
   acknowledgeRadioByMetadata,
   getOnDutyPortersCleanersWithIds,
 } from '@/lib/radioEvents';
+import { sendPushToUsers, sendPushToRoles } from '@/lib/fcm';
 
 export const dynamic = 'force-dynamic';
 
@@ -265,6 +266,20 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Native push to the assigned surgeon & anaesthetist that the patient
+        // is in theatre and ready for them. No-op if FCM unset.
+        const receiveTargets = [surgery.surgeonId, surgery.anesthetistId].filter(
+          (v): v is string => typeof v === 'string' && v.length > 0,
+        );
+        if (receiveTargets.length > 0) {
+          void sendPushToUsers(receiveTargets, {
+            title: '🏥 Patient in theatre',
+            body: `${patientName} has been received in ${theatreName} and is ready. Please proceed to theatre.`,
+            link: '/dashboard/theatre-reception',
+            data: { surgeryId, theatreId: theatreId ?? '', kind: 'patient_in_theatre' },
+          });
+        }
+
         return NextResponse.json({ success: true, message: 'Patient received' });
       }
 
@@ -404,6 +419,15 @@ export async function POST(request: NextRequest) {
             theatreId,
             tripleRepeat: true,
           },
+        });
+
+        // Native push to the perioperative / holding-area nurses to send the
+        // next patient. No-op if FCM unset.
+        void sendPushToRoles(['PERIOPERATIVE_NURSE'], {
+          title: '✅ Theatre ready — send next patient',
+          body: `${theatreName} has been cleaned and is ready. Please transfer the next patient.`,
+          link: '/dashboard/holding-area',
+          data: { surgeryId, theatreId: theatreId ?? '', kind: 'theatre_ready' },
         });
 
         return NextResponse.json({

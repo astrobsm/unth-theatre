@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { triggerRadio } from '@/lib/radioEvents';
+import { sendPushToRoles } from '@/lib/fcm';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -176,6 +177,18 @@ export async function PATCH(
           status: validatedData.status,
         },
       });
+
+      // Native push to porters when blood is ready for collection, so a porter
+      // can be dispatched even when the app is closed. No-op if FCM unset.
+      if (ready) {
+        const units = `${existingRequest.unitsRequested} unit${existingRequest.unitsRequested === 1 ? '' : 's'} of ${existingRequest.bloodType}${existingRequest.rhFactor ?? ''}`;
+        void sendPushToRoles(['PORTER'], {
+          title: '🩸 Blood ready for collection',
+          body: `${existingRequest.patientName}: ${units} ready at blood bank. Please dispatch a porter to collect.`,
+          link: '/dashboard/blood-bank',
+          data: { bloodRequestId: params.id, kind: 'blood_ready' },
+        });
+      }
     }
 
     return NextResponse.json(updatedRequest);

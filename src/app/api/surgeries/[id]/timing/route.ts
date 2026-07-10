@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { triggerRadio, speak3, getOnDutyPortersAndCleaners, namesPhrase } from '@/lib/radioEvents';
+import { sendPushToRoles } from '@/lib/fcm';
 
 export const dynamic = 'force-dynamic';
 
@@ -373,6 +374,21 @@ export async function PUT(
           tripleRepeat: true,
           cleaners: cleaners.map((c) => ({ name: c.name, staffCode: c.staffCode })),
         },
+      });
+
+      // Native push to porters (move the patient) and cleaners (turn the theatre
+      // over) so they are alerted even when the app is closed. No-op if FCM unset.
+      void sendPushToRoles(['PORTER'], {
+        title: '🧑\u200d⚕️ Patient ready for transfer',
+        body: `${patientName} — ${procedure} complete in ${theatre}. Please move the patient to recovery.`,
+        link: '/dashboard/theatre-reception',
+        data: { surgeryId: params.id, kind: 'porter_call' },
+      });
+      void sendPushToRoles(['CLEANER'], {
+        title: '🧹 Theatre turnover needed',
+        body: `${theatre}: end of surgery for ${patientName}. Please prepare the theatre for the next case.`,
+        link: '/dashboard/theatre-reception',
+        data: { surgeryId: params.id, kind: 'cleaner_call' },
       });
     }
 
