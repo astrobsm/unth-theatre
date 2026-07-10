@@ -1,0 +1,59 @@
+{
+  "name": "orm-unth-desktop",
+  "productName": "ORM - UNTH",
+  "version": "1.0.0",
+  "description": "Operative Resource Manager — UNTH Ituku Ozalla (Desktop). A native desktop shell that loads the live web app.",
+  "author": "UNTH Ituku Ozalla",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "set CAP_SERVER_URL=http://localhost:3000&& electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ng.edu.unth.orm",
+    "productName": "ORM - UNTH",
+    "copyright": "UNTH Ituku Ozalla",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "loading.html",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ORM - UNTH"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "category": "public.app-category.medical",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "maintainer": "UNTH Ituku Ozalla"
+    }
+  }
+}

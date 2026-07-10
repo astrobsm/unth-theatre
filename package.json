@@ -14,12 +14,20 @@
     "db:push": "prisma db push",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:sync": "cap sync",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "cap:run:android": "cap run android",
+    "cap:run:ios": "cap run ios"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@capacitor/core": "^6.2.1",
     "@hookform/resolvers": "^3.9.0",
     "@prisma/client": "^5.19.0",
     "@tensorflow/tfjs": "^4.22.0",
@@ -47,6 +55,9 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/ios": "^6.2.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.16.0",
     "@types/nodemailer": "^6.4.23",
