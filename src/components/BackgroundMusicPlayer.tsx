@@ -86,6 +86,9 @@ export default function BackgroundMusicPlayer() {
   const resumeRef            = useRef<{ url: string; time: number } | null>(null);
   const resumedRef           = useRef(false);
   const manifestFetchedRef   = useRef(false);
+  // Counts consecutive track load failures so we can auto-skip a bad track but
+  // stop (with a clear message) if the whole library is unreachable.
+  const loadFailuresRef      = useRef(0);
 
   // Smoothly ramp the audio element volume to `target` over `durationMs`.
   // Cancels any in-flight fade. Calls `onDone` when finished. If the audio
@@ -223,6 +226,25 @@ export default function BackgroundMusicPlayer() {
     a.volume = ducked ? 0 : volume;
     setError(null);
 
+    // When a track's source can't be loaded (e.g. the host is unreachable or
+    // over quota), auto-skip to the next track. If several tracks in a row fail
+    // we conclude the whole library is unavailable and stop with a clear
+    // message instead of surfacing the raw "no supported sources" error.
+    const onMediaError = () => {
+      if (cancelled) return;
+      loadFailuresRef.current += 1;
+      const limit = Math.min(queue.length || 1, 4);
+      if (loadFailuresRef.current < limit) {
+        advance(1); // try the next track
+      } else {
+        setPlaying(false);
+        setError('Background music is temporarily unavailable.');
+      }
+    };
+    const onCanPlay = () => { loadFailuresRef.current = 0; };
+    a.addEventListener('error', onMediaError);
+    a.addEventListener('canplay', onCanPlay);
+
     // Resume from the saved position after a refresh (once).
     if (!resumedRef.current && resumeRef.current && currentTrack.url === resumeRef.current.url) {
       const seek = resumeRef.current.time;
@@ -239,16 +261,30 @@ export default function BackgroundMusicPlayer() {
     // Auto-start in the primary window unless the user explicitly paused.
     if (!playIntentRef.current) {
       setPlaying(false);
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+        a.removeEventListener('error', onMediaError);
+        a.removeEventListener('canplay', onCanPlay);
+      };
     }
     a.play()
-      .then(() => { if (!cancelled) { setPlaying(true); setError(null); } })
+      .then(() => { if (!cancelled) { setPlaying(true); setError(null); loadFailuresRef.current = 0; } })
       .catch((e) => {
         if (cancelled) return;
         setPlaying(false);
-        setError(e?.message || 'Tap anywhere to start music (browser blocks autoplay).');
+        // A rejected play() on a track that failed to load reports "no supported
+        // sources" — the onMediaError handler already deals with that case, so
+        // only surface the autoplay-blocked hint here.
+        const msg = e?.name === 'NotAllowedError'
+          ? 'Tap anywhere to start music (browser blocks autoplay).'
+          : null;
+        if (msg) setError(msg);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      a.removeEventListener('error', onMediaError);
+      a.removeEventListener('canplay', onCanPlay);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, currentTrack?.url, isLeader]);
 

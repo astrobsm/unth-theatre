@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import {
   Bell,
   BellRing,
@@ -148,6 +149,33 @@ export default function NotificationBell() {
     setIsOpen(false);
   };
 
+  // Send a test push to this user's own registered devices, so staff can
+  // confirm push notifications reach their phone even when the app is closed.
+  const [testingPush, setTestingPush] = useState(false);
+  const handleTestPush = async () => {
+    if (testingPush) return;
+    setTestingPush(true);
+    try {
+      const res = await fetch('/api/push-test', { method: 'POST', credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (data?.ok) {
+        toast.success(`Test push sent to ${data.devices} device${data.devices === 1 ? '' : 's'}. Check your phone.`);
+      } else if (data?.reason === 'no_devices') {
+        toast.error('No registered device. Open the installed app and allow notifications first.');
+      } else if (data?.reason === 'fcm_not_configured') {
+        toast.error('Push service is not configured on the server yet.');
+      } else if (res.status === 401) {
+        toast.error('Please sign in to test push.');
+      } else {
+        toast.error(data?.message || 'Could not send test push.');
+      }
+    } catch {
+      toast.error('Could not reach the server to send a test push.');
+    } finally {
+      setTestingPush(false);
+    }
+  };
+
   const criticalTimelineCount = timeline.filter(t => t.urgency === 'critical').length;
 
   return (
@@ -210,6 +238,15 @@ export default function NotificationBell() {
                     Read all
                   </button>
                 )}
+                <button
+                  onClick={handleTestPush}
+                  disabled={testingPush}
+                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 font-medium disabled:opacity-50"
+                  title="Send a test push notification to this device"
+                >
+                  <BellRing className="w-3.5 h-3.5" />
+                  {testingPush ? 'Sending…' : 'Test push'}
+                </button>
                 <button
                   onClick={() => setIsOpen(false)}
                   className="p-1 hover:bg-gray-100 rounded"

@@ -35,6 +35,34 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * GET /api/device-tokens — diagnostic for the current user: how many devices
+ * are registered for push, on which platforms, and when last seen. Lets the
+ * app show the user whether THIS install successfully registered for push.
+ */
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id ?? null;
+    if (!userId) {
+      return NextResponse.json({ registered: 0, platforms: [], lastSeenAt: null });
+    }
+    const tokens = await prisma.deviceToken.findMany({
+      where: { userId },
+      select: { platform: true, lastSeenAt: true },
+      orderBy: { lastSeenAt: 'desc' },
+    });
+    return NextResponse.json({
+      registered: tokens.length,
+      platforms: Array.from(new Set(tokens.map((t) => t.platform))),
+      lastSeenAt: tokens[0]?.lastSeenAt ?? null,
+    });
+  } catch (err) {
+    console.error('device-tokens GET error:', err);
+    return NextResponse.json({ registered: 0, platforms: [], lastSeenAt: null });
+  }
+}
+
+/**
  * DELETE /api/device-tokens?token=... — unregister a token (e.g. on sign-out).
  */
 export async function DELETE(request: NextRequest) {
