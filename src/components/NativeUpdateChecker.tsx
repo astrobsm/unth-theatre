@@ -13,9 +13,24 @@
  * service worker).
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const DISMISS_KEY = 'orm.native.updateDismissedFor';
+const CHECK_EVENT = 'orm:native-update-check';
+const RESULT_EVENT = 'orm:native-update-result';
+
+type UpdateState =
+  | { status: 'idle' }
+  | { status: 'unavailable'; message: string }
+  | { status: 'current'; current: string }
+  | { status: 'available'; current: string; latest: string; url: string; name?: string };
+
+declare global {
+  interface WindowEventMap {
+    [CHECK_EVENT]: CustomEvent<{ manual?: boolean }>;
+    [RESULT_EVENT]: CustomEvent<UpdateState>;
+  }
+}
 
 // Compare dotted numeric versions (e.g. "1.0.4" > "1.0.3"). Non-numeric parts
 // are treated as 0. Returns true when `latest` is strictly newer than `current`.
@@ -34,54 +49,126 @@ function isNewer(latest: string, current: string): boolean {
 
 export default function NativeUpdateChecker() {
   const started = useRef(false);
+  const [isNativeAndroid, setIsNativeAndroid] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle' });
+
+  const publish = (state: UpdateState) => {
+    setUpdate(state);
+    window.dispatchEvent(new CustomEvent(RESULT_EVENT, { detail: state }));
+  };
+
+  const openUpdate = async (url: string) => {
+    try {
+      const { AppLauncher } = await import('@capacitor/app-launcher');
+      await AppLauncher.openUrl({ url });
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const checkForUpdate = async (manual = false) => {
+    if (checking) return;
+    setChecking(true);
+    try {
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor?.isNativePlatform?.() || Capacitor.getPlatform?.() !== 'android') {
+        publish({ status: 'unavailable', message: 'Android app updates are only available inside the installed Android app.' });
+        return;
+      }
+      setIsNativeAndroid(true);
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        publish({ status: 'unavailable', message: 'Connect to the internet to check for app updates.' });
+        return;
+      }
+
+      const { App } = await import('@capacitor/app');
+      const info = await App.getInfo();
+      const current = info?.version || '0.0.0';
+
+      const res = await fetch('/api/app-version', { cache: 'no-store' });
+      if (!res.ok) {
+        publish({ status: 'unavailable', message: 'Could not reach the update server.' });
+        return;
+      }
+
+      const data = await res.json();
+      const latest: string | undefined = data?.android?.version;
+      const url: string | undefined = data?.android?.url;
+      const name: string | undefined = data?.android?.name;
+      if (!latest || !url) {
+        publish({ status: 'unavailable', message: 'No Android update package is available yet.' });
+        return;
+      }
+
+      if (!isNewer(latest, current)) {
+        publish({ status: 'current', current });
+        return;
+      }
+
+      publish({ status: 'available', current, latest, url, name });
+      if (!manual) {
+        try {
+          if (window.localStorage.getItem(DISMISS_KEY) === latest) return;
+          window.localStorage.setItem(DISMISS_KEY, latest);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      publish({ status: 'unavailable', message: 'App update check failed. Please try again.' });
+    } finally {
+      setChecking(false);
+    }
+  };
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
 
-    (async () => {
-      try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (!Capacitor?.isNativePlatform?.()) return;
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-
-        const { App } = await import('@capacitor/app');
-        const info = await App.getInfo();
-        const current = info?.version || '0.0.0';
-
-        const res = await fetch('/api/app-version', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const latest: string | undefined = data?.android?.version;
-        const url: string | undefined = data?.android?.url;
-        if (!latest || !url) return;
-        if (!isNewer(latest, current)) return;
-
-        // Don't nag: only prompt once per newer version per install.
-        try {
-          if (window.localStorage.getItem(DISMISS_KEY) === latest) return;
-        } catch {
-          /* storage blocked — prompt anyway */
-        }
-
-        const accept = window.confirm(
-          `A new version of ORM - UNTH (${latest}) is available.\n\n` +
-            `You have ${current}. Download and install the update now?`
-        );
-        try {
-          window.localStorage.setItem(DISMISS_KEY, latest);
-        } catch {
-          /* ignore */
-        }
-        if (accept) {
-          // Open the APK download in the system browser to install.
-          window.open(url, '_blank');
-        }
-      } catch {
-        /* plugin unavailable / web — ignore */
-      }
-    })();
+    const onManualCheck = (event: WindowEventMap[typeof CHECK_EVENT]) => {
+      checkForUpdate(Boolean(event.detail?.manual));
+    };
+    window.addEventListener(CHECK_EVENT, onManualCheck);
+    checkForUpdate(false);
+    return () => window.removeEventListener(CHECK_EVENT, onManualCheck);
   }, []);
 
-  return null;
+  if (!isNativeAndroid || update.status !== 'available') return null;
+
+  return (
+    <div className="fixed inset-x-3 bottom-3 z-[70] rounded-lg border border-blue-200 bg-white p-4 shadow-2xl sm:left-auto sm:w-[380px]">
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Android app update available</p>
+          <p className="text-xs text-gray-600">
+            Version {update.latest} is ready. You have {update.current}.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => openUpdate(update.url)}
+            className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Update Android App
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                window.localStorage.setItem(DISMISS_KEY, update.latest);
+              } catch {
+                /* ignore */
+              }
+              setUpdate({ status: 'idle' });
+            }}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

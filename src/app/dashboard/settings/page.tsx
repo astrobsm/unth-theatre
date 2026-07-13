@@ -21,6 +21,12 @@ interface SyncStatus {
   offlineDataCached: boolean;
 }
 
+type NativeUpdateResult =
+  | { status: 'idle' }
+  | { status: 'unavailable'; message: string }
+  | { status: 'current'; current: string }
+  | { status: 'available'; current: string; latest: string; url: string; name?: string };
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [isOnline, setIsOnline] = useState(true);
@@ -151,6 +157,43 @@ export default function SettingsPage() {
     setUpdating(true);
     setMessage(null);
     try {
+      const isNativeAndroid = await (async () => {
+        try {
+          const { Capacitor } = await import('@capacitor/core');
+          return Capacitor?.isNativePlatform?.() && Capacitor.getPlatform?.() === 'android';
+        } catch {
+          return false;
+        }
+      })();
+
+      if (isNativeAndroid) {
+        const result = await new Promise<NativeUpdateResult>((resolve) => {
+          const timeout = window.setTimeout(() => {
+            window.removeEventListener('orm:native-update-result', onResult as EventListener);
+            resolve({ status: 'unavailable', message: 'Android update check timed out. Please try again.' });
+          }, 15000);
+          const onResult = (event: Event) => {
+            window.clearTimeout(timeout);
+            window.removeEventListener('orm:native-update-result', onResult as EventListener);
+            resolve((event as CustomEvent<NativeUpdateResult>).detail);
+          };
+          window.addEventListener('orm:native-update-result', onResult as EventListener);
+          window.dispatchEvent(new CustomEvent('orm:native-update-check', { detail: { manual: true } }));
+        });
+
+        if (result.status === 'available') {
+          setMessage({
+            type: 'success',
+            text: `Android update ${result.latest} is ready. Tap the Android update button at the bottom of the screen to download it.`,
+          });
+        } else if (result.status === 'current') {
+          setMessage({ type: 'info', text: `Android app is up to date. Installed version: ${result.current}.` });
+        } else if (result.status === 'unavailable') {
+          setMessage({ type: 'error', text: result.message });
+        }
+        return;
+      }
+
       if ('serviceWorker' in navigator) {
         const reg = await navigator.serviceWorker.ready;
         await reg.update();
