@@ -5,17 +5,21 @@ import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getCachedData } from '@/lib/offlineStore';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [newPasswordValue, setNewPasswordValue] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userId, setUserId] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   // First-time staff ID capture (porters/cleaners and any other newly seeded staff)
@@ -403,16 +407,28 @@ export default function LoginPage() {
               <label htmlFor="password" className="label">
                 Password
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="input-field"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  className="input-field pr-11"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-primary-600 disabled:opacity-40"
+                  disabled={loading}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -835,27 +851,51 @@ export default function LoginPage() {
             <form onSubmit={handlePasswordChange} className="space-y-4">
               <div>
                 <label className="label">New Password</label>
-                <input
-                  type="password"
-                  value={newPasswordValue}
-                  onChange={(e) => setNewPasswordValue(e.target.value)}
-                  className="input-field"
-                  placeholder="Enter new password"
-                  required
-                  minLength={8}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPasswordValue}
+                    onChange={(e) => setNewPasswordValue(e.target.value)}
+                    className="input-field pr-11"
+                    placeholder="Enter new password"
+                    required
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-primary-600 disabled:opacity-40"
+                    disabled={loading}
+                    aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                    title={showNewPassword ? 'Hide new password' : 'Show new password'}
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="label">Confirm Password</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input-field"
-                  placeholder="Re-enter new password"
-                  required
-                  minLength={8}
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="input-field pr-11"
+                    placeholder="Re-enter new password"
+                    required
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-primary-600 disabled:opacity-40"
+                    disabled={loading}
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               {error && (
                 <div className="text-red-600 text-sm bg-red-50 p-3 rounded">
