@@ -5,6 +5,19 @@ import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone, MessageCirc
 import { whatsappChatLink } from "@/lib/whatsapp";
 import SurgeryCodeLookup from "@/components/SurgeryCodeLookup";
 
+function todayInputValue() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function dayRange(date: string) {
+  return {
+    fromDate: `${date}T00:00:00`,
+    toDate: `${date}T23:59:59.999`,
+  };
+}
+
 interface Item {
   id: string;
   surgeryId: string;
@@ -28,6 +41,9 @@ interface Item {
     surgeryType: string;
     surgeonName: string;
     location?: string | null;
+    theatreId?: string | null;
+    theatreName?: string | null;
+    theatreLocation?: string | null;
     surgeon?: { id: string; fullName: string; phoneNumber?: string | null } | null;
     scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
     circulatingNurse?: { fullName: string; phoneNumber?: string | null } | null;
@@ -47,14 +63,18 @@ export default function ConsumablePackProviderPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<string>("ALL");
+  const [selectedDate, setSelectedDate] = useState(todayInputValue);
   // Search by patient PT / folder number (also matches patient name).
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
     setLoading(true);
+    setError("");
     try {
-      const r = await fetch("/api/consumable-requests", { cache: "no-store" });
+      const { fromDate, toDate } = dayRange(selectedDate);
+      const params = new URLSearchParams({ fromDate, toDate });
+      const r = await fetch(`/api/consumable-requests?${params.toString()}`, { cache: "no-store" });
       if (r.ok) setItems(await r.json());
       else setError((await r.json()).error || "Failed to load");
     } catch (e: any) {
@@ -63,7 +83,7 @@ export default function ConsumablePackProviderPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [selectedDate]);
 
   const grouped = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -81,9 +101,11 @@ export default function ConsumablePackProviderPage() {
       g[key].items.push(it);
     }
     return Object.values(g).sort((a, b) => {
-      // Emergency first, then by patient PT / folder number (ascending).
+      // Emergency first, then by scheduled time and patient PT / folder number.
       if (a.surgery.surgeryType === "EMERGENCY" && b.surgery.surgeryType !== "EMERGENCY") return -1;
       if (b.surgery.surgeryType === "EMERGENCY" && a.surgery.surgeryType !== "EMERGENCY") return 1;
+      const byTime = (a.surgery.scheduledTime || "").localeCompare(b.surgery.scheduledTime || "", undefined, { numeric: true });
+      if (byTime !== 0) return byTime;
       const fa = a.surgery.patient.folderNumber || "";
       const fb = b.surgery.patient.folderNumber || "";
       const byFolder = fa.localeCompare(fb, undefined, { numeric: true, sensitivity: "base" });
@@ -122,7 +144,7 @@ export default function ConsumablePackProviderPage() {
         </button>
       </div>
       <p className="text-sm text-gray-600">
-        Pre-pack the consumables required for each booked surgery. Emergency cases are pinned to the top.
+        Showing consumable requests for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}. Emergency cases are pinned to the top.
       </p>
 
       {/* Hand-over policy notice */}
@@ -145,14 +167,25 @@ export default function ConsumablePackProviderPage() {
         title="Enter the patient's consumable pack code"
       />
 
-      {/* Search / sort by patient PT (folder) number */}
-      <div className="flex items-center gap-2">
+      {/* Date selector + search / sort by patient PT (folder) number */}
+      <div className="grid gap-2 sm:grid-cols-[220px_1fr_auto] sm:items-end">
+        <div>
+          <label htmlFor="request-date" className="label">Request date</label>
+          <input
+            id="request-date"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value || todayInputValue())}
+            className="input-field"
+            aria-label="Select request date"
+          />
+        </div>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by PT / folder number or patient name…"
-          className="input-field flex-1"
+          className="input-field"
           aria-label="Search by patient PT number"
         />
         {search && (
@@ -161,7 +194,7 @@ export default function ConsumablePackProviderPage() {
           </button>
         )}
       </div>
-      <p className="text-xs text-gray-500">Cases are sorted by patient PT number (emergencies pinned to the top).</p>
+      <p className="text-xs text-gray-500">Cases are loaded for the selected surgery date and sorted by time, then PT number (emergencies pinned to the top).</p>
 
       <div className="flex gap-2 text-xs">
         {["ALL", "REQUESTED", "PACKING", "PACKED", "DELIVERED"].map((s) => (
@@ -198,13 +231,15 @@ export default function ConsumablePackProviderPage() {
           requesterItem?.requestedBy?.phoneNumber ||
           g.surgery.surgeon?.phoneNumber ||
           null;
+        const theatreName = g.surgery.theatreName || g.surgery.location || "Theatre not assigned";
+        const theatreLocation = g.surgery.theatreLocation || g.surgery.location || null;
         return (
           <div key={g.surgery.id} className={`card border ${g.surgery.surgeryType === "EMERGENCY" ? "border-red-300 bg-red-50/40" : "border-gray-200"}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm text-gray-500">
                   {new Date(g.surgery.scheduledDate).toLocaleDateString()} · {g.surgery.scheduledTime}
-                  {g.surgery.location ? ` · ${g.surgery.location}` : ""}
+                  {` · ${theatreName}`}
                   {" · "}{g.surgery.subspecialty}
                   {g.surgery.surgeryType === "EMERGENCY" && (
                     <span className="ml-2 inline-flex items-center gap-1 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded">
@@ -217,6 +252,10 @@ export default function ConsumablePackProviderPage() {
 
                 {/* Hand the pack to the scrub nurse assigned to this theatre */}
                 <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
+                  <div className="mb-1 text-blue-900">
+                    <span className="font-semibold">Theatre:</span> {theatreName}
+                    {theatreLocation && theatreLocation !== theatreName ? <span className="text-gray-600"> · {theatreLocation}</span> : null}
+                  </div>
                   <span className="font-semibold text-blue-900">Hand pack to scrub nurse: </span>
                   {g.surgery.scrubNurse?.fullName ? (
                     <>

@@ -63,6 +63,8 @@ export async function GET(req: NextRequest) {
           surgeryType: true,
           surgeonName: true,
           location: true,
+          theatreId: true,
+          scrubNurseId: true,
           surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         },
       },
@@ -111,6 +113,24 @@ export async function GET(req: NextRequest) {
   const surgeries = Array.from(surgeryMap.values());
   const surgeryIds = surgeries.map((s) => s.id);
   if (surgeryIds.length) {
+    const theatreIds = Array.from(new Set(surgeries.map((s) => s.theatreId).filter(Boolean)));
+    const theatres = theatreIds.length
+      ? await prisma.theatreSuite.findMany({
+          where: { id: { in: theatreIds } },
+          select: { id: true, name: true, location: true },
+        })
+      : [];
+    const theatreById = new Map(theatres.map((t) => [t.id, t]));
+
+    const scrubNurseIds = Array.from(new Set(surgeries.map((s) => s.scrubNurseId).filter(Boolean)));
+    const scrubNurses = scrubNurseIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: scrubNurseIds } },
+          select: { id: true, fullName: true, phoneNumber: true },
+        })
+      : [];
+    const scrubNurseById = new Map(scrubNurses.map((u) => [u.id, u]));
+
     const dayKeys = Array.from(
       new Set(surgeries.map((s) => new Date(s.scheduledDate).toISOString().slice(0, 10)))
     );
@@ -141,15 +161,21 @@ export async function GET(req: NextRequest) {
       const s = it.surgery;
       if (!s) continue;
       let a = bySurgeryId.get(s.id);
+      const theatre = s.theatreId ? theatreById.get(s.theatreId) : null;
+      const surgeryScrubNurse = s.scrubNurseId ? scrubNurseById.get(s.scrubNurseId) : null;
       if (!a && s.location) {
         a = byTheatreDay.get(`${s.location.toLowerCase()}|${new Date(s.scheduledDate).toISOString().slice(0, 10)}`);
       }
       s.scrubNurse = a?.scrubNurse
         ? { fullName: a.scrubNurse.fullName, phoneNumber: a.scrubNurse.phoneNumber }
-        : null;
+        : surgeryScrubNurse
+          ? { fullName: surgeryScrubNurse.fullName, phoneNumber: surgeryScrubNurse.phoneNumber }
+          : null;
       s.circulatingNurse = a?.circulatingNurse
         ? { fullName: a.circulatingNurse.fullName, phoneNumber: a.circulatingNurse.phoneNumber }
         : null;
+      s.theatreName = a?.theatre?.name || theatre?.name || s.location || null;
+      s.theatreLocation = theatre?.location || s.location || null;
     }
   }
 
