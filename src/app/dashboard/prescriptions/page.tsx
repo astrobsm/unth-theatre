@@ -35,6 +35,12 @@ import {
   type ReportMedication,
 } from '@/lib/prescription-pdf';
 
+function todayInputValue() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
 interface Medication {
   name: string;
   dose: string;
@@ -77,8 +83,15 @@ interface Prescription {
   packedAt?: string;
   surgery: {
     procedureName: string;
+    scheduledTime?: string | null;
+    location?: string | null;
+    theatreName?: string | null;
+    theatreLocation?: string | null;
+    scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
     anesthetist?: { id: string; fullName: string; phoneNumber?: string | null } | null;
     patient?: {
+      name?: string | null;
+      folderNumber?: string | null;
       comorbidities?: string | null;
       otherMedications?: string | null;
       anticoagulantName?: string | null;
@@ -94,6 +107,9 @@ interface Prescription {
     priority: string;
     surgicalUnit: string;
     requiredByTime?: string;
+    theatreName?: string | null;
+    theatreLocation?: string | null;
+    scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
   };
 }
 
@@ -102,6 +118,7 @@ export default function PrescriptionsPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'needsPacking' | 'all' | 'packed' | 'partiallyPacked'>('needsPacking');
+  const [selectedDate, setSelectedDate] = useState(todayInputValue);
   // Search by patient PT / folder number (also matches patient name).
   const [search, setSearch] = useState('');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
@@ -124,23 +141,26 @@ export default function PrescriptionsPage() {
     const interval = setInterval(fetchPrescriptions, 30 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [filter, selectedDate]);
 
   const fetchPrescriptions = async () => {
     try {
       // Fetch both regular and emergency prescriptions in parallel
-      let regularUrl = '/api/prescriptions';
+      const regularParams = new URLSearchParams({ date: selectedDate });
       if (filter === 'needsPacking') {
-        regularUrl += '?needsPacking=true';
+        regularParams.set('needsPacking', 'true');
       } else if (filter === 'packed') {
-        regularUrl += '?status=PACKED';
+        regularParams.set('status', 'PACKED');
       } else if (filter === 'partiallyPacked') {
-        regularUrl += '?status=PARTIALLY_PACKED';
+        regularParams.set('status', 'PARTIALLY_PACKED');
       }
+      const regularUrl = `/api/prescriptions?${regularParams.toString()}`;
+
+      const emergencyParams = new URLSearchParams({ date: selectedDate });
 
       const [regularRes, emergencyRes] = await Promise.all([
         fetch(regularUrl),
-        fetch('/api/emergency-prescriptions'),
+        fetch(`/api/emergency-prescriptions?${emergencyParams.toString()}`),
       ]);
 
       let regularData: Prescription[] = [];
@@ -189,6 +209,9 @@ export default function PrescriptionsPage() {
             packedAt: ep.packedAt,
             surgery: {
               procedureName: ep.emergencyBooking?.procedureName || 'Emergency Surgery',
+              theatreName: ep.emergencyBooking?.theatreName || null,
+              theatreLocation: ep.emergencyBooking?.theatreLocation || null,
+              scrubNurse: ep.emergencyBooking?.scrubNurse || null,
             },
             isEmergencyRx: true,
             folderNumber: ep.folderNumber,
@@ -579,8 +602,8 @@ export default function PrescriptionsPage() {
 
       {/* Surgical Shopping Lists — drugs/IV/wound dressings selected at booking */}
       <SurgicalShoppingListsPanel
-        fromDate={exportFrom}
-        toDate={exportTo}
+        fromDate={selectedDate}
+        toDate={selectedDate}
         canPack={['PHARMACIST', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(((session?.user as any)?.role) || '')}
       />
 
@@ -698,20 +721,31 @@ export default function PrescriptionsPage() {
           <h3 className="text-lg font-medium text-gray-900 mb-2">No prescriptions found</h3>
           <p className="text-gray-600">
             {filter === 'needsPacking' 
-              ? 'All prescriptions have been packed!'
-              : 'No prescriptions available'}
+              ? `All prescriptions have been packed for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}!`
+              : `No prescriptions available for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}`}
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Search / sort by patient PT (folder) number */}
-          <div className="flex items-center gap-2">
+          {/* Date selector + search / sort by patient PT (folder) number */}
+          <div className="grid gap-2 sm:grid-cols-[220px_1fr_auto] sm:items-end">
+            <div>
+              <label htmlFor="pharmacy-request-date" className="block text-xs font-medium text-gray-600 mb-1">Request date</label>
+              <input
+                id="pharmacy-request-date"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value || todayInputValue())}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
+                aria-label="Select pharmacy request date"
+              />
+            </div>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by PT / folder number or patient name…"
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               aria-label="Search prescriptions by patient PT number"
             />
             {search && (
@@ -724,7 +758,7 @@ export default function PrescriptionsPage() {
             )}
           </div>
           <p className="text-xs text-gray-500">
-            Sorted by patient PT number (emergencies pinned to the top).
+            Showing pharmacy requests for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}. Sorted by patient PT number (emergencies pinned to the top).
           </p>
 
           {visiblePrescriptions.length === 0 ? (
@@ -735,6 +769,9 @@ export default function PrescriptionsPage() {
             visiblePrescriptions.map((prescription) => {
             const medications = parseMedications(prescription.medications);
             const hoursUntilSurgery = timeUntilSurgery(prescription.scheduledSurgeryDate);
+            const theatreName = prescription.surgery?.theatreName || prescription.emergencyBooking?.theatreName || prescription.surgery?.location || 'Theatre not assigned';
+            const theatreLocation = prescription.surgery?.theatreLocation || prescription.emergencyBooking?.theatreLocation || prescription.surgery?.location || null;
+            const scrubNurse = prescription.surgery?.scrubNurse || prescription.emergencyBooking?.scrubNurse || null;
 
             return (
               <div key={prescription.id} className={`bg-white rounded-lg shadow-sm overflow-hidden ${
@@ -804,6 +841,33 @@ export default function PrescriptionsPage() {
                       <p className="text-sm text-gray-600 mt-1">
                         {prescription.surgery.procedureName}
                       </p>
+                      <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
+                        <div className="mb-1 text-blue-900">
+                          <span className="font-semibold">Theatre:</span> {theatreName}
+                          {theatreLocation && theatreLocation !== theatreName ? <span className="text-gray-600"> · {theatreLocation}</span> : null}
+                        </div>
+                        <span className="font-semibold text-blue-900">Scrub nurse: </span>
+                        {scrubNurse?.fullName ? (
+                          <>
+                            <span className="text-gray-800">{scrubNurse.fullName}</span>
+                            {scrubNurse.phoneNumber ? (
+                              <a
+                                href={whatsappChatLink(scrubNurse.phoneNumber) || `tel:${scrubNurse.phoneNumber.replace(/\s+/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Chat / call the scrub nurse"
+                                className="ml-2 inline-flex items-center gap-1 text-green-700 hover:underline font-medium"
+                              >
+                                <MessageCircle className="h-3 w-3" /> {scrubNurse.phoneNumber}
+                              </a>
+                            ) : (
+                              <span className="ml-1 text-gray-400">(no phone on file)</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-500">Not assigned yet. Confirm theatre allocation / duty roster.</span>
+                        )}
+                      </div>
                     </div>
                     {(['APPROVED', 'PARTIALLY_PACKED', 'LATE_ARRIVAL'].includes(prescription.status)) && !prescription.packedAt && (
                       <button

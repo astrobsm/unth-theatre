@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const bookingId = searchParams.get('bookingId');
     const status = searchParams.get('status');
+    const date = searchParams.get('date');
     const pendingOnly = searchParams.get('pending') === 'true';
 
     const where: any = { isEmergency: true };
@@ -38,6 +39,17 @@ export async function GET(request: NextRequest) {
 
     if (pendingOnly) {
       where.status = { in: ['SUBMITTED', 'PHARMACIST_VIEWED', 'PACKING'] };
+    }
+
+    if (date) {
+      const startDate = new Date(date);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(date);
+      endDate.setHours(23, 59, 59, 999);
+      where.OR = [
+        { emergencyBooking: { requiredByTime: { gte: startDate, lte: endDate } } },
+        { emergencyBooking: { requiredByTime: null }, createdAt: { gte: startDate, lte: endDate } },
+      ];
     }
 
     const prescriptions = await prisma.emergencyPrescription.findMany({
@@ -61,6 +73,17 @@ export async function GET(request: NextRequest) {
             priority: true,
             status: true,
             requiredByTime: true,
+            theatreName: true,
+            theatreId: true,
+            surgeryId: true,
+            surgery: {
+              select: {
+                id: true,
+                location: true,
+                theatreId: true,
+                scrubNurseId: true,
+              },
+            },
           },
         },
         packedBy: {
@@ -69,6 +92,47 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    const surgeryIds = Array.from(new Set(prescriptions.map((p: any) => p.emergencyBooking?.surgeryId).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)));
+    const surgeries = surgeryIds.length
+      ? await prisma.surgery.findMany({
+          where: { id: { in: surgeryIds } },
+          select: { id: true, scheduledDate: true, location: true, theatreId: true, scrubNurseId: true },
+        })
+      : [];
+    const surgeryById = new Map(surgeries.map((s) => [s.id, s]));
+
+    const theatreIds = Array.from(new Set([
+      ...prescriptions.map((p: any) => p.emergencyBooking?.theatreId).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0),
+      ...surgeries.map((s) => s.theatreId).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0),
+    ]));
+    const theatres = theatreIds.length
+      ? await prisma.theatreSuite.findMany({
+          where: { id: { in: theatreIds } },
+          select: { id: true, name: true, location: true },
+        })
+      : [];
+    const theatreById = new Map(theatres.map((t) => [t.id, t]));
+
+    const scrubNurseIds = Array.from(new Set(surgeries.map((s) => s.scrubNurseId).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)));
+    const scrubNurses = scrubNurseIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: scrubNurseIds } },
+          select: { id: true, fullName: true, phoneNumber: true },
+        })
+      : [];
+    const scrubNurseById = new Map(scrubNurses.map((u) => [u.id, u]));
+
+    for (const prescription of prescriptions as any[]) {
+      const booking = prescription.emergencyBooking;
+      if (!booking) continue;
+      const surgery = booking.surgeryId ? surgeryById.get(booking.surgeryId) : null;
+      const theatre = (booking.theatreId ? theatreById.get(booking.theatreId) : null) || (surgery?.theatreId ? theatreById.get(surgery.theatreId) : null);
+      const scrubNurse = surgery?.scrubNurseId ? scrubNurseById.get(surgery.scrubNurseId) : null;
+      booking.theatreName = booking.theatreName || theatre?.name || surgery?.location || null;
+      booking.theatreLocation = theatre?.location || surgery?.location || null;
+      booking.scrubNurse = scrubNurse ? { fullName: scrubNurse.fullName, phoneNumber: scrubNurse.phoneNumber } : null;
+    }
 
     // Auto-mark as viewed by pharmacist
     if (session.user.role === 'PHARMACIST') {

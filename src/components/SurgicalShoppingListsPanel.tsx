@@ -22,8 +22,10 @@ import {
   Truck,
   AlertCircle,
   Siren,
+  MessageCircle,
 } from 'lucide-react';
 import { isNarcotic } from '@/lib/narcotics';
+import { whatsappChatLink } from '@/lib/whatsapp';
 
 type PackStatus = 'REQUESTED' | 'PACKING' | 'PACKED' | 'DELIVERED' | 'CANCELLED';
 
@@ -48,6 +50,9 @@ interface DDRequest {
     subspecialty?: string | null;
     surgeonName?: string | null;
     location?: string | null;
+    theatreName?: string | null;
+    theatreLocation?: string | null;
+    scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
     surgeryType?: string | null;
     patient: { name: string; folderNumber?: string | null };
   };
@@ -167,7 +172,7 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
           <div>
             <h2 className="text-base font-semibold text-gray-900">Surgical Shopping Lists — Drugs / IV / Wound Dressings</h2>
             <p className="text-xs text-gray-600">
-              Selected at booking. Pack the night before surgery. Date range follows the export filter above.
+              Selected at booking. Pack the night before surgery. Date follows the Pharmacy request date on this page.
             </p>
           </div>
         </div>
@@ -223,6 +228,8 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
             const narcoticCount = gItems.filter(i => isNarcotic(i.name)).length;
             const isEmergency = surgery.surgeryType === 'EMERGENCY';
             const dt = new Date(surgery.scheduledDate);
+            const theatreName = surgery.theatreName || surgery.location || 'Theatre not assigned';
+            const theatreLocation = surgery.theatreLocation || surgery.location || null;
 
             return (
               <li key={surgery.id} className={`px-4 py-3 ${isEmergency ? 'bg-red-50/40 border-l-4 border-red-500' : ''}`}>
@@ -260,10 +267,38 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
                         <span className="font-medium">{surgery.procedureName}</span>
                         {surgery.subspecialty && <span> · {surgery.subspecialty}</span>}
                         {surgery.surgeonName && <span> · {surgery.surgeonName}</span>}
-                        {surgery.location && <span> · {surgery.location}</span>}
+                        <span> · {theatreName}</span>
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">
                         Scheduled: {dt.toLocaleDateString()}{surgery.scheduledTime ? ` · ${surgery.scheduledTime}` : ''}
+                      </div>
+                      <div className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs">
+                        <div className="text-blue-900">
+                          <span className="font-semibold">Theatre:</span> {theatreName}
+                          {theatreLocation && theatreLocation !== theatreName ? <span className="text-gray-600"> · {theatreLocation}</span> : null}
+                        </div>
+                        <div className="mt-0.5">
+                          <span className="font-semibold text-blue-900">Scrub nurse:</span>{' '}
+                          {surgery.scrubNurse?.fullName ? (
+                            <>
+                              <span className="text-gray-800">{surgery.scrubNurse.fullName}</span>
+                              {surgery.scrubNurse.phoneNumber ? (
+                                <a
+                                  href={whatsappChatLink(surgery.scrubNurse.phoneNumber) || `tel:${surgery.scrubNurse.phoneNumber.replace(/\s+/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-2 inline-flex items-center gap-1 text-green-700 hover:underline font-medium"
+                                >
+                                  <MessageCircle className="h-3 w-3" /> {surgery.scrubNurse.phoneNumber}
+                                </a>
+                              ) : (
+                                <span className="ml-1 text-gray-400">(no phone on file)</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-gray-500">Not assigned yet</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
