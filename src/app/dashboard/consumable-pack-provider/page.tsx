@@ -164,7 +164,8 @@ export default function ConsumablePackProviderPage() {
 
       <SurgeryCodeLookup
         expect="CONSUMABLE"
-        title="Enter the patient's consumable pack code"
+        lookupBy="patient"
+        title="Consumable pack — enter the patient's PT number"
       />
 
       {/* Date selector + search / sort by patient PT (folder) number */}

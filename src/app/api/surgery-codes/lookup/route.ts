@@ -16,7 +16,218 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const raw = new URL(req.url).searchParams.get("code") || "";
+  const searchParams = new URL(req.url).searchParams;
+  const patientIdentifier = searchParams.get("patientIdentifier")?.trim() || "";
+  const expectedType = searchParams.get("type") as "CONSUMABLE" | "PHARMACY" | "ANAESTHESIA" | null;
+
+  if (patientIdentifier && (expectedType === "CONSUMABLE" || expectedType === "PHARMACY" || expectedType === "ANAESTHESIA")) {
+    const patientWhere = {
+      OR: [
+        { folderNumber: { equals: patientIdentifier, mode: "insensitive" as const } },
+        { ptNumber: { equals: patientIdentifier, mode: "insensitive" as const } },
+      ],
+    };
+
+    if (expectedType === "CONSUMABLE") {
+      const latestRequest = await prisma.surgeryConsumableRequest.findFirst({
+        where: { surgery: { patient: patientWhere } },
+        orderBy: { createdAt: "desc" },
+        include: {
+          surgery: {
+            select: {
+              id: true,
+              procedureName: true,
+              scheduledDate: true,
+              scheduledTime: true,
+              surgeonName: true,
+              surgeryType: true,
+              subspecialty: true,
+              location: true,
+              consumablePackCode: true,
+              patient: {
+                select: {
+                  name: true,
+                  folderNumber: true,
+                  ptNumber: true,
+                  phoneNumber: true,
+                  caregiverName: true,
+                  caregiverPhone: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (latestRequest?.surgery) {
+        const items = await prisma.surgeryConsumableRequest.findMany({
+          where: { surgeryId: latestRequest.surgery.id },
+          orderBy: { createdAt: "asc" },
+        });
+
+        return NextResponse.json({
+          found: true,
+          codeType: "CONSUMABLE",
+          code: latestRequest.surgery.consumablePackCode ?? patientIdentifier,
+          patient: {
+            name: latestRequest.surgery.patient?.name ?? null,
+            folderNumber: latestRequest.surgery.patient?.ptNumber ?? latestRequest.surgery.patient?.folderNumber ?? null,
+            phoneNumber: latestRequest.surgery.patient?.phoneNumber ?? null,
+            caregiverName: latestRequest.surgery.patient?.caregiverName ?? null,
+            caregiverPhone: latestRequest.surgery.patient?.caregiverPhone ?? null,
+          },
+          surgery: {
+            id: latestRequest.surgery.id,
+            procedureName: latestRequest.surgery.procedureName,
+            scheduledDate: latestRequest.surgery.scheduledDate,
+            scheduledTime: latestRequest.surgery.scheduledTime,
+            surgeonName: latestRequest.surgery.surgeonName,
+            surgeryType: latestRequest.surgery.surgeryType,
+            subspecialty: latestRequest.surgery.subspecialty,
+            location: latestRequest.surgery.location,
+          },
+          items,
+        });
+      }
+    }
+
+    if (expectedType === "PHARMACY") {
+      const latestRequest = await prisma.surgeryDrugDressingRequest.findFirst({
+        where: { surgery: { patient: patientWhere } },
+        orderBy: { createdAt: "desc" },
+        include: {
+          surgery: {
+            select: {
+              id: true,
+              procedureName: true,
+              scheduledDate: true,
+              scheduledTime: true,
+              surgeonName: true,
+              surgeryType: true,
+              subspecialty: true,
+              location: true,
+              pharmacyDrugCode: true,
+              patient: {
+                select: {
+                  name: true,
+                  folderNumber: true,
+                  ptNumber: true,
+                  phoneNumber: true,
+                  caregiverName: true,
+                  caregiverPhone: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (latestRequest?.surgery) {
+        const items = await prisma.surgeryDrugDressingRequest.findMany({
+          where: { surgeryId: latestRequest.surgery.id },
+          orderBy: { createdAt: "asc" },
+        });
+
+        return NextResponse.json({
+          found: true,
+          codeType: "PHARMACY",
+          code: latestRequest.surgery.pharmacyDrugCode ?? patientIdentifier,
+          patient: {
+            name: latestRequest.surgery.patient?.name ?? null,
+            folderNumber: latestRequest.surgery.patient?.ptNumber ?? latestRequest.surgery.patient?.folderNumber ?? null,
+            phoneNumber: latestRequest.surgery.patient?.phoneNumber ?? null,
+            caregiverName: latestRequest.surgery.patient?.caregiverName ?? null,
+            caregiverPhone: latestRequest.surgery.patient?.caregiverPhone ?? null,
+          },
+          surgery: {
+            id: latestRequest.surgery.id,
+            procedureName: latestRequest.surgery.procedureName,
+            scheduledDate: latestRequest.surgery.scheduledDate,
+            scheduledTime: latestRequest.surgery.scheduledTime,
+            surgeonName: latestRequest.surgery.surgeonName,
+            surgeryType: latestRequest.surgery.surgeryType,
+            subspecialty: latestRequest.surgery.subspecialty,
+            location: latestRequest.surgery.location,
+          },
+          items,
+        });
+      }
+    }
+
+    if (expectedType === "ANAESTHESIA") {
+      const latestPrescription = await prisma.anestheticPrescription.findFirst({
+        where: { patient: patientWhere },
+        orderBy: { prescriptionDate: "desc" },
+        include: {
+          patient: {
+            select: {
+              name: true,
+              folderNumber: true,
+              ptNumber: true,
+              phoneNumber: true,
+              caregiverName: true,
+              caregiverPhone: true,
+            },
+          },
+          surgery: {
+            select: {
+              id: true,
+              procedureName: true,
+              scheduledDate: true,
+              scheduledTime: true,
+              surgeonName: true,
+              surgeryType: true,
+              subspecialty: true,
+              location: true,
+              anaesthesiaDrugCode: true,
+            },
+          },
+        },
+      });
+
+      if (latestPrescription) {
+        return NextResponse.json({
+          found: true,
+          codeType: "ANAESTHESIA",
+          code: latestPrescription.surgery?.anaesthesiaDrugCode ?? patientIdentifier,
+          patient: {
+            name: latestPrescription.patient?.name ?? latestPrescription.patientName ?? null,
+            folderNumber: latestPrescription.patient?.ptNumber ?? latestPrescription.patient?.folderNumber ?? null,
+            phoneNumber: latestPrescription.patient?.phoneNumber ?? null,
+            caregiverName: latestPrescription.patient?.caregiverName ?? null,
+            caregiverPhone: latestPrescription.patient?.caregiverPhone ?? null,
+          },
+          surgery: latestPrescription.surgery ? {
+            id: latestPrescription.surgery.id,
+            procedureName: latestPrescription.surgery.procedureName,
+            scheduledDate: latestPrescription.surgery.scheduledDate,
+            scheduledTime: latestPrescription.surgery.scheduledTime,
+            surgeonName: latestPrescription.surgery.surgeonName,
+            surgeryType: latestPrescription.surgery.surgeryType,
+            subspecialty: latestPrescription.surgery.subspecialty,
+            location: latestPrescription.surgery.location,
+          } : null,
+          items: [latestPrescription],
+        });
+      }
+    }
+
+    return NextResponse.json(
+      {
+        found: false,
+        error: `No ${
+          expectedType === "CONSUMABLE"
+            ? "consumable request"
+            : expectedType === "PHARMACY"
+            ? "pharmacy request"
+            : "anaesthesia prescription"
+        } found for that PT number`,
+      },
+      { status: 404 }
+    );
+  }
+
+  const raw = searchParams.get("code") || "";
   const code = normaliseCode(raw);
   if (!code) {
     return NextResponse.json({ error: "A code is required" }, { status: 400 });

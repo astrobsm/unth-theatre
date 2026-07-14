@@ -44,9 +44,11 @@ const TITLES: Record<CodeType, string> = {
 export default function SurgeryCodeLookup({
   expect,
   title = "Enter patient code",
+  lookupBy = "code",
 }: {
   expect?: CodeType;
   title?: string;
+  lookupBy?: "code" | "patient";
 }) {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,7 +63,15 @@ export default function SurgeryCodeLookup({
     setError("");
     setResult(null);
     try {
-      const r = await fetch(`/api/surgery-codes/lookup?code=${encodeURIComponent(trimmed)}`, {
+      const params = new URLSearchParams();
+      if (lookupBy === "patient") {
+        params.set("patientIdentifier", trimmed);
+        if (expect) params.set("type", expect);
+      } else {
+        params.set("code", trimmed);
+      }
+
+      const r = await fetch(`/api/surgery-codes/lookup?${params.toString()}`, {
         cache: "no-store",
       });
       const data: LookupResult = await r.json();
@@ -92,7 +102,9 @@ export default function SurgeryCodeLookup({
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder={
-              expect === "PHARMACY"
+              lookupBy === "patient"
+                ? "e.g. PT-12345 or folder number"
+                : expect === "PHARMACY"
                 ? "e.g. PH-7K9QF2"
                 : expect === "ANAESTHESIA"
                 ? "e.g. AN-7K9QF2"

@@ -542,17 +542,18 @@ export default function PrescriptionsPage() {
         </p>
       </div>
 
-      {/* Patient code lookup — the pharmacist keys in the code the surgeon /
-          anaesthetist generated at booking to see exactly what to pack for that
-          patient. Two dedicated fields: surgery drugs vs anaesthetic Rx. */}
+      {/* Patient lookup — pharmacy uses the patient's PT / folder number to see
+          the surgery drugs and anaesthetic prescription for that patient. */}
       <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <SurgeryCodeLookup
           expect="PHARMACY"
-          title="Surgery drugs code (PH-…) — enter the code from the surgeon's booking"
+          lookupBy="patient"
+          title="Surgery drugs — enter the patient's PT number"
         />
         <SurgeryCodeLookup
           expect="ANAESTHESIA"
-          title="Anaesthetic prescription code (AN-…) — enter the anaesthetist's code"
+          lookupBy="patient"
+          title="Anaesthetic prescription — enter the patient's PT number"
         />
       </div>
 
