@@ -556,6 +556,24 @@ export default function PrescriptionsPage() {
         />
       </div>
 
+      <div className="bg-blue-50 border border-blue-100 rounded-lg shadow-sm mb-4 p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label htmlFor="pharmacy-request-date" className="block text-xs font-medium text-blue-900 mb-1">Pharmacy request date</label>
+          <input
+            id="pharmacy-request-date"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value || todayInputValue())}
+            className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            aria-label="Select pharmacy request date"
+          />
+        </div>
+        <div className="text-sm text-blue-900">
+          Showing pharmacy requests for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}.
+          <span className="block text-xs text-blue-700 mt-1">This date controls prescriptions and surgical shopping lists.</span>
+        </div>
+      </div>
+
       {/* Date-range PDF export toolbar */}
       <div className="bg-white rounded-lg shadow-sm mb-4 p-4 flex flex-wrap items-end gap-3">
         <div>
@@ -727,19 +745,8 @@ export default function PrescriptionsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Date selector + search / sort by patient PT (folder) number */}
-          <div className="grid gap-2 sm:grid-cols-[220px_1fr_auto] sm:items-end">
-            <div>
-              <label htmlFor="pharmacy-request-date" className="block text-xs font-medium text-gray-600 mb-1">Request date</label>
-              <input
-                id="pharmacy-request-date"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value || todayInputValue())}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
-                aria-label="Select pharmacy request date"
-              />
-            </div>
+          {/* Search / sort by patient PT (folder) number */}
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
             <input
               type="text"
               value={search}
