@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { hasModuleAccess } from "@/lib/modules";
 import { z } from "zod";
 
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !["ADMIN", "THEATRE_MANAGER", "THEATRE_CHAIRMAN"].includes(session.user.role)) {
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!hasModuleAccess(session.user.role, session.user.extraModules, "theatres")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

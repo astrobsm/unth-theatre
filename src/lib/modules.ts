@@ -160,6 +160,19 @@ export function resolveAllowedModuleIds(
 }
 
 /**
+ * True if the user may use the given module — role default OR admin grant.
+ * Use this in API routes instead of hard-coding role lists, so that access
+ * granted in /dashboard/admin/access actually takes effect server-side.
+ */
+export function hasModuleAccess(
+  role: string | undefined | null,
+  extraModules: string[] | undefined | null,
+  moduleId: ModuleId
+): boolean {
+  return resolveAllowedModuleIds(role, extraModules ?? []).has(moduleId);
+}
+
+/**
  * True if the given path is reachable for this role + grants.
  * Unmapped paths default to allowed (we only restrict paths a module claims).
  */
