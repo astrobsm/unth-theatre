@@ -7,7 +7,13 @@
 // This makes natural speech work with no paid credits, while keeping graceful
 // degradation on old browsers / blocked model downloads.
 
-import { speakViaKokoro, isKokoroAvailable, preloadKokoro, type KokoroSpeakHooks } from './kokoroTts';
+import {
+  speakViaKokoro,
+  isKokoroAvailable,
+  isKokoroReady,
+  preloadKokoro,
+  type KokoroSpeakHooks,
+} from './kokoroTts';
 
 export { preloadKokoro };
 
@@ -127,12 +133,21 @@ async function speakAnnouncementNow(
   const clean = (text || '').trim();
   if (!clean || typeof window === 'undefined') return false;
 
-  // 1) Kokoro — free neural voice. Only try while it is still viable.
-  if (isKokoroAvailable()) {
+  // 1) Kokoro — free neural voice, but ONLY when the engine is already loaded.
+  //
+  // Awaiting a cold load here used to block the announcement behind an ~86 MB
+  // model download that initialises WASM on the main thread. That froze the UI
+  // (including the Acknowledge button) at precisely the moment an emergency
+  // needed to be heard and actioned. A voice that arrives late is worse than a
+  // plainer voice that arrives now, so warm the engine in the background and
+  // let this announcement fall through to something that is ready.
+  if (isKokoroReady()) {
     try {
       const ok = await speakViaKokoro(clean, hooks);
       if (ok) return true;
     } catch { /* fall through to ElevenLabs */ }
+  } else if (isKokoroAvailable()) {
+    preloadKokoro(); // background warm-up; never awaited
   }
 
   // 2) ElevenLabs proxy (only does anything if a key is configured server-side).

@@ -54,6 +54,9 @@ function kokoroInCooldown(): boolean {
 // Singleton model promise so the ~80 MB model is only downloaded / initialised
 // once per page session.
 let ttsPromise: Promise<any> | null = null;
+// True only once the engine has finished loading and can synthesise NOW.
+// Callers use this to avoid awaiting a cold load on a latency-critical path.
+let ttsReady = false;
 
 // CDN sources for kokoro-js (native ESM, incl. transformers.js + onnxruntime).
 // jsdelivr first, esm.sh as a fallback if the first host is blocked/slow.
@@ -118,6 +121,7 @@ async function getKokoro(): Promise<any> {
     for (const cfg of configs) {
       try {
         const tts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, cfg);
+        ttsReady = true;
         console.info(`[kokoro] TTS engine ready (${cfg.device}/${cfg.dtype}).`);
         return tts;
       } catch (e) {
@@ -148,13 +152,43 @@ async function getKokoro(): Promise<any> {
  */
 export function preloadKokoro(): void {
   if (kokoroGivenUp() || kokoroInCooldown() || ttsPromise) return;
+  if (!shouldAutoLoadModel()) return;
   // Fire and forget — never throws to the caller.
   getKokoro().catch(() => {});
+}
+
+/**
+ * Whether it is reasonable to pull the model down automatically.
+ *
+ * It is ~86 MB and initialises onnxruntime WASM on the MAIN THREAD, so on a
+ * metered link or a low-memory handset the automatic download costs the user
+ * real money and janks the UI — a bad trade for a nicer voice. Those devices
+ * keep the built-in browser voice, which is instant, free and always available.
+ * An explicit user action can still load it via getKokoro().
+ */
+function shouldAutoLoadModel(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const conn = (navigator as any).connection;
+  if (conn?.saveData) return false;
+  if (typeof conn?.effectiveType === 'string' && /2g|3g/.test(conn.effectiveType)) return false;
+  const memGb = (navigator as any).deviceMemory;
+  if (typeof memGb === 'number' && memGb > 0 && memGb < 4) return false;
+  return true;
 }
 
 export function isKokoroAvailable(): boolean {
   // Available unless we've given up for the session or are briefly cooling down.
   return !kokoroGivenUp() && !kokoroInCooldown();
+}
+
+/**
+ * True only when the engine is loaded and can synthesise immediately.
+ *
+ * `isKokoroAvailable()` means "worth trying eventually"; this means "will not
+ * block". Latency-critical callers (emergency announcements) must use this one.
+ */
+export function isKokoroReady(): boolean {
+  return ttsReady;
 }
 
 // Cache rendered audio object URLs by text so repeated announcements (emergency
