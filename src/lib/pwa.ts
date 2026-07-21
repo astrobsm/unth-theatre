@@ -18,6 +18,60 @@ function notifyUpdateAvailable(reg: ServiceWorkerRegistration): void {
   updatePending = true;
   onUpdateAvailable?.(reg);
 }
+
+// Guards the one automatic reload we allow per tab session.
+let reloadingForUpdate = false;
+const AUTO_UPDATE_FLAG = 'orm-sw-auto-updated';
+
+function readSessionFlag(key: string): boolean {
+  try {
+    return sessionStorage.getItem(key) === '1';
+  } catch {
+    return false; // private mode / storage disabled
+  }
+}
+
+function writeSessionFlag(key: string): void {
+  try {
+    sessionStorage.setItem(key, '1');
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/**
+ * Activate a worker that was ALREADY waiting when the page loaded.
+ *
+ * sw.js deliberately avoids skipWaiting() so a new worker cannot hot-swap
+ * cached assets under a running page. That reasoning does not apply at load
+ * time: the page has only just started, so activating now costs a single
+ * reload rather than a mid-session chunk mismatch. It has to be automatic
+ * because otherwise every user stays on the old worker until they personally
+ * tap the update prompt — which most never do, leaving fixes undelivered.
+ *
+ * Updates discovered mid-session still only prompt; see the `updatefound`
+ * handler, which is unchanged.
+ */
+function applyWaitingWorker(registration: ServiceWorkerRegistration): void {
+  const waiting = registration.waiting;
+  if (!waiting || !navigator.serviceWorker.controller) return;
+
+  // If we already swapped once this session and something is STILL waiting,
+  // stop auto-applying and fall back to the prompt — reloading again could loop.
+  if (readSessionFlag(AUTO_UPDATE_FLAG)) {
+    notifyUpdateAvailable(registration);
+    return;
+  }
+  writeSessionFlag(AUTO_UPDATE_FLAG);
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadingForUpdate) return;
+    reloadingForUpdate = true;
+    window.location.reload();
+  });
+
+  waiting.postMessage({ type: 'SKIP_WAITING' });
+}
 let onInstallReady: (() => void) | null = null;
 let onUpdateAvailable: ((reg: ServiceWorkerRegistration) => void) | null = null;
 
@@ -55,12 +109,10 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 
     // A worker that finished installing on a PREVIOUS visit is already sitting
     // in `waiting` by the time we get here, so `updatefound` will never fire for
-    // it. Without this check the update prompt never appears, applyUpdate() is
-    // never called, and — because sw.js deliberately does not call skipWaiting
-    // — the old worker keeps controlling the app indefinitely.
-    if (registration.waiting && navigator.serviceWorker.controller) {
-      notifyUpdateAvailable(registration);
-    }
+    // it. Left alone it would never activate, and the old worker would keep
+    // controlling the app indefinitely. Apply it now, while the page is still
+    // loading — see applyWaitingWorker.
+    applyWaitingWorker(registration);
 
     // Listen for messages from SW
     navigator.serviceWorker.addEventListener('message', (event) => {
