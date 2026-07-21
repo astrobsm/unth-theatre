@@ -384,7 +384,9 @@ async function networkFirstWithCache(request) {
         // Store in the Cache API only. We no longer re-parse the body to also
         // write an IndexedDB copy on every response — that doubled the work on
         // every API call. The Cache API copy already serves offline fallback.
-        cache.put(request, networkResponse.clone());
+        // Unawaited, so swallow failures (quota, uncacheable response) — an
+        // unhandled rejection here would surface as console noise on every call.
+        cache.put(request, networkResponse.clone()).catch(() => {});
       }
       return networkResponse;
     });
@@ -392,23 +394,36 @@ async function networkFirstWithCache(request) {
   const cached = await cache.match(request);
 
   if (cached) {
+    // Build each response off a *clone*. A Response body is a one-shot stream:
+    // handing out `cached.body` directly locks it, so the second reader (the
+    // offline path below, or a later timer firing) would throw
+    // "Response body object should not be disturbed or locked".
+    const fromCache = (offline) => {
+      const headers = new Headers(cached.headers);
+      headers.set('X-ORM-Cache', 'true');
+      if (offline) headers.set('X-ORM-Offline', 'true');
+      return new Response(cached.clone().body, { status: cached.status, headers });
+    };
+
     // Race the network against a short timeout. If the network wins quickly we
     // return the fresh response; otherwise we serve the cached copy immediately
     // (and the background fetch above still refreshes the cache for next time).
+    let timer;
     const timeoutFallback = new Promise((resolve) => {
-      setTimeout(() => {
-        const headers = new Headers(cached.headers);
-        headers.set('X-ORM-Cache', 'true');
-        resolve(new Response(cached.body, { status: cached.status, headers }));
-      }, NETWORK_TIMEOUT_MS);
+      timer = setTimeout(() => resolve(fromCache(false)), NETWORK_TIMEOUT_MS);
     });
     try {
-      return await Promise.race([networkPromise, timeoutFallback]);
-    } catch (err) {
-      const headers = new Headers(cached.headers);
-      headers.set('X-ORM-Cache', 'true');
-      headers.set('X-ORM-Offline', 'true');
-      return new Response(cached.body, { status: cached.status, headers });
+      // The network rejection is handled here rather than by an outer catch: once
+      // the timeout has won the race, an outer catch can no longer observe it and
+      // the failure surfaces as an unhandled rejection in the console.
+      return await Promise.race([
+        networkPromise.catch(() => fromCache(true)),
+        timeoutFallback,
+      ]);
+    } finally {
+      // Without this the timer still fires after the network has won, doing
+      // pointless work and throwing uncaught from inside the timer callback.
+      clearTimeout(timer);
     }
   }
 

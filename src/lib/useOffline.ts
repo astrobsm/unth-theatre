@@ -321,6 +321,14 @@ export function useServiceWorker() {
             });
           }
         });
+
+        // A worker that installed on an earlier visit is already `waiting`, so
+        // `updatefound` will never fire for it. sw.js deliberately does not call
+        // skipWaiting, so without this the prompt never shows and the old worker
+        // stays in control forever.
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          setUpdateAvailable(true);
+        }
       })
       .catch((err) => console.error('[SW] Registration failed:', err));
 

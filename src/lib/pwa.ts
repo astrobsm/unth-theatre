@@ -5,6 +5,19 @@
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let swRegistration: ServiceWorkerRegistration | null = null;
+// registerServiceWorker() is called from more than one component (OfflineProvider
+// and OfflineIndicator). Without this guard each caller started its own update
+// timer, so the periodic check ran once per mount instead of once per app.
+let updateTimer: ReturnType<typeof setInterval> | null = null;
+// Set once a new worker is known to be waiting. Registration happens from more
+// than one component, so the update can be detected before setUpdateHandler()
+// has run — this lets a late handler still be told.
+let updatePending = false;
+
+function notifyUpdateAvailable(reg: ServiceWorkerRegistration): void {
+  updatePending = true;
+  onUpdateAvailable?.(reg);
+}
 let onInstallReady: (() => void) | null = null;
 let onUpdateAvailable: ((reg: ServiceWorkerRegistration) => void) | null = null;
 
@@ -35,10 +48,19 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
       newWorker.addEventListener('statechange', () => {
         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
           // New version available
-          onUpdateAvailable?.(registration);
+          notifyUpdateAvailable(registration);
         }
       });
     });
+
+    // A worker that finished installing on a PREVIOUS visit is already sitting
+    // in `waiting` by the time we get here, so `updatefound` will never fire for
+    // it. Without this check the update prompt never appears, applyUpdate() is
+    // never called, and — because sw.js deliberately does not call skipWaiting
+    // — the old worker keeps controlling the app indefinitely.
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      notifyUpdateAvailable(registration);
+    }
 
     // Listen for messages from SW
     navigator.serviceWorker.addEventListener('message', (event) => {
@@ -55,10 +77,20 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
       }
     });
 
-    // Periodic update check every 60 minutes
-    setInterval(() => {
-      registration.update();
-    }, 60 * 60 * 1000);
+    // Periodic update check every 60 minutes. Only ever one timer per app —
+    // see the note on `updateTimer` above.
+    if (updateTimer === null) {
+      updateTimer = setInterval(() => {
+        // Skip while offline: update() would fail by definition, and the theatre
+        // network drops regularly.
+        if (!navigator.onLine) return;
+        // update() rejects whenever /sw.js cannot be fetched (flaky connection,
+        // deploy in progress). That is expected and harmless — but unhandled it
+        // surfaces as "Uncaught (in promise) TypeError: Failed to update a
+        // ServiceWorker" in every user's console.
+        registration.update().catch(() => {});
+      }, 60 * 60 * 1000);
+    }
 
     console.log('[PWA] Service worker registered');
     return registration;
@@ -106,6 +138,9 @@ export function canInstall(): boolean {
 // ============================================================
 export function setUpdateHandler(handler: (reg: ServiceWorkerRegistration) => void): void {
   onUpdateAvailable = handler;
+  // Registration may already have found a waiting worker before this component
+  // mounted; replay it so the prompt is not missed.
+  if (updatePending && swRegistration) handler(swRegistration);
 }
 
 export function applyUpdate(): void {
