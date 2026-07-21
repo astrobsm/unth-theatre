@@ -13,8 +13,9 @@
 
 import { useState } from 'react';
 import { Download, Printer, MapPin, Receipt, Pill, Stethoscope, ListChecks, Phone, Loader2 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jsPDF + autoTable (~400 KB) load only when a guide is actually generated.
+import type jsPDF from 'jspdf';
+import type { UserOptions } from 'jspdf-autotable';
 
 const STATIONS = [
   {
@@ -60,7 +61,12 @@ export default function PatientPaymentGuidePage() {
     setError(null);
     setGenerating(true);
     try {
-      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+      const [{ default: JsPDF }, { default: autoTableFn }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const autoTable = (d: jsPDF, o: UserOptions) => autoTableFn(d, o);
+      const doc = new JsPDF({ unit: 'mm', format: 'a4' });
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
 
@@ -76,7 +82,7 @@ export default function PatientPaymentGuidePage() {
         const y = (pageH - size) / 2;
         // Try faint alpha; if GState unsupported, fall back to a small corner logo.
         try {
-          const jsPdfAny = jsPDF as unknown as { GState: new (opts: { opacity: number }) => unknown };
+          const jsPdfAny = JsPDF as unknown as { GState: new (opts: { opacity: number }) => unknown };
           const docAny = doc as unknown as { setGState: (g: unknown) => void };
           const faint = new jsPdfAny.GState({ opacity: 0.08 });
           docAny.setGState(faint);

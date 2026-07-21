@@ -375,7 +375,7 @@ export default function PrescriptionsPage() {
         alert('No prescriptions found in the selected date range.');
         return;
       }
-      const doc = buildRegisterPdf(all, fromDate.toISOString(), toDate.toISOString());
+      const doc = await buildRegisterPdf(all, fromDate.toISOString(), toDate.toISOString());
       if (mode === 'download') {
         downloadPdf(doc, `prescription-register_${exportFrom}_to_${exportTo}.pdf`);
       } else {
@@ -389,8 +389,8 @@ export default function PrescriptionsPage() {
     }
   };
 
-  const handlePrintSingle = (p: Prescription, mode: 'download' | 'print') => {
-    const doc = buildPatientPrescriptionPdf(toReportPrescription(p));
+  const handlePrintSingle = async (p: Prescription, mode: 'download' | 'print') => {
+    const doc = await buildPatientPrescriptionPdf(toReportPrescription(p));
     if (mode === 'download') {
       downloadPdf(doc, `prescription_${p.patientName.replace(/\s+/g, '_')}_${p.id.slice(0, 6)}.pdf`);
     } else {

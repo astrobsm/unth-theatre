@@ -8,7 +8,6 @@ import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPre
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
-import jsPDF from 'jspdf';
 
 type OnDutyMember = {
   userId: string;
@@ -210,50 +209,6 @@ export default function NewEmergencyBookingPage() {
 
   const removeTeamMember = (index: number) => {
     setTeamMembers((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const downloadConsentTemplate = () => {
-    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-    const w = doc.internal.pageSize.getWidth();
-    const margin = 14;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('UNTH EMERGENCY SURGERY CONSENT FORM (TEMPLATE)', w / 2, 16, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text('To be printed, signed by patient/relative and uploaded during booking.', w / 2, 22, { align: 'center' });
-    doc.line(margin, 26, w - margin, 26);
-
-    const lines = [
-      'Patient Name: ____________________________________________   Folder No: ______________________',
-      'Diagnosis: ________________________________________________________________________________',
-      'Proposed Procedure: ________________________________________________________________________',
-      'Surgical Unit: __________________________   Theatre: __________________________',
-      'Date: ____________________   Estimated Start Time: ____________________',
-      '',
-      'I/We have been informed of the diagnosis, procedure, expected benefits, risks, alternatives,',
-      'and possible complications. I/We understand that emergency interventions may be required.',
-      'I/We consent to the above operation and required anaesthesia, blood transfusion, and associated',
-      'life-saving measures as clinically indicated.',
-      '',
-      'Patient / Relative Name: _______________________________________________',
-      'Relationship to patient (if not patient): ___________________________________',
-      'Signature / Thumbprint: ___________________________________   Date: ____________________',
-      '',
-      'Witness (Name): __________________________________________  Signature: ____________________',
-      'Surgeon (Name): __________________________________________  Signature: ____________________',
-      'Anaesthetist (Name): ______________________________________  Signature: ____________________',
-    ];
-
-    doc.setFontSize(10);
-    doc.text(lines, margin, 36);
-    doc.setFontSize(8);
-    doc.setTextColor(120);
-    doc.text('UNTH ORM Template - Emergency Surgery Consent', w / 2, 290, { align: 'center' });
-    doc.setTextColor(0);
-
-    doc.save('UNTH-Emergency-Surgery-Consent-Template.pdf');
   };
 
   // Auto-fetch on-duty emergency team whenever the requested date/time changes.

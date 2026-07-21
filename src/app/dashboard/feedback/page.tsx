@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import QRCode from 'qrcode';
+// qrcode is loaded on demand — the page renders long before the QR is needed.
 import {
   MessageCircle,
   Send,
@@ -125,7 +125,8 @@ export default function StaffFeedbackPage() {
     if (typeof window === 'undefined') return;
     const url = `${window.location.origin}/feedback`;
     setPublicUrl(url);
-    QRCode.toDataURL(url, { width: 320, margin: 1 })
+    import('qrcode')
+      .then((m) => m.toDataURL(url, { width: 320, margin: 1 }))
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(''));
   }, []);

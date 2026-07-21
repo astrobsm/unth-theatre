@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import jsPDF from 'jspdf';
+// jsPDF (~400 KB) loads only when a consent PDF is actually produced.
+import type jsPDF from 'jspdf';
 import {
   ArrowLeft, FileText, PenLine, Upload, Download, Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2,
 } from 'lucide-react';
@@ -184,8 +185,9 @@ export default function SurgeryConsentPage() {
   }
 
   // ---- PDF generation (filled UNTH consent + captured signatures) ----
-  function buildPdf(): jsPDF {
-    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  async function buildPdf(): Promise<jsPDF> {
+    const { default: JsPDF } = await import('jspdf');
+    const doc = new JsPDF({ unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const margin = 14;
@@ -296,8 +298,8 @@ export default function SurgeryConsentPage() {
 
   const fileSafe = (s: string) => (s || 'patient').replace(/[^A-Za-z0-9._-]+/g, '_');
 
-  const downloadPdf = () => {
-    const doc = buildPdf();
+  const downloadPdf = async () => {
+    const doc = await buildPdf();
     doc.save(`UNTH-Consent-${fileSafe(form.patientName)}.pdf`);
   };
 
@@ -321,7 +323,7 @@ export default function SurgeryConsentPage() {
     try {
       let hardCopyFile: { name: string; mimeType: string; base64: string } | null = null;
       if (mode === 'ELECTRONIC') {
-        const doc = buildPdf();
+        const doc = await buildPdf();
         const dataUri = doc.output('datauristring');
         const base64 = dataUri.split(',').pop() || '';
         hardCopyFile = { name: `UNTH-Consent-${fileSafe(form.patientName)}.pdf`, mimeType: 'application/pdf', base64 };

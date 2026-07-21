@@ -2,22 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import {
-  Bar, Line, Pie, Doughnut,
-} from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
+import dynamic from 'next/dynamic';
 import {
   FlaskConical, Filter, RefreshCw, Download, BarChart3, Activity,
   Users, AlertTriangle, Layers, Database, Sigma, Play, Plus, Trash2,
@@ -25,10 +10,15 @@ import {
 } from 'lucide-react';
 import { exportToExcel, exportToCSV, exportMultiSheetExcel } from '@/lib/exportUtils';
 
-ChartJS.register(
-  CategoryScale, LinearScale, PointElement, LineElement, BarElement,
-  ArcElement, Title, Tooltip, Legend, Filler
+// Charts load on demand — chart.js is ~250 KB and this page is usable (query
+// builder, filters, exports) long before a chart is rendered.
+const chartLoading = () => (
+  <div className="h-64 flex items-center justify-center text-sm text-gray-400">Loading chart…</div>
 );
+const Bar = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Bar), { ssr: false, loading: chartLoading });
+const Line = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Line), { ssr: false, loading: chartLoading });
+const Pie = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Pie), { ssr: false, loading: chartLoading });
+const Doughnut = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Doughnut), { ssr: false, loading: chartLoading });
 
 // ---- Palette ---------------------------------------------------------------
 const PALETTE = [

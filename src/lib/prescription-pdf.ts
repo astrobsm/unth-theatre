@@ -4,9 +4,29 @@
 
 "use client";
 
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+// jsPDF + autoTable are ~400 KB and were statically imported here, which forced
+// them onto the prescriptions route for every visitor even though a PDF is only
+// produced on an explicit click. Loaded on demand instead, mirroring
+// ./pdfGenerator.ts. The type-only imports below are erased at compile time and
+// cost nothing.
+import type jsPDF from "jspdf";
+import type { UserOptions } from "jspdf-autotable";
 import { isNarcotic } from "./narcotics";
+
+let _jsPDF: typeof import("jspdf").default | null = null;
+let _autoTable: typeof import("jspdf-autotable").default | null = null;
+
+async function loadPdfLibs() {
+  if (!_jsPDF) _jsPDF = (await import("jspdf")).default;
+  if (!_autoTable) _autoTable = (await import("jspdf-autotable")).default;
+  return { JsPDF: _jsPDF, autoTable: _autoTable };
+}
+
+/** Local shim so call sites keep reading `autoTable(doc, {...})`. */
+function autoTable(doc: jsPDF, opts: UserOptions) {
+  if (!_autoTable) throw new Error("autoTable used before loadPdfLibs()");
+  return _autoTable(doc, opts);
+}
 
 export interface ReportMedication {
   name: string;
@@ -86,12 +106,13 @@ function footer(doc: jsPDF) {
 
 /** Prescription register over a date range — one row per medication so
  *  narcotics can be tallied row-by-row. */
-export function buildRegisterPdf(
+export async function buildRegisterPdf(
   prescriptions: ReportPrescription[],
   fromIso: string,
   toIso: string,
 ) {
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  const { JsPDF } = await loadPdfLibs();
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
   header(
     doc,
     `Prescription Register: ${fmt(fromIso)} – ${fmt(toIso)}`,
@@ -215,8 +236,9 @@ export function buildRegisterPdf(
 }
 
 /** Single-patient prescription print — full detail for one Rx. */
-export function buildPatientPrescriptionPdf(rx: ReportPrescription) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+export async function buildPatientPrescriptionPdf(rx: ReportPrescription) {
+  const { JsPDF } = await loadPdfLibs();
+  const doc = new JsPDF({ unit: "mm", format: "a4" });
   header(
     doc,
     `Prescription — ${rx.patientName}${rx.folderNumber ? " (" + rx.folderNumber + ")" : ""}`,
