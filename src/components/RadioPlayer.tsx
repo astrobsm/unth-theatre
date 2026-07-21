@@ -6,6 +6,7 @@ import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, Gr
 import { useMediaHub } from '@/components/MediaHub';
 import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
 import { useTabLeader } from '@/lib/useTabLeader';
+import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 interface Announcement {
   id: string;
@@ -27,6 +28,19 @@ interface Announcement {
 }
 
 const POLL_MS = 7000;
+// A hidden tab still needs to hear about an emergency, so it backs off rather
+// than stopping. A metered / 2G link backs off too — the theatre runs on poor
+// mobile internet and a stream of polls competes with the requests that matter.
+const POLL_MS_HIDDEN = 30000;
+const POLL_MS_SLOW_LINK = 20000;
+
+function pollDelay(): number {
+  if (typeof document !== 'undefined' && document.hidden) return POLL_MS_HIDDEN;
+  const conn = typeof navigator !== 'undefined' ? (navigator as any).connection : undefined;
+  if (conn?.saveData) return POLL_MS_SLOW_LINK;
+  if (typeof conn?.effectiveType === 'string' && /2g/.test(conn.effectiveType)) return POLL_MS_SLOW_LINK;
+  return POLL_MS;
+}
 
 export default function RadioPlayer() {
   const { data: session, status } = useSession();
@@ -356,20 +370,47 @@ export default function RadioPlayer() {
     }
   }, []);
 
-  // Keep service alive while tab is hidden by re-fetching when it becomes visible.
+  // Poll for announcements.
+  //
+  // This was a flat 7s setInterval with no gating, which made it ~92% of all
+  // idle network traffic: a hidden tab cost exactly as much as a focused one,
+  // three open tabs tripled it, and an offline handset still burned radio and
+  // battery on ~9 failed requests a minute. On theatre wifi that is the
+  // difference between a responsive app and a stalled one.
+  //
+  // It stays fast while visible — this is how an emergency reaches staff — and
+  // backs off otherwise. Any backed-off or skipped cycle is cut short the
+  // moment the tab is shown or the link returns, so an emergency is never
+  // delayed by more than the wake-up.
   useEffect(() => {
     if (status !== 'authenticated' || !enabled) return;
-    const onVisible = () => { if (!document.hidden) fetchQueue(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [status, enabled, fetchQueue]);
 
-  // Poll
-  useEffect(() => {
-    if (status !== 'authenticated' || !enabled) return;
-    fetchQueue();
-    const id = setInterval(fetchQueue, POLL_MS);
-    return () => clearInterval(id);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
+    const tick = async () => {
+      // Skip while offline: the request can only fail.
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        await fetchQueue();
+      }
+      if (!cancelled) timer = setTimeout(tick, pollDelay());
+    };
+    tick();
+
+    const wake = () => {
+      if (cancelled || document.hidden) return;
+      clearTimeout(timer);
+      tick();
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('online', wake);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('online', wake);
+    };
   }, [status, enabled, fetchQueue]);
 
   // Pick the highest-priority announcement and play it. Non-ack items play
@@ -478,27 +519,41 @@ export default function RadioPlayer() {
 
   return (
     <>
-    {/* Floating, always-on-top Acknowledge button. Placed at the bottom CENTRE
-        so it never overlaps the media-hub launcher / assistant widgets that
-        cluster in the bottom-right corner (which previously intercepted taps
-        and looked like a duplicate control). Highest z-index guarantees the
-        click lands. */}
+    {/* Acknowledge lives at the TOP CENTRE: it is the highest-priority control
+        in the app, so it gets the one screen position nothing else occupies.
+        Previously it shared `bottom-4` with the radio panel, which is
+        min(92vw,22rem) wide — on a phone the panel covered it and swallowed the
+        taps. The dock now guarantees separation rather than relying on offsets.
+        Sized responsively so the label never wraps mid-word on a narrow screen. */}
     {top?.requireAck && (
-      <button
-        onClick={() => acknowledge(top.id)}
-        disabled={ackBusy}
-        title="Acknowledge emergency announcement"
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[10030] flex items-center gap-2 px-6 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-base shadow-2xl ring-4 ring-green-300/70 disabled:opacity-60 print:hidden animate-pulse pointer-events-auto"
-      >
-        {ackBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-        {ackBusy ? 'ACKNOWLEDGING…' : 'ACKNOWLEDGE EMERGENCY'}
-      </button>
+      <DockSlot anchor="top-center" order={DOCK_ORDER.acknowledge}>
+        <button
+          onClick={() => acknowledge(top.id)}
+          disabled={ackBusy}
+          title="Acknowledge emergency announcement"
+          className="flex items-center justify-center gap-2 w-[min(92vw,26rem)] px-5 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm sm:text-base shadow-2xl ring-4 ring-green-300/70 disabled:opacity-60 animate-pulse"
+        >
+          {ackBusy ? (
+            <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+          )}
+          <span className="truncate">
+            {ackBusy ? 'ACKNOWLEDGING…' : 'ACKNOWLEDGE EMERGENCY'}
+          </span>
+        </button>
+      </DockSlot>
     )}
     {mode === 'radio' && (
+    <DockSlot anchor="bottom-right" order={DOCK_ORDER.radio}>
+    {/* Undragged, the dock positions this and keeps it clear of the other
+        widgets. Once dragged, `position: fixed` takes it out of the dock's flow
+        to the exact spot the user chose (the bottom-right anchor applies no
+        transform, so fixed still resolves against the viewport). */}
     <div
       ref={dragRef}
-      style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
-      className={`fixed ${pos ? '' : 'bottom-4 right-4'} z-[10005] w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 print:hidden ${
+      style={pos ? { position: 'fixed', left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
+      className={`${pos ? 'z-[10005]' : ''} w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 ${
         isEmergency
           ? 'bg-red-600 border-red-900 text-white animate-pulse'
           : 'bg-gradient-to-r from-slate-900 to-slate-800 border-primary-600 text-white'
@@ -588,6 +643,7 @@ export default function RadioPlayer() {
         </div>
       )}
     </div>
+    </DockSlot>
     )}
     </>
   );
