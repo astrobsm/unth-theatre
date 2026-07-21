@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { MessageCircle, Send, X, Mic, MicOff, Volume2, Loader2 } from 'lucide-react';
+import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -102,17 +103,19 @@ export default function AssistantWidget() {
   return (
     <>
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-20 right-5 z-[55] w-14 h-14 rounded-full bg-gradient-to-br from-primary-600 to-secondary-600 text-white shadow-2xl hover:scale-105 transition flex items-center justify-center"
-          title="Theatre assistant"
-        >
-          <MessageCircle className="w-7 h-7" />
-        </button>
+        <DockSlot anchor="bottom-right" order={DOCK_ORDER.assistant}>
+          <button
+            onClick={() => setOpen(true)}
+            className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-600 to-secondary-600 text-white shadow-2xl hover:scale-105 transition flex items-center justify-center"
+            title="Theatre assistant"
+          >
+            <MessageCircle className="w-7 h-7" />
+          </button>
+        </DockSlot>
       )}
 
       {open && (
-        <div className="fixed bottom-20 right-5 z-[55] w-[360px] max-w-[95vw] h-[520px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-4 right-4 z-[10010] w-[360px] max-w-[95vw] h-[520px] max-h-[75vh] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
           <div className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold">
               <MessageCircle className="w-5 h-5" /> Theatre Assistant

@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download, X, Share, Plus } from 'lucide-react';
+import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 import {
   setupInstallPrompt,
   promptInstall,
@@ -96,8 +97,11 @@ export default function InstallAppButton() {
 
   return (
     <>
-      {/* Floating button — fixed bottom-right on every page */}
-      <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-2 print:hidden">
+      {/* Bottom-LEFT: the bottom-right corner is the media cluster. This used to
+          share the exact `bottom-4 right-4` slot as the hub launcher, so the two
+          round buttons overlapped and fought for taps. */}
+      <DockSlot anchor="bottom-left" order={DOCK_ORDER.install}>
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={handleClick}
@@ -118,6 +122,7 @@ export default function InstallAppButton() {
           <X className="h-4 w-4" />
         </button>
       </div>
+      </DockSlot>
 
       {/* iOS Safari add-to-home-screen instructions */}
       {showIosHelp && (

@@ -17,6 +17,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Radio, Music, X } from 'lucide-react';
+import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 type Mode = 'hub' | 'split' | 'radio' | 'music';
 
@@ -92,7 +93,8 @@ export function MediaHubLauncher() {
   if (mode === 'radio' || mode === 'music') return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[10004] print:hidden flex items-center gap-2">
+    <DockSlot anchor="bottom-right" order={DOCK_ORDER.mediaHub}>
+    <div className="flex items-center gap-2">
       {mode === 'split' ? (
         <>
           <button
@@ -151,5 +153,6 @@ export function MediaHubLauncher() {
         </button>
       )}
     </div>
+    </DockSlot>
   );
 }

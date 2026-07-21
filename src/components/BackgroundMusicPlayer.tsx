@@ -22,6 +22,7 @@ import {
 import { useMediaHub } from '@/components/MediaHub';
 import { useTabLeader } from '@/lib/useTabLeader';
 import { AmbientEngine } from '@/lib/ambientEngine';
+import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 const LS_ENABLED   = 'bgMusic.enabled';
 const LS_VOLUME    = 'bgMusic.volume';
@@ -236,11 +237,8 @@ export default function BackgroundMusicPlayer() {
   }, [enabled, playing, ducked, setMusicActive]);
 
   return (
-    <div
-      className="fixed bottom-20 right-4 z-[10006] print:hidden"
-      onMouseEnter={clearAutohide}
-      onMouseLeave={armAutohide}
-    >
+    <DockSlot anchor="bottom-right" order={DOCK_ORDER.music}>
+    <div onMouseEnter={clearAutohide} onMouseLeave={armAutohide}>
       {mode === 'music' && (
         <div className="bg-white border border-gray-200 shadow-lg rounded-xl overflow-hidden">
           <button
@@ -300,5 +298,6 @@ export default function BackgroundMusicPlayer() {
         </div>
       )}
     </div>
+    </DockSlot>
   );
 }

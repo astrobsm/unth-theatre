@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { OfflineProvider } from "@/components/OfflineProvider";
 import { MediaHubProvider } from "@/components/MediaHub";
+import { FloatingDockRoot } from "@/components/FloatingDock";
 
 // Global audio/media chrome is never needed for first paint — it only
 // activates after the user is authenticated and interacts. Deferring it with
@@ -46,6 +47,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <OfflineProvider>
         <MediaHubProvider>
+          {/* Anchors for every floating widget. Mounted before them so the
+              portals find their host on first paint. */}
+          <FloatingDockRoot />
           {children}
           {/* Media chrome (Theatre Radio, background music, launcher) is
               non-critical and only mounts once the page is idle, keeping the

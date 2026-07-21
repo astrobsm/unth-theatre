@@ -2,6 +2,7 @@
 
 import { useServiceWorker } from '@/lib/useOffline';
 import { RefreshCw, Sparkles } from 'lucide-react';
+import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 /**
  * Floating banner shown when a new service worker version has installed
@@ -14,10 +15,15 @@ export default function ServiceWorkerUpdatePrompt() {
   if (!updateAvailable) return null;
 
   return (
+    // Docked bottom-left, away from the media cluster. It previously sat at
+    // `bottom-4 right-4 z-50` — the same corner as the media widgets but at a
+    // far lower z-index, so it rendered *underneath* them and its "Reload now"
+    // button could not be reached.
+    <DockSlot anchor="bottom-left" order={DOCK_ORDER.update}>
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-blue-300 bg-white shadow-xl"
+      className="w-[min(92vw,24rem)] rounded-lg border border-blue-300 bg-white shadow-xl"
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
@@ -41,5 +47,6 @@ export default function ServiceWorkerUpdatePrompt() {
         </div>
       </div>
     </div>
+    </DockSlot>
   );
 }
