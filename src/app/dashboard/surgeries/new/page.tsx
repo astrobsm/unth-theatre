@@ -10,6 +10,7 @@ import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { formatAge } from '@/lib/age';
+import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -473,6 +474,7 @@ export default function NewSurgeryPage() {
       scheduledTime: formData.get('scheduledTime'),
       estimatedDuration: parseInt(formData.get('estimatedDuration') as string) || 60,
       surgeryType: surgeryType,
+      magnitude: (formData.get('magnitude') as string) || null,
       anesthesiaType: anesthesiaType || null,
       needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
       needDiathermy: formData.get('needDiathermy') === 'on',
@@ -1118,6 +1120,20 @@ export default function NewSurgeryPage() {
                 placeholder="e.g. 90"
               />
               <p className="text-xs text-gray-500 mt-1">Total estimated duration of the surgery in minutes. Used to validate daily theatre capacity (8 AM - 5 PM).</p>
+            </div>
+
+            <div>
+              <label className="label">Operative Magnitude *</label>
+              <select name="magnitude" required defaultValue="" className="input-field">
+                <option value="" disabled>Select magnitude…</option>
+                <option value="MINOR">Minor</option>
+                <option value="INTERMEDIATE">Intermediate</option>
+                <option value="MAJOR">Major</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Determines the mandatory base pack sent to the consumable providers — gauze bundle,
+                glove and gown counts scale with this.
+              </p>
             </div>
           </div>
         </div>
@@ -1853,6 +1869,9 @@ function BookingCodesModal({
             Give these codes to{codes.patientName ? <> <span className="font-semibold">{codes.patientName}</span></> : ' the patient'}.
             Keying a code in reveals exactly what was requested so the patient can be costed and pay.
           </p>
+
+          {/* Mandatory: no paper prescriptions. */}
+          <NoPaperPrescriptionWarning variant="banner" />
 
           {/* Payment instruction for the patient */}
           <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3">

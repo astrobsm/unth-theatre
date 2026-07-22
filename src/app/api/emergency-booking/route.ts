@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
+import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ const createEmergencyBookingSchema = z.object({
   theatreName: z.string().optional(),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM']).default('CRITICAL'),
   classification: z.string().optional(),
+  magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR']).nullish(),
   bloodRequired: z.boolean().default(false),
   bloodType: z.string().optional(),
   bloodUnits: z.number().optional(),
@@ -487,6 +489,7 @@ export async function POST(request: NextRequest) {
         estimatedDuration: newDuration,
         theatreId: resolvedTheatreId,
         surgeryType: 'EMERGENCY',
+        magnitude: validatedData.magnitude ?? null,
         status: 'SCHEDULED',
         needBloodTransfusion: validatedData.bloodRequired || false,
         otherSpecialNeeds: validatedData.specialEquipment || null,
@@ -598,38 +601,52 @@ export async function POST(request: NextRequest) {
     const consumableRequests = validatedData.consumableRequests ?? [];
     const drugDressingRequests = validatedData.drugDressingRequests ?? [];
 
-    if (consumableRequests.length > 0) {
-      await prisma.surgeryConsumableRequest.createMany({
-        data: consumableRequests.map((c) => ({
-          surgeryId: surgery.id,
-          templateId: c.templateId || null,
-          name: c.name,
-          category: c.category as any,
-          size: c.size ?? null,
-          unit: c.unit,
-          quantity: c.quantity,
-          notes: c.notes ?? null,
-          requestedById: session.user.id,
-          requestedByName: session.user.name || null,
+    // The MANDATORY base pack attaches to every emergency booking regardless of
+    // what the surgeon selected, scaled to operative magnitude, and stamped so
+    // the pack provider can tell it apart from surgeon-added extras.
+    const basePackRows = resolveBasePack(validatedData.magnitude).map((b) => ({
+      surgeryId: surgery.id,
+      templateId: null,
+      name: b.name,
+      category: b.category as any,
+      size: b.size,
+      unit: b.unit,
+      quantity: b.quantity,
+      notes: BASE_PACK_LABEL,
+      requestedById: session.user.id,
+      requestedByName: session.user.name || null,
+    }));
+    const extraConsumableRows = consumableRequests.map((c) => ({
+      surgeryId: surgery.id,
+      templateId: c.templateId || null,
+      name: c.name,
+      category: c.category as any,
+      size: c.size ?? null,
+      unit: c.unit,
+      quantity: c.quantity,
+      notes: c.notes ?? null,
+      requestedById: session.user.id,
+      requestedByName: session.user.name || null,
+    }));
+    const allConsumableRows = [...basePackRows, ...extraConsumableRows];
+    await prisma.surgeryConsumableRequest.createMany({ data: allConsumableRows });
+
+    // Notify Consumable Pack Providers with red EMERGENCY tag (always — there is
+    // always at least the base pack to prepare).
+    const packProviders = await prisma.user.findMany({
+      where: { role: 'CONSUMABLE_PACK_PROVIDER', status: 'APPROVED' },
+      select: { id: true },
+    });
+    if (packProviders.length > 0) {
+      await prisma.notification.createMany({
+        data: packProviders.map((u) => ({
+          userId: u.id,
+          type: 'STOCK_ALERT' as any,
+          title: '🚨 EMERGENCY: New consumable pre-pack request',
+          message: `Emergency ${validatedData.procedureName} for ${validatedData.patientName} — ${allConsumableRows.length} item(s) to pack.`,
+          link: '/dashboard/consumable-pack-provider',
         })),
       });
-
-      // Notify Consumable Pack Providers with red EMERGENCY tag
-      const packProviders = await prisma.user.findMany({
-        where: { role: 'CONSUMABLE_PACK_PROVIDER', status: 'APPROVED' },
-        select: { id: true },
-      });
-      if (packProviders.length > 0) {
-        await prisma.notification.createMany({
-          data: packProviders.map((u) => ({
-            userId: u.id,
-            type: 'STOCK_ALERT' as any,
-            title: '🚨 EMERGENCY: New consumable pre-pack request',
-            message: `Emergency ${validatedData.procedureName} for ${validatedData.patientName} — ${consumableRequests.length} item(s) to pack.`,
-            link: '/dashboard/consumable-pack-provider',
-          })),
-        });
-      }
     }
 
     if (drugDressingRequests.length > 0) {

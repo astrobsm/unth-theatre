@@ -6,6 +6,7 @@ import { z } from "zod";
 import { generateUniqueSurgeryCode } from "@/lib/surgeryCodes";
 import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
 import { jsonWithETag } from "@/lib/etag";
+import { resolveBasePack, BASE_PACK_LABEL } from "@/lib/baseConsumablePack";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ const surgerySchema = z.object({
   scheduledTime: z.string(),
   estimatedDuration: z.number().int().min(1, 'Estimated duration must be at least 1 minute').default(60),
   surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
+  magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR']).nullish(),
   anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
   needBloodTransfusion: z.boolean().default(false),
   needDiathermy: z.boolean().default(false),
@@ -528,23 +530,37 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Persist booking-time pre-pack plan (consumables for pack provider, drugs for pharmacy)
-    if (consumableRequests && consumableRequests.length) {
-      await prisma.surgeryConsumableRequest.createMany({
-        data: consumableRequests.map((c) => ({
-          surgeryId: surgery.id,
-          templateId: c.templateId ?? null,
-          name: c.name,
-          category: c.category as any,
-          size: c.size ?? null,
-          unit: c.unit ?? "piece",
-          quantity: c.quantity,
-          notes: c.notes ?? null,
-          requestedById: (session.user as any).id,
-          requestedByName: (session.user as any).fullName || (session.user as any).name || null,
-        })),
-      });
-    }
+    // Persist booking-time pre-pack plan (consumables for pack provider, drugs for pharmacy).
+    // The MANDATORY base pack is attached to every booking regardless of what the
+    // surgeon selected, scaled to the operative magnitude, and stamped so the pack
+    // provider can tell it apart from surgeon-added extras.
+    const requesterId = (session.user as any).id;
+    const requesterName = (session.user as any).fullName || (session.user as any).name || null;
+    const basePackRows = resolveBasePack(validatedData.magnitude).map((b) => ({
+      surgeryId: surgery.id,
+      templateId: null,
+      name: b.name,
+      category: b.category as any,
+      size: b.size,
+      unit: b.unit,
+      quantity: b.quantity,
+      notes: BASE_PACK_LABEL,
+      requestedById: requesterId,
+      requestedByName: requesterName,
+    }));
+    const extraRows = (consumableRequests ?? []).map((c) => ({
+      surgeryId: surgery.id,
+      templateId: c.templateId ?? null,
+      name: c.name,
+      category: c.category as any,
+      size: c.size ?? null,
+      unit: c.unit ?? "piece",
+      quantity: c.quantity,
+      notes: c.notes ?? null,
+      requestedById: requesterId,
+      requestedByName: requesterName,
+    }));
+    await prisma.surgeryConsumableRequest.createMany({ data: [...basePackRows, ...extraRows] });
 
     if (drugDressingRequests && drugDressingRequests.length) {
       await prisma.surgeryDrugDressingRequest.createMany({

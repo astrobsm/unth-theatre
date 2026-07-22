@@ -8,6 +8,7 @@ import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPre
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
+import { NoPaperPrescriptionDialog } from '@/components/NoPaperPrescriptionWarning';
 
 type OnDutyMember = {
   userId: string;
@@ -64,6 +65,9 @@ export default function NewEmergencyBookingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Holds the just-booked surgery id while the no-paper-prescription dialog is
+  // shown; acknowledging navigates on to the consent form.
+  const [bookedSurgeryId, setBookedSurgeryId] = useState<string | null>(null);
   const [surgeons, setSurgeons] = useState<{ id: string; fullName: string }[]>([]);
   const [anesthetists, setAnesthetists] = useState<{ id: string; fullName: string }[]>([]);
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
@@ -95,6 +99,7 @@ export default function NewEmergencyBookingPage() {
     anaesthesiaType: '',
     requiredByTime: '',
     estimatedDuration: '',
+    magnitude: '',
     priority: 'CRITICAL',
     classification: '',
     bloodRequired: false,
@@ -290,6 +295,7 @@ export default function NewEmergencyBookingPage() {
         theatreName: form.theatreName || undefined,
         priority: form.priority,
         classification: form.classification || undefined,
+        magnitude: form.magnitude || undefined,
         bloodRequired: form.bloodRequired,
         bloodType: form.bloodRequired ? form.bloodType : undefined,
         bloodUnits: form.bloodRequired && form.bloodUnits ? parseInt(form.bloodUnits) : undefined,
@@ -338,11 +344,11 @@ export default function NewEmergencyBookingPage() {
         throw new Error(data.error || 'Failed to submit emergency booking');
       }
 
-      // Go straight to the structured consent form so it can be signed (or a
-      // signed scan uploaded) for the just-booked emergency case.
+      // Show the mandatory no-paper-prescription acknowledgement before moving
+      // on to the consent form for the just-booked emergency case.
       const created = await res.json().catch(() => null);
       const newSurgeryId = created?.surgery?.id;
-      router.push(newSurgeryId ? `/dashboard/surgeries/${newSurgeryId}/consent` : '/dashboard/emergency-booking');
+      setBookedSurgeryId(newSurgeryId ?? '');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -352,6 +358,17 @@ export default function NewEmergencyBookingPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {bookedSurgeryId !== null && (
+        <NoPaperPrescriptionDialog
+          onAcknowledge={() =>
+            router.push(
+              bookedSurgeryId
+                ? `/dashboard/surgeries/${bookedSurgeryId}/consent`
+                : '/dashboard/emergency-booking'
+            )
+          }
+        />
+      )}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg">
           <ArrowLeft className="h-5 w-5" />
@@ -722,6 +739,19 @@ export default function NewEmergencyBookingPage() {
                 <option value="Trauma">Trauma</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+            <div>
+              <label className="label">Operative Magnitude *</label>
+              <select name="magnitude" value={form.magnitude} onChange={handleChange} required className="input-field">
+                <option value="" disabled>Select magnitude…</option>
+                <option value="MINOR">Minor</option>
+                <option value="INTERMEDIATE">Intermediate</option>
+                <option value="MAJOR">Major</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Scales the mandatory base pack (gauze bundle, glove/gown counts) sent to the
+                consumable providers.
+              </p>
             </div>
           </div>
         </div>

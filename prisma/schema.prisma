@@ -839,6 +839,10 @@ model Surgery {
   estimatedDuration  Int                    @default(60) // Estimated duration in minutes
   status             SurgeryStatus          @default(SCHEDULED)
   surgeryType        SurgeryType            @default(ELECTIVE)
+  // Operative magnitude: MAJOR | INTERMEDIATE | MINOR. Nullable so existing
+  // rows migrate cleanly; captured at booking and used to scale the mandatory
+  // base consumable pack (gauze bundle, glove/gown counts, etc.).
+  magnitude          String?
   readinessStatus    SurgeryReadinessStatus @default(PENDING_CHECKS)
 
   // Anesthesia
