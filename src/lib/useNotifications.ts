@@ -1,7 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { useAdaptivePoll } from '@/lib/useAdaptivePoll';
+import { useTabLeader } from '@/lib/useTabLeader';
+
+// Notification list moves with real events; the timeline is aggregated and slow.
+const NOTIFICATIONS_POLL_MS = 60_000;
+const TIMELINE_POLL_MS = 180_000;
 
 export interface Notification {
   id: string;
@@ -61,9 +67,6 @@ export function useNotifications() {
     error: null,
   });
 
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttempts = useRef(0);
 
   // Fetch notifications from REST API
   const fetchNotifications = useCallback(async (page = 1) => {
@@ -77,10 +80,18 @@ export function useNotifications() {
         unreadCount: data.unreadCount,
         isLoading: false,
         error: null,
+        // Reflects "reached the server on the last attempt". The bell shows this
+        // as its live/offline indicator.
+        isConnected: true,
       }));
       return data;
     } catch (error) {
-      setState(prev => ({ ...prev, isLoading: false, error: 'Failed to load notifications' }));
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        isConnected: false,
+        error: 'Failed to load notifications',
+      }));
       return null;
     }
   }, []);
@@ -143,70 +154,6 @@ export function useNotifications() {
     }
   }, []);
 
-  // Connect SSE stream
-  const connectSSE = useCallback(() => {
-    if (!session?.user?.id || typeof window === 'undefined') return;
-
-    // Close existing connection
-    eventSourceRef.current?.close();
-
-    const es = new EventSource('/api/notifications/stream');
-    eventSourceRef.current = es;
-
-    es.addEventListener('init', (event) => {
-      const data = JSON.parse(event.data);
-      setState(prev => ({
-        ...prev,
-        unreadCount: data.unreadCount,
-        isConnected: true,
-        error: null,
-      }));
-      reconnectAttempts.current = 0;
-    });
-
-    es.addEventListener('notifications', (event) => {
-      const data = JSON.parse(event.data);
-      setState(prev => ({
-        ...prev,
-        notifications: [
-          ...data.notifications.filter(
-            (n: Notification) => !prev.notifications.some(existing => existing.id === n.id)
-          ),
-          ...prev.notifications,
-        ],
-        unreadCount: data.unreadCount,
-      }));
-
-      // Show browser notification for high-priority items
-      data.notifications.forEach((notif: Notification) => {
-        if (notif.priority === 'HIGH' || notif.priority === 'URGENT') {
-          showBrowserNotification(notif.title, notif.message, notif.actionUrl);
-        }
-      });
-
-      // Broadcast to other tabs
-      broadcastChannel?.postMessage({ type: 'NEW_NOTIFICATIONS', notifications: data.notifications });
-    });
-
-    es.addEventListener('timeline-alert', (event) => {
-      const data = JSON.parse(event.data);
-      // Show browser notification for timeline alerts
-      data.events.forEach((evt: any) => {
-        showBrowserNotification(`⏰ ${evt.title}`, evt.message, evt.actionUrl);
-      });
-    });
-
-    es.onerror = () => {
-      setState(prev => ({ ...prev, isConnected: false }));
-      es.close();
-
-      // Exponential backoff reconnect
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-      reconnectAttempts.current++;
-      reconnectTimeoutRef.current = setTimeout(connectSSE, delay);
-    };
-  }, [session?.user?.id]);
-
   // Cross-tab sync via BroadcastChannel
   useEffect(() => {
     if (!broadcastChannel) return;
@@ -248,33 +195,47 @@ export function useNotifications() {
     return () => broadcastChannel?.removeEventListener('message', handleMessage);
   }, []);
 
-  // Initial load and SSE connection
+  // Initial load for every tab, so a newly-opened tab shows the current state
+  // immediately rather than waiting for the leader's next poll.
   useEffect(() => {
     if (!session?.user?.id) return;
-
     fetchNotifications();
     fetchTimeline();
-    connectSSE();
+  }, [session?.user?.id, fetchNotifications, fetchTimeline]);
 
-    // Refresh timeline every 2 minutes
-    const timelineInterval = setInterval(fetchTimeline, 120000);
+  /*
+   * Transport: leader-gated polling, deliberately NOT Server-Sent Events.
+   *
+   * /api/notifications/stream holds a serverless function open per connection
+   * and runs its own 5s database poll inside it (5 queries per tick). Across
+   * ~537 staff that is ~320 queries/second against the Supabase pooler plus 537
+   * pinned function instances — it would not survive production, and on theatre
+   * wifi the dropped connections produce reconnect storms on top.
+   *
+   * Polling one cheap endpoint instead costs ~9 req/s for the same population,
+   * degrades gracefully on a bad link, and needs no reconnect logic. Only the
+   * leader tab polls; the others are updated over BroadcastChannel by the
+   * handlers above, so extra tabs are free.
+   */
+  const isLeader = useTabLeader();
 
-    // Re-fetch when tab becomes visible
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        fetchNotifications();
-        fetchTimeline();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
+  useAdaptivePoll(
+    useCallback(async () => {
+      await fetchNotifications();
+    }, [fetchNotifications]),
+    NOTIFICATIONS_POLL_MS,
+    { enabled: !!session?.user?.id && isLeader, leading: false }
+  );
 
-    return () => {
-      eventSourceRef.current?.close();
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      clearInterval(timelineInterval);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [session?.user?.id, connectSSE, fetchNotifications, fetchTimeline]);
+  // The timeline is derived/aggregated data and moves far more slowly than the
+  // notification list, so it gets its own slower cadence.
+  useAdaptivePoll(
+    useCallback(async () => {
+      await fetchTimeline();
+    }, [fetchTimeline]),
+    TIMELINE_POLL_MS,
+    { enabled: !!session?.user?.id && isLeader, leading: false }
+  );
 
   // Request browser notification permission
   const requestPermission = useCallback(async () => {

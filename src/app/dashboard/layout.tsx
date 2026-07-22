@@ -7,6 +7,9 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
+// Deferred: the bell's panel is sizeable and nothing depends on it for first
+// paint, so it stays out of the critical dashboard bundle.
+const NotificationBell = dynamic(() => import('@/components/NotificationBell'), { ssr: false });
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
 import { getCachedData, setCachedData } from '@/lib/offlineStore';
 
@@ -686,6 +689,7 @@ export default function DashboardLayout({
             <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <OfflineIndicator />
               <ServiceWorkerUpdatePrompt />
+              <NotificationBell />
               <span className="px-2 sm:px-4 py-1 sm:py-2 bg-primary-100 text-primary-800 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap">
                 {session.user.role.replace(/_/g, ' ')}
               </span>
