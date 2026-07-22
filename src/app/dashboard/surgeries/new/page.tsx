@@ -11,6 +11,7 @@ import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { formatAge } from '@/lib/age';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
+import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -189,6 +190,7 @@ export default function NewSurgeryPage() {
   const [consumableTemplates, setConsumableTemplates] = useState<any[]>([]);
   const [consumableLoading, setConsumableLoading] = useState(false);
   const [selectedConsumables, setSelectedConsumables] = useState<Record<string, { quantity: number; notes?: string }>>({});
+  const [packPick, setPackPick] = useState<PackPickerPayload>({ consumableRequests: [], drugDressingRequests: [] });
 
   // Pre-pack plan: drugs / IV fluids / wound dressing agents (visible to Pharmacy)
   const [drugDressingTemplates, setDrugDressingTemplates] = useState<any[]>([]);
@@ -513,33 +515,40 @@ export default function NewSurgeryPage() {
             porterName: onDuty.team.porter?.name ?? null,
           }
         : undefined,
-      // Pre-pack plan: surgical consumables (Consumable Pack Provider)
-      consumableRequests: Object.entries(selectedConsumables).map(([templateId, sel]) => {
-        const t = consumableTemplates.find((x: any) => x.id === templateId);
-        return {
-          templateId,
-          name: t?.name ?? 'Unknown',
-          category: t?.category ?? 'OTHER',
-          size: t?.size ?? null,
-          unit: t?.unit ?? 'piece',
-          quantity: sel.quantity,
-          notes: sel.notes ?? null,
-        };
-      }),
+      // Pre-pack plan: surgical consumables (Consumable Pack Provider) — hand-picked
+      // catalog items plus any applied packs. The base pack is added server-side.
+      consumableRequests: [
+        ...Object.entries(selectedConsumables).map(([templateId, sel]) => {
+          const t = consumableTemplates.find((x: any) => x.id === templateId);
+          return {
+            templateId,
+            name: t?.name ?? 'Unknown',
+            category: t?.category ?? 'OTHER',
+            size: t?.size ?? null,
+            unit: t?.unit ?? 'piece',
+            quantity: sel.quantity,
+            notes: sel.notes ?? null,
+          };
+        }),
+        ...packPick.consumableRequests,
+      ],
       // Pre-pack plan: drugs / IV fluids / wound-dressing agents (Pharmacy)
-      drugDressingRequests: Object.entries(selectedDrugs).map(([templateId, sel]) => {
-        const t = drugDressingTemplates.find((x: any) => x.id === templateId);
-        return {
-          templateId,
-          name: t?.name ?? 'Unknown',
-          type: t?.type ?? 'OTHER',
-          dosage: sel.dosage ?? t?.defaultDosage ?? null,
-          route: sel.route ?? t?.defaultRoute ?? null,
-          quantity: sel.quantity,
-          unit: t?.unit ?? 'vial',
-          notes: sel.notes ?? null,
-        };
-      }),
+      drugDressingRequests: [
+        ...Object.entries(selectedDrugs).map(([templateId, sel]) => {
+          const t = drugDressingTemplates.find((x: any) => x.id === templateId);
+          return {
+            templateId,
+            name: t?.name ?? 'Unknown',
+            type: t?.type ?? 'OTHER',
+            dosage: sel.dosage ?? t?.defaultDosage ?? null,
+            route: sel.route ?? t?.defaultRoute ?? null,
+            quantity: sel.quantity,
+            unit: t?.unit ?? 'vial',
+            notes: sel.notes ?? null,
+          };
+        }),
+        ...packPick.drugDressingRequests,
+      ],
       // Informed consent file (base64) — visible to holding-area nurse for clearance
       consentFile: consentFile
         ? { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 }
@@ -1462,6 +1471,15 @@ export default function NewSurgeryPage() {
               Selected: {comorbidities.length} comorbidities, {currentMedications.length} current medications.
             </div>
           )}
+        </div>
+
+        {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
+        <div className="card">
+          <div className="flex items-center gap-3 mb-3">
+            <Package className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Apply a pack</h2>
+          </div>
+          <SurgicalPackPicker subspecialty={subspecialty || undefined} onChange={setPackPick} />
         </div>
 
         {/* Surgical Consumables — Pre-pack plan for Consumable Pack Provider */}

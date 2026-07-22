@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText } from 'lucide-react';
 import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPrePackSelectors';
+import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
@@ -74,6 +75,7 @@ export default function NewEmergencyBookingPage() {
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
   const [prePack, setPrePack] = useState<PrePackPayload>({ consumableRequests: [], drugDressingRequests: [] });
+  const [packPick, setPackPick] = useState<PackPickerPayload>({ consumableRequests: [], drugDressingRequests: [] });
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnitOption[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -308,8 +310,10 @@ export default function NewEmergencyBookingPage() {
           staffCode: m.staffCode || undefined,
         })),
         // Pre-pack shopping lists — pushed to Consumable Pack Provider and Pharmacy with red EMERGENCY tag
-        consumableRequests: prePack.consumableRequests,
-        drugDressingRequests: prePack.drugDressingRequests,
+        // Merge hand-picked catalog items with any applied packs; the base pack
+        // is added server-side.
+        consumableRequests: [...prePack.consumableRequests, ...packPick.consumableRequests],
+        drugDressingRequests: [...prePack.drugDressingRequests, ...packPick.drugDressingRequests],
         // Electronic UNTH consent captured & signed inline at emergency booking.
         consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
           ? consentForm
@@ -805,6 +809,12 @@ export default function NewEmergencyBookingPage() {
               <textarea name="specialRequirements" value={form.specialRequirements} onChange={handleChange} className="input-field" rows={2} />
             </div>
           </div>
+        </div>
+
+        {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold mb-3 text-gray-800">Apply a pack</h2>
+          <SurgicalPackPicker subspecialty={form.surgicalUnit || undefined} emergency onChange={setPackPick} />
         </div>
 
         {/* Pre-pack lists — Surgical Consumables + Drugs/IV/Wound Dressing for night-before packing */}

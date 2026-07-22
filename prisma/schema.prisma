@@ -6773,6 +6773,60 @@ model SurgeryDrugDressingRequest {
 }
 
 // ============================================================================
+// SURGICAL PACKS — reusable, named bundles a surgeon applies at booking.
+// A CONSUMABLE pack expands into SurgeryConsumableRequest rows (to the pack
+// providers); a PHARMACY pack expands into SurgeryDrugDressingRequest rows (to
+// pharmacy). Keyed by subspecialty. Authored/curated by admins/pharmacists;
+// only `isActive` packs are offered at booking. The mandatory base pack is
+// separate (a code constant) and always attaches regardless of these.
+// ============================================================================
+enum SurgicalPackKind {
+  CONSUMABLE
+  PHARMACY
+}
+
+model SurgicalPack {
+  id           String           @id @default(uuid())
+  name         String
+  subspecialty String // e.g. "General Surgery", "Obstetrics & Gynaecology"
+  kind         SurgicalPackKind
+  description  String?
+  isActive     Boolean          @default(false) // draft until an admin activates it
+  sortOrder    Int              @default(0)
+  createdById  String?
+  createdByName String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  items SurgicalPackItem[]
+
+  @@index([subspecialty, kind, isActive])
+  @@map("surgical_packs")
+}
+
+model SurgicalPackItem {
+  id       String @id @default(uuid())
+  packId   String
+  name     String
+  quantity Int    @default(1)
+  unit     String @default("piece")
+  // Consumable-pack fields (ignored for pharmacy packs)
+  category String? // a SurgicalConsumableCategory value
+  size     String?
+  // Pharmacy-pack fields (ignored for consumable packs)
+  drugType String? // a SurgicalDrugDressingType value
+  dosage   String?
+  route    String?
+  notes    String?
+  sortOrder Int   @default(0)
+
+  pack SurgicalPack @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@index([packId])
+  @@map("surgical_pack_items")
+}
+
+// ============================================================================
 // POST-OP PRESCRIPTION PHARMACY HAND-OFF
 // Surgeon writes post-op meds → pharmacy is notified → packs → radio
 // announces patient to pay bill → on payment, second radio announces pickup.

@@ -304,9 +304,11 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/admin/access', icon: Shield, label: 'Module Access', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-units', icon: Building2, label: 'Surgical Units', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog', badge: 'ADMIN' });
+    menuItems.push({ href: '/dashboard/admin/surgical-packs', icon: Package, label: 'Surgical Packs', badge: 'ADMIN' });
   } else if (['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'].includes(session.user.role)) {
-    // Non-admin roles that maintain pack/drug entries can also reach the catalog.
+    // Non-admin roles that maintain pack/drug entries can also reach the catalog + packs.
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog' });
+    menuItems.push({ href: '/dashboard/admin/surgical-packs', icon: Package, label: 'Surgical Packs' });
   }
 
   // Live monitoring — visible to admins, theatre manager and chairman
