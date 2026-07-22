@@ -61,6 +61,8 @@ export default function UsersPage() {
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ fullName: '', phoneNumber: '', email: '', department: '' });
   const [editLoading, setEditLoading] = useState(false);
+  // Contact Directory: 'ALL' or a specific role to export (e.g. HOUSE_OFFICER).
+  const [directoryRole, setDirectoryRole] = useState<string>('ALL');
 
   useEffect(() => {
     if (session?.user.role === 'ADMIN' || session?.user.role === 'THEATRE_MANAGER') {
@@ -443,8 +445,14 @@ export default function UsersPage() {
     return s;
   };
 
-  const buildContactDirectory = () => {
-    const approved = (Array.isArray(users) ? users : []).filter(u => u.status === 'APPROVED');
+  // Human-readable role label, matching how roles are shown elsewhere on the page.
+  const roleLabel = (role: string) => role.replace(/_/g, ' ');
+
+  // `roleFilter` = 'ALL' for everyone, or a specific role id to narrow the export.
+  const buildContactDirectory = (roleFilter: string = 'ALL') => {
+    const approved = (Array.isArray(users) ? users : []).filter(
+      u => u.status === 'APPROVED' && (roleFilter === 'ALL' || u.role === roleFilter)
+    );
     const cleaned = approved
       .map(u => ({
         fullName: (u.fullName || '').trim(),
@@ -459,8 +467,14 @@ export default function UsersPage() {
     return { withPhone, withoutPhone };
   };
 
+  // Suffix for filenames / titles reflecting the current role filter.
+  const directoryScopeLabel = () =>
+    directoryRole === 'ALL' ? 'All roles' : roleLabel(directoryRole);
+  const directoryFileSlug = () =>
+    directoryRole === 'ALL' ? 'all' : directoryRole.toLowerCase().replace(/_/g, '-');
+
   const copyDirectoryForWhatsApp = async () => {
-    const { withPhone, withoutPhone } = buildContactDirectory();
+    const { withPhone, withoutPhone } = buildContactDirectory(directoryRole);
     const byDept: Record<string, typeof withPhone> = {};
     for (const u of withPhone) {
       (byDept[u.department] ||= []).push(u);
@@ -468,6 +482,7 @@ export default function UsersPage() {
     const depts = Object.keys(byDept).sort();
     const lines: string[] = [];
     lines.push('📒 *ORM PLATFORM — REGISTERED USERS & PHONE NUMBERS*');
+    if (directoryRole !== 'ALL') lines.push(`Role: *${directoryScopeLabel()}*`);
     lines.push(`Total: ${withPhone.length} (with phone) + ${withoutPhone.length} (missing phone)`);
     lines.push('🔗 https://unth-theatre-mai.vercel.app');
     lines.push('');
@@ -506,7 +521,7 @@ export default function UsersPage() {
   };
 
   const downloadDirectoryCSV = () => {
-    const { withPhone, withoutPhone } = buildContactDirectory();
+    const { withPhone, withoutPhone } = buildContactDirectory(directoryRole);
     const all = [...withPhone, ...withoutPhone];
     const esc = (v: string) => {
       const s = (v ?? '').replace(/"/g, '""');
@@ -521,13 +536,13 @@ export default function UsersPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `orm-contacts-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `orm-contacts-${directoryFileSlug()}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const downloadDirectoryPDF = async () => {
-    const { withPhone, withoutPhone } = buildContactDirectory();
+    const { withPhone, withoutPhone } = buildContactDirectory(directoryRole);
     const [{ default: jsPDF }, autoTableMod] = await Promise.all([
       import('jspdf'),
       import('jspdf-autotable'),
@@ -537,7 +552,10 @@ export default function UsersPage() {
     const today = new Date().toLocaleDateString();
 
     doc.setFontSize(16);
-    doc.text('ORM Platform — Registered Users & Phone Numbers', 40, 40);
+    const title = directoryRole === 'ALL'
+      ? 'ORM Platform — Registered Users & Phone Numbers'
+      : `ORM Platform — ${directoryScopeLabel()} Directory`;
+    doc.text(title, 40, 40);
     doc.setFontSize(10);
     doc.text(`Generated: ${today}    |    With phone: ${withPhone.length}    |    Missing phone: ${withoutPhone.length}`, 40, 58);
     doc.text('https://unth-theatre-mai.vercel.app', 40, 72);
@@ -577,7 +595,7 @@ export default function UsersPage() {
       });
     }
 
-    doc.save(`orm-contacts-${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`orm-contacts-${directoryFileSlug()}-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'THEATRE_MANAGER')) {
@@ -591,6 +609,21 @@ export default function UsersPage() {
   const pendingUsers = Array.isArray(users) ? users.filter(u => u.status === 'PENDING') : [];
   const approvedUsers = Array.isArray(users) ? users.filter(u => u.status === 'APPROVED') : [];
   const approvedWithPhone = approvedUsers.filter(u => !!u.phoneNumber).length;
+
+  // Roles that actually have approved users, with counts, for the export filter.
+  // Only roles present are listed, so the dropdown never offers an empty export.
+  const directoryRoleCounts = Object.entries(
+    approvedUsers.reduce<Record<string, number>>((acc, u) => {
+      acc[u.role] = (acc[u.role] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([role, count]) => ({ role, count }))
+    .sort((a, b) => a.role.localeCompare(b.role));
+  const directorySelectedCount =
+    directoryRole === 'ALL'
+      ? approvedUsers.length
+      : approvedUsers.filter(u => u.role === directoryRole).length;
 
   // Case-insensitive search across name, username and staff code for the All Users table.
   const userQuery = userSearch.trim().toLowerCase();
@@ -692,16 +725,55 @@ export default function UsersPage() {
           Export the list of approved users and their phone numbers — share on WhatsApp, save as PDF, or download as CSV.
           Currently <strong>{approvedWithPhone}</strong> of <strong>{approvedUsers.length}</strong> approved users have a phone number on file.
         </p>
+
+        {/* Role filter — export everyone, or just one role (e.g. House Officers). */}
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex flex-col">
+            <label htmlFor="directory-role" className="text-xs font-medium text-gray-600 mb-1">
+              Filter by role
+            </label>
+            <select
+              id="directory-role"
+              value={directoryRole}
+              onChange={(e) => setDirectoryRole(e.target.value)}
+              className="input-field h-10 min-w-[14rem]"
+            >
+              <option value="ALL">All roles ({approvedUsers.length})</option>
+              {directoryRoleCounts.map(({ role, count }) => (
+                <option key={role} value={role}>
+                  {roleLabel(role)} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-sm text-gray-600 pb-2">
+            Exporting <strong>{directorySelectedCount}</strong>{' '}
+            {directoryRole === 'ALL' ? 'approved user(s)' : `${roleLabel(directoryRole)}(s)`}.
+          </p>
+        </div>
+
         <div className="flex flex-wrap gap-3">
-          <button onClick={copyDirectoryForWhatsApp} className="btn-primary inline-flex items-center">
+          <button
+            onClick={copyDirectoryForWhatsApp}
+            disabled={directorySelectedCount === 0}
+            className="btn-primary inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Copy className="w-4 h-4 mr-2" />
             Copy for WhatsApp
           </button>
-          <button onClick={downloadDirectoryPDF} className="btn-secondary inline-flex items-center">
+          <button
+            onClick={downloadDirectoryPDF}
+            disabled={directorySelectedCount === 0}
+            className="btn-secondary inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <FileText className="w-4 h-4 mr-2" />
             Download PDF
           </button>
-          <button onClick={downloadDirectoryCSV} className="btn-secondary inline-flex items-center">
+          <button
+            onClick={downloadDirectoryCSV}
+            disabled={directorySelectedCount === 0}
+            className="btn-secondary inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Download className="w-4 h-4 mr-2" />
             Download CSV
           </button>
