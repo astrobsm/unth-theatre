@@ -53,6 +53,8 @@ export default function RadioPlayer() {
   const [current, setCurrent] = useState<Announcement | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [ackBusy, setAckBusy] = useState(false);
+  // Non-blocking replacement for window.prompt()/alert() on the ack path.
+  const [ackError, setAckError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   // User-chosen widget position (top-left px). null = default bottom-right anchor.
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -455,18 +457,14 @@ export default function RadioPlayer() {
     else speak(text, onDone);
   }, [queue, enabled, isLeader, speak, playAudio, markPlayed]);
 
+  // Acknowledge in a single tap — no code prompt. In a theatre, silencing the
+  // alarm must be instant; a confirmation step is friction at the worst possible
+  // moment, and the codes had no way of reaching the staff who would need them.
+  // The server no longer gates on a code either, so this always goes through.
   const acknowledge = useCallback(
     async (id: string) => {
       setAckBusy(true);
-      let code: string | undefined;
-      const ann = queue.find((q) => q.id === id) ?? current;
-      if (ann?.ackCode) {
-        code = window.prompt('Enter your acknowledgment code:') ?? undefined;
-        if (!code) {
-          setAckBusy(false);
-          return;
-        }
-      }
+      setAckError(null);
 
       // 1) Stop the radio IMMEDIATELY — don't wait for the server.
       hardStop();
@@ -482,11 +480,13 @@ export default function RadioPlayer() {
         const r = await fetch('/api/radio/acknowledge', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ announcementId: id, code }),
+          body: JSON.stringify({ announcementId: id }),
         });
         if (!r.ok) {
           const e = await r.json().catch(() => ({}));
-          alert(e.error ?? 'Failed to acknowledge');
+          // Inline, not alert(): a modal dialog blocks the main thread and would
+          // leave the alarm sounding behind a frozen page.
+          setAckError(e.error ?? 'Failed to acknowledge');
           // Server rejected — lift suppression so the broadcast resumes,
           // and refresh from server to restore accurate state.
           suppressedRef.current.delete(id);
@@ -499,12 +499,12 @@ export default function RadioPlayer() {
         // quiet for the operator who clicked, AND queue the ack for retry
         // when the browser comes back online (handled by flushAckQueue).
         console.warn('[radio] acknowledge offline; queued for retry', err);
-        enqueueAck({ id, code, ts: Date.now() });
+        enqueueAck({ id, ts: Date.now() });
       } finally {
         setAckBusy(false);
       }
     },
-    [queue, current, fetchQueue, hardStop, enqueueAck]
+    [fetchQueue, hardStop, enqueueAck]
   );
 
   if (status !== 'authenticated') return null;
@@ -542,8 +542,17 @@ export default function RadioPlayer() {
             {ackBusy ? 'ACKNOWLEDGING…' : 'ACKNOWLEDGE EMERGENCY'}
           </span>
         </button>
+        {ackError && (
+          <div
+            role="alert"
+            className="mt-2 w-[min(92vw,26rem)] rounded-lg bg-white border border-red-300 text-red-700 text-sm px-3 py-2 shadow-lg"
+          >
+            {ackError}
+          </div>
+        )}
       </DockSlot>
     )}
+
     {mode === 'radio' && (
     <DockSlot anchor="bottom-right" order={DOCK_ORDER.radio}>
     {/* Undragged, the dock positions this and keeps it clear of the other

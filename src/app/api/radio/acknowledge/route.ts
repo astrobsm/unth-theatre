@@ -45,9 +45,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
     }
 
-    if (ann.ackCode && ann.ackCode !== code) {
-      return NextResponse.json({ error: 'Invalid acknowledgment code' }, { status: 403 });
-    }
+    // Acknowledgement is one tap, no code check. In a theatre the alarm must be
+    // silenceable instantly, and confirmation codes had no mechanism to reach
+    // the staff who would need them — so an enforced code could only lock the
+    // alarm on. `codeUsed` is still recorded below when a client sends one.
 
     const responseSecs = Math.max(
       0,
