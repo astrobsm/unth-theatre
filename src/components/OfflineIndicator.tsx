@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useOfflineContext } from '@/components/OfflineProvider';
 import {
   Wifi,
   WifiOff,
@@ -49,7 +50,15 @@ export default function OfflineIndicator() {
   const [syncResult, setSyncResult] = useState<{ synced: number; failed: number } | null>(null);
   const [installed, setInstalled] = useState(false);
 
-  // Monitor offline queue
+  // OfflineProvider already polls the queue and publishes the count; mirror it
+  // rather than running a second timer over the same IndexedDB store.
+  const { pendingSyncCount } = useOfflineContext();
+  useEffect(() => {
+    setPendingCount(pendingSyncCount);
+  }, [pendingSyncCount]);
+
+  // Still used for the immediate refresh after a sync completes, where waiting
+  // for the provider's next tick would leave a stale badge on screen.
   const checkPending = useCallback(async () => {
     try {
       const count = await getOfflineQueueCount();
@@ -136,16 +145,19 @@ export default function OfflineIndicator() {
     };
     window.addEventListener('sw-sync-complete', onSyncComplete);
 
-    // Check pending count periodically
+    // No periodic check here. OfflineProvider already polls the offline queue
+    // every 10s and publishes the result on context, so a second 15s timer read
+    // the same IndexedDB store to compute the same number — twice the wake-ups
+    // on a device where battery matters. We take the provider's count below and
+    // still refresh on the events that actually change it (sync complete, and
+    // `orm:offline-queued` which the provider listens for).
     checkPending();
-    const interval = setInterval(checkPending, 15000);
 
     return () => {
       cleanupInstall();
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
       window.removeEventListener('sw-sync-complete', onSyncComplete);
-      clearInterval(interval);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

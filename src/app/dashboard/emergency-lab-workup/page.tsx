@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAdaptivePoll } from '@/lib/useAdaptivePoll';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import {
@@ -521,16 +522,16 @@ export default function EmergencyLabWorkupPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchRequests();
-    fetchNotifications();
-    // Poll every 15 seconds for new notifications
-    const interval = setInterval(() => {
-      fetchRequests();
-      fetchNotifications();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [fetchRequests, fetchNotifications]);
+  // Two endpoints every 15s = 8 req/min, previously ungated: it kept firing on
+  // a hidden tab and on a dead link. useAdaptivePoll backs off when hidden or on
+  // a slow link and skips entirely while offline, then catches up the moment the
+  // tab is shown or the connection returns.
+  useAdaptivePoll(
+    useCallback(async () => {
+      await Promise.all([fetchRequests(), fetchNotifications()]);
+    }, [fetchRequests, fetchNotifications]),
+    15000
+  );
 
   const playVoiceAlert = async (notification: VoiceNotification) => {
     if ('speechSynthesis' in window) {

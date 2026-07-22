@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useAdaptivePoll } from '@/lib/useAdaptivePoll';
 import { Activity, Users, LogIn, RefreshCw, Pause, Play, Clock, ShieldAlert, Search, BarChart3 } from 'lucide-react';
 
 interface OnlineUser {
@@ -80,7 +81,6 @@ export default function LiveMonitoringPage() {
   const [loading, setLoading] = useState(false);
   const [paused, setPaused] = useState(false);
   const [search, setSearch] = useState('');
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,17 +103,15 @@ export default function LiveMonitoringPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (paused) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = null;
-      return;
-    }
-    intervalRef.current = setInterval(() => load(), POLL_MS);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [paused, load]);
+  // A 7s poll on an admin dashboard that is routinely left open all day. It was
+  // gated only on the manual Pause toggle, so a forgotten background tab cost a
+  // steady 8.5 req/min. Now it also backs off when hidden or on a slow link and
+  // stops entirely while offline.
+  useAdaptivePoll(
+    useCallback(async () => { await load(); }, [load]),
+    POLL_MS,
+    { enabled: !paused, leading: false }
+  );
 
   const filteredActivity = data
     ? data.recentActivity.filter((r) => {
