@@ -434,25 +434,45 @@ export async function POST(request: NextRequest) {
         const [hh, mm] = (validatedData.scheduledTime || '08:00').split(':').map((n) => parseInt(n, 10));
         if (!Number.isNaN(hh)) sched.setHours(hh, Number.isNaN(mm) ? 0 : mm, 0, 0);
         const hour = sched.getHours();
-        const shift: 'MORNING' | 'CALL' | 'NIGHT' =
-          hour >= 8 && hour < 16 ? 'MORNING' : hour >= 16 && hour < 22 ? 'CALL' : 'NIGHT';
         const dateOnly = new Date(Date.UTC(sched.getFullYear(), sched.getMonth(), sched.getDate()));
 
-        const baseWhere = { date: dateOnly, shift, staffCategory: 'ANAESTHETISTS' as const };
-        const tId = (validatedData.theatreId || '').trim();
-        const rosters = await prisma.roster.findMany({
-          where: tId ? { ...baseWhere, theatreId: tId } : baseWhere,
-          include: { user: { select: { id: true } } },
-        });
-        const pool = rosters.length
-          ? rosters
-          : tId
-            ? await prisma.roster.findMany({ where: baseWhere, include: { user: { select: { id: true } } } })
-            : [];
+        // Which rostered shift covers this case, in order of preference.
+        //
+        // Elective anaesthesia is the MORNING list (08:00-16:00). Everything
+        // outside that window — early mornings, evenings and overnight — is
+        // covered by the CALL team (that is what "on call" means; the roster
+        // has a single call team per day, not separate CALL/NIGHT lists).
+        //
+        // During elective hours we still prefer someone rostered MORNING for
+        // the specific theatre, but fall back to the CALL team when no elective
+        // list exists (e.g. an urgent case slotted into a call day), so a
+        // daytime emergency is never left without an anaesthetist just because
+        // the roster only names the call cover.
+        const preferredShifts: Array<'MORNING' | 'CALL'> =
+          hour >= 8 && hour < 16 ? ['MORNING', 'CALL'] : ['CALL'];
+
         const rank = (s: string | null) =>
           s === 'CONSULTANT' ? 0 : s === 'SENIOR_REGISTRAR' ? 1 : s === 'REGISTRAR' ? 2 : 3;
-        pool.sort((a, b) => rank(a.seniorityLevel) - rank(b.seniorityLevel));
-        resolvedAnaesthetistId = pool[0]?.user.id || null;
+        const tId = (validatedData.theatreId || '').trim();
+
+        // For a given shift, prefer someone rostered to the chosen theatre,
+        // otherwise anyone on that shift anywhere in the suite.
+        const poolForShift = async (shift: 'MORNING' | 'CALL') => {
+          const base = { date: dateOnly, shift, staffCategory: 'ANAESTHETISTS' as const };
+          const specific = tId
+            ? await prisma.roster.findMany({ where: { ...base, theatreId: tId }, include: { user: { select: { id: true } } } })
+            : [];
+          if (specific.length) return specific;
+          return prisma.roster.findMany({ where: base, include: { user: { select: { id: true } } } });
+        };
+
+        for (const shift of preferredShifts) {
+          const pool = await poolForShift(shift);
+          if (!pool.length) continue;
+          pool.sort((a, b) => rank(a.seniorityLevel) - rank(b.seniorityLevel));
+          resolvedAnaesthetistId = pool[0]?.user.id || null;
+          if (resolvedAnaesthetistId) break;
+        }
       } catch (e) {
         console.warn('Auto-assign anaesthetist from roster failed:', (e as Error)?.message);
       }

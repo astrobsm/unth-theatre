@@ -15,7 +15,7 @@ const rosterSchema = z.object({
   shift: z.enum(['MORNING', 'CALL', 'NIGHT']),
   seniorityLevel: z.string().optional().nullable(),
   subRole: z.string().optional().nullable(),
-  location: z.enum(['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE']).optional().nullable(),
+  location: z.enum(['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU']).optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -28,7 +28,7 @@ const updateRosterSchema = z.object({
   shift: z.enum(['MORNING', 'CALL', 'NIGHT']).optional(),
   seniorityLevel: z.string().nullable().optional(),
   subRole: z.string().nullable().optional(),
-  location: z.enum(['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE']).nullable().optional(),
+  location: z.enum(['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU']).nullable().optional(),
   notes: z.string().nullable().optional(),
   editReason: z.string().min(5, 'Edit reason must be at least 5 characters'),
 });

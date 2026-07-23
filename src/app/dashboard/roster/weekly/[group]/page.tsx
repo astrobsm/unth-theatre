@@ -7,16 +7,17 @@ import { ArrowLeft, Plus, Trash2, Save, Calendar, AlertCircle, CheckCircle2 } fr
 
 // ---------- Group configuration ----------
 type Shift = 'MORNING' | 'CALL' | 'NIGHT';
-type Location = 'MAIN_THEATRE' | 'A_AND_E' | 'EYE_THEATRE' | 'CTU_THEATRE';
+type Location = 'MAIN_THEATRE' | 'A_AND_E' | 'EYE_THEATRE' | 'CTU_THEATRE' | 'ICU';
 
 const LOCATION_LABELS: Record<Location, string> = {
   MAIN_THEATRE: 'Main Theatre Complex',
   A_AND_E: 'Accident & Emergency Theatre',
   EYE_THEATRE: 'Eye Theatre',
   CTU_THEATRE: 'CTU Theatre',
+  ICU: 'Intensive Care Unit',
 };
 
-const ALL_LOCATIONS: Location[] = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE'];
+const ALL_LOCATIONS: Location[] = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU'];
 
 interface GroupConfig {
   slug: string;

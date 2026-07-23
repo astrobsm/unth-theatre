@@ -36,7 +36,7 @@ const weeklySchema = z.object({
   staffCategory: z.enum(VALID_CATEGORIES),
   weekStart: z.string().min(1), // ISO date — Monday of the week
   location: z
-    .enum(["MAIN_THEATRE", "A_AND_E", "EYE_THEATRE", "CTU_THEATRE"])
+    .enum(["MAIN_THEATRE", "A_AND_E", "EYE_THEATRE", "CTU_THEATRE", "ICU"])
     .default("MAIN_THEATRE"),
   entries: z.array(entrySchema).min(1),
 });
