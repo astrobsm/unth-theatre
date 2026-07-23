@@ -191,6 +191,40 @@ export function isKokoroReady(): boolean {
   return ttsReady;
 }
 
+/**
+ * Wait up to `timeoutMs` for the engine to become usable, starting a background
+ * load if one is not already running. Resolves `true` only if it is ready in
+ * time — never rejects, never waits longer than asked.
+ *
+ * This exists so a surface that can afford a moment (the theatre radio, the
+ * announcement kiosk) gets the natural voice on its FIRST announcement instead
+ * of the robotic one, while latency-critical callers (emergency alerts) keep
+ * passing 0 and fall through immediately as before.
+ */
+export function whenKokoroReady(timeoutMs = 0): Promise<boolean> {
+  if (ttsReady) return Promise.resolve(true);
+  if (timeoutMs <= 0 || !isKokoroAvailable()) return Promise.resolve(false);
+  if (!ttsPromise) {
+    preloadKokoro();
+    // Auto-load was declined (metered link / low-memory device) — don't stall.
+    if (!ttsPromise) return Promise.resolve(false);
+  }
+  const pending = ttsPromise;
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    pending.then(
+      () => { clearTimeout(timer); finish(ttsReady); },
+      () => { clearTimeout(timer); finish(false); }
+    );
+  });
+}
+
 // Cache rendered audio object URLs by text so repeated announcements (emergency
 // calls repeat every few minutes) reuse the same blob instead of re-generating.
 const urlCache = new Map<string, string>();

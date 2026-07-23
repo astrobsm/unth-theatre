@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, GripVertical, X } from 'lucide-react';
 import { useMediaHub } from '@/components/MediaHub';
 import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
+import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
 import { useTabLeader } from '@/lib/useTabLeader';
 import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
@@ -116,9 +117,15 @@ export default function RadioPlayer() {
 
   // Warm up the free in-browser Kokoro voice shortly after the radio is enabled
   // so the first workflow announcement plays without the model-download delay.
+  // Two seconds is late enough to stay out of the way of first paint and early
+  // enough that the engine is usually ready before anything needs saying — the
+  // old 8s delay meant the first announcement of a shift was routinely voiced
+  // by the fallback synth. Also prime the browser voice list, which Chrome
+  // populates asynchronously, so the fallback itself has a good voice to pick.
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return;
-    const t = setTimeout(() => { preloadKokoro(); }, 8000);
+    primeHumanVoices();
+    const t = setTimeout(() => { preloadKokoro(); }, 2000);
     return () => clearTimeout(t);
   }, [enabled]);
 
@@ -289,7 +296,9 @@ export default function RadioPlayer() {
     try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
   }, []);
 
-  // Browser Web-Speech fallback used when ElevenLabs is unavailable.
+  // Browser Web-Speech fallback, used only when both neural engines are out.
+  // The voice and prosody come from lib/humanVoice so this still sounds like a
+  // person rather than whichever legacy synth the device lists first.
   const speakBrowser = useCallback(
     (text: string, onDone?: () => void) => {
       try {
@@ -297,15 +306,7 @@ export default function RadioPlayer() {
         if (!synth) { emitRadioIdle(); onDone?.(); return; }
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.98;
-        u.pitch = 1;
-        u.volume = 1;
-        const voices = synth.getVoices();
-        const preferred =
-          voices.find((v) => /en-?(GB|US)/i.test(v.lang) && /female|samantha|zira|google/i.test(v.name)) ||
-          voices.find((v) => /en/i.test(v.lang)) ||
-          voices[0];
-        if (preferred) u.voice = preferred;
+        applyHumanVoice(u);
         u.onstart = () => { setSpeaking(true); emitRadioActive(); };
         u.onend = () => { setSpeaking(false); emitRadioIdle(); onDone?.(); };
         u.onerror = () => { setSpeaking(false); emitRadioIdle(); onDone?.(); };
@@ -322,14 +323,19 @@ export default function RadioPlayer() {
     [emitRadioActive, emitRadioIdle]
   );
 
-  // Speak via ElevenLabs (natural voice) and gracefully fall back to the
-  // browser's speechSynthesis if the service is unavailable.
+  // Speak in the natural voice (Kokoro, then ElevenLabs), gracefully falling
+  // back to the browser's speechSynthesis if neither is available.
+  //
+  // `warmupWaitMs` lets a routine message wait a moment for a cold neural
+  // engine rather than settle for the fallback voice. Emergencies pass 0: being
+  // heard immediately beats being heard beautifully.
   const speak = useCallback(
-    (text: string, onDone?: () => void) => {
+    (text: string, onDone?: () => void, warmupWaitMs = 2500) => {
       if (typeof window === 'undefined' || muted) { onDone?.(); return; }
       if (!audioRef.current) audioRef.current = new Audio();
       void speakAnnouncement(text, {
         getAudio: () => audioRef.current as HTMLAudioElement,
+        warmupWaitMs,
         onStart: () => { setSpeaking(true); emitRadioActive(); },
         onEnd: () => { setSpeaking(false); emitRadioIdle(); },
       }).then((ok) => {
@@ -454,7 +460,7 @@ export default function RadioPlayer() {
     };
 
     if (top.audioUrl) playAudio(top.audioUrl, onDone);
-    else speak(text, onDone);
+    else speak(text, onDone, isEmergency ? 0 : 2500);
   }, [queue, enabled, isLeader, speak, playAudio, markPlayed]);
 
   // Acknowledge in a single tap — no code prompt. In a theatre, silencing the
@@ -584,7 +590,10 @@ export default function RadioPlayer() {
             if (!enabled) {
               // user gesture unlocks audio
               setEnabled(true);
-              try { window.speechSynthesis?.getVoices(); } catch {}
+              primeHumanVoices();
+              // Start the neural engine on the gesture itself, so it is warm
+              // well before the first real announcement.
+              preloadKokoro();
               speak('Theatre radio service activated.');
             } else {
               setCollapsed((c) => !c);

@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { speakAnnouncement } from '@/lib/radioTts';
+import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
+import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
 
 // ============================================================================
 // Generic Announcement TV Kiosk
@@ -105,6 +106,11 @@ export default function AnnouncementDisplay({
       const u = new SpeechSynthesisUtterance(' ');
       u.volume = 0;
       window.speechSynthesis.speak(u);
+      // Same gesture warms the neural voice and the browser voice list, so the
+      // display's first announcement is spoken naturally rather than by the
+      // fallback synth.
+      primeHumanVoices();
+      preloadKokoro();
       setAudioEnabled(true);
     } catch (e) {
       console.error('[AnnouncementDisplay] enableAudio failed', e);
@@ -149,13 +155,8 @@ export default function AnnouncementDisplay({
         const synth = window.speechSynthesis;
         if (!synth) return resolve();
         const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.95;
-        u.pitch = 1.0;
-        u.volume = 1.0;
-        // Prefer an English voice when available
-        const voices = synth.getVoices();
-        const enVoice = voices.find((v) => /en[-_]/i.test(v.lang));
-        if (enVoice) u.voice = enVoice;
+        // Most humanoid voice this device has, with announcement prosody.
+        applyHumanVoice(u);
         u.onend = () => resolve();
         u.onerror = () => resolve();
         synth.cancel();
@@ -166,9 +167,11 @@ export default function AnnouncementDisplay({
     });
   }, []);
 
-  // Voice the announcement via ElevenLabs, falling back to the browser voice.
+  // Voice the announcement in the natural voice, falling back to the browser
+  // voice. This is a kiosk display: an extra couple of seconds on the first
+  // announcement is invisible, and buys the neural voice for it.
   const speak = useCallback(async (text: string): Promise<void> => {
-    const ok = await speakAnnouncement(text);
+    const ok = await speakAnnouncement(text, { warmupWaitMs: 3000 });
     if (!ok) await speakBrowser(text);
   }, [speakBrowser]);
 

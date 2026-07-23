@@ -3,7 +3,9 @@
 // Every radio / emergency / workflow announcement is voiced by, in order:
 //   1) Kokoro TTS   — free, in-browser neural voice (PRIMARY, see kokoroTts.ts)
 //   2) ElevenLabs   — server proxy (/api/radio/tts), only if a key is configured
-//   3) speechSynthesis — the built-in robotic browser voice (caller fallback)
+//   3) speechSynthesis — the built-in browser voice (caller fallback), picked
+//      via lib/humanVoice.ts so it lands on the device's neural voice rather
+//      than whichever legacy formant synth happens to be first in the list
 // This makes natural speech work with no paid credits, while keeping graceful
 // degradation on old browsers / blocked model downloads.
 
@@ -12,6 +14,7 @@ import {
   isKokoroAvailable,
   isKokoroReady,
   preloadKokoro,
+  whenKokoroReady,
   type KokoroSpeakHooks,
 } from './kokoroTts';
 
@@ -73,6 +76,13 @@ export interface SpeakHooks {
   getAudio?: () => HTMLAudioElement;
   /** 0..1 playback volume (default 1). */
   volume?: number;
+  /**
+   * How long this announcement may wait for a cold neural engine to finish
+   * warming before falling through to a lesser voice (default 0 — no wait).
+   * Non-urgent surfaces set a second or two so their first announcement is
+   * still spoken in the natural voice; emergency paths leave it at 0.
+   */
+  warmupWaitMs?: number;
 }
 
 /**
@@ -141,13 +151,22 @@ async function speakAnnouncementNow(
   // needed to be heard and actioned. A voice that arrives late is worse than a
   // plainer voice that arrives now, so warm the engine in the background and
   // let this announcement fall through to something that is ready.
-  if (isKokoroReady()) {
+  //
+  // Callers that can afford a moment pass `warmupWaitMs`, which waits out a
+  // cold load up to that bound only — so a page's first announcement still
+  // gets the natural voice, without any caller ever waiting indefinitely.
+  let ready = isKokoroReady();
+  if (!ready && isKokoroAvailable()) {
+    preloadKokoro(); // background warm-up; never awaited
+    if (hooks.warmupWaitMs && hooks.warmupWaitMs > 0) {
+      ready = await whenKokoroReady(hooks.warmupWaitMs);
+    }
+  }
+  if (ready) {
     try {
       const ok = await speakViaKokoro(clean, hooks);
       if (ok) return true;
     } catch { /* fall through to ElevenLabs */ }
-  } else if (isKokoroAvailable()) {
-    preloadKokoro(); // background warm-up; never awaited
   }
 
   // 2) ElevenLabs proxy (only does anything if a key is configured server-side).

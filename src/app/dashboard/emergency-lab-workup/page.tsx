@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAdaptivePoll } from '@/lib/useAdaptivePoll';
+import { speakAnnouncement } from '@/lib/radioTts';
+import { applyHumanVoice } from '@/lib/humanVoice';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import {
@@ -533,22 +535,27 @@ export default function EmergencyLabWorkupPage() {
     15000
   );
 
+  // Voice a lab alert through the shared announcement path (natural voice, and
+  // globally serialised so it can never talk over the theatre radio or an
+  // emergency alert). This used to call speechSynthesis directly at pitch 1.2,
+  // which was both the most machine-like voice in the app and the only one that
+  // could speak on top of another announcement.
   const playVoiceAlert = async (notification: VoiceNotification) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(notification.voiceMessage);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.2;
-      utterance.volume = 1;
-      utterance.lang = 'en-US';
-      window.speechSynthesis.speak(utterance);
+    void speakAnnouncement(notification.voiceMessage, { warmupWaitMs: 1500 }).then((ok) => {
+      if (ok || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      try {
+        const utterance = new SpeechSynthesisUtterance(notification.voiceMessage);
+        applyHumanVoice(utterance);
+        window.speechSynthesis.speak(utterance);
+      } catch { /* nothing more we can do */ }
+    });
 
-      // Mark as played
-      await fetch('/api/emergency-lab-workup/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId: notification.id, action: 'VOICE_PLAYED' }),
-      });
-    }
+    // Mark as played straight away rather than waiting for playback to finish.
+    await fetch('/api/emergency-lab-workup/notifications', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationId: notification.id, action: 'VOICE_PLAYED' }),
+    });
   };
 
   const acknowledgeNotification = async (notificationId: string) => {

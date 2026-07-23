@@ -9,6 +9,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DECKS, getDeck, type DeckSlide, type SlideBg } from '@/lib/presentations';
+import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
 
 const themes: Record<SlideBg, { background: string; accent: string; text: string; sub: string }> = {
   navy:    { background: 'linear-gradient(135deg, #001f3f 0%, #003366 50%, #001a2e 100%)', accent: '#87CEEB', text: '#FFFFFF', sub: '#87CEEB' },
@@ -21,26 +22,12 @@ const themes: Record<SlideBg, { background: string; accent: string; text: string
 function useSpeech() {
   const [supported, setSupported] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [voice, setVoice] = useState<SpeechSynthesisVoice | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     setSupported(true);
-    const load = () => {
-      const list = window.speechSynthesis.getVoices();
-      if (!voice && list.length) {
-        const preferred =
-          list.find((v) => /en-GB|en_GB/i.test(v.lang) && /female/i.test(v.name)) ||
-          list.find((v) => /en-GB|en_GB/i.test(v.lang)) ||
-          list.find((v) => /^en/i.test(v.lang)) ||
-          list[0];
-        setVoice(preferred);
-      }
-    };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
+    primeHumanVoices();
     return () => { try { window.speechSynthesis.cancel(); } catch {} };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const speak = useCallback((text: string) => {
@@ -48,15 +35,13 @@ function useSpeech() {
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      if (voice) u.voice = voice;
-      u.rate = 0.95;
-      u.pitch = 1.0;
+      applyHumanVoice(u);
       u.onstart = () => setSpeaking(true);
       u.onend = () => setSpeaking(false);
       u.onerror = () => setSpeaking(false);
       window.speechSynthesis.speak(u);
     } catch { setSpeaking(false); }
-  }, [supported, voice]);
+  }, [supported]);
 
   const stop = useCallback(() => {
     if (!supported) return;

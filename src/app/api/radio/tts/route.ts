@@ -25,6 +25,13 @@ export const dynamic = 'force-dynamic';
 const DEFAULT_VOICE_ID = 'ygEVplYAGZ9epkJkyj4V';
 const DEFAULT_MODEL_ID = 'eleven_multilingual_v2';
 
+/** Read a 0..1 voice-setting override from the environment, ignoring anything
+ *  unparseable or out of range so a bad value can't break announcements. */
+function numFromEnv(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+}
+
 // Small in-memory LRU cache. Radio announcements repeat (e.g. emergency calls
 // every 5 minutes), so caching the rendered audio by text avoids burning
 // ElevenLabs quota on identical messages. Cleared on cold start.
@@ -108,10 +115,16 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         text,
         model_id: modelId,
+        // Tuned for a human read rather than a flat one. Stability is what
+        // makes ElevenLabs sound like an announcement system: high values
+        // flatten the delivery into a monotone, and style at 0 removes the
+        // natural variation in emphasis. Loosening stability and adding a
+        // little style gives the announcements the cadence of a person
+        // speaking. Overridable per-deployment without a redeploy of code.
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.0,
+          stability: numFromEnv(process.env.ELEVENLABS_STABILITY, 0.4),
+          similarity_boost: numFromEnv(process.env.ELEVENLABS_SIMILARITY, 0.8),
+          style: numFromEnv(process.env.ELEVENLABS_STYLE, 0.3),
           use_speaker_boost: true,
         },
       }),

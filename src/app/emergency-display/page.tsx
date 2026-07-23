@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { speakAnnouncement } from '@/lib/radioTts';
+import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
+import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
 
 // ==================== TYPES ====================
 interface EmergencyItem {
@@ -105,6 +106,13 @@ class AudioAlertEngine {
     this.enabled = true;
     if (typeof window !== 'undefined') {
       this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Warm the neural voice and the browser voice list the moment audio is
+      // enabled. An emergency announcement can never wait for a cold engine
+      // (see radioTts), so the only way it gets the natural voice is for the
+      // engine to already be loaded by the time the alert lands — and this
+      // display is opened long before it is needed.
+      primeHumanVoices();
+      preloadKokoro();
       // Preload audio element during user gesture so browser allows playback
       if (!this.audioElement) {
         this.audioElement = new Audio('/audio/announcement-default.mp3');
@@ -232,15 +240,9 @@ class AudioAlertEngine {
         const synth = window.speechSynthesis;
         synth.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.92;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        utterance.lang = 'en-US';
-        const voices = synth.getVoices();
-        const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
-          || voices.find(v => v.name.includes('Microsoft') && v.lang.startsWith('en'))
-          || voices.find(v => v.lang.startsWith('en-'));
-        if (preferred) utterance.voice = preferred;
+        // Most humanoid voice available, a touch slower than conversational so
+        // an alert stays intelligible across a noisy theatre corridor.
+        applyHumanVoice(utterance, { rate: 0.92 });
         // Safety: allow up to 30s for the (possibly long combined) narration.
         const timeout = setTimeout(() => { synth.cancel(); resolve(); }, 30000);
         utterance.onend = () => { clearTimeout(timeout); resolve(); };

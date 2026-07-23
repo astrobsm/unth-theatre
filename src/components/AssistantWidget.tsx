@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { MessageCircle, Send, X, Mic, MicOff, Volume2, Loader2 } from 'lucide-react';
 import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
+import { speakAnnouncement } from '@/lib/radioTts';
+import { applyHumanVoice } from '@/lib/humanVoice';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -33,18 +35,24 @@ export default function AssistantWidget() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs, open]);
 
+  // Answer aloud in the same natural voice the radio and announcements use.
+  // Going through speakAnnouncement also means the assistant queues politely
+  // behind an emergency announcement instead of speaking over it.
   const speak = (text: string) => {
     if (!voiceOut) return;
-    try {
-      const synth = window.speechSynthesis;
-      if (!synth) return;
-      synth.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 0.98;
-      synth.speak(u);
-    } catch {
-      /* noop */
-    }
+    void speakAnnouncement(text, { warmupWaitMs: 2000 }).then((ok) => {
+      if (ok) return;
+      try {
+        const synth = window.speechSynthesis;
+        if (!synth) return;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        applyHumanVoice(u);
+        synth.speak(u);
+      } catch {
+        /* noop */
+      }
+    });
   };
 
   const send = async (q: string) => {

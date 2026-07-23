@@ -26,6 +26,7 @@ const createWorkerLazy = async () => {
   return createWorker;
 };
 import { SpeechRecognitionService, createSpeechRecognition } from '@/lib/speech-recognition';
+import { applyHumanVoice } from '@/lib/humanVoice';
 import { applyImageEnhancements, initializeTensorFlow } from '@/lib/tensorflow-ocr';
 import { 
   AdvancedImagePreprocessor, 
@@ -487,9 +488,17 @@ export function SmartTextInput({
     }
 
     const utterance = new SpeechSynthesisUtterance(value);
-    utterance.lang = selectedLanguage;
-    utterance.rate = 0.9;
-    
+    if (/^en/i.test(selectedLanguage)) {
+      // English read-back gets the device's most humanoid voice, same as every
+      // other spoken surface. Other languages keep the engine's own default —
+      // an English voice reading e.g. Igbo would be worse, not better.
+      applyHumanVoice(utterance, { lang: selectedLanguage, rate: 0.9 });
+    } else {
+      utterance.lang = selectedLanguage;
+      utterance.rate = 0.9;
+    }
+
+
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     
