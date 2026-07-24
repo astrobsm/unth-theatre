@@ -55,6 +55,17 @@ interface Pack {
   items: PackItem[];
 }
 
+// Catalog templates offered in the "Add item" dropdown inside View pack content.
+interface CatalogConsumable {
+  id: string; name: string; category?: string | null; size?: string | null;
+  unit?: string | null; defaultQuantity?: number | null; specialty?: string | null;
+}
+interface CatalogDrug {
+  id: string; name: string; type?: string | null; defaultDosage?: string | null;
+  defaultRoute?: string | null; defaultQuantity?: number | null; unit?: string | null;
+  isControlled?: boolean;
+}
+
 // Per-booking editable copy of a pack item (never persisted to the master pack).
 // `quantity` may be '' transiently while the surgeon clears the box to retype.
 interface EditItem {
@@ -87,6 +98,9 @@ export default function SurgicalPackPicker({
   // Per-pack per-booking edits (keyed by pack id). Absent => use master items as-is.
   const [edits, setEdits] = useState<Map<string, EditItem[]>>(new Map());
   const [viewing, setViewing] = useState<string | null>(null);
+  // Catalog templates for the "Add item" dropdown.
+  const [consumableCatalog, setConsumableCatalog] = useState<CatalogConsumable[]>([]);
+  const [drugCatalog, setDrugCatalog] = useState<CatalogDrug[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +114,22 @@ export default function SurgicalPackPicker({
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [subspecialty]);
+
+  // Load the consumable + drug/dressing catalogs (for the Add-item dropdown).
+  useEffect(() => {
+    let cancelled = false;
+    // Pull the full active catalog so the Add-item dropdown is comprehensive
+    // (grouped by category), not limited to the current subspecialty.
+    fetch('/api/admin/consumable-templates?activeOnly=true', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (!cancelled) setConsumableCatalog(Array.isArray(d) ? d : []); })
+      .catch(() => { if (!cancelled) setConsumableCatalog([]); });
+    fetch('/api/admin/drug-dressing-templates?activeOnly=true', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (!cancelled) setDrugCatalog(Array.isArray(d) ? d : []); })
+      .catch(() => { if (!cancelled) setDrugCatalog([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   // The effective (possibly-edited) items for a pack.
   const effectiveItems = useCallback(
@@ -164,12 +194,12 @@ export default function SurgicalPackPicker({
     mutateEdits(packId, (items) => { items[idx].removed = !items[idx].removed; return items; });
   const setField = (packId: string, idx: number, field: keyof EditItem, value: string) =>
     mutateEdits(packId, (items) => { (items[idx] as any)[field] = value; return items; });
-  const addItem = (packId: string, kind: Pack['kind']) =>
+  const addItem = (packId: string, kind: Pack['kind'], prefill?: Partial<EditItem>) =>
     mutateEdits(packId, (items) => [
       ...items,
       kind === 'CONSUMABLE'
-        ? { name: '', quantity: 1, unit: 'piece', category: 'OTHER', added: true }
-        : { name: '', quantity: 1, unit: 'vial', drugType: 'OTHER', added: true },
+        ? { name: '', quantity: 1, unit: 'piece', category: 'OTHER', added: true, ...prefill }
+        : { name: '', quantity: 1, unit: 'vial', drugType: 'OTHER', added: true, ...prefill },
     ]);
   const resetPack = (packId: string) =>
     setEdits((prev) => {
@@ -274,6 +304,8 @@ export default function SurgicalPackPicker({
           onToggleRemove={(idx) => toggleRemove(viewingPack.id, idx)}
           onField={(idx, f, v) => setField(viewingPack.id, idx, f, v)}
           onAdd={() => addItem(viewingPack.id, viewingPack.kind)}
+          onAddPrefill={(prefill) => addItem(viewingPack.id, viewingPack.kind, prefill)}
+          catalog={viewingPack.kind === 'CONSUMABLE' ? consumableCatalog : drugCatalog}
           onReset={() => resetPack(viewingPack.id)}
           edited={edits.has(viewingPack.id)}
         />
@@ -285,8 +317,20 @@ export default function SurgicalPackPicker({
 // ---------------------------------------------------------------------------
 // Modal: view & edit a pack's contents for this booking.
 // ---------------------------------------------------------------------------
+// Build the display label / prefill for a catalog template.
+function catalogLabel(t: any, isPharmacy: boolean): string {
+  return isPharmacy
+    ? `${t.name}${t.defaultDosage ? ` — ${t.defaultDosage}` : ''}${t.unit ? ` (${t.unit})` : ''}`
+    : `${t.name}${t.size ? ` — ${t.size}` : ''}${t.unit ? ` (${t.unit})` : ''}`;
+}
+function catalogToPrefill(t: any, isPharmacy: boolean): Partial<EditItem> {
+  return isPharmacy
+    ? { name: t.name, quantity: t.defaultQuantity ?? 1, unit: t.unit ?? 'vial', drugType: t.type ?? 'OTHER', dosage: t.defaultDosage ?? null, route: t.defaultRoute ?? null, added: true }
+    : { name: t.name, quantity: t.defaultQuantity ?? 1, unit: t.unit ?? 'piece', category: t.category ?? 'OTHER', size: t.size ?? null, added: true };
+}
+
 function PackContentModal({
-  pack, items, selected, emergency, onClose, onApply, onQty, onToggleRemove, onField, onAdd, onReset, edited,
+  pack, items, selected, emergency, onClose, onApply, onQty, onToggleRemove, onField, onAdd, onAddPrefill, catalog, onReset, edited,
 }: {
   pack: Pack;
   items: EditItem[];
@@ -298,10 +342,24 @@ function PackContentModal({
   onToggleRemove: (idx: number) => void;
   onField: (idx: number, field: keyof EditItem, value: string) => void;
   onAdd: () => void;
+  onAddPrefill: (prefill: Partial<EditItem>) => void;
+  catalog: any[];
   onReset: () => void;
   edited: boolean;
 }) {
   const isPharmacy = pack.kind === 'PHARMACY';
+  // Group catalog items by category (consumables) / type (drugs) for the dropdown.
+  const catalogGroups = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const t of catalog) {
+      const label = String((isPharmacy ? t.type : t.category) || 'OTHER').replace(/_/g, ' ');
+      if (!map.has(label)) map.set(label, []);
+      map.get(label)!.push(t);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([label, its]) => ({ label, items: its.sort((x: any, y: any) => String(x.name).localeCompare(String(y.name))) }));
+  }, [catalog, isPharmacy]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
@@ -405,13 +463,38 @@ function PackContentModal({
               )}
             </div>
           ))}
-          <button
-            type="button"
-            onClick={onAdd}
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 mt-1"
-          >
-            <Plus className="w-4 h-4" /> Add item
-          </button>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <select
+              aria-label={`Add ${isPharmacy ? 'drug / IV fluid' : 'consumable'} from catalog`}
+              className="input-field text-sm py-1 max-w-[24rem]"
+              value=""
+              onChange={(e) => {
+                const t = catalog.find((c) => c.id === e.target.value);
+                if (t) onAddPrefill(catalogToPrefill(t, isPharmacy));
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">
+                {catalog.length
+                  ? `+ Add ${isPharmacy ? 'drug / IV fluid' : 'consumable'} from catalog…`
+                  : 'Catalog empty — use custom item'}
+              </option>
+              {catalogGroups.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.items.map((t: any) => (
+                    <option key={t.id} value={t.id}>{catalogLabel(t, isPharmacy)}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={onAdd}
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700"
+            >
+              <Plus className="w-4 h-4" /> Add custom item
+            </button>
+          </div>
         </div>
 
         {/* footer */}

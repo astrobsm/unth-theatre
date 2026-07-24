@@ -1488,71 +1488,10 @@ export default function NewSurgeryPage() {
             Provider), and the mandatory base pack still auto-attaches on the
             server. Surgeons fine-tune per case via "View pack content". */}
 
-        {/* Drugs and IV Fluids / Active Wound Dressing Agents — Pharmacy pre-pack */}
-        <div className="card">
-          <div className="flex items-center gap-3 mb-2">
-            <Pill className="w-6 h-6 text-primary-600" />
-            <h2 className="text-xl font-semibold">Drugs and IV Fluids / Active Wound Dressing Agents</h2>
-            <span className="ml-auto text-xs text-gray-500">Visible to Pharmacy for packing.</span>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Select antibiotics, IV fluids, dressings and wound-care agents needed for this case.
-            Edit dosage / route / quantity per item.
-          </p>
-          {drugDressingLoading ? (
-            <div className="text-sm text-gray-500">Loading drugs &amp; dressings…</div>
-          ) : drugDressingTemplates.length === 0 ? (
-            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
-              No drugs/dressings in catalog yet. Admin can seed via
-              <code className="mx-1 bg-amber-100 px-1 rounded">POST /api/admin/seed-surgical-catalog</code>.
-            </div>
-          ) : (
-            <div className="space-y-4 max-h-[460px] overflow-y-auto pr-2">
-              {Object.entries(
-                drugDressingTemplates.reduce((acc: Record<string, any[]>, t: any) => {
-                  (acc[t.type] ||= []).push(t); return acc;
-                }, {}),
-              ).map(([typ, items]: any) => (
-                <div key={typ}>
-                  <div className="font-medium text-sm text-gray-800 mb-2">{typ.replaceAll('_', ' ')}</div>
-                  <div className="space-y-2">
-                    {items.map((t: any) => {
-                      const sel = selectedDrugs[t.id];
-                      return (
-                        <div key={t.id} className={`border rounded px-3 py-2 ${sel ? 'bg-primary-50 border-primary-200' : 'border-gray-200'}`}>
-                          <div className="flex items-center gap-2">
-                            <input
-                              aria-label={`Select ${t.name}`}
-                              title={`Select ${t.name}`}
-                              type="checkbox"
-                              checked={!!sel}
-                              onChange={() => toggleDrug(t)}
-                              className="w-4 h-4"
-                            />
-                            <div className="flex-1 text-sm font-medium">
-                              {t.name}
-                              {t.isControlled ? <span className="ml-2 text-[10px] uppercase bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Controlled</span> : null}
-                            </div>
-                            <div className="text-xs text-gray-500">{t.unit}</div>
-                          </div>
-                          {sel && (
-                            <div className="grid sm:grid-cols-4 gap-2 mt-2 ml-6 text-xs">
-                              <input className="input py-1" placeholder="Dosage" value={sel.dosage || ''} onChange={(e) => setDrugField(t.id, 'dosage', e.target.value)} />
-                              <input className="input py-1" placeholder="Route" value={sel.route || ''} onChange={(e) => setDrugField(t.id, 'route', e.target.value)} />
-                              <input aria-label={`Quantity for ${t.name}`} title="Quantity" placeholder="Qty" type="number" min={1} className="input py-1" value={sel.quantity} onChange={(e) => setDrugField(t.id, 'quantity', e.target.value)} />
-                              <input className="input py-1" placeholder="Notes" value={sel.notes || ''} onChange={(e) => setDrugField(t.id, 'notes', e.target.value)} />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-3 text-xs text-gray-600">Selected: {Object.keys(selectedDrugs).length}</div>
-        </div>
+        {/* Drugs / IV fluids / wound-dressing manual list removed — pharmacy
+            packs in the "Apply a pack" picker above now supply these (antibiotics,
+            IV fluids, adjuncts) to Pharmacy. Surgeons add any extra drug/fluid
+            for this case from the catalog dropdown inside "View pack content". */}
 
         {/* Informed Consent Upload — visible to Holding Area for clearance */}
         <div className="card">
