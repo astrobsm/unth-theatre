@@ -12,6 +12,8 @@ import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm 
 import { formatAge } from '@/lib/age';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
+import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { notify } from '@/lib/notifications';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -622,6 +624,14 @@ export default function NewSurgeryPage() {
       });
 
       if (response.ok) {
+        // Offline: the write was queued (no server-generated codes/id yet).
+        // Confirm and return to the list instead of showing an empty codes modal.
+        if (isOfflineQueued(response)) {
+          notify.success(OFFLINE_SAVED_MESSAGE);
+          setLoading(false);
+          router.push('/dashboard/surgeries');
+          return;
+        }
         // Show the patient-facing codes so the surgeon can copy them and give
         // them to the patient before leaving this screen.
         try {

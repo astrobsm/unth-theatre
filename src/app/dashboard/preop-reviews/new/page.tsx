@@ -15,6 +15,8 @@ import {
 } from '@/lib/anaesthesia-consumables';
 import SignaturePad from '@/components/SignaturePad';
 import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
+import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { notify } from '@/lib/notifications';
 import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaesthesiaConsent';
 import ContactName from '@/components/ContactName';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -503,6 +505,13 @@ export default function NewPreOpReviewPage() {
       });
 
       if (response.ok) {
+        // Offline: queued (pharmacy/pack providers only see it after sync), so
+        // skip the "go and pay now" modal to avoid a misleading instruction.
+        if (isOfflineQueued(response)) {
+          notify.success(OFFLINE_SAVED_MESSAGE);
+          router.push('/dashboard/preop-reviews');
+          return;
+        }
         // Feedback: remind the anaesthetist to send the patient to pay for the
         // prescribed drugs/items with their PT number before surgery.
         setPaymentInfo({

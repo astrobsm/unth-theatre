@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText } from 'lucide-react';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
+import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { notify } from '@/lib/notifications';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
@@ -344,6 +346,15 @@ export default function NewEmergencyBookingPage() {
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to submit emergency booking');
+      }
+
+      // Offline: the booking was queued (no server surgery id yet). Confirm and
+      // return to the emergency list; the alerts fire on the server after sync.
+      if (isOfflineQueued(res)) {
+        notify.success(OFFLINE_SAVED_MESSAGE);
+        setLoading(false);
+        router.push('/dashboard/emergency-booking');
+        return;
       }
 
       // Show the mandatory no-paper-prescription acknowledgement before moving
