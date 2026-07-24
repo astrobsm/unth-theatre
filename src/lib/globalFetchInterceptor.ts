@@ -163,19 +163,42 @@ async function handleGetFetch(
 // ============================================================
 // Mutation handler — queue in IndexedDB when offline
 // ============================================================
+function headersToObject(h?: HeadersInit): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!h) return out;
+  if (h instanceof Headers) h.forEach((v, k) => { out[k] = v; });
+  else if (Array.isArray(h)) h.forEach(([k, v]) => { out[k] = v; });
+  else Object.assign(out, h as Record<string, string>);
+  return out;
+}
+function genIdempotencyKey(): string {
+  try {
+    const c: any = typeof crypto !== 'undefined' ? crypto : null;
+    if (c?.randomUUID) return c.randomUUID();
+  } catch { /* ignore */ }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function handleMutationFetch(
   url: string,
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
+  // A stable idempotency key attached to the FIRST attempt AND every offline
+  // replay, so a mutation that reached the server but lost its response (or is
+  // replayed on reconnect) is de-duplicated server-side.
+  const idemKey = genIdempotencyKey();
+  const canInject = typeof input === 'string' || input instanceof URL;
+  const firstInit: RequestInit | undefined = canInject
+    ? { ...init, headers: { ...headersToObject(init?.headers), 'X-Idempotency-Key': idemKey } }
+    : init;
   try {
-    const response = await originalFetch(input, init);
+    const response = await originalFetch(input, firstInit);
     return response;
   } catch (networkError) {
     // Offline — queue the mutation
     const method = (init?.method ?? 'POST').toUpperCase();
     let body: unknown = null;
-    let headers: Record<string, string> = {};
 
     try {
       if (init?.body) {
@@ -185,15 +208,8 @@ async function handleMutationFetch(
       body = init?.body;
     }
 
-    if (init?.headers) {
-      if (init.headers instanceof Headers) {
-        init.headers.forEach((v, k) => { headers[k] = v; });
-      } else if (Array.isArray(init.headers)) {
-        init.headers.forEach(([k, v]) => { headers[k] = v; });
-      } else {
-        headers = init.headers as Record<string, string>;
-      }
-    }
+    // Carry the SAME idempotency key on every replay.
+    const headers: Record<string, string> = { ...headersToObject(init?.headers), 'X-Idempotency-Key': idemKey };
 
     // Derive entity type from URL
     const entityType = url.split('/api/')[1]?.split('/')[0]?.split('?')[0] ?? 'unknown';

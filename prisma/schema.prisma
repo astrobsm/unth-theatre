@@ -660,6 +660,21 @@ model Roster {
 // history and rollback. Publishing flips that department/period's DRAFT rows to
 // PUBLISHED and records an immutable JSON snapshot here; rollback recreates rows
 // from a chosen version's snapshot.
+// Idempotency guard for offline-queued writes. The client attaches a stable
+// X-Idempotency-Key to each mutation (first attempt + every replay); routes that
+// opt in store the first successful response here and return it verbatim on any
+// replay, so reconnect-sync can never double-create a record.
+model IdempotencyKey {
+  key            String   @id
+  responseStatus Int
+  responseBody   String   @db.Text
+  route          String?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
 model RosterPublication {
   id              String   @id @default(uuid())
   department      String // dept slug: nursing, anaesthetists, porters, …

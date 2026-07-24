@@ -108,6 +108,18 @@ function openDB(): Promise<IDBDatabase> {
 
 export async function addToOfflineQueue(item: Omit<OfflineQueueItem, 'id' | 'timestamp' | 'retryCount'>): Promise<number> {
   if (!isIndexedDBAvailable()) return -1;
+  // De-dupe: skip if an identical pending mutation (same url + method + body, or
+  // same idempotency key) is already queued — prevents accidental double-queues.
+  try {
+    const pending = await getOfflineQueue();
+    const newBody = JSON.stringify(item.body ?? null);
+    const newKey = item.headers?.['X-Idempotency-Key'];
+    const dup = pending.find((p) =>
+      (newKey && p.headers?.['X-Idempotency-Key'] === newKey) ||
+      (p.url === item.url && p.method === item.method && JSON.stringify(p.body ?? null) === newBody),
+    );
+    if (dup) return dup.id ?? -1;
+  } catch { /* fall through to enqueue */ }
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('offlineQueue', 'readwrite');

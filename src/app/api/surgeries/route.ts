@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from "@/lib/idempotency";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
@@ -265,10 +266,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Idempotency: if an offline-queued booking is replayed on reconnect, return
+    // the original response instead of creating a duplicate surgery.
+    const idemKey = idempotencyKeyFrom(request);
+    const replay = await replayIfSeen(idemKey);
+    if (replay) return replay;
 
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
@@ -746,6 +753,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await rememberResult(idemKey, 201, surgery, 'POST /api/surgeries');
     return NextResponse.json(surgery, { status: 201 });
 
   } catch (error) {

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
 import { sendPushToUsers } from '@/lib/fcm';
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 
@@ -272,6 +273,12 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+
+    // Idempotency: a replayed offline emergency booking returns the original
+    // response instead of creating a duplicate case + alert.
+    const idemKey = idempotencyKeyFrom(request);
+    const replay = await replayIfSeen(idemKey);
+    if (replay) return replay;
 
     const body = await request.json();
     const validatedData = createEmergencyBookingSchema.parse(body);
@@ -810,12 +817,14 @@ export async function POST(request: NextRequest) {
       metadata: { surgeryId: surgery.id, bookingId: booking.id, alertId: emergencyAlert.id },
     });
 
-    return NextResponse.json({
+    const responsePayload = {
       booking,
       surgery,
       emergencyAlert,
       message: 'Emergency booking submitted and emergency alerts raised',
-    }, { status: 201 });
+    };
+    await rememberResult(idemKey, 201, responsePayload, 'POST /api/emergency-booking');
+    return NextResponse.json(responsePayload, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
