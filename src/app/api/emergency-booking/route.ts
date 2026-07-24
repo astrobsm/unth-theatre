@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
+import { sendPushToUsers } from '@/lib/fcm';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 
@@ -737,6 +738,57 @@ export async function POST(request: NextRequest) {
         }),
       },
     });
+
+    // ── Smart notifications: alert the WHOLE on-duty multidisciplinary team ──
+    // Resolve everyone rostered for today's current shift (any theatre) plus the
+    // first-of-role contacts for disciplines that aren't on the standing roster,
+    // and notify them in-app + via FCM push (push no-ops when FCM is unset).
+    try {
+      const now = new Date();
+      const h = now.getHours();
+      const curShift = h >= 8 && h < 16 ? 'MORNING' : h >= 16 && h < 22 ? 'CALL' : 'NIGHT';
+      const dateOnly = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const rostered = await prisma.roster.findMany({
+        where: { date: dateOnly, shift: curShift as any },
+        select: { userId: true },
+      });
+      const roleContacts = await prisma.user.findMany({
+        where: {
+          status: 'APPROVED' as any,
+          role: { in: ['THEATRE_MANAGER', 'RECOVERY_ROOM_NURSE', 'BLOODBANK_STAFF', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'BIOMEDICAL_ENGINEER'] as any },
+        },
+        select: { id: true },
+      });
+      const teamUserIds = Array.from(new Set([
+        ...rostered.map((r) => r.userId),
+        ...roleContacts.map((u) => u.id),
+        ...(validatedData.anesthetistId ? [validatedData.anesthetistId] : []),
+        ...(validatedData.surgeonId ? [validatedData.surgeonId] : []),
+      ])).filter(Boolean);
+
+      if (teamUserIds.length > 0) {
+        const title = `🚨 EMERGENCY: ${validatedData.procedureName}`;
+        const message = `${validatedData.priority} priority — ${validatedData.patientName} (folder ${validatedData.folderNumber})${resolvedTheatreName ? ` in ${resolvedTheatreName}` : ''}. Start ${hhmm(nextStart)}. Please respond.`;
+        await prisma.notification.createMany({
+          data: teamUserIds.map((uid) => ({
+            userId: uid,
+            type: 'EMERGENCY_ESCALATION' as any,
+            title,
+            message,
+            link: `/dashboard/emergency-booking?highlight=${booking.id}`,
+          })),
+        });
+        // Fire-and-forget push (safe no-op when FCM is not configured).
+        void sendPushToUsers(teamUserIds, {
+          title,
+          body: message,
+          data: { kind: 'emergency_booking', bookingId: booking.id, surgeryId: surgery.id },
+          link: '/dashboard/emergency-booking',
+        });
+      }
+    } catch (e) {
+      console.error('emergency team notification failed (non-fatal):', e);
+    }
 
     // Theatre Radio: announce emergency booking
     const anaesNote = validatedData.anaesthesiaType

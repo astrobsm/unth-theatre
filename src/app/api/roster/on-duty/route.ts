@@ -26,9 +26,12 @@ type StaffEntry = {
   role: string;
   staffCode: string | null;
   phoneNumber: string | null;
+  extension: string | null;
   seniorityLevel: string | null;
+  subRole: string | null;
   theatreId: string | null;
   shift: string;
+  source?: "roster" | "role"; // roster = rostered on duty; role = on-call by role (fallback contact)
 };
 
 /**
@@ -120,6 +123,7 @@ export async function GET(request: NextRequest) {
             role: true,
             staffCode: true,
             phoneNumber: true,
+            extension: true,
           },
         },
       },
@@ -137,15 +141,19 @@ export async function GET(request: NextRequest) {
       role: r.user.role,
       staffCode: r.user.staffCode,
       phoneNumber: r.user.phoneNumber,
+      extension: r.user.extension ?? null,
       seniorityLevel: r.seniorityLevel ?? null,
+      subRole: r.subRole ?? null,
       theatreId: r.theatreId ?? null,
       shift: r.shift,
+      source: "roster",
     });
 
     const candidates = {
       anaesthetists: [] as StaffEntry[],
       anaestheticTechnicians: [] as StaffEntry[],
       nurses: [] as StaffEntry[],
+      recoveryNurses: [] as StaffEntry[],
       cleaners: [] as StaffEntry[],
       porters: [] as StaffEntry[],
       pharmacists: [] as StaffEntry[],
@@ -162,6 +170,9 @@ export async function GET(request: NextRequest) {
           break;
         case "NURSES":
           candidates.nurses.push(entry);
+          break;
+        case "RECOVERY_NURSES":
+          candidates.recoveryNurses.push(entry);
           break;
         case "CLEANERS":
           candidates.cleaners.push(entry);
@@ -192,14 +203,67 @@ export async function GET(request: NextRequest) {
       (a, b) => senorityRank(a.seniorityLevel) - senorityRank(b.seniorityLevel)
     );
 
+    // Nurses: split by subRole where recorded; otherwise fall back to order.
+    const bySub = (want: string) => candidates.nurses.filter((n) => (n.subRole ?? "").toUpperCase() === want);
+    const scrub = bySub("SCRUB");
+    const circ = bySub("CIRCULATING");
+    const supervisors = bySub("SUPERVISING");
+    const plainNurses = candidates.nurses.filter(
+      (n) => !["SCRUB", "CIRCULATING", "SUPERVISING", "HOLDING_AREA"].includes((n.subRole ?? "").toUpperCase())
+    );
+    const scrubNurse = scrub[0] ?? plainNurses[0] ?? candidates.nurses[0] ?? null;
+    const circulatingNurse =
+      circ[0] ?? plainNurses.find((n) => n.userId !== scrubNurse?.userId) ?? candidates.nurses.find((n) => n.userId !== scrubNurse?.userId) ?? null;
+
+    // Role-based fallback contacts for disciplines that are not part of the
+    // standing duty roster (theatre manager, blood bank, CSSD, recovery, biomed).
+    // "On-call by role" — the first APPROVED user of the role. Advisory contact.
+    const ROLE_CONTACTS: Array<[string, string[]]> = [
+      ["theatreManager", ["THEATRE_MANAGER"]],
+      ["bloodBank", ["BLOODBANK_STAFF"]],
+      ["cssd", ["CSSD_STAFF", "CSSD_SUPERVISOR"]],
+      ["biomedicalEngineer", ["BIOMEDICAL_ENGINEER"]],
+    ];
+    const roleContacts: Record<string, StaffEntry | null> = {};
+    await Promise.all(
+      ROLE_CONTACTS.map(async ([key, roles]) => {
+        const u = await prisma.user.findFirst({
+          where: { role: { in: roles as any }, status: "APPROVED" as any },
+          select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true },
+          orderBy: { fullName: "asc" },
+        });
+        roleContacts[key] = u
+          ? { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" }
+          : null;
+      })
+    );
+
+    // Recovery nurse: prefer a rostered RECOVERY_NURSES entry, else by role.
+    let recoveryNurse: StaffEntry | null = candidates.recoveryNurses[0] ?? null;
+    if (!recoveryNurse) {
+      const u = await prisma.user.findFirst({
+        where: { role: "RECOVERY_ROOM_NURSE" as any, status: "APPROVED" as any },
+        select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true },
+      });
+      if (u) recoveryNurse = { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" };
+    }
+
     const team = {
       anaesthetist: sortedAnaesthetists[0] ?? null,
+      // Second/emergency anaesthetist for cover.
+      anaesthetist2: sortedAnaesthetists[1] ?? null,
       anaestheticTechnician: candidates.anaestheticTechnicians[0] ?? null,
-      scrubNurse: candidates.nurses[0] ?? null,
-      circulatingNurse: candidates.nurses[1] ?? null,
+      scrubNurse,
+      circulatingNurse,
+      supervisors,
+      recoveryNurse,
       cleaner: candidates.cleaners[0] ?? null,
       porter: candidates.porters[0] ?? null,
       pharmacist: candidates.pharmacists[0] ?? null,
+      theatreManager: roleContacts.theatreManager ?? null,
+      bloodBank: roleContacts.bloodBank ?? null,
+      cssd: roleContacts.cssd ?? null,
+      biomedicalEngineer: roleContacts.biomedicalEngineer ?? null,
     };
 
     return NextResponse.json({

@@ -204,17 +204,29 @@ interface OnDutyStaff {
   userId: string;
   name: string;
   phoneNumber: string | null;
+  extension?: string | null;
+  source?: string; // "roster" | "role"
+  role?: string;
 }
 
 interface OnDutyTeam {
   shift: string;
   rostersFound: number;
   team: {
+    anaesthetist?: OnDutyStaff | null;
+    anaesthetist2?: OnDutyStaff | null;
+    anaestheticTechnician?: OnDutyStaff | null;
     scrubNurse: OnDutyStaff | null;
     circulatingNurse: OnDutyStaff | null;
+    supervisors?: OnDutyStaff[];
+    recoveryNurse?: OnDutyStaff | null;
     porter: OnDutyStaff | null;
     cleaner: OnDutyStaff | null;
     pharmacist: OnDutyStaff | null;
+    theatreManager?: OnDutyStaff | null;
+    bloodBank?: OnDutyStaff | null;
+    cssd?: OnDutyStaff | null;
+    biomedicalEngineer?: OnDutyStaff | null;
   };
 }
 
@@ -833,28 +845,47 @@ export default function EmergencyBookingPage() {
                           const od = onDutyTeams[booking.id];
                           const t = od?.team;
                           if (!t) return null;
-                          const rows: Array<[string, string | undefined]> = [
-                            ['Scrub Nurse', t.scrubNurse?.name],
-                            ['Circulating Nurse', t.circulatingNurse?.name],
-                            ['Porter', t.porter?.name],
-                            ['Cleaner', t.cleaner?.name],
-                            ['Pharmacist', t.pharmacist?.name],
+                          const rows: Array<[string, OnDutyStaff | null | undefined]> = [
+                            ['Consultant/Anaesthetist', t.anaesthetist],
+                            ['Anaesthetist (2nd)', t.anaesthetist2],
+                            ['Anaesthetic Technician', t.anaestheticTechnician],
+                            ['Scrub Nurse', t.scrubNurse],
+                            ['Circulating Nurse', t.circulatingNurse],
+                            ...((t.supervisors ?? []).map((s, i) => [`Supervisor ${i + 1}`, s] as [string, OnDutyStaff])),
+                            ['Recovery Nurse', t.recoveryNurse],
+                            ['Porter', t.porter],
+                            ['Cleaner', t.cleaner],
+                            ['Pharmacist', t.pharmacist],
+                            ['Theatre Manager', t.theatreManager],
+                            ['Blood Bank', t.bloodBank],
+                            ['CSSD', t.cssd],
+                            ['Biomedical Engineer', t.biomedicalEngineer],
                           ];
-                          const hasAny = rows.some(([, v]) => v);
+                          const present = rows.filter(([, v]) => v && v.name);
                           return (
                             <div className="mt-1 pt-1 border-t border-gray-100">
                               <p className="text-xs font-semibold text-gray-500 mb-0.5">
-                                On-Duty Team{od?.shift ? ` (${od.shift} shift)` : ''}
+                                Emergency Response Team{od?.shift ? ` (${od.shift} shift)` : ''}
+                                {booking.theatreName ? ` · ${booking.theatreName}` : ''}
                               </p>
-                              {hasAny ? (
-                                rows.map(([label, value]) =>
-                                  value ? (
-                                    <div key={label} className="flex items-center gap-1">
-                                      <Users className="h-4 w-4 text-teal-600" />
-                                      <span>{label}: <strong>{value}</strong></span>
+                              {present.length ? (
+                                <div className="grid sm:grid-cols-2 gap-x-3 gap-y-0.5">
+                                  {present.map(([label, v]) => (
+                                    <div key={label} className="flex items-center gap-1 min-w-0">
+                                      <Users className="h-3.5 w-3.5 text-teal-600 flex-shrink-0" />
+                                      <span className="truncate">
+                                        {label}: <strong>{v!.name}</strong>
+                                        {v!.source === 'role' && <span className="text-[10px] text-gray-400"> (on-call)</span>}
+                                        {v!.phoneNumber && (
+                                          <a href={`tel:${v!.phoneNumber}`} className="ml-1 text-blue-600 hover:underline inline-flex items-center gap-0.5">
+                                            <Phone className="h-3 w-3" />{v!.phoneNumber}
+                                          </a>
+                                        )}
+                                        {v!.extension && <span className="ml-1 text-gray-500">ext {v!.extension}</span>}
+                                      </span>
                                     </div>
-                                  ) : null
-                                )
+                                  ))}
+                                </div>
                               ) : (
                                 <span className="text-xs text-gray-400">No roster team found for this date/shift.</span>
                               )}
