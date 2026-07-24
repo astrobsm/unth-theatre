@@ -14,11 +14,12 @@ const LOCATIONS = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU
 interface Row {
   id: string; userId: string; staffName: string; staffCode: string | null; phoneNumber: string | null; extension: string | null;
   date: string; shift: string; subRole: string | null; seniorityLevel: string | null; location: string | null;
-  theatreId: string | null; notes: string | null; status: string; version: number | null;
+  theatreId: string | null; notes: string | null; status: string; version: number | null; pendingRemoval: boolean;
 }
 interface DeptData {
   department: { slug: string; label: string; category: string; subRoles: string[]; seniorityLevels: string[]; userRoles: string[] };
-  weekStart: string; canManage: boolean; currentVersion: number; lastPublishedAt: string | null; draftCount: number; rows: Row[];
+  weekStart: string; canManage: boolean; currentVersion: number; lastPublishedAt: string | null;
+  draftCount: number; pendingRemovalCount: number; pendingChanges: number; rows: Row[];
 }
 interface Version { id: string; version: number; status: string; publishedAt: string; publishedByName: string | null; rowCount: number; notes: string | null }
 interface Staff { id: string; fullName: string; role: string }
@@ -90,6 +91,12 @@ export default function DepartmentRosterPage() {
     const res = await fetch(`/api/roster/departments/${dept}?id=${id}`, { method: 'DELETE' });
     if (res.ok) await load(); else setMsg((await res.json().catch(() => ({})))?.error || 'Failed to delete');
   };
+  const stageRemoval = async (id: string, pendingRemoval: boolean) => {
+    const res = await fetch(`/api/roster/departments/${dept}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, pendingRemoval }),
+    });
+    if (res.ok) await load(); else setMsg((await res.json().catch(() => ({})))?.error || 'Failed to update');
+  };
   const publish = async () => {
     setMsg('');
     const res = await fetch(`/api/roster/departments/${dept}/publish`, {
@@ -138,9 +145,14 @@ export default function DepartmentRosterPage() {
       {msg && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{msg}</div>}
 
       {/* Publish bar */}
-      {canManage && data && data.draftCount > 0 && (
+      {canManage && data && data.pendingChanges > 0 && (
         <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 flex items-center justify-between gap-3">
-          <span className="text-sm text-amber-800"><strong>{data.draftCount}</strong> unpublished draft change(s) this week — not visible to theatre/booking until published.</span>
+          <span className="text-sm text-amber-800">
+            <strong>{data.pendingChanges}</strong> unpublished change(s) this week
+            {data.draftCount > 0 && <> — {data.draftCount} addition(s)</>}
+            {data.pendingRemovalCount > 0 && <>{data.draftCount > 0 ? ',' : ' —'} {data.pendingRemovalCount} removal(s)</>}
+            . Removals stay live until you publish.
+          </span>
           <button onClick={publish} className="btn-primary text-sm inline-flex items-center gap-1"><UploadCloud className="w-4 h-4" /> Publish roster</button>
         </div>
       )}
@@ -201,7 +213,7 @@ export default function DepartmentRosterPage() {
             <div className="text-xs font-semibold text-gray-400 pt-8">Shift</div>
             {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
             {SHIFTS.map((shift) => (
-              <FragmentRow key={shift} shift={shift} days={days} rowsFor={rowsFor} canManage={!!canManage} onDelete={deleteRow} />
+              <FragmentRow key={shift} shift={shift} days={days} rowsFor={rowsFor} canManage={!!canManage} onDelete={deleteRow} onStage={stageRemoval} />
             ))}
           </div>
         </div>
@@ -236,8 +248,9 @@ export default function DepartmentRosterPage() {
   );
 }
 
-function FragmentRow({ shift, days, rowsFor, canManage, onDelete }: {
-  shift: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean; onDelete: (id: string) => void;
+function FragmentRow({ shift, days, rowsFor, canManage, onDelete, onStage }: {
+  shift: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean;
+  onDelete: (id: string) => void; onStage: (id: string, pendingRemoval: boolean) => void;
 }) {
   return (
     <>
@@ -246,18 +259,31 @@ function FragmentRow({ shift, days, rowsFor, canManage, onDelete }: {
         const rows = rowsFor(d, shift);
         return (
           <div key={d + shift} className="min-h-[52px] rounded border border-gray-100 bg-gray-50/40 p-1 space-y-1">
-            {rows.map((r) => (
-              <div key={r.id} className={`text-[11px] rounded px-1.5 py-1 flex items-start justify-between gap-1 ${r.status === 'DRAFT' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900'}`}>
-                <span className="leading-tight">
-                  {r.staffName}
-                  {r.subRole ? <span className="block text-[10px] opacity-70">{r.subRole}</span> : null}
-                  {r.seniorityLevel ? <span className="block text-[10px] opacity-70">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
-                </span>
-                {canManage && r.status === 'DRAFT' && (
-                  <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0" aria-label="Remove"><Trash2 className="w-3 h-3" /></button>
-                )}
-              </div>
-            ))}
+            {rows.map((r) => {
+              const staged = r.status === 'PUBLISHED' && r.pendingRemoval;
+              const cls = staged
+                ? 'bg-red-50 text-red-800 line-through'
+                : r.status === 'DRAFT' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900';
+              return (
+                <div key={r.id} className={`text-[11px] rounded px-1.5 py-1 flex items-start justify-between gap-1 ${cls}`}>
+                  <span className="leading-tight">
+                    {r.staffName}
+                    {r.subRole ? <span className="block text-[10px] opacity-70 no-underline">{r.subRole}</span> : null}
+                    {r.seniorityLevel ? <span className="block text-[10px] opacity-70 no-underline">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
+                    {staged ? <span className="block text-[9px] font-semibold text-red-600 no-underline">will be removed on publish</span> : null}
+                  </span>
+                  {canManage && (
+                    r.status === 'DRAFT' ? (
+                      <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0" aria-label="Remove draft"><Trash2 className="w-3 h-3" /></button>
+                    ) : staged ? (
+                      <button onClick={() => onStage(r.id, false)} className="text-primary-600 hover:text-primary-700 flex-shrink-0" aria-label="Keep (undo removal)"><RotateCcw className="w-3 h-3" /></button>
+                    ) : (
+                      <button onClick={() => onStage(r.id, true)} className="text-red-400 hover:text-red-600 flex-shrink-0" aria-label="Stage removal"><Trash2 className="w-3 h-3" /></button>
+                    )
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })}

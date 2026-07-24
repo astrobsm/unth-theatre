@@ -637,6 +637,9 @@ model Roster {
   status         String  @default("PUBLISHED") // DRAFT | PUBLISHED
   publicationId  String? // the RosterPublication this row was published under
   version        Int? // publication version number
+  // A PUBLISHED row staged for removal: stays live (visible to on-duty) until the
+  // next Publish, which deletes it. Lets published rosters be edited draft-style.
+  pendingRemoval Boolean @default(false)
 
   @@index([date, theatreId, shift])
   @@index([staffCategory, date])

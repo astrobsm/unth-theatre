@@ -40,6 +40,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   });
 
   const draftCount = rows.filter((r) => r.status === 'DRAFT').length;
+  const pendingRemovalCount = rows.filter((r) => r.status === 'PUBLISHED' && r.pendingRemoval).length;
   const role = (session.user as any).role;
 
   return NextResponse.json({
@@ -49,11 +50,14 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
     currentVersion: latestPublication?.version ?? 0,
     lastPublishedAt: latestPublication?.publishedAt ?? null,
     draftCount,
+    pendingRemovalCount,
+    pendingChanges: draftCount + pendingRemovalCount,
     rows: rows.map((r) => ({
       id: r.id, userId: r.userId, staffName: r.staffName,
       staffCode: r.user?.staffCode ?? null, phoneNumber: r.user?.phoneNumber ?? null, extension: r.user?.extension ?? null,
       date: r.date.toISOString().slice(0, 10), shift: r.shift, subRole: r.subRole, seniorityLevel: r.seniorityLevel,
       location: r.location, theatreId: r.theatreId, notes: r.notes, status: r.status, version: r.version,
+      pendingRemoval: r.pendingRemoval,
     })),
   });
 }
@@ -111,7 +115,29 @@ export async function DELETE(request: NextRequest, { params }: { params: { dept:
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   const row = await prisma.roster.findUnique({ where: { id }, select: { status: true, staffCategory: true } });
   if (!row || row.staffCategory !== dept.category) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (row.status !== 'DRAFT') return NextResponse.json({ error: 'Only draft rows can be deleted here' }, { status: 409 });
+  if (row.status !== 'DRAFT') return NextResponse.json({ error: 'Only draft rows can be deleted here. Use stage-removal for published rows.' }, { status: 409 });
   await prisma.roster.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
+
+const patchSchema = z.object({ id: z.string(), pendingRemoval: z.boolean() });
+
+// PATCH — stage (or un-stage) a PUBLISHED row for removal. The row stays live
+// (on-duty still sees it) until the next Publish, which deletes staged rows.
+// This is how published rosters are edited draft-style. Manager only.
+export async function PATCH(request: NextRequest, { params }: { params: { dept: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const dept = getRosterDept(params.dept);
+  if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
+  if (!canManageRosterDept(dept, (session.user as any).role)) {
+    return NextResponse.json({ error: 'Not authorised' }, { status: 403 });
+  }
+  const parsed = patchSchema.safeParse(await request.json());
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
+  const row = await prisma.roster.findUnique({ where: { id: parsed.data.id }, select: { status: true, staffCategory: true } });
+  if (!row || row.staffCategory !== dept.category) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (row.status !== 'PUBLISHED') return NextResponse.json({ error: 'Only published rows can be staged for removal' }, { status: 409 });
+  await prisma.roster.update({ where: { id: parsed.data.id }, data: { pendingRemoval: parsed.data.pendingRemoval } });
   return NextResponse.json({ ok: true });
 }

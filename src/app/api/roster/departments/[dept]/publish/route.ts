@@ -43,8 +43,9 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
     where: { staffCategory: dept.category as any, date: { gte: start, lte: end } },
   });
   const drafts = weekRows.filter((r) => r.status === 'DRAFT');
-  if (drafts.length === 0) {
-    return NextResponse.json({ error: 'Nothing to publish — no draft changes for this week.' }, { status: 400 });
+  const staged = weekRows.filter((r) => r.status === 'PUBLISHED' && r.pendingRemoval);
+  if (drafts.length === 0 && staged.length === 0) {
+    return NextResponse.json({ error: 'Nothing to publish — no draft additions or staged removals this week.' }, { status: 400 });
   }
 
   const lastPub = await prisma.rosterPublication.findFirst({
@@ -53,8 +54,10 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
   });
   const version = (lastPub?.version ?? 0) + 1;
 
-  // Snapshot = the FULL published set after this publish (existing published + drafts).
-  const snapshot: SnapRow[] = weekRows.map((r) => ({
+  // The published set AFTER this publish = every week row EXCEPT the ones staged
+  // for removal (drafts are about to be flipped to published; staged rows deleted).
+  const finalRows = weekRows.filter((r) => !r.pendingRemoval);
+  const snapshot: SnapRow[] = finalRows.map((r) => ({
     userId: r.userId, staffName: r.staffName, staffCategory: r.staffCategory,
     seniorityLevel: r.seniorityLevel, subRole: r.subRole, location: r.location,
     date: dateOnly(r.date).toISOString().slice(0, 10), theatreId: r.theatreId, shift: r.shift, notes: r.notes,
@@ -71,15 +74,20 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
         department: dept.slug, category: dept.category, location: null,
         periodStart: start, periodEnd: end, version, status: 'PUBLISHED',
         publishedById: (session.user as any).id, publishedByName: (session.user as any).fullName ?? session.user.name ?? '',
-        rowCount: weekRows.length, snapshot: JSON.stringify(snapshot), notes: parsed.data.notes ?? null,
+        rowCount: finalRows.length, snapshot: JSON.stringify(snapshot), notes: parsed.data.notes ?? null,
       },
     });
-    await tx.roster.updateMany({
-      where: { id: { in: drafts.map((d) => d.id) } },
-      data: { status: 'PUBLISHED', publicationId: pub.id, version },
-    });
+    // Delete the staged-for-removal rows.
+    if (staged.length) await tx.roster.deleteMany({ where: { id: { in: staged.map((s) => s.id) } } });
+    // Flip drafts to published.
+    if (drafts.length) {
+      await tx.roster.updateMany({
+        where: { id: { in: drafts.map((d) => d.id) } },
+        data: { status: 'PUBLISHED', publicationId: pub.id, version },
+      });
+    }
     return pub;
   });
 
-  return NextResponse.json({ ok: true, version: result.version, published: drafts.length, totalRows: weekRows.length });
+  return NextResponse.json({ ok: true, version: result.version, published: drafts.length, removed: staged.length, totalRows: finalRows.length });
 }
