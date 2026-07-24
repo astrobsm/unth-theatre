@@ -749,7 +749,7 @@ export async function POST(request: NextRequest) {
       const curShift = h >= 8 && h < 16 ? 'MORNING' : h >= 16 && h < 22 ? 'CALL' : 'NIGHT';
       const dateOnly = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const rostered = await prisma.roster.findMany({
-        where: { date: dateOnly, shift: curShift as any },
+        where: { date: dateOnly, shift: curShift as any, status: 'PUBLISHED' },
         select: { userId: true },
       });
       const roleContacts = await prisma.user.findMany({

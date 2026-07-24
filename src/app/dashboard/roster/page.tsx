@@ -361,6 +361,27 @@ export default function RosterPage() {
         </div>
       </Link>
 
+      {/* Department roster (draft / publish / versioning) call-out */}
+      <Link
+        href="/dashboard/roster/departments"
+        className="block rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-5 hover:shadow-md transition"
+      >
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-lg bg-teal-600 text-white">
+            <ClipboardCheck className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-teal-900">Department Rosters — Draft &amp; Publish</h2>
+            <p className="text-sm text-teal-800 mt-1">
+              Standalone per-department pages (<code>/roster/nursing</code>, <code>/roster/anaesthetists</code>, …) with
+              supervisor access control: build a <strong>draft</strong>, then <strong>publish</strong> it live. Full
+              version history with one-click rollback. Only published rosters drive theatre, booking and on-duty.
+            </p>
+            <p className="text-xs font-semibold text-teal-700 mt-2">Open department rosters →</p>
+          </div>
+        </div>
+      </Link>
+
       {/* Upload Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {staffCategories.slice(1).map((category) => (

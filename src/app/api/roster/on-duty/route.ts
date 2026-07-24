@@ -103,9 +103,11 @@ export async function GET(request: NextRequest) {
       date: Date;
       shift: "MORNING" | "CALL" | "NIGHT";
       theatreId?: string;
+      status: string;
     } = {
       date: dateOnly,
       shift,
+      status: "PUBLISHED", // only published rosters are "on duty"; drafts are excluded
     };
 
     const theatreFilter = theatreIdParam?.trim();

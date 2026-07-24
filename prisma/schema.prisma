@@ -631,10 +631,43 @@ model Roster {
   uploadedAt     DateTime      @default(now())
   notes          String?       @db.Text
 
+  // Draft/publish governance (department roster pages). Existing rows default to
+  // PUBLISHED so all current consumers (on-duty, booking auto-assign, meals, …)
+  // keep working; only new department-page drafts are DRAFT until published.
+  status         String  @default("PUBLISHED") // DRAFT | PUBLISHED
+  publicationId  String? // the RosterPublication this row was published under
+  version        Int? // publication version number
+
   @@index([date, theatreId, shift])
   @@index([staffCategory, date])
   @@index([location, date])
+  @@index([status, date])
   @@map("rosters")
+}
+
+// A published snapshot of one department's roster for a period. Enables version
+// history and rollback. Publishing flips that department/period's DRAFT rows to
+// PUBLISHED and records an immutable JSON snapshot here; rollback recreates rows
+// from a chosen version's snapshot.
+model RosterPublication {
+  id              String   @id @default(uuid())
+  department      String // dept slug: nursing, anaesthetists, porters, …
+  category        String // a StaffCategory value
+  location        String?
+  periodStart     DateTime @db.Date
+  periodEnd       DateTime @db.Date
+  version         Int
+  status          String   @default("PUBLISHED") // PUBLISHED | ARCHIVED
+  publishedById   String?
+  publishedByName String?
+  publishedAt     DateTime @default(now())
+  rowCount        Int      @default(0)
+  snapshot        String   @db.Text // JSON array of the roster rows at publish time
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([department, periodStart])
+  @@map("roster_publications")
 }
 
 model InventoryItem {

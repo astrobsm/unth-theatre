@@ -492,7 +492,7 @@ export async function POST(request: NextRequest) {
         // For a given shift, prefer someone rostered to the chosen theatre,
         // otherwise anyone on that shift anywhere in the suite.
         const poolForShift = async (shift: 'MORNING' | 'CALL') => {
-          const base = { date: dateOnly, shift, staffCategory: 'ANAESTHETISTS' as const };
+          const base = { date: dateOnly, shift, staffCategory: 'ANAESTHETISTS' as const, status: 'PUBLISHED' };
           const specific = tId
             ? await prisma.roster.findMany({ where: { ...base, theatreId: tId }, include: { user: { select: { id: true } } } })
             : [];

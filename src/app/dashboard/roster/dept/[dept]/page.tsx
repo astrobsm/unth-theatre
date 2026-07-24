@@ -1,0 +1,266 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import {
+  ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2, UploadCloud, History,
+  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle,
+} from 'lucide-react';
+
+const SHIFTS = ['MORNING', 'CALL', 'NIGHT'] as const;
+const LOCATIONS = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU'];
+
+interface Row {
+  id: string; userId: string; staffName: string; staffCode: string | null; phoneNumber: string | null; extension: string | null;
+  date: string; shift: string; subRole: string | null; seniorityLevel: string | null; location: string | null;
+  theatreId: string | null; notes: string | null; status: string; version: number | null;
+}
+interface DeptData {
+  department: { slug: string; label: string; category: string; subRoles: string[]; seniorityLevels: string[]; userRoles: string[] };
+  weekStart: string; canManage: boolean; currentVersion: number; lastPublishedAt: string | null; draftCount: number; rows: Row[];
+}
+interface Version { id: string; version: number; status: string; publishedAt: string; publishedByName: string | null; rowCount: number; notes: string | null }
+interface Staff { id: string; fullName: string; role: string }
+
+// Monday of the week containing `d` (ISO).
+function mondayOf(d: Date): string {
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dow = (x.getUTCDay() + 6) % 7; // 0 = Monday
+  x.setUTCDate(x.getUTCDate() - dow);
+  return x.toISOString().slice(0, 10);
+}
+function addDays(iso: string, n: number): string {
+  const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
+}
+const DAY_LABEL = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+export default function DepartmentRosterPage() {
+  const { dept } = useParams<{ dept: string }>();
+  const [weekStart, setWeekStart] = useState<string>(() => mondayOf(new Date()));
+  const [data, setData] = useState<DeptData | null>(null);
+  const [versions, setVersions] = useState<Version[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
+
+  // add-form state
+  const [fStaff, setFStaff] = useState(''); const [fDate, setFDate] = useState(''); const [fShift, setFShift] = useState('MORNING');
+  const [fSub, setFSub] = useState(''); const [fSen, setFSen] = useState(''); const [fLoc, setFLoc] = useState('MAIN_THEATRE'); const [fNotes, setFNotes] = useState('');
+
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const [r, v] = await Promise.all([
+        fetch(`/api/roster/departments/${dept}?weekStart=${weekStart}`, { cache: 'no-store' }),
+        fetch(`/api/roster/departments/${dept}/versions?weekStart=${weekStart}`, { cache: 'no-store' }),
+      ]);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `HTTP ${r.status}`);
+      const d: DeptData = await r.json();
+      setData(d);
+      setVersions(v.ok ? (await v.json()).versions : []);
+      if (!fDate) setFDate(weekStart);
+    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+  }, [dept, weekStart, fDate]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch('/api/users?status=APPROVED', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : [])).then((d) => setStaff(Array.isArray(d) ? d : d.users ?? [])).catch(() => {});
+  }, []);
+
+  const eligibleStaff = useMemo(
+    () => staff.filter((s) => data?.department.userRoles.includes(s.role)),
+    [staff, data],
+  );
+
+  const addRow = async () => {
+    if (!fStaff || !fDate) { setMsg('Pick staff and a day.'); return; }
+    setMsg('');
+    const res = await fetch(`/api/roster/departments/${dept}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: fStaff, date: fDate, shift: fShift, subRole: fSub || null, seniorityLevel: fSen || null, location: fLoc, notes: fNotes || null }),
+    });
+    if (res.ok) { setFStaff(''); setFNotes(''); await load(); } else { setMsg((await res.json().catch(() => ({})))?.error || 'Failed to add'); }
+  };
+  const deleteRow = async (id: string) => {
+    const res = await fetch(`/api/roster/departments/${dept}?id=${id}`, { method: 'DELETE' });
+    if (res.ok) await load(); else setMsg((await res.json().catch(() => ({})))?.error || 'Failed to delete');
+  };
+  const publish = async () => {
+    setMsg('');
+    const res = await fetch(`/api/roster/departments/${dept}/publish`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) { setMsg(`Published v${j.version} (${j.published} change(s) went live).`); await load(); } else { setMsg(j?.error || 'Publish failed'); }
+  };
+  const rollback = async (version: number) => {
+    if (!confirm(`Roll this week's roster back to version ${version}? Current rows will be replaced.`)) return;
+    const res = await fetch(`/api/roster/departments/${dept}/versions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart, version }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) { setMsg(`Rolled back to v${version} (now published as v${j.newVersion}).`); await load(); } else { setMsg(j?.error || 'Rollback failed'); }
+  };
+
+  const rowsFor = (day: string, shift: string) => (data?.rows ?? []).filter((r) => r.date === day && r.shift === shift);
+  const canManage = data?.canManage;
+
+  return (
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+      <Link href="/dashboard/roster/departments" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"><ArrowLeft className="w-4 h-4" /> All department rosters</Link>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-primary-100 flex items-center justify-center"><CalendarDays className="w-6 h-6 text-primary-600" /></div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{data?.department.label ?? dept} Roster</h1>
+            <p className="text-sm text-gray-500">
+              {canManage
+                ? <span className="inline-flex items-center gap-1 text-green-700"><ShieldCheck className="w-4 h-4" /> You can manage this roster</span>
+                : <span className="inline-flex items-center gap-1 text-gray-500"><Lock className="w-4 h-4" /> View only — a department supervisor publishes changes</span>}
+              {data && <> · Published v{data.currentVersion}{data.lastPublishedAt ? ` on ${new Date(data.lastPublishedAt).toLocaleDateString()}` : ' — not yet published'}</>}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="btn-secondary text-sm p-2" aria-label="Previous week"><ChevronLeft className="w-4 h-4" /></button>
+          <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(new Date(e.target.value + 'T00:00:00Z')))} className="input-field text-sm py-1.5" />
+          <button onClick={() => setWeekStart(addDays(weekStart, 7))} className="btn-secondary text-sm p-2" aria-label="Next week"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+      </div>
+
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</div>}
+      {msg && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{msg}</div>}
+
+      {/* Publish bar */}
+      {canManage && data && data.draftCount > 0 && (
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 flex items-center justify-between gap-3">
+          <span className="text-sm text-amber-800"><strong>{data.draftCount}</strong> unpublished draft change(s) this week — not visible to theatre/booking until published.</span>
+          <button onClick={publish} className="btn-primary text-sm inline-flex items-center gap-1"><UploadCloud className="w-4 h-4" /> Publish roster</button>
+        </div>
+      )}
+
+      {/* Add assignment (managers only) */}
+      {canManage && data && (
+        <div className="card">
+          <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2"><Plus className="w-4 h-4" /> Add assignment (draft)</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
+            <div className="lg:col-span-2">
+              <label className="label">Staff</label>
+              <select className="input-field" value={fStaff} onChange={(e) => setFStaff(e.target.value)}>
+                <option value="">Select staff…</option>
+                {eligibleStaff.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Day</label>
+              <select className="input-field" value={fDate} onChange={(e) => setFDate(e.target.value)}>
+                {days.map((d) => <option key={d} value={d}>{DAY_LABEL(d)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Shift</label>
+              <select className="input-field" value={fShift} onChange={(e) => setFShift(e.target.value)}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+            </div>
+            {data.department.subRoles.length > 0 && (
+              <div>
+                <label className="label">Sub-role</label>
+                <select className="input-field" value={fSub} onChange={(e) => setFSub(e.target.value)}><option value="">—</option>{data.department.subRoles.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+              </div>
+            )}
+            {data.department.seniorityLevels.length > 0 && (
+              <div>
+                <label className="label">Seniority</label>
+                <select className="input-field" value={fSen} onChange={(e) => setFSen(e.target.value)}><option value="">—</option>{data.department.seniorityLevels.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select>
+              </div>
+            )}
+            <div>
+              <label className="label">Location</label>
+              <select className="input-field" value={fLoc} onChange={(e) => setFLoc(e.target.value)}>{LOCATIONS.map((l) => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}</select>
+            </div>
+            <div className="lg:col-span-5">
+              <label className="label">Notes (optional)</label>
+              <input className="input-field" value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="e.g. holding area cover" />
+            </div>
+            <button onClick={addRow} className="btn-primary text-sm inline-flex items-center justify-center gap-1 h-[38px]"><Plus className="w-4 h-4" /> Add</button>
+          </div>
+        </div>
+      )}
+
+      {/* Week grid */}
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-500 py-10 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Loading…</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[900px] grid grid-cols-8 gap-2">
+            <div className="text-xs font-semibold text-gray-400 pt-8">Shift</div>
+            {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
+            {SHIFTS.map((shift) => (
+              <FragmentRow key={shift} shift={shift} days={days} rowsFor={rowsFor} canManage={!!canManage} onDelete={deleteRow} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Version history */}
+      <div className="card">
+        <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2"><History className="w-4 h-4" /> Version history (this week)</h2>
+        {versions.length === 0 ? (
+          <p className="text-sm text-gray-400">No published versions yet for this week.</p>
+        ) : (
+          <div className="space-y-1">
+            {versions.map((v) => (
+              <div key={v.id} className="flex items-center justify-between gap-3 text-sm border-b border-gray-50 py-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  {v.status === 'PUBLISHED' ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" /> : <History className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+                  <span className="truncate">
+                    <strong>v{v.version}</strong> · {v.rowCount} row(s) · {new Date(v.publishedAt).toLocaleString()}
+                    {v.publishedByName ? ` · ${v.publishedByName}` : ''}{v.notes ? ` · ${v.notes}` : ''}
+                    {v.status !== 'PUBLISHED' && <span className="ml-1 text-[11px] text-gray-400">(archived)</span>}
+                  </span>
+                </div>
+                {canManage && v.status !== 'PUBLISHED' && (
+                  <button onClick={() => rollback(v.version)} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"><RotateCcw className="w-3.5 h-3.5" /> Restore</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FragmentRow({ shift, days, rowsFor, canManage, onDelete }: {
+  shift: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean; onDelete: (id: string) => void;
+}) {
+  return (
+    <>
+      <div className="text-xs font-semibold text-gray-500 flex items-center">{shift}</div>
+      {days.map((d) => {
+        const rows = rowsFor(d, shift);
+        return (
+          <div key={d + shift} className="min-h-[52px] rounded border border-gray-100 bg-gray-50/40 p-1 space-y-1">
+            {rows.map((r) => (
+              <div key={r.id} className={`text-[11px] rounded px-1.5 py-1 flex items-start justify-between gap-1 ${r.status === 'DRAFT' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900'}`}>
+                <span className="leading-tight">
+                  {r.staffName}
+                  {r.subRole ? <span className="block text-[10px] opacity-70">{r.subRole}</span> : null}
+                  {r.seniorityLevel ? <span className="block text-[10px] opacity-70">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
+                </span>
+                {canManage && r.status === 'DRAFT' && (
+                  <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0" aria-label="Remove"><Trash2 className="w-3 h-3" /></button>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
