@@ -75,6 +75,15 @@ const createPreOpReviewSchema = z.object({
     specialInstructions: z.string().optional(),
     allergyAlerts: z.string().optional(),
   }).optional(),
+  // Anaesthesia consumables from applied packs → Consumable Pack Provider.
+  consumableRequests: z.array(z.object({
+    name: z.string().min(1),
+    category: z.string().default('ANAESTHESIA_AIRWAY'),
+    size: z.string().nullish(),
+    unit: z.string().default('piece'),
+    quantity: z.number().int().min(1).default(1),
+    notes: z.string().nullish(),
+  })).optional(),
   // Anaesthesia consent (WHO-aligned) — electronic signature or uploaded scan.
   anaesthesiaConsent: z.object({
     text: z.string(),
@@ -193,8 +202,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createPreOpReviewSchema.parse(body);
 
-    // Extract prescription data before creating review
-    const { prescription, anaesthesiaConsent, ...reviewData } = validatedData;
+    // Extract prescription + pack-consumable data before creating review
+    const { prescription, anaesthesiaConsent, consumableRequests, ...reviewData } = validatedData;
 
     // Check if review already exists for this surgery
     const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
@@ -263,6 +272,48 @@ export async function POST(request: NextRequest) {
       // Generate the patient-facing anaesthesia drug code for pharmacy collection.
       if (reviewData.surgeryId) {
         await ensureAnaesthesiaCodeForSurgery(prisma, reviewData.surgeryId);
+      }
+    }
+
+    // Anaesthesia consumables from applied packs → Consumable Pack Provider.
+    if (consumableRequests && consumableRequests.length > 0 && reviewData.surgeryId) {
+      const CONS_CATEGORIES = new Set([
+        'GLOVES', 'GOWNS_DRAPES', 'SUTURES', 'SYRINGES_NEEDLES', 'CATHETERS_TUBING',
+        'DRESSING_PACKS', 'SKIN_PREP', 'CLEANING_SOLUTION', 'STERILE_DRESSINGS',
+        'IRRIGATION', 'DIATHERMY', 'SUCTION', 'ANAESTHESIA_AIRWAY', 'PPE', 'OTHER',
+      ]);
+      await prisma.surgeryConsumableRequest.createMany({
+        data: consumableRequests.map((c) => ({
+          surgeryId: reviewData.surgeryId,
+          name: c.name,
+          category: (CONS_CATEGORIES.has(c.category) ? c.category : 'ANAESTHESIA_AIRWAY') as any,
+          size: c.size ?? null,
+          unit: c.unit ?? 'piece',
+          quantity: c.quantity ?? 1,
+          notes: c.notes ?? 'Anaesthesia pack',
+          requestedById: session.user.id,
+          requestedByName: session.user.name || '',
+        })),
+      });
+      // Notify the consumable pack providers / theatre store.
+      try {
+        const providers = await prisma.user.findMany({
+          where: { role: { in: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER', 'ADMIN'] as any }, status: 'APPROVED' as any },
+          select: { id: true },
+        });
+        if (providers.length) {
+          await prisma.notification.createMany({
+            data: providers.map((u) => ({
+              userId: u.id,
+              type: 'STOCK_ALERT' as any,
+              title: 'Anaesthesia consumables to pack',
+              message: `${consumableRequests.length} anaesthesia consumable(s) requested for ${reviewData.patientName}.`,
+              link: '/dashboard/consumable-pack-provider',
+            })),
+          });
+        }
+      } catch (e) {
+        console.error('pack-provider notification failed (non-fatal):', e);
       }
     }
 

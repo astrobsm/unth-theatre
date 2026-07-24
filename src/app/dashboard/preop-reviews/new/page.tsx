@@ -14,6 +14,7 @@ import {
   type AnaesthesiaConsumable,
 } from '@/lib/anaesthesia-consumables';
 import SignaturePad from '@/components/SignaturePad';
+import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
 import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaesthesiaConsent';
 import ContactName from '@/components/ContactName';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -280,6 +281,9 @@ export default function NewPreOpReviewPage() {
 
   // Anesthetic Prescription states
   const [prescribedMedications, setPrescribedMedications] = useState<PrescribedMedication[]>([]);
+  // Anaesthesia packs applied via the picker (drugs → pharmacy, consumables → pack provider).
+  const [anaesTechnique, setAnaesTechnique] = useState('');
+  const [packContribution, setPackContribution] = useState<AnaesPackPayload>({ medications: [], consumableRequests: [] });
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedMedication, setSelectedMedication] = useState('');
   const [selectedDose, setSelectedDose] = useState('');
@@ -479,12 +483,16 @@ export default function NewPreOpReviewPage() {
             method: consentMethod,
           }
         : undefined,
-      // Anesthetic Prescription data
-      prescription: prescribedMedications.length > 0 ? {
-        medications: prescribedMedications,
-        urgency: prescriptionUrgency,
-        specialInstructions: prescriptionSpecialInstructions,
-      } : undefined,
+      // Anesthetic Prescription data — hand-added meds + drugs from applied
+      // anaesthesia packs (both go to Pharmacy).
+      prescription: (() => {
+        const allMeds = [...prescribedMedications, ...packContribution.medications];
+        return allMeds.length > 0
+          ? { medications: allMeds, urgency: prescriptionUrgency, specialInstructions: prescriptionSpecialInstructions }
+          : undefined;
+      })(),
+      // Anaesthesia consumables from applied packs → Consumable Pack Provider.
+      consumableRequests: packContribution.consumableRequests.length > 0 ? packContribution.consumableRequests : undefined,
     };
 
     try {
@@ -941,6 +949,8 @@ export default function NewPreOpReviewPage() {
                   name="proposedAnesthesiaType"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   required
+                  value={anaesTechnique}
+                  onChange={(e) => setAnaesTechnique(e.target.value)}
                 >
                   <option value="">Select type</option>
                   <option value="GENERAL">General Anesthesia</option>
@@ -986,6 +996,21 @@ export default function NewPreOpReviewPage() {
                   <h2 className="text-xl font-semibold">Anesthetic Prescription</h2>
                   <p className="text-sm text-gray-500">Add medications for pharmacy to prepare</p>
                 </div>
+              </div>
+
+              {/* Anaesthesia packs — apply a whole drug/consumable bundle in one tap */}
+              <div className="mb-5 rounded-lg border border-purple-100 bg-purple-50/40 p-4">
+                <h3 className="font-medium mb-2 flex items-center gap-2 text-purple-800">
+                  <Syringe className="w-4 h-4" /> Apply an anaesthesia pack
+                </h3>
+                <AnaesthesiaPackPicker anaesthesiaType={anaesTechnique} onChange={setPackContribution} />
+                {(packContribution.medications.length > 0 || packContribution.consumableRequests.length > 0) && (
+                  <p className="mt-3 text-xs text-purple-700">
+                    From applied packs: <strong>{packContribution.medications.length}</strong> drug item(s) → Pharmacy,{' '}
+                    <strong>{packContribution.consumableRequests.length}</strong> consumable(s) → Consumable Pack Provider.
+                    Use “View pack content” to adjust before submitting.
+                  </p>
+                )}
               </div>
 
               {/* Urgency Selection */}
