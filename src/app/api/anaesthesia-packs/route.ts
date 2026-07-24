@@ -5,9 +5,12 @@ import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/surgical-packs?subspecialty=&kind=CONSUMABLE|PHARMACY[&all=true]
-// Booking-facing read: lists ACTIVE packs (optionally filtered) with their items
-// so a surgeon can apply one. Any authenticated user may read.
+const PREFIX = 'ANAESTHESIA::';
+
+// GET /api/anaesthesia-packs[?technique=General|Spinal|...][&kind=CONSUMABLE|PHARMACY][&all=true]
+// Returns ACTIVE anaesthesia packs (stored in surgical_packs, keyed by the
+// ANAESTHESIA:: prefix) with their items. Used by the anaesthesia pack picker on
+// the pre-anaesthetic review. Any authenticated user may read.
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -15,24 +18,23 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const subspecialty = searchParams.get('subspecialty')?.trim();
+  const technique = searchParams.get('technique')?.trim();
   const kind = searchParams.get('kind')?.trim();
   const includeInactive = searchParams.get('all') === 'true';
 
-  const where: any = {};
+  const where: any = {
+    subspecialty: technique ? `${PREFIX}${technique}` : { startsWith: PREFIX },
+  };
   if (!includeInactive) where.isActive = true;
-  // Anaesthesia packs live in the same table keyed by "ANAESTHESIA::<technique>".
-  // Keep them OUT of the surgical booking picker: exact-match a real subspecialty,
-  // otherwise exclude the ANAESTHESIA:: prefix entirely.
-  if (subspecialty) where.subspecialty = subspecialty;
-  else where.subspecialty = { not: { startsWith: 'ANAESTHESIA::' } };
   if (kind === 'CONSUMABLE' || kind === 'PHARMACY') where.kind = kind;
 
-  const packs = await prisma.surgicalPack.findMany({
+  const rows = await prisma.surgicalPack.findMany({
     where,
     orderBy: [{ subspecialty: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
     include: { items: { orderBy: { sortOrder: 'asc' } } },
   });
 
+  // Surface the technique (strip the prefix) so the client can group/filter.
+  const packs = rows.map((p) => ({ ...p, technique: p.subspecialty.replace(PREFIX, '') }));
   return NextResponse.json({ packs });
 }
