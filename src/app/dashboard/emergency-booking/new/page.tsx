@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText } from 'lucide-react';
-import SurgeryPrePackSelectors, { PrePackPayload } from '@/components/SurgeryPrePackSelectors';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
@@ -74,7 +73,6 @@ export default function NewEmergencyBookingPage() {
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
-  const [prePack, setPrePack] = useState<PrePackPayload>({ consumableRequests: [], drugDressingRequests: [] });
   const [packPick, setPackPick] = useState<PackPickerPayload>({ consumableRequests: [], drugDressingRequests: [] });
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnitOption[]>([]);
@@ -312,8 +310,8 @@ export default function NewEmergencyBookingPage() {
         // Pre-pack shopping lists — pushed to Consumable Pack Provider and Pharmacy with red EMERGENCY tag
         // Merge hand-picked catalog items with any applied packs; the base pack
         // is added server-side.
-        consumableRequests: [...prePack.consumableRequests, ...packPick.consumableRequests],
-        drugDressingRequests: [...prePack.drugDressingRequests, ...packPick.drugDressingRequests],
+        consumableRequests: [...packPick.consumableRequests],
+        drugDressingRequests: [...packPick.drugDressingRequests],
         // Electronic UNTH consent captured & signed inline at emergency booking.
         consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
           ? consentForm
@@ -817,12 +815,10 @@ export default function NewEmergencyBookingPage() {
           <SurgicalPackPicker subspecialty={form.surgicalUnit || undefined} emergency onChange={setPackPick} />
         </div>
 
-        {/* Pre-pack lists — Surgical Consumables + Drugs/IV/Wound Dressing for night-before packing */}
-        <SurgeryPrePackSelectors
-          subspecialty={form.surgicalUnit || undefined}
-          emergency
-          onChange={setPrePack}
-        />
+        {/* Manual pre-pack tick-lists removed — the "Apply a pack" picker above
+            supplies consumables (→ Consumable Pack Provider) and drugs/IV fluids
+            (→ Pharmacy); the mandatory base pack still auto-attaches server-side.
+            Surgeons fine-tune per case via "View pack content". */}
 
         {/* Warning Banner */}
         <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
