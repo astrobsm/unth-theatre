@@ -862,6 +862,25 @@ model Surgery {
   otherSpecialNeeds       String?
   remarks                 String?
 
+  // ── Compulsory pre-operative safety labs & assessments (captured at booking) ──
+  // Nullable in the DB so existing rows migrate cleanly; the booking form and the
+  // POST /api/surgeries Zod schema enforce them as required for new bookings.
+  recentHb               Float?    // Haemoglobin g/dL — sample within 48 h of surgery
+  hbSampleAt             DateTime? // When the Hb sample was drawn (drives the 48 h rule)
+  potassium              Float?    // Serum K+ mmol/L
+  sodium                 Float?    // Serum Na+ mmol/L
+  creatinine             Float?    // Serum creatinine µmol/L
+  hbsAgStatus            String?   // NEGATIVE | POSITIVE | PENDING | NOT_DONE
+  hcvStatus              String?   // NEGATIVE | POSITIVE | PENDING | NOT_DONE
+  hivStatus              String?   // NEGATIVE | POSITIVE | PENDING | NOT_DONE
+  bloodPressureSystolic  Int?      // mmHg
+  bloodPressureDiastolic Int?      // mmHg
+  // Risk assessments — bleeding & nutrition compulsory for all; pressure-sore
+  // compulsory for patients older than 45 (enforced on the booking form).
+  bleedingRiskLevel      String?   // LOW | MODERATE | HIGH
+  nutritionalStatusAtBooking String? // GOOD | FAIR | POOR
+  pressureSoreRiskAtBooking  String? // LOW | MEDIUM | HIGH (age > 45)
+
   // Costs
   totalItemsCost   Decimal? @db.Decimal(10, 2)
   patientCharge    Decimal? @db.Decimal(10, 2)

@@ -157,6 +157,14 @@ export default function NewSurgeryPage() {
   const [searchPatient, setSearchPatient] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
+  // Compulsory pre-operative safety labs & risk assessments (Part of booking).
+  const [preop, setPreop] = useState({
+    recentHb: '', hbSampleAt: '', potassium: '', sodium: '', creatinine: '',
+    hbsAgStatus: '', hcvStatus: '', hivStatus: '',
+    bpSystolic: '', bpDiastolic: '',
+    bleedingRiskLevel: '', nutritionalStatusAtBooking: '', pressureSoreRiskAtBooking: '',
+  });
+  const setPreopField = (k: keyof typeof preop, v: string) => setPreop((p) => ({ ...p, [k]: v }));
   const [postOpDestination, setPostOpDestination] = useState('');
   const [isDayCase, setIsDayCase] = useState(false);
   const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
@@ -452,6 +460,43 @@ export default function NewSurgeryPage() {
     setLoading(true);
     setError('');
 
+    // ── Compulsory pre-operative safety validation ──
+    const selPatient = patients.find((p) => p.id === selectedPatientId);
+    const patientAgeYears =
+      selPatient && (selPatient.ageUnit ?? 'YEARS') === 'YEARS' ? Number(selPatient.age) : 0;
+    const missing: string[] = [];
+    if (preop.recentHb === '') missing.push('recent haemoglobin');
+    if (!preop.hbSampleAt) missing.push('haemoglobin sample date/time');
+    if (preop.potassium === '') missing.push('potassium');
+    if (preop.sodium === '') missing.push('sodium');
+    if (preop.creatinine === '') missing.push('creatinine');
+    if (!preop.hbsAgStatus) missing.push('HBsAg status');
+    if (!preop.hcvStatus) missing.push('HCV status');
+    if (!preop.hivStatus) missing.push('HIV status');
+    if (preop.bpSystolic === '' || preop.bpDiastolic === '') missing.push('blood pressure');
+    if (!preop.bleedingRiskLevel) missing.push('bleeding-risk assessment');
+    if (!preop.nutritionalStatusAtBooking) missing.push('nutritional assessment');
+    if (patientAgeYears > 45 && !preop.pressureSoreRiskAtBooking) {
+      missing.push('pressure-sore risk assessment (required for patients over 45)');
+    }
+    if (missing.length) {
+      setLoading(false);
+      setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
+      return;
+    }
+    // Haemoglobin must be sampled within 48 h of the scheduled surgery.
+    if (preop.hbSampleAt) {
+      const dateStr = (e.currentTarget.elements.namedItem('scheduledDate') as HTMLInputElement)?.value;
+      const timeStr = (e.currentTarget.elements.namedItem('scheduledTime') as HTMLInputElement)?.value;
+      const surgeryWhen = new Date(`${dateStr}T${timeStr || '00:00'}`).getTime();
+      const sampleWhen = new Date(preop.hbSampleAt).getTime();
+      if (!Number.isNaN(surgeryWhen) && !Number.isNaN(sampleWhen) && (surgeryWhen - sampleWhen) / 3_600_000 > 48) {
+        setLoading(false);
+        setError('The haemoglobin sample must be taken within 48 hours before surgery. Please repeat the FBC.');
+        return;
+      }
+    }
+
     const formData = new FormData(e.currentTarget);
 
     const chosenSurgeon = surgeons.find((s) => s.id === selectedSurgeonId);
@@ -485,6 +530,20 @@ export default function NewSurgeryPage() {
       otherSpecialNeeds: otherSpecialNeeds,
       postOpDestination: postOpDestination || null,
       isDayCase: isDayCase,
+      // Compulsory pre-operative safety labs & risk assessments.
+      recentHb: preop.recentHb === '' ? null : Number(preop.recentHb),
+      hbSampleAt: preop.hbSampleAt || null,
+      potassium: preop.potassium === '' ? null : Number(preop.potassium),
+      sodium: preop.sodium === '' ? null : Number(preop.sodium),
+      creatinine: preop.creatinine === '' ? null : Number(preop.creatinine),
+      hbsAgStatus: preop.hbsAgStatus || null,
+      hcvStatus: preop.hcvStatus || null,
+      hivStatus: preop.hivStatus || null,
+      bloodPressureSystolic: preop.bpSystolic === '' ? null : Number(preop.bpSystolic),
+      bloodPressureDiastolic: preop.bpDiastolic === '' ? null : Number(preop.bpDiastolic),
+      bleedingRiskLevel: preop.bleedingRiskLevel || null,
+      nutritionalStatusAtBooking: preop.nutritionalStatusAtBooking || null,
+      pressureSoreRiskAtBooking: preop.pressureSoreRiskAtBooking || null,
       // Clinical summary persisted on the Patient record so the Pharmacist sees it on every prescription.
       comorbiditiesList: comorbidities,
       otherComorbidities: otherComorbidities.trim() || null,
@@ -1472,6 +1531,79 @@ export default function NewSurgeryPage() {
             </div>
           )}
         </div>
+
+        {/* Compulsory pre-operative safety labs & risk assessments */}
+        {(() => {
+          const selP = patients.find((p) => p.id === selectedPatientId);
+          const over45 = !!selP && (selP.ageUnit ?? 'YEARS') === 'YEARS' && Number(selP.age) > 45;
+          const SEROLOGY = ['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'];
+          const sel = (k: keyof typeof preop, opts: string[], placeholder = 'Select…') => (
+            <select className="input-field" value={preop[k]} onChange={(e) => setPreopField(k, e.target.value)}>
+              <option value="">{placeholder}</option>
+              {opts.map((o) => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
+            </select>
+          );
+          return (
+            <div className="card border-2 border-amber-200">
+              <div className="flex items-center gap-3 mb-1">
+                <FileText className="w-6 h-6 text-amber-600" />
+                <h2 className="text-xl font-semibold">Pre-operative Safety Labs &amp; Assessments</h2>
+                <span className="ml-auto text-xs font-semibold text-amber-700">All fields compulsory</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                Current results are required before theatre. Haemoglobin must be sampled within 48&nbsp;hours of surgery.
+              </p>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <label className="label">Recent Hb (g/dL) *</label>
+                  <input type="number" step="0.1" min="0" className="input-field" placeholder="e.g. 11.5"
+                    value={preop.recentHb} onChange={(e) => setPreopField('recentHb', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Hb sample taken (within 48 h) *</label>
+                  <input type="datetime-local" className="input-field"
+                    value={preop.hbSampleAt} onChange={(e) => setPreopField('hbSampleAt', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Blood pressure (mmHg) *</label>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min="0" className="input-field" placeholder="Systolic"
+                      value={preop.bpSystolic} onChange={(e) => setPreopField('bpSystolic', e.target.value)} />
+                    <span className="text-gray-400">/</span>
+                    <input type="number" min="0" className="input-field" placeholder="Diastolic"
+                      value={preop.bpDiastolic} onChange={(e) => setPreopField('bpDiastolic', e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Potassium (mmol/L) *</label>
+                  <input type="number" step="0.1" className="input-field" placeholder="3.5–5.1"
+                    value={preop.potassium} onChange={(e) => setPreopField('potassium', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Sodium (mmol/L) *</label>
+                  <input type="number" step="0.1" className="input-field" placeholder="135–145"
+                    value={preop.sodium} onChange={(e) => setPreopField('sodium', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Creatinine (µmol/L) *</label>
+                  <input type="number" step="1" className="input-field" placeholder="e.g. 80"
+                    value={preop.creatinine} onChange={(e) => setPreopField('creatinine', e.target.value)} />
+                </div>
+                <div><label className="label">HBsAg *</label>{sel('hbsAgStatus', SEROLOGY)}</div>
+                <div><label className="label">HCV *</label>{sel('hcvStatus', SEROLOGY)}</div>
+                <div><label className="label">HIV *</label>{sel('hivStatus', SEROLOGY)}</div>
+                <div><label className="label">Bleeding-risk assessment *</label>{sel('bleedingRiskLevel', ['LOW', 'MODERATE', 'HIGH'])}</div>
+                <div><label className="label">Nutritional assessment *</label>{sel('nutritionalStatusAtBooking', ['GOOD', 'FAIR', 'POOR'])}</div>
+                <div>
+                  <label className="label">
+                    Pressure-sore risk {over45 ? '*' : <span className="text-gray-400 font-normal">(required if age &gt; 45)</span>}
+                  </label>
+                  {sel('pressureSoreRiskAtBooking', ['LOW', 'MEDIUM', 'HIGH'])}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
         <div className="card">

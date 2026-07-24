@@ -38,6 +38,23 @@ const surgerySchema = z.object({
   // Unit supervising consultant (chosen from the surgeon list).
   supervisingConsultantId: z.string().nullish(),
   supervisingConsultantName: z.string().nullish(),
+  // ── Compulsory pre-operative safety labs & risk assessments (booking form) ──
+  // Required for every booking so the theatre/anaesthetic team has a current
+  // safety picture. hbSampleAt drives the "Hb within 48 h" rule (checked below).
+  recentHb: z.coerce.number().positive('Recent haemoglobin (g/dL) is required'),
+  hbSampleAt: z.string().min(1, 'Haemoglobin sample date/time is required'),
+  potassium: z.coerce.number().positive('Serum potassium (mmol/L) is required'),
+  sodium: z.coerce.number().positive('Serum sodium (mmol/L) is required'),
+  creatinine: z.coerce.number().positive('Serum creatinine (µmol/L) is required'),
+  hbsAgStatus: z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'], { required_error: 'HBsAg status is required' }),
+  hcvStatus: z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'], { required_error: 'HCV status is required' }),
+  hivStatus: z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'], { required_error: 'HIV status is required' }),
+  bloodPressureSystolic: z.coerce.number().int().positive('Systolic BP is required'),
+  bloodPressureDiastolic: z.coerce.number().int().positive('Diastolic BP is required'),
+  bleedingRiskLevel: z.enum(['LOW', 'MODERATE', 'HIGH'], { required_error: 'Bleeding risk assessment is required' }),
+  nutritionalStatusAtBooking: z.enum(['GOOD', 'FAIR', 'POOR'], { required_error: 'Nutritional assessment is required' }),
+  // Pressure-sore risk is compulsory only for patients > 45 (enforced on the form).
+  pressureSoreRiskAtBooking: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullish(),
   // Clinical Summary collected on the booking form. Persisted on the Patient record
   // so the Pharmacy page (and other downstream views) can display them.
   comorbiditiesList: z.array(z.string()).optional(),
@@ -270,8 +287,25 @@ export async function POST(request: NextRequest) {
       drugDressingRequests,
       consentFile,
       consentForm,
+      hbSampleAt,
       ...surgeryData
     } = validatedData;
+
+    // Enforce the "haemoglobin sampled within 48 h of surgery" safety rule.
+    if (hbSampleAt) {
+      const sampleMs = new Date(hbSampleAt).getTime();
+      const surgeryMs = new Date(validatedData.scheduledDate).getTime();
+      if (Number.isNaN(sampleMs)) {
+        return NextResponse.json({ error: 'Invalid haemoglobin sample date/time.' }, { status: 400 });
+      }
+      const hoursBefore = (surgeryMs - sampleMs) / 3_600_000;
+      if (hoursBefore > 48) {
+        return NextResponse.json(
+          { error: 'Haemoglobin sample must be taken within 48 hours before surgery. Please repeat the FBC.' },
+          { status: 400 },
+        );
+      }
+    }
 
     // Resolve surgeon: if a user id was supplied, validate it and prefer the DB fullName.
     let resolvedSurgeonId: string | null = null;
@@ -496,6 +530,8 @@ export async function POST(request: NextRequest) {
         anesthetistId: resolvedAnaesthetistId,
         surgeryType: surgeryType,
         scheduledDate: new Date(validatedData.scheduledDate),
+        // Hb sample timestamp (drives the "within 48 h" safety rule).
+        hbSampleAt: hbSampleAt ? new Date(hbSampleAt) : null,
         // Informed consent file (base64) — visible to the holding-area nurse for
         // pre-theatre clearance.
         ...(consentFile
