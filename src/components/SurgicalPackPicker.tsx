@@ -56,8 +56,9 @@ interface Pack {
 }
 
 // Per-booking editable copy of a pack item (never persisted to the master pack).
+// `quantity` may be '' transiently while the surgeon clears the box to retype.
 interface EditItem {
-  name: string; quantity: number; unit: string;
+  name: string; quantity: number | ''; unit: string;
   category?: string | null; size?: string | null;
   drugType?: string | null; dosage?: string | null; route?: string | null;
   removed?: boolean; // soft-removed for this case
@@ -113,8 +114,10 @@ export default function SurgicalPackPicker({
     const drugDressingRequests: PackDrugItem[] = [];
     for (const p of chosen) {
       for (const it of effectiveItems(p, editMap)) {
-        if (it.removed || !it.name.trim()) continue;
-        const qty = Math.max(1, Number(it.quantity) || 1);
+        const qty = Number(it.quantity) || 0;
+        // An empty/zero quantity means "not requested" — skip it (the surgeon
+        // cleared the box), as does a removed row or a blank name.
+        if (it.removed || !it.name.trim() || qty < 1) continue;
         if (p.kind === 'CONSUMABLE') {
           consumableRequests.push({
             name: it.name.trim(), category: it.category ?? 'OTHER', size: it.size ?? null,
@@ -155,8 +158,8 @@ export default function SurgicalPackPicker({
       return next;
     });
   };
-  const setQty = (packId: string, idx: number, q: number) =>
-    mutateEdits(packId, (items) => { items[idx].quantity = Math.max(1, q || 1); return items; });
+  const setQty = (packId: string, idx: number, q: number | '') =>
+    mutateEdits(packId, (items) => { items[idx].quantity = q; return items; });
   const toggleRemove = (packId: string, idx: number) =>
     mutateEdits(packId, (items) => { items[idx].removed = !items[idx].removed; return items; });
   const setField = (packId: string, idx: number, field: keyof EditItem, value: string) =>
@@ -291,7 +294,7 @@ function PackContentModal({
   emergency?: boolean;
   onClose: () => void;
   onApply: () => void;
-  onQty: (idx: number, q: number) => void;
+  onQty: (idx: number, q: number | '') => void;
   onToggleRemove: (idx: number) => void;
   onField: (idx: number, field: keyof EditItem, value: string) => void;
   onAdd: () => void;
@@ -340,9 +343,13 @@ function PackContentModal({
                 />
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   value={it.quantity}
-                  onChange={(e) => onQty(idx, parseInt(e.target.value, 10))}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    // Allow clearing the box to empty, then typing the figure.
+                    onQty(idx, raw === '' ? '' : Math.max(0, parseInt(raw, 10) || 0));
+                  }}
                   className="input-field w-16 text-sm py-1 text-center"
                   disabled={it.removed}
                 />

@@ -1482,77 +1482,11 @@ export default function NewSurgeryPage() {
           <SurgicalPackPicker subspecialty={subspecialty || undefined} onChange={setPackPick} />
         </div>
 
-        {/* Surgical Consumables — Pre-pack plan for Consumable Pack Provider */}
-        <div className="card">
-          <div className="flex items-center gap-3 mb-2">
-            <Package className="w-6 h-6 text-primary-600" />
-            <h2 className="text-xl font-semibold">Surgical Consumables</h2>
-            <span className="ml-auto text-xs text-gray-500">
-              Pre-pack list for the night before surgery (visible to Consumable Pack Provider).
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Tick each item the patient needs. Quantities default to typical usage and can be edited.
-            {subspecialty ? ` Filtered to ${subspecialty}.` : ''}
-          </p>
-          {consumableLoading ? (
-            <div className="text-sm text-gray-500">Loading consumables…</div>
-          ) : consumableTemplates.length === 0 ? (
-            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
-              No consumables in catalog yet. An admin can seed the starter list at
-              <code className="mx-1 bg-amber-100 px-1 rounded">POST /api/admin/seed-surgical-catalog</code>
-              or curate items from <a href="/dashboard/admin/surgical-catalog" className="underline">Admin → Surgical Catalog</a>.
-            </div>
-          ) : (
-            <div className="space-y-4 max-h-[460px] overflow-y-auto pr-2">
-              {Object.entries(
-                consumableTemplates.reduce((acc: Record<string, any[]>, t: any) => {
-                  (acc[t.category] ||= []).push(t); return acc;
-                }, {}),
-              ).map(([cat, items]: any) => (
-                <div key={cat}>
-                  <div className="font-medium text-sm text-gray-800 mb-2">{cat.replaceAll('_', ' ')}</div>
-                  <div className="grid sm:grid-cols-2 gap-2">
-                    {items.map((t: any) => {
-                      const sel = selectedConsumables[t.id];
-                      return (
-                        <div key={t.id} className={`flex items-center gap-2 border rounded px-3 py-2 ${sel ? 'bg-primary-50 border-primary-200' : 'border-gray-200'}`}>
-                          <input
-                            aria-label={`Select ${t.name}`}
-                            title={`Select ${t.name}`}
-                            type="checkbox"
-                            checked={!!sel}
-                            onChange={() => toggleConsumable(t)}
-                            className="w-4 h-4"
-                          />
-                          <div className="flex-1 text-sm">
-                            <div className="font-medium">{t.name}{t.size ? ` — ${t.size}` : ''}</div>
-                            <div className="text-xs text-gray-500">{t.unit}{t.specialty ? ` · ${t.specialty}` : ''}</div>
-                          </div>
-                          {sel && (
-                            <input
-                              aria-label={`Quantity for ${t.name}`}
-                              title="Quantity"
-                              placeholder="Qty"
-                              type="number"
-                              min={1}
-                              value={sel.quantity}
-                              onChange={(ev) => setConsumableQty(t.id, parseInt(ev.target.value, 10) || 1)}
-                              className="w-16 input text-sm py-1"
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-3 text-xs text-gray-600">
-            Selected items: {Object.keys(selectedConsumables).length}
-          </div>
-        </div>
+        {/* Surgical Consumables manual tick-list removed — the "Apply a pack"
+            picker above now supplies consumable requests (each pack expands to
+            the same SurgeryConsumableRequest rows for the Consumable Pack
+            Provider), and the mandatory base pack still auto-attaches on the
+            server. Surgeons fine-tune per case via "View pack content". */}
 
         {/* Drugs and IV Fluids / Active Wound Dressing Agents — Pharmacy pre-pack */}
         <div className="card">
