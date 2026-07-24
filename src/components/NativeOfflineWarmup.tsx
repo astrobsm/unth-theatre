@@ -18,8 +18,12 @@
 import { useEffect, useRef } from 'react';
 import { useOfflineContext } from '@/components/OfflineProvider';
 
-// Bump the suffix to force every installed app to re-warm after a major release.
-const WARMED_KEY = 'orm.native.offlineWarmed.v1';
+// Bump SHELL_VERSION on each release with meaningful new modules/pages so every
+// installed app re-downloads the full offline shell. It also auto-re-warms if the
+// cache is older than MAX_AGE_MS, keeping offline coverage complete over time.
+const WARMED_KEY = 'orm.native.offlineWarmed';
+const SHELL_VERSION = 'v2-2026-07';
+const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 export default function NativeOfflineWarmup() {
   const { downloadAppShellNow } = useOfflineContext();
@@ -40,16 +44,22 @@ export default function NativeOfflineWarmup() {
         // browser/PWA caches on demand already.
         if (!isNative && !isElectron) return;
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-        // Only auto-download the full shell once per install (heavy, one-time).
+        // Re-warm on a new release (SHELL_VERSION change) or if the cache is stale
+        // (> MAX_AGE_MS); otherwise skip (the heavy download runs at most occasionally).
         try {
-          if (window.localStorage.getItem(WARMED_KEY)) return;
-        } catch { /* storage blocked — proceed once */ }
+          const raw = window.localStorage.getItem(WARMED_KEY);
+          if (raw) {
+            const rec = JSON.parse(raw) as { version?: string; at?: number };
+            const fresh = rec.version === SHELL_VERSION && Date.now() - (rec.at ?? 0) < MAX_AGE_MS;
+            if (fresh) return;
+          }
+        } catch { /* storage blocked / bad JSON — proceed to warm */ }
 
         // Defer so app startup stays snappy, then cache everything for offline.
         setTimeout(async () => {
           try {
             await downloadAppShellNow();
-            window.localStorage.setItem(WARMED_KEY, String(Date.now()));
+            window.localStorage.setItem(WARMED_KEY, JSON.stringify({ version: SHELL_VERSION, at: Date.now() }));
           } catch {
             // Failed (e.g. flaky network) — leave the flag unset so the next
             // launch tries again until the device is fully offline-ready.

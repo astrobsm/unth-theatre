@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { useOfflineContext } from '@/components/OfflineProvider';
 import {
   Settings, RefreshCw, Download, Wifi, WifiOff, Database,
   Bell, Clock, Shield, CheckCircle, AlertTriangle, Smartphone,
@@ -29,6 +30,7 @@ type NativeUpdateResult =
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const { downloadAppShellNow, isDownloadingShell, isFullyCached } = useOfflineContext();
   const [isOnline, setIsOnline] = useState(true);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
@@ -382,6 +384,36 @@ export default function SettingsPage() {
               {clearingCache ? 'Clearing...' : 'Clear Cache & Re-sync'}
             </button>
           </div>
+        </div>
+
+        {/* Prepare for offline use — downloads the ENTIRE app shell + data */}
+        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-teal-500">
+          <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+            <Download className="h-5 w-5 text-teal-600" />
+            Prepare for Offline Use
+          </h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Download the full app (every module page) and current data onto this device so it opens and
+            works with <strong>no internet</strong>. Do this once on a good connection, then repeat after big updates.
+          </p>
+          <div className="flex items-center gap-2 mb-3 text-sm">
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${isFullyCached ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+              {isFullyCached ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+              {isFullyCached ? 'Ready for offline' : 'Not fully downloaded yet'}
+            </span>
+          </div>
+          <button
+            onClick={() => downloadAppShellNow()}
+            disabled={isDownloadingShell || !isOnline}
+            className="px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 font-medium"
+          >
+            {isDownloadingShell ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {isDownloadingShell ? 'Downloading app for offline…' : 'Download app for offline use'}
+          </button>
+          <p className="mt-3 text-xs text-gray-400">
+            Note: the very first launch after installing still needs internet once (to fetch the app). After that,
+            the app cold-starts and runs offline; any work you do is saved and syncs automatically when you reconnect.
+          </p>
         </div>
 
         {/* Device Info */}

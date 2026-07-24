@@ -12,33 +12,81 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
       color: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 2rem;
-      -webkit-user-select: none;
-      user-select: none;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 2rem;
+      -webkit-user-select: none; user-select: none;
     }
-    img { width: 120px; height: 120px; object-fit: contain; margin-bottom: 1.5rem; }
-    h1 { font-size: 1.5rem; margin-bottom: .5rem; }
-    p { color: #c7d2fe; font-size: .95rem; line-height: 1.5; max-width: 320px; }
+    img { width: 110px; height: 110px; object-fit: contain; margin-bottom: 1.25rem; }
+    h1 { font-size: 1.4rem; margin-bottom: .4rem; }
+    p { color: #c7d2fe; font-size: .92rem; line-height: 1.5; max-width: 340px; }
+    .status { margin-top: 1.25rem; font-size: .85rem; color: #e0e7ff; min-height: 1.2em; max-width: 340px; }
     .spinner {
-      margin-top: 2rem;
-      width: 42px; height: 42px;
-      border: 4px solid rgba(255,255,255,0.25);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
+      margin-top: 1.75rem; width: 42px; height: 42px;
+      border: 4px solid rgba(255,255,255,0.25); border-top-color: #fff;
+      border-radius: 50%; animation: spin 1s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .btn {
+      margin-top: 1.75rem; background: #fff; color: #1e40af; border: none;
+      padding: .7rem 1.6rem; border-radius: 999px; font-size: .95rem; font-weight: 600; cursor: pointer;
+      display: none;
+    }
+    .btn:active { transform: scale(0.98); }
   </style>
 </head>
 <body>
   <img src="./icon-512.png" alt="ORM" onerror="this.style.display='none'" />
   <h1>Operative Resource Manager</h1>
   <p>University of Nigeria Teaching Hospital, Ituku&nbsp;Ozalla</p>
-  <div class="spinner" aria-hidden="true"></div>
+  <div class="status" id="status">Starting…</div>
+  <div class="spinner" aria-hidden="true" id="spinner"></div>
+  <button class="btn" id="retry" onclick="attempt(true)">Retry</button>
+
+  <script>
+    // Self-recovering bootstrap for the native shell. When the app can't reach
+    // the server (e.g. a cold start with no internet), this screen waits and
+    // automatically loads the app the moment connectivity returns — instead of
+    // dead-ending on a spinner. Any saved offline work is preserved by the app.
+    var SERVER_URL = 'https://unth-theatre-mai.vercel.app';
+    var statusEl = document.getElementById('status');
+    var retryBtn = document.getElementById('retry');
+    var spinner = document.getElementById('spinner');
+
+    function setStatus(t) { statusEl.textContent = t; }
+
+    // Probe the server; resolve(true) if reachable.
+    function probe() {
+      if (navigator && navigator.onLine === false) return Promise.resolve(false);
+      return fetch(SERVER_URL + '/manifest.json', { method: 'GET', cache: 'no-store', mode: 'no-cors' })
+        .then(function () { return true; })
+        .catch(function () { return false; });
+    }
+
+    function enter() {
+      setStatus('Connected — opening the app…');
+      // Load the live app. Once loaded, its service worker caches everything so
+      // future launches open even without internet.
+      window.location.href = SERVER_URL + '/dashboard';
+    }
+
+    function attempt(manual) {
+      setStatus(manual ? 'Checking connection…' : 'Waiting for a connection…');
+      spinner.style.display = 'inline-block';
+      retryBtn.style.display = 'none';
+      probe().then(function (ok) {
+        if (ok) { enter(); return; }
+        spinner.style.display = 'none';
+        retryBtn.style.display = 'inline-block';
+        setStatus('You appear to be offline. Your saved work is safe — the app will open automatically when a connection returns.');
+      });
+    }
+
+    // React immediately when the OS reports we're back online.
+    window.addEventListener('online', function () { attempt(false); });
+    // Poll periodically as a fallback (some platforms fire 'online' unreliably).
+    setInterval(function () { if (navigator.onLine !== false) probe().then(function (ok) { if (ok) enter(); }); }, 4000);
+
+    attempt(false);
+  </script>
 </body>
 </html>
