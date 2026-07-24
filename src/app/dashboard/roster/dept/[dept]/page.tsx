@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2, UploadCloud, History,
-  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle,
+  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move,
 } from 'lucide-react';
 
 const SHIFTS = ['MORNING', 'CALL', 'NIGHT'] as const;
@@ -49,6 +49,11 @@ export default function DepartmentRosterPage() {
   // add-form state
   const [fStaff, setFStaff] = useState(''); const [fDate, setFDate] = useState(''); const [fShift, setFShift] = useState('MORNING');
   const [fSub, setFSub] = useState(''); const [fSen, setFSen] = useState(''); const [fLoc, setFLoc] = useState('MAIN_THEATRE'); const [fNotes, setFNotes] = useState('');
+  // P4: conflicts + copy-day + drag
+  const [conflictIds, setConflictIds] = useState<Set<string>>(new Set());
+  const [conflictList, setConflictList] = useState<Array<{ staffName: string; date: string; shift: string; count: number }>>([]);
+  const [copySrc, setCopySrc] = useState(''); const [copyDst, setCopyDst] = useState(''); const [showCopyDay, setShowCopyDay] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
@@ -64,6 +69,13 @@ export default function DepartmentRosterPage() {
       setData(d);
       setVersions(v.ok ? (await v.json()).versions : []);
       if (!fDate) setFDate(weekStart);
+      // Conflicts (cross-department double-booking) for this week.
+      fetch(`/api/roster/conflicts?weekStart=${weekStart}`, { cache: 'no-store' })
+        .then((cr) => (cr.ok ? cr.json() : { conflictRowIds: [], conflicts: [] }))
+        .then((cj) => {
+          setConflictIds(new Set<string>(cj.conflictRowIds ?? []));
+          setConflictList(cj.conflicts ?? []);
+        }).catch(() => {});
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   }, [dept, weekStart, fDate]);
 
@@ -112,6 +124,40 @@ export default function DepartmentRosterPage() {
     });
     const j = await res.json().catch(() => ({}));
     if (res.ok) { setMsg(`Rolled back to v${version} (now published as v${j.newVersion}).`); await load(); } else { setMsg(j?.error || 'Rollback failed'); }
+  };
+
+  const copyWeek = async () => {
+    if (!confirm('Copy last week’s roster into this week as drafts? Existing entries are kept.')) return;
+    const res = await fetch(`/api/roster/departments/${dept}/copy`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'week', weekStart }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setMsg(res.ok ? `Copied ${j.copied} draft(s) from last week${j.skipped ? ` (${j.skipped} already existed)` : ''}.` : (j?.error || 'Copy failed'));
+    if (res.ok) await load();
+  };
+  const copyDay = async () => {
+    if (!copySrc || !copyDst) { setMsg('Pick a source and target day.'); return; }
+    const res = await fetch(`/api/roster/departments/${dept}/copy`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'day', sourceDate: copySrc, targetDate: copyDst }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setMsg(res.ok ? `Copied ${j.copied} draft(s) to ${DAY_LABEL(copyDst)}.` : (j?.error || 'Copy failed'));
+    if (res.ok) { setShowCopyDay(false); await load(); }
+  };
+  const moveRow = async (id: string, date: string, shift: string) => {
+    const res = await fetch(`/api/roster/departments/${dept}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, date, shift }),
+    });
+    if (res.ok) await load(); else setMsg((await res.json().catch(() => ({})))?.error || 'Move failed');
+  };
+  const exportCsv = () => {
+    const cols = ['Date', 'Shift', 'Staff', 'Sub-role', 'Seniority', 'Location', 'Status', 'Notes'];
+    const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const lines = [cols.join(',')];
+    for (const r of data?.rows ?? []) lines.push([r.date, r.shift, r.staffName, r.subRole, r.seniorityLevel, r.location, r.pendingRemoval ? 'PUBLISHED (to be removed)' : r.status, r.notes].map(esc).join(','));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `roster-${dept}-${weekStart}.csv`; a.click(); URL.revokeObjectURL(a.href);
   };
 
   const rowsFor = (day: string, shift: string) => (data?.rows ?? []).filter((r) => r.date === day && r.shift === shift);
@@ -204,6 +250,39 @@ export default function DepartmentRosterPage() {
         </div>
       )}
 
+      {/* Toolbar: copy / export / print */}
+      <div className="flex flex-wrap items-center gap-2">
+        {canManage && <button onClick={copyWeek} className="btn-secondary text-sm inline-flex items-center gap-1"><Copy className="w-4 h-4" /> Copy last week</button>}
+        {canManage && <button onClick={() => setShowCopyDay((s) => !s)} className="btn-secondary text-sm inline-flex items-center gap-1"><Copy className="w-4 h-4" /> Copy a day…</button>}
+        <button onClick={exportCsv} className="btn-secondary text-sm inline-flex items-center gap-1"><Download className="w-4 h-4" /> Export CSV</button>
+        <button onClick={() => window.print()} className="btn-secondary text-sm inline-flex items-center gap-1"><Printer className="w-4 h-4" /> Print / PDF</button>
+        {canManage && (
+          <span className="text-[11px] text-gray-400 ml-auto inline-flex items-center gap-1"><Move className="w-3.5 h-3.5" /> drag draft chips between cells to reschedule</span>
+        )}
+      </div>
+      {showCopyDay && canManage && (
+        <div className="card flex flex-wrap items-end gap-2">
+          <div><label className="label">From day</label>
+            <select className="input-field" value={copySrc} onChange={(e) => setCopySrc(e.target.value)}><option value="">Select…</option>{days.map((d) => <option key={d} value={d}>{DAY_LABEL(d)}</option>)}</select></div>
+          <div><label className="label">To day</label>
+            <select className="input-field" value={copyDst} onChange={(e) => setCopyDst(e.target.value)}><option value="">Select…</option>{days.map((d) => <option key={d} value={d}>{DAY_LABEL(d)}</option>)}</select></div>
+          <button onClick={copyDay} className="btn-primary text-sm">Copy day</button>
+        </div>
+      )}
+
+      {/* Conflict banner (cross-department double-booking) */}
+      {conflictList.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> {conflictList.length} double-booking conflict(s) this week</p>
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {conflictList.slice(0, 6).map((c, i) => (
+              <li key={i}>{c.staffName} — {DAY_LABEL(c.date)} {c.shift} ({c.count} assignments)</li>
+            ))}
+            {conflictList.length > 6 && <li>…and {conflictList.length - 6} more</li>}
+          </ul>
+        </div>
+      )}
+
       {/* Week grid */}
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 py-10 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Loading…</div>
@@ -213,7 +292,9 @@ export default function DepartmentRosterPage() {
             <div className="text-xs font-semibold text-gray-400 pt-8">Shift</div>
             {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
             {SHIFTS.map((shift) => (
-              <FragmentRow key={shift} shift={shift} days={days} rowsFor={rowsFor} canManage={!!canManage} onDelete={deleteRow} onStage={stageRemoval} />
+              <FragmentRow key={shift} shift={shift} days={days} rowsFor={rowsFor} canManage={!!canManage}
+                onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow} conflictIds={conflictIds}
+                dragId={dragId} setDragId={setDragId} />
             ))}
           </div>
         </div>
@@ -248,9 +329,11 @@ export default function DepartmentRosterPage() {
   );
 }
 
-function FragmentRow({ shift, days, rowsFor, canManage, onDelete, onStage }: {
+function FragmentRow({ shift, days, rowsFor, canManage, onDelete, onStage, onMove, conflictIds, dragId, setDragId }: {
   shift: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean;
   onDelete: (id: string) => void; onStage: (id: string, pendingRemoval: boolean) => void;
+  onMove: (id: string, date: string, shift: string) => void; conflictIds: Set<string>;
+  dragId: string | null; setDragId: (id: string | null) => void;
 }) {
   return (
     <>
@@ -258,22 +341,34 @@ function FragmentRow({ shift, days, rowsFor, canManage, onDelete, onStage }: {
       {days.map((d) => {
         const rows = rowsFor(d, shift);
         return (
-          <div key={d + shift} className="min-h-[52px] rounded border border-gray-100 bg-gray-50/40 p-1 space-y-1">
+          <div key={d + shift}
+            className="min-h-[52px] rounded border border-gray-100 bg-gray-50/40 p-1 space-y-1"
+            onDragOver={(e) => { if (canManage && dragId) e.preventDefault(); }}
+            onDrop={(e) => { e.preventDefault(); if (canManage && dragId) onMove(dragId, d, shift); setDragId(null); }}
+          >
             {rows.map((r) => {
               const staged = r.status === 'PUBLISHED' && r.pendingRemoval;
+              const conflict = conflictIds.has(r.id);
               const cls = staged
                 ? 'bg-red-50 text-red-800 line-through'
                 : r.status === 'DRAFT' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900';
+              const isDraft = r.status === 'DRAFT';
               return (
-                <div key={r.id} className={`text-[11px] rounded px-1.5 py-1 flex items-start justify-between gap-1 ${cls}`}>
+                <div key={r.id}
+                  draggable={canManage && isDraft}
+                  onDragStart={() => setDragId(r.id)}
+                  onDragEnd={() => setDragId(null)}
+                  title={conflict ? 'Double-booked this day/shift' : (canManage && isDraft ? 'Drag to reschedule' : undefined)}
+                  className={`text-[11px] rounded px-1.5 py-1 flex items-start justify-between gap-1 ${cls} ${conflict ? 'ring-2 ring-red-400' : ''} ${canManage && isDraft ? 'cursor-move' : ''}`}>
                   <span className="leading-tight">
+                    {conflict ? <AlertCircle className="w-3 h-3 text-red-500 inline mr-0.5 -mt-0.5" /> : null}
                     {r.staffName}
                     {r.subRole ? <span className="block text-[10px] opacity-70 no-underline">{r.subRole}</span> : null}
                     {r.seniorityLevel ? <span className="block text-[10px] opacity-70 no-underline">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
                     {staged ? <span className="block text-[9px] font-semibold text-red-600 no-underline">will be removed on publish</span> : null}
                   </span>
                   {canManage && (
-                    r.status === 'DRAFT' ? (
+                    isDraft ? (
                       <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0" aria-label="Remove draft"><Trash2 className="w-3 h-3" /></button>
                     ) : staged ? (
                       <button onClick={() => onStage(r.id, false)} className="text-primary-600 hover:text-primary-700 flex-shrink-0" aria-label="Keep (undo removal)"><RotateCcw className="w-3 h-3" /></button>

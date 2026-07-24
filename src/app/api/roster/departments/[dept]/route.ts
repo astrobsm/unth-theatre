@@ -120,11 +120,17 @@ export async function DELETE(request: NextRequest, { params }: { params: { dept:
   return NextResponse.json({ ok: true });
 }
 
-const patchSchema = z.object({ id: z.string(), pendingRemoval: z.boolean() });
+const patchSchema = z.object({
+  id: z.string(),
+  pendingRemoval: z.boolean().optional(), // stage/un-stage a PUBLISHED row
+  date: z.string().optional(),            // move a DRAFT row (drag & drop)
+  shift: z.enum(['MORNING', 'CALL', 'NIGHT']).optional(),
+});
 
-// PATCH — stage (or un-stage) a PUBLISHED row for removal. The row stays live
-// (on-duty still sees it) until the next Publish, which deletes staged rows.
-// This is how published rosters are edited draft-style. Manager only.
+// PATCH — two operations, manager only:
+//   • stage/un-stage a PUBLISHED row for removal (pendingRemoval). The row stays
+//     live until the next Publish (draft-style editing of published rosters).
+//   • move a DRAFT row to another day/shift (date/shift) — drag & drop.
 export async function PATCH(request: NextRequest, { params }: { params: { dept: string } }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -135,9 +141,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { dept: 
   }
   const parsed = patchSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
-  const row = await prisma.roster.findUnique({ where: { id: parsed.data.id }, select: { status: true, staffCategory: true } });
+  const d = parsed.data;
+  const row = await prisma.roster.findUnique({ where: { id: d.id }, select: { status: true, staffCategory: true } });
   if (!row || row.staffCategory !== dept.category) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (row.status !== 'PUBLISHED') return NextResponse.json({ error: 'Only published rows can be staged for removal' }, { status: 409 });
-  await prisma.roster.update({ where: { id: parsed.data.id }, data: { pendingRemoval: parsed.data.pendingRemoval } });
-  return NextResponse.json({ ok: true });
+
+  // Move a draft (drag & drop).
+  if (d.date || d.shift) {
+    if (row.status !== 'DRAFT') return NextResponse.json({ error: 'Only draft rows can be moved. Stage the published row and add a new draft instead.' }, { status: 409 });
+    await prisma.roster.update({
+      where: { id: d.id },
+      data: { ...(d.date ? { date: dateOnly(d.date) } : {}), ...(d.shift ? { shift: d.shift } : {}) },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Stage/un-stage a published row.
+  if (typeof d.pendingRemoval === 'boolean') {
+    if (row.status !== 'PUBLISHED') return NextResponse.json({ error: 'Only published rows can be staged for removal' }, { status: 409 });
+    await prisma.roster.update({ where: { id: d.id }, data: { pendingRemoval: d.pendingRemoval } });
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 }
