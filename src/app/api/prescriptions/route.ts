@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { triggerRadio } from '@/lib/radioEvents';
@@ -207,6 +208,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const idemKey = idempotencyKeyFrom(request);
+    const replay = await replayIfSeen(idemKey);
+    if (replay) return replay;
+
     const body = await request.json();
     const validatedData = createPrescriptionSchema.parse(body);
 
@@ -289,7 +294,9 @@ export async function POST(request: NextRequest) {
       data: { prescriptionId: prescription.id, kind: 'prescription_ready' },
     });
 
-    return NextResponse.json({ ...prescription, anaesthesiaDrugCode }, { status: 201 });
+    const rxPayload = { ...prescription, anaesthesiaDrugCode };
+    await rememberResult(idemKey, 201, rxPayload, 'POST /api/prescriptions');
+    return NextResponse.json(rxPayload, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -4,7 +4,8 @@
 // ============================================================
 
 const DB_NAME = 'orm-offline';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
+const MAX_SYNC_RETRIES = 5;
 
 export interface OfflineQueueItem {
   id?: number;
@@ -79,6 +80,11 @@ function openDB(): Promise<IDBDatabase> {
         }
         if (!db.objectStoreNames.contains('syncMeta')) {
           db.createObjectStore('syncMeta', { keyPath: 'key' });
+        }
+        // v4: dead-letter store for mutations that failed to sync (client error
+        // or exhausted retries) so staff can see / retry / dismiss them.
+        if (!db.objectStoreNames.contains('failedMutations')) {
+          db.createObjectStore('failedMutations', { keyPath: 'id', autoIncrement: true });
         }
       };
 
@@ -180,6 +186,95 @@ export async function clearOfflineQueue(): Promise<void> {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+}
+
+// Update a queued item in place (e.g. bump retryCount).
+async function updateOfflineQueueItem(item: OfflineQueueItem): Promise<void> {
+  if (!isIndexedDBAvailable() || item.id == null) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('offlineQueue', 'readwrite');
+    tx.objectStore('offlineQueue').put(item);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+// ============================================================
+// DEAD-LETTER — mutations that could not be synced
+// ============================================================
+export interface FailedMutation {
+  id?: number;
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: unknown;
+  description: string;
+  entityType: string;
+  failedAt: number;
+  lastError: string;
+}
+
+async function addFailedMutation(item: OfflineQueueItem, lastError: string): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('failedMutations', 'readwrite');
+    tx.objectStore('failedMutations').add({
+      url: item.url, method: item.method, headers: item.headers, body: item.body,
+      description: item.description, entityType: item.entityType, failedAt: Date.now(), lastError,
+    });
+    tx.oncomplete = () => {
+      try { window.dispatchEvent(new CustomEvent('orm:sync-failed')); } catch { /* ignore */ }
+      resolve();
+    };
+    tx.onerror = () => resolve();
+  });
+}
+
+export async function getFailedMutations(): Promise<FailedMutation[]> {
+  if (!isIndexedDBAvailable()) return [];
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('failedMutations', 'readonly');
+    const req = tx.objectStore('failedMutations').getAll();
+    req.onsuccess = () => resolve((req.result as FailedMutation[]) || []);
+    req.onerror = () => resolve([]);
+  });
+}
+
+export async function getFailedCount(): Promise<number> {
+  if (!isIndexedDBAvailable()) return 0;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('failedMutations', 'readonly');
+    const req = tx.objectStore('failedMutations').count();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(0);
+  });
+}
+
+export async function dismissFailedMutation(id: number): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('failedMutations', 'readwrite');
+    tx.objectStore('failedMutations').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+// Move a failed mutation back onto the live queue for another sync attempt.
+export async function retryFailedMutation(id: number): Promise<void> {
+  const failed = await getFailedMutations();
+  const item = failed.find((f) => f.id === id);
+  if (!item) return;
+  await addToOfflineQueue({
+    url: item.url, method: item.method, headers: item.headers, body: item.body,
+    description: item.description, entityType: item.entityType,
+  });
+  await dismissFailedMutation(id);
 }
 
 // ============================================================
@@ -291,6 +386,15 @@ export async function getSyncMeta<T = unknown>(key: string): Promise<T | null> {
 // SYNC ENGINE - Process queued mutations
 // ============================================================
 
+async function safeErr(response: Response): Promise<string> {
+  try {
+    const j = await response.clone().json();
+    return (j?.error || j?.message || '').toString().slice(0, 200);
+  } catch {
+    return '';
+  }
+}
+
 export async function processOfflineQueue(): Promise<{ synced: number; failed: number; remaining: number }> {
   const queue = await getOfflineQueue();
   if (queue.length === 0) return { synced: 0, failed: 0, remaining: 0 };
@@ -310,13 +414,24 @@ export async function processOfflineQueue(): Promise<{ synced: number; failed: n
         await removeFromOfflineQueue(item.id!);
         synced++;
       } else if (response.status >= 400 && response.status < 500) {
-        // Client error - don't retry
+        // Client error — permanent; dead-letter it so staff can see/retry/dismiss.
+        await addFailedMutation(item, `Server rejected the change (HTTP ${response.status}). ${await safeErr(response)}`);
         await removeFromOfflineQueue(item.id!);
         failed++;
       } else {
+        // Server error (5xx) — retry a few times, then dead-letter.
+        const rc = (item.retryCount ?? 0) + 1;
+        if (rc >= MAX_SYNC_RETRIES) {
+          await addFailedMutation(item, `Server error (HTTP ${response.status}) after ${rc} attempts.`);
+          await removeFromOfflineQueue(item.id!);
+        } else {
+          await updateOfflineQueueItem({ ...item, retryCount: rc });
+        }
         failed++;
       }
     } catch {
+      // Network error — still offline / transient; leave in queue for next sync
+      // (never dead-letter on network failure, so we don't lose data).
       failed++;
     }
   }

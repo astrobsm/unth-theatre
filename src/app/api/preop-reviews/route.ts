@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
@@ -199,6 +200,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const idemKey = idempotencyKeyFrom(request);
+    const replay = await replayIfSeen(idemKey);
+    if (replay) return replay;
+
     const body = await request.json();
     const validatedData = createPreOpReviewSchema.parse(body);
 
@@ -328,6 +333,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await rememberResult(idemKey, 201, review, 'POST /api/preop-reviews');
     return NextResponse.json(review, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

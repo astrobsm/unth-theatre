@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
@@ -142,6 +143,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const idemKey = idempotencyKeyFrom(request);
+    const replay = await replayIfSeen(idemKey);
+    if (replay) return replay;
+
     const body = await request.json();
     const validatedData = createBloodRequestSchema.parse(body);
 
@@ -223,6 +228,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await rememberResult(idemKey, 201, bloodRequest, 'POST /api/blood-requests');
     return NextResponse.json(bloodRequest, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

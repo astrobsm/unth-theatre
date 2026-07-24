@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,10 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
   if (!canManageRosterDept(dept, (session.user as any).role)) {
     return NextResponse.json({ error: 'Not authorised to publish this department roster' }, { status: 403 });
   }
+  const idemKey = idempotencyKeyFrom(request);
+  const replay = await replayIfSeen(idemKey);
+  if (replay) return replay;
+
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
 
@@ -89,5 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
     return pub;
   });
 
-  return NextResponse.json({ ok: true, version: result.version, published: drafts.length, removed: staged.length, totalRows: finalRows.length });
+  const pubPayload = { ok: true, version: result.version, published: drafts.length, removed: staged.length, totalRows: finalRows.length };
+  await rememberResult(idemKey, 200, pubPayload, 'POST /api/roster/departments/publish');
+  return NextResponse.json(pubPayload);
 }

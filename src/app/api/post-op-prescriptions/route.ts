@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { idempotencyKeyFrom, replayIfSeen, rememberResult } from "@/lib/idempotency";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -74,6 +75,10 @@ export async function POST(req: NextRequest) {
   if (!SURGEON_ROLES.includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
+    const idemKey = idempotencyKeyFrom(req);
+    const replay = await replayIfSeen(idemKey);
+    if (replay) return replay;
+
     const body = createSchema.parse(await req.json());
     const surgery = await prisma.surgery.findUnique({
       where: { id: body.surgeryId },
@@ -126,7 +131,9 @@ export async function POST(req: NextRequest) {
       console.warn("post-op pharmacy notification skipped", e);
     }
 
-    return NextResponse.json({ ...created, medications: body.medications }, { status: 201 });
+    const poPayload = { ...created, medications: body.medications };
+    await rememberResult(idemKey, 201, poPayload, 'POST /api/post-op-prescriptions');
+    return NextResponse.json(poPayload, { status: 201 });
   } catch (e: any) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "Validation", details: e.errors }, { status: 400 });
     console.error("post-op prescription create failed", e);
