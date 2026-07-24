@@ -43,6 +43,7 @@ import {
   Activity,
   Gauge,
   ClipboardCheck,
+  Radar,
   Sparkles,
   BriefcaseMedical,
   TrendingUp,
@@ -219,6 +220,7 @@ export default function DashboardLayout({
 
     // === DAY-OF-SURGERY LOGISTICS ===
     { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster' },
+    { href: '/dashboard/staff-availability', icon: Radar, label: 'Staff Availability', badge: 'NEW' },
     { href: '/dashboard/surgical-unit-calendar', icon: CalendarDays, label: 'Surgical Unit Calendar', badge: 'NEW' },
     { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
@@ -381,6 +383,7 @@ export default function DashboardLayout({
   const NAV_LAYOUT: NavEntry[] = [
     { type: 'single', href: '/dashboard' },
     { type: 'single', href: '/dashboard/roster' },
+    { type: 'single', href: '/dashboard/staff-availability' },
     { type: 'single', href: '/dashboard/emergency-booking' },
     { type: 'group', label: 'Alerts', icon: AlertTriangle, hrefs: [
       '/dashboard/alerts',

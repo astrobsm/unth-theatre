@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
+import { availabilityMeta } from '@/lib/staffAvailability';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
@@ -205,6 +206,8 @@ interface OnDutyStaff {
   name: string;
   phoneNumber: string | null;
   extension?: string | null;
+  availabilityStatus?: string | null;
+  currentLocation?: string | null;
   source?: string; // "roster" | "role"
   role?: string;
 }
@@ -872,7 +875,7 @@ export default function EmergencyBookingPage() {
                                 <div className="grid sm:grid-cols-2 gap-x-3 gap-y-0.5">
                                   {present.map(([label, v]) => (
                                     <div key={label} className="flex items-center gap-1 min-w-0">
-                                      <Users className="h-3.5 w-3.5 text-teal-600 flex-shrink-0" />
+                                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${availabilityMeta(v!.availabilityStatus).dot}`} title={availabilityMeta(v!.availabilityStatus).label} />
                                       <span className="truncate">
                                         {label}: <strong>{v!.name}</strong>
                                         {v!.source === 'role' && <span className="text-[10px] text-gray-400"> (on-call)</span>}

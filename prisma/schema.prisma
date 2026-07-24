@@ -359,6 +359,14 @@ model User {
   extension          String?    // Internal theatre extension / bleep for roster contact display
   department         String?
   staffCode          String?    @unique // Code for cleaners, porters, and other staff to log duties
+  // Live staff availability (P3 workforce board). A single current snapshot per
+  // user; self-set or admin-overridden. AVAILABLE | BUSY | IN_THEATRE |
+  // TRANSPORTING_PATIENT | PREPARING_THEATRE | CLEANING_THEATRE |
+  // ON_EMERGENCY_CASE | BREAK | OFF_DUTY | ON_LEAVE | UNAVAILABLE
+  availabilityStatus    String?
+  availabilityNote      String?  // current assignment / free note
+  currentLocation       String?
+  availabilityUpdatedAt DateTime?
   resetToken         String? // Password reset token
   resetTokenExpiry   DateTime? // Reset token expiration
   isFirstLogin       Boolean    @default(true) // Track if user has logged in before

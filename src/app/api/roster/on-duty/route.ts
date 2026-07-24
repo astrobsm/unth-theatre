@@ -27,6 +27,8 @@ type StaffEntry = {
   staffCode: string | null;
   phoneNumber: string | null;
   extension: string | null;
+  availabilityStatus: string | null;
+  currentLocation: string | null;
   seniorityLevel: string | null;
   subRole: string | null;
   theatreId: string | null;
@@ -126,6 +128,8 @@ export async function GET(request: NextRequest) {
             staffCode: true,
             phoneNumber: true,
             extension: true,
+            availabilityStatus: true,
+            currentLocation: true,
           },
         },
       },
@@ -144,6 +148,8 @@ export async function GET(request: NextRequest) {
       staffCode: r.user.staffCode,
       phoneNumber: r.user.phoneNumber,
       extension: r.user.extension ?? null,
+      availabilityStatus: r.user.availabilityStatus ?? null,
+      currentLocation: r.user.currentLocation ?? null,
       seniorityLevel: r.seniorityLevel ?? null,
       subRole: r.subRole ?? null,
       theatreId: r.theatreId ?? null,
@@ -231,11 +237,11 @@ export async function GET(request: NextRequest) {
       ROLE_CONTACTS.map(async ([key, roles]) => {
         const u = await prisma.user.findFirst({
           where: { role: { in: roles as any }, status: "APPROVED" as any },
-          select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true },
+          select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true, availabilityStatus: true, currentLocation: true },
           orderBy: { fullName: "asc" },
         });
         roleContacts[key] = u
-          ? { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" }
+          ? { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, availabilityStatus: u.availabilityStatus ?? null, currentLocation: u.currentLocation ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" }
           : null;
       })
     );
@@ -245,9 +251,9 @@ export async function GET(request: NextRequest) {
     if (!recoveryNurse) {
       const u = await prisma.user.findFirst({
         where: { role: "RECOVERY_ROOM_NURSE" as any, status: "APPROVED" as any },
-        select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true },
+        select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true, availabilityStatus: true, currentLocation: true },
       });
-      if (u) recoveryNurse = { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" };
+      if (u) recoveryNurse = { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, availabilityStatus: u.availabilityStatus ?? null, currentLocation: u.currentLocation ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" };
     }
 
     const team = {
