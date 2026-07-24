@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { notify } from '@/lib/notifications';
 
 interface Surgery {
   id: string;
@@ -65,6 +67,11 @@ export default function NewHoldingAreaAssessment() {
       });
 
       if (response.ok) {
+        if (isOfflineQueued(response)) {
+          notify.success(OFFLINE_SAVED_MESSAGE);
+          router.push('/dashboard/holding-area');
+          return;
+        }
         const assessment = await response.json();
         router.push(`/dashboard/holding-area/${assessment.id}`);
       } else {

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator } from 'lucide-react';
+import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { notify } from '@/lib/notifications';
 import Link from 'next/link';
 import { WARDS } from '@/lib/constants';
 import { AGE_UNITS, ageInYears, type AgeUnit } from '@/lib/age';
@@ -319,6 +321,14 @@ export default function NewPatientPage() {
       });
 
       if (response.ok) {
+        // Offline: the patient is queued but has no server id yet, so we can't
+        // pre-select them in a booking form. Confirm and go to the patients list;
+        // resume booking after reconnect/sync.
+        if (isOfflineQueued(response)) {
+          notify.success(OFFLINE_SAVED_MESSAGE);
+          router.push('/dashboard/patients');
+          return;
+        }
         // If we were sent here from the surgery scheduler, go straight back with
         // the new patient pre-selected so the user can continue booking.
         const returnTo =

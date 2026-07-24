@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { notify } from '@/lib/notifications';
 
 interface Surgery {
   id: string;
@@ -175,6 +177,11 @@ export default function NewPACUAssessment() {
       });
 
       if (response.ok) {
+        if (isOfflineQueued(response)) {
+          notify.success(OFFLINE_SAVED_MESSAGE);
+          router.push('/dashboard/pacu');
+          return;
+        }
         const assessment = await response.json();
         router.push(`/dashboard/pacu/${assessment.id}`);
       } else {
