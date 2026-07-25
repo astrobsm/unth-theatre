@@ -1956,6 +1956,15 @@ function BookingCodesModal({
               Complete the surgical consent form now
             </Link>
           )}
+          {codes.surgeryId && (
+            <Link
+              href={`/dashboard/surgeries/${codes.surgeryId}/scribe`}
+              className="flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-800 hover:bg-teal-100"
+            >
+              <Stethoscope className="w-4 h-4" />
+              Run Medical Scribe safety check
+            </Link>
+          )}
         </div>
         <div className="flex justify-end gap-3 border-t px-5 py-4">
           <button onClick={onClose} className="btn-primary">
