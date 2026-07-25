@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator } from 'lucide-react';
+import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator, ArrowRight } from 'lucide-react';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 import Link from 'next/link';
@@ -58,6 +58,8 @@ export default function NewPatientPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [duplicate, setDuplicate] = useState<any | null>(null);
+  const [checkingDup, setCheckingDup] = useState(false);
   // Ward list (built-in defaults + any custom wards created by admins).
   const [wards, setWards] = useState<string[]>([...WARDS]);
   useEffect(() => {
@@ -239,6 +241,25 @@ export default function NewPatientPage() {
     setBleedingFactors(prev => ({ ...prev, age: years }));
   }, [age, ageUnit]);
 
+  // Instant "already registered" detection by folder/PT number.
+  const checkDuplicate = async (folderNumber?: string, ptNumber?: string) => {
+    const fn = (folderNumber || '').trim();
+    const pt = (ptNumber || '').trim();
+    if (!fn && !pt) return;
+    setCheckingDup(true);
+    try {
+      const params = new URLSearchParams();
+      if (fn) params.set('folderNumber', fn);
+      if (pt) params.set('ptNumber', pt);
+      const res = await fetch(`/api/patients?${params.toString()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const matches = await res.json();
+        setDuplicate(Array.isArray(matches) && matches.length ? matches[0] : null);
+      }
+    } catch { /* offline / ignore — the server 409 still guards on submit */ }
+    finally { setCheckingDup(false); }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -343,6 +364,16 @@ export default function NewPatientPage() {
         } else {
           router.push('/dashboard/patients');
         }
+      } else if (response.status === 409) {
+        // Already registered — surface the existing patient with a booking prompt.
+        const j = await response.json().catch(() => ({}));
+        if (j?.patient) {
+          setDuplicate(j.patient);
+          setError('');
+          if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setError(j?.error || 'This patient is already registered.');
+        }
       } else {
         const error = await response.json();
         setError(error.error || 'Failed to register patient');
@@ -378,6 +409,41 @@ export default function NewPatientPage() {
         </div>
       )}
 
+      {duplicate && (
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-amber-900">This patient is already registered.</p>
+              <p className="text-sm text-amber-800 mt-0.5">
+                <strong>{duplicate.name}</strong> · Folder {duplicate.folderNumber}
+                {duplicate.ptNumber ? ` · PT ${duplicate.ptNumber}` : ''} · {duplicate.age} {String(duplicate.ageUnit || 'YEARS').toLowerCase()} · {duplicate.gender}{duplicate.ward ? ` · ${duplicate.ward}` : ''}
+              </p>
+              <p className="text-xs text-amber-700 mt-1">No need to register again — continue straight to booking a surgery for this patient (their details are imported automatically).</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push(`/dashboard/surgeries/new?patientId=${duplicate.id}`)}
+                  className="btn-primary text-sm inline-flex items-center gap-1"
+                >
+                  <ArrowRight className="w-4 h-4" /> Continue to Surgery Booking
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/dashboard/patients/${duplicate.id}`)}
+                  className="btn-secondary text-sm"
+                >
+                  View patient
+                </button>
+                <button type="button" onClick={() => setDuplicate(null)} className="text-sm text-amber-700 hover:text-amber-900 underline px-2">
+                  Register a different patient
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Patient Information */}
         <div className="card">
@@ -406,6 +472,8 @@ export default function NewPatientPage() {
                 required
                 className="input-field"
                 placeholder="e.g., UNTH/2024/001"
+                onChange={() => { if (duplicate) setDuplicate(null); }}
+                onBlur={(e) => checkDuplicate(e.target.value, undefined)}
               />
             </div>
 
@@ -416,6 +484,8 @@ export default function NewPatientPage() {
                 name="ptNumber"
                 className="input-field"
                 placeholder="e.g., PT001234"
+                onChange={() => { if (duplicate) setDuplicate(null); }}
+                onBlur={(e) => checkDuplicate(undefined, e.target.value)}
               />
             </div>
 

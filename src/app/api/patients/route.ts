@@ -73,12 +73,34 @@ const patientSchema = z.object({
   assessmentDate: z.date().or(z.string().transform((str) => new Date(str))).optional(),
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Optional lookup: ?folderNumber= / ?ptNumber= (exact) or ?q= (contains).
+    // Used by the registration form to instantly detect an already-registered
+    // patient. With no params it returns the full list (unchanged behaviour).
+    const { searchParams } = new URL(request.url);
+    const folderNumber = searchParams.get('folderNumber')?.trim();
+    const ptNumber = searchParams.get('ptNumber')?.trim();
+    const q = searchParams.get('q')?.trim();
+    if (folderNumber || ptNumber || q) {
+      const or: any[] = [];
+      if (folderNumber) or.push({ folderNumber });
+      if (ptNumber) or.push({ ptNumber });
+      if (q) {
+        or.push(
+          { folderNumber: { contains: q, mode: 'insensitive' } },
+          { ptNumber: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+        );
+      }
+      const matches = await prisma.patient.findMany({ where: { OR: or }, take: 10, orderBy: { createdAt: 'desc' } });
+      return NextResponse.json(matches);
     }
 
     const patients = await prisma.patient.findMany({
@@ -108,6 +130,23 @@ export async function POST(request: NextRequest) {
     console.log('Received patient data:', JSON.stringify(body, null, 2));
     
     const validatedData = patientSchema.parse(body);
+
+    // Duplicate guard: a patient with this folder (or PT) number already exists.
+    // Return the existing record so the UI can offer to continue to booking.
+    const existing = await prisma.patient.findFirst({
+      where: {
+        OR: [
+          { folderNumber: validatedData.folderNumber },
+          ...(validatedData.ptNumber ? [{ ptNumber: validatedData.ptNumber }] : []),
+        ],
+      },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: 'This patient is already registered.', code: 'DUPLICATE', patient: existing },
+        { status: 409 },
+      );
+    }
 
     const patient = await prisma.patient.create({
       data: validatedData
