@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -859,6 +859,16 @@ export default function SurgeriesPage() {
                         >
                           <Eye className="w-4 h-4" />
                           View
+                        </Link>
+
+                        {/* Medical Scribe safety check - Always visible */}
+                        <Link
+                          href={`/dashboard/surgeries/${surgery.id}/scribe`}
+                          className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-800 font-semibold"
+                          title="Medical Scribe (Safety Check)"
+                        >
+                          <Stethoscope className="w-4 h-4" />
+                          Scribe
                         </Link>
 
                         {/* Edit (re-schedule, change theatre/anaesthesia) - tracked in audit log */}
