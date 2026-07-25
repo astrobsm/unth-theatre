@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2, UploadCloud, History,
-  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move,
+  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move, Link2, Check,
 } from 'lucide-react';
 
 const SHIFTS = ['MORNING', 'CALL', 'NIGHT'] as const;
@@ -54,6 +54,19 @@ export default function DepartmentRosterPage() {
   const [conflictList, setConflictList] = useState<Array<{ staffName: string; date: string; shift: string; count: number }>>([]);
   const [copySrc, setCopySrc] = useState(''); const [copyDst, setCopyDst] = useState(''); const [showCopyDay, setShowCopyDay] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/roster/${dept}` : `/roster/${dept}`;
+  const copyShareLink = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); }
+    catch {
+      const ta = document.createElement('textarea');
+      ta.value = shareUrl; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000);
+  };
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
@@ -165,7 +178,17 @@ export default function DepartmentRosterPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
-      <Link href="/dashboard/roster/departments" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"><ArrowLeft className="w-4 h-4" /> All department rosters</Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/dashboard/roster/departments" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"><ArrowLeft className="w-4 h-4" /> All department rosters</Link>
+        <button
+          type="button"
+          onClick={copyShareLink}
+          title={`Copy shareable link (${shareUrl})`}
+          className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg border ${linkCopied ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-primary-600 border-gray-200 hover:bg-gray-50'}`}
+        >
+          {linkCopied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Link2 className="w-3.5 h-3.5" /> Copy shareable link</>}
+        </button>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
