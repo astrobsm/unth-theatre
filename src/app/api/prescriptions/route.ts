@@ -4,7 +4,7 @@ import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempote
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { triggerRadio } from '@/lib/radioEvents';
-import { sendPushToRoles } from '@/lib/fcm';
+import { pushToRoles } from '@/lib/pushAll';
 import { z } from 'zod';
 import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
 
@@ -285,12 +285,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Native push to pharmacy so they are alerted even when the app is closed.
-    // No-ops when FCM is not configured.
-    void sendPushToRoles(['PHARMACIST'], {
+    // Push to pharmacy phones/PWAs (native FCM + web-push) so they are alerted
+    // even when the app is closed. No-ops for any channel that isn't configured.
+    void pushToRoles(['PHARMACIST'], {
       title: '💊 New prescription to review',
       body: `Anaesthetic prescription for ${prescription.patientName ?? validatedData.patientName}. Pharmacy, please review and pack.`,
-      link: '/dashboard/prescriptions',
+      url: '/dashboard/prescriptions',
+      priority: 'HIGH', tag: 'prescription-ready',
       data: { prescriptionId: prescription.id, kind: 'prescription_ready' },
     });
 

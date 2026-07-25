@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
+import { pushToUsers } from '@/lib/pushAll';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
@@ -220,13 +221,30 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Notify all blood bank staff
+    // Notify all blood bank staff — in-app + push to phones/PWAs.
     const bloodBankStaff = await prisma.user.findMany({
-      where: {
-        role: 'BLOODBANK_STAFF',
-        status: 'APPROVED',
-      },
+      where: { role: 'BLOODBANK_STAFF', status: 'APPROVED' },
+      select: { id: true },
     });
+    if (bloodBankStaff.length) {
+      const isEmergency = (bloodRequest as any).isEmergency === true || (bloodRequest as any).urgency === 'EMERGENCY';
+      const title = isEmergency ? '🩸 EMERGENCY blood request' : '🩸 New blood request';
+      const body = `${bloodRequest.unitsRequested} unit(s) ${bloodRequest.bloodType ?? ''} for ${bloodRequest.patientName} — ${bloodRequest.procedureName}.`;
+      try {
+        await prisma.notification.createMany({
+          data: bloodBankStaff.map((u) => ({
+            userId: u.id, type: 'STOCK_ALERT', title, message: body, link: '/dashboard/blood-bank',
+          })),
+        });
+      } catch (e) { console.warn('blood-bank notification skipped', e); }
+      void pushToUsers(bloodBankStaff.map((u) => u.id), {
+        title, body, url: '/dashboard/blood-bank',
+        priority: isEmergency ? 'CRITICAL' : 'HIGH',
+        ...(isEmergency ? { sound: 'emergency' } : {}),
+        tag: 'blood-request',
+        data: { bloodRequestId: bloodRequest.id, kind: 'blood_request' },
+      });
+    }
 
     await rememberResult(idemKey, 201, bloodRequest, 'POST /api/blood-requests');
     return NextResponse.json(bloodRequest, { status: 201 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from "@/lib/idempotency";
+import { pushToUsers } from "@/lib/pushAll";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
@@ -657,6 +658,13 @@ export async function POST(request: NextRequest) {
             },
           });
         }
+        // Push to phones/PWAs too (native FCM + web-push; no-ops if unconfigured).
+        void pushToUsers(pharmacists.map((p) => p.id), {
+          title: '💊 New drug/dressing pack request',
+          body: `${drugDressingRequests.length} item(s) for ${patient.name} — ${validatedData.procedureName}.`,
+          url: `/dashboard/medication-tracking?surgery=${surgery.id}`,
+          priority: 'HIGH', tag: 'pharmacy-pack',
+        });
       } catch (e) {
         console.warn("Pharmacy notification skipped", e);
       }
@@ -680,6 +688,12 @@ export async function POST(request: NextRequest) {
             },
           });
         }
+        void pushToUsers(packers.map((p) => p.id), {
+          title: '📦 New consumables pre-pack request',
+          body: `${consumableRequests.length} item(s) for ${patient.name} — ${validatedData.procedureName}.`,
+          url: `/dashboard/consumable-pack-provider?surgery=${surgery.id}`,
+          priority: 'HIGH', tag: 'consumable-pack',
+        });
       } catch (e) {
         console.warn("Pack-provider notification skipped", e);
       }
