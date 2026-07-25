@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature } from 'lucide-react';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
@@ -70,6 +70,7 @@ export default function NewEmergencyBookingPage() {
   // Holds the just-booked surgery id while the no-paper-prescription dialog is
   // shown; acknowledging navigates on to the consent form.
   const [bookedSurgeryId, setBookedSurgeryId] = useState<string | null>(null);
+  const [showNextSteps, setShowNextSteps] = useState(false);
   const [surgeons, setSurgeons] = useState<{ id: string; fullName: string }[]>([]);
   const [anesthetists, setAnesthetists] = useState<{ id: string; fullName: string }[]>([]);
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
@@ -371,16 +372,46 @@ export default function NewEmergencyBookingPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      {bookedSurgeryId !== null && (
+      {bookedSurgeryId !== null && !showNextSteps && (
         <NoPaperPrescriptionDialog
           onAcknowledge={() =>
-            router.push(
-              bookedSurgeryId
-                ? `/dashboard/surgeries/${bookedSurgeryId}/consent`
-                : '/dashboard/emergency-booking'
-            )
+            bookedSurgeryId
+              ? setShowNextSteps(true)
+              : router.push('/dashboard/emergency-booking')
           }
         />
+      )}
+
+      {/* Post-booking next steps — consent + immediate safety check */}
+      {showNextSteps && bookedSurgeryId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Siren className="h-5 w-5 text-red-600" />
+              <h3 className="font-semibold text-gray-900">Emergency case booked</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">Alerts have been raised. Next steps for this case:</p>
+            <div className="space-y-2">
+              <button
+                onClick={() => router.push(`/dashboard/surgeries/${bookedSurgeryId}/scribe`)}
+                className="w-full flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-800 hover:bg-teal-100"
+              >
+                <Stethoscope className="w-4 h-4" /> Run Medical Scribe safety check
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/surgeries/${bookedSurgeryId}/consent`)}
+                className="w-full flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm font-semibold text-indigo-800 hover:bg-indigo-100"
+              >
+                <FileSignature className="w-4 h-4" /> Complete the surgical consent form
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => router.push('/dashboard/emergency-booking')} className="btn-secondary text-sm">
+                Go to emergency list
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg">
