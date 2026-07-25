@@ -5,7 +5,7 @@
 // Emergency-aware: audio precaching + priority push notifications
 // ============================================================
 
-const CACHE_VERSION = 'v37';
+const CACHE_VERSION = 'v38';
 const STATIC_CACHE = `orm-static-${CACHE_VERSION}`;
 const DATA_CACHE = `orm-data-${CACHE_VERSION}`;
 const PAGE_CACHE = `orm-pages-${CACHE_VERSION}`;
@@ -506,24 +506,45 @@ async function offlineNavigationHandler(request) {
     return ct.includes('text/html');
   };
 
-  try {
-    const networkResponse = await fetch(request);
+  // Background revalidation: always fetch the fresh document and refresh the
+  // page cache so the NEXT launch/navigation has the latest shell.
+  const revalidate = fetch(request).then((networkResponse) => {
     if (networkResponse.ok && isHtmlDoc(networkResponse)) {
-      pageCache.put(request, networkResponse.clone());
+      pageCache.put(request, networkResponse.clone()).catch(() => {});
     }
     return networkResponse;
-  } catch (err) {
-    // 1) Exact route match (ignoreSearch handles App Router cache-busting params).
-    const exact =
-      (await pageCache.match(request, { ignoreSearch: true })) ||
-      (await staticCache.match(request, { ignoreSearch: true }));
-    if (isHtmlDoc(exact)) return exact;
+  });
 
-    // 2) App-shell fallback. This is a client-rendered SPA (Next.js App Router):
-    //    serving the cached dashboard/home shell lets the client router boot and
-    //    render the requested route from cached data — instead of the dead-end
-    //    offline page. Only routes under /dashboard get the dashboard shell so
-    //    the sidebar layout matches; everything else gets the root shell.
+  // INSTANT PAINT (stale-while-revalidate): if this EXACT page is already
+  // cached, hand it back immediately and let the network refresh it in the
+  // background. This is what makes repeat launches open instantly instead of
+  // waiting for a full server render every single time. Page DATA is unaffected
+  // — it is still fetched fresh from /api/* (which re-checks auth on every
+  // request), so a cached shell can never surface stale data or another user's
+  // data; only the static layout is served early. Next.js chunks are
+  // content-hashed and cache-first, so the cached HTML always hydrates against
+  // matching chunks. Trade-off: the UI is at most one launch behind the very
+  // latest deploy (it updates itself on the next open); data is always live.
+  const cachedExact =
+    (await pageCache.match(request, { ignoreSearch: true })) ||
+    (await staticCache.match(request, { ignoreSearch: true }));
+  if (isHtmlDoc(cachedExact)) {
+    revalidate.catch(() => {}); // network errors are fine — we already have a shell
+    const headers = new Headers(cachedExact.headers);
+    headers.set('X-ORM-SWR', 'true');
+    return new Response(cachedExact.clone().body, { status: cachedExact.status, headers });
+  }
+
+  // Not cached yet (first-ever visit to this route) — wait for the network.
+  try {
+    return await revalidate;
+  } catch (err) {
+    // Offline with no exact cached copy — fall back to a cached shell.
+    // App-shell fallback. This is a client-rendered SPA (Next.js App Router):
+    // serving the cached dashboard/home shell lets the client router boot and
+    // render the requested route from cached data — instead of the dead-end
+    // offline page. Only routes under /dashboard get the dashboard shell so the
+    // sidebar layout matches; everything else gets the root shell.
     const url = new URL(request.url);
     const shellCandidates = url.pathname.startsWith('/dashboard')
       ? ['/dashboard', '/']
@@ -539,7 +560,7 @@ async function offlineNavigationHandler(request) {
       }
     }
 
-    // 3) Last resort — the stable static offline page.
+    // Last resort — the stable static offline page.
     const offlinePage =
       (await staticCache.match(OFFLINE_PAGE)) || (await caches.match(OFFLINE_PAGE));
     return (

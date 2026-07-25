@@ -14,6 +14,14 @@ import type { CapacitorConfig } from '@capacitor/cli';
  */
 const SERVER_URL = process.env.CAP_SERVER_URL || 'https://unth-theatre-mai.vercel.app';
 
+// Land the native app directly on the main hub instead of the site root. The
+// root ("/") server-redirects to "/auth/login", which then forwards a logged-in
+// user on to "/dashboard" — three server round-trips on EVERY cold launch.
+// Loading "/dashboard" first collapses that to one; unauthenticated users are
+// still bounced to /auth/login by the dashboard's own auth guard, so the login
+// flow is unchanged.
+const LANDING_URL = `${SERVER_URL.replace(/\/$/, '')}/dashboard`;
+
 const config: CapacitorConfig = {
   appId: 'ng.edu.unth.orm',
   appName: 'ORM - UNTH',
@@ -21,7 +29,7 @@ const config: CapacitorConfig = {
   webDir: 'mobile-shell',
   backgroundColor: '#1e40af',
   server: {
-    url: SERVER_URL,
+    url: LANDING_URL,
     cleartext: SERVER_URL.startsWith('http://'), // only allow cleartext for local dev
     androidScheme: 'https',
     // Keep in-app navigation for the app's own domain(s); everything else opens
