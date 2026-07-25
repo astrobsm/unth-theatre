@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
-import { sendPushToUsers } from '@/lib/fcm';
+import { pushToUsers } from '@/lib/pushAll';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
@@ -785,12 +785,17 @@ export async function POST(request: NextRequest) {
             link: `/dashboard/emergency-booking?highlight=${booking.id}`,
           })),
         });
-        // Fire-and-forget push (safe no-op when FCM is not configured).
-        void sendPushToUsers(teamUserIds, {
+        // Fire-and-forget push to BOTH native (FCM) and PWA (web-push). Emergency
+        // sound + CRITICAL priority so a CLOSED phone plays the alert and iOS
+        // breaks through Focus/DND. No-ops for any channel that isn't configured.
+        void pushToUsers(teamUserIds, {
           title,
           body: message,
-          data: { kind: 'emergency_booking', bookingId: booking.id, surgeryId: surgery.id },
-          link: '/dashboard/emergency-booking',
+          url: '/dashboard/emergency-booking',
+          sound: 'emergency',
+          priority: 'CRITICAL',
+          tag: 'emergency-surgery',
+          data: { kind: 'emergency_booking', bookingId: booking.id, surgeryId: surgery.id, priority: 'CRITICAL' },
         });
       }
     } catch (e) {

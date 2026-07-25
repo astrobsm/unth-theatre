@@ -88,6 +88,11 @@ async function getAccessToken(sa: ServiceAccount): Promise<string | null> {
 export interface PushPayload {
   title: string;
   body: string;
+  // Custom notification sound (Android raw resource name / iOS .caf without ext).
+  // e.g. 'emergency' → plays res/raw/emergency.* on a CLOSED phone.
+  sound?: string;
+  priority?: string; // CRITICAL | HIGH | ... — bumps to MAX + time-sensitive
+  tag?: string;
   data?: Record<string, string>;
   /** Deep-link path opened when the notification is tapped (e.g. /dashboard/emergency-alerts). */
   link?: string;
@@ -105,13 +110,30 @@ async function sendToToken(
     message: {
       token,
       notification: { title: payload.title, body: payload.body },
-      data: { ...(payload.data || {}), ...(payload.link ? { link: payload.link } : {}) },
+      data: {
+        ...(payload.data || {}),
+        ...(payload.link ? { link: payload.link } : {}),
+        ...(payload.priority ? { priority: payload.priority } : {}),
+        ...(payload.tag ? { tag: payload.tag } : {}),
+      },
       android: {
-        priority: 'HIGH',
-        notification: { sound: 'default', channelId: 'orm_alerts' },
+        priority: 'HIGH', // wake a dozing/closed device
+        notification: {
+          sound: payload.sound || 'default', // custom emergency clip when set
+          channelId: 'orm_alerts',
+          notificationPriority: 'PRIORITY_MAX',
+          defaultVibrateTimings: true,
+          ...(payload.tag ? { tag: payload.tag } : {}),
+        },
       },
       apns: {
-        payload: { aps: { sound: 'default' } },
+        headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
+        payload: {
+          aps: {
+            sound: payload.sound && payload.sound !== 'default' ? `${payload.sound}.caf` : 'default',
+            'interruption-level': 'time-sensitive', // breaks through Focus/DND on iOS
+          },
+        },
       },
     },
   };
