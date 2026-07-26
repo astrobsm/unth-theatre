@@ -224,11 +224,12 @@ export default function RosterBulkUploadModal({
     }
   };
 
-  // Excel template with dropdowns (staff names for THIS department, shifts, etc.)
+  // Excel template with a dropdown on every column (staff names for THIS
+  // department, exact dates from the chosen week, shifts, etc.).
   const downloadTemplate = () => {
     const a = document.createElement('a');
-    a.href = `/api/roster/departments/${dept}/template`;
-    a.download = `roster-template-${dept}.xlsx`;
+    a.href = `/api/roster/departments/${dept}/template?weekStart=${weekStart}`;
+    a.download = `roster-template-${dept}-${weekStart}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -253,11 +254,12 @@ export default function RosterBulkUploadModal({
             <>
               {/* Instructions */}
               <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
-                <strong>Easiest:</strong> click <em>Excel template</em> — it downloads a sheet with <strong>dropdown menus of this
-                department's staff</strong> plus Day, Shift, Sub-role, Seniority and Location. Fill it by picking from the menus,
-                then choose the file here to upload. You can also paste from Excel / Google Sheets or upload a CSV.
+                <strong>Easiest:</strong> pick the week below, then click <em>Excel template</em> — it downloads a sheet where
+                <strong> every column is a dropdown</strong>: this department's staff, the <strong>exact dates</strong> of the
+                chosen 4 weeks, Shift, Sub-role, Seniority, Location and Notes. Fill it by picking from the menus, then choose
+                the file here to upload. You can also paste from Excel / Google Sheets or upload a CSV.
                 <ul className="ml-4 mt-1 list-disc text-[13px] text-blue-700">
-                  <li>Day can be a weekday name (<em>Mon</em>, <em>Tuesday</em>) or a date (<em>2026-07-29</em>, <em>29/07/2026</em>).</li>
+                  <li>Date can be picked from the dropdown, or typed (<em>2026-07-29</em>, <em>29/07/2026</em>, or a weekday like <em>Mon</em>).</li>
                   <li>Shift accepts MORNING/AM/Day, CALL/On-call, NIGHT/PM.</li>
                   <li>Names are matched to your department's staff (full name, part of it, or staff code).</li>
                   <li>Everything lands as a <strong>draft</strong> — nothing goes live until you press Publish.</li>
@@ -267,7 +269,7 @@ export default function RosterBulkUploadModal({
               {/* Week + actions */}
               <div className="mb-3 flex flex-wrap items-end gap-3">
                 <label className="flex flex-col text-xs font-medium text-gray-500">
-                  Week starting (Mon) — used for weekday names
+                  Week starting (Mon) — sets the template's dates
                   <input
                     type="date"
                     value={weekStart}
