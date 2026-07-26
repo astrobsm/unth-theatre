@@ -75,6 +75,18 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
     subspecialties = Array.from(new Set(units.map((u) => u.subspecialty).filter(Boolean)));
   }
 
+  // Anaesthetic technicians are assigned to a THEATRE, or to day-call / night-call
+  // emergency cover, or ICU. So for this department the "Sub-role" column becomes
+  // an "Assignment" dropdown of real theatres + those call/ICU options — the app
+  // later matches a case's theatre to the technician assigned to it.
+  const isTech = dept.slug === 'anaesthetic-technicians';
+  const TECH_SPECIALS = ['DAY CALL (emergency cover)', 'NIGHT CALL (emergency cover)', 'ICU'];
+  let theatreNames: string[] = [];
+  if (isTech) {
+    const theatres = await prisma.theatreSuite.findMany({ select: { name: true }, orderBy: { name: 'asc' } });
+    theatreNames = theatres.map((t) => t.name).filter(Boolean);
+  }
+
   const wb = new ExcelJS.Workbook();
   wb.creator = 'UNTH Theatre ORM';
   const ws = wb.addWorksheet('Roster');
@@ -83,12 +95,13 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
 
   const subRoles = isAnaes
     ? [ON_CALL_ALL, ...subspecialties]
-    : dept.subRoles?.length ? dept.subRoles : SUBROLE_FALLBACK;
+    : isTech
+      ? [...theatreNames, ...TECH_SPECIALS]
+      : dept.subRoles?.length ? dept.subRoles : SUBROLE_FALLBACK;
   const seniority = dept.seniorityLevels?.length ? dept.seniorityLevels : SENIORITY_FALLBACK;
   const locations = [...LOCATIONS];
-  const headers = isAnaes
-    ? ['Name', 'Date', 'Shift', 'Subspecialty', 'Seniority', 'Location', 'Notes']
-    : HEADERS;
+  const col4Label = isAnaes ? 'Subspecialty' : isTech ? 'Assignment' : 'Sub-role';
+  const headers = ['Name', 'Date', 'Shift', col4Label, 'Seniority', 'Location', 'Notes'];
 
   // Lists sheet — one column per option set (A..G). Dates are stored as TEXT so
   // Excel can't silently reformat them.
@@ -129,7 +142,11 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
     ws.getCell(r, 3).dataValidation = listVal(ref('C', SHIFTS.length), 'MORNING / CALL / NIGHT');
     ws.getCell(r, 4).dataValidation = listVal(
       ref('D', subRoles.length),
-      isAnaes ? 'Surgical subspecialty covered — or ALL EMERGENCIES for the on-call consultant' : 'Sub-role (optional)'
+      isAnaes
+        ? 'Surgical subspecialty covered — or ALL EMERGENCIES for the on-call consultant'
+        : isTech
+          ? 'Theatre covered — or DAY CALL / NIGHT CALL / ICU'
+          : 'Sub-role (optional)'
     );
     ws.getCell(r, 5).dataValidation = listVal(
       ref('E', seniority.length),

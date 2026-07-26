@@ -98,9 +98,9 @@ function parse(text: string, weekStart: string): ParsedRow[] {
       name: Math.max(0, find('name', 'staff')),
       date: Math.max(0, find('date', 'day')),
       shift: Math.max(0, find('shift')),
-      subRole: find('sub', 'role'),
+      subRole: find('sub', 'role', 'assign', 'subspecial', 'theatre'),
       seniority: find('senior', 'level', 'grade'),
-      location: find('location', 'theatre', 'venue'),
+      location: find('location', 'venue'),
       notes: find('note', 'remark'),
     };
     dataLines = lines.slice(1);
@@ -270,6 +270,13 @@ export default function RosterBulkUploadModal({
                     covers that day. Put the surgical subspecialty for elective assignments (consultant + resident), and choose{' '}
                     <em>ALL EMERGENCIES</em> with shift <em>CALL</em> for the day's on-call consultant. The app then matches every
                     booking to the anaesthetist on its subspecialty.
+                  </div>
+                )}
+                {dept === 'anaesthetic-technicians' && (
+                  <div className="mt-2 rounded border border-blue-200 bg-white/60 p-2 text-[13px] text-blue-800">
+                    <strong>Anaesthetic technicians:</strong> the <em>Assignment</em> column is the theatre the technician covers
+                    that day — the app matches each booked case's theatre to that technician. For emergency cover choose{' '}
+                    <em>DAY CALL</em> (shift CALL) or <em>NIGHT CALL</em> (shift NIGHT); use <em>ICU</em> for ICU duty.
                   </div>
                 )}
               </div>
