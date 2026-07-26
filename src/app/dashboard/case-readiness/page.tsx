@@ -181,10 +181,12 @@ export default function CaseReadinessPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [unitFilter, setUnitFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setUnitFilter(null); // a new date's cases may not include the previously picked unit
     try {
       const res = await fetch(`/api/surgery-readiness?date=${selectedDate}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
@@ -204,8 +206,10 @@ export default function CaseReadinessPage() {
 
   const visibleCases = useMemo(() => {
     if (!board) return [];
-    return onlyFlagged ? board.cases.filter((c) => c.flags.length > 0) : board.cases;
-  }, [board, onlyFlagged]);
+    return board.cases.filter(
+      (c) => (!onlyFlagged || c.flags.length > 0) && (!unitFilter || c.unit === unitFilter)
+    );
+  }, [board, onlyFlagged, unitFilter]);
 
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-6">
@@ -268,6 +272,7 @@ export default function CaseReadinessPage() {
         <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">
             Unit log — packs prescribed &amp; packed
+            <span className="ml-2 font-normal text-xs text-gray-400">tap a row to show only that unit</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">
@@ -286,8 +291,17 @@ export default function CaseReadinessPage() {
               </thead>
               <tbody>
                 {board.unitLog.map((u) => (
-                  <tr key={u.unit} className="border-t border-gray-100">
-                    <td className="px-4 py-2 font-medium text-gray-800">{u.unit}</td>
+                  <tr
+                    key={u.unit}
+                    onClick={() => setUnitFilter((prev) => (prev === u.unit ? null : u.unit))}
+                    className={`cursor-pointer border-t border-gray-100 transition-colors ${
+                      unitFilter === u.unit ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <td className="px-4 py-2 font-medium text-gray-800">
+                      {unitFilter === u.unit && <span className="mr-1 text-blue-600">▸</span>}
+                      {u.unit}
+                    </td>
                     <td className="px-3 py-2 text-center">{u.cases}</td>
                     <td className="px-3 py-2 text-center">{u.consumablePrescribed}/{u.cases}</td>
                     <td className="px-3 py-2 text-center">
@@ -325,10 +339,21 @@ export default function CaseReadinessPage() {
       {/* Filter toggle + bulk WhatsApp */}
       {board && board.cases.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <label className="flex items-center gap-2 text-sm text-gray-600">
-            <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
-            Show only cases needing attention
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
+              Show only cases needing attention
+            </label>
+            {unitFilter && (
+              <button
+                onClick={() => setUnitFilter(null)}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800 hover:bg-blue-200"
+                title="Clear unit filter"
+              >
+                Unit: {unitFilter} <span className="text-blue-500">✕</span>
+              </button>
+            )}
+          </div>
           {board.summary.flagged > 0 && (
             <button
               onClick={() => {
