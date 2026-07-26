@@ -20,6 +20,9 @@ const PushNotificationRegistrar = dynamic(() => import("@/components/PushNotific
 const NativeOfflineWarmup = dynamic(() => import("@/components/NativeOfflineWarmup"), { ssr: false });
 // Native shell auto-update check — prompts to install a newer APK (native only).
 const NativeUpdateChecker = dynamic(() => import("@/components/NativeUpdateChecker"), { ssr: false });
+// Content/feature auto-update — detects a newer DEPLOYMENT and refreshes the app
+// onto it (Android/desktop/PWA), so improvements reach devices without re-install.
+const AppUpdateChecker = dynamic(() => import("@/components/AppUpdateChecker"), { ssr: false });
 
 // Mounts its children only once the browser is idle after first paint, so the
 // media widgets (radio poll, music manifest, launcher) never compete with the
@@ -62,6 +65,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <PushNotificationRegistrar />
             <NativeOfflineWarmup />
             <NativeUpdateChecker />
+            <AppUpdateChecker />
           </DeferUntilIdle>
         </MediaHubProvider>
       </OfflineProvider>

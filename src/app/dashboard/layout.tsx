@@ -214,6 +214,7 @@ export default function DashboardLayout({
     { href: '/dashboard/patient-payment-guide', icon: Receipt, label: 'Patient Payment Guide', badge: 'NEW' },
     { href: '/dashboard/anaesthetist-board', icon: Stethoscope, label: 'Anaesthetist Board', badge: 'NEW' },
     { href: '/dashboard/roster/anaesthetist-coverage', icon: Stethoscope, label: 'Anaesthetist Coverage', badge: 'NEW' },
+    { href: '/dashboard/roster/technician-coverage', icon: Wrench, label: 'Technician Coverage', badge: 'NEW' },
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
     { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Rx Approvals', badge: 'NEW' },
     { href: '/dashboard/prescriptions', icon: FileText, label: 'Pharmacy' },
@@ -424,6 +425,7 @@ export default function DashboardLayout({
     { type: 'group', label: 'Anaesthetist Board', icon: Stethoscope, hrefs: [
       '/dashboard/anaesthetist-board',
       '/dashboard/roster/anaesthetist-coverage',
+      '/dashboard/roster/technician-coverage',
       '/dashboard/preop-reviews',
       '/dashboard/anesthesia-setup',
       '/dashboard/prescription-approvals',
