@@ -219,10 +219,29 @@ export async function GET(request: NextRequest) {
       : [];
     const theatreMap = new Map(theatres.map(t => [t.id, t]));
 
+    // Resolve assigned anaesthetist + anaesthetic technician (both soft refs to
+    // User.id, no Prisma relation) so every board can show them on the case.
+    const staffIds = Array.from(
+      new Set(
+        surgeries
+          .flatMap(s => [s.anesthetistId, (s as any).theatreTechnicianId])
+          .filter((x): x is string => !!x)
+      )
+    );
+    const staff = staffIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: staffIds } },
+          select: { id: true, fullName: true, phoneNumber: true },
+        })
+      : [];
+    const staffMap = new Map(staff.map(u => [u.id, u]));
+
     const enriched = surgeries.map(s => ({
       ...s,
       theatre: s.theatreId ? theatreMap.get(s.theatreId) ?? null : null,
       theatreName: s.theatreId ? theatreMap.get(s.theatreId)?.name ?? null : null,
+      anaesthetist: s.anesthetistId ? staffMap.get(s.anesthetistId) ?? null : null,
+      theatreTechnician: (s as any).theatreTechnicianId ? staffMap.get((s as any).theatreTechnicianId) ?? null : null,
     }));
 
     // For daily planning views: sort by DATE first, then surgical UNIT, then the

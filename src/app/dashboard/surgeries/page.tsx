@@ -37,6 +37,8 @@ interface Surgery {
   theatreId?: string | null;
   theatreName?: string | null;
   theatre?: { id: string; name: string; location: string } | null;
+  anaesthetist?: { id: string; fullName: string; phoneNumber?: string | null } | null;
+  theatreTechnician?: { id: string; fullName: string; phoneNumber?: string | null } | null;
   supervisingConsultantName?: string | null;
   needBloodTransfusion?: boolean;
   needDiathermy?: boolean;
@@ -781,6 +783,16 @@ export default function SurgeriesPage() {
                       {surgery.supervisingConsultantName && (
                         <div className="text-xs text-indigo-600 mt-0.5">
                           Consultant: {surgery.supervisingConsultantName}
+                        </div>
+                      )}
+                      {surgery.anaesthetist?.fullName && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          Anaesthetist: {surgery.anaesthetist.fullName}
+                        </div>
+                      )}
+                      {surgery.theatreTechnician?.fullName && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          Technician: {surgery.theatreTechnician.fullName}
                         </div>
                       )}
                     </td>

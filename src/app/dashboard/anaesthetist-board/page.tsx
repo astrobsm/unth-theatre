@@ -31,6 +31,8 @@ interface Surgery {
   theatreId?: string | null;
   theatreName?: string | null;
   theatre?: { id: string; name: string; location: string } | null;
+  anaesthetist?: { id: string; fullName: string; phoneNumber?: string | null } | null;
+  theatreTechnician?: { id: string; fullName: string; phoneNumber?: string | null } | null;
   needBloodTransfusion?: boolean;
   needDiathermy?: boolean;
   needStereo?: boolean;
@@ -300,6 +302,12 @@ export default function AnaesthetistBoardPage() {
                               ? (s.theatreName || s.theatre?.name || s.location || '—')
                               : (s.unit || s.subspecialty || '—')
                             }
+                            {s.anaesthetist?.fullName && (
+                              <div className="text-xs text-gray-500 mt-0.5">Anaesth: {s.anaesthetist.fullName}</div>
+                            )}
+                            {s.theatreTechnician?.fullName && (
+                              <div className="text-xs text-gray-500 mt-0.5">Tech: {s.theatreTechnician.fullName}</div>
+                            )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div>{formatDate(s.scheduledDate)}</div>
