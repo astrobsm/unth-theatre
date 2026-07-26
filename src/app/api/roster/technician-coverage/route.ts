@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         where: { scheduledDate: { gte: start, lte: end } },
         select: {
           id: true, procedureName: true, subspecialty: true, unit: true, location: true, theatreId: true,
-          scheduledTime: true, surgeryType: true,
+          theatreTechnicianId: true, scheduledTime: true, surgeryType: true,
           patient: { select: { name: true, folderNumber: true, ptNumber: true } },
         },
         orderBy: { scheduledTime: 'asc' },
@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
     const theatreById = new Map(theatres.map((t) => [t.id, t.name]));
     const unitIdByName = new Map(units.map((u) => [norm(u.name), u.id]));
     const theatreByUnitId = new Map(schedules.map((s) => [s.unitId, s.theatreName]));
+
+    // Resolve currently-assigned technicians (soft ref) to names.
+    const assignedIds = Array.from(new Set(surgeries.map((s) => s.theatreTechnicianId).filter((x): x is string => !!x)));
+    const assignedUsers = assignedIds.length
+      ? await prisma.user.findMany({ where: { id: { in: assignedIds } }, select: { id: true, fullName: true } })
+      : [];
+    const userNameById = new Map(assignedUsers.map((u) => [u.id, u.fullName]));
 
     const techOf = (r: (typeof rosterRows)[number]): Tech => ({
       userId: r.userId,
@@ -121,6 +128,9 @@ export async function GET(request: NextRequest) {
         assigned,
         source,
         covered: source === 'theatre' || (isEmergency && source === 'call'),
+        currentTechnician: s.theatreTechnicianId
+          ? { id: s.theatreTechnicianId, name: userNameById.get(s.theatreTechnicianId) || 'Assigned' }
+          : null,
       };
     });
 

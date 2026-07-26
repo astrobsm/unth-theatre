@@ -888,6 +888,7 @@ model Surgery {
   assistantSurgeonId String?
   anesthetistId      String?
   scrubNurseId       String?
+  theatreTechnicianId String? // Assigned anaesthetic technician (soft ref to User.id, no FK to keep migration safe)
   subspecialty       String
   unit               String // Surgical unit/department
   location           String? // Operating location/complex (e.g., Professor Ojukwu Theatre Complex, Eye Theatre, A&E, Cardiothoracic Centre)

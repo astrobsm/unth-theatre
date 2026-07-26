@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft, CalendarDays, RefreshCw, Wrench, Siren, AlertTriangle, CheckCircle2, Phone, MessageCircle, Users,
-  BellRing, Building2, Moon, Sun, HeartPulse,
+  BellRing, Building2, Moon, Sun, HeartPulse, UserPlus,
 } from 'lucide-react';
 import { whatsappChatLink } from '@/lib/whatsapp';
 
@@ -22,6 +22,7 @@ type CaseRow = {
   id: string; patientName: string; folderNumber: string | null; procedureName: string;
   subspecialty: string; unit: string; theatre: string; scheduledTime: string; surgeryType: string; isEmergency: boolean;
   assigned: Tech[]; source: 'theatre' | 'call' | 'none'; covered: boolean;
+  currentTechnician: { id: string; name: string } | null;
 };
 type Board = {
   date: string;
@@ -65,6 +66,7 @@ export default function TechnicianCoveragePage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -78,6 +80,18 @@ export default function TechnicianCoveragePage() {
   }, [selectedDate]);
 
   useEffect(() => { load(); }, [load]);
+
+  const assign = async (surgeryId: string, userId: string, name: string) => {
+    setAssigningId(surgeryId); setMsg(null);
+    try {
+      const res = await fetch('/api/roster/technician-coverage/assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surgeryId, userId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) { setMsg(`Assigned ${name} to the case.`); await load(); }
+      else setMsg(j?.error || 'Failed to assign');
+    } finally { setAssigningId(null); }
+  };
 
   const alertGaps = async () => {
     setBusy(true); setMsg(null);
@@ -229,6 +243,34 @@ export default function TechnicianCoveragePage() {
                     ) : (
                       <span className="text-sm text-red-600">No technician assigned to this theatre.</span>
                     )}
+                  </div>
+
+                  {/* Current assignment on the surgery + one-tap assign */}
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
+                    <span className="text-[11px] uppercase text-gray-400">On the booking:</span>
+                    {c.currentTechnician ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {c.currentTechnician.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">not assigned</span>
+                    )}
+                    {canAlert && c.assigned.map((cand) => {
+                      const isCurrent = c.currentTechnician?.id === cand.userId;
+                      return (
+                        <button
+                          key={cand.userId}
+                          onClick={() => assign(c.id, cand.userId, cand.name)}
+                          disabled={assigningId === c.id || isCurrent}
+                          className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium disabled:opacity-60 ${
+                            isCurrent ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                          title={isCurrent ? 'Already assigned' : `Assign ${cand.name} to this case`}
+                        >
+                          <UserPlus className="h-3.5 w-3.5" /> {isCurrent ? 'Assigned' : `Assign ${cand.name}`}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
