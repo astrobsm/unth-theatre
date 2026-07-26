@@ -7,6 +7,7 @@ import {
   ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2, UploadCloud, History,
   Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move, Link2, Check,
 } from 'lucide-react';
+import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
 
 const SHIFTS = ['MORNING', 'CALL', 'NIGHT'] as const;
 const LOCATIONS = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU'];
@@ -55,6 +56,7 @@ export default function DepartmentRosterPage() {
   const [copySrc, setCopySrc] = useState(''); const [copyDst, setCopyDst] = useState(''); const [showCopyDay, setShowCopyDay] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/roster/${dept}` : `/roster/${dept}`;
   const copyShareLink = async () => {
     try { await navigator.clipboard.writeText(shareUrl); }
@@ -180,15 +182,36 @@ export default function DepartmentRosterPage() {
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
       <div className="flex items-center justify-between gap-2">
         <Link href="/dashboard/roster/departments" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"><ArrowLeft className="w-4 h-4" /> All department rosters</Link>
-        <button
-          type="button"
-          onClick={copyShareLink}
-          title={`Copy shareable link (${shareUrl})`}
-          className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg border ${linkCopied ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-primary-600 border-gray-200 hover:bg-gray-50'}`}
-        >
-          {linkCopied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Link2 className="w-3.5 h-3.5" /> Copy shareable link</>}
-        </button>
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setShowBulk(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100"
+            >
+              <UploadCloud className="w-3.5 h-3.5" /> Bulk upload
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={copyShareLink}
+            title={`Copy shareable link (${shareUrl})`}
+            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg border ${linkCopied ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-primary-600 border-gray-200 hover:bg-gray-50'}`}
+          >
+            {linkCopied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Link2 className="w-3.5 h-3.5" /> Copy shareable link</>}
+          </button>
+        </div>
       </div>
+
+      {showBulk && data && (
+        <RosterBulkUploadModal
+          dept={dept}
+          label={data.department.label}
+          weekStart={weekStart}
+          onClose={() => setShowBulk(false)}
+          onUploaded={load}
+        />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">

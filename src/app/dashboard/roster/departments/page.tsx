@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, CalendarDays, Users, Stethoscope, HeartPulse, Wrench, Truck, Sparkles, Pill, Link2, Check } from 'lucide-react';
-import { ROSTER_DEPARTMENTS } from '@/lib/rosterDepartments';
+import { useSession } from 'next-auth/react';
+import { ArrowLeft, CalendarDays, Users, Stethoscope, HeartPulse, Wrench, Truck, Sparkles, Pill, Link2, Check, UploadCloud } from 'lucide-react';
+import { ROSTER_DEPARTMENTS, canManageRosterDept, type RosterDept } from '@/lib/rosterDepartments';
+import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
 
 const ICONS: Record<string, any> = {
   nursing: Users, anaesthetists: Stethoscope, 'nurse-anaesthetists': HeartPulse,
@@ -11,7 +13,10 @@ const ICONS: Record<string, any> = {
 };
 
 export default function DepartmentRosterHub() {
+  const { data: session } = useSession();
+  const role = (session?.user as any)?.role as string | undefined;
   const [copied, setCopied] = useState<string | null>(null);
+  const [bulkDept, setBulkDept] = useState<RosterDept | null>(null);
 
   const shareUrl = (slug: string) =>
     `${typeof window !== 'undefined' ? window.location.origin : ''}/roster/${slug}`;
@@ -46,6 +51,7 @@ export default function DepartmentRosterHub() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {ROSTER_DEPARTMENTS.map((d) => {
           const Icon = ICONS[d.slug] ?? Users;
+          const canManage = canManageRosterDept(d, role);
           return (
             <div key={d.slug} className="card border-2 border-transparent hover:border-primary-300 transition-colors">
               <div className="flex items-center gap-3">
@@ -66,10 +72,27 @@ export default function DepartmentRosterHub() {
                   {copied === d.slug ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Link2 className="w-3.5 h-3.5" /> Copy link</>}
                 </button>
               </div>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => setBulkDept(d)}
+                  className="mt-2 w-full inline-flex items-center justify-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" /> Bulk upload roster
+                </button>
+              )}
             </div>
           );
         })}
       </div>
+
+      {bulkDept && (
+        <RosterBulkUploadModal
+          dept={bulkDept.slug}
+          label={bulkDept.label}
+          onClose={() => setBulkDept(null)}
+        />
+      )}
     </div>
   );
 }
