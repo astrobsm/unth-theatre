@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Package,
   Pill,
+  Syringe,
   MessageCircle,
   AlertTriangle,
   CheckCircle2,
@@ -13,8 +14,10 @@ import {
   Phone,
   ClipboardList,
   ArrowLeft,
+  Send,
   User as UserIcon,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { whatsappLink, whatsappChatLink } from '@/lib/whatsapp';
 
 // Local-timezone-safe YYYY-MM-DD for the date input (matches other dashboard pages).
@@ -52,6 +55,7 @@ type CaseRow = {
   magnitude: string | null;
   consumable: PackSummary;
   pharmacy: PackSummary;
+  anaesthesia: PackSummary;
   contacts: {
     consultant: Contact;
     bookedBy: Contact;
@@ -69,6 +73,8 @@ type UnitLog = {
   consumableReady: number;
   pharmacyPrescribed: number;
   pharmacyReady: number;
+  anaesthesiaPrescribed: number;
+  anaesthesiaReady: number;
   flagged: number;
 };
 type Board = {
@@ -85,6 +91,34 @@ function openWhatsApp(phone: string | null, message: string) {
     return;
   }
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+// Human date (DD/MM/YYYY) from a YYYY-MM-DD string, without timezone drift.
+function humanDate(isoDay: string) {
+  const [y, m, d] = isoDay.split('-');
+  return d && m && y ? `${d}/${m}/${y}` : isoDay;
+}
+
+// Consolidated summary of every flagged case. Opens WhatsApp WITHOUT a fixed
+// number so the sender can pick the recipient (e.g. the theatre coordination
+// group) — a single wa.me link cannot address multiple different people.
+function buildBulkMessage(cases: CaseRow[], dateLabel: string, sender: string) {
+  const flagged = cases.filter((c) => c.flags.length > 0);
+  const lines = [
+    `🏥 UNTH Theatre — Case Readiness Summary (${dateLabel})`,
+    ``,
+    `${flagged.length} case(s) need attention:`,
+    ``,
+  ];
+  flagged.forEach((c, idx) => {
+    lines.push(
+      `${idx + 1}. ${c.patientName}${c.folderNumber ? ` (Folder ${c.folderNumber})` : ''} — ` +
+        `${c.procedureName}, ${c.unit}, ${c.scheduledTime}`
+    );
+    c.flags.forEach((f) => lines.push(`   • ${f.label}`));
+  });
+  lines.push('', 'Kindly action promptly so the cases proceed as scheduled. Thank you.', sender);
+  return lines.join('\n');
 }
 
 // Colored pill describing a pack's readiness.
@@ -141,6 +175,7 @@ function ContactChip({ role, contact }: { role: string; contact: Contact }) {
 }
 
 export default function CaseReadinessPage() {
+  const { data: session } = useSession();
   const [selectedDate, setSelectedDate] = useState(todayInputValue);
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(false);
@@ -235,36 +270,44 @@ export default function CaseReadinessPage() {
             Unit log — packs prescribed &amp; packed
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-gray-400">
                   <th className="px-4 py-2">Unit</th>
-                  <th className="px-4 py-2 text-center">Cases</th>
-                  <th className="px-4 py-2 text-center">Consumable prescribed</th>
-                  <th className="px-4 py-2 text-center">Consumable ready</th>
-                  <th className="px-4 py-2 text-center">Pharmacy prescribed</th>
-                  <th className="px-4 py-2 text-center">Pharmacy ready</th>
-                  <th className="px-4 py-2 text-center">Flagged</th>
+                  <th className="px-3 py-2 text-center">Cases</th>
+                  <th className="px-3 py-2 text-center">Consumable Rx</th>
+                  <th className="px-3 py-2 text-center">Consumable ready</th>
+                  <th className="px-3 py-2 text-center">Pharmacy Rx</th>
+                  <th className="px-3 py-2 text-center">Pharmacy ready</th>
+                  <th className="px-3 py-2 text-center">Anaesthesia Rx</th>
+                  <th className="px-3 py-2 text-center">Anaesthesia ready</th>
+                  <th className="px-3 py-2 text-center">Flagged</th>
                 </tr>
               </thead>
               <tbody>
                 {board.unitLog.map((u) => (
                   <tr key={u.unit} className="border-t border-gray-100">
                     <td className="px-4 py-2 font-medium text-gray-800">{u.unit}</td>
-                    <td className="px-4 py-2 text-center">{u.cases}</td>
-                    <td className="px-4 py-2 text-center">{u.consumablePrescribed}/{u.cases}</td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-3 py-2 text-center">{u.cases}</td>
+                    <td className="px-3 py-2 text-center">{u.consumablePrescribed}/{u.cases}</td>
+                    <td className="px-3 py-2 text-center">
                       <span className={u.consumableReady === u.cases ? 'text-green-700' : 'text-amber-700'}>
                         {u.consumableReady}/{u.cases}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-center">{u.pharmacyPrescribed}/{u.cases}</td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-3 py-2 text-center">{u.pharmacyPrescribed}/{u.cases}</td>
+                    <td className="px-3 py-2 text-center">
                       <span className={u.pharmacyReady === u.cases ? 'text-green-700' : 'text-amber-700'}>
                         {u.pharmacyReady}/{u.cases}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-3 py-2 text-center">{u.anaesthesiaPrescribed}/{u.cases}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={u.anaesthesiaReady === u.cases ? 'text-green-700' : 'text-amber-700'}>
+                        {u.anaesthesiaReady}/{u.cases}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center">
                       {u.flagged > 0 ? (
                         <span className="font-semibold text-red-700">{u.flagged}</span>
                       ) : (
@@ -279,12 +322,28 @@ export default function CaseReadinessPage() {
         </div>
       )}
 
-      {/* Filter toggle */}
+      {/* Filter toggle + bulk WhatsApp */}
       {board && board.cases.length > 0 && (
-        <label className="mb-3 flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
-          Show only cases needing attention
-        </label>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
+            Show only cases needing attention
+          </label>
+          {board.summary.flagged > 0 && (
+            <button
+              onClick={() => {
+                const sender = `— ${session?.user?.name || 'Theatre Coordinator'}, UNTH Theatre (ORM)`;
+                const msg = buildBulkMessage(board.cases, humanDate(board.date), sender);
+                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700"
+              title="Open WhatsApp with a summary of all flagged cases — pick the recipient or group"
+            >
+              <Send className="h-4 w-4" />
+              WhatsApp all flagged ({board.summary.flagged})
+            </button>
+          )}
+        </div>
       )}
 
       {/* States */}
@@ -330,7 +389,7 @@ export default function CaseReadinessPage() {
             </div>
 
             {/* Pack pills */}
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 text-gray-400">
                 <Package className="h-4 w-4" />
               </span>
@@ -339,6 +398,10 @@ export default function CaseReadinessPage() {
                 <Pill className="h-4 w-4" />
               </span>
               <PackPill label="Pharmacy" pack={c.pharmacy} />
+              <span className="inline-flex items-center gap-1 text-gray-400">
+                <Syringe className="h-4 w-4" />
+              </span>
+              <PackPill label="Anaesthesia" pack={c.anaesthesia} />
             </div>
 
             {/* Contacts */}

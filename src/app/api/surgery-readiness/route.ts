@@ -27,6 +27,24 @@ function summarise(rows: PackRow[]) {
   return { prescribed, total, packedCount, ready, statusLabel };
 }
 
+// AnestheticPrescription uses its own richer PrescriptionStatus lifecycle, so it
+// gets a dedicated readiness mapping (into the same shape as summarise()).
+const RX_PACKED = ['PACKED', 'DISPENSED', 'COLLECTED', 'IN_USE', 'RECONCILED'];
+const RX_INPROGRESS = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_PACKED', 'LATE_ARRIVAL', 'QUERY_ISSUED'];
+function summariseRx(rows: PackRow[]) {
+  const active = rows.filter((r) => !['REJECTED', 'RETURNED'].includes(r.status));
+  const total = active.length;
+  const prescribed = total > 0;
+  const packedCount = active.filter((r) => RX_PACKED.includes(r.status)).length;
+  const ready = prescribed && packedCount === total;
+  let statusLabel: string;
+  if (!prescribed) statusLabel = 'NOT_PRESCRIBED';
+  else if (ready) statusLabel = 'PACKED';
+  else if (packedCount > 0 || active.some((r) => RX_INPROGRESS.includes(r.status))) statusLabel = 'PACKING';
+  else statusLabel = 'REQUESTED';
+  return { prescribed, total, packedCount, ready, statusLabel };
+}
+
 function fmtDate(d: Date) {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -65,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     const surgeryIds = surgeries.map((s) => s.id);
 
-    const [consumables, drugs, providers, pharmacists] = await Promise.all([
+    const [consumables, drugs, prescriptions, providers, pharmacists] = await Promise.all([
       surgeryIds.length
         ? prisma.surgeryConsumableRequest.findMany({
             where: { surgeryId: { in: surgeryIds } },
@@ -79,6 +97,17 @@ export async function GET(request: NextRequest) {
         ? prisma.surgeryDrugDressingRequest.findMany({
             where: { surgeryId: { in: surgeryIds } },
             include: {
+              packedBy: { select: { id: true, fullName: true, phoneNumber: true } },
+            },
+          })
+        : Promise.resolve([] as any[]),
+      surgeryIds.length
+        ? prisma.anestheticPrescription.findMany({
+            where: { surgeryId: { in: surgeryIds } },
+            select: {
+              id: true,
+              surgeryId: true,
+              status: true,
               packedBy: { select: { id: true, fullName: true, phoneNumber: true } },
             },
           })
@@ -105,6 +134,12 @@ export async function GET(request: NextRequest) {
       arr.push(d);
       drugsBySurgery.set(d.surgeryId, arr);
     }
+    const rxBySurgery = new Map<string, any[]>();
+    for (const r of prescriptions) {
+      const arr = rxBySurgery.get(r.surgeryId) || [];
+      arr.push(r);
+      rxBySurgery.set(r.surgeryId, arr);
+    }
 
     const providerContacts: Contact[] = providers
       .filter((u) => u.phoneNumber)
@@ -122,8 +157,10 @@ export async function GET(request: NextRequest) {
     const cases = surgeries.map((s) => {
       const cRows = consumablesBySurgery.get(s.id) || [];
       const dRows = drugsBySurgery.get(s.id) || [];
+      const rRows = rxBySurgery.get(s.id) || [];
       const consumable = summarise(cRows);
       const pharmacy = summarise(dRows);
+      const anaesthesia = summariseRx(rRows);
 
       // Consultant surgeon (FK first, then free-text name).
       const consultant: Contact = s.surgeon
@@ -207,6 +244,24 @@ export async function GET(request: NextRequest) {
         });
       }
 
+      if (!anaesthesia.prescribed) {
+        flags.push({
+          id: 'anaesthesia-not-prescribed',
+          severity: 'medium',
+          label: 'Anaesthesia drugs NOT prescribed',
+          targets: [anaesthetist].filter((c) => c.phone),
+          message: buildMessage('The ANAESTHESIA drug prescription for this case has not been created. Please prescribe the anaesthesia drugs for this case.'),
+        });
+      } else if (!anaesthesia.ready) {
+        flags.push({
+          id: 'anaesthesia-not-packed',
+          severity: 'high',
+          label: `Anaesthesia drugs not packed (${anaesthesia.packedCount}/${anaesthesia.total})`,
+          targets: casePharmacists,
+          message: buildMessage('The ANAESTHESIA drug pack for this case is prescribed but NOT yet packed/dispensed. Please prioritise packing/dispensing this pack.'),
+        });
+      }
+
       return {
         id: s.id,
         patientName: s.patient?.name || 'Unknown',
@@ -220,6 +275,7 @@ export async function GET(request: NextRequest) {
         magnitude: s.magnitude || null,
         consumable,
         pharmacy,
+        anaesthesia,
         contacts: {
           consultant,
           bookedBy,
@@ -228,7 +284,7 @@ export async function GET(request: NextRequest) {
           consumableProviders,
         },
         flags,
-        allReady: consumable.ready && pharmacy.ready,
+        allReady: consumable.ready && pharmacy.ready && anaesthesia.ready,
       };
     });
 
@@ -243,6 +299,8 @@ export async function GET(request: NextRequest) {
         consumableReady: 0,
         pharmacyPrescribed: 0,
         pharmacyReady: 0,
+        anaesthesiaPrescribed: 0,
+        anaesthesiaReady: 0,
         flagged: 0,
       };
       u.cases += 1;
@@ -250,6 +308,8 @@ export async function GET(request: NextRequest) {
       if (c.consumable.ready) u.consumableReady += 1;
       if (c.pharmacy.prescribed) u.pharmacyPrescribed += 1;
       if (c.pharmacy.ready) u.pharmacyReady += 1;
+      if (c.anaesthesia.prescribed) u.anaesthesiaPrescribed += 1;
+      if (c.anaesthesia.ready) u.anaesthesiaReady += 1;
       if (c.flags.length) u.flagged += 1;
       unitMap.set(key, u);
     }
