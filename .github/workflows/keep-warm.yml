@@ -1,0 +1,34 @@
+name: Keep Vercel warm
+
+# Prevents "cold start" slowness: Vercel puts idle deployments to sleep, so the
+# first request after a quiet spell is slow. This job pings the live site on a
+# schedule so a real app launch always hits an already-running instance.
+#
+# Runs entirely on GitHub's free runners from this repo — no third-party service.
+
+on:
+  schedule:
+    # Every 5 minutes (GitHub's minimum). Note: scheduled runs can be delayed a
+    # few minutes when GitHub is busy — that's fine for keep-warm.
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {} # allows a manual "Run workflow" from the Actions tab
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping health endpoint + dashboard
+        run: |
+          BASE="https://unth-theatre-mai.vercel.app"
+          # Warm the serverless runtime via the cheap health route...
+          echo "Pinging $BASE/api/ping"
+          curl -fsS --max-time 30 "$BASE/api/ping" || echo "ping endpoint not reachable (ok if mid-deploy)"
+          # ...and the dashboard page so the page renderer stays warm too.
+          echo "Warming $BASE/dashboard"
+          curl -fsS --max-time 30 -o /dev/null "$BASE/dashboard" || echo "dashboard warm skipped"
+          echo "Done."
