@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { X, UploadCloud, FileText, Loader2, CheckCircle2, AlertTriangle, ClipboardPaste, Download } from 'lucide-react';
+import { X, UploadCloud, Loader2, CheckCircle2, AlertTriangle, ClipboardPaste, Download } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Date / shift helpers — intentionally forgiving so the upload "just works".
@@ -165,8 +165,11 @@ export default function RosterBulkUploadModal({
   const invalid = parsed.filter((r) => !r.ok);
 
   const [reading, setReading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const onFile = async (f: File | null) => {
     if (!f) return;
+    setFileName(f.name);
     const lower = f.name.toLowerCase();
     if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
       setReading(true);
@@ -281,26 +284,57 @@ export default function RosterBulkUploadModal({
                 )}
               </div>
 
-              {/* Week + actions */}
-              <div className="mb-3 flex flex-wrap items-end gap-3">
-                <label className="flex flex-col text-xs font-medium text-gray-500">
-                  Week starting (Mon) — sets the template's dates
-                  <input
-                    type="date"
-                    value={weekStart}
-                    onChange={(e) => setWeekStart(mondayOf(new Date(e.target.value + 'T00:00:00Z')))}
-                    className="input-field mt-1 py-1.5 text-sm"
-                  />
-                </label>
-                <button onClick={() => setText(EXAMPLE)} className="btn-secondary inline-flex items-center gap-1 py-1.5 text-sm">
-                  <ClipboardPaste className="h-4 w-4" /> Load example
-                </button>
-                <button onClick={downloadTemplate} className="btn-secondary inline-flex items-center gap-1 py-1.5 text-sm">
-                  <Download className="h-4 w-4" /> Excel template
-                </button>
-                <button onClick={() => fileRef.current?.click()} className="btn-secondary inline-flex items-center gap-1 py-1.5 text-sm">
-                  {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />} Choose file (Excel/CSV)
-                </button>
+              {/* STEP 1 — download the template */}
+              <div className="mb-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Step 1 · Get the template</div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="flex flex-col text-xs font-medium text-gray-500">
+                    Week starting (Mon) — sets the template's dates
+                    <input
+                      type="date"
+                      value={weekStart}
+                      onChange={(e) => setWeekStart(mondayOf(new Date(e.target.value + 'T00:00:00Z')))}
+                      className="input-field mt-1 py-1.5 text-sm"
+                    />
+                  </label>
+                  <button onClick={downloadTemplate} className="btn-primary inline-flex items-center gap-1 py-1.5 text-sm">
+                    <Download className="h-4 w-4" /> Download Excel template
+                  </button>
+                  <button onClick={() => setText(EXAMPLE)} className="btn-secondary inline-flex items-center gap-1 py-1.5 text-sm">
+                    <ClipboardPaste className="h-4 w-4" /> Load example
+                  </button>
+                </div>
+              </div>
+
+              {/* STEP 2 — upload the filled sheet (prominent drop zone) */}
+              <div className="mb-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Step 2 · Upload your filled sheet</div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileRef.current?.click()}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileRef.current?.click(); }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); onFile(e.dataTransfer.files?.[0] || null); }}
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-6 text-center transition ${
+                    dragOver ? 'border-primary-400 bg-primary-50' : fileName ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {reading ? (
+                    <Loader2 className="h-7 w-7 animate-spin text-primary-500" />
+                  ) : fileName ? (
+                    <CheckCircle2 className="h-7 w-7 text-green-600" />
+                  ) : (
+                    <UploadCloud className="h-7 w-7 text-primary-500" />
+                  )}
+                  <div className="text-sm font-medium text-gray-700">
+                    {fileName
+                      ? <>Loaded <span className="text-green-700">{fileName}</span> — check the preview, then press Upload below</>
+                      : <>Drop your filled Excel/CSV here, or <span className="text-primary-600 underline">click to choose</span></>}
+                  </div>
+                  <div className="text-xs text-gray-400">Accepts .xlsx, .xls or .csv</div>
+                </div>
                 <input
                   ref={fileRef}
                   type="file"
@@ -310,13 +344,16 @@ export default function RosterBulkUploadModal({
                 />
               </div>
 
-              {/* Paste box */}
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={'Paste rows here…\nName  Day  Shift  Sub-role  Seniority  Location  Notes'}
-                className="input-field h-40 w-full font-mono text-xs"
-              />
+              {/* Secondary: paste instead of a file */}
+              <details className="mb-1">
+                <summary className="cursor-pointer text-xs text-gray-500">…or paste rows from Excel / Google Sheets instead</summary>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={'Paste rows here…\nName  Date  Shift  Sub-role  Seniority  Location  Notes'}
+                  className="input-field mt-2 h-32 w-full font-mono text-xs"
+                />
+              </details>
 
               {/* Preview */}
               {parsed.length > 0 && (
@@ -427,7 +464,7 @@ export default function RosterBulkUploadModal({
             </>
           ) : (
             <>
-              <button onClick={() => { setResult(null); setText(''); }} className="btn-secondary text-sm">Upload more</button>
+              <button onClick={() => { setResult(null); setText(''); setFileName(null); }} className="btn-secondary text-sm">Upload more</button>
               <button onClick={onClose} className="btn-primary text-sm">Done</button>
             </>
           )}
