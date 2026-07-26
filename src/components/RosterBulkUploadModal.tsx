@@ -80,7 +80,10 @@ type ParsedRow = {
 const HEADER_KEYS = ['name', 'date', 'day', 'shift', 'sub', 'role', 'senior', 'level', 'location', 'theatre', 'note'];
 
 function parse(text: string, weekStart: string): ParsedRow[] {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const rawLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const delim0 = rawLines[0]?.includes('\t') ? '\t' : ',';
+  // Drop rows that are entirely empty (e.g. the template's unused validated rows).
+  const lines = rawLines.filter((l) => splitLine(l, delim0).some((c) => c.trim() !== ''));
   if (!lines.length) return [];
   const delim = lines[0].includes('\t') ? '\t' : ',';
 
@@ -161,10 +164,31 @@ export default function RosterBulkUploadModal({
   const valid = parsed.filter((r) => r.ok);
   const invalid = parsed.filter((r) => !r.ok);
 
+  const [reading, setReading] = useState(false);
   const onFile = async (f: File | null) => {
     if (!f) return;
-    const content = await f.text();
-    setText(content);
+    const lower = f.name.toLowerCase();
+    if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+      setReading(true);
+      setError('');
+      try {
+        const XLSX = await import('xlsx');
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheet = wb.Sheets['Roster'] || wb.Sheets[wb.SheetNames[0]];
+        // sheet_to_csv quotes any value containing commas, and our parser handles
+        // quoted CSV — so this round-trips names/notes safely.
+        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+        setText(csv);
+      } catch {
+        setError('Could not read that Excel file. Try “Save As → CSV” and upload that instead.');
+      } finally {
+        setReading(false);
+      }
+    } else {
+      const content = await f.text();
+      setText(content);
+    }
   };
 
   const upload = async () => {
@@ -200,14 +224,14 @@ export default function RosterBulkUploadModal({
     }
   };
 
+  // Excel template with dropdowns (staff names for THIS department, shifts, etc.)
   const downloadTemplate = () => {
-    const csv = 'Name,Day,Shift,Sub-role,Seniority,Location,Notes\nJane Doe,Monday,MORNING,,,MAIN_THEATRE,\n';
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `roster-template-${dept}.csv`;
+    a.href = `/api/roster/departments/${dept}/template`;
+    a.download = `roster-template-${dept}.xlsx`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    a.remove();
   };
 
   return (
@@ -229,8 +253,9 @@ export default function RosterBulkUploadModal({
             <>
               {/* Instructions */}
               <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
-                Paste straight from Excel / Google Sheets, or choose a CSV file. Columns (a header row is optional):{' '}
-                <strong>Name, Day/Date, Shift</strong>, then optional Sub-role, Seniority, Location, Notes.
+                <strong>Easiest:</strong> click <em>Excel template</em> — it downloads a sheet with <strong>dropdown menus of this
+                department's staff</strong> plus Day, Shift, Sub-role, Seniority and Location. Fill it by picking from the menus,
+                then choose the file here to upload. You can also paste from Excel / Google Sheets or upload a CSV.
                 <ul className="ml-4 mt-1 list-disc text-[13px] text-blue-700">
                   <li>Day can be a weekday name (<em>Mon</em>, <em>Tuesday</em>) or a date (<em>2026-07-29</em>, <em>29/07/2026</em>).</li>
                   <li>Shift accepts MORNING/AM/Day, CALL/On-call, NIGHT/PM.</li>
@@ -254,15 +279,15 @@ export default function RosterBulkUploadModal({
                   <ClipboardPaste className="h-4 w-4" /> Load example
                 </button>
                 <button onClick={downloadTemplate} className="btn-secondary inline-flex items-center gap-1 py-1.5 text-sm">
-                  <Download className="h-4 w-4" /> Template
+                  <Download className="h-4 w-4" /> Excel template
                 </button>
                 <button onClick={() => fileRef.current?.click()} className="btn-secondary inline-flex items-center gap-1 py-1.5 text-sm">
-                  <FileText className="h-4 w-4" /> Choose CSV
+                  {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />} Choose file (Excel/CSV)
                 </button>
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".csv,.tsv,.txt,text/csv"
+                  accept=".xlsx,.xls,.csv,.tsv,.txt,text/csv"
                   className="hidden"
                   onChange={(e) => onFile(e.target.files?.[0] || null)}
                 />
