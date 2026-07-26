@@ -14,6 +14,7 @@ import {
   DownloadCloud,
   CheckCircle2,
   CloudOff,
+  ClipboardList,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useOfflineData } from '@/lib/useOfflineData';
@@ -194,7 +195,7 @@ export default function DashboardPage() {
 
       {/* Compact emergency access — the two most critical links only. The large
           multi-button quick-access grid and charts were removed for speed. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
           href="/dashboard/emergency-booking"
           className="flex items-center gap-3 bg-gradient-to-r from-red-600 to-orange-500 text-white rounded-xl p-4 shadow hover:opacity-95 transition"
@@ -208,6 +209,13 @@ export default function DashboardPage() {
         >
           <Phone className="w-6 h-6 flex-shrink-0" />
           <span className="font-semibold">Call for Patient</span>
+        </Link>
+        <Link
+          href="/dashboard/case-readiness"
+          className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-500 text-white rounded-xl p-4 shadow hover:opacity-95 transition"
+        >
+          <ClipboardList className="w-6 h-6 flex-shrink-0" />
+          <span className="font-semibold">Case Pack Readiness</span>
         </Link>
       </div>
 

@@ -226,6 +226,7 @@ export default function DashboardLayout({
     { href: '/dashboard/theatres', icon: Building2, label: 'Theatre Allocation' },
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
+    { href: '/dashboard/case-readiness', icon: ClipboardList, label: 'Case Pack Readiness', badge: 'NEW' },
     { href: '/dashboard/call-for-patient', icon: Phone, label: 'Call for Patient', badge: 'NEW' },
     { href: '/dashboard/scrub-management', icon: Shirt, label: 'Scrub Management', badge: 'NEW' },
 
@@ -418,6 +419,7 @@ export default function DashboardLayout({
       '/dashboard/transfers',
     ] },
     { type: 'single', href: '/dashboard/theatre-readiness' },
+    { type: 'single', href: '/dashboard/case-readiness' },
     { type: 'group', label: 'Anaesthetist Board', icon: Stethoscope, hrefs: [
       '/dashboard/anaesthetist-board',
       '/dashboard/preop-reviews',
