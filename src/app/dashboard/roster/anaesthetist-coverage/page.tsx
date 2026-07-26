@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import {
   ArrowLeft, CalendarDays, RefreshCw, Stethoscope, Siren, AlertTriangle, CheckCircle2, Phone, MessageCircle, Users,
+  UserPlus, BellRing,
 } from 'lucide-react';
 import { whatsappChatLink } from '@/lib/whatsapp';
+
+const ASSIGN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIST'];
 
 function todayInputValue() {
   const d = new Date();
@@ -19,6 +23,7 @@ type CaseRow = {
   subspecialty: string; unit: string; scheduledTime: string; surgeryType: string; isEmergency: boolean;
   assigned: { consultants: Contact[]; residents: Contact[] };
   source: 'subspecialty' | 'on-call' | 'none'; covered: boolean;
+  currentAnaesthetist: { id: string; name: string } | null;
 };
 type Coverage = { subspecialty: string; consultants: Contact[]; residents: Contact[] };
 type Board = {
@@ -57,10 +62,14 @@ function People({ label, people }: { label: string; people: Contact[] }) {
 }
 
 export default function AnaesthetistCoveragePage() {
+  const { data: session } = useSession();
+  const canManage = ASSIGN_ROLES.includes((session?.user as any)?.role);
   const [selectedDate, setSelectedDate] = useState(todayInputValue);
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); // surgeryId being assigned / 'alert'
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -74,6 +83,29 @@ export default function AnaesthetistCoveragePage() {
   }, [selectedDate]);
 
   useEffect(() => { load(); }, [load]);
+
+  const assign = async (surgeryId: string, userId: string, name: string) => {
+    setBusy(surgeryId); setMsg(null);
+    try {
+      const res = await fetch('/api/roster/anaesthetist-coverage/assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surgeryId, userId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) { setMsg(`Assigned ${name} to the case.`); await load(); }
+      else setMsg(j?.error || 'Failed to assign');
+    } finally { setBusy(null); }
+  };
+
+  const alertGaps = async () => {
+    setBusy('alert'); setMsg(null);
+    try {
+      const res = await fetch('/api/roster/anaesthetist-coverage/alert', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: selectedDate }),
+      });
+      const j = await res.json().catch(() => ({}));
+      setMsg(res.ok ? (j.notified ? `Alert sent to ${j.notified} anaesthetist(s).` : (j.message || 'Nothing to alert.')) : (j?.error || 'Failed to send alert'));
+    } finally { setBusy(null); }
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
@@ -108,6 +140,7 @@ export default function AnaesthetistCoveragePage() {
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {msg && <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{msg}</div>}
 
       {board && (
         <>
@@ -144,10 +177,22 @@ export default function AnaesthetistCoveragePage() {
 
           {/* Gaps */}
           {board.gaps.length > 0 && (
-            <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              <AlertTriangle className="mr-1 inline h-4 w-4" />
-              Booked subspecialties with <strong>no anaesthetist rostered</strong> today: {board.gaps.join(', ')}. These cases
-              fall back to the on-call consultant — assign a subspecialty anaesthetist on the roster.
+            <div className="mb-5 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <AlertTriangle className="mr-1 inline h-4 w-4" />
+                Booked subspecialties with <strong>no anaesthetist rostered</strong> today: {board.gaps.join(', ')}. These cases
+                fall back to the on-call consultant — assign a subspecialty anaesthetist on the roster.
+              </div>
+              {canManage && (
+                <button
+                  onClick={alertGaps}
+                  disabled={busy === 'alert'}
+                  className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                  title="Notify the on-call consultant and consultant anaesthetists about these gaps"
+                >
+                  <BellRing className="h-4 w-4" /> Notify on-call of gaps
+                </button>
+              )}
             </div>
           )}
 
@@ -217,6 +262,34 @@ export default function AnaesthetistCoveragePage() {
                     ) : (
                       <span className="text-sm text-red-600">No anaesthetist rostered for this case.</span>
                     )}
+                  </div>
+
+                  {/* Current assignment on the surgery + one-tap assign */}
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
+                    <span className="text-[11px] uppercase text-gray-400">On the booking:</span>
+                    {c.currentAnaesthetist ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {c.currentAnaesthetist.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">not assigned</span>
+                    )}
+                    {canManage && [...c.assigned.consultants, ...c.assigned.residents].map((cand) => {
+                      const isCurrent = c.currentAnaesthetist?.id === cand.userId;
+                      return (
+                        <button
+                          key={cand.userId}
+                          onClick={() => assign(c.id, cand.userId, cand.name)}
+                          disabled={busy === c.id || isCurrent}
+                          className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium disabled:opacity-60 ${
+                            isCurrent ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                          title={isCurrent ? 'Already assigned' : `Assign ${cand.name} to this case`}
+                        >
+                          <UserPlus className="h-3.5 w-3.5" /> {isCurrent ? 'Assigned' : `Assign ${cand.name}`}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}

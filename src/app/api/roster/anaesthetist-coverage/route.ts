@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
           id: true, procedureName: true, subspecialty: true, unit: true, scheduledTime: true,
           surgeryType: true, status: true,
           patient: { select: { name: true, folderNumber: true, ptNumber: true } },
+          anesthetist: { select: { id: true, fullName: true } },
         },
         orderBy: { scheduledTime: 'asc' },
       }),
@@ -109,6 +110,7 @@ export async function GET(request: NextRequest) {
         assigned,
         source,
         covered,
+        currentAnaesthetist: s.anesthetist ? { id: s.anesthetist.id, name: s.anesthetist.fullName } : null,
       };
     });
 
