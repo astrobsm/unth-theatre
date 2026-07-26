@@ -89,12 +89,22 @@ export async function GET(request: NextRequest) {
       },
       select: {
         theatreId: true,
+        theatreTechnicianId: true,
         surgeonName: true,
         surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         assistantSurgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
       },
     });
+
+    // Resolve the per-case anaesthetic technician (soft ref to User.id, no relation).
+    const techIds = Array.from(
+      new Set(surgeries.map((s) => (s as any).theatreTechnicianId).filter((x): x is string => !!x))
+    );
+    const techUsers = techIds.length
+      ? await prisma.user.findMany({ where: { id: { in: techIds } }, select: { id: true, fullName: true, phoneNumber: true } })
+      : [];
+    const techById = new Map(techUsers.map((u) => [u.id, u]));
 
     // Helper: shape a User relation into a { name, phone } contact (or null)
     const contact = (u: { fullName: string; phoneNumber: string | null } | null | undefined) =>
@@ -126,6 +136,7 @@ export async function GET(request: NextRequest) {
       const theatreSurgeries = surgeries.filter(s => s.theatreId === theatre.id);
       const surgeonMap = new Map<string, { name: string; phone: string | null }>();
       const anaesthetistMap = new Map<string, { name: string; phone: string | null }>();
+      const technicianMap = new Map<string, { name: string; phone: string | null }>();
       for (const s of theatreSurgeries) {
         const surgeon = contact(s.surgeon) || (s.surgeonName ? { name: s.surgeonName, phone: null } : null);
         if (surgeon) surgeonMap.set(surgeon.name + (surgeon.phone || ''), surgeon);
@@ -133,9 +144,12 @@ export async function GET(request: NextRequest) {
         if (assistant) surgeonMap.set(assistant.name + (assistant.phone || ''), assistant);
         const anaes = contact(s.anesthetist);
         if (anaes) anaesthetistMap.set(anaes.name + (anaes.phone || ''), anaes);
+        const tech = contact(techById.get((s as any).theatreTechnicianId || ''));
+        if (tech) technicianMap.set(tech.name + (tech.phone || ''), tech);
       }
       const surgeons = Array.from(surgeonMap.values());
       const surgeryAnaesthetists = Array.from(anaesthetistMap.values());
+      const surgeryTechnicians = Array.from(technicianMap.values());
 
       return {
         theatreId: theatre.id,
@@ -161,6 +175,7 @@ export async function GET(request: NextRequest) {
         staffAssignments,
         surgeons,
         surgeryAnaesthetists,
+        surgeryTechnicians,
         totalAllocations: theatreAllocations.length,
       };
     });

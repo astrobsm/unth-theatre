@@ -48,6 +48,7 @@ interface TheatreStatus {
   staffAssignments: StaffAssignments | null;
   surgeons: StaffContact[];
   surgeryAnaesthetists: StaffContact[];
+  surgeryTechnicians?: StaffContact[];
   totalAllocations: number;
 }
 
@@ -433,6 +434,10 @@ export default function TheatreReadinessDashboard() {
                   <StaffRow label="Scrub/Periop Nurse" contact={theatre.staffAssignments?.scrubNurse ?? null} color="bg-blue-50" />
                   <StaffRow label="Circulating Nurse" contact={theatre.staffAssignments?.circulatingNurse ?? null} color="bg-blue-50" />
                   <StaffRow label="Anaesthetic Technician" contact={theatre.staffAssignments?.anaestheticTechnician ?? null} color="bg-green-50" />
+                  {/* Technician(s) assigned directly on the case, if any */}
+                  {theatre.surgeryTechnicians && theatre.surgeryTechnicians.length > 0 && theatre.surgeryTechnicians.map((t, i) => (
+                    <StaffRow key={`tech-${i}`} label="Technician (case)" contact={t} color="bg-green-50" />
+                  ))}
                   <StaffRow label="Consultant Anaesthetist" contact={theatre.staffAssignments?.anaesthetistConsultant ?? null} color="bg-green-50" />
                   <StaffRow label="Senior Reg. Anaesthesia" contact={theatre.staffAssignments?.anaesthetistSeniorRegistrar ?? null} color="bg-green-50" />
                   <StaffRow label="Registrar Anaesthesia" contact={theatre.staffAssignments?.anaesthetistRegistrar ?? null} color="bg-green-50" />
