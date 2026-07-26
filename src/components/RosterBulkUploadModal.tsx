@@ -264,6 +264,14 @@ export default function RosterBulkUploadModal({
                   <li>Names are matched to your department's staff (full name, part of it, or staff code).</li>
                   <li>Everything lands as a <strong>draft</strong> — nothing goes live until you press Publish.</li>
                 </ul>
+                {dept === 'anaesthetists' && (
+                  <div className="mt-2 rounded border border-blue-200 bg-white/60 p-2 text-[13px] text-blue-800">
+                    <strong>Anaesthetists:</strong> the <em>Subspecialty</em> column decides which booked cases each anaesthetist
+                    covers that day. Put the surgical subspecialty for elective assignments (consultant + resident), and choose{' '}
+                    <em>ALL EMERGENCIES</em> with shift <em>CALL</em> for the day's on-call consultant. The app then matches every
+                    booking to the anaesthetist on its subspecialty.
+                  </div>
+                )}
               </div>
 
               {/* Week + actions */}

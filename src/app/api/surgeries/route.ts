@@ -508,11 +508,19 @@ export async function POST(request: NextRequest) {
           return prisma.roster.findMany({ where: base, include: { user: { select: { id: true } } } });
         };
 
+        // Anaesthetists are rostered per SURGICAL SUBSPECIALTY on elective days
+        // (Roster.subRole holds the covered subspecialty). Prefer whoever is
+        // rostered to THIS case's subspecialty; only if nobody is do we fall back
+        // to the most-senior anaesthetist on that shift (e.g. the call cover).
+        const normSub = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+        const wantSub = normSub(validatedData.subspecialty);
         for (const shift of preferredShifts) {
           const pool = await poolForShift(shift);
           if (!pool.length) continue;
-          pool.sort((a, b) => rank(a.seniorityLevel) - rank(b.seniorityLevel));
-          resolvedAnaesthetistId = pool[0]?.user.id || null;
+          const subspecialtyMatch = wantSub ? pool.filter((p) => normSub(p.subRole) === wantSub) : [];
+          const chooseFrom = subspecialtyMatch.length ? subspecialtyMatch : pool;
+          chooseFrom.sort((a, b) => rank(a.seniorityLevel) - rank(b.seniorityLevel));
+          resolvedAnaesthetistId = chooseFrom[0]?.user.id || null;
           if (resolvedAnaesthetistId) break;
         }
       } catch (e) {

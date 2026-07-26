@@ -59,15 +59,36 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   });
   const names = staff.map((s) => s.fullName).filter(Boolean);
 
+  // Anaesthetists work by SURGICAL SUBSPECIALTY: on elective days each anaesthetist
+  // covers one or more surgical subspecialties; the CALL consultant covers ALL
+  // emergencies. So for this department the "Sub-role" column becomes a dropdown
+  // of real surgical subspecialties (+ an ALL EMERGENCIES option for on-call).
+  const isAnaes = dept.slug === 'anaesthetists';
+  const ON_CALL_ALL = 'ALL EMERGENCIES (on-call)';
+  let subspecialties: string[] = [];
+  if (isAnaes) {
+    const units = await prisma.surgicalUnit.findMany({
+      where: { active: true },
+      select: { subspecialty: true },
+      orderBy: { subspecialty: 'asc' },
+    });
+    subspecialties = Array.from(new Set(units.map((u) => u.subspecialty).filter(Boolean)));
+  }
+
   const wb = new ExcelJS.Workbook();
   wb.creator = 'UNTH Theatre ORM';
   const ws = wb.addWorksheet('Roster');
   const lists = wb.addWorksheet('Lists');
   lists.state = 'veryHidden';
 
-  const subRoles = dept.subRoles?.length ? dept.subRoles : SUBROLE_FALLBACK;
+  const subRoles = isAnaes
+    ? [ON_CALL_ALL, ...subspecialties]
+    : dept.subRoles?.length ? dept.subRoles : SUBROLE_FALLBACK;
   const seniority = dept.seniorityLevels?.length ? dept.seniorityLevels : SENIORITY_FALLBACK;
   const locations = [...LOCATIONS];
+  const headers = isAnaes
+    ? ['Name', 'Date', 'Shift', 'Subspecialty', 'Seniority', 'Location', 'Notes']
+    : HEADERS;
 
   // Lists sheet — one column per option set (A..G). Dates are stored as TEXT so
   // Excel can't silently reformat them.
@@ -84,7 +105,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   const ref = (col: string, n: number) => `Lists!$${col}$1:$${col}$${Math.max(n, 1)}`;
 
   // Roster sheet — header + validated data rows.
-  ws.addRow(HEADERS);
+  ws.addRow(headers);
   ws.getRow(1).font = { bold: true };
   ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } };
   ws.columns = [
@@ -106,8 +127,14 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
     ws.getCell(r, 1).dataValidation = listVal(ref('A', names.length), 'Choose a staff member');
     ws.getCell(r, 2).dataValidation = listVal(ref('B', dates.length), 'Choose the exact date');
     ws.getCell(r, 3).dataValidation = listVal(ref('C', SHIFTS.length), 'MORNING / CALL / NIGHT');
-    ws.getCell(r, 4).dataValidation = listVal(ref('D', subRoles.length), 'Sub-role (optional)');
-    ws.getCell(r, 5).dataValidation = listVal(ref('E', seniority.length), 'Seniority (optional)');
+    ws.getCell(r, 4).dataValidation = listVal(
+      ref('D', subRoles.length),
+      isAnaes ? 'Surgical subspecialty covered — or ALL EMERGENCIES for the on-call consultant' : 'Sub-role (optional)'
+    );
+    ws.getCell(r, 5).dataValidation = listVal(
+      ref('E', seniority.length),
+      isAnaes ? 'CONSULTANT for consultants, REGISTRAR/SENIOR_REGISTRAR for residents' : 'Seniority (optional)'
+    );
     ws.getCell(r, 6).dataValidation = listVal(ref('F', locations.length), 'Location');
     ws.getCell(r, 7).dataValidation = listVal(ref('G', NOTE_OPTIONS.length), 'Notes (optional)');
   }
