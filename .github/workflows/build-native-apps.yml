@@ -43,6 +43,16 @@ jobs:
         with:
           node-version: '20'
 
+      # electron-builder needs bsdtar (libarchive-tools) and fakeroot to produce
+      # the Linux deb; recent Ubuntu runner images no longer ship bsdtar. Without
+      # them the deb target fails, and because electron-builder aborts on that
+      # failure it never publishes latest-linux.yml — which is the feed the
+      # AppImage's auto-updater reads. Result on v1.0.7: an AppImage was
+      # released, but no update metadata, so Linux users could not auto-update.
+      - name: Install Linux packaging tools
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools fakeroot
+
       - name: Install desktop deps
         working-directory: desktop
         run: npm install
