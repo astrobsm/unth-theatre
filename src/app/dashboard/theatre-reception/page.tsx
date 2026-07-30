@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { isSurgeonRole } from '@/lib/roleGroups';
 import {
   ClipboardCheck,
   UserCheck,
@@ -216,7 +217,7 @@ export default function TheatreReceptionPage() {
     const links: { href: string; label: string; icon: any }[] = [];
     const isAnaesthetist =
       userRole === 'ANAESTHETIST' || userRole === 'CONSULTANT_ANAESTHETIST';
-    const isSurgeon = userRole === 'SURGEON';
+    const isSurgeon = isSurgeonRole(userRole);
     const isNurse = NURSE_ROLES.includes(userRole);
     const all = !userRole || FULL_ACCESS.includes(userRole);
 

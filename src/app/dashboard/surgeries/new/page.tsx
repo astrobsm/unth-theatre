@@ -360,7 +360,7 @@ export default function NewSurgeryPage() {
       // Only roles that exist in the UserRole enum can act as the operating surgeon.
       // (Trainee grades aren't separate enum values in this system; consultants and trainees
       //  all sit under SURGEON. House officers are added via the team-member picker, not here.)
-      const response = await fetch('/api/users?role=SURGEON&status=APPROVED');
+      const response = await fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON&status=APPROVED');
       if (response.ok) {
         const data = await response.json();
         const list = Array.isArray(data) ? data : (data?.users ?? []);
@@ -1727,7 +1727,11 @@ export default function NewSurgeryPage() {
                     member.role === 'CONSULTANT' ? (
                       <SurgicalTeamMemberPicker
                         key={index}
-                        roles="SURGEON"
+                        // Consultant surgeons first, but resident surgeons stay
+                        // searchable: everyone starts as SURGEON until an admin
+                        // promotes them, so restricting this to the consultant
+                        // role alone would empty the picker on day one.
+                        roles="CONSULTANT_SURGEON,SURGEON"
                         value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
                         onChange={(next) => updateTeamMember(index, next)}
                         onRemove={() => removeTeamMember(index)}

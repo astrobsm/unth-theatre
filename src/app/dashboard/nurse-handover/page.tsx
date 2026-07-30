@@ -253,7 +253,7 @@ export default function NurseHandoverPage() {
   const [anaesthetistOpts, setAnaesthetistOpts] = useState<{ id: string; fullName: string; staffCode?: string | null; role?: string | null }[]>([]);
 
   useEffect(() => {
-    fetch('/api/users?roles=SURGEON,HOUSE_OFFICER&limit=300')
+    fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON,HOUSE_OFFICER&limit=300')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setSurgeonOpts(Array.isArray(d) ? d : d.users || []))
       .catch(() => {});

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { sendPushToRoles } from '@/lib/fcm';
 import { z } from 'zod';
+import { isSurgeonRole } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user can trigger emergency alerts
-    if (!['SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
+    if (!['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
       return NextResponse.json(
         { error: 'Insufficient permissions to trigger emergency alerts' },
         { status: 403 }
@@ -187,8 +188,8 @@ export async function POST(request: NextRequest) {
         estimatedStartTime: validatedData.estimatedStartTime
           ? new Date(validatedData.estimatedStartTime)
           : null,
-        surgeonId: session.user.role === 'SURGEON' ? session.user.id : surgery.surgeonId || '',
-        surgeonName: session.user.role === 'SURGEON' ? (session.user.name || '') : surgery.surgeonName || '',
+        surgeonId: isSurgeonRole(session.user.role) ? session.user.id : surgery.surgeonId || '',
+        surgeonName: isSurgeonRole(session.user.role) ? (session.user.name || '') : surgery.surgeonName || '',
         status: 'ACTIVE',
         displayOnTv: true,
       },
@@ -274,7 +275,7 @@ export async function POST(request: NextRequest) {
     // when the app is fully closed. No-ops if FCM isn't configured yet.
     const notifyRoles = [
       'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
-      'SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER',
+      'SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER',
       'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST',
     ];
     void sendPushToRoles(notifyRoles, {

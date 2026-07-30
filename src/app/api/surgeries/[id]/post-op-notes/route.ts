@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-const ALLOWED = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER'];
+const ALLOWED = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER'];
 
 export async function GET(
   request: NextRequest,

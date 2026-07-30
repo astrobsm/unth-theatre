@@ -4,7 +4,13 @@ import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getCachedData } from '@/lib/offlineStore';
+import {
+  offlineLogin,
+  describeOfflineFailure,
+  enrollFromCurrentSession,
+  listOfflineEnrolments,
+  type OfflineEnrolment,
+} from '@/lib/offlineAuth';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
@@ -22,6 +28,9 @@ export default function LoginPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userId, setUserId] = useState('');
   const [isOffline, setIsOffline] = useState(false);
+  // Accounts that have signed in online on this device and can therefore sign
+  // in again with no network (see lib/offlineAuth).
+  const [enrolments, setEnrolments] = useState<OfflineEnrolment[]>([]);
   // First-time staff ID capture (porters/cleaners and any other newly seeded staff)
   const [showStaffIdCapture, setShowStaffIdCapture] = useState(false);
   const [staffIdValue, setStaffIdValue] = useState('');
@@ -82,37 +91,20 @@ export default function LoginPage() {
     'Mortuary',
   ];
 
-  // Offline auto-login: if offline and session is cached, redirect to dashboard
+  // Offline sign-in readiness. We deliberately do NOT auto-redirect into the
+  // dashboard just because a session happens to be cached on the device — that
+  // let anyone reaching this screen in offline mode straight through without a
+  // password. Instead we show which accounts are enrolled for offline sign-in
+  // and require the password, which is verified by decrypting the local vault.
   useEffect(() => {
     const checkOfflineLogin = async () => {
       const offline = !navigator.onLine;
       setIsOffline(offline);
 
-      if (offline) {
-        try {
-          const cached = await getCachedData<{ user: { role: string } }>('session');
-          if (cached?.data?.user) {
-            const role = cached.data.user.role;
-            // Navigate based on cached role
-            switch (role) {
-              case 'ANAESTHETIST':
-              case 'SCRUB_NURSE':
-              case 'SURGEON':
-                router.push('/dashboard/surgeries');
-                break;
-              case 'THEATRE_STORE_KEEPER':
-                router.push('/dashboard/inventory');
-                break;
-              case 'RECOVERY_ROOM_NURSE':
-                router.push('/dashboard/pacu');
-                break;
-              default:
-                router.push('/dashboard');
-            }
-          }
-        } catch {
-          // No cached session
-        }
+      try {
+        setEnrolments(await listOfflineEnrolments());
+      } catch {
+        setEnrolments([]);
       }
     };
 
@@ -134,17 +126,37 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    // If offline, try cached session
+    // Offline: verify the password against the encrypted on-device vault. The
+    // password is the only thing that can decrypt it, so a wrong password fails
+    // here exactly as it would on the server.
     if (!navigator.onLine) {
-      try {
-        const cached = await getCachedData<{ user: { role: string } }>('session');
-        if (cached?.data?.user) {
-          router.push('/dashboard');
-          return;
-        }
-      } catch {}
-      setError('You are offline and no cached session is available. Please connect to the internet.');
-      setLoading(false);
+      const result = await offlineLogin(username, password);
+      if (!result.ok) {
+        setError(describeOfflineFailure(result));
+        setLoading(false);
+        return;
+      }
+
+      // Full navigation (not router.push) so the session provider re-reads the
+      // session we just re-established in IndexedDB.
+      const role = result.session.user?.role;
+      switch (role) {
+        case 'ANAESTHETIST':
+        case 'CONSULTANT_ANAESTHETIST':
+        case 'SCRUB_NURSE':
+        case 'SURGEON':
+        case 'CONSULTANT_SURGEON':
+          window.location.href = '/dashboard/surgeries';
+          break;
+        case 'THEATRE_STORE_KEEPER':
+          window.location.href = '/dashboard/inventory';
+          break;
+        case 'RECOVERY_ROOM_NURSE':
+          window.location.href = '/dashboard/pacu';
+          break;
+        default:
+          window.location.href = '/dashboard';
+      }
       return;
     }
 
@@ -161,11 +173,18 @@ export default function LoginPage() {
         return;
       }
 
+      // Enrol this device for offline sign-in: encrypt the session with a key
+      // derived from the password just verified by the server. Best-effort —
+      // never blocks the login.
+      try {
+        await enrollFromCurrentSession(username, password);
+      } catch { /* offline sign-in stays unavailable; online login is unaffected */ }
+
       // Fetch user session to check if password change is required
       const sessionResponse = await fetch('/api/auth/session');
       if (sessionResponse.ok) {
         const session = await sessionResponse.json();
-        
+
         // Check if user must change password
         const userCheckResponse = await fetch(`/api/users/check-first-login`);
         if (userCheckResponse.ok) {
@@ -207,6 +226,7 @@ export default function LoginPage() {
             router.push('/dashboard/surgeries');
             break;
           case 'SURGEON':
+          case 'CONSULTANT_SURGEON':
             router.push('/dashboard/surgeries');
             break;
           case 'THEATRE_STORE_KEEPER':
@@ -312,6 +332,12 @@ export default function LoginPage() {
       });
 
       if (response.ok) {
+        // Re-enrol offline sign-in against the NEW password, otherwise the
+        // device vault would still only open with the old one.
+        try {
+          await enrollFromCurrentSession(username, newPasswordValue);
+        } catch { /* best-effort */ }
+
         setShowChangePassword(false);
         setNewPasswordValue('');
         setConfirmPassword('');
@@ -347,9 +373,24 @@ export default function LoginPage() {
         <div className="text-center">
           {/* Offline Banner */}
           {isOffline && (
-            <div className="mb-4 bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">
-              <strong>You are offline.</strong> If you have previously logged in, you will be redirected automatically.
-              Otherwise, please connect to the internet to sign in.
+            <div className="mb-4 bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm text-left">
+              <strong>You are offline.</strong>{' '}
+              {enrolments.length > 0 ? (
+                <>
+                  Sign in normally with your username and password — it is verified on this
+                  device. Available offline for:{' '}
+                  <span className="font-semibold">
+                    {enrolments.map((e) => e.displayName).join(', ')}
+                  </span>
+                  .
+                </>
+              ) : (
+                <>
+                  No account has signed in on this device yet, so offline sign-in is not
+                  available. Connect to the internet for the first sign-in — after that this
+                  device works with no network.
+                </>
+              )}
             </div>
           )}
 

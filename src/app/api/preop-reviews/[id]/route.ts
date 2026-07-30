@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { detectConflict } from '@/lib/concurrency';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -146,6 +147,9 @@ export async function PATCH(
         { status: 404 }
       );
     }
+
+    const conflict = detectConflict(request, existingReview, 'pre-op review');
+    if (conflict) return conflict;
 
     // Update review
     const updatedReview = await prisma.preOperativeAnestheticReview.update({

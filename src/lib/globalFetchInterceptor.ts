@@ -4,7 +4,22 @@
 // offline fallback for ALL API calls without modifying pages
 // ============================================================
 
-import { setCachedData, getCachedData, addToOfflineQueue } from './offlineStore';
+import {
+  setCachedData,
+  getCachedData,
+  addToOfflineQueue,
+  addPendingRecord,
+  getPendingRecords,
+} from './offlineStore';
+import {
+  parseApiPath,
+  mergePendingIntoList,
+  mergePendingIntoRecord,
+  materialiseCreate,
+  offlineMutationEcho,
+  type PendingRecord,
+  type PendingOp,
+} from './offlineMerge';
 
 let interceptorInstalled = false;
 let originalFetch: typeof window.fetch;
@@ -88,6 +103,10 @@ export function installFetchInterceptor(): void {
 
   originalFetch = window.fetch.bind(window);
 
+  // Whenever a queued mutation reaches the server its local stand-in is
+  // removed; drop the overlay snapshot so reads stop merging it.
+  window.addEventListener('orm:pending-changed', invalidatePendingSnapshot);
+
   window.fetch = async function interceptedFetch(
     input: RequestInfo | URL,
     init?: RequestInit
@@ -128,34 +147,370 @@ export function uninstallFetchInterceptor(): void {
 }
 
 // ============================================================
-// GET handler — network first, fallback to IndexedDB cache
+// GET handler — LOCAL FIRST
+// ------------------------------------------------------------
+// Order of preference:
+//   1. A locally cached copy newer than FRESH_WINDOW_MS  -> returned instantly,
+//      with a silent background revalidation. Navigating back to a page you
+//      just looked at never waits on the network.
+//   2. An older cached copy -> raced against the network for SLOW_NETWORK_MS,
+//      so a degraded link (2G, packet loss) shows real data in ~1s instead of
+//      hanging. The network request is NOT aborted; it keeps running and
+//      refreshes the cache for next time.
+//   3. Nothing cached -> the network, as before, with the cache as fallback.
 // ============================================================
+
+/** How long a cached response may be served without touching the network. */
+const FRESH_WINDOW_MS = 60 * 1000;
+/** How long we wait for the network when we already hold an older copy. */
+const SLOW_NETWORK_MS = 1200;
+/** How long cached API responses stay usable as an offline fallback. */
+const OFFLINE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Endpoints that must never be answered from cache while the device is online:
+ * live status boards, auth, deploy-version polling and anything whose whole
+ * purpose is to be current. They still fall back to cache when offline.
+ */
+const ALWAYS_LIVE = [
+  '/api/auth/',
+  '/api/version',
+  '/api/app-version',
+  '/api/emergency-display',
+  '/api/emergency-alerts',
+  '/api/radio',
+  '/api/notifications',
+  '/api/staff/availability',
+  '/api/power-status',
+  '/api/live',
+];
+
+function isAlwaysLive(pathname: string): boolean {
+  return ALWAYS_LIVE.some((p) => pathname.startsWith(p));
+}
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url, window.location.origin).pathname;
+  } catch {
+    return url;
+  }
+}
+
+// ------------------------------------------------------------
+// Pending-record overlay
+// ------------------------------------------------------------
+// Reading IndexedDB on every single GET would tax the fast path, so the
+// pending set is snapshotted in memory. It only changes when a mutation is
+// queued or the queue drains, and both of those invalidate the snapshot.
+let pendingSnapshot: PendingRecord[] | null = null;
+let pendingSnapshotAt = 0;
+const PENDING_SNAPSHOT_TTL_MS = 2000;
+
+export function invalidatePendingSnapshot(): void {
+  pendingSnapshot = null;
+}
+
+async function pendingRecords(): Promise<PendingRecord[]> {
+  if (pendingSnapshot && Date.now() - pendingSnapshotAt < PENDING_SNAPSHOT_TTL_MS) {
+    return pendingSnapshot;
+  }
+  try {
+    pendingSnapshot = await getPendingRecords();
+    pendingSnapshotAt = Date.now();
+  } catch {
+    pendingSnapshot = [];
+    pendingSnapshotAt = Date.now();
+  }
+  return pendingSnapshot;
+}
+
+/**
+ * Fold anything this device created/changed offline into a response, so a
+ * queued booking appears in the list immediately instead of after the next
+ * sync. Returns the original response untouched when there is nothing pending
+ * for that entity — the overwhelmingly common case.
+ */
+async function applyPending(response: Response, url: string): Promise<Response> {
+  try {
+    if (!response.ok) return response;
+    if (!(response.headers.get('content-type') || '').includes('json')) return response;
+
+    const { entityType, id } = parseApiPath(url, window.location.origin);
+    const relevant = (await pendingRecords()).filter((p) => p.entityType === entityType);
+    if (!relevant.length) return response;
+
+    const data = await response.clone().json();
+    // Choose by PAYLOAD SHAPE, not by URL shape. `/api/roster/departments/x`
+    // has path segments after the entity but returns a list, and a list merge
+    // is what it needs. mergePendingIntoList hands the payload straight back
+    // when it finds no array, so we then try the single-record path.
+    let merged = mergePendingIntoList(data, relevant, entityType);
+    if (merged === data && id) merged = mergePendingIntoRecord(data, relevant, id);
+    if (merged === data) return response;
+
+    const headers = new Headers(response.headers);
+    headers.set('Content-Type', 'application/json');
+    headers.set('X-Offline-Pending-Merged', 'true');
+    return new Response(JSON.stringify(merged), { status: 200, headers });
+  } catch {
+    return response;
+  }
+}
+
+/**
+ * The version of the record this device is about to edit, taken from whatever
+ * copy it last saw (detail cache first, then the list it appeared in). Sent as
+ * `X-Base-Version` so the server can refuse to overwrite someone else's later
+ * change instead of silently clobbering it.
+ *
+ * Deliberately only used for mutations QUEUED OFFLINE. Attaching it to online
+ * edits would turn a merely-stale local cache into a spurious conflict for an
+ * edit the user is making right now, with the server reachable anyway.
+ */
+async function resolveBaseVersion(url: string): Promise<string | null> {
+  try {
+    const { entityType, id } = parseApiPath(url, window.location.origin);
+    if (!id) return null;
+
+    const readVersion = (row: unknown): string | null => {
+      if (!row || typeof row !== 'object') return null;
+      const r = row as Record<string, unknown>;
+      const v = r.updatedAt ?? r.updated_at;
+      return typeof v === 'string' || typeof v === 'number' ? String(v) : null;
+    };
+
+    // The detail endpoint's cached copy is the most precise source.
+    const detail = await getCachedData(`api-cache:/api/${entityType}/${id}`);
+    if (detail) {
+      const d = detail.data as Record<string, unknown>;
+      const direct = readVersion(d) ?? readVersion(d?.data);
+      if (direct) return direct;
+    }
+
+    // Otherwise find the row inside the cached list.
+    const list = await getCachedData(`api-cache:/api/${entityType}`);
+    if (list) {
+      const payload = list.data as unknown;
+      const rows: unknown[] = Array.isArray(payload)
+        ? payload
+        : ((payload as Record<string, unknown>)?.[entityType] as unknown[]) ??
+          ((payload as Record<string, unknown>)?.data as unknown[]) ??
+          [];
+      const match = (rows || []).find(
+        (r) => r && typeof r === 'object' && String((r as Record<string, unknown>).id) === id
+      );
+      if (match) return readVersion(match);
+    }
+  } catch {
+    /* no version available — the server simply skips the check */
+  }
+  return null;
+}
+
+/**
+ * A detail request for a record that only exists on this device
+ * (`/api/surgeries/offline-…`). There is nothing on the server to ask for, so
+ * serve the local copy instead of letting the page 404.
+ */
+async function servePendingRecord(url: string): Promise<Response | null> {
+  const { id } = parseApiPath(url, window.location.origin);
+  if (!id || !id.startsWith('offline-')) return null;
+  const match = (await pendingRecords()).find((p) => p.clientId === id);
+  if (!match) return null;
+  return new Response(JSON.stringify(materialiseCreate(match)), {
+    status: 200,
+    statusText: 'OK (Pending Local Record)',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Offline-Cache': 'true',
+      'X-Offline-Pending-Record': 'true',
+    },
+  });
+}
+
+/** Build the Response we hand back for locally-held data. */
+function cachedResponse(data: unknown, opts: { stale: boolean; offline: boolean }): Response {
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    statusText: opts.offline ? 'OK (Offline Cache)' : 'OK (Local Cache)',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Offline-Cache': 'true',
+      'X-Cache-Stale': opts.stale ? 'true' : 'false',
+      ...(opts.offline ? { 'X-Offline': 'true' } : {}),
+    },
+  });
+}
+
+/**
+ * Mirror a successful JSON GET into IndexedDB. Deliberately not awaited by the
+ * caller: parsing happens after the response has already been handed to the
+ * page, so this never adds latency to the request the user is waiting on.
+ */
+function writeThrough(cacheKey: string, response: Response): void {
+  const type = response.headers.get('content-type') || '';
+  if (!type.includes('json')) return;
+  response
+    .clone()
+    .json()
+    .then((data) => setCachedData(cacheKey, data, OFFLINE_CACHE_TTL_MS))
+    .catch(() => {
+      /* unparseable or storage full — cache is best-effort */
+    });
+}
+
 async function handleGetFetch(
   url: string,
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
+  // A record that exists only on this device is served from local state; there
+  // is nothing on the server to ask for.
+  const local = await servePendingRecord(url);
+  if (local) return local;
+
+  const response = await readThrough(url, input, init);
+  return applyPending(response, url);
+}
+
+async function readThrough(
+  url: string,
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const cacheKey = urlToCacheKey(url);
+  const live = isAlwaysLive(pathOf(url));
+
+  // Requests that opt out of caching (Range, streaming, explicit no-store) go
+  // straight to the network untouched.
+  if (init?.cache === 'no-store' || init?.signal) {
+    return networkWithCacheFallback(url, input, init, cacheKey);
+  }
+
+  let cached: Awaited<ReturnType<typeof getCachedData>> = null;
   try {
-    // Fast path: return the network response immediately. The service worker
-    // already caches API GETs (Cache API + IndexedDB), so we do NOT parse the
-    // body or write to IndexedDB here — that added latency to every request.
-    return await originalFetch(input, init);
+    cached = await getCachedData(cacheKey);
+  } catch {
+    cached = null;
+  }
+
+  const age = cached ? Date.now() - cached.cachedAt : Infinity;
+
+  // 1) Fresh local copy — serve now, refresh quietly behind the user's back.
+  if (cached && !live && age < FRESH_WINDOW_MS) {
+    void originalFetch(input, init)
+      .then((res) => { if (res.ok) writeThrough(cacheKey, res); })
+      .catch(() => { /* offline — the copy we just served is still valid */ });
+    return cachedResponse(cached.data, { stale: false, offline: false });
+  }
+
+  // 2) Older local copy — race it against a slow network.
+  if (cached) {
+    const networkPromise = originalFetch(input, init).then((res) => {
+      if (res.ok) writeThrough(cacheKey, res);
+      return res;
+    });
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const fallback = new Promise<Response>((resolve) => {
+      timer = setTimeout(
+        () => resolve(cachedResponse(cached!.data, { stale: true, offline: false })),
+        SLOW_NETWORK_MS
+      );
+    });
+
+    try {
+      // The rejection is handled inside the race: once the timeout has won, an
+      // outer catch can no longer observe it and it would surface as an
+      // unhandled rejection.
+      return await Promise.race([
+        networkPromise.catch(() =>
+          cachedResponse(cached!.data, { stale: cached!.isStale, offline: true })
+        ),
+        fallback,
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  // 3) Never seen this endpoint before — nothing to render from, so wait.
+  return networkWithCacheFallback(url, input, init, cacheKey);
+}
+
+/**
+ * Last resort for a detail request with no cached copy of its own: find the
+ * record inside the cached LIST it appeared in. Opening a patient offline that
+ * you only ever saw in a list then shows the record instead of an error.
+ *
+ * The row may carry fewer fields than the detail endpoint returns (nested
+ * relations are usually list-omitted), so the response is marked partial.
+ */
+async function findInCachedList(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const { entityType, id } = parseApiPath(url, window.location.origin);
+    if (!id || id.includes('/')) return null;
+
+    const list = await getCachedData(`api-cache:/api/${entityType}`);
+    if (!list) return null;
+
+    const payload = list.data as unknown;
+    const rows: unknown[] = Array.isArray(payload)
+      ? payload
+      : ((payload as Record<string, unknown>)?.[entityType] as unknown[]) ??
+        ((payload as Record<string, unknown>)?.data as unknown[]) ??
+        ((payload as Record<string, unknown>)?.items as unknown[]) ??
+        [];
+
+    const match = (rows || []).find(
+      (r) => r && typeof r === 'object' && String((r as Record<string, unknown>).id) === id
+    );
+    return (match as Record<string, unknown>) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function networkWithCacheFallback(
+  url: string,
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  cacheKey: string
+): Promise<Response> {
+  try {
+    const response = await originalFetch(input, init);
+    if (response.ok) writeThrough(cacheKey, response);
+    return response;
   } catch (networkError) {
-    // Network failed — fall back to whatever the SW cached in IndexedDB.
-    const cached = await getCachedData(urlToCacheKey(url));
+    const cached = await getCachedData(cacheKey).catch(() => null);
     if (cached) {
-      return new Response(JSON.stringify(cached.data), {
+      return cachedResponse(cached.data, { stale: cached.isStale, offline: true });
+    }
+
+    // Nothing cached for this exact URL — fall back to the row in its list.
+    const fromList = await findInCachedList(url);
+    if (fromList) {
+      return new Response(JSON.stringify(fromList), {
         status: 200,
-        statusText: 'OK (Offline Cache)',
+        statusText: 'OK (Offline, from cached list)',
         headers: {
           'Content-Type': 'application/json',
           'X-Offline-Cache': 'true',
-          'X-Cache-Stale': cached.isStale ? 'true' : 'false',
+          'X-Offline': 'true',
+          'X-Offline-Partial': 'true',
         },
       });
     }
-
-    // No cache available — re-throw so the calling code can handle it
+    // Nothing cached and no network — let the caller handle it, but tell the
+    // app so the global "Working offline" indicator can explain the gap.
+    try {
+      window.dispatchEvent(
+        new CustomEvent('orm:offline-read-miss', { detail: { url, at: Date.now() } })
+      );
+    } catch {
+      /* CustomEvent unsupported */
+    }
     throw networkError;
   }
 }
@@ -211,8 +566,15 @@ async function handleMutationFetch(
     // Carry the SAME idempotency key on every replay.
     const headers: Record<string, string> = { ...headersToObject(init?.headers), 'X-Idempotency-Key': idemKey };
 
-    // Derive entity type from URL
-    const entityType = url.split('/api/')[1]?.split('/')[0]?.split('?')[0] ?? 'unknown';
+    const { entityType, id: targetId } = parseApiPath(url, window.location.origin);
+
+    // Stamp the change with the record version this device was looking at, so
+    // the server can tell "nobody else touched it" from "this would overwrite
+    // someone's later edit" when the queue is replayed, possibly hours later.
+    if (method !== 'POST') {
+      const baseVersion = await resolveBaseVersion(url);
+      if (baseVersion) headers['X-Base-Version'] = baseVersion;
+    }
 
     await addToOfflineQueue({
       url,
@@ -223,6 +585,28 @@ async function handleMutationFetch(
       entityType,
     });
 
+    // Record what this mutation DOES to the data, not just that it happened, so
+    // reads can show the row immediately instead of the user's work vanishing
+    // until connectivity returns.
+    // Classify by METHOD, not by URL shape: POST to a nested collection
+    // (/api/roster/departments/anaesthetists) still creates a row, even though
+    // the path has segments after the entity.
+    const op: PendingOp =
+      method === 'DELETE' ? 'delete' : method === 'POST' ? 'create' : 'update';
+    const pending: PendingRecord = {
+      clientId: op === 'create' ? `offline-${idemKey}` : `offline-${op}-${targetId}-${idemKey}`,
+      entityType,
+      op,
+      targetId,
+      url,
+      method,
+      body: body && typeof body === 'object' ? (body as Record<string, unknown>) : null,
+      createdAt: Date.now(),
+      idempotencyKey: idemKey,
+    };
+    await addPendingRecord(pending);
+    invalidatePendingSnapshot();
+
     console.log(`[FetchInterceptor] Queued offline mutation: ${method} ${url}`);
 
     // Register Background Sync so the queue drains automatically when the
@@ -230,22 +614,18 @@ async function handleMutationFetch(
     await requestBackgroundSync();
     notifyQueued(entityType);
 
-    // Return a synthetic success response so the UI doesn't break
-    return new Response(
-      JSON.stringify({
-        success: true,
-        offline: true,
-        message: 'Your changes have been saved offline and will sync when you are back online.',
-      }),
-      {
-        status: 200,
-        statusText: 'OK (Queued Offline)',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Offline-Queued': 'true',
-        },
-      }
-    );
+    // Echo back a usable record (with an id the caller can navigate to) rather
+    // than a bare success flag, so post-submit redirects and optimistic UI
+    // behave the same offline as online.
+    return new Response(JSON.stringify(offlineMutationEcho(pending)), {
+      status: 200,
+      statusText: 'OK (Queued Offline)',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Offline-Queued': 'true',
+        'X-Offline-Record-Id': pending.clientId,
+      },
+    });
   }
 }
 
@@ -260,13 +640,36 @@ async function handleSessionFetch(
     const response = await originalFetch(input, init);
 
     if (response.ok) {
-      const clone = response.clone();
+      let session: { user?: unknown } | null = null;
       try {
-        const session = await clone.json();
-        if (session?.user) {
-          await setCachedData('session', session, 7 * 24 * 60 * 60 * 1000); // 7 days
+        session = await response.clone().json();
+      } catch {
+        session = null;
+      }
+
+      if (session?.user) {
+        await setCachedData('session', session, 7 * 24 * 60 * 60 * 1000); // 7 days
+        return response;
+      }
+
+      // A 200 with no user is NOT proof of being signed out. Offline, it is what
+      // the service worker returns when it has nothing cached ({user: null}) —
+      // and because that is a *successful* response, the catch below never runs,
+      // so the session stored by an offline sign-in was ignored and the user was
+      // bounced to the login screen. Consult the local session instead.
+      //
+      // Only while offline: online, an empty session genuinely means signed out,
+      // and a dead session must never be resurrected.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedData<{ user?: unknown }>('session');
+        if (cached?.data?.user) {
+          return new Response(JSON.stringify(cached.data), {
+            status: 200,
+            statusText: 'OK (Offline Session)',
+            headers: { 'Content-Type': 'application/json', 'X-Offline-Cache': 'true' },
+          });
         }
-      } catch {}
+      }
     }
 
     return response;

@@ -6,30 +6,63 @@
 
 import { setCachedData, getCachedData } from './offlineStore';
 
-// All API endpoints to pre-fetch and cache for offline access
-const OFFLINE_DATA_ENDPOINTS = [
-  { key: 'dashboard-stats', url: '/api/dashboard/stats', ttl: 60 * 60 * 1000 }, // 1 hour
-  { key: 'surgeries', url: '/api/surgeries', ttl: 30 * 60 * 1000 },
-  { key: 'patients', url: '/api/patients', ttl: 30 * 60 * 1000 },
-  { key: 'inventory', url: '/api/inventory', ttl: 30 * 60 * 1000 },
-  { key: 'theatres', url: '/api/theatres', ttl: 60 * 60 * 1000 },
-  { key: 'sub-stores', url: '/api/sub-stores', ttl: 30 * 60 * 1000 },
-  { key: 'roster', url: '/api/roster', ttl: 60 * 60 * 1000 },
-  { key: 'transfers', url: '/api/transfers', ttl: 30 * 60 * 1000 },
-  { key: 'alerts', url: '/api/alerts', ttl: 15 * 60 * 1000 },
-  { key: 'theatre-setup', url: '/api/theatre-setup', ttl: 60 * 60 * 1000 },
-  { key: 'preop-reviews', url: '/api/preop-reviews', ttl: 30 * 60 * 1000 },
-  { key: 'prescriptions', url: '/api/prescriptions', ttl: 30 * 60 * 1000 },
-  { key: 'power-status', url: '/api/power-status', ttl: 15 * 60 * 1000 },
-  { key: 'water-supply', url: '/api/water-supply', ttl: 15 * 60 * 1000 },
-  { key: 'theatre-meals', url: '/api/theatre-meals', ttl: 60 * 60 * 1000 },
-  { key: 'users', url: '/api/users', ttl: 60 * 60 * 1000 },
-  { key: 'emergency-booking', url: '/api/emergency-booking', ttl: 15 * 60 * 1000 },
-  { key: 'emergency-display', url: '/api/emergency-display', ttl: 5 * 60 * 1000 },
-  { key: 'emergency-alerts', url: '/api/emergency-alerts', ttl: 15 * 60 * 1000 },
-  { key: 'blood-requests', url: '/api/blood-requests', ttl: 30 * 60 * 1000 },
-  { key: 'checklists', url: '/api/checklists', ttl: 30 * 60 * 1000 },
+/**
+ * Every collection endpoint the app reads, so ONE "Prepare for Offline Use" run
+ * leaves every module with data — not just the handful that used to be listed
+ * here (21 of 71 collections, which is why modules a device had never visited
+ * came up empty offline).
+ *
+ * Derived from the API routes that expose a GET collection handler. Anything
+ * that 404s or 403s for the signed-in user is simply skipped, so a role that
+ * cannot see a module costs nothing.
+ */
+const OFFLINE_COLLECTIONS = [
+  // Overview / scheduling
+  'dashboard/stats', 'surgeries', 'patients', 'cancellations', 'surgery-readiness',
+  'surgical-units', 'surgical-packs', 'anaesthesia-packs', 'wards', 'locations', 'contacts',
+  // Emergency
+  'emergency-booking', 'emergency-display', 'emergency-alerts', 'emergency-lab-workup',
+  'emergency-pre-anaesthetic', 'emergency-prescriptions', 'emergency-team-availability',
+  // Pre-op
+  'pre-operative-visit', 'preop-reviews', 'prescriptions', 'post-op-prescriptions',
+  'blood-requests', 'investigations', 'drug-dressing-requests',
+  // Theatre / intra-op
+  'theatres', 'theatre-setup', 'theatre-reception', 'theatre-audit', 'allocations',
+  'holding-area', 'checklists', 'intraoperative', 'equipment-checkout', 'call-for-patient',
+  // Post-op
+  'pacu', 'nurse-handover', 'transfers',
+  // Roster & staff
+  'roster', 'users', 'scrubs', 'walkie-talkies',
+  // Stores & supplies
+  'inventory', 'sub-stores', 'stock-transfers', 'consumable-requests',
+  // CSSD / laundry / facilities
+  'cssd-inventory', 'cssd-sterilization', 'cssd-readiness', 'laundry',
+  'power-status', 'power-maintenance', 'power-readiness', 'power-fuel-consumption',
+  'water-supply', 'water-supply-readiness', 'plumbing-water-supply',
+  // Alerts, safety & governance
+  'alerts', 'fault-alerts', 'incidents', 'mortality', 'anonymous-tips',
+  'security-reports', 'disciplinary-queries', 'audit-logs',
+  // Admin / misc
+  'announcements', 'theatre-meals', 'notifications',
 ];
+
+/** Endpoints whose data goes stale quickly get a shorter refresh window. */
+const SHORT_TTL = new Set([
+  'emergency-display', 'emergency-alerts', 'emergency-booking', 'alerts', 'fault-alerts',
+  'power-status', 'water-supply', 'notifications', 'holding-area', 'theatre-reception',
+]);
+
+// All API endpoints to pre-fetch and cache for offline access.
+//
+// IMPORTANT: the cache key MUST match urlToCacheKey() in
+// globalFetchInterceptor.ts. It previously used bare keys ('surgeries'), which
+// no reader ever looked up — so everything this prefetched was invisible to the
+// pages that needed it offline.
+const OFFLINE_DATA_ENDPOINTS = OFFLINE_COLLECTIONS.map((name) => ({
+  key: `api-cache:/api/${name}`,
+  url: `/api/${name}`,
+  ttl: (SHORT_TTL.has(name) ? 15 : 60) * 60 * 1000,
+}));
 
 // Dashboard routes to pre-cache as HTML for offline navigation.
 // COMPREHENSIVE: every module page the user can reach from the sidebar so the
@@ -145,8 +178,12 @@ export async function prefetchAllOfflineData(
 ): Promise<OfflineDataStatus> {
   const total = OFFLINE_DATA_ENDPOINTS.length;
   let cached = 0;
+  let skipped = 0; // endpoints this user's role has no access to
   const failed: string[] = [];
-  const BATCH_SIZE = 3;
+  // Six at a time: the endpoint list covers every module now, so a batch of 3
+  // made "Prepare for Offline Use" take noticeably longer without being kinder
+  // to the network in any way that mattered.
+  const BATCH_SIZE = 6;
 
   // Filter to only endpoints that need refreshing
   const staleEndpoints: typeof OFFLINE_DATA_ENDPOINTS = [];
@@ -168,24 +205,27 @@ export async function prefetchAllOfflineData(
         if (response.ok) {
           const data = await response.json();
           await setCachedData(endpoint.key, data, endpoint.ttl);
-          return true;
+          return 'cached' as const;
         }
-        return false;
+        // This role simply cannot see that module — not a failure, and it must
+        // not make the device report itself as "not ready for offline use".
+        if ([401, 403, 404].includes(response.status)) return 'skipped' as const;
+        return 'failed' as const;
       })
     );
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
-      if (r.status === 'fulfilled' && r.value) {
-        cached++;
-      } else {
-        failed.push(batch[j].key);
-      }
+      if (r.status === 'fulfilled' && r.value === 'cached') cached++;
+      else if (r.status === 'fulfilled' && r.value === 'skipped') skipped++;
+      else failed.push(batch[j].key);
     }
-    onProgress?.(cached + failed.length, total);
+    onProgress?.(cached + skipped + failed.length, total);
   }
 
   const status: OfflineDataStatus = {
-    totalEndpoints: total,
+    // Endpoints this role cannot see are excluded from the total, so the
+    // readiness figure reflects what this user actually needs offline.
+    totalEndpoints: total - skipped,
     cachedEndpoints: cached,
     failedEndpoints: failed,
     lastFullSync: cached > 0 ? Date.now() : null,

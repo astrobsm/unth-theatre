@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { describe, welchTTest, mannWhitneyU, chiSquare, pearson } from '@/lib/stats';
+import { SURGEON_ROLES } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -177,7 +178,7 @@ export async function GET(request: NextRequest) {
         prisma.surgery.findMany({ distinct: ['subspecialty'], select: { subspecialty: true }, orderBy: { subspecialty: 'asc' } }),
         prisma.surgery.findMany({ distinct: ['unit'], select: { unit: true }, orderBy: { unit: 'asc' } }),
         prisma.surgery.findMany({ distinct: ['location'], select: { location: true }, orderBy: { location: 'asc' } }),
-        prisma.user.findMany({ where: { role: 'SURGEON' }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } }),
+        prisma.user.findMany({ where: { role: { in: [...SURGEON_ROLES] } }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } }),
         prisma.user.findMany({ where: { role: { in: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'] } }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } }),
       ]);
       return NextResponse.json({

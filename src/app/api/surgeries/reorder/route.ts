@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 // Roles allowed to change the order a unit's cases are listed in.
 const ALLOWED = [
   'SURGEON',
+  'CONSULTANT_SURGEON',
   'SCRUB_NURSE',
   'RECOVERY_ROOM_NURSE',
   'ADMIN',

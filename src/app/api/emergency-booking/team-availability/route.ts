@@ -11,7 +11,7 @@ const respondAvailabilitySchema = z.object({
   emergencyBookingId: z.string(),
   status: z.enum(['AVAILABLE', 'EN_ROUTE', 'ARRIVED', 'UNAVAILABLE', 'ON_ANOTHER_CASE']),
   teamRole: z.enum([
-    'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE',
+    'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE',
     'ANAESTHETIC_TECHNICIAN', 'PORTER', 'RECOVERY_ROOM_NURSE',
     'THEATRE_STORE_KEEPER', 'BIOMEDICAL_ENGINEER', 'CLEANER',
     'BLOODBANK_STAFF', 'PHARMACIST'
@@ -26,6 +26,7 @@ const respondAvailabilitySchema = z.object({
 function mapUserRoleToTeamRole(userRole: string): string | null {
   const mapping: Record<string, string> = {
     'SURGEON': 'SURGEON',
+    'CONSULTANT_SURGEON': 'SURGEON',
     'ANAESTHETIST': 'ANAESTHETIST',
     'CONSULTANT_ANAESTHETIST': 'ANAESTHETIST',
     'SCRUB_NURSE': 'SCRUB_NURSE',

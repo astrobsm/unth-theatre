@@ -289,7 +289,7 @@ self.addEventListener('fetch', (event) => {
 async function networkFirstEmergency(request) {
   const cache = await caches.open(DATA_CACHE);
   const url = new URL(request.url);
-  const cacheKey = url.pathname;
+  const cacheKey = apiCacheKey(url);
 
   try {
     const networkResponse = await fetch(request);
@@ -312,8 +312,11 @@ async function networkFirstEmergency(request) {
       headers.set('X-ORM-Emergency', 'true');
       return new Response(cached.body, { status: cached.status, headers });
     }
-    // IndexedDB as last resort
-    const idbData = await getFromIndexedDB('cachedData', cacheKey);
+    // IndexedDB as last resort (legacy bare-pathname key included for devices
+    // upgrading from a release that keyed entries differently).
+    const idbData =
+      (await getFromIndexedDB('cachedData', cacheKey)) ||
+      (await getFromIndexedDB('cachedData', url.pathname));
     if (idbData) {
       return new Response(JSON.stringify(idbData), {
         status: 200,
@@ -347,16 +350,29 @@ async function networkFirstSession(request) {
     }
     return networkResponse;
   } catch (err) {
+    // A cached session is only useful if it actually names a user. An empty one
+    // (e.g. captured while signed out) must NOT outrank a real session held in
+    // IndexedDB — that is what left offline users looking signed-out and
+    // bouncing between the dashboard and the login screen.
     const cached = await cache.match(request);
     if (cached) {
-      const headers = new Headers(cached.headers);
-      headers.set('X-ORM-Cache', 'true');
-      headers.set('X-ORM-Offline', 'true');
-      return new Response(cached.body, { status: cached.status, headers });
+      let hasUser = false;
+      try {
+        const parsed = await cached.clone().json();
+        hasUser = !!(parsed && parsed.user);
+      } catch (e) {
+        hasUser = false;
+      }
+      if (hasUser) {
+        const headers = new Headers(cached.headers);
+        headers.set('X-ORM-Cache', 'true');
+        headers.set('X-ORM-Offline', 'true');
+        return new Response(cached.clone().body, { status: cached.status, headers });
+      }
     }
-    // Try IndexedDB as last resort
+    // IndexedDB is where an offline sign-in stores the session.
     const idbSession = await getFromIndexedDB('cachedData', 'session');
-    if (idbSession) {
+    if (idbSession && idbSession.user) {
       return new Response(JSON.stringify(idbSession), {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'X-ORM-Cache': 'true', 'X-ORM-Offline': 'true' },
@@ -381,12 +397,19 @@ async function networkFirstWithCache(request) {
   const networkPromise = fetch(request)
     .then((networkResponse) => {
       if (networkResponse.ok) {
-        // Store in the Cache API only. We no longer re-parse the body to also
-        // write an IndexedDB copy on every response — that doubled the work on
-        // every API call. The Cache API copy already serves offline fallback.
         // Unawaited, so swallow failures (quota, uncacheable response) — an
         // unhandled rejection here would surface as console noise on every call.
         cache.put(request, networkResponse.clone()).catch(() => {});
+        // Also mirror the JSON into IndexedDB under the canonical key. The
+        // Cache API copy can be evicted by the browser under storage pressure,
+        // and IndexedDB is what the app itself reads when it renders from local
+        // data. Parsing happens off the response path (no await), so this does
+        // not add latency to the request the page is waiting on.
+        networkResponse
+          .clone()
+          .json()
+          .then((data) => storeInIndexedDB('cachedData', apiCacheKey(new URL(request.url)), data))
+          .catch(() => {});
       }
       return networkResponse;
     });
@@ -431,9 +454,13 @@ async function networkFirstWithCache(request) {
   try {
     return await networkPromise;
   } catch (err) {
-    // Try IndexedDB
+    // Try IndexedDB — canonical key first, then the legacy keys written by
+    // older releases (bare pathname / pathname+search), so devices upgrading
+    // from a previous version keep their existing offline data.
     const url = new URL(request.url);
-    const idbData = await getFromIndexedDB('cachedData', url.pathname + url.search);
+    const idbData =
+      (await getFromIndexedDB('cachedData', apiCacheKey(url))) ||
+      (await getFromIndexedDB('cachedData', url.pathname + url.search));
     if (idbData) {
       return new Response(JSON.stringify(idbData), {
         status: 200,
@@ -605,37 +632,53 @@ function isStaticAsset(url) {
 // ============================================================
 // IndexedDB Helpers (for service worker context)
 // ============================================================
+// Open the app's IndexedDB WITHOUT pinning a version.
+//
+// This used to request version 3 while the app itself had already upgraded the
+// database (v4, then v5). Requesting a LOWER version than the one on disk makes
+// the open fail with VersionError, which silently killed every service-worker
+// read and write — the client had stopped caching API GETs itself on the
+// assumption the SW was doing it, so offline reads quietly stopped working.
+//
+// Opening with no version always attaches to whatever version exists, and the
+// app (lib/offlineStore.ts) owns the schema. If a store we need is not there
+// yet, we degrade instead of upgrading behind the app's back.
 function openIndexedDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('orm-offline', 3);
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('offlineQueue')) {
-        db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
-      }
-      if (!db.objectStoreNames.contains('cachedData')) {
-        db.createObjectStore('cachedData', { keyPath: 'key' });
-      }
-      if (!db.objectStoreNames.contains('syncMeta')) {
-        db.createObjectStore('syncMeta', { keyPath: 'key' });
-      }
-    };
+    const request = indexedDB.open('orm-offline');
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error('IndexedDB blocked'));
   });
 }
 
-function storeInIndexedDB(storeName, key, data) {
+// The single canonical key for a cached API GET. MUST match urlToCacheKey() in
+// lib/globalFetchInterceptor.ts, otherwise the client cannot find what the
+// service worker cached (and vice versa).
+function apiCacheKey(url) {
+  return `api-cache:${url.pathname}${url.search}`;
+}
+
+function storeInIndexedDB(storeName, key, data, ttlMs) {
   openIndexedDB().then((db) => {
+    if (!db.objectStoreNames.contains(storeName)) return;
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    store.put({ key, data, timestamp: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    // Long TTL by default: `expiresAt` marks data STALE, it does not delete it.
+    // A week-old roster is still far better than a blank screen in theatre.
+    store.put({
+      key,
+      data,
+      timestamp: Date.now(),
+      expiresAt: Date.now() + (ttlMs || 7 * 24 * 60 * 60 * 1000),
+    });
   }).catch(() => {});
 }
 
 function getFromIndexedDB(storeName, key) {
   return openIndexedDB().then((db) => {
     return new Promise((resolve) => {
+      if (!db.objectStoreNames.contains(storeName)) { resolve(null); return; }
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
       const request = store.get(key);

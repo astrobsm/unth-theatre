@@ -12,7 +12,7 @@ import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 const NotificationBell = dynamic(() => import('@/components/NotificationBell'), { ssr: false });
 const SyncStatusBadge = dynamic(() => import('@/components/SyncStatusBadge'), { ssr: false });
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
-import { getCachedData, setCachedData } from '@/lib/offlineStore';
+import { getCachedData, setCachedData, removeCachedData } from '@/lib/offlineStore';
 
 // Non-critical chrome — these are not needed for first paint, so we code-split
 // them out of the layout bundle and mount them after the page is interactive.
@@ -92,6 +92,10 @@ export default function DashboardLayout({
   // paint the dashboard chrome instantly on a slow network instead of blocking on
   // the /api/auth/session round-trip. NextAuth still validates in the background.
   const [cachedUser, setCachedUser] = useState<any>(null);
+  // Whether the IndexedDB identity lookup has finished. The redirect below must
+  // NOT run before we know whether an offline identity exists, or it bounces a
+  // signed-in offline user to the login screen while the lookup is in flight.
+  const [identityChecked, setIdentityChecked] = useState(false);
   // Default: collapsed on phones (<1024px), expanded on desktop. Avoids the
   // sidebar covering the page on first load on small screens.
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -107,7 +111,10 @@ export default function DashboardLayout({
         // Only trust a cached identity that has the role we render the shell from.
         if (active && rec?.data && (rec.data as any).role) setCachedUser(rec.data);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (active) setIdentityChecked(true);
+      });
     return () => {
       active = false;
     };
@@ -138,10 +145,21 @@ export default function DashboardLayout({
   }, [pathname]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/login');
-    }
-  }, [status, router]);
+    if (status !== 'unauthenticated') return;
+
+    // Wait until we know whether this device holds an offline identity.
+    if (!identityChecked) return;
+
+    // OFFLINE with a known identity: stay put. NextAuth reports
+    // "unauthenticated" simply because /api/auth/session could not be reached,
+    // which is not the same as being signed out. Redirecting here caused an
+    // endless bounce — the login screen would send the user straight back to
+    // /dashboard because IT trusted the cached session, and round it went, with
+    // the page visibly blinking. One source of truth: the cached identity.
+    if (typeof navigator !== 'undefined' && !navigator.onLine && cachedUser) return;
+
+    router.push('/auth/login');
+  }, [status, router, identityChecked, cachedUser]);
 
   // Warm the always-visible top-level routes shortly after load so the very
   // first tap on them is instant. Kept small + deferred (idle) so it never
@@ -661,7 +679,21 @@ export default function DashboardLayout({
               </div>
             </div>
             <button
-              onClick={() => signOut({ callbackUrl: '/auth/login' })}
+              onClick={async () => {
+                // Drop the locally cached session FIRST. Otherwise, on a device
+                // that is offline, the sign-out request is queued rather than
+                // performed and the cached session would still let the next
+                // person straight back into this account.
+                try {
+                  await removeCachedData('session');
+                  await removeCachedData('currentUser');
+                } catch { /* best-effort */ }
+                if (!navigator.onLine) {
+                  window.location.href = '/auth/login';
+                  return;
+                }
+                signOut({ callbackUrl: '/auth/login' });
+              }}
               className="flex items-center w-full px-4 py-2.5 text-sm bg-primary-700 hover:bg-primary-600 rounded-lg transition-all duration-200 font-medium shadow-md"
             >
               <LogOut className="w-4 h-4 mr-2" />

@@ -2,7 +2,9 @@
  * Role-based permissions for theatre management system
  */
 
-export type UserRole = 
+import { effectiveRoles } from './roleGroups';
+
+export type UserRole =
   | 'ADMIN'
   | 'SYSTEM_ADMINISTRATOR'
   | 'THEATRE_MANAGER'
@@ -15,6 +17,7 @@ export type UserRole =
   | 'OXYGEN_UNIT_SUPERVISOR'
   | 'WORKS_SUPERVISOR'
   | 'SURGEON'
+  | 'CONSULTANT_SURGEON'
   | 'ANAESTHETIST'
   | 'CONSULTANT_ANAESTHETIST'
   | 'SCRUB_NURSE'
@@ -49,16 +52,16 @@ export interface Permission {
 export const permissions = {
   // WHO Checklist
   whoChecklist: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
-    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
   // Anesthesia Monitoring
   anesthesiaMonitoring: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -66,16 +69,16 @@ export const permissions = {
   // Surgical Count
   surgicalCount: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'SCRUB_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
   // Surgical Timing
   surgicalTiming: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
-    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
@@ -97,16 +100,16 @@ export const permissions = {
 
   // Surgery Scheduling
   surgeryScheduling: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
-    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
   // Holding Area Assessment
   holdingArea: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -114,7 +117,7 @@ export const permissions = {
   // PACU/Recovery
   pacu: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'RECOVERY_ROOM_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'SURGEON'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'RECOVERY_ROOM_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -130,7 +133,7 @@ export const permissions = {
   // Patient Transfers
   transfers: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'PORTER', 'SCRUB_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -145,9 +148,9 @@ export const permissions = {
 
   // Mortality Audit
   mortality: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST'],
-    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    update: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
@@ -178,7 +181,7 @@ export const permissions = {
   // Pre-Operative Anesthetic Review
   preOpReview: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -193,8 +196,8 @@ export const permissions = {
 
   // Blood Requests
   bloodRequests: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'BLOODBANK_STAFF'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'BLOODBANK_STAFF'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'BLOODBANK_STAFF'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -203,14 +206,14 @@ export const permissions = {
   // Nurse Handover
   nurseHandover: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
   emergencyAlerts: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -233,8 +236,8 @@ export const permissions = {
 
   // Incident Reporting
   incidents: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
     delete: ['ADMIN'],
   },
@@ -273,16 +276,16 @@ export const permissions = {
 
   // Pre-operative Investigations
   investigations: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'LABORATORY_STAFF'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
 
   // Emergency Lab Workup
   emergencyLabWorkup: {
-    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LABORATORY_STAFF', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
+    create: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LABORATORY_STAFF', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'LABORATORY_STAFF'],
     delete: ['ADMIN', 'THEATRE_MANAGER'],
   },
@@ -298,7 +301,7 @@ export const permissions = {
   // Oxygen Control Room
   oxygenControl: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIC_TECHNICIAN'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SURGEON'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SURGEON', 'CONSULTANT_SURGEON'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIC_TECHNICIAN'],
     delete: ['ADMIN'],
   },
@@ -306,7 +309,7 @@ export const permissions = {
   // Oxygen Alerts (Red Alerts)
   oxygenAlerts: {
     create: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN'],
-    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SURGEON', 'SCRUB_NURSE'],
+    read: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE'],
     update: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIC_TECHNICIAN'],
     delete: ['ADMIN'],
   },
@@ -324,8 +327,11 @@ export function hasPermission(
   
   const modulePermissions = permissions[module];
   if (!modulePermissions) return false;
-  
-  return (modulePermissions[action] as readonly UserRole[]).includes(userRole);
+
+  // Senior grades inherit their junior role's permissions, so the matrix below
+  // does not have to repeat every consultant variant (see lib/roleGroups.ts).
+  const allowed = modulePermissions[action] as readonly string[];
+  return effectiveRoles(userRole).some((r) => allowed.includes(r));
 }
 
 /**
@@ -345,6 +351,7 @@ export function getRoleName(role: UserRole): string {
     OXYGEN_UNIT_SUPERVISOR: 'Oxygen Unit Supervisor',
     WORKS_SUPERVISOR: 'Works Supervisor',
     SURGEON: 'Surgeon',
+    CONSULTANT_SURGEON: 'Consultant Surgeon',
     ANAESTHETIST: 'Anaesthetist',
     CONSULTANT_ANAESTHETIST: 'Consultant Anaesthetist',
     SCRUB_NURSE: 'Perioperative Nurse',
@@ -387,6 +394,7 @@ export function getRoleDashboard(role: UserRole): string {
     OXYGEN_UNIT_SUPERVISOR: '/dashboard/oxygen-control',
     WORKS_SUPERVISOR: '/dashboard',
     SURGEON: '/dashboard/surgeries',
+    CONSULTANT_SURGEON: '/dashboard/surgeries',
     ANAESTHETIST: '/dashboard/preop-reviews',
     CONSULTANT_ANAESTHETIST: '/dashboard/preop-reviews',
     SCRUB_NURSE: '/dashboard/surgeries',
@@ -452,39 +460,40 @@ export function getVisibleNavItems(role: UserRole): string[] {
   // Define which roles can see which nav items
   const navPermissions: Record<string, UserRole[]> = {
     dashboard: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SYSTEM_ADMINISTRATOR'],
-    surgeries: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'],
-    patients: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'RECOVERY_ROOM_NURSE'],
+    surgeries: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'],
+    patients: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'RECOVERY_ROOM_NURSE'],
     inventory: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE', 'PROCUREMENT_OFFICER'],
     'holding-area': ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'],
     pacu: ['ADMIN', 'THEATRE_MANAGER', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIST'],
     transfers: ['ADMIN', 'THEATRE_MANAGER', 'PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
-    theatres: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST'],
-    checklists: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
-    'preop-reviews': ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'],
+    theatres: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    checklists: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'],
+    'preop-reviews': ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'],
     prescriptions: ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'],
-    'blood-bank': ['ADMIN', 'THEATRE_MANAGER', 'BLOODBANK_STAFF', 'SURGEON', 'ANAESTHETIST'],
-    'emergency-alerts': ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
+    'blood-bank': ['ADMIN', 'THEATRE_MANAGER', 'BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
+    'emergency-alerts': ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_STORE_KEEPER', 'ANAESTHETIC_TECHNICIAN', 'PORTER', 'BLOODBANK_STAFF', 'PHARMACIST', 'CSSD_STAFF', 'POWER_PLANT_OPERATOR'],
     cssd: ['ADMIN', 'THEATRE_MANAGER', 'CSSD_STAFF'],
     'power-house': ['ADMIN', 'THEATRE_MANAGER', 'POWER_PLANT_OPERATOR'],
     reports: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
     users: ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'],
-    alerts: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
-    cancellations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON'],
-    mortality: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'ANAESTHETIST'],
+    alerts: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    cancellations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON'],
+    mortality: ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'],
     'theatre-setup': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER'],
-    incidents: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_CHAIRMAN'],
+    incidents: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'THEATRE_CHAIRMAN'],
     laundry: ['ADMIN', 'THEATRE_MANAGER', 'LAUNDRY_STAFF'],
     'water-supply': ['ADMIN', 'THEATRE_MANAGER', 'PLUMBER'],
     'sub-stores': ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER'],
-    investigations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
-    'emergency-lab-workup': ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LABORATORY_STAFF', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
+    investigations: ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'LABORATORY_STAFF'],
+    'emergency-lab-workup': ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LABORATORY_STAFF', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'],
     'theatre-meals': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CAFETERIA_MANAGER'],
     'stock-transfers': ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_STORE_KEEPER', 'SCRUB_NURSE'],
     'oxygen-control': ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN'],
   };
 
+  const roles = effectiveRoles(role);
   return allItems.filter(item => {
     const allowedRoles = navPermissions[item] || [];
-    return allowedRoles.includes(role);
+    return roles.some((r) => (allowedRoles as readonly string[]).includes(r));
   });
 }

@@ -80,7 +80,7 @@ export default function EditSurgeryPage() {
         const [sRes, tRes, suRes, unRes, locRes, audRes] = await Promise.all([
           fetch(`/api/surgeries/${id}`),
           fetch('/api/theatres'),
-          fetch('/api/users?role=SURGEON&status=APPROVED'),
+          fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON&status=APPROVED'),
           fetch('/api/surgical-units?activeOnly=true'),
           fetch('/api/locations'),
           fetch(`/api/audit-logs?tableName=surgeries&recordId=${id}`),

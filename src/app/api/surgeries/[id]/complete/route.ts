@@ -6,7 +6,7 @@ import prisma from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // Roles permitted to mark a surgery as completed.
-const ALLOWED = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'];
+const ALLOWED = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'];
 
 // POST - Mark a surgery as COMPLETED so PACU can admit the patient and the
 // surgeon can write the post-operative note.

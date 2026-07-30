@@ -22,6 +22,7 @@ const RECEIVING_ROLES: any[] = [
   'ANAESTHETIC_TECHNICIAN',
   'HOUSE_OFFICER',
   'SURGEON',
+  'CONSULTANT_SURGEON',
 ];
 
 export async function POST(request: NextRequest) {

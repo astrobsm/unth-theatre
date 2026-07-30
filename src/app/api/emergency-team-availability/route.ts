@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 
 const TEAM_ROLE_MAP: Record<string, string> = {
   SURGEON: 'SURGEON',
+  CONSULTANT_SURGEON: 'SURGEON',
   ANAESTHETIST: 'ANAESTHETIST',
   CONSULTANT_ANAESTHETIST: 'ANAESTHETIST',
   SCRUB_NURSE: 'SCRUB_NURSE',

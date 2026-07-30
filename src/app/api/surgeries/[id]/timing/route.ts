@@ -64,7 +64,7 @@ export async function POST(
     }
 
     // Check authorization
-    const allowedRoles = ['SURGEON', 'CIRCULATING_NURSE', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
+    const allowedRoles = ['SURGEON', 'CONSULTANT_SURGEON', 'CIRCULATING_NURSE', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
     if (!allowedRoles.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -174,7 +174,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const allowedRoles = ['SURGEON', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
+    const allowedRoles = ['SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
     if (!allowedRoles.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

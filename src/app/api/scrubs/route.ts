@@ -20,6 +20,7 @@ export const dynamic = 'force-dynamic';
 function colorForRole(role?: string | null): string {
   switch (role) {
     case 'SURGEON':
+    case 'CONSULTANT_SURGEON':
       return 'GREEN';
     case 'ANAESTHETIST':
     case 'CONSULTANT_ANAESTHETIST':
@@ -40,6 +41,7 @@ function colorForRole(role?: string | null): string {
 // Roles that wear scrubs and can therefore be allocated sets.
 const SCRUB_WEARING_ROLES = [
   'SURGEON',
+  'CONSULTANT_SURGEON',
   'ANAESTHETIST',
   'CONSULTANT_ANAESTHETIST',
   'SCRUB_NURSE',

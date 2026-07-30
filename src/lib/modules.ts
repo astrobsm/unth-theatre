@@ -10,6 +10,8 @@
 //      OR if the admin has explicitly granted that module to them
 //      (UserModuleGrant rows -> session.user.extraModules).
 
+import { effectiveRoles } from './roleGroups';
+
 export type ModuleId = string;
 
 export interface AppModule {
@@ -31,7 +33,7 @@ export const FULL_ACCESS_ROLES = [
 // Convenience role groupings used by defaultRoles below.
 const CLINICAL_CORE = [
   'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC',
-  'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
+  'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
   'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
   'ANAESTHETIC_TECHNICIAN',
 ];
@@ -51,13 +53,13 @@ export const MODULES: AppModule[] = [
   { id: 'cancellations', label: 'Cancellations', paths: ['/dashboard/cancellations'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
 
   // Pre-operative
-  { id: 'pre-operative-visit', label: 'Pre-Op Visit', paths: ['/dashboard/pre-operative-visit'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'HOUSE_OFFICER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Pre-Op' },
-  { id: 'patient-payment-guide', label: 'Patient Payment Guide', paths: ['/dashboard/patient-payment-guide'], defaultRoles: ['SURGEON', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', ...ADMIN_VIEWERS], category: 'Pre-Op' },
+  { id: 'pre-operative-visit', label: 'Pre-Op Visit', paths: ['/dashboard/pre-operative-visit'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Pre-Op' },
+  { id: 'patient-payment-guide', label: 'Patient Payment Guide', paths: ['/dashboard/patient-payment-guide'], defaultRoles: ['SURGEON', 'CONSULTANT_SURGEON', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIST', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', ...ADMIN_VIEWERS], category: 'Pre-Op' },
   { id: 'anaesthetist-board', label: 'Anaesthetist Review Board', paths: ['/dashboard/anaesthetist-board'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
-  { id: 'preop-reviews', label: 'Pre-op Reviews', paths: ['/dashboard/preop-reviews'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'], category: 'Pre-Op' },
+  { id: 'preop-reviews', label: 'Pre-op Reviews', paths: ['/dashboard/preop-reviews'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'], category: 'Pre-Op' },
   { id: 'prescription-approvals', label: 'Rx Approvals', paths: ['/dashboard/prescription-approvals'], defaultRoles: ['CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
   { id: 'prescriptions', label: 'Pharmacy', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
-  { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
+  { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
   { id: 'anesthesia-setup', label: 'Anesthesia Setup', paths: ['/dashboard/anesthesia-setup'], defaultRoles: ['ANAESTHETIC_TECHNICIAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
 
   // Day-of-surgery logistics
@@ -66,13 +68,13 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-setup', label: 'Theatre Setup', paths: ['/dashboard/theatre-setup'], defaultRoles: ['SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN', 'THEATRE_STORE_KEEPER'], category: 'Logistics' },
   { id: 'theatre-readiness', label: 'Theatre Readiness', paths: ['/dashboard/theatre-readiness'], defaultRoles: ['*'], category: 'Logistics' },
   { id: 'call-for-patient', label: 'Call for Patient', paths: ['/dashboard/call-for-patient'], defaultRoles: ['PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Logistics' },
-  { id: 'scrub-management', label: 'Scrub Management', paths: ['/dashboard/scrub-management'], defaultRoles: ['SCRUB_CARE_PROVIDER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Logistics' },
+  { id: 'scrub-management', label: 'Scrub Management', paths: ['/dashboard/scrub-management'], defaultRoles: ['SCRUB_CARE_PROVIDER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Logistics' },
 
   // Intra-operative
-  { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
-  { id: 'holding-area', label: 'Holding Area', paths: ['/dashboard/holding-area'], defaultRoles: ['SCRUB_NURSE', 'PORTER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON'], category: 'Intra-Op' },
+  { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
+  { id: 'holding-area', label: 'Holding Area', paths: ['/dashboard/holding-area'], defaultRoles: ['SCRUB_NURSE', 'PORTER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'], category: 'Intra-Op' },
   { id: 'ward-entries', label: 'Ward Escort Log', paths: ['/dashboard/holding-area/ward-entries'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Intra-Op' },
-  { id: 'checklists', label: 'WHO Checklists', paths: ['/dashboard/checklists'], defaultRoles: ['SCRUB_NURSE', 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
+  { id: 'checklists', label: 'WHO Checklists', paths: ['/dashboard/checklists'], defaultRoles: ['SCRUB_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
   { id: 'equipment-checkout', label: 'Equipment Checkout', paths: ['/dashboard/equipment-checkout'], defaultRoles: ['THEATRE_STORE_KEEPER', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'], category: 'Intra-Op' },
   { id: 'medication-tracking', label: 'Med Tracking', paths: ['/dashboard/medication-tracking'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Intra-Op' },
   { id: 'consumable-pack-provider', label: 'Consumable Packs', paths: ['/dashboard/consumable-pack-provider'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER'], category: 'Intra-Op' },
@@ -85,7 +87,7 @@ export const MODULES: AppModule[] = [
   { id: 'transfers', label: 'Patient Transfers', paths: ['/dashboard/transfers'], defaultRoles: ['PORTER', 'RECOVERY_ROOM_NURSE'], category: 'Post-Op' },
 
   // Lab
-  { id: 'emergency-lab-workup', label: 'Emergency Lab Workup', paths: ['/dashboard/emergency-lab-workup'], defaultRoles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST', 'SURGEON', 'ANAESTHETIST'], category: 'Lab' },
+  { id: 'emergency-lab-workup', label: 'Emergency Lab Workup', paths: ['/dashboard/emergency-lab-workup'], defaultRoles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'], category: 'Lab' },
 
   // Facility & support services
   { id: 'plumbing-water-supply', label: 'Plumbing & Water', paths: ['/dashboard/plumbing-water-supply'], defaultRoles: ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR'], category: 'Facility' },
@@ -101,7 +103,7 @@ export const MODULES: AppModule[] = [
   { id: 'walkie-talkies', label: 'Walkie-Talkie Radios', paths: ['/dashboard/walkie-talkies'], defaultRoles: ['*'], category: 'Alerts' },
   { id: 'fault-alerts', label: 'Fault Alerts', paths: ['/dashboard/fault-alerts'], defaultRoles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR', 'PLUMBER'], category: 'Alerts' },
   { id: 'emergency-alerts', label: 'Emergency Alerts', paths: ['/dashboard/emergency-alerts'], defaultRoles: [...CLINICAL_CORE], category: 'Alerts' },
-  { id: 'mortality', label: 'Mortality Registry', paths: ['/dashboard/mortality'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Alerts' },
+  { id: 'mortality', label: 'Mortality Registry', paths: ['/dashboard/mortality'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Alerts' },
   { id: 'anonymous-tips', label: 'Anonymous Tips (Submit)', paths: ['/dashboard/anonymous-tips'], defaultRoles: ['*'], category: 'Alerts' },
   { id: 'security-reports', label: 'Security Reports (Submit)', paths: ['/dashboard/security-reports'], defaultRoles: ['*'], category: 'Alerts' },
 
@@ -114,7 +116,7 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-meals', label: 'Theatre Meals', paths: ['/dashboard/theatre-meals'], defaultRoles: ['THEATRE_CAFETERIA_MANAGER'], category: 'Reports' },
   { id: 'staff-effectiveness', label: 'Staff Effectiveness', paths: ['/dashboard/reports/staff-effectiveness'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'reports', label: 'Reports & Analytics', paths: ['/dashboard/reports'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
-  { id: 'research', label: 'Research & Analytics', paths: ['/dashboard/research'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Reports' },
+  { id: 'research', label: 'Research & Analytics', paths: ['/dashboard/research'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Reports' },
   { id: 'presentation', label: 'Presentation', paths: ['/dashboard/presentation'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'training', label: 'Staff Training', paths: ['/training'], defaultRoles: ['*'], category: 'Reports' },
   { id: 'settings', label: 'Settings', paths: ['/dashboard/settings'], defaultRoles: ['*'], category: 'Reports' },
@@ -150,9 +152,12 @@ export function resolveAllowedModuleIds(
   if (isFullAccessRole(role)) {
     return new Set(MODULES.map(m => m.id));
   }
+  // A senior role also gets everything its junior role gets, so a consultant
+  // surgeon never sees fewer modules than a resident surgeon.
+  const roles = effectiveRoles(role);
   const ids = new Set<string>();
   for (const m of MODULES) {
-    if (m.defaultRoles.includes('*') || (role && m.defaultRoles.includes(role))) {
+    if (m.defaultRoles.includes('*') || roles.some((r) => m.defaultRoles.includes(r))) {
       ids.add(m.id);
     }
   }
@@ -196,6 +201,6 @@ export function canAccessPath(
   }
   if (!claimed) return true; // path not mapped to any module
   if (claimed.defaultRoles.includes('*')) return true;
-  if (role && claimed.defaultRoles.includes(role)) return true;
+  if (effectiveRoles(role).some((r) => claimed!.defaultRoles.includes(r))) return true;
   return extraModules.includes(claimed.id);
 }

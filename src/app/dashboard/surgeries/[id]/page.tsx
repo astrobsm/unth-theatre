@@ -142,14 +142,14 @@ export default function SurgeryDetailPage() {
   // Role-based action visibility
   const userRole = session?.user?.role;
   
-  const canAccessWHOChecklist = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE'].includes(userRole || '');
+  const canAccessWHOChecklist = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE'].includes(userRole || '');
   const canAccessAnesthesia = ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST', 'NURSE_ANAESTHETIST'].includes(userRole || '');
   const canAccessSurgicalCount = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'CIRCULATING_NURSE'].includes(userRole || '');
-  const canAccessTiming = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE'].includes(userRole || '');
+  const canAccessTiming = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE', 'CIRCULATING_NURSE'].includes(userRole || '');
   const canAccessConsumables = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'THEATRE_STORE_KEEPER'].includes(userRole || '');
   const canAccessBOM = ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
   // Surgeons (and admins / theatre managers) may close out a case and write the post-op note.
-  const canCompleteSurgery = ['SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
+  const canCompleteSurgery = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
 
   if (loading) {
     return (

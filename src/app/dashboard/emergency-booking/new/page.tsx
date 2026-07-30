@@ -117,7 +117,7 @@ export default function NewEmergencyBookingPage() {
     async function fetchStaff() {
       try {
         const [surgeonRes, anesthetistRes, theatresRes, unitsRes] = await Promise.all([
-          fetch('/api/users?role=SURGEON&status=APPROVED'),
+          fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON&status=APPROVED'),
           fetch('/api/users?role=ANAESTHETIST&status=APPROVED'),
           fetch('/api/theatres'),
           fetch('/api/surgical-units?activeOnly=true'),
@@ -194,7 +194,7 @@ export default function NewEmergencyBookingPage() {
   };
 
   const TEAM_ROLE_ROLES: Record<TeamRole, string> = {
-    CONSULTANT: 'SURGEON',
+    CONSULTANT: 'CONSULTANT_SURGEON,SURGEON',
     SENIOR_REGISTRAR: 'SURGEON',
     REGISTRAR: 'SURGEON',
     HOUSE_OFFICER: 'HOUSE_OFFICER',

@@ -1,0 +1,113 @@
+/**
+ * Exercises the REAL src/lib/roleGroups.ts + the role expansion in
+ * permissions.ts and modules.ts, so a promotion can never silently REMOVE
+ * access from a surgeon.
+ */
+const fs = require('fs');
+const path = require('path');
+const Module = require('module');
+const ROOT = path.resolve(__dirname, '../..');
+const ts = require(path.join(ROOT, 'node_modules/typescript'));
+
+function load(rel, deps = {}) {
+  const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  const js = ts.transpileModule(src, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const m = new Module(rel);
+  m.require = (id) => (deps[id] ? deps[id] : require(id));
+  m._compile(js, path.join(ROOT, rel.replace(/\.ts$/, '.js')));
+  return m.exports;
+}
+
+const RG = load('src/lib/roleGroups.ts');
+const P = load('src/lib/permissions.ts', { './roleGroups': RG });
+const M = load('src/lib/modules.ts', { './roleGroups': RG });
+
+let pass = 0, fail = 0;
+const check = (label, cond, extra = '') => {
+  if (cond) { pass++; console.log(`  PASS  ${label}`); }
+  else { fail++; console.log(`  FAIL  ${label} ${extra}`); }
+};
+
+console.log('\n1. Role expansion');
+check('a consultant surgeon is also a surgeon',
+  RG.effectiveRoles('CONSULTANT_SURGEON').join() === 'CONSULTANT_SURGEON,SURGEON');
+check('a resident surgeon is NOT a consultant',
+  RG.effectiveRoles('SURGEON').join() === 'SURGEON');
+check('unrelated roles are unchanged', RG.effectiveRoles('SCRUB_NURSE').join() === 'SCRUB_NURSE');
+check('null role expands to nothing', RG.effectiveRoles(null).length === 0);
+check('roleSatisfies: consultant satisfies SURGEON', RG.roleSatisfies('CONSULTANT_SURGEON', 'SURGEON'));
+check('roleSatisfies: resident does not satisfy CONSULTANT_SURGEON',
+  !RG.roleSatisfies('SURGEON', 'CONSULTANT_SURGEON'));
+check('roleAllowed works through inheritance',
+  RG.roleAllowed('CONSULTANT_SURGEON', ['SURGEON', 'ADMIN']));
+check('roleAllowed rejects an unrelated role',
+  !RG.roleAllowed('PORTER', ['SURGEON', 'ADMIN']));
+check('anaesthetist pair deliberately NOT inherited (pre-existing config preserved)',
+  RG.effectiveRoles('CONSULTANT_ANAESTHETIST').join() === 'CONSULTANT_ANAESTHETIST');
+
+console.log('\n2. Groups and labels');
+check('SURGEON_ROLES covers both grades',
+  RG.SURGEON_ROLES.includes('SURGEON') && RG.SURGEON_ROLES.includes('CONSULTANT_SURGEON'));
+check('isSurgeonRole true for both', RG.isSurgeonRole('SURGEON') && RG.isSurgeonRole('CONSULTANT_SURGEON'));
+check('isSurgeonRole false for others', !RG.isSurgeonRole('ANAESTHETIST') && !RG.isSurgeonRole(null));
+check('isConsultantRole distinguishes grade',
+  RG.isConsultantRole('CONSULTANT_SURGEON') && !RG.isConsultantRole('SURGEON'));
+check('seniority labels', RG.seniorityLabel('CONSULTANT_SURGEON') === 'Consultant'
+  && RG.seniorityLabel('SURGEON') === 'Resident' && RG.seniorityLabel('PORTER') === null);
+
+console.log('\n3. A promotion never removes permissions');
+{
+  const ACTIONS = ['create', 'read', 'update', 'delete'];
+  const modules = Object.keys(P.permissions);
+  let lost = [];
+  for (const mod of modules) {
+    for (const action of ACTIONS) {
+      const resident = P.hasPermission('SURGEON', mod, action);
+      const consultant = P.hasPermission('CONSULTANT_SURGEON', mod, action);
+      if (resident && !consultant) lost.push(`${mod}.${action}`);
+    }
+  }
+  check(`consultant keeps every one of the resident's permissions across ${modules.length} modules`,
+    lost.length === 0, lost.join(', '));
+  check('the permission matrix is actually exercised (sanity)',
+    P.hasPermission('SURGEON', 'surgeryScheduling', 'create') === true);
+  check('consultant can schedule surgery',
+    P.hasPermission('CONSULTANT_SURGEON', 'surgeryScheduling', 'create') === true);
+  check('a porter still cannot schedule surgery',
+    P.hasPermission('PORTER', 'surgeryScheduling', 'create') === false);
+}
+
+console.log('\n4. A promotion never removes modules or pages');
+{
+  const resident = M.resolveAllowedModuleIds('SURGEON');
+  const consultant = M.resolveAllowedModuleIds('CONSULTANT_SURGEON');
+  const missing = [...resident].filter((id) => !consultant.has(id));
+  check(`consultant sees all ${resident.size} resident modules`, missing.length === 0, missing.join(', '));
+  check('module set is non-trivial', resident.size > 10);
+
+  const paths = M.MODULES.flatMap((m) => m.paths);
+  const deniedForConsultant = paths.filter(
+    (p) => M.canAccessPath('SURGEON', [], p) && !M.canAccessPath('CONSULTANT_SURGEON', [], p)
+  );
+  check(`no path reachable by a resident is blocked for a consultant (${paths.length} paths)`,
+    deniedForConsultant.length === 0, deniedForConsultant.join(', '));
+  check('an unrelated role is still restricted somewhere',
+    M.resolveAllowedModuleIds('CLEANER').size < resident.size);
+}
+
+console.log('\n5. Nav items');
+{
+  const resident = P.getVisibleNavItems('SURGEON');
+  const consultant = P.getVisibleNavItems('CONSULTANT_SURGEON');
+  const missing = resident.filter((i) => !consultant.includes(i));
+  check(`consultant sees all ${resident.length} resident nav items`, missing.length === 0, missing.join(', '));
+}
+
+console.log('\n6. Display metadata exists for the new role');
+check('role has a human label', P.getRoleName('CONSULTANT_SURGEON') === 'Consultant Surgeon');
+check('role has a landing dashboard', P.getRoleDashboard('CONSULTANT_SURGEON') === '/dashboard/surgeries');
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exitCode = fail ? 1 : 0;

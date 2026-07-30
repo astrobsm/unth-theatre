@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import { detectConflict } from '@/lib/concurrency';
 
 export const dynamic = 'force-dynamic';
 
@@ -179,6 +180,11 @@ export async function PUT(
     if (!existingSurgery) {
       return NextResponse.json({ error: 'Surgery not found' }, { status: 404 });
     }
+
+    // Refuse to overwrite a booking that moved on while this edit sat in an
+    // offline queue — the caller is told what the server now holds.
+    const conflict = detectConflict(request, existingSurgery, 'surgery');
+    if (conflict) return conflict;
 
     // Only allow updates if surgery is not completed or cancelled
     if (existingSurgery.status === 'COMPLETED' || existingSurgery.status === 'CANCELLED') {

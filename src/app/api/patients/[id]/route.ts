@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/apiMiddleware';
 import prisma from '@/lib/prisma';
+import { detectConflict } from '@/lib/concurrency';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,6 +110,9 @@ export async function PUT(
     if (!existingPatient) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
     }
+
+    const conflict = detectConflict(request, existingPatient, 'patient record');
+    if (conflict) return conflict;
 
     // Prepare update data
     const updateData: any = {};

@@ -1,0 +1,13 @@
+-- Split surgeons into residents (SURGEON) and consultants (CONSULTANT_SURGEON),
+-- mirroring the existing ANAESTHETIST / CONSULTANT_ANAESTHETIST pair.
+--
+-- Existing SURGEON users are left exactly as they are: everyone stays a
+-- resident surgeon until an admin promotes them from Users -> Change role.
+-- CONSULTANT_SURGEON inherits every SURGEON permission in the application
+-- layer (see src/lib/roleGroups.ts), so promoting someone never removes access.
+--
+-- IF NOT EXISTS keeps this safe to re-run and safe on databases that were
+-- already synced with `prisma db push`.
+-- NOTE: the enum type is "UserRole" (see prisma/schema.prisma and the earlier
+-- 20260217000000_add_new_roles_emergency_booking migration) — not "Role".
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'CONSULTANT_SURGEON';

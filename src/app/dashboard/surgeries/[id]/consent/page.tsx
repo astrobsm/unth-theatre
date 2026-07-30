@@ -105,7 +105,7 @@ export default function SurgeryConsentPage() {
   const [surgeons, setSurgeons] = useState<{ id: string; fullName: string; staffCode?: string | null; role?: string | null }[]>([]);
 
   useEffect(() => {
-    fetch('/api/users?roles=SURGEON&limit=300')
+    fetch('/api/users?roles=SURGEON,CONSULTANT_SURGEON&limit=300')
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => setSurgeons(Array.isArray(data) ? data : data.users || []))
       .catch(() => {});

@@ -8,6 +8,7 @@ import { pushToUsers } from '@/lib/pushAll';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
+import { isSurgeonRole } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest) {
 // Roles allowed to update the status of an emergency booking
 const STATUS_UPDATE_ROLES = [
   'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN',
-  'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON',
+  'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON',
   'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'ADMIN', 'SYSTEM_ADMINISTRATOR',
   'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR',
 ];
@@ -267,7 +268,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only surgeons, anesthetists, house officers, theatre managers, and admins can create emergency bookings
-    if (!['SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'].includes(session.user.role)) {
+    if (!['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'].includes(session.user.role)) {
       return NextResponse.json(
         { error: 'Insufficient permissions to create emergency booking' },
         { status: 403 }
@@ -284,8 +285,8 @@ export async function POST(request: NextRequest) {
     const validatedData = createEmergencyBookingSchema.parse(body);
 
     // Determine surgeon
-    const surgeonId = validatedData.surgeonId || (session.user.role === 'SURGEON' ? session.user.id : undefined);
-    const surgeonName = validatedData.surgeonName || (session.user.role === 'SURGEON' ? (session.user.name || '') : '');
+    const surgeonId = validatedData.surgeonId || (isSurgeonRole(session.user.role) ? session.user.id : undefined);
+    const surgeonName = validatedData.surgeonName || (isSurgeonRole(session.user.role) ? (session.user.name || '') : '');
 
     if (!surgeonId) {
       return NextResponse.json(

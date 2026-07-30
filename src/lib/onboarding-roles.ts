@@ -10,7 +10,8 @@ export interface RoleDef {
 // Order = order shown in the form dropdown
 export const ONBOARDING_ROLES: RoleDef[] = [
   // Clinical
-  { value: 'SURGEON',                  label: 'Surgeon',                          prefix: 'SRG' },
+  { value: 'SURGEON',                  label: 'Surgeon (Resident)',               prefix: 'SRG' },
+  { value: 'CONSULTANT_SURGEON',       label: 'Consultant Surgeon',               prefix: 'CSG' },
   { value: 'HOUSE_OFFICER',            label: 'House Officer',                    prefix: 'HOU' },
   { value: 'ANAESTHETIST',             label: 'Anaesthetist',                     prefix: 'ANS' },
   { value: 'CONSULTANT_ANAESTHETIST',  label: 'Consultant Anaesthetist',          prefix: 'CAN' },

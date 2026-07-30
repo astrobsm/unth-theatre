@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     // Lab staff see all; surgeons/anaesthetists see their own requests
     if (session.user.role === 'LABORATORY_STAFF') {
       // Lab staff sees everything
-    } else if (['SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role)) {
+    } else if (['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role)) {
       where.requestedById = session.user.id;
     }
 
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     // Only clinical staff can request lab workups
     const allowedRoles = [
-      'SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
+      'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
       'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR',
     ];
     if (!allowedRoles.includes(session.user.role)) {

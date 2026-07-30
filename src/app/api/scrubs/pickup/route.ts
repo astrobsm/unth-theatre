@@ -19,6 +19,7 @@ export const dynamic = 'force-dynamic';
 function colorForRole(role?: string | null): string {
   switch (role) {
     case 'SURGEON':
+    case 'CONSULTANT_SURGEON':
       return 'GREEN';
     case 'ANAESTHETIST':
     case 'CONSULTANT_ANAESTHETIST':

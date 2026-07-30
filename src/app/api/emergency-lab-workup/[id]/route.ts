@@ -299,7 +299,7 @@ export async function PATCH(
         }
 
         const updateData: any = {};
-        if (['SURGEON'].includes(session.user.role)) {
+        if (['SURGEON', 'CONSULTANT_SURGEON'].includes(session.user.role)) {
           updateData.viewedBySurgeon = true;
           updateData.viewedBySurgeonAt = new Date();
         }

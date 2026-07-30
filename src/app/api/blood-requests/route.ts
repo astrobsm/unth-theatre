@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user can request blood (surgeon, anesthetist, or admin)
-    if (!['SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
+    if (!['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
       return NextResponse.json(
         { error: 'Only surgeons, anesthetists, or admins can request blood' },
         { status: 403 }

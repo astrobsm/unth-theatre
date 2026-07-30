@@ -10,7 +10,7 @@ import {
 } from '@/lib/offlineDataManager';
 import { registerServiceWorker } from '@/lib/pwa';
 import { getOfflineQueueCount, processOfflineQueue, isIndexedDBAvailable } from '@/lib/offlineStore';
-import { installFetchInterceptor, uninstallFetchInterceptor } from '@/lib/globalFetchInterceptor';
+import { installFetchInterceptor } from '@/lib/globalFetchInterceptor';
 import { MODULES } from '@/lib/modules';
 
 // The module routes to make available offline (unique, dashboard-scoped).
@@ -88,6 +88,20 @@ export function useOfflineContext() {
 // OfflineProvider Component
 // ============================================================
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
+  // Install the fetch wrapper BEFORE anything can issue a request.
+  //
+  // This used to run 2s after first paint, which meant NextAuth's very first
+  // /api/auth/session call escaped it. Offline that call fails, NextAuth reports
+  // "unauthenticated", and the dashboard bounced to the login screen even though
+  // a valid offline session was cached. Installing a fetch wrapper is a couple
+  // of assignments — it was never the expensive part of offline setup (that is
+  // the service worker registration and prefetch, both still deferred below).
+  //
+  // Called during render on purpose: effects run too late, since the provider
+  // that fetches the session is an ancestor. installFetchInterceptor() is
+  // idempotent and returns immediately once installed.
+  if (typeof window !== 'undefined') installFetchInterceptor();
+
   const router = useRouter();
   const [isOnline, setIsOnline] = useState(true);
   const [isFullyCached, setIsFullyCached] = useState(false);
@@ -108,9 +122,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // Defer heavy offline setup so the page renders instantly
     const raf = requestAnimationFrame(() => {
       const timer = setTimeout(() => {
-        // Install global fetch interceptor so ALL API calls get offline fallback
-        installFetchInterceptor();
-
+        // (The fetch interceptor is installed during render — see above.)
         registerServiceWorker().then((reg) => {
           if (reg) {
             setSwRegistered(true);
@@ -141,7 +153,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelAnimationFrame(raf);
-      uninstallFetchInterceptor();
+      // The fetch interceptor is deliberately NOT uninstalled here. React's
+      // StrictMode mounts, unmounts and remounts in development: tearing it down
+      // in cleanup left the app with no interceptor at all (the install happens
+      // during render, which does not run again on remount of the same element),
+      // silently disabling offline support. It is process-wide and idempotent,
+      // and removing it mid-session only creates windows where requests escape.
     };
   }, []);
 

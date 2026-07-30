@@ -3,8 +3,16 @@
 // Provides: offline mutation queue, API data cache, sync tracking
 // ============================================================
 
+import {
+  extractServerId,
+  hasUnresolvedClientId,
+  remapClientIds,
+  remapUrl,
+  type PendingRecord,
+} from './offlineMerge';
+
 const DB_NAME = 'orm-offline';
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 const MAX_SYNC_RETRIES = 5;
 
 export interface OfflineQueueItem {
@@ -85,6 +93,17 @@ function openDB(): Promise<IDBDatabase> {
         // or exhausted retries) so staff can see / retry / dismiss them.
         if (!db.objectStoreNames.contains('failedMutations')) {
           db.createObjectStore('failedMutations', { keyPath: 'id', autoIncrement: true });
+        }
+        // v5: encrypted offline-login vault — one record per enrolled user,
+        // keyed by lowercased username. Holds ONLY ciphertext (see offlineAuth).
+        if (!db.objectStoreNames.contains('authVault')) {
+          db.createObjectStore('authVault', { keyPath: 'username' });
+        }
+        // v6: records created/edited/deleted while offline, so reads can show
+        // them before they reach the server (see lib/offlineMerge.ts).
+        if (!db.objectStoreNames.contains('pendingRecords')) {
+          const store = db.createObjectStore('pendingRecords', { keyPath: 'clientId' });
+          store.createIndex('entityType', 'entityType', { unique: false });
         }
       };
 
@@ -213,9 +232,23 @@ export interface FailedMutation {
   entityType: string;
   failedAt: number;
   lastError: string;
+  /**
+   * Present when the server refused the change because the record had moved on.
+   * Holds what the server currently has, so the user can compare the two
+   * versions and decide, rather than being told only that it failed.
+   */
+  conflict?: {
+    serverVersion?: string;
+    yourVersion?: string;
+    serverRecord?: unknown;
+  };
 }
 
-async function addFailedMutation(item: OfflineQueueItem, lastError: string): Promise<void> {
+async function addFailedMutation(
+  item: OfflineQueueItem,
+  lastError: string,
+  conflict?: FailedMutation['conflict']
+): Promise<void> {
   if (!isIndexedDBAvailable()) return;
   const db = await openDB();
   return new Promise((resolve) => {
@@ -223,6 +256,7 @@ async function addFailedMutation(item: OfflineQueueItem, lastError: string): Pro
     tx.objectStore('failedMutations').add({
       url: item.url, method: item.method, headers: item.headers, body: item.body,
       description: item.description, entityType: item.entityType, failedAt: Date.now(), lastError,
+      ...(conflict ? { conflict } : {}),
     });
     tx.oncomplete = () => {
       try { window.dispatchEvent(new CustomEvent('orm:sync-failed')); } catch { /* ignore */ }
@@ -274,7 +308,200 @@ export async function retryFailedMutation(id: number): Promise<void> {
     url: item.url, method: item.method, headers: item.headers, body: item.body,
     description: item.description, entityType: item.entityType,
   });
+  // Back in the queue: clear the red "rejected" badge on the local row.
+  await unmarkPendingFailed(item.headers?.['X-Idempotency-Key']);
   await dismissFailedMutation(id);
+}
+
+/** Clear the rejected flag when a failed mutation is queued again. */
+export async function unmarkPendingFailed(key?: string): Promise<void> {
+  if (!key) return;
+  const all = await getPendingRecords();
+  await Promise.all(
+    all
+      .filter((p) => p.idempotencyKey === key)
+      .map((p) => addPendingRecord({ ...p, failed: false }))
+  );
+}
+
+/**
+ * Resolve a conflict in favour of THIS device's version: re-queue the change
+ * with an explicit overwrite marker, having first moved the base version
+ * forward to what the server now holds. The overwrite is deliberate, recorded,
+ * and only ever happens because a person chose it.
+ */
+export async function resolveConflictKeepMine(id: number): Promise<void> {
+  const failed = await getFailedMutations();
+  const item = failed.find((f) => f.id === id);
+  if (!item) return;
+
+  const headers: Record<string, string> = { ...item.headers, 'X-Overwrite-Conflict': 'true' };
+  if (item.conflict?.serverVersion) headers['X-Base-Version'] = item.conflict.serverVersion;
+
+  await addToOfflineQueue({
+    url: item.url, method: item.method, headers, body: item.body,
+    description: item.description, entityType: item.entityType,
+  });
+  await unmarkPendingFailed(item.headers?.['X-Idempotency-Key']);
+  await dismissFailedMutation(id);
+}
+
+/**
+ * Resolve a conflict in favour of the SERVER: throw away this device's version
+ * and let the record stand as it is. Equivalent to discarding the change.
+ */
+export async function resolveConflictKeepServer(id: number): Promise<void> {
+  await discardFailedMutation(id);
+}
+
+/**
+ * Discard a rejected change for good: removes the dead-letter entry AND the
+ * local row it produced, so the list stops showing work that will never be
+ * saved. Used by the "Dismiss" action in the sync panel.
+ */
+export async function discardFailedMutation(id: number): Promise<void> {
+  const failed = await getFailedMutations();
+  const item = failed.find((f) => f.id === id);
+  if (item) await removePendingByIdempotencyKey(item.headers?.['X-Idempotency-Key']);
+  await dismissFailedMutation(id);
+}
+
+// ============================================================
+// PENDING RECORDS — rows created/changed offline, merged into reads until
+// they reach the server (see lib/offlineMerge.ts).
+// ============================================================
+export async function addPendingRecord(record: PendingRecord): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('pendingRecords', 'readwrite');
+    tx.objectStore('pendingRecords').put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+export async function getPendingRecords(entityType?: string): Promise<PendingRecord[]> {
+  if (!isIndexedDBAvailable()) return [];
+  const db = await openDB();
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('pendingRecords', 'readonly');
+      const store = tx.objectStore('pendingRecords');
+      const req = entityType
+        ? store.index('entityType').getAll(entityType)
+        : store.getAll();
+      req.onsuccess = () => resolve((req.result as PendingRecord[]) || []);
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+export async function removePendingRecord(clientId: string): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('pendingRecords', 'readwrite');
+    tx.objectStore('pendingRecords').delete(clientId);
+    tx.oncomplete = () => {
+      // Tell the fetch interceptor to drop its in-memory overlay so the next
+      // read shows the server's authoritative row rather than the local copy.
+      try { window.dispatchEvent(new CustomEvent('orm:pending-changed')); } catch { /* ignore */ }
+      resolve();
+    };
+    tx.onerror = () => resolve();
+  });
+}
+
+/**
+ * Clear the pending record belonging to a queued mutation once that mutation
+ * has reached the server — otherwise the row would keep showing a "waiting to
+ * sync" badge forever.
+ */
+export async function removePendingByIdempotencyKey(key?: string): Promise<void> {
+  if (!key) return;
+  const all = await getPendingRecords();
+  await Promise.all(
+    all.filter((p) => p.idempotencyKey === key).map((p) => removePendingRecord(p.clientId))
+  );
+}
+
+/**
+ * Flag the local row whose sync the server rejected. It stays on screen (the
+ * work is not thrown away) but is marked so it is not mistaken for saved.
+ */
+export async function markPendingFailed(key?: string): Promise<void> {
+  if (!key) return;
+  const all = await getPendingRecords();
+  await Promise.all(
+    all
+      .filter((p) => p.idempotencyKey === key)
+      .map((p) => addPendingRecord({ ...p, failed: true }))
+  );
+}
+
+// ============================================================
+// AUTH VAULT — encrypted offline-login records (see lib/offlineAuth.ts)
+// Only ciphertext + non-secret metadata is ever stored here.
+// ============================================================
+export interface AuthVaultRecord {
+  username: string;        // lowercased, the store key
+  displayName: string;     // for the "signed in as" hint on the login screen
+  salt: string;            // base64 PBKDF2 salt
+  iv: string;              // base64 AES-GCM IV
+  iterations: number;      // PBKDF2 iteration count used
+  ciphertext: string;      // base64 AES-GCM payload (the NextAuth session)
+  enrolledAt: number;
+  expiresAt: number;
+  failedAttempts: number;
+  lockedUntil: number;     // epoch ms; 0 = not locked
+  lastOfflineLoginAt: number;
+}
+
+export async function putAuthVault(record: AuthVaultRecord): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('authVault', 'readwrite');
+    tx.objectStore('authVault').put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+export async function getAuthVault(username: string): Promise<AuthVaultRecord | null> {
+  if (!isIndexedDBAvailable()) return null;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('authVault', 'readonly');
+    const req = tx.objectStore('authVault').get(username.trim().toLowerCase());
+    req.onsuccess = () => resolve((req.result as AuthVaultRecord) ?? null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+export async function listAuthVaults(): Promise<AuthVaultRecord[]> {
+  if (!isIndexedDBAvailable()) return [];
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('authVault', 'readonly');
+    const req = tx.objectStore('authVault').getAll();
+    req.onsuccess = () => resolve((req.result as AuthVaultRecord[]) || []);
+    req.onerror = () => resolve([]);
+  });
+}
+
+export async function deleteAuthVault(username: string): Promise<void> {
+  if (!isIndexedDBAvailable()) return;
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('authVault', 'readwrite');
+    tx.objectStore('authVault').delete(username.trim().toLowerCase());
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
 }
 
 // ============================================================
@@ -283,19 +510,45 @@ export async function retryFailedMutation(id: number): Promise<void> {
 
 export async function setCachedData(key: string, data: unknown, ttlMs: number = 30 * 60 * 1000): Promise<void> {
   if (!isIndexedDBAvailable()) return;
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('cachedData', 'readwrite');
-    const store = tx.objectStore('cachedData');
-    const request = store.put({
-      key,
-      data,
-      timestamp: Date.now(),
-      expiresAt: Date.now() + ttlMs,
-    });
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  try {
+    await putCachedData(key, data, ttlMs);
+  } catch (err) {
+    // Storage full — usually a form carrying base64 photos/scans. Drop expired
+    // entries and try once more, so a queued mutation is never lost just
+    // because the READ cache had filled up.
+    const name = (err as { name?: string })?.name || '';
+    if (name === 'QuotaExceededError' || name === 'AbortError') {
+      try {
+        await clearExpiredCache();
+        await putCachedData(key, data, ttlMs);
+        return;
+      } catch {
+        console.warn('[offlineStore] cache write failed after eviction; continuing without caching');
+        return;
+      }
+    }
+    // Any other failure: caching is best-effort and must never break the caller.
+    console.warn('[offlineStore] cache write failed:', (err as Error)?.message);
+  }
+}
+
+function putCachedData(key: string, data: unknown, ttlMs: number): Promise<void> {
+  return openDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('cachedData', 'readwrite');
+        const store = tx.objectStore('cachedData');
+        const request = store.put({
+          key,
+          data,
+          timestamp: Date.now(),
+          expiresAt: Date.now() + ttlMs,
+        });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+        tx.onabort = () => reject(tx.error);
+      })
+  );
 }
 
 export async function getCachedData<T = unknown>(key: string): Promise<{ data: T; isStale: boolean; cachedAt: number } | null> {
@@ -395,6 +648,13 @@ async function safeErr(response: Response): Promise<string> {
   }
 }
 
+/** Persisted map of local ids -> the server ids they became. */
+const ID_MAP_KEY = 'clientIdMap';
+
+async function loadIdMap(): Promise<Record<string, string>> {
+  return (await getSyncMeta<Record<string, string>>(ID_MAP_KEY)) ?? {};
+}
+
 export async function processOfflineQueue(): Promise<{ synced: number; failed: number; remaining: number }> {
   const queue = await getOfflineQueue();
   if (queue.length === 0) return { synced: 0, failed: 0, remaining: 0 };
@@ -402,7 +662,28 @@ export async function processOfflineQueue(): Promise<{ synced: number; failed: n
   let synced = 0;
   let failed = 0;
 
-  for (const item of queue) {
+  // Records created offline hold a local id; anything queued after them refers
+  // to it (register a patient, then book their surgery). As each create lands
+  // we learn its real id and rewrite the rest of the queue, so the chain of
+  // work a nurse did offline syncs as a unit instead of the children failing.
+  // The queue is FIFO, so a parent is always attempted before its children.
+  const idMap = await loadIdMap();
+
+  for (const rawItem of queue) {
+    // Hold back anything still pointing at a local id we have not resolved —
+    // its parent has not synced yet. Sending it would guarantee a rejection and
+    // dead-letter real clinical work.
+    if (hasUnresolvedClientId(rawItem.url, rawItem.body, idMap)) {
+      failed++;
+      continue;
+    }
+
+    const item: OfflineQueueItem = {
+      ...rawItem,
+      url: remapUrl(rawItem.url, idMap),
+      body: remapClientIds(rawItem.body, idMap),
+    };
+
     try {
       const response = await fetch(item.url, {
         method: item.method,
@@ -411,12 +692,51 @@ export async function processOfflineQueue(): Promise<{ synced: number; failed: n
       });
 
       if (response.ok) {
+        // Learn this record's real id so later items can reference it.
+        if (item.method === 'POST') {
+          try {
+            const created = await response.clone().json();
+            const serverId = extractServerId(created);
+            const pending = (await getPendingRecords()).find(
+              (p) => p.idempotencyKey === item.headers?.['X-Idempotency-Key']
+            );
+            if (serverId && pending?.clientId) {
+              idMap[pending.clientId] = serverId;
+              await setSyncMeta(ID_MAP_KEY, idMap);
+            }
+          } catch {
+            /* response had no usable body — later items simply stay held back */
+          }
+        }
         await removeFromOfflineQueue(item.id!);
+        // The server now holds this row, so drop the local stand-in — the next
+        // read will show the authoritative record instead of the pending copy.
+        await removePendingByIdempotencyKey(item.headers?.['X-Idempotency-Key']);
         synced++;
+      } else if (response.status === 409) {
+        // CONFLICT — someone else changed the same record while this device was
+        // offline. Never silently overwrite clinical data: keep BOTH versions
+        // and let a human decide which one wins.
+        let payload: Record<string, unknown> = {};
+        try { payload = await response.clone().json(); } catch { /* no body */ }
+        await addFailedMutation(
+          item,
+          `Conflict: this record was changed by someone else while you were offline. ` +
+            `Your version was not applied. ${await safeErr(response)}`.trim(),
+          {
+            serverVersion: payload.serverVersion as string | undefined,
+            yourVersion: payload.yourVersion as string | undefined,
+            serverRecord: payload.current,
+          }
+        );
+        await removeFromOfflineQueue(item.id!);
+        await markPendingFailed(item.headers?.['X-Idempotency-Key']);
+        failed++;
       } else if (response.status >= 400 && response.status < 500) {
         // Client error — permanent; dead-letter it so staff can see/retry/dismiss.
         await addFailedMutation(item, `Server rejected the change (HTTP ${response.status}). ${await safeErr(response)}`);
         await removeFromOfflineQueue(item.id!);
+        await markPendingFailed(item.headers?.['X-Idempotency-Key']);
         failed++;
       } else {
         // Server error (5xx) — retry a few times, then dead-letter.
@@ -424,6 +744,7 @@ export async function processOfflineQueue(): Promise<{ synced: number; failed: n
         if (rc >= MAX_SYNC_RETRIES) {
           await addFailedMutation(item, `Server error (HTTP ${response.status}) after ${rc} attempts.`);
           await removeFromOfflineQueue(item.id!);
+          await markPendingFailed(item.headers?.['X-Idempotency-Key']);
         } else {
           await updateOfflineQueueItem({ ...item, retryCount: rc });
         }

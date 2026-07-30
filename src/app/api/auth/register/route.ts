@@ -16,6 +16,7 @@ const registerSchema = z.object({
     'THEATRE_MANAGER',
     'THEATRE_CHAIRMAN',
     'SURGEON',
+    'CONSULTANT_SURGEON',
     'ANAESTHETIST',
     'SCRUB_NURSE',
     'RECOVERY_ROOM_NURSE',

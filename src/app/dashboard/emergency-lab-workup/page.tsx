@@ -773,7 +773,7 @@ export default function EmergencyLabWorkupPage() {
 
   const isLabStaff = session?.user?.role === 'LABORATORY_STAFF';
   const isAdmin = session?.user?.role === 'ADMIN' || session?.user?.role === 'THEATRE_MANAGER';
-  const isClinician = ['SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session?.user?.role || '');
+  const isClinician = ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session?.user?.role || '');
 
   // Filter requests by active tab
   const filteredByTab = requests.filter(req => {

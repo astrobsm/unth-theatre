@@ -17,7 +17,7 @@ export async function POST(
     }
 
     const allowedRoles = [
-      'SURGEON', 'ANAESTHETIST', 
+      'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 
       'SCRUB_NURSE', 
       'ADMIN', 'THEATRE_MANAGER'
     ];
