@@ -31,6 +31,7 @@ const SUITES = [
   'test-role-groups.js',
   'test-offline-coverage.js',
   'test-no-redirect-loop.js',
+  'test-auto-update.js',
 ];
 
 let failed = 0;

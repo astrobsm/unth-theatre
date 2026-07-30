@@ -22,7 +22,13 @@ import { useOfflineContext } from '@/components/OfflineProvider';
 // installed app re-downloads the full offline shell. It also auto-re-warms if the
 // cache is older than MAX_AGE_MS, keeping offline coverage complete over time.
 const WARMED_KEY = 'orm.native.offlineWarmed';
-const SHELL_VERSION = 'v2-2026-07';
+// v3: offline-first release. Every installed device MUST re-warm, because the
+// data it cached previously is unreachable: cached API responses were written
+// under a key format nothing reads any more, the service worker's IndexedDB
+// access had been failing outright (it pinned an outdated database version), and
+// the prefetch list has grown from 21 endpoints to 68. Re-warming rewrites all
+// of it under the single canonical key.
+const SHELL_VERSION = 'v3-2026-07-offline-first';
 const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 export default function NativeOfflineWarmup() {
