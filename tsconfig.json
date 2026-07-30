@@ -22,5 +22,10 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // scripts/imprest-tests holds the imprest system's ORIGINAL vitest suites,
+  // kept byte-identical so their assertions still mean what their authors
+  // intended. They are executed by scripts/imprest-tests/run-all.js, which
+  // supplies the vitest surface and resolves their imports against
+  // src/lib/imprest — so they are deliberately outside the app's typecheck.
+  "exclude": ["node_modules", "scripts/imprest-tests"]
 }

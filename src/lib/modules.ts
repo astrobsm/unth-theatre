@@ -121,6 +121,17 @@ export const MODULES: AppModule[] = [
   { id: 'training', label: 'Staff Training', paths: ['/training'], defaultRoles: ['*'], category: 'Reports' },
   { id: 'settings', label: 'Settings', paths: ['/dashboard/settings'], defaultRoles: ['*'], category: 'Reports' },
 
+  // Imprest Management and Retirement
+  // ---------------------------------
+  // `defaultRoles: []` on purpose: imprest access follows an assigned imprest
+  // DUTY (ImprestRoleAssignment), never a clinical role. The API enforces this
+  // independently — see lib/imprest/access.ts — so the sidebar entry appearing
+  // for an admin never implies the route will serve them.
+  { id: 'imprest', label: 'Imprest Register', paths: ['/dashboard/imprest'], defaultRoles: [], category: 'Imprest' },
+  { id: 'imprest-expenditure', label: 'Expenditure', paths: ['/dashboard/imprest/expenditure'], defaultRoles: [], category: 'Imprest' },
+  { id: 'imprest-retirement', label: 'Retirement', paths: ['/dashboard/imprest/retirement'], defaultRoles: [], category: 'Imprest' },
+  { id: 'imprest-duties', label: 'Imprest Duties', paths: ['/dashboard/imprest/duties'], defaultRoles: [], category: 'Imprest' },
+
   // Admin-only modules (cannot be granted; gated separately)
   { id: 'users', label: 'User Management', paths: ['/dashboard/users'], defaultRoles: [], category: 'Admin' },
   { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },

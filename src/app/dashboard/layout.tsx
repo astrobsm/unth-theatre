@@ -59,6 +59,7 @@ import {
   Ambulance,
   FileWarning,
   Wrench,
+  Wallet,
   Phone,
   ClipboardPlus,
   Pill,
@@ -305,6 +306,10 @@ export default function DashboardLayout({
     { href: '/dashboard/research', icon: FlaskConical, label: 'Research & Analytics', badge: 'NEW' },
     { href: '/dashboard/presentation', icon: MonitorPlay, label: 'Presentation', badge: 'NEW' },
     { href: '/dashboard/catalog-contribute', icon: Package, label: 'Contribute Catalog', badge: 'NEW' },
+    // Imprest Management and Retirement. Visibility follows the module gating
+    // above, but the real check is the assigned imprest DUTY, enforced by the
+    // API — a user without one is told how to obtain it rather than 404'd.
+    { href: '/dashboard/imprest', icon: Wallet, label: 'Imprest Register', badge: 'NEW' },
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
     { href: '/role-guide', icon: GraduationCap, label: 'Role Guide', badge: 'GUIDE', external: true },

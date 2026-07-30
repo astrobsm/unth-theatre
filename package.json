@@ -23,7 +23,9 @@
     "cap:open:android": "cap open android",
     "cap:open:ios": "cap open ios",
     "cap:run:android": "cap run android",
-    "cap:run:ios": "cap run ios"
+    "cap:run:ios": "cap run ios",
+    "test:imprest": "node scripts/imprest-tests/run-all.js",
+    "test:all": "npm run test:offline && npm run test:imprest"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
