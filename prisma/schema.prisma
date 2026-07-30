@@ -568,6 +568,26 @@ model User {
   postOpRxPrescribed PostOpPrescription[]         @relation("PostOpPrescribedBy")
   postOpRxPacked     PostOpPrescription[]         @relation("PostOpPackedBy")
 
+  // ---------------------------------------------------------------------
+  // Imprest Management and Retirement System
+  // ---------------------------------------------------------------------
+  // The imprest system has no accounts of its own: this IS the imprest user.
+  // The duty that governs the approval chain (cashier, account officer,
+  // chairman…) is assigned separately in ImprestRoleAssignment, because it is
+  // independent of a clinical role — the cashier may well be a nurse.
+  imprestRoles               ImprestRoleAssignment[] @relation("ImprestRoleAssignments")
+  imprestsReceived           Imprest[]               @relation("ImprestImprestReceivingOfficer")
+  imprestExpenditures        Expenditure[]           @relation("ImprestExpenditureOfficer")
+  imprestAttachments         Attachment[]            @relation("ImprestAttachmentOwner")
+  imprestRetirementsPrepared Retirement[]            @relation("ImprestRetirementPreparer")
+  imprestRetirementsChecked  Retirement[]            @relation("ImprestRetirementChecker")
+  imprestRetirementsApproved Retirement[]            @relation("ImprestRetirementApprover")
+  imprestApprovalsActed      Approval[]              @relation("ImprestApprovalActor")
+  imprestSignatures          Signature[]
+  imprestSignatories         ApprovalSignatory[]
+  imprestAuditLogs           ImprestAuditLog[]
+  imprestNotifications       ImprestNotification[]
+
   @@map("users")
 }
 
@@ -7418,3 +7438,991 @@ model ScrubPickup {
 }
 
 
+// ===========================================================================
+// IMPREST MANAGEMENT AND RETIREMENT SYSTEM
+// ---------------------------------------------------------------------------
+// Merged from the standalone imprest monorepo (apps/api/prisma/schema.prisma).
+// Staff identity is the theatre `User`; imprest carries no second account
+// table. Every table is mapped with an `imprest_` prefix.
+//
+// Design rules inherited from the source schema, and preserved here:
+//   • MONEY IS BIGINT KOBO — no floating point currency anywhere.
+//   • NOTHING IS HARD DELETED — deletedAt/deletedById/deletionReason.
+//   • OPTIMISTIC CONCURRENCY — `version` on every synchronisable row.
+//   • DENORMALISED WITNESS FIELDS — a printed retirement must still read
+//     correctly years later, after vendors are renamed or staff transfer.
+// ===========================================================================
+
+enum ImprestStatus {
+  DRAFT
+  ACTIVE
+  PARTIALLY_RETIRED
+  FULLY_RETIRED
+  CLOSED
+  CANCELLED
+}
+
+enum ExpenditureStatus {
+  DRAFT
+  POSTED
+  QUERIED
+  RETIRED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  POS
+  CHEQUE
+}
+
+enum WorkflowStage {
+  PREPARED
+  SUBMITTED
+  ACCOUNT_OFFICER_REVIEW
+  CHAIRMAN_REVIEW
+  FINANCE_REVIEW
+  INTERNAL_AUDIT
+  APPROVED
+  CLOSED
+  REJECTED
+}
+
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+  QUERY
+}
+
+enum RetirementStatus {
+  DRAFT
+  IN_REVIEW
+  QUERIED
+  APPROVED
+  CLOSED
+  REJECTED
+}
+
+enum AttachmentKind {
+  RECEIPT
+  INVOICE
+  WAYBILL
+  QUOTATION
+  APPROVAL_LETTER
+  BANK_SLIP
+  OTHER
+}
+
+enum SignatureKind {
+  PREPARER
+  OFFICER
+  WITNESS
+  APPROVER
+  CERTIFIER
+}
+
+enum DocumentType {
+  IMPREST_REGISTER
+  CASH_BOOK
+  EXPENSE_REGISTER
+  RETIREMENT_FORM
+  APPROVAL_SHEET
+  RECEIPT_REGISTER
+  SUMMARY_REPORT
+  VENDOR_REGISTER
+  AUDIT_REPORT
+  PAYMENT_VOUCHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  SOFT_DELETE
+  RESTORE
+  SUBMIT
+  APPROVE
+  REJECT
+  QUERY
+  CLOSE
+  CANCEL
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  PASSWORD_CHANGE
+  TWO_FACTOR_ENABLED
+  TWO_FACTOR_DISABLED
+  EXPORT
+  PRINT
+  UPLOAD
+  SYNC
+  PERMISSION_DENIED
+}
+
+enum AuditEntity {
+  USER
+  IMPREST
+  EXPENDITURE
+  ATTACHMENT
+  RETIREMENT
+  APPROVAL
+  VENDOR
+  CATEGORY
+  BUDGET_HEAD
+  DEPARTMENT
+  SETTING
+  SESSION
+  DOCUMENT
+}
+
+enum ImprestNotificationType {
+  PENDING_RETIREMENT
+  LATE_RETIREMENT
+  APPROVAL_NEEDED
+  RECEIPT_MISSING
+  BUDGET_EXHAUSTED
+  RETIREMENT_COMPLETED
+  EXPENDITURE_QUERIED
+  IMPREST_RECEIVED
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum SyncMutationState {
+  PENDING
+  APPLIED
+  REJECTED
+  CONFLICT
+}
+
+enum ConflictResolution {
+  SERVER
+  CLIENT
+  MANUAL
+}
+
+model Department {
+  id       String  @id @default(uuid()) @db.Uuid
+  code     String  @unique
+  name     String
+  office   String?
+  isActive Boolean @default(true)
+
+  // The imprest system no longer owns user accounts, so a department does not
+  // list members here — theatre staff belong to a department on the User record.
+  imprests        Imprest[]
+  roleAssignments ImprestRoleAssignment[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_departments")
+}
+
+model BudgetHead {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  voteCodes     VoteCode[]
+  imprests      Imprest[]
+  expenditures  Expenditure[]
+  categories    ExpenseCategory[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_budget_heads")
+}
+
+model VoteCode {
+  id       String  @id @default(uuid()) @db.Uuid
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true)
+
+  budgetHeadId String?     @db.Uuid
+  budgetHead   BudgetHead? @relation(fields: [budgetHeadId], references: [id], onDelete: SetNull)
+
+  imprests     Imprest[]
+  expenditures Expenditure[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([budgetHeadId])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_vote_codes")
+}
+
+model CostCentre {
+  id       String  @id @default(uuid()) @db.Uuid
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true)
+
+  imprests Imprest[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_cost_centres")
+}
+
+model ExpenseCategory {
+  id        String  @id @default(uuid()) @db.Uuid
+  name      String
+  /// Seeded categories cannot be removed, only deactivated.
+  isSystem  Boolean @default(false)
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(100)
+
+  parentId String?           @db.Uuid
+  parent   ExpenseCategory?  @relation("ImprestCategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children ExpenseCategory[] @relation("ImprestCategoryTree")
+
+  defaultBudgetHeadId String?     @db.Uuid
+  defaultBudgetHead   BudgetHead? @relation(fields: [defaultBudgetHeadId], references: [id], onDelete: SetNull)
+
+  expenditures    Expenditure[] @relation("ImprestExpenditureCategory")
+  subExpenditures Expenditure[] @relation("ImprestExpenditureSubcategory")
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@unique([name, parentId])
+  @@index([parentId])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_expense_categories")
+}
+
+model FinancialYear {
+  id        String   @id @default(uuid()) @db.Uuid
+  label     String   @unique
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isCurrent Boolean  @default(false)
+  isClosed  Boolean  @default(false)
+
+  imprests  Imprest[]
+  sequences DocumentSequence[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([isCurrent])
+  @@index([updatedAt])
+  @@map("imprest_financial_years")
+}
+
+model Vendor {
+  id            String  @id @default(uuid()) @db.Uuid
+  name          String
+  phone         String?
+  address       String?
+  /// Encrypted at rest — see services/crypto.service.ts.
+  tin           String?
+  bankName      String?
+  accountNumber String?
+  isActive      Boolean @default(true)
+
+  expenditures Expenditure[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@unique([name, phone])
+  @@index([name])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_vendors")
+}
+
+model Signature {
+  id   String        @id @default(uuid()) @db.Uuid
+  kind SignatureKind
+
+  /// PNG data URL captured from mouse, touch or stylus.
+  imageData           String
+  signedByName        String
+  signedByDesignation String
+  signedAt            DateTime @default(now())
+
+  signedById String?
+  signedBy   User?   @relation(fields: [signedById], references: [id], onDelete: SetNull)
+
+  /// SHA-256 over the signed payload — binds the mark to the document state.
+  contentHash String
+
+  expenditureId String?      @db.Uuid
+  expenditure   Expenditure? @relation(fields: [expenditureId], references: [id], onDelete: Cascade)
+  retirementId  String?      @db.Uuid
+  retirement    Retirement?  @relation(fields: [retirementId], references: [id], onDelete: Cascade)
+  approval      Approval?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([expenditureId])
+  @@index([retirementId])
+  @@index([signedById])
+  @@map("imprest_signatures")
+}
+
+model Imprest {
+  id             String  @id @default(uuid()) @db.Uuid
+  imprestNumber  String  @unique
+  voucherNumber  String?
+  approvalNumber String?
+
+  financialYearId String        @db.Uuid
+  financialYear   FinancialYear @relation(fields: [financialYearId], references: [id])
+
+  departmentId String     @db.Uuid
+  department   Department @relation(fields: [departmentId], references: [id])
+  office       String?
+
+  dateApproved DateTime  @db.Date
+  dateReceived DateTime? @db.Date
+
+  /// Kobo.
+  amountApproved BigInt
+  /// Kobo.
+  amountReceived BigInt @default(0)
+
+  receivingOfficerId String
+  receivingOfficer   User   @relation("ImprestImprestReceivingOfficer", fields: [receivingOfficerId], references: [id])
+
+  purpose       String
+  fundingSource String?
+
+  budgetHeadId String?     @db.Uuid
+  budgetHead   BudgetHead? @relation(fields: [budgetHeadId], references: [id], onDelete: SetNull)
+  voteCodeId   String?     @db.Uuid
+  voteCode     VoteCode?   @relation(fields: [voteCodeId], references: [id], onDelete: SetNull)
+  costCentreId String?     @db.Uuid
+  costCentre   CostCentre? @relation(fields: [costCentreId], references: [id], onDelete: SetNull)
+
+  expectedRetirementDate DateTime      @db.Date
+  status                 ImprestStatus @default(DRAFT)
+
+  /// Rollups maintained inside the same transaction as expenditure writes, so
+  /// a list screen never has to aggregate the whole ledger to show a balance.
+  totalExpenditure BigInt @default(0)
+  totalRetired     BigInt @default(0)
+  balance          BigInt @default(0)
+
+  remarks        String?
+  closingRemarks String?
+  closedAt       DateTime?
+  cancelledAt    DateTime?
+
+  expenditures Expenditure[]
+  retirements  Retirement[]
+  attachments  Attachment[]  @relation("ImprestAttachmentImprest")
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([status])
+  @@index([financialYearId])
+  @@index([departmentId])
+  @@index([receivingOfficerId])
+  @@index([expectedRetirementDate])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_imprests")
+}
+
+model Expenditure {
+  id            String @id @default(uuid()) @db.Uuid
+  expenseNumber String @unique
+
+  imprestId String  @db.Uuid
+  imprest   Imprest @relation(fields: [imprestId], references: [id])
+
+  date DateTime @db.Date
+
+  vendorId String? @db.Uuid
+  vendor   Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  /// Copied at posting time so a historic schedule survives a vendor rename.
+  vendorName    String
+  vendorPhone   String?
+  vendorAddress String?
+  vendorTin     String?
+
+  description String
+  purpose     String?
+
+  categoryId String          @db.Uuid
+  category   ExpenseCategory @relation("ImprestExpenditureCategory", fields: [categoryId], references: [id])
+
+  subcategoryId String?          @db.Uuid
+  subcategory   ExpenseCategory? @relation("ImprestExpenditureSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+
+  /// Scaled by 1000 to keep fractional quantities (2.5 litres) exact.
+  quantityMilli BigInt  @default(1000)
+  unitOfMeasure String?
+  /// Kobo.
+  unitCost      BigInt
+  /// Kobo.
+  totalCost     BigInt
+
+  paymentMethod PaymentMethod
+  voucherNumber String?
+  receiptNumber String?
+  invoiceNumber String?
+  receiptDate   DateTime?     @db.Date
+
+  /// Kobo. What was charged against the imprest.
+  amountPaid      BigInt
+  /// Kobo.
+  vat             BigInt @default(0)
+  /// Kobo.
+  withholdingTax  BigInt @default(0)
+  /// Kobo. What the vendor received after withholding.
+  netAmount       BigInt
+
+  budgetHeadId String?     @db.Uuid
+  budgetHead   BudgetHead? @relation(fields: [budgetHeadId], references: [id], onDelete: SetNull)
+  voteCodeId   String?     @db.Uuid
+  voteCode     VoteCode?   @relation(fields: [voteCodeId], references: [id], onDelete: SetNull)
+
+  remarks String?
+
+  officerResponsibleId String @db.Uuid
+  officerResponsible   User   @relation("ImprestExpenditureOfficer", fields: [officerResponsibleId], references: [id])
+
+  witnessName        String?
+  witnessDesignation String?
+
+  gpsLatitude  Float?
+  gpsLongitude Float?
+  gpsAccuracy  Float?
+
+  status      ExpenditureStatus @default(POSTED)
+  queryReason String?
+
+  retirementId String?     @db.Uuid
+  retirement   Retirement? @relation(fields: [retirementId], references: [id], onDelete: SetNull)
+
+  /// Kobo. Imprest balance immediately after this line was posted.
+  runningBalance BigInt @default(0)
+
+  attachments Attachment[] @relation("ImprestAttachmentExpenditure")
+  signatures  Signature[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([imprestId, date])
+  @@index([status])
+  @@index([vendorId])
+  @@index([categoryId])
+  @@index([budgetHeadId])
+  @@index([officerResponsibleId])
+  @@index([retirementId])
+  @@index([receiptNumber])
+  @@index([voucherNumber])
+  @@index([date])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_expenditures")
+}
+
+model Attachment {
+  id       String         @id @default(uuid()) @db.Uuid
+  kind     AttachmentKind @default(RECEIPT)
+  fileName String
+  mimeType String
+  byteSize Int
+  /// SHA-256 of the stored bytes — detects tampering, de-duplicates uploads.
+  checksum String
+
+  storageKey          String
+  thumbnailStorageKey String?
+
+  expenditureId String?      @db.Uuid
+  expenditure   Expenditure? @relation("ImprestAttachmentExpenditure", fields: [expenditureId], references: [id], onDelete: Cascade)
+  imprestId     String?      @db.Uuid
+  imprest       Imprest?     @relation("ImprestAttachmentImprest", fields: [imprestId], references: [id], onDelete: Cascade)
+  retirementId  String?      @db.Uuid
+  retirement    Retirement?  @relation("ImprestAttachmentRetirement", fields: [retirementId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?        @relation("ImprestAttachmentOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  width      Int?
+  height     Int?
+  rotation   Int       @default(0)
+  capturedAt DateTime?
+
+  /// Reserved for the OCR pipeline; the architecture is in place, extraction
+  /// is a pluggable step that populates these two columns.
+  ocrText        String?
+  ocrProcessedAt DateTime?
+
+  caption String?
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([expenditureId])
+  @@index([imprestId])
+  @@index([retirementId])
+  @@index([checksum])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_attachments")
+}
+
+model Retirement {
+  id               String @id @default(uuid()) @db.Uuid
+  retirementNumber String @unique
+
+  imprestId String  @db.Uuid
+  imprest   Imprest @relation(fields: [imprestId], references: [id])
+
+  /// Kobo.
+  amountReceived   BigInt
+  /// Kobo.
+  totalExpenditure BigInt
+  /// Kobo.
+  balanceReturned  BigInt
+
+  receiptCount     Int @default(0)
+  vendorCount      Int @default(0)
+  expenditureCount Int @default(0)
+
+  returnReceiptNumber String?
+
+  retirementDate DateTime         @db.Date
+  status         RetirementStatus @default(DRAFT)
+  currentStage   WorkflowStage    @default(PREPARED)
+
+  preparedById String
+  preparedBy   User     @relation("ImprestRetirementPreparer", fields: [preparedById], references: [id])
+  preparedAt   DateTime @default(now())
+
+  checkedById String?
+  checkedBy   User?     @relation("ImprestRetirementChecker", fields: [checkedById], references: [id], onDelete: SetNull)
+  checkedAt   DateTime?
+
+  approvedById String?
+  approvedBy   User?     @relation("ImprestRetirementApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  certificationText String
+  remarks           String?
+
+  documentId  String?   @unique
+  submittedAt DateTime?
+  closedAt    DateTime?
+
+  expenditures Expenditure[]
+  approvals    Approval[]
+  signatures   Signature[]
+  attachments  Attachment[]      @relation("ImprestAttachmentRetirement")
+  documents    GeneratedDocument[]
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@index([imprestId])
+  @@index([status])
+  @@index([currentStage])
+  @@index([preparedById])
+  @@index([deletedAt])
+  @@index([updatedAt])
+  @@map("imprest_retirements")
+}
+
+model Approval {
+  id String @id @default(uuid()) @db.Uuid
+
+  retirementId String     @db.Uuid
+  retirement   Retirement @relation(fields: [retirementId], references: [id], onDelete: Cascade)
+
+  stage    WorkflowStage
+  sequence Int
+  decision ApprovalDecision?
+
+  actorId String?
+  actor   User?   @relation("ImprestApprovalActor", fields: [actorId], references: [id], onDelete: SetNull)
+  /// Copied so the approval sheet still reads correctly after a transfer.
+  actorName        String?
+  actorDesignation String?
+
+  actedAt  DateTime?
+  comments String?
+
+  signatureId String?    @unique @db.Uuid
+  signature   Signature? @relation(fields: [signatureId], references: [id], onDelete: SetNull)
+
+  isCurrent Boolean @default(false)
+
+  ipAddress String?
+  userAgent String?
+
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deletionReason String?
+
+  @@unique([retirementId, stage, sequence])
+  @@index([retirementId])
+  @@index([stage, isCurrent])
+  @@index([actorId])
+  @@index([updatedAt])
+  @@map("imprest_approvals")
+}
+
+model ApprovalSignatory {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stage    WorkflowStage
+  priority Int           @default(1)
+  isActive Boolean       @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, stage])
+  @@index([stage])
+  @@map("imprest_approval_signatories")
+}
+
+model GeneratedDocument {
+  id           String       @id @default(uuid()) @db.Uuid
+  documentId   String       @unique
+  documentType DocumentType
+  title        String
+
+  entityId String? @db.Uuid
+
+  retirementId String?     @db.Uuid
+  retirement   Retirement? @relation(fields: [retirementId], references: [id], onDelete: SetNull)
+
+  storageKey String
+  /// SHA-256 of the rendered PDF — the verification page compares against this.
+  checksum   String
+  byteSize   Int
+  pageCount  Int    @default(1)
+  watermark  String?
+
+  issuedAt    DateTime @default(now())
+  issuedById  String?
+  issuedByName String?
+
+  /// Incremented whenever the verification URL is opened, for the audit file.
+  verificationCount Int       @default(0)
+  lastVerifiedAt    DateTime?
+
+  @@index([documentType])
+  @@index([retirementId])
+  @@index([issuedAt])
+  @@map("imprest_generated_documents")
+}
+
+model ImprestAuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  action      AuditAction
+  entity      AuditEntity
+  entityId    String?     @db.Uuid
+  entityLabel String?
+
+  actorId   String?
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String?
+  /// Witness copy of the imprest duty the actor held at the time. Kept as the
+  /// imprest role (not the clinical role) because that is what governs the
+  /// approval chain, and it must still read correctly after a transfer.
+  actorRole ImprestRole?
+
+  /// Array of { field, oldValue, newValue }. Null for creates and reads.
+  changes Json?
+
+  occurredAt  DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  deviceLabel String?
+  latitude    Float?
+  longitude   Float?
+
+  /// True when the event was captured offline and replayed on reconnection.
+  recordedOffline Boolean @default(false)
+  requestId       String?
+  notes           String?
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([occurredAt])
+  @@index([action])
+  @@map("imprest_audit_logs")
+}
+
+model ImprestNotification {
+  id       String               @id @default(uuid()) @db.Uuid
+  type     ImprestNotificationType
+  severity NotificationSeverity @default(INFO)
+  title    String
+  body     String
+
+  recipientId String @db.Uuid
+  recipient   User   @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  entity    AuditEntity?
+  entityId  String?      @db.Uuid
+  actionUrl String?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  /// De-duplication key: one open alert per (recipient, type, entity).
+  dedupeKey String?
+
+  @@unique([dedupeKey])
+  @@index([recipientId, readAt])
+  @@index([createdAt])
+  @@map("imprest_notifications")
+}
+
+model SyncMutationLog {
+  id String @id @db.Uuid
+
+  deviceId    String
+  deviceLabel String?
+
+  userId String
+
+  entity      AuditEntity
+  entityId    String      @db.Uuid
+  operation   String
+  baseVersion Int
+
+  payload Json
+
+  state        SyncMutationState @default(PENDING)
+  errorCode    String?
+  errorMessage String?
+  appliedVersion Int?
+
+  clientCreatedAt DateTime
+  receivedAt      DateTime @default(now())
+  processedAt     DateTime?
+
+  @@index([deviceId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([state])
+  @@map("imprest_sync_mutation_log")
+}
+
+model SyncConflict {
+  id String @id @default(uuid()) @db.Uuid
+
+  mutationId String      @db.Uuid
+  entity     AuditEntity
+  entityId   String      @db.Uuid
+  userId     String
+
+  clientPayload Json
+  serverRecord  Json
+
+  detectedAt DateTime            @default(now())
+  resolution ConflictResolution?
+  resolvedAt DateTime?
+  resolvedById String?
+  notes      String?
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([resolvedAt])
+  @@map("imprest_sync_conflicts")
+}
+
+model DocumentSequence {
+  id     String @id @default(uuid()) @db.Uuid
+  series String
+
+  financialYearId String        @db.Uuid
+  financialYear   FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+
+  lastValue Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([series, financialYearId])
+  @@map("imprest_document_sequences")
+}
+
+model OrganisationSetting {
+  id String @id @default("singleton")
+
+  institutionName String @default("UNIVERSITY OF NIGERIA TEACHING HOSPITAL")
+  officeName      String @default("OFFICE OF THE CHAIRMAN")
+  unitName        String @default("THEATRE COMMERCIALIZED UNIT")
+  address         String @default("Ituku-Ozalla, Enugu State, Nigeria")
+
+  logoAttachmentId       String? @db.Uuid
+  currentFinancialYearId String? @db.Uuid
+
+  defaultRetirementDays   Int     @default(30)
+  enforceOverspendBlock   Boolean @default(true)
+  budgetWarningThreshold  Float   @default(90)
+  /// Kobo.
+  requireReceiptAbove     BigInt  @default(0)
+  vatRate                 Float   @default(7.5)
+  withholdingTaxRate      Float   @default(5)
+  sessionIdleTimeoutMinutes Int   @default(20)
+
+  certificationText String @default("I certify that the above expenditure was incurred solely for the purpose stated, that the goods and services were received, and that the supporting receipts attached are genuine.")
+
+  /// Ordered WorkflowStage[] describing the approval chain.
+  approvalChain Json
+
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+  updatedById String?
+
+  @@map("imprest_organisation_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Imprest duty assignment
+// ---------------------------------------------------------------------------
+// The imprest system originally carried its own accounts with their own role
+// column. Identity is now the theatre `User`, but an imprest duty is NOT the
+// same thing as a clinical role: the cashier may be a nurse, the account officer
+// may be an administrator, and the approval chain is driven by the imprest duty
+// alone. So the duty lives here, assigned per user, leaving `User.role`
+// untouched.
+//
+// A user with no row here has no imprest access at all — access is granted
+// deliberately, not inherited from a clinical role.
+
+enum ImprestRole {
+  ADMINISTRATOR
+  CHAIRMAN
+  ACCOUNT_OFFICER
+  CASHIER
+  INTERNAL_AUDITOR
+  HOSPITAL_MANAGEMENT
+  FINANCE
+  VIEW_ONLY_AUDITOR
+}
+
+model ImprestRoleAssignment {
+  id     String      @id @default(uuid())
+  userId String
+  user   User        @relation("ImprestRoleAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  role   ImprestRole
+
+  /// Designation as it should appear on printed vouchers and approval sheets —
+  /// a witness field, so a reprint years later still names the office correctly.
+  designation String?
+
+  /// Which imprest department this duty applies to. Null = all departments.
+  departmentId String?     @db.Uuid
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  isActive    Boolean   @default(true)
+  assignedAt  DateTime  @default(now())
+  assignedById String?
+  revokedAt   DateTime?
+  revokedById String?
+
+  @@unique([userId, role, departmentId])
+  @@index([userId])
+  @@index([role])
+  @@map("imprest_role_assignments")
+}
