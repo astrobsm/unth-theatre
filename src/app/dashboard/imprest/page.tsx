@@ -126,8 +126,13 @@ export default function ImprestRegisterPage() {
               <p className="text-xs text-amber-700">
                 An imprest duty (cashier, account officer, chairman, auditor…) is granted
                 separately from your clinical role, because it governs the approval chain.
-                An administrator can assign one under Imprest → Duties.
               </p>
+              <Link
+                href="/dashboard/imprest/duties"
+                className="inline-block pt-1 text-xs font-semibold text-amber-900 underline"
+              >
+                Open Imprest Duties →
+              </Link>
             </div>
           </div>
         </div>
