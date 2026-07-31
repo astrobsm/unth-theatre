@@ -18,7 +18,6 @@
 -- Money is BIGINT kobo throughout; nothing is hard-deleted (deletedAt columns);
 -- every synchronisable row carries `version` for optimistic concurrency.
 -- ===========================================================================
-
 -- CreateEnum
 CREATE TYPE "ImprestStatus" AS ENUM ('DRAFT', 'ACTIVE', 'PARTIALLY_RETIRED', 'FULLY_RETIRED', 'CLOSED', 'CANCELLED');
 
@@ -295,7 +294,7 @@ CREATE TABLE "imprest_expenditures" (
     "budgetHeadId" UUID,
     "voteCodeId" UUID,
     "remarks" TEXT,
-    "officerResponsibleId" UUID NOT NULL,
+    "officerResponsibleId" TEXT NOT NULL,
     "witnessName" TEXT,
     "witnessDesignation" TEXT,
     "gpsLatitude" DOUBLE PRECISION,
@@ -482,7 +481,7 @@ CREATE TABLE "imprest_notifications" (
     "severity" "NotificationSeverity" NOT NULL DEFAULT 'INFO',
     "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
-    "recipientId" UUID NOT NULL,
+    "recipientId" TEXT NOT NULL,
     "entity" "AuditEntity",
     "entityId" UUID,
     "actionUrl" TEXT,

@@ -7954,7 +7954,7 @@ model Expenditure {
 
   remarks String?
 
-  officerResponsibleId String @db.Uuid
+  officerResponsibleId String
   officerResponsible   User   @relation("ImprestExpenditureOfficer", fields: [officerResponsibleId], references: [id])
 
   witnessName        String?
@@ -8257,7 +8257,7 @@ model ImprestNotification {
   title    String
   body     String
 
-  recipientId String @db.Uuid
+  recipientId String
   recipient   User   @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 
   entity    AuditEntity?
