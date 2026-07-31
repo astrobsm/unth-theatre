@@ -14,6 +14,7 @@
  *   test-concurrency.js    refusing to overwrite a record someone else changed
  *   test-role-groups.js    surgeon/consultant-surgeon split: promoting a user
  *                          must never remove access
+ *   test-module-paths.js   the offline warm-up only prefetches routes that exist
  *   test-offline-coverage.js  read coverage wiring: prefetch list is real, all
  *                          writers agree on one cache keyspace, nothing
  *                          bypasses the fetch interceptor
@@ -31,6 +32,7 @@ const SUITES = [
   'test-role-groups.js',
   'test-offline-coverage.js',
   'test-no-redirect-loop.js',
+  'test-module-paths.js',
   'test-auto-update.js',
 ];
 

@@ -11,11 +11,16 @@ import {
 import { registerServiceWorker } from '@/lib/pwa';
 import { getOfflineQueueCount, processOfflineQueue, isIndexedDBAvailable } from '@/lib/offlineStore';
 import { installFetchInterceptor } from '@/lib/globalFetchInterceptor';
-import { MODULES } from '@/lib/modules';
+import { NAVIGABLE_MODULE_PATHS } from '@/lib/modules';
 
 // The module routes to make available offline (unique, dashboard-scoped).
+//
+// NAVIGABLE_MODULE_PATHS rather than every module path: a module's `paths` are
+// access-control prefixes, and several of them (e.g. /dashboard/cssd) have no
+// page. Prefetching those asked Next.js for a route that does not exist, which
+// is where the run of `?_rsc=` 404s in the console came from.
 const OFFLINE_ROUTES = Array.from(
-  new Set<string>(['/dashboard', ...MODULES.flatMap((m) => m.paths)])
+  new Set<string>(['/dashboard', ...NAVIGABLE_MODULE_PATHS])
 ).filter((p) => p.startsWith('/dashboard'));
 
 // Precache the app's module route DOCUMENTS (HTML) via the service worker, in

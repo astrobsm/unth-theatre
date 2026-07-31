@@ -15,14 +15,20 @@ import { setCachedData, getCachedData } from './offlineStore';
  * Derived from the API routes that expose a GET collection handler. Anything
  * that 404s or 403s for the signed-in user is simply skipped, so a role that
  * cannot see a module costs nothing.
+ *
+ * `contacts`, `emergency-pre-anaesthetic` and `emergency-team-availability`
+ * were listed here and are deliberately NOT: none of them is a collection.
+ * Each requires a parameter (`id`/`name`, `bookingId`) and answers 400 without
+ * one, so prefetching them cached nothing and logged an error per load. Their
+ * data is per-booking and is cached when the booking page fetches it.
  */
 const OFFLINE_COLLECTIONS = [
   // Overview / scheduling
   'dashboard/stats', 'surgeries', 'patients', 'cancellations', 'surgery-readiness',
-  'surgical-units', 'surgical-packs', 'anaesthesia-packs', 'wards', 'locations', 'contacts',
+  'surgical-units', 'surgical-packs', 'anaesthesia-packs', 'wards', 'locations',
   // Emergency
   'emergency-booking', 'emergency-display', 'emergency-alerts', 'emergency-lab-workup',
-  'emergency-pre-anaesthetic', 'emergency-prescriptions', 'emergency-team-availability',
+  'emergency-prescriptions',
   // Pre-op
   'pre-operative-visit', 'preop-reviews', 'prescriptions', 'post-op-prescriptions',
   'blood-requests', 'investigations', 'drug-dressing-requests',

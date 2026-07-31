@@ -142,6 +142,32 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-audit', label: 'Theatre Audit', paths: ['/dashboard/theatre-audit'], defaultRoles: [...ADMIN_VIEWERS], category: 'Admin' },
 ];
 
+/**
+ * Catalogue paths that are access-control PREFIXES with no page of their own.
+ *
+ * `/dashboard/cssd` gates `/dashboard/cssd/inventory` but is not itself
+ * navigable; `/dashboard/imprest/expenditure` is a grant key, the real form
+ * being at `/dashboard/imprest/<id>/expenditure/new`.
+ *
+ * This list exists because the offline warm-up prefetched every path in the
+ * catalogue as though it were a page, so each prefix produced a 404 in the
+ * console on every load. `scripts/offline-tests/test-module-paths.js` checks
+ * this list against the filesystem in both directions, so it cannot drift as
+ * pages are added or removed.
+ */
+export const PREFIX_ONLY_PATHS: string[] = [
+  '/dashboard/power-house',
+  '/dashboard/cssd',
+  '/dashboard/laundry-supervisor',
+  '/dashboard/works-supervisor',
+  '/dashboard/imprest/expenditure',
+];
+
+/** Catalogue paths that really are pages — what the offline warm-up should fetch. */
+export const NAVIGABLE_MODULE_PATHS: string[] = Array.from(
+  new Set(MODULES.flatMap((m) => m.paths))
+).filter((p) => !PREFIX_ONLY_PATHS.includes(p));
+
 // Modules that may be granted by admins via the access editor.
 // Admin-only modules are excluded — those follow role membership only.
 export const GRANTABLE_MODULES = MODULES.filter(m => m.category !== 'Admin');
