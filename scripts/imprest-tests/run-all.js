@@ -153,6 +153,13 @@ const SUITES = fs
   .filter((f) => f.endsWith('.test.ts'))
   .sort();
 
+/**
+ * Suites that are ordinary Node scripts rather than vitest sources. They are
+ * async and keep their own counters, so they run as child processes and their
+ * exit code decides the outcome.
+ */
+const SCRIPT_SUITES = ['test-retirement-pdf.js'];
+
 console.log(`Imprest domain tests (${SUITES.length} suites, run against src/lib/imprest)\n`);
 
 for (const suite of SUITES) {
@@ -166,6 +173,26 @@ for (const suite of SUITES) {
   const p = passed - before.passed;
   const f = failed - before.failed;
   console.log(`  ${f ? 'FAIL' : 'ok  '}  ${suite.padEnd(24)} ${p} passed${f ? `, ${f} failed` : ''}`);
+}
+
+// ---------------------------------------------------------------------------
+// Script suites (async, own counters) — run out-of-process.
+// ---------------------------------------------------------------------------
+const { execFileSync } = require('child_process');
+for (const suite of SCRIPT_SUITES) {
+  try {
+    const out = execFileSync(process.execPath, [path.join(__dirname, suite)], { encoding: 'utf8' });
+    const m = out.match(/(\d+) passed, (\d+) failed/);
+    const p = m ? Number(m[1]) : 0;
+    const f = m ? Number(m[2]) : 0;
+    passed += p;
+    failed += f;
+    console.log(`  ${f ? 'FAIL' : 'ok  '}  ${suite.padEnd(24)} ${p} passed${f ? `, ${f} failed` : ''}`);
+  } catch (err) {
+    failed++;
+    failures.push(`${suite}\n      ${(err.stdout || err.message || '').toString().slice(-400)}`);
+    console.log(`  FAIL  ${suite}`);
+  }
 }
 
 if (failures.length) {
