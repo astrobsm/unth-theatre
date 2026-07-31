@@ -26,20 +26,21 @@ export default function NexoraCredit({
   const strong = variant === 'dark' ? 'text-white' : 'text-gray-600';
 
   return (
-    <div className={`flex flex-col items-center gap-1.5 ${className}`}>
+    // One line: mark and credit sit together as a single lockup.
+    <div className={`flex flex-wrap items-center justify-center gap-1.5 ${className}`}>
       {hasLogo && (
         // The mark is neon on near-black and its background is baked in (no
         // transparency), so on a pale page it would read as a stray dark
-        // square. Seating it in a dark rounded chip makes that deliberate, and
+        // square. Seating it in a small dark chip makes that deliberate, and
         // matches how the brand is drawn.
-        <span className="inline-flex items-center justify-center rounded-md bg-[#020617] p-1 ring-1 ring-white/10">
+        <span className="inline-flex flex-shrink-0 items-center justify-center rounded bg-[#020617] p-[2px] ring-1 ring-white/10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/nexora-logo.png"
             alt="NEXORA Technologies"
-            width={28}
-            height={28}
-            className="h-7 w-7 object-contain"
+            width={14}
+            height={14}
+            className="h-3.5 w-3.5 object-contain"
             onError={() => setHasLogo(false)}
           />
         </span>
