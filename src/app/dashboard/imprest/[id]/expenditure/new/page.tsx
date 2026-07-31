@@ -16,6 +16,7 @@ import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import { formatNaira, nairaToKobo } from '@/lib/imprest/money';
 import { computeExpenditureAmounts } from '@/lib/imprest/calculations';
 import { PaymentMethod } from '@/lib/imprest/enums';
+import ReceiptCapture, { type CapturedReceipt } from '@/components/imprest/ReceiptCapture';
 
 interface Ref { id: string; name?: string; code?: string; fullName?: string }
 
@@ -29,6 +30,8 @@ export default function NewExpenditurePage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
+  const [receipts, setReceipts] = useState<CapturedReceipt[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -137,11 +140,46 @@ export default function NewExpenditurePage() {
         if (data.details?.fieldErrors) setFieldErrors(data.details.fieldErrors);
         return;
       }
+
+      // Attach the receipts to the line just posted.
+      //
+      // Offline, `data.expenditure.id` is the local id the queue minted. That is
+      // correct to use: when the queued expenditure finally reaches the server
+      // the sync engine rewrites every later reference to it, so these
+      // attachments follow their line rather than being orphaned.
+      const expenditureId = data.expenditure?.id;
+      if (expenditureId && receipts.length > 0) {
+        let attached = 0;
+        for (const r of receipts) {
+          setProgress(`Attaching receipt ${attached + 1} of ${receipts.length}…`);
+          try {
+            await fetch('/api/imprest/attachments', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                expenditureId,
+                dataUrl: r.dataUrl,
+                fileName: r.fileName,
+                kind: 'RECEIPT',
+                width: r.width,
+                height: r.height,
+              }),
+            });
+            attached++;
+          } catch {
+            // Queued like everything else; the line is already saved, so this
+            // must not block the officer.
+          }
+        }
+        setProgress(null);
+      }
+
       router.push(`/dashboard/imprest/${imprestId}`);
     } catch {
       setError('Could not reach the server. The line has been kept on this device and will sync.');
     } finally {
       setSaving(false);
+      setProgress(null);
     }
   };
 
@@ -265,6 +303,12 @@ export default function NewExpenditurePage() {
           <F label="Remarks" full>
             <textarea rows={2} value={form.remarks} onChange={(e) => set('remarks', e.target.value)} className={I} />
           </F>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Receipts <span className="text-gray-400">(a retirement is only as good as these)</span>
+            </label>
+            <ReceiptCapture receipts={receipts} onChange={setReceipts} disabled={saving} />
+          </div>
         </Card>
 
         <div className="flex items-center gap-3">
@@ -273,7 +317,7 @@ export default function NewExpenditurePage() {
             disabled={saving || !!previewError}
             className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
           >
-            <Save className="h-4 w-4" /> {saving ? 'Posting…' : 'Post expenditure'}
+            <Save className="h-4 w-4" /> {saving ? progress ?? 'Posting…' : 'Post expenditure'}
           </button>
           <Link href={`/dashboard/imprest/${imprestId}`} className="text-sm text-gray-600 hover:text-gray-900">Cancel</Link>
         </div>

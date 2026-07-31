@@ -8009,7 +8009,14 @@ model Attachment {
   /// SHA-256 of the stored bytes — detects tampering, de-duplicates uploads.
   checksum String
 
-  storageKey          String
+  /// The imprest system stored bytes in an object store and kept only a key.
+  /// This app keeps uploaded evidence as a base64 data URL in a text column —
+  /// the same convention as consent scans and incident media — because that is
+  /// what survives the offline queue: a data URL is JSON, so a receipt captured
+  /// with no network queues and replays like any other field. `storageKey` is
+  /// retained (now optional) so a later move to object storage is not blocked.
+  dataUrl             String? @db.Text
+  storageKey          String?
   thumbnailStorageKey String?
 
   expenditureId String?      @db.Uuid
