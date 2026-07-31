@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import OfflineIndicator from '@/components/OfflineIndicator';
+import NexoraCredit from '@/components/NexoraCredit';
 import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 // Deferred: the bell's panel is sizeable and nothing depends on it for first
 // paint, so it stays out of the critical dashboard bundle.
@@ -715,6 +716,7 @@ export default function DashboardLayout({
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
             </button>
+            <NexoraCredit variant="dark" className="pt-3" />
           </div>
         </div>
       </aside>

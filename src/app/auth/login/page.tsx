@@ -12,6 +12,7 @@ import {
   type OfflineEnrolment,
 } from '@/lib/offlineAuth';
 import { Eye, EyeOff } from 'lucide-react';
+import NexoraCredit from '@/components/NexoraCredit';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -878,6 +879,8 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+
+        <NexoraCredit className="pt-1" />
       </div>
 
       {/* Password Change Modal for First Login */}
