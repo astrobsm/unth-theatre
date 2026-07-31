@@ -7453,6 +7453,15 @@ model ScrubPickup {
 //     correctly years later, after vendors are renamed or staff transfer.
 // ===========================================================================
 
+/// Nigerian Civil Service quarterly imprest cycle. The standing imprest is
+/// released once per quarter and must be fully retired before the next is issued.
+enum Quarter {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
 enum ImprestStatus {
   DRAFT
   ACTIVE
@@ -7480,13 +7489,19 @@ enum PaymentMethod {
 enum WorkflowStage {
   PREPARED
   SUBMITTED
+  ACCOUNTS_REVIEW
+  INTERNAL_AUDIT
+  CHIEF_ACCOUNTANT_REVIEW
+  MEDICAL_DIRECTOR_REVIEW
+  APPROVED
+  COMPLETED
+  RETURNED
+  REJECTED
+  /// Pre-reconfiguration stages, kept so existing rows remain readable.
   ACCOUNT_OFFICER_REVIEW
   CHAIRMAN_REVIEW
   FINANCE_REVIEW
-  INTERNAL_AUDIT
-  APPROVED
   CLOSED
-  REJECTED
 }
 
 enum ApprovalDecision {
@@ -7497,16 +7512,24 @@ enum ApprovalDecision {
 
 enum RetirementStatus {
   DRAFT
-  IN_REVIEW
+  SUBMITTED
+  UNDER_REVIEW
+  RETURNED
   QUERIED
   APPROVED
-  CLOSED
   REJECTED
+  COMPLETED
+  /// Retained so historical rows keep their meaning; superseded by
+  /// UNDER_REVIEW and COMPLETED respectively.
+  IN_REVIEW
+  CLOSED
 }
 
 enum AttachmentKind {
   RECEIPT
   INVOICE
+  PAYMENT_VOUCHER
+  DELIVERY_NOTE
   WAYBILL
   QUOTATION
   APPROVAL_LETTER
@@ -7833,6 +7856,19 @@ model Imprest {
   voucherNumber  String?
   approvalNumber String?
 
+  /// Which quarter's standing imprest this is. One active imprest per quarter,
+  /// and the next cannot be raised until this one is retired and approved.
+  quarter Quarter?
+  /// Treasury voucher on which Hospital Management released the funds — quoted
+  /// on the retirement so Accounts can trace the release.
+  treasuryVoucherNumber String?
+  /// Set when the retirement is submitted, and when Management approves it.
+  retirementDate DateTime? @db.Date
+  approvalDate   DateTime? @db.Date
+  /// False until this imprest is fully retired and approved. The gate on
+  /// releasing the next quarter's funds.
+  eligibleForNextQuarter Boolean @default(false)
+
   financialYearId String        @db.Uuid
   financialYear   FinancialYear @relation(fields: [financialYearId], references: [id])
 
@@ -7933,6 +7969,12 @@ model Expenditure {
   totalCost     BigInt
 
   paymentMethod PaymentMethod
+  /// Payment voucher raised for this line, and the instrument it was paid by.
+  /// Required by Accounts when reconciling against the bank.
+  paymentVoucherNumber String?
+  chequeNumber         String?
+  bankReference        String?
+
   voucherNumber String?
   receiptNumber String?
   invoiceNumber String?
@@ -8071,6 +8113,9 @@ model Retirement {
   totalExpenditure BigInt
   /// Kobo.
   balanceReturned  BigInt
+  /// Unspent imprest the officer must refund. Kobo, like every other amount.
+  /// Distinct from balanceReturned: what is OWED versus what has been handed back.
+  refundDue        BigInt @default(0)
 
   receiptCount     Int @default(0)
   vendorCount      Int @default(0)
@@ -8243,6 +8288,10 @@ model ImprestAuditLog {
   /// Array of { field, oldValue, newValue }. Null for creates and reads.
   changes Json?
 
+  /// Why the change was made. Required when a figure is amended after
+  /// submission — an unexplained edit to a retirement is an audit finding.
+  reason String?
+
   occurredAt  DateTime @default(now())
   ipAddress   String?
   userAgent   String?
@@ -8404,6 +8453,8 @@ model OrganisationSetting {
 
 enum ImprestRole {
   ADMINISTRATOR
+  CHIEF_ACCOUNTANT
+  MEDICAL_DIRECTOR
   CHAIRMAN
   ACCOUNT_OFFICER
   CASHIER

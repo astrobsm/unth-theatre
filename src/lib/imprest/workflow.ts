@@ -23,24 +23,24 @@ import { canActOnStage } from './permissions';
 export const WORKFLOW_SEQUENCE: WorkflowStage[] = [
   WorkflowStage.PREPARED,
   WorkflowStage.SUBMITTED,
-  WorkflowStage.ACCOUNT_OFFICER_REVIEW,
-  WorkflowStage.CHAIRMAN_REVIEW,
-  WorkflowStage.FINANCE_REVIEW,
+  WorkflowStage.ACCOUNTS_REVIEW,
   WorkflowStage.INTERNAL_AUDIT,
+  WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
+  WorkflowStage.MEDICAL_DIRECTOR_REVIEW,
   WorkflowStage.APPROVED,
-  WorkflowStage.CLOSED,
+  WorkflowStage.COMPLETED,
 ];
 
 /** Stages at which a named officer records a decision and signs. */
 export const REVIEW_STAGES: WorkflowStage[] = [
-  WorkflowStage.ACCOUNT_OFFICER_REVIEW,
-  WorkflowStage.CHAIRMAN_REVIEW,
-  WorkflowStage.FINANCE_REVIEW,
+  WorkflowStage.ACCOUNTS_REVIEW,
   WorkflowStage.INTERNAL_AUDIT,
+  WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
+  WorkflowStage.MEDICAL_DIRECTOR_REVIEW,
 ];
 
 export const TERMINAL_STAGES: WorkflowStage[] = [
-  WorkflowStage.CLOSED,
+  WorkflowStage.COMPLETED,
   WorkflowStage.REJECTED,
 ];
 
@@ -99,15 +99,22 @@ export function statusForStage(stage: WorkflowStage): RetirementStatus {
     case WorkflowStage.PREPARED:
       return RetirementStatus.DRAFT;
     case WorkflowStage.SUBMITTED:
+    case WorkflowStage.ACCOUNTS_REVIEW:
+    case WorkflowStage.INTERNAL_AUDIT:
+    case WorkflowStage.CHIEF_ACCOUNTANT_REVIEW:
+    case WorkflowStage.MEDICAL_DIRECTOR_REVIEW:
+    // Superseded stages, so a historical row still resolves.
     case WorkflowStage.ACCOUNT_OFFICER_REVIEW:
     case WorkflowStage.CHAIRMAN_REVIEW:
     case WorkflowStage.FINANCE_REVIEW:
-    case WorkflowStage.INTERNAL_AUDIT:
       return RetirementStatus.IN_REVIEW;
     case WorkflowStage.APPROVED:
       return RetirementStatus.APPROVED;
+    case WorkflowStage.COMPLETED:
     case WorkflowStage.CLOSED:
       return RetirementStatus.CLOSED;
+    case WorkflowStage.RETURNED:
+      return RetirementStatus.RETURNED;
     case WorkflowStage.REJECTED:
       return RetirementStatus.REJECTED;
     default:
@@ -191,7 +198,7 @@ export function applySubmission(currentStage: WorkflowStage): TransitionResult {
   // SUBMITTED is a bookkeeping marker; the packet immediately awaits the
   // Account Officer, so we advance past it in one step.
   return {
-    stage: WorkflowStage.ACCOUNT_OFFICER_REVIEW,
+    stage: WorkflowStage.ACCOUNTS_REVIEW,
     status: RetirementStatus.IN_REVIEW,
     isFinalApproval: false,
   };
@@ -206,7 +213,7 @@ export function applyClosure(currentStage: WorkflowStage): TransitionResult {
     );
   }
   return {
-    stage: WorkflowStage.CLOSED,
+    stage: WorkflowStage.COMPLETED,
     status: RetirementStatus.CLOSED,
     isFinalApproval: false,
   };

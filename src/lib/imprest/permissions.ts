@@ -44,6 +44,8 @@ export const Permission = {
   APPROVE_CHAIRMAN: 'approval:chairman',
   APPROVE_FINANCE: 'approval:finance',
   APPROVE_INTERNAL_AUDIT: 'approval:internal-audit',
+  APPROVE_CHIEF_ACCOUNTANT: 'approval:chief-accountant',
+  APPROVE_MEDICAL_DIRECTOR: 'approval:medical-director',
 
   // Reference data
   REFERENCE_VIEW: 'reference:view',
@@ -197,6 +199,29 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     P.SYNC_PUSH,
   ],
 
+  /** Verifies the figures after Internal Audit; cannot post or edit spending. */
+  [UserRole.CHIEF_ACCOUNTANT]: [
+    ...READ_ONLY,
+    P.EXPENDITURE_QUERY,
+    P.APPROVE_CHIEF_ACCOUNTANT,
+    P.RETIREMENT_CLOSE,
+    P.IMPREST_CLOSE,
+    P.REPORT_EXPORT,
+    P.DOCUMENT_GENERATE,
+    P.AUDIT_VIEW,
+    P.SYNC_PUSH,
+  ],
+
+  /** Final approval. Deliberately holds no create or edit rights at all. */
+  [UserRole.MEDICAL_DIRECTOR]: [
+    ...READ_ONLY,
+    P.APPROVE_MEDICAL_DIRECTOR,
+    P.RETIREMENT_CLOSE,
+    P.REPORT_EXPORT,
+    P.DOCUMENT_GENERATE,
+    P.AUDIT_VIEW,
+  ],
+
   [UserRole.HOSPITAL_MANAGEMENT]: [
     ...READ_ONLY,
     P.REPORT_EXPORT,
@@ -246,13 +271,21 @@ export function hasAllPermissions(
 export const STAGE_PERMISSION: Record<WorkflowStage, Permission | null> = {
   [WorkflowStage.PREPARED]: null,
   [WorkflowStage.SUBMITTED]: null,
+  // The statutory chain: Accounts, then Internal Audit, then the Chief
+  // Accountant, then the Medical Director.
+  [WorkflowStage.ACCOUNTS_REVIEW]: P.APPROVE_ACCOUNT_OFFICER,
+  [WorkflowStage.INTERNAL_AUDIT]: P.APPROVE_INTERNAL_AUDIT,
+  [WorkflowStage.CHIEF_ACCOUNTANT_REVIEW]: P.APPROVE_CHIEF_ACCOUNTANT,
+  [WorkflowStage.MEDICAL_DIRECTOR_REVIEW]: P.APPROVE_MEDICAL_DIRECTOR,
+  [WorkflowStage.APPROVED]: null,
+  [WorkflowStage.COMPLETED]: P.RETIREMENT_CLOSE,
+  [WorkflowStage.RETURNED]: null,
+  [WorkflowStage.REJECTED]: null,
+  // Superseded stages, retained so historical rows resolve.
   [WorkflowStage.ACCOUNT_OFFICER_REVIEW]: P.APPROVE_ACCOUNT_OFFICER,
   [WorkflowStage.CHAIRMAN_REVIEW]: P.APPROVE_CHAIRMAN,
   [WorkflowStage.FINANCE_REVIEW]: P.APPROVE_FINANCE,
-  [WorkflowStage.INTERNAL_AUDIT]: P.APPROVE_INTERNAL_AUDIT,
-  [WorkflowStage.APPROVED]: null,
   [WorkflowStage.CLOSED]: P.RETIREMENT_CLOSE,
-  [WorkflowStage.REJECTED]: null,
 };
 
 /** Roles able to act on a stage — used to address `APPROVAL_NEEDED` alerts. */

@@ -19,6 +19,8 @@
  */
 export const UserRole = {
   ADMINISTRATOR: 'ADMINISTRATOR',
+  CHIEF_ACCOUNTANT: 'CHIEF_ACCOUNTANT',
+  MEDICAL_DIRECTOR: 'MEDICAL_DIRECTOR',
   CHAIRMAN: 'CHAIRMAN',
   ACCOUNT_OFFICER: 'ACCOUNT_OFFICER',
   CASHIER: 'CASHIER',
@@ -34,6 +36,8 @@ export const ALL_ROLES = Object.values(UserRole) as UserRole[];
 /** Human-readable designations printed on vouchers, schedules and PDFs. */
 export const ROLE_LABELS: Record<UserRole, string> = {
   ADMINISTRATOR: 'System Administrator',
+  CHIEF_ACCOUNTANT: 'Chief Accountant',
+  MEDICAL_DIRECTOR: 'Chief Medical Director',
   CHAIRMAN: 'Chairman, Theatre Commercialized Unit',
   ACCOUNT_OFFICER: 'Account Officer',
   CASHIER: 'Cashier',
@@ -46,6 +50,14 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 // ---------------------------------------------------------------------------
 // Imprest lifecycle
 // ---------------------------------------------------------------------------
+
+/** The quarterly standing-imprest cycle. */
+export const Quarter = { Q1: 'Q1', Q2: 'Q2', Q3: 'Q3', Q4: 'Q4' } as const;
+export type Quarter = (typeof Quarter)[keyof typeof Quarter];
+export const ALL_QUARTERS = Object.values(Quarter) as Quarter[];
+
+/** The standing imprest released each quarter, in kobo (₦500,000.00). */
+export const STANDING_IMPREST_KOBO = 50_000_000;
 
 export const ImprestStatus = {
   DRAFT: 'DRAFT',
@@ -148,19 +160,30 @@ export const DEFAULT_EXPENSE_CATEGORIES = [
 export const WorkflowStage = {
   PREPARED: 'PREPARED',
   SUBMITTED: 'SUBMITTED',
+  ACCOUNTS_REVIEW: 'ACCOUNTS_REVIEW',
+  INTERNAL_AUDIT: 'INTERNAL_AUDIT',
+  CHIEF_ACCOUNTANT_REVIEW: 'CHIEF_ACCOUNTANT_REVIEW',
+  MEDICAL_DIRECTOR_REVIEW: 'MEDICAL_DIRECTOR_REVIEW',
+  APPROVED: 'APPROVED',
+  COMPLETED: 'COMPLETED',
+  RETURNED: 'RETURNED',
+  REJECTED: 'REJECTED',
+  // Superseded by the statutory chain; kept so historical rows stay readable.
   ACCOUNT_OFFICER_REVIEW: 'ACCOUNT_OFFICER_REVIEW',
   CHAIRMAN_REVIEW: 'CHAIRMAN_REVIEW',
   FINANCE_REVIEW: 'FINANCE_REVIEW',
-  INTERNAL_AUDIT: 'INTERNAL_AUDIT',
-  APPROVED: 'APPROVED',
   CLOSED: 'CLOSED',
-  REJECTED: 'REJECTED',
 } as const;
 export type WorkflowStage = (typeof WorkflowStage)[keyof typeof WorkflowStage];
 
 export const WORKFLOW_STAGE_LABELS: Record<WorkflowStage, string> = {
   PREPARED: 'Prepared',
   SUBMITTED: 'Submitted',
+  ACCOUNTS_REVIEW: 'Accounts Department',
+  CHIEF_ACCOUNTANT_REVIEW: 'Chief Accountant',
+  MEDICAL_DIRECTOR_REVIEW: 'Chief Medical Director',
+  COMPLETED: 'Completed',
+  RETURNED: 'Returned',
   ACCOUNT_OFFICER_REVIEW: 'Account Officer Review',
   CHAIRMAN_REVIEW: 'Chairman Review',
   FINANCE_REVIEW: 'Finance Review',
@@ -179,11 +202,15 @@ export type ApprovalDecision = (typeof ApprovalDecision)[keyof typeof ApprovalDe
 
 export const RetirementStatus = {
   DRAFT: 'DRAFT',
-  IN_REVIEW: 'IN_REVIEW',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  RETURNED: 'RETURNED',
   QUERIED: 'QUERIED',
   APPROVED: 'APPROVED',
-  CLOSED: 'CLOSED',
   REJECTED: 'REJECTED',
+  COMPLETED: 'COMPLETED',
+  IN_REVIEW: 'IN_REVIEW',
+  CLOSED: 'CLOSED',
 } as const;
 export type RetirementStatus = (typeof RetirementStatus)[keyof typeof RetirementStatus];
 
@@ -194,6 +221,8 @@ export type RetirementStatus = (typeof RetirementStatus)[keyof typeof Retirement
 export const AttachmentKind = {
   RECEIPT: 'RECEIPT',
   INVOICE: 'INVOICE',
+  PAYMENT_VOUCHER: 'PAYMENT_VOUCHER',
+  DELIVERY_NOTE: 'DELIVERY_NOTE',
   WAYBILL: 'WAYBILL',
   QUOTATION: 'QUOTATION',
   APPROVAL_LETTER: 'APPROVAL_LETTER',

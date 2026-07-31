@@ -18,46 +18,46 @@ import {
 describe('chain shape', () => {
   it('advances through every office in order', () => {
     expect(nextStage(WorkflowStage.PREPARED)).toBe(WorkflowStage.SUBMITTED);
-    expect(nextStage(WorkflowStage.SUBMITTED)).toBe(WorkflowStage.ACCOUNT_OFFICER_REVIEW);
-    expect(nextStage(WorkflowStage.ACCOUNT_OFFICER_REVIEW)).toBe(WorkflowStage.CHAIRMAN_REVIEW);
-    expect(nextStage(WorkflowStage.CHAIRMAN_REVIEW)).toBe(WorkflowStage.FINANCE_REVIEW);
-    expect(nextStage(WorkflowStage.FINANCE_REVIEW)).toBe(WorkflowStage.INTERNAL_AUDIT);
-    expect(nextStage(WorkflowStage.INTERNAL_AUDIT)).toBe(WorkflowStage.APPROVED);
-    expect(nextStage(WorkflowStage.APPROVED)).toBe(WorkflowStage.CLOSED);
-    expect(nextStage(WorkflowStage.CLOSED)).toBeNull();
+    expect(nextStage(WorkflowStage.SUBMITTED)).toBe(WorkflowStage.ACCOUNTS_REVIEW);
+    expect(nextStage(WorkflowStage.ACCOUNTS_REVIEW)).toBe(WorkflowStage.INTERNAL_AUDIT);
+    expect(nextStage(WorkflowStage.INTERNAL_AUDIT)).toBe(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW);
+    expect(nextStage(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW)).toBe(WorkflowStage.MEDICAL_DIRECTOR_REVIEW);
+    expect(nextStage(WorkflowStage.MEDICAL_DIRECTOR_REVIEW)).toBe(WorkflowStage.APPROVED);
+    expect(nextStage(WorkflowStage.APPROVED)).toBe(WorkflowStage.COMPLETED);
+    expect(nextStage(WorkflowStage.COMPLETED)).toBeNull();
   });
 
   it('classifies review and terminal stages', () => {
-    expect(isReviewStage(WorkflowStage.CHAIRMAN_REVIEW)).toBe(true);
+    expect(isReviewStage(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW)).toBe(true);
     expect(isReviewStage(WorkflowStage.APPROVED)).toBe(false);
-    expect(isTerminalStage(WorkflowStage.CLOSED)).toBe(true);
+    expect(isTerminalStage(WorkflowStage.COMPLETED)).toBe(true);
     expect(isTerminalStage(WorkflowStage.REJECTED)).toBe(true);
     expect(isTerminalStage(WorkflowStage.INTERNAL_AUDIT)).toBe(false);
   });
 
   it('maps each stage to a retirement status', () => {
     expect(statusForStage(WorkflowStage.PREPARED)).toBe(RetirementStatus.DRAFT);
-    expect(statusForStage(WorkflowStage.FINANCE_REVIEW)).toBe(RetirementStatus.IN_REVIEW);
+    expect(statusForStage(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW)).toBe(RetirementStatus.IN_REVIEW);
     expect(statusForStage(WorkflowStage.APPROVED)).toBe(RetirementStatus.APPROVED);
-    expect(statusForStage(WorkflowStage.CLOSED)).toBe(RetirementStatus.CLOSED);
+    expect(statusForStage(WorkflowStage.COMPLETED)).toBe(RetirementStatus.CLOSED);
     expect(statusForStage(WorkflowStage.REJECTED)).toBe(RetirementStatus.REJECTED);
   });
 
   it('reports progress along the chain', () => {
     expect(stageProgress(WorkflowStage.PREPARED)).toBe(0);
-    expect(stageProgress(WorkflowStage.CLOSED)).toBe(100);
-    expect(stageProgress(WorkflowStage.CHAIRMAN_REVIEW)).toBeGreaterThan(0);
-    expect(stageProgress(WorkflowStage.CHAIRMAN_REVIEW)).toBeLessThan(100);
+    expect(stageProgress(WorkflowStage.COMPLETED)).toBe(100);
+    expect(stageProgress(WorkflowStage.INTERNAL_AUDIT)).toBeGreaterThan(0);
+    expect(stageProgress(WorkflowStage.INTERNAL_AUDIT)).toBeLessThan(100);
   });
 
   it('seeds one approval slot per reviewing office', () => {
     const slots = initialApprovalSlots();
     expect(slots).toHaveLength(4);
     expect(slots.map((s) => s.stage)).toEqual([
-      WorkflowStage.ACCOUNT_OFFICER_REVIEW,
-      WorkflowStage.CHAIRMAN_REVIEW,
-      WorkflowStage.FINANCE_REVIEW,
+      WorkflowStage.ACCOUNTS_REVIEW,
       WorkflowStage.INTERNAL_AUDIT,
+      WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
+      WorkflowStage.MEDICAL_DIRECTOR_REVIEW,
     ]);
     expect(slots.map((s) => s.sequence)).toEqual([1, 2, 3, 4]);
   });
@@ -66,43 +66,43 @@ describe('chain shape', () => {
 describe('applySubmission', () => {
   it('places a prepared retirement before the Account Officer', () => {
     const result = applySubmission(WorkflowStage.PREPARED);
-    expect(result.stage).toBe(WorkflowStage.ACCOUNT_OFFICER_REVIEW);
+    expect(result.stage).toBe(WorkflowStage.ACCOUNTS_REVIEW);
     expect(result.status).toBe(RetirementStatus.IN_REVIEW);
   });
 
   it('refuses to resubmit a packet already in the chain', () => {
-    expect(() => applySubmission(WorkflowStage.CHAIRMAN_REVIEW)).toThrow(WorkflowError);
+    expect(() => applySubmission(WorkflowStage.ACCOUNTS_REVIEW)).toThrow(WorkflowError);
   });
 });
 
 describe('applyDecision', () => {
   it('walks an approved packet up the chain', () => {
     const step1 = applyDecision({
-      currentStage: WorkflowStage.ACCOUNT_OFFICER_REVIEW,
+      currentStage: WorkflowStage.ACCOUNTS_REVIEW,
       decision: ApprovalDecision.APPROVE,
       actorRole: UserRole.ACCOUNT_OFFICER,
     });
-    expect(step1.stage).toBe(WorkflowStage.CHAIRMAN_REVIEW);
+    expect(step1.stage).toBe(WorkflowStage.INTERNAL_AUDIT);
     expect(step1.isFinalApproval).toBe(false);
 
     const step2 = applyDecision({
-      currentStage: WorkflowStage.CHAIRMAN_REVIEW,
-      decision: ApprovalDecision.APPROVE,
-      actorRole: UserRole.CHAIRMAN,
-    });
-    expect(step2.stage).toBe(WorkflowStage.FINANCE_REVIEW);
-
-    const step3 = applyDecision({
-      currentStage: WorkflowStage.FINANCE_REVIEW,
-      decision: ApprovalDecision.APPROVE,
-      actorRole: UserRole.FINANCE,
-    });
-    expect(step3.stage).toBe(WorkflowStage.INTERNAL_AUDIT);
-
-    const step4 = applyDecision({
       currentStage: WorkflowStage.INTERNAL_AUDIT,
       decision: ApprovalDecision.APPROVE,
       actorRole: UserRole.INTERNAL_AUDITOR,
+    });
+    expect(step2.stage).toBe(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW);
+
+    const step3 = applyDecision({
+      currentStage: WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
+      decision: ApprovalDecision.APPROVE,
+      actorRole: UserRole.CHIEF_ACCOUNTANT,
+    });
+    expect(step3.stage).toBe(WorkflowStage.MEDICAL_DIRECTOR_REVIEW);
+
+    const step4 = applyDecision({
+      currentStage: WorkflowStage.MEDICAL_DIRECTOR_REVIEW,
+      decision: ApprovalDecision.APPROVE,
+      actorRole: UserRole.MEDICAL_DIRECTOR,
     });
     expect(step4.stage).toBe(WorkflowStage.APPROVED);
     expect(step4.status).toBe(RetirementStatus.APPROVED);
@@ -111,9 +111,9 @@ describe('applyDecision', () => {
 
   it('rejects terminally from any reviewing office', () => {
     const result = applyDecision({
-      currentStage: WorkflowStage.FINANCE_REVIEW,
+      currentStage: WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
       decision: ApprovalDecision.REJECT,
-      actorRole: UserRole.FINANCE,
+      actorRole: UserRole.CHIEF_ACCOUNTANT,
     });
     expect(result.stage).toBe(WorkflowStage.REJECTED);
     expect(result.status).toBe(RetirementStatus.REJECTED);
@@ -134,7 +134,7 @@ describe('applyDecision', () => {
   it('stops the wrong office from acting out of turn', () => {
     expect(() =>
       applyDecision({
-        currentStage: WorkflowStage.CHAIRMAN_REVIEW,
+        currentStage: WorkflowStage.MEDICAL_DIRECTOR_REVIEW,
         decision: ApprovalDecision.APPROVE,
         actorRole: UserRole.CASHIER,
       }),
@@ -142,7 +142,7 @@ describe('applyDecision', () => {
 
     expect(() =>
       applyDecision({
-        currentStage: WorkflowStage.FINANCE_REVIEW,
+        currentStage: WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
         decision: ApprovalDecision.APPROVE,
         actorRole: UserRole.CHAIRMAN,
       }),
@@ -152,7 +152,7 @@ describe('applyDecision', () => {
   it('refuses a decision on a finished retirement', () => {
     expect(() =>
       applyDecision({
-        currentStage: WorkflowStage.CLOSED,
+        currentStage: WorkflowStage.COMPLETED,
         decision: ApprovalDecision.APPROVE,
         actorRole: UserRole.FINANCE,
       }),
@@ -173,7 +173,7 @@ describe('applyDecision', () => {
 describe('applyClosure', () => {
   it('closes an approved retirement', () => {
     const result = applyClosure(WorkflowStage.APPROVED);
-    expect(result.stage).toBe(WorkflowStage.CLOSED);
+    expect(result.stage).toBe(WorkflowStage.COMPLETED);
     expect(result.status).toBe(RetirementStatus.CLOSED);
   });
 
@@ -184,14 +184,14 @@ describe('applyClosure', () => {
 
 describe('buildWorkflowTimeline', () => {
   it('marks completed, current and pending stages', () => {
-    const timeline = buildWorkflowTimeline(WorkflowStage.FINANCE_REVIEW);
+    const timeline = buildWorkflowTimeline(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW);
     const states = Object.fromEntries(timeline.map((s) => [s.stage, s.state]));
 
     expect(states[WorkflowStage.PREPARED]).toBe('complete');
-    expect(states[WorkflowStage.CHAIRMAN_REVIEW]).toBe('complete');
-    expect(states[WorkflowStage.FINANCE_REVIEW]).toBe('current');
-    expect(states[WorkflowStage.INTERNAL_AUDIT]).toBe('pending');
-    expect(states[WorkflowStage.CLOSED]).toBe('pending');
+    expect(states[WorkflowStage.INTERNAL_AUDIT]).toBe('complete');
+    expect(states[WorkflowStage.CHIEF_ACCOUNTANT_REVIEW]).toBe('current');
+    expect(states[WorkflowStage.MEDICAL_DIRECTOR_REVIEW]).toBe('pending');
+    expect(states[WorkflowStage.COMPLETED]).toBe('pending');
   });
 
   it('skips the whole chain once rejected', () => {
@@ -202,19 +202,19 @@ describe('buildWorkflowTimeline', () => {
 
 describe('role-based access control', () => {
   it('grants each reviewing office exactly its own stage', () => {
-    expect(canActOnStage(UserRole.ACCOUNT_OFFICER, WorkflowStage.ACCOUNT_OFFICER_REVIEW)).toBe(true);
-    expect(canActOnStage(UserRole.ACCOUNT_OFFICER, WorkflowStage.CHAIRMAN_REVIEW)).toBe(false);
-    expect(canActOnStage(UserRole.CHAIRMAN, WorkflowStage.CHAIRMAN_REVIEW)).toBe(true);
-    expect(canActOnStage(UserRole.FINANCE, WorkflowStage.FINANCE_REVIEW)).toBe(true);
+    expect(canActOnStage(UserRole.ACCOUNT_OFFICER, WorkflowStage.ACCOUNTS_REVIEW)).toBe(true);
+    expect(canActOnStage(UserRole.ACCOUNT_OFFICER, WorkflowStage.MEDICAL_DIRECTOR_REVIEW)).toBe(false);
+    expect(canActOnStage(UserRole.MEDICAL_DIRECTOR, WorkflowStage.MEDICAL_DIRECTOR_REVIEW)).toBe(true);
+    expect(canActOnStage(UserRole.CHIEF_ACCOUNTANT, WorkflowStage.CHIEF_ACCOUNTANT_REVIEW)).toBe(true);
     expect(canActOnStage(UserRole.INTERNAL_AUDITOR, WorkflowStage.INTERNAL_AUDIT)).toBe(true);
   });
 
   it('keeps the Administrator out of the approval chain', () => {
     // An account that can edit the figures must not also be able to certify them.
     for (const stage of [
-      WorkflowStage.ACCOUNT_OFFICER_REVIEW,
-      WorkflowStage.CHAIRMAN_REVIEW,
-      WorkflowStage.FINANCE_REVIEW,
+      WorkflowStage.ACCOUNTS_REVIEW,
+      WorkflowStage.MEDICAL_DIRECTOR_REVIEW,
+      WorkflowStage.CHIEF_ACCOUNTANT_REVIEW,
       WorkflowStage.INTERNAL_AUDIT,
     ]) {
       expect(canActOnStage(UserRole.ADMINISTRATOR, stage)).toBe(false);
@@ -237,7 +237,7 @@ describe('role-based access control', () => {
   });
 
   it('addresses approval alerts to the roles that can act', () => {
-    expect(rolesForStage(WorkflowStage.CHAIRMAN_REVIEW)).toEqual([UserRole.CHAIRMAN]);
+    expect(rolesForStage(WorkflowStage.MEDICAL_DIRECTOR_REVIEW)).toEqual([UserRole.MEDICAL_DIRECTOR]);
     expect(rolesForStage(WorkflowStage.PREPARED)).toEqual([]);
   });
 });
