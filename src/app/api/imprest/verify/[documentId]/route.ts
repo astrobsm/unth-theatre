@@ -67,7 +67,11 @@ export async function GET(_request: NextRequest, { params }: { params: { documen
       title: document.title,
       issuedAt: document.issuedAt,
       issuedBy: document.issuedByName ?? 'Unknown',
-      checksum: document.checksum,
+      // An identifier is allocated before the document is rendered, so the QR
+      // code can carry it. Until the finished bytes are registered there is no
+      // checksum — say so plainly rather than imply the copy is intact.
+      checksum: document.checksum || null,
+      certified: Boolean(document.checksum),
       pageCount: document.pageCount,
       watermark: document.watermark,
       verificationCount: document.verificationCount + 1,

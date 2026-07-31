@@ -23,7 +23,8 @@ interface Verification {
   title?: string;
   issuedAt?: string;
   issuedBy?: string;
-  checksum?: string;
+  checksum?: string | null;
+  certified?: boolean;
   pageCount?: number;
   watermark?: string | null;
   verificationCount?: number;
@@ -88,7 +89,17 @@ export default function VerifyImprestDocumentPage() {
               <Row label="Issued by" value={data.issuedBy} />
               <Row label="Pages" value={data.pageCount ? String(data.pageCount) : undefined} />
               {data.watermark && <Row label="Watermark" value={data.watermark} />}
-              <Row label="Checksum" value={data.checksum} mono />
+              {data.certified ? (
+                <Row label="Checksum" value={data.checksum ?? undefined} mono />
+              ) : (
+                <div className="py-2">
+                  <p className="text-sm text-amber-700">
+                    <strong>Issued, but not certified.</strong> No checksum was recorded for this
+                    document, so its contents cannot be confirmed. Ask the issuing office to
+                    re-issue it.
+                  </p>
+                </div>
+              )}
               <Row
                 label="Times verified"
                 value={data.verificationCount ? String(data.verificationCount) : '1'}

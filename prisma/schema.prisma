@@ -8198,7 +8198,12 @@ model GeneratedDocument {
   retirementId String?     @db.Uuid
   retirement   Retirement? @relation(fields: [retirementId], references: [id], onDelete: SetNull)
 
-  storageKey String
+  /// The issued PDF itself, as a base64 data URL — same convention as receipts.
+  /// Keeping the bytes means a disputed document can be compared against what was
+  /// actually issued, not merely against a checksum. storageKey stays for a later
+  /// move to object storage.
+  dataUrl    String? @db.Text
+  storageKey String?
   /// SHA-256 of the rendered PDF — the verification page compares against this.
   checksum   String
   byteSize   Int

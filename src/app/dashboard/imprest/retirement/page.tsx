@@ -13,8 +13,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ClipboardCheck, AlertCircle, CheckCircle2, XCircle, MessageSquareWarning, Send } from 'lucide-react';
+import { ClipboardCheck, AlertCircle, CheckCircle2, XCircle, MessageSquareWarning, Send, FileDown } from 'lucide-react';
 import { formatNaira } from '@/lib/imprest/money';
+import { generateRetirementForm } from '@/lib/imprest/retirementPdf';
 
 interface Retirement {
   id: string;
@@ -114,6 +115,43 @@ export default function RetirementQueuePage() {
       await load();
     } catch {
       setNotice('Saved on this device — it will sync when you are back online.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const downloadForm = async (r: Retirement) => {
+    setBusyId(r.id);
+    setNotice(null);
+    try {
+      const { blob, documentId, certified } = await generateRetirementForm({
+        retirementNumber: r.retirementNumber,
+        retirementDate: r.retirementDate,
+        status: r.status,
+        currentStage: r.currentStage,
+        amountReceived: r.amountReceived,
+        totalExpenditure: r.totalExpenditure,
+        balanceReturned: r.balanceReturned,
+        expenditureCount: r.expenditureCount,
+        receiptCount: r.receiptCount,
+        imprest: r.imprest ?? null,
+        preparedBy: r.preparedBy ?? null,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${r.retirementNumber.replace(/\//g, '-')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setNotice(
+        certified
+          ? `Issued ${documentId}. The QR code on the form verifies it.`
+          : `Issued ${documentId}, but the checksum could not be registered — it will verify as "issued, but not certified" until you are back online.`
+      );
+    } catch (err) {
+      setNotice((err as Error).message || 'The form could not be produced.');
     } finally {
       setBusyId(null);
     }
@@ -244,6 +282,7 @@ export default function RetirementQueuePage() {
                   {r.currentStage === 'APPROVED' && (
                     <Action onClick={() => act(r, 'CLOSE')} busy={busyId === r.id} icon={CheckCircle2} label="Close retirement" primary />
                   )}
+                  <Action onClick={() => downloadForm(r)} busy={busyId === r.id} icon={FileDown} label="Retirement form" />
                   {r._offlinePending && (
                     <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
                       SAVED ON THIS DEVICE
