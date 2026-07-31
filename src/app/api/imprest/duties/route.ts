@@ -19,6 +19,9 @@ import { permissionsForRole } from '@/lib/imprest/permissions';
 
 export const dynamic = 'force-dynamic';
 
+/** Module ids granted alongside an imprest duty, so the menu is reachable. */
+const IMPREST_MODULE_IDS = ['imprest', 'imprest-expenditure', 'imprest-retirement'];
+
 const USER_FIELDS = {
   id: true,
   fullName: true,
@@ -135,6 +138,24 @@ export async function POST(request: NextRequest) {
           include: { user: { select: USER_FIELDS }, department: true },
         });
 
+    // Make the module visible in the sidebar for this person.
+    //
+    // Imprest modules carry `defaultRoles: []` on purpose — access follows the
+    // DUTY, not a clinical role — but the sidebar is driven by role defaults
+    // plus per-user grants. Without a grant the cashier who happens to be a
+    // nurse holds the duty, is served by every API, and yet has no way to
+    // reach the module except by typing the URL. This is the app's own
+    // mechanism for exactly that, so it is reused rather than special-cased.
+    await Promise.all(
+      IMPREST_MODULE_IDS.map((moduleId) =>
+        prisma.userModuleGrant.upsert({
+          where: { userId_moduleId: { userId, moduleId } },
+          create: { userId, moduleId, grantedById: actor.userId },
+          update: {},
+        })
+      )
+    );
+
     await prisma.imprestAuditLog.create({
       data: {
         action: 'CREATE',
@@ -147,7 +168,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ duty: saved, success: true }, { status: 201 });
+    return NextResponse.json(
+      {
+        duty: saved,
+        success: true,
+        // The sidebar reads module access from the session, which is minted at
+        // sign-in — so it appears once they sign in again.
+        note: 'The Imprest menu appears for them the next time they sign in.',
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('[imprest] duty assign failed:', error);
     return NextResponse.json({ error: 'Failed to assign the duty' }, { status: 500 });
@@ -195,6 +225,17 @@ export async function DELETE(request: NextRequest) {
       where: { id },
       data: { isActive: false, revokedAt: new Date(), revokedById: actor.userId },
     });
+
+    // Withdraw the menu too — but only if this was their LAST active duty.
+    // Somebody who holds two offices and gives up one still needs the module.
+    const stillHoldsADuty = await prisma.imprestRoleAssignment.count({
+      where: { userId: duty.userId, isActive: true, revokedAt: null, id: { not: id } },
+    });
+    if (stillHoldsADuty === 0) {
+      await prisma.userModuleGrant.deleteMany({
+        where: { userId: duty.userId, moduleId: { in: IMPREST_MODULE_IDS } },
+      });
+    }
 
     await prisma.imprestAuditLog.create({
       data: {

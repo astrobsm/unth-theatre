@@ -60,6 +60,7 @@ import {
   FileWarning,
   Wrench,
   Wallet,
+  UserCog,
   Phone,
   ClipboardPlus,
   Pill,
@@ -310,6 +311,8 @@ export default function DashboardLayout({
     // above, but the real check is the assigned imprest DUTY, enforced by the
     // API — a user without one is told how to obtain it rather than 404'd.
     { href: '/dashboard/imprest', icon: Wallet, label: 'Imprest Register', badge: 'NEW' },
+    { href: '/dashboard/imprest/retirement', icon: ClipboardCheck, label: 'Retirements', badge: 'NEW' },
+    { href: '/dashboard/imprest/duties', icon: UserCog, label: 'Imprest Duties', badge: 'NEW' },
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
     { href: '/role-guide', icon: GraduationCap, label: 'Role Guide', badge: 'GUIDE', external: true },
@@ -484,6 +487,14 @@ export default function DashboardLayout({
       '/dashboard/theatre-audit',
       '/dashboard/users',
       '/role-guide',
+    ] },
+    // Imprest gets a named group of its own. Without an entry in this layout it
+    // fell through to the trailing "More" group, which starts collapsed at the
+    // very bottom — present, but not findable.
+    { type: 'group', label: 'Imprest', icon: Wallet, hrefs: [
+      '/dashboard/imprest',
+      '/dashboard/imprest/retirement',
+      '/dashboard/imprest/duties',
     ] },
     { type: 'group', label: 'Theatre Annex', icon: Building2, hrefs: [
       '/dashboard/oxygen-control',
