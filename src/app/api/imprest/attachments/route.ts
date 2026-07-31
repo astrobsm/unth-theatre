@@ -16,7 +16,9 @@ import { createHash } from 'crypto';
 import prisma from '@/lib/prisma';
 import { requireImprest } from '@/lib/imprest/access';
 import { Permission } from '@/lib/imprest/permissions';
-import { AttachmentKind } from '@/lib/imprest/enums';
+import { AttachmentKind, AuditAction, AuditEntity } from '@/lib/imprest/enums';
+import { writeAudit } from '@/lib/imprest/audit';
+import { isRetirementLocked } from '@/lib/imprest/quarterlyRules';
 import { serialize } from '@/lib/imprest/serialize';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 
@@ -181,16 +183,14 @@ export async function POST(request: NextRequest) {
       select: { id: true, kind: true, fileName: true, mimeType: true, byteSize: true, checksum: true, createdAt: true },
     });
 
-    await prisma.imprestAuditLog.create({
-      data: {
-        action: 'UPLOAD',
-        entity: 'ATTACHMENT',
-        entityId: created.id,
-        entityLabel: created.fileName,
-        actorId: actor.userId,
-        actorName: actor.fullName,
-        actorRole: actor.role,
-      },
+    await writeAudit(prisma, request, actor, {
+      action: AuditAction.UPLOAD,
+      entity: AuditEntity.ATTACHMENT,
+      entityId: created.id,
+      entityLabel: created.fileName,
+      // The checksum is the point of the entry: it is what proves the file
+      // logged here is the file that is still attached.
+      changes: { checksum: { from: null, to: created.checksum }, byteSize: { from: null, to: created.byteSize } },
     });
 
     const payload = { attachment: serialize(created), success: true };
@@ -217,10 +217,31 @@ export async function DELETE(request: NextRequest) {
   try {
     const attachment = await prisma.attachment.findUnique({
       where: { id },
-      select: { id: true, fileName: true, deletedAt: true },
+      select: {
+        id: true,
+        fileName: true,
+        deletedAt: true,
+        retirement: { select: { status: true, currentStage: true } },
+        expenditure: { select: { retirement: { select: { status: true, currentStage: true } } } },
+      },
     });
     if (!attachment) return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
     if (attachment.deletedAt) return NextResponse.json({ success: true });
+
+    // Evidence cited by an approved retirement is part of a closed record. It
+    // may not be withdrawn, even by a duty that ordinarily holds the delete
+    // right — the certified figures rest on it.
+    const owning = attachment.retirement ?? attachment.expenditure?.retirement;
+    if (owning && isRetirementLocked(owning.status, owning.currentStage)) {
+      return NextResponse.json(
+        {
+          error:
+            'This file supports an approved retirement and cannot be removed. Reopen the retirement first.',
+          code: 'RETIREMENT_LOCKED',
+        },
+        { status: 409 }
+      );
+    }
 
     // Evidence is never destroyed — the tombstone stays, so a retirement that
     // once cited this receipt can still account for it.
@@ -229,17 +250,13 @@ export async function DELETE(request: NextRequest) {
       data: { deletedAt: new Date(), deletedById: actor.userId, deletionReason: reason ?? null },
     });
 
-    await prisma.imprestAuditLog.create({
-      data: {
-        action: 'SOFT_DELETE',
-        entity: 'ATTACHMENT',
-        entityId: id,
-        entityLabel: attachment.fileName,
-        actorId: actor.userId,
-        actorName: actor.fullName,
-        actorRole: actor.role,
-        notes: reason ?? undefined,
-      },
+    await writeAudit(prisma, request, actor, {
+      action: AuditAction.SOFT_DELETE,
+      entity: AuditEntity.ATTACHMENT,
+      entityId: id,
+      entityLabel: attachment.fileName,
+      notes: reason ?? null,
+      reason: reason ?? null,
     });
 
     return NextResponse.json({ success: true });

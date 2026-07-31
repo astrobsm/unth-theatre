@@ -13,7 +13,8 @@ import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { requireImprest } from '@/lib/imprest/access';
 import { Permission } from '@/lib/imprest/permissions';
-import { ExpenditureStatus, ImprestStatus } from '@/lib/imprest/enums';
+import { AuditAction, AuditEntity, ExpenditureStatus, ImprestStatus } from '@/lib/imprest/enums';
+import { writeAudit } from '@/lib/imprest/audit';
 import { createExpenditureSchema } from '@/lib/imprest/validation/expenditure';
 import { computeExpenditureAmounts, checkOverspend } from '@/lib/imprest/calculations';
 import { koboToBigInt, quantityToMilli, serialize } from '@/lib/imprest/serialize';
@@ -169,6 +170,9 @@ export async function POST(request: NextRequest) {
           netAmount: koboToBigInt(amounts.netAmount),
           paymentMethod: input.paymentMethod,
           voucherNumber: input.voucherNumber,
+          paymentVoucherNumber: input.paymentVoucherNumber,
+          chequeNumber: input.chequeNumber,
+          bankReference: input.bankReference,
           receiptNumber: input.receiptNumber,
           invoiceNumber: input.invoiceNumber,
           receiptDate: input.receiptDate ? new Date(input.receiptDate) : null,
@@ -204,15 +208,17 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      await tx.imprestAuditLog.create({
-        data: {
-          action: 'CREATE',
-          entity: 'EXPENDITURE',
-          entityId: row.id,
-          entityLabel: row.expenseNumber,
-          actorId: actor.userId,
-          actorName: actor.fullName,
-          actorRole: actor.role,
+      await writeAudit(tx, request, actor, {
+        action: AuditAction.CREATE,
+        entity: AuditEntity.EXPENDITURE,
+        entityId: row.id,
+        entityLabel: row.expenseNumber,
+        changes: {
+          totalCost: { from: null, to: amounts.totalCost },
+          imprestBalance: {
+            from: Number(imprest.amountReceived) - currentSpend,
+            to: Number(imprest.amountReceived) - spentAfter,
+          },
         },
       });
 

@@ -14,8 +14,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { requireImprest } from '@/lib/imprest/access';
-import { Permission } from '@/lib/imprest/permissions';
-import { ExpenditureStatus, ImprestStatus, RetirementStatus, WorkflowStage } from '@/lib/imprest/enums';
+import { canActOnStage, Permission } from '@/lib/imprest/permissions';
+import {
+  ExpenditureStatus,
+  ImprestStatus,
+  RetirementStatus,
+  UserRole,
+  WorkflowStage,
+} from '@/lib/imprest/enums';
+import { AuditAction, AuditEntity } from '@/lib/imprest/enums';
+import { writeAudit } from '@/lib/imprest/audit';
+import { computeRetirementPosition } from '@/lib/imprest/quarterlyRules';
+import { REVIEW_STAGES } from '@/lib/imprest/workflow';
 import { createRetirementSchema } from '@/lib/imprest/validation/retirement';
 import { koboToBigInt, serialize } from '@/lib/imprest/serialize';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
@@ -28,6 +38,11 @@ const LIST_INCLUDE = {
       id: true,
       imprestNumber: true,
       purpose: true,
+      // Carried so the printed retirement form can state the period and the
+      // treasury voucher without a second round trip.
+      quarter: true,
+      treasuryVoucherNumber: true,
+      financialYear: { select: { label: true } },
       department: { select: { code: true, name: true } },
     },
   },
@@ -147,6 +162,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Opening imprest, less expenditure, less cash handed back — what the
+    // officer still owes. Accounts chase this figure, so it is stored rather
+    // than recomputed differently by each report.
+    const position = computeRetirementPosition({
+      openingImprest: received,
+      totalExpenditure,
+      balanceReturned,
+    });
+
     const created = await prisma.$transaction(async (tx) => {
       const year = new Date(input.retirementDate).getFullYear();
       const seq = await tx.retirement.count({ where: { retirementNumber: { startsWith: `RET/${year}/` } } });
@@ -159,6 +183,7 @@ export async function POST(request: NextRequest) {
           amountReceived: imprest.amountReceived,
           totalExpenditure: koboToBigInt(totalExpenditure),
           balanceReturned: koboToBigInt(balanceReturned),
+          refundDue: koboToBigInt(position.refundDue),
           receiptCount: chosen.filter((e) => e.attachments.length > 0).length,
           vendorCount: new Set(chosen.map((e) => e.vendorId ?? e.vendorName)).size,
           expenditureCount: chosen.length,
@@ -196,15 +221,15 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      await tx.imprestAuditLog.create({
-        data: {
-          action: 'CREATE',
-          entity: 'RETIREMENT',
-          entityId: row.id,
-          entityLabel: row.retirementNumber,
-          actorId: actor.userId,
-          actorName: actor.fullName,
-          actorRole: actor.role,
+      await writeAudit(tx, request, actor, {
+        action: AuditAction.CREATE,
+        entity: AuditEntity.RETIREMENT,
+        entityId: row.id,
+        entityLabel: row.retirementNumber,
+        changes: {
+          totalExpenditure: { from: null, to: totalExpenditure },
+          balanceReturned: { from: null, to: balanceReturned },
+          refundDue: { from: null, to: position.refundDue },
         },
       });
 
@@ -220,25 +245,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Review stages this duty may act on — used by the "awaiting me" filter. */
+/**
+ * Review stages this duty may act on — used by the "awaiting me" filter.
+ *
+ * Derived from the permission matrix rather than listed by hand: the earlier
+ * hard-coded switch named the superseded stages, so after the chain was
+ * rewritten it silently returned an empty queue for the new offices.
+ */
 function stagesFor(role: string): WorkflowStage[] {
-  switch (role) {
-    case 'ACCOUNT_OFFICER':
-      return [WorkflowStage.ACCOUNT_OFFICER_REVIEW];
-    case 'CHAIRMAN':
-      return [WorkflowStage.CHAIRMAN_REVIEW];
-    case 'FINANCE':
-      return [WorkflowStage.FINANCE_REVIEW];
-    case 'INTERNAL_AUDITOR':
-      return [WorkflowStage.INTERNAL_AUDIT];
-    case 'ADMINISTRATOR':
-      return [
-        WorkflowStage.ACCOUNT_OFFICER_REVIEW,
-        WorkflowStage.CHAIRMAN_REVIEW,
-        WorkflowStage.FINANCE_REVIEW,
-        WorkflowStage.INTERNAL_AUDIT,
-      ];
-    default:
-      return [];
-  }
+  return REVIEW_STAGES.filter((stage) => canActOnStage(role as UserRole, stage));
 }

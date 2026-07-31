@@ -46,8 +46,13 @@ const expenditureCore = z.object({
 
   paymentMethod: z.nativeEnum(PaymentMethod),
   voucherNumber: optionalText(64),
+  /** The payment voucher the expenditure was charged on. */
+  paymentVoucherNumber: optionalText(64),
   receiptNumber: optionalText(64),
   invoiceNumber: optionalText(64),
+  /** Set when payment was by cheque or transfer rather than cash. */
+  chequeNumber: optionalText(64),
+  bankReference: optionalText(64),
   receiptDate: isoDateSchema.nullish().transform((v) => v ?? null),
 
   vat: koboSchema.default(0),

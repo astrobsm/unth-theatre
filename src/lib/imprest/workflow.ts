@@ -107,12 +107,15 @@ export function statusForStage(stage: WorkflowStage): RetirementStatus {
     case WorkflowStage.ACCOUNT_OFFICER_REVIEW:
     case WorkflowStage.CHAIRMAN_REVIEW:
     case WorkflowStage.FINANCE_REVIEW:
-      return RetirementStatus.IN_REVIEW;
+      // UNDER_REVIEW and COMPLETED are the civil-service spellings. IN_REVIEW
+      // and CLOSED remain in the enum so rows written before the change still
+      // read, but nothing writes them any more.
+      return RetirementStatus.UNDER_REVIEW;
     case WorkflowStage.APPROVED:
       return RetirementStatus.APPROVED;
     case WorkflowStage.COMPLETED:
     case WorkflowStage.CLOSED:
-      return RetirementStatus.CLOSED;
+      return RetirementStatus.COMPLETED;
     case WorkflowStage.RETURNED:
       return RetirementStatus.RETURNED;
     case WorkflowStage.REJECTED:
@@ -199,7 +202,7 @@ export function applySubmission(currentStage: WorkflowStage): TransitionResult {
   // Account Officer, so we advance past it in one step.
   return {
     stage: WorkflowStage.ACCOUNTS_REVIEW,
-    status: RetirementStatus.IN_REVIEW,
+    status: RetirementStatus.UNDER_REVIEW,
     isFinalApproval: false,
   };
 }
@@ -214,7 +217,37 @@ export function applyClosure(currentStage: WorkflowStage): TransitionResult {
   }
   return {
     stage: WorkflowStage.COMPLETED,
-    status: RetirementStatus.CLOSED,
+    status: RetirementStatus.COMPLETED,
+    isFinalApproval: false,
+  };
+}
+
+/**
+ * Reopening an approved or completed retirement.
+ *
+ * This is deliberately not a stage in WORKFLOW_SEQUENCE — it is an override
+ * that runs backwards through the chain, and treating it as an ordinary
+ * transition would let it appear on the approval sheet as though the officers
+ * had reconsidered. The retirement returns to RETURNED, which is the state the
+ * chain already understands as "sent back for correction", so it re-enters at
+ * the beginning rather than resuming mid-chain with stale approvals standing.
+ */
+export function applyReopen(currentStage: WorkflowStage): TransitionResult {
+  const reopenable: WorkflowStage[] = [
+    WorkflowStage.APPROVED,
+    WorkflowStage.COMPLETED,
+    WorkflowStage.CLOSED,
+    WorkflowStage.REJECTED,
+  ];
+  if (!reopenable.includes(currentStage)) {
+    throw new WorkflowError(
+      'WORKFLOW_NOT_REOPENABLE',
+      `Only a concluded retirement needs reopening; this one is at "${currentStage}" and can still be worked on.`,
+    );
+  }
+  return {
+    stage: WorkflowStage.RETURNED,
+    status: RetirementStatus.RETURNED,
     isFinalApproval: false,
   };
 }

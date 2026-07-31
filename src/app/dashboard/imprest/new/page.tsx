@@ -16,7 +16,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
+import { ALL_QUARTERS, STANDING_IMPREST_KOBO } from '@/lib/imprest/enums';
 import { nairaToKobo, formatNaira } from '@/lib/imprest/money';
+import { checkStandingImprestAmount, quarterLabel, quarterOf } from '@/lib/imprest/quarterlyRules';
 
 interface Ref { id: string; code?: string; name?: string; label?: string; fullName?: string; isCurrent?: boolean; isClosed?: boolean }
 
@@ -41,7 +43,12 @@ export default function NewImprestPage() {
     financialYearId: '',
     departmentId: '',
     receivingOfficerId: '',
+    // Defaults to the quarter today falls in, which is almost always the one
+    // being raised. Changeable, because an imprest is sometimes processed a few
+    // days into the next quarter.
+    quarter: quarterOf(new Date()) as string,
     voucherNumber: '',
+    treasuryVoucherNumber: '',
     approvalNumber: '',
     office: '',
     dateApproved: todayIso(),
@@ -93,6 +100,10 @@ export default function NewImprestPage() {
   const receivedKobo = form.amountReceived ? nairaToKobo(Number(form.amountReceived)) : 0;
   const receivedExceeds = receivedKobo > approvedKobo && approvedKobo > 0;
 
+  // The same rule the server enforces, shown while the officer is still typing.
+  // The server remains the authority; this only saves a wasted round trip.
+  const overStanding = approvedKobo > 0 && !checkStandingImprestAmount(approvedKobo).allowed;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -107,7 +118,9 @@ export default function NewImprestPage() {
           financialYearId: form.financialYearId,
           departmentId: form.departmentId,
           receivingOfficerId: form.receivingOfficerId,
+          quarter: form.quarter,
           voucherNumber: form.voucherNumber || undefined,
+          treasuryVoucherNumber: form.treasuryVoucherNumber || undefined,
           approvalNumber: form.approvalNumber || undefined,
           office: form.office || undefined,
           dateApproved: form.dateApproved,
@@ -197,6 +210,16 @@ export default function NewImprestPage() {
               ))}
             </select>
           </Field>
+          <Field label="Quarter" required error={fieldErrors.quarter}>
+            <select required value={form.quarter} onChange={(e) => set('quarter', e.target.value)} className={inputCls}>
+              {ALL_QUARTERS.map((q) => (
+                <option key={q} value={q}>{q} — {quarterLabel(q)}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              One standing imprest per quarter. The previous quarter must be retired and approved first.
+            </p>
+          </Field>
           <Field label="Approval number"><input value={form.approvalNumber} onChange={(e) => set('approvalNumber', e.target.value)} className={inputCls} /></Field>
           <Field label="Date approved" required error={fieldErrors.dateApproved}>
             <input type="date" required value={form.dateApproved} onChange={(e) => set('dateApproved', e.target.value)} className={inputCls} />
@@ -206,7 +229,17 @@ export default function NewImprestPage() {
         <Section title="Funds">
           <Field label="Amount approved (₦)" required error={fieldErrors.amountApproved}>
             <input type="number" min="0" step="0.01" required value={form.amountApproved} onChange={(e) => set('amountApproved', e.target.value)} className={inputCls} />
-            {approvedKobo > 0 && <p className="mt-1 text-xs text-gray-500">{formatNaira(approvedKobo)}</p>}
+            {overStanding ? (
+              <p className="mt-1 text-xs font-medium text-red-600">
+                The quarterly standing imprest is {formatNaira(STANDING_IMPREST_KOBO)}. A larger sum needs separate approval from Hospital Management.
+              </p>
+            ) : (
+              approvedKobo > 0 && (
+                <p className="mt-1 text-xs text-gray-500">
+                  {formatNaira(approvedKobo)} of {formatNaira(STANDING_IMPREST_KOBO)} standing imprest
+                </p>
+              )
+            )}
           </Field>
           <Field label="Amount received (₦)" error={fieldErrors.amountReceived}>
             <input type="number" min="0" step="0.01" value={form.amountReceived} onChange={(e) => set('amountReceived', e.target.value)} className={inputCls} />
@@ -220,6 +253,10 @@ export default function NewImprestPage() {
             )}
           </Field>
           <Field label="Voucher number"><input value={form.voucherNumber} onChange={(e) => set('voucherNumber', e.target.value)} className={inputCls} /></Field>
+          <Field label="Treasury voucher number">
+            <input value={form.treasuryVoucherNumber} onChange={(e) => set('treasuryVoucherNumber', e.target.value)} className={inputCls} />
+            <p className="mt-1 text-xs text-gray-500">The Sub-Treasury voucher the cash was released against.</p>
+          </Field>
           <Field label="Date received"><input type="date" value={form.dateReceived} onChange={(e) => set('dateReceived', e.target.value)} className={inputCls} /></Field>
           <Field label="Receiving officer" required error={fieldErrors.receivingOfficerId}>
             <select required value={form.receivingOfficerId} onChange={(e) => set('receivingOfficerId', e.target.value)} className={inputCls}>
@@ -270,7 +307,7 @@ export default function NewImprestPage() {
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            disabled={saving || loadingRef || receivedExceeds}
+            disabled={saving || loadingRef || receivedExceeds || overStanding}
             className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
           >
             <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save imprest'}

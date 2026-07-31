@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Wallet, Search, AlertCircle, Plus, RefreshCw } from 'lucide-react';
+import { Wallet, Search, AlertCircle, Plus, RefreshCw, CalendarClock } from 'lucide-react';
 import { formatNaira } from '@/lib/imprest/money';
 
 interface ImprestRow {
@@ -107,12 +107,20 @@ export default function ImprestRegisterPage() {
           </div>
         </div>
         {!noDuty && (
-          <Link
-            href="/dashboard/imprest/new"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-          >
-            <Plus className="h-4 w-4" /> New Imprest
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/imprest/quarterly"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <CalendarClock className="h-4 w-4" /> Quarterly Position
+            </Link>
+            <Link
+              href="/dashboard/imprest/new"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+            >
+              <Plus className="h-4 w-4" /> New Imprest
+            </Link>
+          </div>
         )}
       </div>
 

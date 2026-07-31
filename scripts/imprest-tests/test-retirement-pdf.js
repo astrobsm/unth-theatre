@@ -79,25 +79,29 @@ function loadTs(rel) {
   const result = await generateRetirementForm({
     retirementNumber: 'RET/2026/0001',
     retirementDate: '2026-07-31',
-    status: 'IN_REVIEW',
-    currentStage: 'CHAIRMAN_REVIEW',
+    status: 'UNDER_REVIEW',
+    currentStage: 'CHIEF_ACCOUNTANT_REVIEW',
     // ₦450,000 received; ₦387,500 spent; ₦62,500 returned — balances exactly.
     amountReceived: 45_000_000,
     totalExpenditure: 38_750_000,
     balanceReturned: 6_250_000,
     expenditureCount: 3,
     receiptCount: 3,
+    refundDue: 0,
     imprest: {
       imprestNumber: 'IMP/2026/0007',
       purpose: 'Theatre consumables and generator diesel for July',
+      quarter: 'Q3',
+      financialYear: { label: '2026' },
+      treasuryVoucherNumber: 'TV/2026/0442',
       department: { code: 'TCU', name: 'Theatre Commercialized Unit' },
     },
     preparedBy: { fullName: 'A. Okeke' },
     checkedBy: { fullName: 'B. Nwosu' },
     lines: [
-      { date: '2026-07-05', expenseNumber: 'IMP-2026-0007-001', description: 'Surgical gloves, 20 boxes', vendorName: 'Medplus Supplies', totalCost: 18_000_000, receiptNumber: 'R-1021' },
-      { date: '2026-07-12', expenseNumber: 'IMP-2026-0007-002', description: 'Diesel, 200 litres', vendorName: 'Ozalla Fuels', totalCost: 15_750_000, receiptNumber: 'R-1044' },
-      { date: '2026-07-20', expenseNumber: 'IMP-2026-0007-003', description: 'Sutures assorted', vendorName: 'Medplus Supplies', totalCost: 5_000_000, receiptNumber: 'R-1067' },
+      { date: '2026-07-05', expenseNumber: 'IMP-2026-0007-001', description: 'Surgical gloves, 20 boxes', vendorName: 'Medplus Supplies', totalCost: 18_000_000, receiptNumber: 'R-1021', paymentVoucherNumber: 'PV/0091', attachmentCount: 2 },
+      { date: '2026-07-12', expenseNumber: 'IMP-2026-0007-002', description: 'Diesel, 200 litres', vendorName: 'Ozalla Fuels', totalCost: 15_750_000, receiptNumber: 'R-1044', paymentVoucherNumber: 'PV/0092', attachmentCount: 1 },
+      { date: '2026-07-20', expenseNumber: 'IMP-2026-0007-003', description: 'Sutures assorted', vendorName: 'Medplus Supplies', totalCost: 5_000_000, receiptNumber: 'R-1067', paymentVoucherNumber: 'PV/0093', attachmentCount: 1 },
     ],
   });
 
@@ -159,6 +163,68 @@ function loadTs(rel) {
   check('the difference is real content, not noise',
     buf.length - bareBuf.length > 500, `difference ${buf.length - bareBuf.length} bytes`);
   check('the control render is still a valid PDF', bareBuf.subarray(0, 5).toString() === '%PDF-');
+
+  // The statutory form carries five signature blocks, an index of supporting
+  // documents and page numbers. jsPDF compresses page content, so the text
+  // cannot simply be grepped — but each of those is drawn work, and a form
+  // rendered without the index must therefore be materially smaller.
+  console.log('\n6. The statutory panels are drawn, not merely declared');
+  calls.length = 0;
+  const noIndex = await generateRetirementForm({
+    retirementNumber: 'RET/2026/0003',
+    retirementDate: '2026-07-31',
+    status: 'UNDER_REVIEW',
+    currentStage: 'CHIEF_ACCOUNTANT_REVIEW',
+    amountReceived: 45_000_000,
+    totalExpenditure: 38_750_000,
+    balanceReturned: 6_250_000,
+    expenditureCount: 3,
+    receiptCount: 3,
+    imprest: { imprestNumber: 'IMP/2026/0009', purpose: 'Same lines, no attachment counts' },
+    // Identical lines but no attachmentCount anywhere, so the index is skipped.
+    lines: [
+      { date: '2026-07-05', expenseNumber: 'IMP-2026-0007-001', description: 'Surgical gloves, 20 boxes', vendorName: 'Medplus Supplies', totalCost: 18_000_000, receiptNumber: 'R-1021', paymentVoucherNumber: 'PV/0091' },
+      { date: '2026-07-12', expenseNumber: 'IMP-2026-0007-002', description: 'Diesel, 200 litres', vendorName: 'Ozalla Fuels', totalCost: 15_750_000, receiptNumber: 'R-1044', paymentVoucherNumber: 'PV/0092' },
+      { date: '2026-07-20', expenseNumber: 'IMP-2026-0007-003', description: 'Sutures assorted', vendorName: 'Medplus Supplies', totalCost: 5_000_000, receiptNumber: 'R-1067', paymentVoucherNumber: 'PV/0093' },
+    ],
+  });
+  const noIndexBuf = Buffer.from(await noIndex.blob.arrayBuffer());
+  check('the index of supporting documents is really drawn',
+    buf.length > noIndexBuf.length + 300, `${buf.length} vs ${noIndexBuf.length}`);
+
+  // A long retirement must spill onto a second sheet, and the footer must say
+  // so — that is what tells an auditor no page has been removed from a bundle.
+  calls.length = 0;
+  const many = [];
+  for (let i = 1; i <= 45; i += 1) {
+    many.push({
+      date: '2026-07-05',
+      expenseNumber: `IMP-2026-0010-${String(i).padStart(3, '0')}`,
+      description: `Consumable item number ${i} purchased for theatre use`,
+      vendorName: 'Medplus Supplies',
+      totalCost: 100_000,
+      receiptNumber: `R-${2000 + i}`,
+      paymentVoucherNumber: `PV/${1000 + i}`,
+      attachmentCount: 1,
+    });
+  }
+  const long = await generateRetirementForm({
+    retirementNumber: 'RET/2026/0004',
+    retirementDate: '2026-07-31',
+    status: 'UNDER_REVIEW',
+    currentStage: 'INTERNAL_AUDIT',
+    amountReceived: 45_000_000,
+    totalExpenditure: 4_500_000,
+    balanceReturned: 40_500_000,
+    expenditureCount: many.length,
+    receiptCount: many.length,
+    imprest: { imprestNumber: 'IMP/2026/0010', purpose: 'A retirement long enough to paginate' },
+    lines: many,
+  });
+  const longRegistered = calls.find((c) => c.method === 'PATCH')?.body ?? {};
+  check('a 45-line retirement runs to more than one page', longRegistered.pageCount > 1,
+    `pageCount ${longRegistered.pageCount}`);
+  check('it is still a valid PDF', Buffer.from(await long.blob.arrayBuffer()).subarray(0, 5).toString() === '%PDF-');
 
   const outDir = path.join(__dirname, 'out');
   fs.mkdirSync(outDir, { recursive: true });

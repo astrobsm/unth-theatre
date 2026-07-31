@@ -18,7 +18,13 @@ import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { requireImprest } from '@/lib/imprest/access';
 import { Permission } from '@/lib/imprest/permissions';
-import { ImprestStatus } from '@/lib/imprest/enums';
+import { AuditAction, AuditEntity, ImprestStatus } from '@/lib/imprest/enums';
+import { writeAudit } from '@/lib/imprest/audit';
+import {
+  canRaiseQuarterlyImprest,
+  checkStandingImprestAmount,
+  quarterOf,
+} from '@/lib/imprest/quarterlyRules';
 import { createImprestSchema } from '@/lib/imprest/validation/imprest';
 import { koboToBigInt, serialize } from '@/lib/imprest/serialize';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
@@ -51,6 +57,7 @@ export async function GET(request: NextRequest) {
     deletedAt: sp.get('includeDeleted') === 'true' ? undefined : null,
   };
   if (sp.get('status')) where.status = sp.get('status');
+  if (sp.get('quarter')) where.quarter = sp.get('quarter');
   if (sp.get('financialYearId')) where.financialYearId = sp.get('financialYearId');
   if (sp.get('departmentId')) where.departmentId = sp.get('departmentId');
   if (sp.get('receivingOfficerId')) where.receivingOfficerId = sp.get('receivingOfficerId');
@@ -137,6 +144,44 @@ export async function POST(request: NextRequest) {
     if (!officer) return NextResponse.json({ error: 'Receiving officer not found' }, { status: 404 });
     if (!department) return NextResponse.json({ error: 'Department not found' }, { status: 404 });
 
+    // --- Financial Regulations -------------------------------------------
+    // The quarter is part of the record, so derive it when the caller did not
+    // send one rather than leaving the column null.
+    const quarter = input.quarter ?? quarterOf(input.dateApproved);
+
+    const capped = checkStandingImprestAmount(input.amountApproved);
+    if (!capped.allowed) {
+      return NextResponse.json({ error: capped.message, code: capped.code }, { status: 422 });
+    }
+
+    // Each department holds its own standing imprest, so the "one per quarter"
+    // and "retire before the next" rules are judged within the department.
+    const siblings = await prisma.imprest.findMany({
+      where: {
+        financialYearId: input.financialYearId,
+        departmentId: input.departmentId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        imprestNumber: true,
+        quarter: true,
+        financialYearId: true,
+        status: true,
+        eligibleForNextQuarter: true,
+      },
+    });
+
+    const eligible = canRaiseQuarterlyImprest({
+      quarter,
+      financialYearId: input.financialYearId,
+      existing: siblings,
+    });
+    if (!eligible.allowed) {
+      return NextResponse.json({ error: eligible.message, code: eligible.code }, { status: 409 });
+    }
+    // ---------------------------------------------------------------------
+
     const created = await prisma.$transaction(async (tx) => {
       const imprestNumber = input.imprestNumber?.trim() || (await allocateImprestNumber(financialYear.label, tx));
 
@@ -152,6 +197,8 @@ export async function POST(request: NextRequest) {
           imprestNumber,
           voucherNumber: input.voucherNumber,
           approvalNumber: input.approvalNumber,
+          treasuryVoucherNumber: input.treasuryVoucherNumber,
+          quarter,
           financialYearId: input.financialYearId,
           departmentId: input.departmentId,
           office: input.office,
@@ -175,15 +222,16 @@ export async function POST(request: NextRequest) {
         include: LIST_INCLUDE,
       });
 
-      await tx.imprestAuditLog.create({
-        data: {
-          action: 'CREATE',
-          entity: 'IMPREST',
-          entityId: row.id,
-          entityLabel: row.imprestNumber,
-          actorId: actor.userId,
-          actorName: actor.fullName,
-          actorRole: actor.role,
+      await writeAudit(tx, request, actor, {
+        action: AuditAction.CREATE,
+        entity: AuditEntity.IMPREST,
+        entityId: row.id,
+        entityLabel: row.imprestNumber,
+        // The opening figures, so a later alteration has something to differ from.
+        changes: {
+          quarter: { from: null, to: quarter },
+          amountApproved: { from: null, to: input.amountApproved },
+          amountReceived: { from: null, to: input.amountReceived },
         },
       });
 

@@ -47,6 +47,9 @@ export default function NewExpenditurePage() {
     vat: '',
     withholdingTax: '',
     paymentMethod: PaymentMethod.CASH as string,
+    paymentVoucherNumber: '',
+    chequeNumber: '',
+    bankReference: '',
     receiptNumber: '',
     invoiceNumber: '',
     receiptDate: '',
@@ -127,6 +130,9 @@ export default function NewExpenditurePage() {
           vat: form.vat ? nairaToKobo(Number(form.vat)) : 0,
           withholdingTax: form.withholdingTax ? nairaToKobo(Number(form.withholdingTax)) : 0,
           paymentMethod: form.paymentMethod,
+          paymentVoucherNumber: form.paymentVoucherNumber || undefined,
+          chequeNumber: form.chequeNumber || undefined,
+          bankReference: form.bankReference || undefined,
           receiptNumber: form.receiptNumber || undefined,
           invoiceNumber: form.invoiceNumber || undefined,
           receiptDate: form.receiptDate || null,
@@ -291,6 +297,20 @@ export default function NewExpenditurePage() {
               {Object.values(PaymentMethod).map((m) => (<option key={m} value={m}>{m}</option>))}
             </select>
           </F>
+          <F label="Payment voucher number">
+            <input value={form.paymentVoucherNumber} onChange={(e) => set('paymentVoucherNumber', e.target.value)} className={I} />
+          </F>
+          {/* Cheque and bank details only make sense for non-cash payments, so
+              they appear once the method calls for them rather than sitting
+              blank on every cash line. */}
+          {form.paymentMethod === PaymentMethod.CHEQUE && (
+            <F label="Cheque number"><input value={form.chequeNumber} onChange={(e) => set('chequeNumber', e.target.value)} className={I} /></F>
+          )}
+          {(form.paymentMethod === PaymentMethod.TRANSFER ||
+            form.paymentMethod === PaymentMethod.POS ||
+            form.paymentMethod === PaymentMethod.CHEQUE) && (
+            <F label="Bank reference"><input value={form.bankReference} onChange={(e) => set('bankReference', e.target.value)} className={I} /></F>
+          )}
           <F label="Receipt number"><input value={form.receiptNumber} onChange={(e) => set('receiptNumber', e.target.value)} className={I} /></F>
           <F label="Receipt date"><input type="date" value={form.receiptDate} onChange={(e) => set('receiptDate', e.target.value)} className={I} /></F>
           <F label="Invoice number"><input value={form.invoiceNumber} onChange={(e) => set('invoiceNumber', e.target.value)} className={I} /></F>

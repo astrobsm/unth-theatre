@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ImprestStatus } from '../enums';
+import { ImprestStatus, Quarter } from '../enums';
 import {
   isoDateSchema,
   koboSchema,
@@ -19,6 +19,15 @@ const imprestCore = z.object({
   imprestNumber: z.string().trim().max(64).optional(),
   voucherNumber: optionalText(64),
   approvalNumber: optionalText(64),
+  /** Treasury voucher against which the Sub-Treasury released the cash. */
+  treasuryVoucherNumber: optionalText(64),
+
+  /**
+   * The quarter this standing imprest belongs to. Optional on the wire: when a
+   * caller omits it the server derives it from the approval date, so requests
+   * written against the pre-quarterly API still work.
+   */
+  quarter: z.nativeEnum(Quarter).optional(),
 
   financialYearId: uuidSchema,
   departmentId: uuidSchema,

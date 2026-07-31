@@ -45,6 +45,8 @@ import {
   Activity,
   Gauge,
   ClipboardCheck,
+  CalendarClock,
+  FileSpreadsheet,
   Radar,
   Sparkles,
   BriefcaseMedical,
@@ -312,7 +314,9 @@ export default function DashboardLayout({
     // above, but the real check is the assigned imprest DUTY, enforced by the
     // API — a user without one is told how to obtain it rather than 404'd.
     { href: '/dashboard/imprest', icon: Wallet, label: 'Imprest Register', badge: 'NEW' },
+    { href: '/dashboard/imprest/quarterly', icon: CalendarClock, label: 'Quarterly Position', badge: 'NEW' },
     { href: '/dashboard/imprest/retirement', icon: ClipboardCheck, label: 'Retirements', badge: 'NEW' },
+    { href: '/dashboard/imprest/reports', icon: FileSpreadsheet, label: 'Imprest Reports', badge: 'NEW' },
     { href: '/dashboard/imprest/duties', icon: UserCog, label: 'Imprest Duties', badge: 'NEW' },
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
@@ -494,7 +498,9 @@ export default function DashboardLayout({
     // very bottom — present, but not findable.
     { type: 'group', label: 'Imprest', icon: Wallet, hrefs: [
       '/dashboard/imprest',
+      '/dashboard/imprest/quarterly',
       '/dashboard/imprest/retirement',
+      '/dashboard/imprest/reports',
       '/dashboard/imprest/duties',
     ] },
     { type: 'group', label: 'Theatre Annex', icon: Building2, hrefs: [

@@ -38,6 +38,12 @@ export const Permission = {
   RETIREMENT_UPDATE: 'retirement:update',
   RETIREMENT_SUBMIT: 'retirement:submit',
   RETIREMENT_CLOSE: 'retirement:close',
+  /**
+   * Unlocking an approved retirement so its figures can be corrected. Held by
+   * the Administrator alone: it is the one act that can alter a certified
+   * record, and it is always recorded with a reason.
+   */
+  RETIREMENT_REOPEN: 'retirement:reopen',
 
   // Approvals — one permission per chain stage
   APPROVE_ACCOUNT_OFFICER: 'approval:account-officer',
@@ -112,6 +118,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     P.ATTACHMENT_DELETE,
     P.RETIREMENT_CREATE,
     P.RETIREMENT_UPDATE,
+    P.RETIREMENT_REOPEN,
     P.REFERENCE_MANAGE,
     P.VENDOR_MANAGE,
     P.REPORT_EXPORT,

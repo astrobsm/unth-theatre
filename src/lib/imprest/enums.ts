@@ -281,6 +281,8 @@ export const AuditAction = {
   REJECT: 'REJECT',
   QUERY: 'QUERY',
   CLOSE: 'CLOSE',
+  /** Administrative unlock of an approved retirement. Always carries a reason. */
+  REOPEN: 'REOPEN',
   CANCEL: 'CANCEL',
   LOGIN: 'LOGIN',
   LOGIN_FAILED: 'LOGIN_FAILED',

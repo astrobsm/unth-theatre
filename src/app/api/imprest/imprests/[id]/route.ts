@@ -10,7 +10,9 @@ import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { requireImprest } from '@/lib/imprest/access';
 import { Permission } from '@/lib/imprest/permissions';
-import { ImprestStatus } from '@/lib/imprest/enums';
+import { AuditAction, AuditEntity, ImprestStatus } from '@/lib/imprest/enums';
+import { diffFields, writeAudit } from '@/lib/imprest/audit';
+import { isImprestLocked } from '@/lib/imprest/quarterlyRules';
 import { koboToBigInt, serialize } from '@/lib/imprest/serialize';
 import { detectConflict } from '@/lib/concurrency';
 
@@ -106,9 +108,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const conflict = detectConflict(request, existing, 'imprest');
     if (conflict) return conflict;
 
-    if (existing.status === ImprestStatus.CLOSED || existing.status === ImprestStatus.CANCELLED) {
+    // Retired, closed and cancelled imprests are finished records. Note that
+    // FULLY_RETIRED counts: money cannot be added to an imprest that has
+    // already been accounted for.
+    if (isImprestLocked(existing.status)) {
       return NextResponse.json(
-        { error: 'A closed or cancelled imprest can no longer receive funds.' },
+        { error: `An imprest with status "${existing.status}" can no longer receive funds.` },
         { status: 409 }
       );
     }
@@ -138,16 +143,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         include: DETAIL_INCLUDE,
       });
 
-      await tx.imprestAuditLog.create({
-        data: {
-          action: 'UPDATE',
-          entity: 'IMPREST',
-          entityId: row.id,
-          entityLabel: row.imprestNumber,
-          actorId: actor.userId,
-          actorName: actor.fullName,
-          actorRole: actor.role,
-        },
+      await writeAudit(tx, request, actor, {
+        action: AuditAction.UPDATE,
+        entity: AuditEntity.IMPREST,
+        entityId: row.id,
+        entityLabel: row.imprestNumber,
+        // Recording receipt moves money, so the before/after is the point of
+        // the entry rather than a decoration on it.
+        changes: diffFields(existing, row, [
+          'amountReceived',
+          'balance',
+          'dateReceived',
+          'voucherNumber',
+          'status',
+        ]),
       });
 
       return row;

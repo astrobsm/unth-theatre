@@ -13,8 +13,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ClipboardCheck, AlertCircle, CheckCircle2, XCircle, MessageSquareWarning, Send, FileDown } from 'lucide-react';
+import { ClipboardCheck, AlertCircle, CheckCircle2, XCircle, MessageSquareWarning, Send, FileDown, Unlock } from 'lucide-react';
+import { WORKFLOW_STAGE_LABELS } from '@/lib/imprest/enums';
 import { formatNaira } from '@/lib/imprest/money';
+import { REVIEW_STAGES } from '@/lib/imprest/workflow';
 import { generateRetirementForm } from '@/lib/imprest/retirementPdf';
 
 interface Retirement {
@@ -26,32 +28,44 @@ interface Retirement {
   amountReceived: number;
   totalExpenditure: number;
   balanceReturned: number;
+  refundDue?: number | null;
   expenditureCount: number;
   receiptCount: number;
-  imprest?: { id: string; imprestNumber: string; purpose: string; department?: { code: string; name: string } | null } | null;
+  imprest?: {
+    id: string;
+    imprestNumber: string;
+    purpose: string;
+    quarter?: string | null;
+    treasuryVoucherNumber?: string | null;
+    financialYear?: { label: string } | null;
+    department?: { code: string; name: string } | null;
+  } | null;
   preparedBy?: { fullName: string } | null;
+  checkedBy?: { fullName: string } | null;
+  approvedBy?: { fullName: string } | null;
   _offlinePending?: string;
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  PREPARED: 'Prepared',
-  SUBMITTED: 'Submitted',
-  ACCOUNT_OFFICER_REVIEW: 'With the account officer',
-  CHAIRMAN_REVIEW: 'With the chairman',
-  FINANCE_REVIEW: 'With finance',
-  INTERNAL_AUDIT: 'With internal audit',
-  APPROVED: 'Approved',
-  CLOSED: 'Closed',
-  REJECTED: 'Rejected',
-};
+// Stage names come from the enum module rather than a copy kept here: the local
+// copy still named the superseded offices, so a retirement sitting with the
+// Chief Accountant displayed a bare "CHIEF_ACCOUNTANT_REVIEW".
+const STAGE_LABEL: Record<string, string> = WORKFLOW_STAGE_LABELS;
+
+/** Stages a retirement can be reopened from — see workflow.applyReopen. */
+const CONCLUDED_STAGES = ['APPROVED', 'COMPLETED', 'CLOSED', 'REJECTED'];
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-700 border-gray-200',
-  IN_REVIEW: 'bg-blue-100 text-blue-800 border-blue-200',
+  SUBMITTED: 'bg-blue-100 text-blue-800 border-blue-200',
+  UNDER_REVIEW: 'bg-blue-100 text-blue-800 border-blue-200',
+  RETURNED: 'bg-amber-100 text-amber-800 border-amber-200',
   QUERIED: 'bg-amber-100 text-amber-800 border-amber-200',
   APPROVED: 'bg-green-100 text-green-800 border-green-200',
-  CLOSED: 'bg-slate-200 text-slate-700 border-slate-300',
+  COMPLETED: 'bg-slate-200 text-slate-700 border-slate-300',
   REJECTED: 'bg-red-100 text-red-800 border-red-200',
+  // Superseded spellings, for rows written before the reconfiguration.
+  IN_REVIEW: 'bg-blue-100 text-blue-800 border-blue-200',
+  CLOSED: 'bg-slate-200 text-slate-700 border-slate-300',
 };
 
 export default function RetirementQueuePage() {
@@ -87,7 +101,11 @@ export default function RetirementQueuePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const act = async (r: Retirement, action: 'SUBMIT' | 'DECIDE' | 'CLOSE', decision?: string) => {
+  const act = async (
+    r: Retirement,
+    action: 'SUBMIT' | 'DECIDE' | 'CLOSE' | 'REOPEN',
+    decision?: string
+  ) => {
     const comment =
       decision === 'REJECT' || decision === 'QUERY'
         ? window.prompt(decision === 'REJECT' ? 'Reason for rejection:' : 'What needs clarifying?') ?? ''
@@ -97,13 +115,28 @@ export default function RetirementQueuePage() {
       return;
     }
 
+    // Unlocking a certified record is the one action that needs justifying,
+    // and the server refuses it without a reason — asked for here so the
+    // administrator is not bounced by a 400 after committing to the click.
+    let reason: string | undefined;
+    if (action === 'REOPEN') {
+      reason =
+        window.prompt(
+          `Reopening ${r.retirementNumber} withdraws its approval and returns it for correction.\n\nWhy is it being reopened?`
+        ) ?? '';
+      if (reason.trim().length < 10) {
+        setNotice('A reason of at least 10 characters is required to reopen an approved retirement.');
+        return;
+      }
+    }
+
     setBusyId(r.id);
     setNotice(null);
     try {
       const res = await fetch(`/api/imprest/retirements/${r.id}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, decision, comment }),
+        body: JSON.stringify({ action, decision, comment, reason }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -124,6 +157,35 @@ export default function RetirementQueuePage() {
     setBusyId(r.id);
     setNotice(null);
     try {
+      // The queue carries only totals, so the expenditure lines are fetched
+      // here. Without them the printed form stated a total with nothing behind
+      // it — which is precisely the document an auditor cannot accept. Offline,
+      // this reads from cache; if it genuinely cannot be had, the form is still
+      // produced with the totals rather than not at all.
+      let lines: NonNullable<Parameters<typeof generateRetirementForm>[0]['lines']> = [];
+      if (r.imprest?.id) {
+        try {
+          const res = await fetch(`/api/imprest/expenditures?imprestId=${r.imprest.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            lines = (data.expenditures ?? [])
+              .filter((e: { status: string }) => e.status !== 'VOIDED')
+              .map((e: Record<string, unknown>) => ({
+                date: e.date as string,
+                expenseNumber: e.expenseNumber as string,
+                description: e.description as string,
+                vendorName: e.vendorName as string,
+                totalCost: e.totalCost as number,
+                receiptNumber: (e.receiptNumber as string | null) ?? null,
+                paymentVoucherNumber: (e.paymentVoucherNumber as string | null) ?? null,
+                attachmentCount: Array.isArray(e.attachments) ? e.attachments.length : 0,
+              }));
+          }
+        } catch {
+          /* totals-only form is better than no form */
+        }
+      }
+
       const { blob, documentId, certified } = await generateRetirementForm({
         retirementNumber: r.retirementNumber,
         retirementDate: r.retirementDate,
@@ -132,10 +194,14 @@ export default function RetirementQueuePage() {
         amountReceived: r.amountReceived,
         totalExpenditure: r.totalExpenditure,
         balanceReturned: r.balanceReturned,
+        refundDue: r.refundDue ?? null,
         expenditureCount: r.expenditureCount,
         receiptCount: r.receiptCount,
         imprest: r.imprest ?? null,
         preparedBy: r.preparedBy ?? null,
+        checkedBy: r.checkedBy ?? null,
+        approvedBy: r.approvedBy ?? null,
+        lines,
       });
 
       const url = URL.createObjectURL(blob);
@@ -229,7 +295,9 @@ export default function RetirementQueuePage() {
         <div className="space-y-3">
           {rows.map((r) => {
             const unaccounted = r.amountReceived - r.totalExpenditure - r.balanceReturned;
-            const reviewable = ['ACCOUNT_OFFICER_REVIEW', 'CHAIRMAN_REVIEW', 'FINANCE_REVIEW', 'INTERNAL_AUDIT'].includes(r.currentStage);
+            // REVIEW_STAGES rather than a hand-written list — this one had gone
+            // stale, so no decision buttons appeared at the new offices.
+            const reviewable = (REVIEW_STAGES as string[]).includes(r.currentStage);
             return (
               <div key={r.id} className={`rounded-xl border bg-white p-4 ${r._offlinePending ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200'}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -281,6 +349,12 @@ export default function RetirementQueuePage() {
                   )}
                   {r.currentStage === 'APPROVED' && (
                     <Action onClick={() => act(r, 'CLOSE')} busy={busyId === r.id} icon={CheckCircle2} label="Close retirement" primary />
+                  )}
+                  {/* Offered on concluded retirements only. Whether this
+                      operator may actually do it is the server's decision —
+                      the button is a shortcut, not the permission. */}
+                  {CONCLUDED_STAGES.includes(r.currentStage) && (
+                    <Action onClick={() => act(r, 'REOPEN')} busy={busyId === r.id} icon={Unlock} label="Reopen" danger />
                   )}
                   <Action onClick={() => downloadForm(r)} busy={busyId === r.id} icon={FileDown} label="Retirement form" />
                   {r._offlinePending && (

@@ -4,6 +4,7 @@ import { canActOnStage, hasPermission, Permission, permissionsForRole, rolesForS
 import {
   applyClosure,
   applyDecision,
+  applyReopen,
   applySubmission,
   buildWorkflowTimeline,
   initialApprovalSlots,
@@ -37,9 +38,9 @@ describe('chain shape', () => {
 
   it('maps each stage to a retirement status', () => {
     expect(statusForStage(WorkflowStage.PREPARED)).toBe(RetirementStatus.DRAFT);
-    expect(statusForStage(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW)).toBe(RetirementStatus.IN_REVIEW);
+    expect(statusForStage(WorkflowStage.CHIEF_ACCOUNTANT_REVIEW)).toBe(RetirementStatus.UNDER_REVIEW);
     expect(statusForStage(WorkflowStage.APPROVED)).toBe(RetirementStatus.APPROVED);
-    expect(statusForStage(WorkflowStage.COMPLETED)).toBe(RetirementStatus.CLOSED);
+    expect(statusForStage(WorkflowStage.COMPLETED)).toBe(RetirementStatus.COMPLETED);
     expect(statusForStage(WorkflowStage.REJECTED)).toBe(RetirementStatus.REJECTED);
   });
 
@@ -67,7 +68,7 @@ describe('applySubmission', () => {
   it('places a prepared retirement before the Account Officer', () => {
     const result = applySubmission(WorkflowStage.PREPARED);
     expect(result.stage).toBe(WorkflowStage.ACCOUNTS_REVIEW);
-    expect(result.status).toBe(RetirementStatus.IN_REVIEW);
+    expect(result.status).toBe(RetirementStatus.UNDER_REVIEW);
   });
 
   it('refuses to resubmit a packet already in the chain', () => {
@@ -174,11 +175,36 @@ describe('applyClosure', () => {
   it('closes an approved retirement', () => {
     const result = applyClosure(WorkflowStage.APPROVED);
     expect(result.stage).toBe(WorkflowStage.COMPLETED);
-    expect(result.status).toBe(RetirementStatus.CLOSED);
+    expect(result.status).toBe(RetirementStatus.COMPLETED);
   });
 
   it('will not close a packet still under review', () => {
     expect(() => applyClosure(WorkflowStage.INTERNAL_AUDIT)).toThrow(WorkflowError);
+  });
+});
+
+describe('applyReopen', () => {
+  it('returns an approved retirement for correction', () => {
+    const result = applyReopen(WorkflowStage.APPROVED);
+    expect(result.stage).toBe(WorkflowStage.RETURNED);
+    expect(result.status).toBe(RetirementStatus.RETURNED);
+    expect(result.isFinalApproval).toBe(false);
+  });
+
+  it('reopens a completed retirement as well as an approved one', () => {
+    expect(applyReopen(WorkflowStage.COMPLETED).stage).toBe(WorkflowStage.RETURNED);
+    expect(applyReopen(WorkflowStage.REJECTED).stage).toBe(WorkflowStage.RETURNED);
+  });
+
+  it('refuses a retirement that is not concluded — there is nothing to unlock', () => {
+    expect(() => applyReopen(WorkflowStage.INTERNAL_AUDIT)).toThrow(WorkflowError);
+    expect(() => applyReopen(WorkflowStage.PREPARED)).toThrow(WorkflowError);
+  });
+
+  it('sends it back to the start of the chain, not to where it left off', () => {
+    // RETURNED, not MEDICAL_DIRECTOR_REVIEW: the earlier signatures no longer
+    // stand once the figures can change.
+    expect(applyReopen(WorkflowStage.APPROVED).stage).toBe(WorkflowStage.RETURNED);
   });
 });
 

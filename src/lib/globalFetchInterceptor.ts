@@ -183,6 +183,11 @@ const ALWAYS_LIVE = [
   '/api/staff/availability',
   '/api/power-status',
   '/api/live',
+  // Returns an .xlsx, not JSON. writeThrough already declines to cache it, but
+  // marking it live stops the read path treating it as a cacheable GET at all —
+  // there is no sensible offline answer to "produce a spreadsheet", and the
+  // reports page surfaces the failure plainly.
+  '/api/imprest/reports/export',
 ];
 
 function isAlwaysLive(pathname: string): boolean {

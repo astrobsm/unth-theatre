@@ -7568,6 +7568,8 @@ enum AuditAction {
   REJECT
   QUERY
   CLOSE
+  /// Administrative unlock of an approved retirement. Always carries a reason.
+  REOPEN
   CANCEL
   LOGIN
   LOGIN_FAILED
