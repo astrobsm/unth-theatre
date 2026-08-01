@@ -36,11 +36,22 @@ function dayOf(value: Date | string): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
-/** Was this tariff in force on `asOf`? */
-export function isEffective(tariff: TariffRow, asOf: Date | string = new Date()): boolean {
+/**
+ * Anything with an effective window — a tariff, a revenue rule. Structural on
+ * purpose: revenue rules are dated by exactly the same convention, and a second
+ * copy of this comparison is a second place for the inclusive/exclusive
+ * boundary to drift.
+ */
+export interface EffectiveDated {
+  effectiveFrom: Date | string;
+  effectiveTo?: Date | string | null;
+}
+
+/** Was this in force on `asOf`? Start inclusive, end exclusive. */
+export function isEffective(row: EffectiveDated, asOf: Date | string = new Date()): boolean {
   const on = dayOf(asOf);
-  if (dayOf(tariff.effectiveFrom) > on) return false;
-  if (tariff.effectiveTo && dayOf(tariff.effectiveTo) <= on) return false;
+  if (dayOf(row.effectiveFrom) > on) return false;
+  if (row.effectiveTo && dayOf(row.effectiveTo) <= on) return false;
   return true;
 }
 
