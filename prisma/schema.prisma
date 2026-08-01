@@ -368,6 +368,18 @@ model User {
   availabilityNote      String?  // current assignment / free note
   currentLocation       String?
   availabilityUpdatedAt DateTime?
+  // Where that location actually is, when the device gave a fix. Written only
+  // when the staff member publishes their OWN status — never in the background,
+  // and never by an admin setting somebody else's availability.
+  currentLatitude       Float?
+  currentLongitude      Float?
+  /// Metres. Carried so a poor fix can be shown as poor rather than trusted.
+  locationAccuracyM     Float?
+  /// When the DEVICE took the fix. A ping queued offline arrives much later,
+  /// so this differs from availabilityUpdatedAt and is what freshness is
+  /// judged against.
+  locationCapturedAt    DateTime?
+  locationSource        StaffLocationSource?
   resetToken         String? // Password reset token
   resetTokenExpiry   DateTime? // Reset token expiration
   isFirstLogin       Boolean    @default(true) // Track if user has logged in before
@@ -590,6 +602,8 @@ model User {
 
   stockMovements    StockMovement[]    @relation("StockMovementActor")
   stockReservations StockReservation[] @relation("StockReservationRequester")
+
+  locationPings     StaffLocationPing[] @relation("StaffLocationPings")
 
   @@map("users")
 }
@@ -9119,4 +9133,69 @@ model RevenueDistribution {
   @@index([invoiceId])
   @@index([accountId, status])
   @@map("revenue_distributions")
+}
+
+// ============================================================================
+// STAFF LOCATION — where somebody was, and when
+// ----------------------------------------------------------------------------
+// The availability board already carried a status, a free-text place ("Theatre
+// 3") and a timestamp. What it could not answer is the question an emergency
+// actually asks: who is NEAREST, and is that information still worth anything?
+//
+// Two things are added.
+//
+// A COORDINATE on the current snapshot, so the board can sort by distance from
+// a theatre rather than by a typed room name that may be hours stale.
+//
+// A PING HISTORY, because a single snapshot forgets. "At each time the staff
+// updates his location" is a trail, not a value — and a trail is what lets a
+// manager see that someone marked themselves available from the car park.
+//
+// PRIVACY. A position is recorded ONLY when a staff member actively sets their
+// own status. There is no background tracking, no polling for position, and
+// nothing is captured while the app merely sits open. The act of publishing
+// your availability IS the consent, and the UI says so plainly at the point of
+// capture. Anything else would be surveillance rather than a workforce board.
+// ============================================================================
+
+/// How a position was obtained. A typed room name and a satellite fix deserve
+/// different confidence, and merging them would flatter the weaker one.
+enum StaffLocationSource {
+  GPS
+  NETWORK
+  MANUAL
+}
+
+/// One publication of "here is where I am, and what I am doing".
+/// Append-only: a position is never edited, only superseded by a newer ping.
+model StaffLocationPing {
+  id String @id @default(uuid())
+
+  /// TEXT id — matches User.id.
+  userId String
+  user   User   @relation("StaffLocationPings", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The availability status published with this position.
+  status String
+
+  /// The free-text place the person typed, e.g. "Theatre 3". Kept alongside the
+  /// coordinate because a room name is often more useful to a human than a pair
+  /// of decimals, and it survives when no fix was available.
+  locationLabel String?
+  note          String?
+
+  latitude  Float?
+  longitude Float?
+  /// Metres. A fix good to 2,000m says almost nothing and should be shown as such.
+  accuracyM Float?
+  source    StaffLocationSource @default(MANUAL)
+
+  /// When the position was taken by the device, which is not necessarily when
+  /// it reached the server — a ping queued offline can arrive much later.
+  capturedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([userId, capturedAt])
+  @@index([capturedAt])
+  @@map("staff_location_pings")
 }

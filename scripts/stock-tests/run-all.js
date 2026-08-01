@@ -54,6 +54,8 @@ function makeExpect() {
         `to contain ${show(x)}`),
       toBeGreaterThan: (n) => check(actual > n, `to be > ${show(n)}`),
       toBeLessThan: (n) => check(actual < n, `to be < ${show(n)}`),
+      toBeGreaterThanOrEqual: (n) => check(actual >= n, `to be >= ${show(n)}`),
+      toBeLessThanOrEqual: (n) => check(actual <= n, `to be <= ${show(n)}`),
       toBeCloseTo: (n, digits = 2) => check(Math.abs(actual - n) < Math.pow(10, -digits) / 2,
         `to be close to ${n}`),
       toBeInstanceOf: (C) => check(actual instanceof C, `to be instance of ${C.name}`),

@@ -25,9 +25,10 @@
     "cap:run:android": "cap run android",
     "cap:run:ios": "cap run ios",
     "test:imprest": "node scripts/imprest-tests/run-all.js",
-    "test:all": "npm run test:offline && npm run test:imprest && npm run test:stock && npm run test:billing",
+    "test:all": "npm run test:offline && npm run test:imprest && npm run test:stock && npm run test:billing && npm run test:lib",
     "test:stock": "node scripts/stock-tests/run-all.js",
-    "test:billing": "node scripts/billing-tests/run-all.js"
+    "test:billing": "node scripts/billing-tests/run-all.js",
+    "test:lib": "node scripts/lib-tests/run-all.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

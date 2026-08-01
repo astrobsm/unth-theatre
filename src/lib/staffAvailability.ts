@@ -40,6 +40,30 @@ export const AVAILABILITY_META: Record<string, AvailabilityMeta> = {
   UNAVAILABLE: { label: 'Unavailable', chip: 'bg-gray-200 text-gray-600 border-gray-300', dot: 'bg-gray-500', reachable: false },
 };
 
+/**
+ * Statuses that mean "I am at work and findable".
+ *
+ * These, and only these, may carry a position. Recording where somebody is when
+ * they have just marked themselves Off Duty or On Leave is not a workforce
+ * board — it is tracking them in their own time, and no operational question
+ * needs the answer. The rule is enforced on the SERVER, not merely hidden in
+ * the UI, so it holds however the request arrives.
+ */
+export const LOCATABLE_STATUSES: readonly AvailabilityStatus[] = [
+  'AVAILABLE',
+  'BUSY',
+  'IN_THEATRE',
+  'TRANSPORTING_PATIENT',
+  'PREPARING_THEATRE',
+  'CLEANING_THEATRE',
+  'ON_EMERGENCY_CASE',
+  'BREAK',
+];
+
+/** May a position be attached to this status? */
+export const capturesLocation = (status: string | null | undefined): boolean =>
+  !!status && (LOCATABLE_STATUSES as readonly string[]).includes(status);
+
 export const availabilityMeta = (s: string | null | undefined): AvailabilityMeta =>
   (s && AVAILABILITY_META[s]) || { label: 'Not set', chip: 'bg-gray-50 text-gray-400 border-gray-200', dot: 'bg-gray-300', reachable: false };
 

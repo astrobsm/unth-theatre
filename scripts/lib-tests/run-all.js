@@ -1,16 +1,11 @@
 /**
- * Runs the imprest domain tests that came with the original monorepo.
+ * Runs the pure-library tests that are not tied to one domain module.
  *
- *     npm run test:imprest
+ *     npm run test:lib
  *
- * Those tests were written for vitest, which this project does not use. Rather
- * than rewrite ~880 lines of assertions (and risk changing their meaning), this
- * runner provides the small slice of the vitest API they actually use —
- * describe/it/test and 8 matchers — and executes the ORIGINAL test files
- * verbatim against the ported modules in src/lib/imprest.
- *
- * These cover the financial core: kobo money arithmetic, document numbering,
- * the approval workflow state machine, and retirement calculations.
+ * Same harness as the imprest, stock and billing suites: it supplies the small
+ * slice of the vitest API those files use and resolves their relative imports
+ * against src/lib, so a module can be tested without a database or a browser.
  */
 const fs = require('fs');
 const path = require('path');
@@ -113,7 +108,7 @@ const VITEST = { describe, it, test: it, expect: makeExpect() };
 const cache = new Map();
 
 /** Where the ported domain modules live. */
-const LIB = path.join(ROOT, 'src/lib/imprest');
+const LIB = path.join(ROOT, 'src/lib');
 
 function resolveTs(absNoExt) {
   return [absNoExt, absNoExt + '.ts', path.join(absNoExt, 'index.ts')].find(
@@ -163,9 +158,9 @@ const SUITES = fs
  * async and keep their own counters, so they run as child processes and their
  * exit code decides the outcome.
  */
-const SCRIPT_SUITES = ['test-retirement-pdf.js'];
+const SCRIPT_SUITES = [];
 
-console.log(`Imprest domain tests (${SUITES.length} suites, run against src/lib/imprest)\n`);
+console.log(`Library tests (${SUITES.length} suites, run against src/lib)\n`);
 
 for (const suite of SUITES) {
   const before = { passed, failed };
