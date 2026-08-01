@@ -17,6 +17,7 @@ import {
   isMappable,
   mapLink,
   nearest,
+  positionOf,
   timeAgo,
 } from './staffLocation';
 
@@ -249,5 +250,51 @@ describe('which statuses may carry a position at all', () => {
       (s) => !capturesLocation(s) && !['OFF_DUTY', 'ON_LEAVE', 'UNAVAILABLE'].includes(s)
     );
     expect(undecided.join(', ')).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Who may see a coordinate.
+ *
+ * The rule lives in the availability route, which needs a database and a
+ * session and so cannot be unit-tested here. What CAN be pinned down is the
+ * shape the route produces — that a stripped row still renders as a normal
+ * board row rather than breaking, and that nothing in this module leaks a
+ * position out of one.
+ */
+describe('a row with its position stripped', () => {
+  const stripped = {
+    id: 'someone-else',
+    currentLatitude: null,
+    currentLongitude: null,
+    locationAccuracyM: null,
+    locationCapturedAt: null,
+    locationSource: null,
+  };
+
+  it('reads as having no position', () => {
+    expect(hasPosition(positionOf(stripped))).toBe(false);
+    expect(isMappable(positionOf(stripped))).toBe(false);
+  });
+
+  it('produces no map link to follow', () => {
+    expect(mapLink(positionOf(stripped))).toBeNull();
+  });
+
+  it('describes itself honestly rather than throwing', () => {
+    expect(describePosition(positionOf(stripped), NOW)).toBe('No location shared');
+  });
+
+  it('is excluded from a nearest-staff search', () => {
+    // Somebody whose position was withheld must not be silently treated as
+    // being at the origin, which would put them top of the list.
+    expect(nearest(THEATRE, [positionOf(stripped)], { now: NOW })).toHaveLength(0);
+  });
+
+  it('is indistinguishable from someone who simply never shared one', () => {
+    const neverShared = positionOf({});
+    expect(describePosition(positionOf(stripped), NOW)).toBe(describePosition(neverShared, NOW));
   });
 });

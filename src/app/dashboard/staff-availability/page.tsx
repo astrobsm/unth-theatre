@@ -36,6 +36,9 @@ export default function StaffAvailabilityBoard() {
 
   const [staff, setStaff] = useState<Staff[]>([]);
   const [me, setMe] = useState('');
+  // The server decides this, and strips the coordinates to match. The flag is
+  // only so the board can say WHY there are none rather than looking broken.
+  const [canSeePositions, setCanSeePositions] = useState(false);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState(''); const [roleF, setRoleF] = useState(''); const [statusF, setStatusF] = useState('');
   const [msg, setMsg] = useState('');
@@ -110,7 +113,7 @@ export default function StaffAvailabilityBoard() {
     const sp = new URLSearchParams();
     if (roleF) sp.set('role', roleF); if (statusF) sp.set('status', statusF); if (q) sp.set('q', q);
     const r = await fetch(`/api/staff/availability?${sp}`, { cache: 'no-store' });
-    if (r.ok) { const d = await r.json(); setStaff(d.staff ?? []); setMe(d.me ?? ''); }
+    if (r.ok) { const d = await r.json(); setStaff(d.staff ?? []); setMe(d.me ?? ''); setCanSeePositions(Boolean(d.canSeePositions)); }
     setLoading(false);
   }, [roleF, statusF, q]);
   useEffect(() => { load(); }, [load]);
@@ -268,6 +271,14 @@ export default function StaffAvailabilityBoard() {
         </div>
         )}
       </div>
+
+      {!canSeePositions && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+          <ShieldQuestion className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+          Exact positions are shown to theatre managers and administrators only. You can see everyone’s
+          status and the place they typed, and your own position on your card.
+        </p>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">

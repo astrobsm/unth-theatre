@@ -40,7 +40,43 @@ export async function GET(request: NextRequest) {
     take: 1000,
   });
 
-  return NextResponse.json({ staff, me: (session.user as any).id });
+  const viewerId = (session.user as any).id;
+  const viewerRole = (session.user as any).role;
+
+  // WHO MAY SEE A POSITION.
+  //
+  // Knowing a colleague is available is one thing; knowing exactly where they
+  // are standing is another, and the whole hospital does not need it. So
+  // coordinates go only to the offices that coordinate work — managers,
+  // administrators and the chairman — plus each person for their own record,
+  // since they published it and are entitled to see what was stored.
+  //
+  // Stripped on the SERVER, not hidden in the UI: a field that reaches the
+  // browser has been disclosed, whatever the screen chooses to draw.
+  const maySeePositions = ADMIN_ROLES.includes(viewerRole);
+
+  const visible = staff.map((s) =>
+    maySeePositions || s.id === viewerId
+      ? s
+      : {
+          ...s,
+          // The free-text place ("Theatre 3") is deliberately KEPT. It is what
+          // the staff member chose to publish in words, and it is what makes
+          // the board useful to everybody without disclosing a coordinate.
+          currentLatitude: null,
+          currentLongitude: null,
+          locationAccuracyM: null,
+          locationCapturedAt: null,
+          locationSource: null,
+        }
+  );
+
+  return NextResponse.json({
+    staff: visible,
+    me: viewerId,
+    // So the board can explain the absence rather than looking broken.
+    canSeePositions: maySeePositions,
+  });
 }
 
 const setSchema = z.object({
