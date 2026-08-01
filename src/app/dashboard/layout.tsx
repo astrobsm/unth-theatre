@@ -257,6 +257,7 @@ export default function DashboardLayout({
     { href: '/dashboard/theatre-supply/reports', icon: FileBarChart, label: 'Supply Reports', badge: 'NEW' },
     { href: '/dashboard/theatre-supply/import', icon: FileSpreadsheet, label: 'Bulk Import', badge: 'NEW' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
+    { href: '/dashboard/theatre-ops', icon: ClipboardList, label: 'Theatre Operations', badge: 'NEW' },
     { href: '/dashboard/case-readiness', icon: ClipboardList, label: 'Case Pack Readiness', badge: 'NEW' },
     { href: '/dashboard/call-for-patient', icon: Phone, label: 'Call for Patient', badge: 'NEW' },
     { href: '/dashboard/scrub-management', icon: Shirt, label: 'Scrub Management', badge: 'NEW' },

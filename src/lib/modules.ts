@@ -67,6 +67,9 @@ export const MODULES: AppModule[] = [
   { id: 'theatres', label: 'Theatre Allocation', paths: ['/dashboard/theatres'], defaultRoles: CLINICAL_CORE, category: 'Logistics' },
   { id: 'theatre-setup', label: 'Theatre Setup', paths: ['/dashboard/theatre-setup'], defaultRoles: ['SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN', 'THEATRE_STORE_KEEPER'], category: 'Logistics' },
   { id: 'theatre-readiness', label: 'Theatre Readiness', paths: ['/dashboard/theatre-readiness'], defaultRoles: ['*'], category: 'Logistics' },
+  // Theatre operations. Wide by default: recording a delay is the good
+  // outcome, so anybody in the room must be able to do it.
+  { id: 'theatre-ops', label: 'Theatre Operations', paths: ['/dashboard/theatre-ops'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'THEATRE_STORE_KEEPER', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'PHARMACIST', 'BIOMEDICAL_ENGINEER', 'PORTER', 'CLEANER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'POWER_PLANT_OPERATOR', 'WORKS_SUPERVISOR', 'OXYGEN_UNIT_SUPERVISOR'], category: 'Logistics' },
   { id: 'call-for-patient', label: 'Call for Patient', paths: ['/dashboard/call-for-patient'], defaultRoles: ['PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Logistics' },
   { id: 'scrub-management', label: 'Scrub Management', paths: ['/dashboard/scrub-management'], defaultRoles: ['SCRUB_CARE_PROVIDER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Logistics' },
 
