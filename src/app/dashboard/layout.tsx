@@ -253,6 +253,7 @@ export default function DashboardLayout({
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
     { href: '/dashboard/theatre-supply', icon: Boxes, label: 'Theatre Supply Unit', badge: 'NEW' },
     { href: '/dashboard/theatre-billing', icon: Receipt, label: 'Theatre Billing', badge: 'NEW' },
+    { href: '/dashboard/theatre-supply/import', icon: FileSpreadsheet, label: 'Bulk Import', badge: 'NEW' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
     { href: '/dashboard/case-readiness', icon: ClipboardList, label: 'Case Pack Readiness', badge: 'NEW' },
     { href: '/dashboard/call-for-patient', icon: Phone, label: 'Call for Patient', badge: 'NEW' },
