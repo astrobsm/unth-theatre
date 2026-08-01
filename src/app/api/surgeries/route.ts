@@ -9,6 +9,7 @@ import { generateUniqueSurgeryCode } from "@/lib/surgeryCodes";
 import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
 import { jsonWithETag } from "@/lib/etag";
 import { resolveBasePack, BASE_PACK_LABEL } from "@/lib/baseConsumablePack";
+import { checkSlot } from "@/lib/theatreOps/scheduling";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +24,18 @@ const surgerySchema = z.object({
   indication: z.string(),
   procedureName: z.string(),
   scheduledDate: z.string(),
-  scheduledTime: z.string(),
-  estimatedDuration: z.number().int().min(1, 'Estimated duration must be at least 1 minute').default(60),
+  // Both MANDATORY. A case with no committed start time cannot be assessed for
+  // delay, and a case with no expected duration cannot have the next one
+  // scheduled after it — so a silent default of 60 minutes was quietly
+  // producing lists that could not happen.
+  scheduledTime: z
+    .string()
+    .regex(/^\d{1,2}:\d{2}$/, 'Give the start time as HH:MM, for example 09:00'),
+  estimatedDuration: z
+    .number({ required_error: 'How long is the case expected to take, in minutes?' })
+    .int()
+    .min(5, 'A case takes at least 5 minutes')
+    .max(24 * 60, 'That is longer than a day'),
   surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
   magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR']).nullish(),
   anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
@@ -405,81 +416,68 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // === Auto-scheduling + 5 PM Cutoff Validation for Elective and Urgent cases ===
+    // === Theatre list scheduling: the surgeon's time, checked against the list ===
     //
-    // Scheduling policy (per requirement):
-    //   • The first elective case of the day starts at 09:00.
-    //   • After the surgeon's estimated duration, add a 15-minute grace plus a
-    //     30-minute turnover (move patient out + clean theatre) = 45 min gap.
-    //   • Each subsequent case on the same day/theatre is auto-sequenced after
-    //     the previous one using that 45-minute gap.
-    //   • All cases must still finish by 17:00 (5 PM); otherwise the booking is
-    //     rejected and the user is asked to reschedule.
+    // Policy:
+    //   * Start time and estimated duration are BOTH mandatory (see the schema).
+    //   * 20 minutes sit between every pair of cases -- patient out, theatre
+    //     cleaned, next patient in.
+    //   * The time the surgeon chose is RESPECTED. It is checked against what is
+    //     already booked and refused with an explanation if it will not fit,
+    //     rather than being silently rewritten.
+    //   * Everything must finish by 17:00.
     //
-    // ELECTIVE cases get their `scheduledTime` auto-assigned by the server (the
-    // value sent by the client is ignored). URGENT cases keep their chosen time
-    // but are still counted toward the day's capacity.
+    // This replaces a version that overwrote whatever time an elective booking
+    // asked for. That was worse than it sounds: the surgeon believed they had
+    // booked 11:00, the system had booked 13:45, and nobody found out until the
+    // ward sent the patient at the wrong hour. The arithmetic now lives in
+    // lib/theatreOps/scheduling, where it is tested.
     if (surgeryType === 'ELECTIVE' || surgeryType === 'URGENT') {
-      const FIRST_CASE_HOUR = 9;                 // 09:00 AM first case
-      const GRACE_MINUTES = 15;                  // post-op grace / handover
-      const TURNOVER_MINUTES = 30;               // patient out + theatre cleaning
-      const TURNAROUND_GAP = GRACE_MINUTES + TURNOVER_MINUTES; // 45 min between cases
-      const END_OF_DAY_MINUTES = 17 * 60;        // 17:00 (1020 min from midnight)
-
-      const scheduledDate = new Date(validatedData.scheduledDate);
-      const dayStart = new Date(scheduledDate);
+      const listDate = new Date(validatedData.scheduledDate);
+      const dayStart = new Date(listDate);
       dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(scheduledDate);
+      const dayEnd = new Date(listDate);
       dayEnd.setHours(23, 59, 59, 999);
 
-      // Sequence within the assigned theatre when one is chosen; otherwise fall
-      // back to sequencing by surgical unit.
+      // Sequenced within the assigned theatre when one is chosen; otherwise by
+      // surgical unit, since a unit without its own theatre still cannot run two
+      // cases at once.
       const theatreKey = (validatedData.theatreId || '').trim();
       const sameDayWhere: any = {
         scheduledDate: { gte: dayStart, lte: dayEnd },
         surgeryType: { in: ['ELECTIVE', 'URGENT'] },
         status: { notIn: ['CANCELLED'] },
       };
-      if (theatreKey) {
-        sameDayWhere.theatreId = theatreKey;
-      } else {
-        sameDayWhere.unit = validatedData.unit;
-      }
+      if (theatreKey) sameDayWhere.theatreId = theatreKey;
+      else sameDayWhere.unit = validatedData.unit;
 
-      const existingSurgeries = await prisma.surgery.findMany({
+      const sameDayCases = await prisma.surgery.findMany({
         where: sameDayWhere,
-        select: { estimatedDuration: true },
+        select: { id: true, scheduledTime: true, estimatedDuration: true },
       });
 
-      const priorCount = existingSurgeries.length;
-      const priorDuration = existingSurgeries.reduce(
-        (sum, s) => sum + (s.estimatedDuration || 60),
-        0
-      );
-      const newDuration = validatedData.estimatedDuration || 60;
+      const verdict = checkSlot({
+        scheduledTime: validatedData.scheduledTime,
+        estimatedDuration: validatedData.estimatedDuration,
+        existing: sameDayCases.map((x) => ({
+          id: x.id,
+          scheduledTime: x.scheduledTime,
+          estimatedDuration: x.estimatedDuration || 60,
+        })),
+      });
 
-      // Start = 09:00 + (sum of prior durations) + (45-min gap × number of prior cases)
-      const startMinutes = FIRST_CASE_HOUR * 60 + priorDuration + TURNAROUND_GAP * priorCount;
-      const endMinutes = startMinutes + newDuration;
-
-      const fmt = (mins: number) =>
-        `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-
-      if (endMinutes > END_OF_DAY_MINUTES) {
+      if (!verdict.ok) {
         const target = theatreKey ? 'this theatre' : validatedData.unit;
         return NextResponse.json(
           {
-            error: `Booking rejected: with the 15-minute grace and 30-minute turnover between cases, this case for ${target} would start at ${fmt(startMinutes)} and finish at ${fmt(endMinutes)}, beyond the 5:00 PM theatre cutoff. Please reschedule to another day.`,
+            error: `${target}: ${verdict.message}`,
+            code: verdict.code,
+            // So the form can offer the fix rather than leaving the surgeon to
+            // do the arithmetic themselves.
+            suggestedStart: verdict.suggestedStart,
           },
           { status: 400 }
         );
-      }
-
-      // Auto-assign the computed start time for ELECTIVE cases.
-      if (surgeryType === 'ELECTIVE') {
-        const computedTime = fmt(startMinutes);
-        (surgeryData as any).scheduledTime = computedTime;
-        validatedData.scheduledTime = computedTime;
       }
     }
 

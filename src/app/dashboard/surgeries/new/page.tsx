@@ -174,6 +174,10 @@ export default function NewSurgeryPage() {
   const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const [estimatedDuration, setEstimatedDuration] = useState('');
+  // The day's list for the chosen theatre, so the form can offer the next
+  // free start rather than leaving the surgeon to work it out.
+  const [listPlan, setListPlan] = useState<{ suggestedStart: string; cases: Array<{ start: string; end: string }> } | null>(null);
   const [unit, setUnit] = useState('');
   const [subspecialty, setSubspecialty] = useState('');
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
@@ -298,6 +302,33 @@ export default function NewSurgeryPage() {
   useEffect(() => {
     if (subspecialty) fetchConsumableTemplates(subspecialty);
   }, [subspecialty]);
+
+  // The day's list for the chosen theatre. Fetched from the server so the
+  // suggestion here and the validation there come from the same function —
+  // a form computing its own would eventually offer a time the server rejects.
+  useEffect(() => {
+    if (!scheduledDate) { setListPlan(null); return; }
+    const params = new URLSearchParams({ date: scheduledDate });
+    if (selectedTheatreId) params.set('theatreId', selectedTheatreId);
+    else if (unit) params.set('unit', unit);
+    else { setListPlan(null); return; }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/theatre-ops/list-plan?${params.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setListPlan(data);
+        // Offer the next free slot only when nothing has been typed. Once the
+        // surgeon has chosen a time it is theirs — the whole point of the
+        // change is that the system stops overwriting it.
+        setScheduledTime((current) => current || data.suggestedStart);
+      } catch { /* offline — the field simply stays as the surgeon left it */ }
+    })();
+    return () => { cancelled = true; };
+  }, [scheduledDate, selectedTheatreId, unit]);
 
   // Auto-fetch on-duty team when scheduledDate + scheduledTime are both set.
   useEffect(() => {
@@ -521,7 +552,9 @@ export default function NewSurgeryPage() {
       procedureName: formData.get('procedureName'),
       scheduledDate: formData.get('scheduledDate'),
       scheduledTime: formData.get('scheduledTime'),
-      estimatedDuration: parseInt(formData.get('estimatedDuration') as string) || 60,
+      // No `|| 60` fallback: a silent default is what produced lists that
+      // could not happen. An empty field must fail validation, not guess.
+      estimatedDuration: parseInt(formData.get('estimatedDuration') as string),
       surgeryType: surgeryType,
       magnitude: (formData.get('magnitude') as string) || null,
       anesthesiaType: anesthesiaType || null,
@@ -1170,17 +1203,25 @@ export default function NewSurgeryPage() {
                 type="time"
                 name="scheduledTime"
                 required
-                readOnly={surgeryType === 'ELECTIVE'}
-                className={`input-field ${surgeryType === 'ELECTIVE' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                className="input-field"
                 title="Surgery time"
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
               />
-              {surgeryType === 'ELECTIVE' && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Auto-scheduled: elective cases start at 09:00 and are sequenced
-                  automatically (15-min grace + 30-min turnover between cases). The
-                  final start time is assigned by the system when you book.
+              {listPlan && (
+                <p className="text-xs text-gray-600 mt-1">
+                  {listPlan.cases.length === 0
+                    ? 'First case of the day for this theatre — suggested start 09:00.'
+                    : `${listPlan.cases.length} case${listPlan.cases.length === 1 ? '' : 's'} already booked, last finishing ${listPlan.cases[listPlan.cases.length - 1].end}. With 20 minutes to clean the theatre and move the patient, the next free start is ${listPlan.suggestedStart}.`}
+                  {scheduledTime && scheduledTime !== listPlan.suggestedStart && (
+                    <button
+                      type="button"
+                      onClick={() => setScheduledTime(listPlan.suggestedStart)}
+                      className="ml-1 font-medium text-blue-600 underline"
+                    >
+                      Use {listPlan.suggestedStart}
+                    </button>
+                  )}
                 </p>
               )}
             </div>
@@ -1191,13 +1232,19 @@ export default function NewSurgeryPage() {
                 type="number"
                 name="estimatedDuration"
                 required
-                min="1"
+                min="5"
                 max="720"
-                defaultValue="60"
+                step="5"
                 className="input-field"
                 placeholder="e.g. 90"
+                value={estimatedDuration}
+                onChange={(e) => setEstimatedDuration(e.target.value)}
               />
-              <p className="text-xs text-gray-500 mt-1">Total estimated duration of the surgery in minutes. Used to validate daily theatre capacity (8 AM - 5 PM).</p>
+              <p className="text-xs text-gray-500 mt-1">
+                How long the case is expected to take. This is what the next case on the
+                list is scheduled after, so a guess here becomes somebody else&apos;s delay.
+                No default is filled in on purpose.
+              </p>
             </div>
 
             <div>
