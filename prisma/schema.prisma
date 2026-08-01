@@ -134,13 +134,27 @@ enum SurgicalTeamRole {
   HOUSE_OFFICER
 }
 
+/// The journey a patient takes through a theatre episode.
+///
+/// Six of these predate the operations-intelligence work and are unchanged.
+/// The three added — anaesthesia start, the WHO time-out, and dressing —
+/// complete the eight milestones the duration calculations need, and they are
+/// added HERE rather than in a parallel milestone table because a second
+/// timeline for the same patient would immediately start disagreeing with
+/// this one.
 enum PatientMovementPhase {
   WARD
   PORTER_DISPATCHED
   HOLDING_AREA
   INSIDE_THEATRE
+  /// Anaesthesia commenced. The boundary between waiting and working.
+  ANAESTHESIA_STARTED
+  /// WHO Surgical Safety Checklist time-out completed.
+  WHO_TIMEOUT_COMPLETED
   SURGERY_STARTED
   SURGERY_ENDED
+  /// Dressing complete — the case is finished but the theatre is not yet free.
+  DRESSING_COMPLETED
   RECOVERY_ROOM
   RETURNED_TO_WARD
 }

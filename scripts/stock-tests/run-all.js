@@ -126,7 +126,12 @@ function loadTs(absNoExt) {
   // the modules, so an import that does not resolve locally is looked up in
   // src/lib/imprest — which keeps the test sources byte-identical to the ones
   // that shipped with the imprest system.
-  const file = resolveTs(absNoExt) || resolveTs(path.join(LIB, path.basename(absNoExt)));
+  // Fall back to the app lib, PRESERVING any subdirectory: basename alone
+  // flattened ./theatreOps/durations to durations and failed to resolve it.
+  const file =
+    resolveTs(absNoExt) ||
+    resolveTs(path.join(LIB, path.relative(__dirname, absNoExt))) ||
+    resolveTs(path.join(LIB, path.basename(absNoExt)));
   if (!file) throw new Error(`cannot resolve ${absNoExt}`);
   if (cache.has(file)) return cache.get(file);
 
