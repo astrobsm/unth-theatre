@@ -105,7 +105,33 @@ console.log('\n5. Nav items');
   check(`consultant sees all ${resident.length} resident nav items`, missing.length === 0, missing.join(', '));
 }
 
-console.log('\n6. Display metadata exists for the new role');
+console.log('\n6. Theatre-ops governance screens are narrower than the board');
+{
+  // Everyone who works a list can see the operations board. The performance
+  // figures read across theatres, and QA review decides whether a flagged case
+  // was avoidable — neither is a shop-floor screen. Longest-prefix matching is
+  // what makes the sub-paths override the parent module, so it is checked here
+  // rather than assumed.
+  const BOARD = '/dashboard/theatre-ops';
+  const PERF = '/dashboard/theatre-ops/performance';
+  const REVIEW = '/dashboard/theatre-ops/review';
+
+  check('a porter can see the operations board', M.canAccessPath('PORTER', [], BOARD));
+  check('a porter cannot see the performance figures', !M.canAccessPath('PORTER', [], PERF));
+  check('a porter cannot see the QA review queue', !M.canAccessPath('PORTER', [], REVIEW));
+  check('a scrub nurse cannot see the QA review queue', !M.canAccessPath('SCRUB_NURSE', [], REVIEW));
+
+  check('a consultant surgeon sees the performance figures',
+    M.canAccessPath('CONSULTANT_SURGEON', [], PERF));
+  // Judging avoidability is a governance function, not a clinical one.
+  check('a consultant surgeon does NOT sit on the QA review by default',
+    !M.canAccessPath('CONSULTANT_SURGEON', [], REVIEW));
+  check('the CMAC sees the QA review queue', M.canAccessPath('CMAC', [], REVIEW));
+  check('the theatre manager sees the QA review queue (full access)',
+    M.canAccessPath('THEATRE_MANAGER', [], REVIEW));
+}
+
+console.log('\n7. Display metadata exists for the new role');
 check('role has a human label', P.getRoleName('CONSULTANT_SURGEON') === 'Consultant Surgeon');
 check('role has a landing dashboard', P.getRoleDashboard('CONSULTANT_SURGEON') === '/dashboard/surgeries');
 

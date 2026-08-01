@@ -70,6 +70,12 @@ export const MODULES: AppModule[] = [
   // Theatre operations. Wide by default: recording a delay is the good
   // outcome, so anybody in the room must be able to do it.
   { id: 'theatre-ops', label: 'Theatre Operations', paths: ['/dashboard/theatre-ops'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'THEATRE_STORE_KEEPER', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'PHARMACIST', 'BIOMEDICAL_ENGINEER', 'PORTER', 'CLEANER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'POWER_PLANT_OPERATOR', 'WORKS_SUPERVISOR', 'OXYGEN_UNIT_SUPERVISOR'], category: 'Logistics' },
+  // The theatre-ops board is for everyone who works a list; the two screens
+  // below read across theatres and are narrowed to consultants + management.
+  // Longest-prefix matching means these override the parent module above.
+  { id: 'theatre-ops-performance', label: 'Theatre Performance', paths: ['/dashboard/theatre-ops/performance'], defaultRoles: [...ADMIN_VIEWERS, 'CONSULTANT_SURGEON', 'CONSULTANT_ANAESTHETIST'], category: 'Logistics' },
+  // QA review decides whether a flagged case was avoidable. Governance only.
+  { id: 'theatre-ops-review', label: 'Theatre QA Review', paths: ['/dashboard/theatre-ops/review'], defaultRoles: [...ADMIN_VIEWERS], category: 'Logistics' },
   { id: 'call-for-patient', label: 'Call for Patient', paths: ['/dashboard/call-for-patient'], defaultRoles: ['PORTER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Logistics' },
   { id: 'scrub-management', label: 'Scrub Management', paths: ['/dashboard/scrub-management'], defaultRoles: ['SCRUB_CARE_PROVIDER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Logistics' },
 
