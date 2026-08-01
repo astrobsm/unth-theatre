@@ -756,6 +756,8 @@ model InventoryItem {
   // Theatre supply chain: the physical lots of this catalogue item.
   stockBatches      StockBatch[]
 
+  tariffs           Tariff[]           @relation("TariffItem")
+
   @@map("inventory_items")
 }
 
@@ -1098,6 +1100,8 @@ model Surgery {
 
   stockMovements    StockMovement[]    @relation("StockMovementSurgery")
   stockReservations StockReservation[] @relation("StockReservationSurgery")
+
+  invoice           Invoice?           @relation("InvoiceSurgery")
 
   @@map("surgeries")
 }
@@ -7823,6 +7827,9 @@ model Vendor {
 
   stockBatches StockBatch[] @relation("StockBatchVendor")
 
+  invoiceLines    InvoiceLine[]    @relation("InvoiceLineVendor")
+  revenueAccounts RevenueAccount[] @relation("RevenueAccountVendor")
+
   @@unique([name, phone])
   @@index([name])
   @@index([deletedAt])
@@ -8780,4 +8787,336 @@ model StockReservation {
   @@index([surgeryId, status])
   @@index([batchId])
   @@map("stock_reservations")
+}
+
+// ============================================================================
+// THEATRE BILLING — tariffs, one invoice per surgery, revenue distribution
+// ----------------------------------------------------------------------------
+// ORM had no billing layer at all before this: no invoice, no price list, no
+// concept of a payment. So this is new ground rather than an extension, and it
+// is built to the two decisions that shape everything else.
+//
+// ONE INVOICE PER SURGERY. Invoice.surgeryId is UNIQUE. A patient having two
+// procedures gets two invoices, and a single procedure can never accumulate
+// two competing bills. Everything chargeable — theatre, anaesthesia,
+// consumables, drugs, CSSD, implants, recovery — is a line on that one
+// invoice, which is what "everything paid once" actually means in practice.
+//
+// PRICES ARE VERSIONED BY EFFECTIVE DATE. A Tariff row is never edited to
+// change a price and never deleted. Superseding it closes the old row
+// (effectiveTo) and opens a new one. A bill raised last quarter must still
+// reprice to what it charged, or it stops reconciling the moment somebody
+// updates a price list.
+//
+// MONEY IS INTEGER KOBO throughout, matching imprest and the stock module.
+// Percentages are BASIS POINTS (1% = 100bp) for the same reason: a revenue
+// split stored as a float cannot be made to sum back to the invoice total.
+//
+// ID TYPES: Surgery, Patient and User are TEXT; the imprest Vendor is @db.Uuid.
+// Every relation below is annotated with the type it must match.
+// ============================================================================
+
+/// What is being priced. Drives both the tariff catalogue and how a line is
+/// routed when revenue is distributed.
+enum ChargeKind {
+  PROCEDURE
+  THEATRE
+  ANAESTHESIA
+  CONSUMABLE
+  DRUG
+  IMPLANT
+  CSSD
+  RECOVERY
+  LABORATORY
+  BLOOD
+  OXYGEN
+  EMERGENCY
+  OTHER
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethodKind {
+  CASH
+  TRANSFER
+  POS
+  CHEQUE
+  WAIVER
+  NHIS
+  HMO
+}
+
+/// Where money is owed to once an invoice is paid.
+enum RevenueAccountKind {
+  HOSPITAL
+  VENDOR
+  CSSD
+  PHARMACY
+  LABORATORY
+  BLOOD_BANK
+  DEPARTMENT
+  THEATRE
+}
+
+enum DistributionStatus {
+  PENDING
+  SETTLED
+  CANCELLED
+}
+
+/// A price, valid over a period. Never edited in place — see the header.
+model Tariff {
+  id String @id @default(uuid())
+
+  /// Stable key for this charge, e.g. "THEATRE-MAJOR" or an item id.
+  code String
+  name String
+  kind ChargeKind
+
+  /// TEXT id — matches InventoryItem.id. Set when the tariff prices a stock item.
+  itemId String?
+  item   InventoryItem? @relation("TariffItem", fields: [itemId], references: [id])
+
+  /// Set when the tariff prices a procedure drawn from the surgical pack library.
+  surgicalPackId String?
+
+  /// Kobo.
+  amount Int
+
+  /// The window this price applies to. effectiveTo null means "still current".
+  /// Superseding writes effectiveTo on the old row rather than changing amount.
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+
+  /// Why the price changed. An unexplained price rise is what an auditor asks about.
+  reason String?
+
+  notes String?
+
+  /// TEXT id — matches User.id.
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoiceLines InvoiceLine[]
+
+  @@index([code, effectiveFrom])
+  @@index([kind, effectiveFrom])
+  @@index([itemId])
+  @@map("tariffs")
+}
+
+/// One bill for one surgery.
+model Invoice {
+  id            String @id @default(uuid())
+  invoiceNumber String @unique
+
+  /// UNIQUE — one invoice per surgery, by decision. TEXT id.
+  surgeryId String  @unique
+  surgery   Surgery @relation("InvoiceSurgery", fields: [surgeryId], references: [id])
+
+  /// TEXT id — matches Patient.id. Denormalised name so a printed bill still
+  /// reads correctly after a record is corrected.
+  patientId   String?
+  patientName String?
+
+  status InvoiceStatus @default(DRAFT)
+
+  /// All kobo. subtotal less discount plus tax equals total.
+  subtotal   Int @default(0)
+  discount   Int @default(0)
+  tax        Int @default(0)
+  total      Int @default(0)
+  amountPaid Int @default(0)
+
+  discountReason String?
+
+  issuedAt DateTime?
+  dueAt    DateTime?
+  paidAt   DateTime?
+
+  cancelledAt    DateTime?
+  cancelReason   String?
+
+  notes String?
+
+  lines         InvoiceLine[]
+  payments      Payment[]
+  distributions RevenueDistribution[]
+
+  /// TEXT ids — match User.id.
+  createdById String?
+  issuedById  String?
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([status])
+  @@index([patientId])
+  @@index([issuedAt])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  kind        ChargeKind
+  description String
+
+  quantity  Int @default(1)
+  /// Kobo, as charged. Captured onto the line so a later price change cannot
+  /// alter a bill that has already been raised.
+  unitPrice Int
+  lineTotal Int
+
+  /// Where the line came from, so every charge can be traced to the thing that
+  /// caused it — a consumed reservation, a tariff, or a hand-added charge.
+  sourceKind String?
+  sourceId   String?
+
+  tariffId String?
+  tariff   Tariff? @relation(fields: [tariffId], references: [id])
+
+  /// Set when the line bills consignment stock, so settlement knows who is owed.
+  /// @db.Uuid — matches Vendor.id.
+  vendorId String? @db.Uuid
+  vendor   Vendor? @relation("InvoiceLineVendor", fields: [vendorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([kind])
+  @@index([vendorId])
+  @@map("invoice_lines")
+}
+
+model Payment {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  /// Kobo.
+  amount Int
+  method PaymentMethodKind @default(CASH)
+
+  /// Bank teller number, POS reference, cheque number — whatever proves it.
+  reference String?
+  /// Scan of the teller slip, as a data URL, matching how the app handles other
+  /// evidence so it queues offline like everything else.
+  evidenceDataUrl String?
+
+  receivedAt   DateTime @default(now())
+  /// TEXT id — matches User.id.
+  receivedById String?
+  receivedByName String?
+
+  notes String?
+
+  /// Reversal, rather than deletion. A payment that is removed leaves a hole
+  /// nobody can explain; a reversed one explains itself.
+  reversedAt     DateTime?
+  reversalReason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([receivedAt])
+  @@map("invoice_payments")
+}
+
+/// A destination money is owed to. Editable — no account is hardcoded.
+model RevenueAccount {
+  id   String             @id @default(uuid())
+  code String             @unique
+  name String
+  kind RevenueAccountKind
+
+  /// Set when this account belongs to a vendor. @db.Uuid — matches Vendor.id.
+  vendorId String? @db.Uuid
+  vendor   Vendor? @relation("RevenueAccountVendor", fields: [vendorId], references: [id])
+
+  bankName      String?
+  accountNumber String?
+
+  isActive Boolean @default(true)
+
+  rules         RevenueRule[]
+  distributions RevenueDistribution[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, isActive])
+  @@map("revenue_accounts")
+}
+
+/// What share of a charge goes where. Effective-dated like tariffs, so a bill
+/// raised under last year's rules still explains its own split.
+model RevenueRule {
+  id String @id @default(uuid())
+
+  kind ChargeKind
+
+  accountId String
+  account   RevenueAccount @relation(fields: [accountId], references: [id])
+
+  /// Basis points: 1% = 100, 100% = 10000. Integer so the shares of an integer
+  /// total can be made to sum back to it exactly.
+  shareBasisPoints Int
+
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, effectiveFrom])
+  @@index([accountId])
+  @@map("revenue_rules")
+}
+
+/// The computed split for one invoice. Written when the invoice is paid, so it
+/// records what was actually distributed rather than what the rules would say
+/// today.
+model RevenueDistribution {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   RevenueAccount @relation(fields: [accountId], references: [id])
+
+  kind ChargeKind
+
+  /// Kobo. The shares across an invoice sum EXACTLY to its total — see
+  /// lib/billing/revenue, which allocates the rounding remainder rather than
+  /// letting it evaporate.
+  amount Int
+
+  /// The basis points applied, kept so the figure can be re-derived.
+  shareBasisPoints Int
+
+  status DistributionStatus @default(PENDING)
+
+  settledAt     DateTime?
+  settlementRef String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([accountId, status])
+  @@map("revenue_distributions")
 }
