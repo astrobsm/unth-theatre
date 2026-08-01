@@ -25,7 +25,8 @@
     "cap:run:android": "cap run android",
     "cap:run:ios": "cap run ios",
     "test:imprest": "node scripts/imprest-tests/run-all.js",
-    "test:all": "npm run test:offline && npm run test:imprest"
+    "test:all": "npm run test:offline && npm run test:imprest && npm run test:stock",
+    "test:stock": "node scripts/stock-tests/run-all.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

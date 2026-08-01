@@ -27,5 +27,9 @@
   // intended. They are executed by scripts/imprest-tests/run-all.js, which
   // supplies the vitest surface and resolves their imports against
   // src/lib/imprest — so they are deliberately outside the app's typecheck.
-  "exclude": ["node_modules", "scripts/imprest-tests"]
+  //
+  // scripts/stock-tests is the same arrangement for the theatre supply chain:
+  // its runner resolves `./quantities` and friends against src/lib/stock. The
+  // modules they exercise ARE typechecked; only the suites are excluded.
+  "exclude": ["node_modules", "scripts/imprest-tests", "scripts/stock-tests"]
 }

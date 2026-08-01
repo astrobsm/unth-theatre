@@ -588,6 +588,9 @@ model User {
   imprestAuditLogs           ImprestAuditLog[]
   imprestNotifications       ImprestNotification[]
 
+  stockMovements    StockMovement[]    @relation("StockMovementActor")
+  stockReservations StockReservation[] @relation("StockReservationRequester")
+
   @@map("users")
 }
 
@@ -749,6 +752,9 @@ model InventoryItem {
   maintenanceAlerts MaintenanceAlert[]
   theatreSetupItems TheatreSetupItem[]
   checkoutItems     CheckoutItem[]     @relation("CheckoutItems")
+
+  // Theatre supply chain: the physical lots of this catalogue item.
+  stockBatches      StockBatch[]
 
   @@map("inventory_items")
 }
@@ -1089,6 +1095,9 @@ model Surgery {
 
   // Scrub-nurse theatre reception & between-case workflow
   caseFlow TheatreCaseFlow? @relation("SurgeryCaseFlow")
+
+  stockMovements    StockMovement[]    @relation("StockMovementSurgery")
+  stockReservations StockReservation[] @relation("StockReservationSurgery")
 
   @@map("surgeries")
 }
@@ -7812,6 +7821,8 @@ model Vendor {
   deletedById    String?
   deletionReason String?
 
+  stockBatches StockBatch[] @relation("StockBatchVendor")
+
   @@unique([name, phone])
   @@index([name])
   @@index([deletedAt])
@@ -8490,4 +8501,278 @@ model ImprestRoleAssignment {
   @@index([userId])
   @@index([role])
   @@map("imprest_role_assignments")
+}
+
+// ============================================================================
+// THEATRE SUPPLY CHAIN — batch-level stock, movement and reservation
+// ----------------------------------------------------------------------------
+// Extends the existing InventoryItem rather than replacing it. InventoryItem
+// stays what it has always been: the CATALOGUE entry — "Vicryl 2/0", one row,
+// one name, one category. What it could never express is the physical reality
+// underneath: two lots of the same suture with different expiry dates, one of
+// them owned by a vendor on consignment and one by the hospital, half of one
+// lot already held for tomorrow's list.
+//
+// StockBatch is that physical lot. StockMovement is the append-only record of
+// every hand it passes through — nothing is ever deleted, and a batch's running
+// counters can always be recomputed from its movements (see lib/stock/reconcile,
+// which reports drift rather than trusting the counters).
+//
+// ID TYPES MATTER HERE. User, Surgery and InventoryItem are TEXT ids; the
+// imprest Vendor is @db.Uuid. A foreign key between the two types is rejected
+// by Postgres — that mistake cost a rolled-back migration on the imprest work,
+// so every relation below is annotated with the type it has to match.
+//
+// Money is integer kobo, never a float and never Decimal — the same rule the
+// imprest module follows. A theatre invoice can carry forty lines, and rounding
+// twice per line is how a bill stops reconciling.
+// ============================================================================
+
+/// Who owns the stock right now. Consignment stock stays the vendor's property
+/// until it is consumed; that transfer of ownership is the billable event.
+enum StockOwner {
+  HOSPITAL
+  VENDOR
+  CSSD
+  THEATRE
+}
+
+enum StockBatchStatus {
+  AVAILABLE
+  RESERVED
+  ISSUED
+  RETURNED
+  QUARANTINED
+  EXPIRED
+  DISPOSED
+  LOST
+}
+
+/// Every way stock can move. Append-only: a mistake is corrected with a
+/// compensating ADJUST movement, never by editing history.
+enum StockMovementType {
+  RECEIVE
+  RESERVE
+  RELEASE_RESERVATION
+  ISSUE
+  RETURN
+  CONSUME
+  TRANSFER
+  ADJUST
+  QUARANTINE
+  EXPIRE
+  DISPOSE
+  OWNERSHIP_TRANSFER
+}
+
+enum StockReservationStatus {
+  RESERVED
+  PARTIALLY_ISSUED
+  ISSUED
+  CONSUMED
+  RELEASED
+  CANCELLED
+}
+
+/// The Theatre Supply Unit's physical stores. Seeded, but editable — a hospital
+/// may have no cold chain store, and may add others.
+model StockLocation {
+  id          String  @id @default(uuid())
+  code        String  @unique
+  name        String
+  description String?
+  /// Controlled drugs require a witness to issue from this store.
+  isControlled Boolean @default(false)
+  /// Emergency stock cannot be drawn for an elective case without authorisation.
+  isEmergency Boolean @default(false)
+  /// Vendor consignment: stock here belongs to a vendor until it is consumed.
+  isConsignment Boolean @default(false)
+  /// Cold chain stores record the range they must stay within.
+  minTempC Float?
+  maxTempC Float?
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  batches StockBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("stock_locations")
+}
+
+/// One physical lot of one catalogue item.
+model StockBatch {
+  id String @id @default(uuid())
+
+  /// TEXT id — matches InventoryItem.id.
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id])
+
+  /// TEXT id — matches StockLocation.id.
+  locationId String?
+  location   StockLocation? @relation(fields: [locationId], references: [id])
+
+  batchNumber     String
+  lotNumber       String?
+  expiryDate      DateTime? @db.Date
+  manufactureDate DateTime? @db.Date
+
+  manufacturer String?
+  brand        String?
+
+  /// Ownership. VENDOR stock is consignment: it becomes the hospital's only on
+  /// consumption, which is what makes it billable and settleable.
+  owner StockOwner @default(HOSPITAL)
+  /// @db.Uuid — matches the imprest Vendor.id, NOT the TEXT ids above.
+  vendorId String? @db.Uuid
+  vendor   Vendor? @relation("StockBatchVendor", fields: [vendorId], references: [id])
+
+  /// All kobo. purchasePrice is what it cost; sellingPrice is what the patient
+  /// is billed; vendorPrice is what the vendor is owed once it is consumed.
+  purchasePrice Int @default(0)
+  sellingPrice  Int @default(0)
+  hospitalPrice Int @default(0)
+  vendorPrice   Int @default(0)
+
+  /// Running counters, derived from StockMovement and reconcilable against it.
+  quantityReceived Int @default(0)
+  quantityReserved Int @default(0)
+  quantityIssued   Int @default(0)
+  quantityReturned Int @default(0)
+  quantityUsed     Int @default(0)
+  quantityDamaged  Int @default(0)
+  quantityExpired  Int @default(0)
+  quantityDisposed Int @default(0)
+
+  minimumLevel Int?
+  maximumLevel Int?
+  reorderLevel Int?
+
+  shelfLocation      String?
+  storageTemperature String?
+
+  /// Scanning. barcode is what a keyboard-wedge scanner types; qrPayload is what
+  /// a camera reads. Both unique, so a scan can never resolve to two batches.
+  barcode   String? @unique
+  qrPayload String? @unique
+
+  status StockBatchStatus @default(AVAILABLE)
+
+  notes String?
+
+  movements    StockMovement[]
+  reservations StockReservation[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String?
+  updatedById String?
+  deletedAt   DateTime?
+
+  @@unique([itemId, batchNumber, locationId])
+  @@index([itemId, status])
+  @@index([expiryDate])
+  @@index([owner, vendorId])
+  @@index([locationId])
+  @@index([deletedAt])
+  @@map("stock_batches")
+}
+
+/// Append-only movement log. Nothing here is ever updated or deleted.
+model StockMovement {
+  id String @id @default(uuid())
+
+  batchId String
+  batch   StockBatch @relation(fields: [batchId], references: [id])
+
+  type StockMovementType
+  /// Always positive; the type says which way it goes.
+  quantity Int
+
+  /// The case this movement was for, when there is one.
+  /// TEXT id — matches Surgery.id.
+  surgeryId String?
+  surgery   Surgery? @relation("StockMovementSurgery", fields: [surgeryId], references: [id])
+
+  reservationId String?
+  reservation   StockReservation? @relation(fields: [reservationId], references: [id])
+
+  fromLocationId String?
+  toLocationId   String?
+
+  /// Ownership before and after — the pair that evidences a consignment
+  /// transfer at the moment of consumption.
+  ownerBefore StockOwner?
+  ownerAfter  StockOwner?
+
+  /// TEXT id — matches User.id.
+  actorId   String?
+  actor     User?   @relation("StockMovementActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String?
+
+  /// Controlled drugs need a second pair of eyes. The witness name is
+  /// denormalised so the register still reads correctly after a transfer.
+  witnessId   String?
+  witnessName String?
+
+  reason String?
+  notes  String?
+
+  /// What the scanner actually read, kept verbatim for dispute resolution.
+  scannedCode String?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([batchId, occurredAt])
+  @@index([surgeryId])
+  @@index([type, occurredAt])
+  @@index([reservationId])
+  @@map("stock_movements")
+}
+
+/// Stock held for a specific case. Reserved stock is still physically present
+/// in the store but is no longer available to anyone else.
+model StockReservation {
+  id String @id @default(uuid())
+
+  /// TEXT id — matches Surgery.id.
+  surgeryId String
+  surgery   Surgery @relation("StockReservationSurgery", fields: [surgeryId], references: [id])
+
+  batchId String
+  batch   StockBatch @relation(fields: [batchId], references: [id])
+
+  quantityReserved Int
+  quantityIssued   Int @default(0)
+  quantityReturned Int @default(0)
+  quantityUsed     Int @default(0)
+
+  status StockReservationStatus @default(RESERVED)
+
+  /// Where this line came from — a pack template, a prescription, or added by
+  /// hand. Kept so the theatre list can explain why an item is on the trolley.
+  sourceKind String?
+  sourceId   String?
+
+  /// Price captured at reservation, in kobo. The patient is billed what was
+  /// agreed when the case was booked, not what the price later became.
+  unitPriceAtReservation Int @default(0)
+
+  /// TEXT id — matches User.id.
+  requestedById String?
+  requestedBy   User?   @relation("StockReservationRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  movements StockMovement[]
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  releasedAt DateTime?
+
+  @@index([surgeryId, status])
+  @@index([batchId])
+  @@map("stock_reservations")
 }
