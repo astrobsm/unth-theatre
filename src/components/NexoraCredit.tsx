@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================
-// Attribution — NEXORA Technologies
+// Attribution — NEXORA Innovations
 // ------------------------------------------------------------
 // Shown on the sign-in screen and at the foot of the dashboard sidebar.
 //
@@ -37,7 +37,7 @@ export default function NexoraCredit({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/nexora-logo.png"
-            alt="NEXORA Technologies"
+            alt="NEXORA Innovations"
             width={14}
             height={14}
             className="h-3.5 w-3.5 object-contain"
@@ -47,7 +47,7 @@ export default function NexoraCredit({
       )}
       <p className={`text-center text-[10px] leading-tight ${muted}`}>
         Created and managed by{' '}
-        <span className={`font-semibold tracking-wide ${strong}`}>NEXORA Technologies</span>
+        <span className={`font-semibold tracking-wide ${strong}`}>NEXORA Innovations</span>
       </p>
     </div>
   );
