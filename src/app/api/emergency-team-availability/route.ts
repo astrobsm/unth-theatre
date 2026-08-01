@@ -32,6 +32,9 @@ const respondSchema = z.object({
   longitude: z.number().optional(),
   estimatedArrivalMin: z.number().optional(),
   notes: z.string().optional(),
+  // A label the handset supplies for itself. Optional, so every existing
+  // caller keeps working unchanged.
+  deviceLabel: z.string().max(200).optional(),
 });
 
 // GET - Fetch team availability for a specific emergency booking
@@ -119,6 +122,7 @@ export async function POST(request: NextRequest) {
         estimatedArrivalMin: data.estimatedArrivalMin,
         distanceKm,
         notes: data.notes,
+        deviceLabel: data.deviceLabel ?? undefined,
         arrivedAt: data.status === 'ARRIVED' ? new Date() : undefined,
       },
       create: {
@@ -133,6 +137,7 @@ export async function POST(request: NextRequest) {
         estimatedArrivalMin: data.estimatedArrivalMin,
         distanceKm,
         notes: data.notes,
+        deviceLabel: data.deviceLabel ?? null,
         arrivedAt: data.status === 'ARRIVED' ? new Date() : undefined,
       },
       include: {

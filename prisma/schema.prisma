@@ -4965,6 +4965,11 @@ model EmergencyTeamAvailability {
   // Notes
   notes String?
 
+  /// A label the device supplies for itself, so an acknowledgement can be
+  /// traced to a handset. Added for the response-monitoring board; nullable
+  /// because every acknowledgement recorded before it existed has none.
+  deviceLabel String?
+
   // Audit
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

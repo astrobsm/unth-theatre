@@ -202,6 +202,10 @@ const ALWAYS_LIVE = [
   // after they marked themselves unavailable, and the coordinator would find
   // out from the empty theatre instead of from the screen.
   '/api/theatre-ops/check-in',
+  // A response clock served from cache is a stopped clock. This screen exists
+  // to say how long a department has been silent; a stale copy would say a
+  // shorter time than the truth, which is the one direction it must never err.
+  '/api/theatre-ops/emergency-response',
 ];
 
 function isAlwaysLive(pathname: string): boolean {
