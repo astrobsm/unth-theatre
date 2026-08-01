@@ -619,6 +619,8 @@ model User {
 
   locationPings     StaffLocationPing[] @relation("StaffLocationPings")
 
+  delaysReported    TheatreDelayRecord[] @relation("DelayReporter")
+
   @@map("users")
 }
 
@@ -1130,6 +1132,9 @@ model Surgery {
   stockReservations StockReservation[] @relation("StockReservationSurgery")
 
   invoice           Invoice?           @relation("InvoiceSurgery")
+
+  delayRecords      TheatreDelayRecord[]      @relation("SurgeryDelayRecords")
+  unexplainedDelay  TheatreUnexplainedDelay?  @relation("SurgeryUnexplainedDelay")
 
   @@map("surgeries")
 }
@@ -9212,4 +9217,176 @@ model StaffLocationPing {
   @@index([userId, capturedAt])
   @@index([capturedAt])
   @@map("staff_location_pings")
+}
+
+// ============================================================================
+// THEATRE OPERATIONS INTELLIGENCE — delays, escalations, unexplained cases
+// ----------------------------------------------------------------------------
+// Three tables, and the distinction between them is the whole design.
+//
+// A DELAY RECORD is somebody explaining what is holding a case up. It is the
+// good outcome: the theatre saw a problem and said so. It carries a category,
+// a narrative and optional evidence, and it SUPPRESSES the unexplained flag.
+//
+// An ESCALATION is the consequence — the department that can fix it being told,
+// and being expected to acknowledge and close. It exists so "we told CSSD at
+// 09:20" is a fact rather than a recollection.
+//
+// An UNEXPLAINED CASE is the absence of the first one at forty-five minutes.
+// Note what it does NOT have: a subject. There is no staffId, no "responsible
+// officer", no attribution of any kind. It records that a CASE ran late with
+// nothing said, and routes to Quality Assurance. Who — if anyone — was at
+// fault is a judgement for people with the facts, and this schema deliberately
+// gives the software no column in which to record an accusation.
+//
+// GEOFENCE. Section 12 asks for GPS validation "without continuously tracking
+// movement". So the coordinate is checked against the hospital boundary and
+// then DISCARDED: only inside/outside and the theatre are kept. The audit
+// question is "was this person actually here?", and that is answerable without
+// building a map of where everybody stood all day.
+// ============================================================================
+
+enum DelayStageRecorded {
+  WARNING
+  UNEXPLAINED
+}
+
+enum EscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+enum UnexplainedReviewStatus {
+  PENDING_REVIEW
+  REVIEWED_NO_ACTION
+  REVIEWED_SYSTEM_ISSUE
+  REVIEWED_REFERRED
+}
+
+/// Somebody explaining what is holding a case up. The good outcome.
+model TheatreDelayRecord {
+  id String @id @default(uuid())
+
+  /// TEXT id — matches Surgery.id.
+  surgeryId String
+  surgery   Surgery @relation("SurgeryDelayRecords", fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  /// A code from lib/theatreOps/delays. Stored as text rather than an enum so
+  /// the taxonomy can grow without a migration — it is a classification, not a
+  /// state machine, and an unknown code degrades to "Other" rather than failing.
+  categoryCode String
+  categoryGroup String?
+
+  narrative String
+
+  /// How late the case was when this was recorded.
+  minutesLateAtRecord Int?
+
+  /// TEXT id — matches User.id. WHO REPORTED the problem, which is not the
+  /// same as who caused it and must never be read as such.
+  reportedById   String?
+  reportedBy     User?   @relation("DelayReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+  reportedByName String?
+
+  /// Evidence, as data URLs, matching how the app handles other media so it
+  /// queues offline like everything else.
+  photoDataUrls String[]
+
+  /// Presence, not position — see the header. The coordinate is validated and
+  /// discarded; only the verdict is kept.
+  withinGeofence Boolean?
+  theatreName    String?
+  deviceLabel    String?
+
+  escalations TheatreEscalation[]
+
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([surgeryId, recordedAt])
+  @@index([categoryCode])
+  @@index([recordedAt])
+  @@map("theatre_delay_records")
+}
+
+/// The department being told, and being expected to close it.
+model TheatreEscalation {
+  id String @id @default(uuid())
+
+  delayRecordId String
+  delayRecord   TheatreDelayRecord @relation(fields: [delayRecordId], references: [id], onDelete: Cascade)
+
+  /// TEXT id — matches Surgery.id. Denormalised so the queue can be read
+  /// per theatre without joining through the delay record.
+  surgeryId String
+
+  /// The role notified. A role rather than a person: the CSSD supervisor on
+  /// duty is whoever is on duty, and addressing an individual would leave the
+  /// escalation unread on their day off.
+  notifiedRole String
+
+  status EscalationStatus @default(OPEN)
+
+  /// TEXT ids — match User.id.
+  acknowledgedById   String?
+  acknowledgedByName String?
+  acknowledgedAt     DateTime?
+
+  resolvedById   String?
+  resolvedByName String?
+  resolvedAt     DateTime?
+  resolutionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([notifiedRole, status])
+  @@index([surgeryId])
+  @@index([status, createdAt])
+  @@map("theatre_escalations")
+}
+
+/// A case that ran late with nothing said. Deliberately subject-less.
+model TheatreUnexplainedDelay {
+  id String @id @default(uuid())
+
+  /// UNIQUE — one record per surgery. A case is either unexplained or it is
+  /// not; raising a second would double-count it in every report.
+  surgeryId String  @unique
+  surgery   Surgery @relation("SurgeryUnexplainedDelay", fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  stage DelayStageRecorded @default(UNEXPLAINED)
+
+  /// How late the case was when the threshold passed.
+  minutesLate Int
+
+  /// Emergencies are measured from booking rather than a scheduled time.
+  isEmergency Boolean @default(false)
+
+  /// NOTE the absence of any "responsible person" column. This records that a
+  /// CASE was unexplained. Attribution is a human judgement made with the facts
+  /// in front of you, and the software is given no place to record an
+  /// accusation it is not entitled to make.
+  reviewStatus UnexplainedReviewStatus @default(PENDING_REVIEW)
+
+  /// TEXT id — matches User.id. The reviewer, not a subject.
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?
+  reviewNotes    String?
+
+  /// Set when the committee judges the delay was avoidable. A conclusion
+  /// reached by people, never by a timer.
+  judgedAvoidable Boolean?
+
+  detectedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([reviewStatus, detectedAt])
+  @@index([detectedAt])
+  @@map("theatre_unexplained_delays")
 }
