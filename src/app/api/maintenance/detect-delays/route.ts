@@ -23,6 +23,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { assessDelay, assessEmergency } from '@/lib/theatreOps/delays';
+import { scheduledInstant } from '@/lib/theatreOps/clock';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,16 +40,6 @@ async function authorise(request: NextRequest): Promise<{ ok: boolean; who: stri
   if (!session?.user) return { ok: false, who: '', status: 401 };
   if (!role || !ADMIN_ROLES.includes(role)) return { ok: false, who: '', status: 403 };
   return { ok: true, who: 'administrator' };
-}
-
-/** "HH:MM" on a date, as an instant. Null when the time is unreadable. */
-function startInstant(date: Date, time: string | null): Date | null {
-  if (!time) return null;
-  const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
-  if (!m) return null;
-  const d = new Date(date);
-  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
-  return d;
 }
 
 export async function GET(request: NextRequest) {
@@ -111,7 +102,7 @@ export async function GET(request: NextRequest) {
         c.surgeryType === 'EMERGENCY'
           ? assessEmergency({ bookedAt: c.createdAt, startedAt, documented, now })
           : assessDelay({
-              scheduledStart: startInstant(c.scheduledDate, c.scheduledTime),
+              scheduledStart: scheduledInstant(c.scheduledDate, c.scheduledTime),
               startedAt,
               documented,
               now,

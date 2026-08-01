@@ -1135,6 +1135,7 @@ model Surgery {
 
   delayRecords      TheatreDelayRecord[]      @relation("SurgeryDelayRecords")
   unexplainedDelay  TheatreUnexplainedDelay?  @relation("SurgeryUnexplainedDelay")
+  preopAlert        TheatrePreopAlert?        @relation("SurgeryPreopAlert")
 
   @@map("surgeries")
 }
@@ -9389,4 +9390,46 @@ model TheatreUnexplainedDelay {
   @@index([reviewStatus, detectedAt])
   @@index([detectedAt])
   @@map("theatre_unexplained_delays")
+}
+
+/// The 60-minute preoperative alert, recorded once per case.
+///
+/// This table exists for exactly one reason: the alert job runs every five
+/// minutes, and without a unique anchor a case due in an hour would be
+/// announced twelve times before it started. `surgeryId` is UNIQUE, so the
+/// second attempt is a no-op however often the schedule fires.
+///
+/// It doubles as evidence. "Nobody told us" is the commonest account of a late
+/// start, and this row records who was told, when, and how far ahead.
+model TheatrePreopAlert {
+  id String @id @default(uuid())
+
+  /// UNIQUE — one alert per case. See above; this is the whole point.
+  surgeryId String  @unique
+  surgery   Surgery @relation("SurgeryPreopAlert", fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  /// The scheduled start the alert was sent against, as understood at the
+  /// time. If the case is later moved, this still says what was announced.
+  scheduledStart DateTime
+
+  /// How far ahead the alert actually went out. Normally 56-60; smaller for a
+  /// case added to the list at short notice.
+  minutesBefore Int
+
+  /// Who was notified. Stored as a JSON array of user ids so a dispute about
+  /// whether someone was told has an answer.
+  recipientIds   String? @db.Text
+  recipientCount Int     @default(0)
+
+  /// Whether each channel actually went out. A push failure must not stop the
+  /// row being written, or the next run would alert all over again.
+  announced    Boolean @default(false)
+  wardNotified Boolean @default(false)
+  pushSent     Boolean @default(false)
+
+  sentAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([sentAt])
+  @@map("theatre_preop_alerts")
 }

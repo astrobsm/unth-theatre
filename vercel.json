@@ -45,7 +45,11 @@
     },
     {
       "path": "/api/maintenance/detect-delays",
-      "schedule": "*/5 7-18 * * *"
+      "schedule": "*/5 5-18 * * *"
+    },
+    {
+      "path": "/api/maintenance/preop-alerts",
+      "schedule": "*/5 4-18 * * *"
     }
   ]
 }

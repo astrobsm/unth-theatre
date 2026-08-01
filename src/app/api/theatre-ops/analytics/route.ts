@@ -12,6 +12,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { timingsFor } from '@/lib/theatreOps/durations';
+import { scheduledInstant } from '@/lib/theatreOps/clock';
 import {
   bottlenecks,
   byDepartment,
@@ -30,16 +31,6 @@ const CAN_VIEW = [
   'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC',
   'CONSULTANT_SURGEON', 'CONSULTANT_ANAESTHETIST',
 ];
-
-/** "HH:MM" on a date, as an instant. */
-function startInstant(date: Date, time: string | null): Date | null {
-  if (!time) return null;
-  const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
-  if (!m) return null;
-  const d = new Date(date);
-  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
-  return d;
-}
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -98,7 +89,7 @@ export async function GET(request: NextRequest) {
       surgeryType: s.surgeryType,
       timings: timingsFor({
         movements: s.movements.map((m) => ({ phase: m.phase as never, timestamp: m.timestamp })),
-        scheduledStart: startInstant(s.scheduledDate, s.scheduledTime),
+        scheduledStart: scheduledInstant(s.scheduledDate, s.scheduledTime),
       }),
     }));
 
