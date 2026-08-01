@@ -8750,6 +8750,11 @@ model StockReservation {
   quantityIssued   Int @default(0)
   quantityReturned Int @default(0)
   quantityUsed     Int @default(0)
+  /// Issued, then discarded rather than used — a dropped vial, a contaminated
+  /// pack. Kept apart from quantityUsed because the patient is billed for what
+  /// was USED; waste is the hospital's loss, and merging the two would quietly
+  /// charge patients for breakages.
+  quantityWasted   Int @default(0)
 
   status StockReservationStatus @default(RESERVED)
 
