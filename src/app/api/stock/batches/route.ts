@@ -18,6 +18,7 @@ import prisma from '@/lib/prisma';
 import { requireStock } from '@/lib/stock/access';
 import { applyMovement } from '@/lib/stock/quantities';
 import { isExpired } from '@/lib/stock/rules';
+import { generateBatchCode, normaliseScan, qrPayloadFor } from '@/lib/stock/barcode';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 
 export const dynamic = 'force-dynamic';
@@ -157,6 +158,8 @@ export async function POST(request: NextRequest) {
     const item = await prisma.inventoryItem.findUnique({ where: { id: itemId }, select: { id: true, name: true } });
     if (!item) return NextResponse.json({ error: 'Inventory item not found' }, { status: 404 });
 
+    const allocatedCode = body.barcode?.trim() ? normaliseScan(body.barcode) : generateBatchCode();
+
     const created = await prisma.$transaction(async (tx) => {
       // A repeat delivery of the same lot into the same store tops up the batch
       // that is already there rather than creating a second row for the same
@@ -199,7 +202,11 @@ export async function POST(request: NextRequest) {
               reorderLevel: body.reorderLevel ?? null,
               shelfLocation: body.shelfLocation ?? null,
               storageTemperature: body.storageTemperature ?? null,
-              barcode: body.barcode?.trim() || null,
+              // Labelled on receipt, always. A lot with no code cannot be
+              // scanned, and stock that cannot be scanned gets counted by hand.
+              // A manufacturer's barcode is honoured when given.
+              barcode: allocatedCode,
+              qrPayload: qrPayloadFor(allocatedCode, request.nextUrl.origin),
               notes: body.notes ?? null,
               createdById: actor.userId,
               updatedById: actor.userId,
@@ -218,7 +225,7 @@ export async function POST(request: NextRequest) {
           actorId: actor.userId,
           actorName: actor.fullName,
           reason: existing ? 'Further delivery against an existing lot' : 'Goods received',
-          scannedCode: body.barcode?.trim() || null,
+          scannedCode: allocatedCode,
         },
       });
 

@@ -81,6 +81,9 @@ export const MODULES: AppModule[] = [
   // Theatre Supply Unit. Wide by default on purpose: a surgeon who cannot see
   // the shelf books blind, which is the problem the module exists to solve.
   { id: 'theatre-supply', label: 'Theatre Supply Unit', paths: ['/dashboard/theatre-supply'], defaultRoles: [...CLINICAL_CORE, 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER', 'PHARMACIST', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'CONSUMABLE_PACK_PROVIDER', 'HOUSE_OFFICER'], category: 'Logistics' },
+  // Billing. Narrower than the supply unit: seeing what a patient owes is a
+  // cash-desk and management matter, not a clinical one.
+  { id: 'theatre-billing', label: 'Theatre Billing', paths: ['/dashboard/theatre-billing'], defaultRoles: ['THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER', 'PHARMACIST', ...ADMIN_VIEWERS], category: 'Logistics' },
 
   // Handover
   { id: 'nurse-handover', label: 'Nurse Handover', paths: ['/dashboard/nurse-handover'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Handover' },
