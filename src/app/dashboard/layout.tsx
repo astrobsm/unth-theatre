@@ -260,6 +260,7 @@ export default function DashboardLayout({
     { href: '/dashboard/theatre-supply/import', icon: FileSpreadsheet, label: 'Bulk Import', badge: 'NEW' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
     { href: '/dashboard/theatre-ops', icon: ClipboardList, label: 'Theatre Operations', badge: 'NEW' },
+    { href: '/dashboard/theatre-ops/check-in', icon: UserCheck, label: 'Team Check-in', badge: 'NEW' },
     { href: '/dashboard/theatre-ops/performance', icon: BarChart3, label: 'Theatre Performance', badge: 'NEW' },
     { href: '/dashboard/theatre-ops/review', icon: Gavel, label: 'QA Review', badge: 'NEW' },
     { href: '/dashboard/case-readiness', icon: ClipboardList, label: 'Case Pack Readiness', badge: 'NEW' },

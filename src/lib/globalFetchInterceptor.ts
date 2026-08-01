@@ -197,6 +197,11 @@ const ALWAYS_LIVE = [
   // catalogue that silently cannot do the thing it was opened to do.
   '/api/imprest/duties',
   '/api/imprest/reference',
+  // Who has said they are coming, right now. A cached copy of this board is
+  // actively misleading: it would show an anaesthetist as present minutes
+  // after they marked themselves unavailable, and the coordinator would find
+  // out from the empty theatre instead of from the screen.
+  '/api/theatre-ops/check-in',
 ];
 
 function isAlwaysLive(pathname: string): boolean {

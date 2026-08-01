@@ -143,6 +143,10 @@ function loadTs(absNoExt) {
   m.require = (id) => {
     if (id === 'vitest') return VITEST;
     if (id.startsWith('.')) return loadTs(path.resolve(path.dirname(file), id));
+    // The app's "@/..." path alias. Modules under src/lib use it to reach each
+    // other, and without this a suite fails to load with a node_modules/@/...
+    // error that says nothing about the real cause.
+    if (id.startsWith('@/')) return loadTs(path.join(ROOT, 'src', id.slice(2)));
     // Node builtins resolve by name; only packages live under node_modules.
     // Without this, a suite that reads a file (`fs`, `path`) fails to load.
     if (Module.builtinModules.includes(id) || id.startsWith('node:')) return require(id);

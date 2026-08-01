@@ -1136,6 +1136,7 @@ model Surgery {
   delayRecords      TheatreDelayRecord[]      @relation("SurgeryDelayRecords")
   unexplainedDelay  TheatreUnexplainedDelay?  @relation("SurgeryUnexplainedDelay")
   preopAlert        TheatrePreopAlert?        @relation("SurgeryPreopAlert")
+  teamCheckIns      SurgeryTeamCheckIn[]      @relation("SurgeryTeamCheckIns")
 
   @@map("surgeries")
 }
@@ -9432,4 +9433,85 @@ model TheatrePreopAlert {
 
   @@index([sentAt])
   @@map("theatre_preop_alerts")
+}
+
+/// What a team member said when asked whether they are coming.
+///
+/// Delayed and Unavailable are first-class answers, not failures to respond.
+/// A system that only records "present" teaches people to tick present and
+/// sort it out later, which is exactly the information a coordinator needed an
+/// hour earlier.
+enum TeamCheckInStatus {
+  PRESENT
+  EN_ROUTE
+  DELAYED
+  UNAVAILABLE
+  REPLACED
+}
+
+/// How a device fix compared against the hospital site.
+///
+/// Note that NO_FIX and IMPRECISE are not judgements about the person. A scrub
+/// nurse in a windowless theatre and someone at home produce the same silence
+/// from a GPS chip.
+enum CheckInFixVerdict {
+  ON_SITE
+  OFF_SITE
+  IMPRECISE
+  NO_FIX
+}
+
+/// A team member's check-in for a scheduled case.
+///
+/// NOTE WHAT IS NOT HERE: latitude and longitude. The check-in sends a
+/// position, the server compares it against the site, and the coordinates are
+/// discarded. What remains is a verdict and a distance rounded to 10 m — a
+/// circle, not a point. The operational question is "are you here?", and that
+/// is all this table is allowed to answer.
+model SurgeryTeamCheckIn {
+  id String @id @default(uuid())
+
+  surgeryId String
+  surgery   Surgery @relation("SurgeryTeamCheckIns", fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  /// TEXT id — matches User.id.
+  userId   String
+  userName String?
+
+  /// What they are on this case, as the case records it ("Surgeon",
+  /// "Anaesthetist"). Free text rather than an enum because the roles on a
+  /// theatre list are not a fixed set and never have been.
+  roleOnCase String
+
+  status TeamCheckInStatus
+
+  /// Required for DELAYED / UNAVAILABLE / REPLACED. "Delayed" with no reason
+  /// is the same as silence to anyone trying to plan around it.
+  reason String?
+
+  /// Who is coming instead, when someone is replaced.
+  replacementName String?
+
+  /// The site check. Coordinates deliberately absent — see above.
+  fixVerdict CheckInFixVerdict @default(NO_FIX)
+  distanceM  Int?
+
+  /// A label the device supplies for itself, so a check-in can be traced to a
+  /// handset without that handset being a tracker.
+  deviceLabel String?
+
+  /// The theatre the case is in at the time of the check-in.
+  theatre String?
+
+  /// Expected minutes to arrival, for EN_ROUTE.
+  etaMinutes Int?
+
+  checkedInAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// One current answer per person per case. Changing your mind updates it.
+  @@unique([surgeryId, userId])
+  @@index([surgeryId, status])
+  @@index([checkedInAt])
+  @@map("surgery_team_check_ins")
 }

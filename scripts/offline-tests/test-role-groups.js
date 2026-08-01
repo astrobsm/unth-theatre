@@ -129,6 +129,17 @@ console.log('\n6. Theatre-ops governance screens are narrower than the board');
   check('the CMAC sees the QA review queue', M.canAccessPath('CMAC', [], REVIEW));
   check('the theatre manager sees the QA review queue (full access)',
     M.canAccessPath('THEATRE_MANAGER', [], REVIEW));
+
+  // Check-in is the opposite case and must STAY broad. Everyone who works a
+  // list has to be able to say whether they are coming — a porter, a cleaner
+  // and a CSSD technician included. If a future narrowing of the theatre-ops
+  // module ever catches this path, the people the board exists to track would
+  // lose the only way to appear on it.
+  const CHECKIN = '/dashboard/theatre-ops/check-in';
+  check('a porter can check in', M.canAccessPath('PORTER', [], CHECKIN));
+  check('a cleaner can check in', M.canAccessPath('CLEANER', [], CHECKIN));
+  check('a scrub nurse can check in', M.canAccessPath('SCRUB_NURSE', [], CHECKIN));
+  check('a CSSD technician can check in', M.canAccessPath('CSSD_STAFF', [], CHECKIN));
 }
 
 console.log('\n7. Display metadata exists for the new role');
