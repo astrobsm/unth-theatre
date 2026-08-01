@@ -188,6 +188,15 @@ const ALWAYS_LIVE = [
   // there is no sensible offline answer to "produce a spreadsheet", and the
   // reports page surfaces the failure plainly.
   '/api/imprest/reports/export',
+  // Administrative CATALOGUES, whose contents change when the app is deployed
+  // rather than when somebody edits data. A week-old copy of "which duties
+  // exist" hides newly added offices from the very screen that assigns them —
+  // which is exactly what happened when the Chief Accountant and Chief Medical
+  // Director duties were added and admins kept being served the old list.
+  // These are desk tasks performed online; an error is better than a stale
+  // catalogue that silently cannot do the thing it was opened to do.
+  '/api/imprest/duties',
+  '/api/imprest/reference',
 ];
 
 function isAlwaysLive(pathname: string): boolean {
