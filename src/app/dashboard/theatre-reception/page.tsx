@@ -19,6 +19,7 @@ import {
   Stethoscope,
   FileText,
   Pill,
+  CalendarDays,
 } from 'lucide-react';
 
 interface StaffOption {
@@ -101,6 +102,12 @@ export default function TheatreReceptionPage() {
   const canRunWorkflow =
     !userRole || NURSE_ROLES.includes(userRole) || FULL_ACCESS.includes(userRole);
 
+  // Which day's list to show. Defaults to today, which is what a scrub nurse
+  // wants every time except when catching up on yesterday or preparing for
+  // tomorrow — so it is a control, not a fixed "today only".
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const today = new Date().toISOString().split('T')[0];
+
   // Per-case local selections
   const [porterSel, setPorterSel] = useState<Record<string, string[]>>({});
   const [cleanerSel, setCleanerSel] = useState<Record<string, string[]>>({});
@@ -112,7 +119,8 @@ export default function TheatreReceptionPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/theatre-reception', { cache: 'no-store' });
+      const qs = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : '';
+      const res = await fetch(`/api/theatre-reception${qs}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setCases(data.cases || []);
@@ -124,7 +132,7 @@ export default function TheatreReceptionPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
     load();
@@ -273,7 +281,7 @@ export default function TheatreReceptionPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ClipboardCheck className="w-7 h-7 text-emerald-600" />
@@ -284,13 +292,60 @@ export default function TheatreReceptionPage() {
             between-case cleaning.
           </p>
         </div>
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700"
-        >
-          <RefreshCw className="w-4 h-4" /> Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <label htmlFor="reception-date" className="text-sm text-gray-600">
+            Date
+          </label>
+          <input
+            id="reception-date"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+            title="Which day's list to load"
+          />
+          {selectedDate !== today && (
+            <button
+              onClick={() => setSelectedDate(today)}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+            >
+              Today
+            </button>
+          )}
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700"
+          >
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </button>
+        </div>
       </div>
+
+      {/* A day other than today is easy to leave selected by accident, and the
+          workflow buttons below act on real patients. Say so plainly. */}
+      {selectedDate !== today && (
+        <div className="mb-5 flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
+          <CalendarDays className="w-4 h-4 flex-shrink-0" />
+          <span>
+            Showing{' '}
+            <strong>
+              {new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </strong>
+            , not today.
+          </span>
+          <button
+            onClick={() => setSelectedDate(today)}
+            className="ml-auto underline font-medium hover:no-underline"
+          >
+            Back to today
+          </button>
+        </div>
+      )}
 
       {/* Theatre selector — show only the cases for your theatre */}
       <div className="mb-5 flex items-center gap-2 flex-wrap">

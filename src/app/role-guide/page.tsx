@@ -694,7 +694,7 @@ export default function RoleGuidePage() {
       {/* Header */}
       <header className="bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 text-white shadow-lg">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-blue-200">
                 Operative Resource Manager

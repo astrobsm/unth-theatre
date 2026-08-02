@@ -187,7 +187,7 @@ export default function ScrubManagementPage() {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-5">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center shadow-sm">
             <Shirt className="w-6 h-6 text-white" />
@@ -481,7 +481,7 @@ function PickupTab({ flash }: { flash: (k: 'ok' | 'err', t: string) => void }) {
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
                 <Shirt className="w-4 h-4 text-teal-600 mx-auto mb-1" />
                 <div className="text-xl font-bold text-gray-900">
@@ -737,7 +737,7 @@ function DeskTab({
           ))}
         </select>
 
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
           <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Clean footwear serial (issued with scrub)
@@ -1251,7 +1251,7 @@ function LaundryTab({
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
               {[
                 { l: 'Expected', v: batch.expectedCount },
                 { l: 'Received', v: batch.receivedCount },

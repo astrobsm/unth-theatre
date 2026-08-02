@@ -183,3 +183,98 @@ body {
 }
 
 
+
+/* ============================================================
+   Small-screen safety net
+   ------------------------------------------------------------
+   The failure this prevents: a header row is `flex justify-between`
+   with a heading on one side and buttons on the other. The buttons
+   do not shrink, so on a 360px phone the heading is squeezed to a
+   few pixels and wraps ONE CHARACTER PER LINE — a column of letters
+   down the page. It was reported from a phone on the holding-area
+   page and the same shape exists elsewhere.
+
+   The page headers themselves are fixed properly (they stack below
+   md). These rules are the backstop for anything not restructured,
+   so the worst case becomes "slightly cramped" rather than
+   "unreadable".
+   ============================================================ */
+
+/* A flex child may shrink below its content width only down to a
+   readable floor. Without min-width:0 a text block in a flex row is
+   crushed by non-shrinking siblings; without a floor it reaches zero. */
+.dashboard-main h1,
+.dashboard-main h2,
+.dashboard-main h3 {
+  /* Break at spaces, and only inside a word when the word itself
+     genuinely cannot fit. Never mid-word for ordinary text. */
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  /* Stops the one-character-per-line column outright: a heading will
+     overflow its box before it agrees to be this narrow. */
+  min-width: 6rem;
+}
+
+@media (max-width: 640px) {
+  /* Headings scale down so a long page title fits a phone. */
+  .dashboard-main h1 {
+    font-size: 1.375rem;
+    line-height: 1.75rem;
+  }
+  .dashboard-main h2 {
+    font-size: 1.125rem;
+    line-height: 1.5rem;
+  }
+
+  /* Long unbroken strings — folder numbers, emails, reference codes —
+     wrap instead of forcing the page sideways. */
+  .dashboard-main {
+    overflow-wrap: break-word;
+  }
+}
+
+/* NOT DONE HERE, deliberately: `overflow-x: hidden` on the body.
+   It removes the sideways scrollbar by CLIPPING whatever overflows,
+   so content becomes unreachable instead of merely awkward — and it
+   hides the very layout faults that ought to be fixed. The page
+   headers, grids and tables above are fixed structurally instead. */
+
+/* ------------------------------------------------------------
+   Tables on a phone
+   ------------------------------------------------------------
+   21 tables in the app are not wrapped in a horizontal scroll
+   container. Rather than restructure that much JSX blind, the
+   table itself becomes the scroll container on small screens.
+   It keeps the table readable and, crucially, keeps it INSIDE
+   the page instead of making the whole page slide sideways.
+
+   Cells are still allowed to wrap (no white-space: nowrap), so
+   most tables simply fit and never scroll at all.
+   ------------------------------------------------------------ */
+@media (max-width: 640px) {
+  .dashboard-main table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Buttons and inputs stay inside the screen and stay tappable.
+   44px is the accepted minimum touch target. */
+@media (max-width: 640px) {
+  .dashboard-main button,
+  .dashboard-main a[role='button'] {
+    min-height: 2.5rem;
+  }
+  .dashboard-main input,
+  .dashboard-main select,
+  .dashboard-main textarea {
+    max-width: 100%;
+    /* 16px stops iOS Safari zooming the whole page when a field is
+       focused, which then leaves the layout scrolled sideways. */
+    font-size: max(16px, 0.875rem);
+  }
+}

@@ -147,7 +147,7 @@ export default function WardEntriesPage() {
 
   return (
     <div className="max-w-7xl mx-auto p-4">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <ClipboardList className="w-8 h-8 text-indigo-600" />

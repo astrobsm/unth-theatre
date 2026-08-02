@@ -1460,7 +1460,7 @@ export default function EmergencyBookingPage() {
                   {/* Row 2: Dose, Route, Frequency */}
                   {selectedDrug && (
                     <>
-                      <div className="grid grid-cols-3 gap-2 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-2">
                         {/* Dose with suggestions */}
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Dose ({selectedDrug.unit})</label>

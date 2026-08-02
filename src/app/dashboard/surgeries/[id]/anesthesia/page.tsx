@@ -614,7 +614,7 @@ export default function AnesthesiaMonitoringPage() {
 
             <div className="mt-4">
               <h4 className="font-medium mb-2">Monitoring Equipment</h4>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   { key: 'ecgMonitored', label: 'ECG' },
                   { key: 'nibpMonitored', label: 'NIBP' },
@@ -764,7 +764,7 @@ export default function AnesthesiaMonitoringPage() {
       {activeTab === 'fluids' && (
         <div className="bg-white border rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-4">Fluid Management</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Crystalloids (mL)</label>
               <input
@@ -839,7 +839,7 @@ export default function AnesthesiaMonitoringPage() {
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
             <h3 className="text-xl font-bold mb-4">Record Vital Signs</h3>
             
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm text-gray-700 mb-1">HR (bpm)</label>
                 <input

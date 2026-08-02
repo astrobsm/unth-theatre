@@ -46,7 +46,7 @@ export default function MedicalScribePage() {
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-lg bg-indigo-100 flex items-center justify-center"><Stethoscope className="w-6 h-6 text-indigo-600" /></div>
           <div>

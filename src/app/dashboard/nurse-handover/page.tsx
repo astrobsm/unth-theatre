@@ -568,7 +568,7 @@ export default function NurseHandoverPage() {
       <Toaster position="top-right" />
       {/* Header */}
       <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <ClipboardPlus className="h-7 w-7 text-teal-600" />
@@ -1329,7 +1329,7 @@ export default function NurseHandoverPage() {
                     <FormInput label="Patient Name" value={form.patientName} onChange={v => setForm({ ...form, patientName: v })} />
                     <FormInput label="Folder Number" value={form.patientFolderNumber} onChange={v => setForm({ ...form, patientFolderNumber: v })} />
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <FormInput label="Age" value={form.patientAge} onChange={v => setForm({ ...form, patientAge: v })} type="number" />
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
@@ -1414,13 +1414,13 @@ export default function NurseHandoverPage() {
                   </div>
 
                   <p className="text-sm font-medium text-purple-700 mt-4">Last Vital Signs at Handover</p>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <FormInput label="BP" value={form.lastBP} onChange={v => setForm({ ...form, lastBP: v })} placeholder="120/80" />
                     <FormInput label="HR (bpm)" value={form.lastHR} onChange={v => setForm({ ...form, lastHR: v })} placeholder="72" />
                     <FormInput label="SpO2 (%)" value={form.lastSpO2} onChange={v => setForm({ ...form, lastSpO2: v })} placeholder="98" />
                     <FormInput label="Temp (°C)" value={form.lastTemp} onChange={v => setForm({ ...form, lastTemp: v })} placeholder="36.8" />
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <FormInput label="Pain Score (0-10)" value={form.painScore} onChange={v => setForm({ ...form, painScore: v })} type="number" />
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Consciousness</label>
@@ -1536,7 +1536,7 @@ export default function NurseHandoverPage() {
                     <CheckField label="Sharps Count Correct" checked={form.sharpsCountCorrect} onChange={v => setForm({ ...form, sharpsCountCorrect: v })} />
                   </div>
                   <FormTextarea label="Count Discrepancy Details (if any)" value={form.countDiscrepancy} onChange={v => setForm({ ...form, countDiscrepancy: v })} />
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <CheckField label="Specimen Collected" checked={form.specimenCollected} onChange={v => setForm({ ...form, specimenCollected: v })} />
                     <FormInput label="Specimen Label" value={form.specimenLabel} onChange={v => setForm({ ...form, specimenLabel: v })} />
                     <CheckField label="Sent to Lab" checked={form.specimenSentToLab} onChange={v => setForm({ ...form, specimenSentToLab: v })} />

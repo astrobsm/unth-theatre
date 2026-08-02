@@ -172,7 +172,7 @@ export default function RadioAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
           <Radio className="w-8 h-8 text-primary-600" /> Theatre Radio Service
         </h1>

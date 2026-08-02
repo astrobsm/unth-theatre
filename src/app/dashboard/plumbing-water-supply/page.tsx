@@ -431,7 +431,7 @@ export default function PlumbingWaterSupplyPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             {department === 'water' ? (
@@ -1264,7 +1264,7 @@ export default function PlumbingWaterSupplyPage() {
               {/* Pumps */}
               <div className="p-4 bg-green-50 rounded-xl">
                 <h4 className="font-semibold text-green-800 mb-3">Pump Status</h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <ToggleField label="Main Pump" checked={statusData.mainPumpOperational} onChange={v => setStatusData(p => ({ ...p, mainPumpOperational: v }))} />
                   <ToggleField label="Backup Pump" checked={statusData.backupPumpOperational} onChange={v => setStatusData(p => ({ ...p, backupPumpOperational: v }))} />
                   <ToggleField label="Booster Pump" checked={statusData.boosterPumpOperational} onChange={v => setStatusData(p => ({ ...p, boosterPumpOperational: v }))} />
@@ -1274,7 +1274,7 @@ export default function PlumbingWaterSupplyPage() {
               {/* Hot water */}
               <div className="p-4 bg-orange-50 rounded-xl">
                 <h4 className="font-semibold text-orange-800 mb-3">Hot Water System</h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <ToggleField label="Hot Water Available" checked={statusData.hotWaterAvailable} onChange={v => setStatusData(p => ({ ...p, hotWaterAvailable: v }))} />
                   <ToggleField label="Boiler Operational" checked={statusData.boilerOperational} onChange={v => setStatusData(p => ({ ...p, boilerOperational: v }))} />
                   <div>

@@ -145,7 +145,7 @@ export default function EmergencyResponsePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         <div className="rounded-xl border bg-white p-3">
           <div className="text-2xl font-bold text-gray-900">{totals.emergencies}</div>
           <div className="text-xs text-gray-500">In the last 24 hours</div>

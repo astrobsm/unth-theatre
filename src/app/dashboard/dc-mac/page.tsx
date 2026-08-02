@@ -51,7 +51,7 @@ export default function DCMACDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">DC-MAC Dashboard</h1>
           <p className="text-gray-600">Deputy Chairman, Medical Advisory Committee</p>

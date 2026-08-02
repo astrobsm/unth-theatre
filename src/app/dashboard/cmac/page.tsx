@@ -58,7 +58,7 @@ export default function CMACDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">C-MAC Dashboard</h1>
           <p className="text-gray-600">Chairman, Medical Advisory Committee - Clinical Oversight</p>

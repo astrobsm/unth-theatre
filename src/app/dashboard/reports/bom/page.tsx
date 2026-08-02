@@ -221,7 +221,7 @@ export default function BOMAnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">BOM Analytics Dashboard</h1>
           <p className="text-gray-600 mt-1">Cost analysis and trends for surgical consumables</p>

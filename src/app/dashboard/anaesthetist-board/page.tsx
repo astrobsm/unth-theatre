@@ -127,7 +127,7 @@ export default function AnaesthetistBoardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <Stethoscope className="w-7 h-7 text-indigo-600" />
           <div>

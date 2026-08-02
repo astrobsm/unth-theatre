@@ -1067,7 +1067,7 @@ export default function NewSurgeryPage() {
             {/* Surgery Type Selection */}
             <div className="md:col-span-2">
               <label className="label">Surgery Type *</label>
-              <div className="grid grid-cols-3 gap-4 mt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
                 <label
                   className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
                     surgeryType === 'ELECTIVE'

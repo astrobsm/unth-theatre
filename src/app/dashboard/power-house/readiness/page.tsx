@@ -114,7 +114,7 @@ export default function PowerReadinessPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
         <h1 className="text-3xl font-bold">Power House Readiness Dashboard</h1>
         <button
           onClick={() => setShowAddModal(true)}

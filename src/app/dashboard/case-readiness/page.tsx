@@ -251,7 +251,7 @@ export default function CaseReadinessPage() {
 
       {/* Summary */}
       {board && (
-        <div className="mb-5 grid grid-cols-3 gap-3">
+        <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="rounded-xl border border-gray-200 bg-white p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">{board.summary.totalCases}</div>
             <div className="text-xs text-gray-500">Cases booked</div>

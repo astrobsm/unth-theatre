@@ -407,7 +407,7 @@ export default function NewChecklistPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">WHO Surgical Safety Checklist</h1>
           <p className="text-gray-600 mt-1">Complete the three-phase surgical safety checklist</p>
@@ -502,7 +502,7 @@ export default function NewChecklistPage() {
         <>
           {/* Phase Navigation */}
           <div className="card">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <button
                 onClick={() => setActivePhase('signIn')}
                 className={`p-4 rounded-lg border-2 transition-all ${
@@ -960,7 +960,7 @@ export default function NewChecklistPage() {
           {/* Overall Progress */}
           <div className="card bg-gradient-to-br from-primary-50 to-primary-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Overall Progress</h3>
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-center">
               <div>
                 <div className="text-3xl font-bold text-blue-600">
                   {Math.round((signInProgress.completed / signInProgress.total) * 100)}%

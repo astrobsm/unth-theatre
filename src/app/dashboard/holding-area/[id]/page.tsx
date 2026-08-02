@@ -291,7 +291,7 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
         >
           ← Back to Holding Area
         </button>
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Holding Area Assessment

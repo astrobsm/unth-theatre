@@ -720,7 +720,7 @@ export default function MedicationTrackingPage() {
                   </div>
 
                   {/* Summary Stats */}
-                  <div className="grid grid-cols-5 gap-2 mb-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
                     <div className="bg-blue-50 rounded p-2 text-center">
                       <p className="text-xs text-blue-600">Dispensed</p>
                       <p className="font-bold text-blue-800">{rec.totalDrugsDispensed}</p>

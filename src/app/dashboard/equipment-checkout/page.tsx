@@ -244,7 +244,7 @@ export default function EquipmentCheckoutPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Equipment Checkout & Return</h1>
           <p className="text-gray-600 mt-1">Log equipment checkout and returns for nurses and technicians</p>

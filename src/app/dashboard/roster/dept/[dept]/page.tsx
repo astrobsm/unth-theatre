@@ -334,7 +334,7 @@ export default function DepartmentRosterPage() {
         <div className="flex items-center gap-2 text-gray-500 py-10 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Loading…</div>
       ) : (
         <div className="overflow-x-auto">
-          <div className="min-w-[900px] grid grid-cols-8 gap-2">
+          <div className="min-w-[900px] grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
             <div className="text-xs font-semibold text-gray-400 pt-8">Shift</div>
             {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
             {SHIFTS.map((shift) => (

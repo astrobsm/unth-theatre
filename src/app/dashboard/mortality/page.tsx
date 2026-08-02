@@ -102,7 +102,7 @@ export default function MortalityPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Mortality Records</h1>
           <p className="text-gray-600 mt-1">Track and review perioperative mortality cases</p>

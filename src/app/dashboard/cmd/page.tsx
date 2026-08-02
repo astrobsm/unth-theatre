@@ -87,7 +87,7 @@ export default function CMDDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Chief Medical Director Dashboard</h1>
           <p className="text-gray-600">Executive overview of all theatre operations</p>

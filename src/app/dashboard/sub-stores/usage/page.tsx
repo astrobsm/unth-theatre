@@ -113,7 +113,7 @@ export default function SubStoreUsagePage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/sub-stores" className="p-2 hover:bg-gray-100 rounded-lg">
             <ArrowLeft className="w-6 h-6" />

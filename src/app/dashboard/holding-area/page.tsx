@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { CalendarDays, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { SYNC_INTERVALS } from '@/lib/sync';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { TableSkeleton } from '@/components/Skeleton';
@@ -366,7 +366,7 @@ export default function HoldingAreaPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Pre-Operative Holding Area
@@ -467,6 +467,33 @@ export default function HoldingAreaPage() {
           </button>
         </div>
       </div>
+
+      {/* A past day is easy to leave selected by accident, and the cards below
+          carry actions on real patients. Say so plainly rather than relying on
+          the date field being noticed. */}
+      {selectedDate && selectedDate !== new Date().toISOString().split('T')[0] && (
+        <div className="mb-6 flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
+          <CalendarDays className="w-4 h-4 flex-shrink-0" />
+          <span>
+            Showing{' '}
+            <strong>
+              {new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </strong>
+            , not today.
+          </span>
+          <button
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            className="ml-auto underline font-medium hover:no-underline"
+          >
+            Back to today
+          </button>
+        </div>
+      )}
 
       {/* Assessments Grid */}
       {assessments.length === 0 ? (
