@@ -45,6 +45,15 @@ const ADMIN_VIEWERS = ['CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'];
 export const MODULES: AppModule[] = [
   // Overview
   { id: 'dashboard', label: 'Dashboard (Home)', paths: ['/dashboard'], defaultRoles: ['*'], category: 'Overview' },
+  // Per-role desks. Each aggregates screens that already exist; the gating
+  // below MIRRORS lib/dashboards/desks, which is what the API enforces. The
+  // finance desk additionally admits imprest finance duty holders — a grant
+  // the sidebar cannot see, so finance staff without one of these roles reach
+  // it by link rather than by menu.
+  { id: 'desk-consultant', label: 'My Practice (desk)', paths: ['/dashboard/my-practice'], defaultRoles: [...ADMIN_VIEWERS, 'CONSULTANT_SURGEON', 'SURGEON', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIST'], category: 'Overview' },
+  { id: 'desk-inventory', label: 'Inventory Desk', paths: ['/dashboard/inventory-desk'], defaultRoles: ['THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER', 'PHARMACIST', 'CSSD_SUPERVISOR', 'CONSUMABLE_PACK_PROVIDER'], category: 'Overview' },
+  { id: 'desk-vendor', label: 'Vendor Accounts', paths: ['/dashboard/vendor-desk'], defaultRoles: [...ADMIN_VIEWERS, 'PROCUREMENT_OFFICER'], category: 'Overview' },
+  { id: 'desk-finance', label: 'Finance Desk', paths: ['/dashboard/finance-desk'], defaultRoles: [...ADMIN_VIEWERS, 'PROCUREMENT_OFFICER'], category: 'Overview' },
   { id: 'emergency-booking', label: '🚨 Emergency Booking', paths: ['/dashboard/emergency-booking'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'PORTER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'PHARMACIST'], category: 'Overview' },
 
   // Patient Registration & Scheduling

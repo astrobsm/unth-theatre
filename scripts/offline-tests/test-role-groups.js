@@ -142,7 +142,38 @@ console.log('\n6. Theatre-ops governance screens are narrower than the board');
   check('a CSSD technician can check in', M.canAccessPath('CSSD_STAFF', [], CHECKIN));
 }
 
-console.log('\n7. Display metadata exists for the new role');
+console.log('\n7. Per-role desks are gated the same way in the menu as in the API');
+{
+  // The sidebar reads lib/modules; the API reads lib/dashboards/desks. Two
+  // lists, one intent — so a divergence would show a person a menu entry that
+  // 403s when they tap it. These pin the pairs that matter.
+  check('a store keeper sees the inventory desk',
+    M.canAccessPath('THEATRE_STORE_KEEPER', [], '/dashboard/inventory-desk'));
+  check('a store keeper does NOT see vendor accounts',
+    !M.canAccessPath('THEATRE_STORE_KEEPER', [], '/dashboard/vendor-desk'));
+  check('a store keeper does NOT see the finance desk',
+    !M.canAccessPath('THEATRE_STORE_KEEPER', [], '/dashboard/finance-desk'));
+
+  check('a consultant surgeon sees My Practice',
+    M.canAccessPath('CONSULTANT_SURGEON', [], '/dashboard/my-practice'));
+  check('a resident surgeon sees My Practice too',
+    M.canAccessPath('SURGEON', [], '/dashboard/my-practice'));
+  check('a consultant surgeon does NOT see the inventory desk',
+    !M.canAccessPath('CONSULTANT_SURGEON', [], '/dashboard/inventory-desk'));
+
+  check('procurement sees vendor accounts',
+    M.canAccessPath('PROCUREMENT_OFFICER', [], '/dashboard/vendor-desk'));
+  check('a scrub nurse sees no money desk',
+    !M.canAccessPath('SCRUB_NURSE', [], '/dashboard/vendor-desk')
+      && !M.canAccessPath('SCRUB_NURSE', [], '/dashboard/finance-desk'));
+  check('a porter sees no desk at all',
+    !M.canAccessPath('PORTER', [], '/dashboard/my-practice')
+      && !M.canAccessPath('PORTER', [], '/dashboard/inventory-desk')
+      && !M.canAccessPath('PORTER', [], '/dashboard/vendor-desk')
+      && !M.canAccessPath('PORTER', [], '/dashboard/finance-desk'));
+}
+
+console.log('\n8. Display metadata exists for the new role');
 check('role has a human label', P.getRoleName('CONSULTANT_SURGEON') === 'Consultant Surgeon');
 check('role has a landing dashboard', P.getRoleDashboard('CONSULTANT_SURGEON') === '/dashboard/surgeries');
 

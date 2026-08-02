@@ -249,6 +249,10 @@ export default function DashboardLayout({
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
 
     // === DAY-OF-SURGERY LOGISTICS ===
+    { href: '/dashboard/my-practice', icon: Stethoscope, label: 'My Practice', badge: 'NEW' },
+    { href: '/dashboard/inventory-desk', icon: Boxes, label: 'Inventory Desk', badge: 'NEW' },
+    { href: '/dashboard/vendor-desk', icon: Store, label: 'Vendor Accounts', badge: 'NEW' },
+    { href: '/dashboard/finance-desk', icon: Wallet, label: 'Finance Desk', badge: 'NEW' },
     { href: '/dashboard/roster', icon: ClipboardCheck, label: 'Duty Roster' },
     { href: '/dashboard/staff-availability', icon: Radar, label: 'Staff Availability', badge: 'NEW' },
     { href: '/dashboard/surgical-unit-calendar', icon: CalendarDays, label: 'Surgical Unit Calendar', badge: 'NEW' },
