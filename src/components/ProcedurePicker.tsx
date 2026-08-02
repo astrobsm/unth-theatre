@@ -46,6 +46,7 @@ export default function ProcedurePicker({
   name = 'procedureName',
   required = true,
   emergencyFirst = false,
+  subspecialtySource = 'subspecialty',
 }: {
   /** Must match surgical_units.subspecialty. Empty disables the list. */
   subspecialty?: string | null;
@@ -56,6 +57,13 @@ export default function ProcedurePicker({
   required?: boolean;
   /** Show procedures commonly done as emergencies first. */
   emergencyFirst?: boolean;
+  /**
+   * What the form calls the control that sets the subspecialty. The emergency
+   * form has no subspecialty field — it derives one from the surgical unit —
+   * so telling the user to "choose the subspecialty above" would send them
+   * looking for a field that is not there.
+   */
+  subspecialtySource?: string;
 }) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(false);
@@ -152,7 +160,14 @@ export default function ProcedurePicker({
   /** Add the typed name to the catalogue. Never blocks the booking. */
   const saveCustom = async () => {
     const trimmed = customName.trim();
-    if (!trimmed || !subspecialty) return;
+    if (!trimmed) return;
+    if (!subspecialty) {
+      // Should be unreachable — the picker falls back to plain text without a
+      // subspecialty — but silently doing nothing here would look like a
+      // broken button, and the entry has to be filed under something.
+      setSaveError(`Choose the ${subspecialtySource} first, so the procedure is filed under it.`);
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaveNote(null);
@@ -170,8 +185,8 @@ export default function ProcedurePicker({
       setCustomName(saved);
       setSaveNote(
         data.created
-          ? 'Added. It will be in the list for everyone from now on.'
-          : 'That procedure was already in the list — selected it for you.'
+          ? `Added to ${data.procedure?.subspecialty ?? subspecialty}. It will be in the list for everyone from now on.`
+          : `Already in the ${data.procedure?.subspecialty ?? subspecialty} list — selected it for you.`
       );
       await load();
     } catch (e: any) {
@@ -198,7 +213,7 @@ export default function ProcedurePicker({
         <p className="mt-1 text-xs text-gray-500 flex items-start gap-1">
           <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
           {!subspecialty
-            ? 'Choose the subspecialty above to pick from the procedure list.'
+            ? `Choose the ${subspecialtySource} first to pick from the procedure list.`
             : 'The procedure list could not be loaded — type the name instead. The booking is unaffected.'}
         </p>
       </div>
@@ -256,7 +271,8 @@ export default function ProcedurePicker({
           {saveError && <span className="text-xs text-amber-700">{saveError}</span>}
           {!saveNote && !saveError && (
             <span className="text-xs text-gray-500">
-              &quot;Add to list&quot; makes it available to everyone next time. The booking works either way.
+              &quot;Add to list&quot; files it under <strong>{subspecialty}</strong> and makes it available to
+              everyone next time. The booking works either way.
             </span>
           )}
         </div>

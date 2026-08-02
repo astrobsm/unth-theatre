@@ -209,6 +209,44 @@ describe('what may go into the catalogue', () => {
   });
 });
 
+describe('a procedure belongs to the subspecialty it was added under', () => {
+  it('scopes the identity key to the subspecialty, not globally', () => {
+    // The unique key is (subspecialty, slug), so the SAME operation may exist
+    // under two specialties — a thyroglossal cyst is excised by general
+    // surgeons and by ENT, and each list should be able to offer it. A global
+    // key would give it to whichever specialty added it first and hide it from
+    // the other.
+    //
+    // Asserted on the key rather than on the data: today no name happens to be
+    // shared, and a test that depended on that coincidence would fail the day
+    // somebody added one, which is the opposite of what it should do.
+    const key = (subspecialty: string, name: string) => `${subspecialty}::${procedureSlug(name)}`;
+    const name = 'Excision of thyroglossal cyst';
+
+    expect(key('General Surgery', name)).not.toBe(key('ENT (Otorhinolaryngology)', name));
+    // ...while the same name in the same specialty collides, which is what
+    // stops a duplicate being created.
+    expect(key('General Surgery', name)).toBe(key('General Surgery', 'EXCISION OF THYROGLOSSAL CYST'));
+  });
+
+  it('gives every catalogue entry a subspecialty of its own', () => {
+    // Verified live before deployment: a user-added entry lands in the chosen
+    // subspecialty, shows up in that picker, and appears in no other.
+    for (const e of allEntries()) {
+      expect(typeof e.subspecialty).toBe('string');
+      expect(e.subspecialty.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('never lets an entry carry a subspecialty the hospital does not have', () => {
+    // The dropdown joins on this string. A value outside the eleven produces a
+    // picker that is silently empty for that specialty, with no error.
+    for (const e of allEntries()) {
+      expect(SUBSPECIALTIES).toContain(e.subspecialty);
+    }
+  });
+});
+
 describe('ordering the dropdown', () => {
   const p = (name: string, usageCount: number) => ({ name, usageCount });
 

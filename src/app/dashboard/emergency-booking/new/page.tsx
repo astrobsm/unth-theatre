@@ -271,6 +271,11 @@ export default function NewEmergencyBookingPage() {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
       setForm(prev => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
+    } else if (name === 'surgicalUnit') {
+      // The procedure list is filtered by the unit's subspecialty, so changing
+      // the unit invalidates a procedure already chosen — and, more to the
+      // point, would file a newly added one under the wrong specialty.
+      setForm(prev => ({ ...prev, surgicalUnit: value, procedureName: '' }));
     } else {
       setForm(prev => ({ ...prev, [name]: value }));
     }
@@ -489,6 +494,7 @@ export default function NewEmergencyBookingPage() {
                 value={form.procedureName}
                 onChange={(procedureName) => setForm((f) => ({ ...f, procedureName }))}
                 emergencyFirst
+                subspecialtySource="surgical unit"
               />
             </div>
             <div>
