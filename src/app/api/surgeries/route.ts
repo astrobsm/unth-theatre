@@ -10,6 +10,7 @@ import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
 import { jsonWithETag } from "@/lib/etag";
 import { resolveBasePack, BASE_PACK_LABEL } from "@/lib/baseConsumablePack";
 import { checkSlot } from "@/lib/theatreOps/scheduling";
+import { recordProcedureUse } from "@/lib/procedures/usage";
 
 export const dynamic = 'force-dynamic';
 
@@ -791,6 +792,10 @@ export async function POST(request: NextRequest) {
         }
       });
     }
+
+    // Feeds the ordering of the procedure picker. Deliberately not awaited in
+    // a way that could fail the booking — a statistic is not worth a case.
+    void recordProcedureUse(validatedData.subspecialty, validatedData.procedureName);
 
     await rememberResult(idemKey, 201, surgery, 'POST /api/surgeries');
     return NextResponse.json(surgery, { status: 201 });

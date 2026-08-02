@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
 import { pushToUsers } from '@/lib/pushAll';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
+import { recordProcedureUse } from '@/lib/procedures/usage';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { isSurgeonRole } from '@/lib/roleGroups';
@@ -461,6 +462,17 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Feeds the ordering of the procedure picker. The booking stores the unit
+    // NAME, so the subspecialty is looked up from it — the same derivation the
+    // form makes. Fire and forget: a statistic must never fail a booking.
+    void prisma.surgicalUnit
+      .findFirst({
+        where: { name: validatedData.surgicalUnit },
+        select: { subspecialty: true },
+      })
+      .then((u) => recordProcedureUse(u?.subspecialty, validatedData.procedureName))
+      .catch(() => { /* ignore */ });
 
     // AUTO-TRIGGER EMERGENCY ALERT
     // Find or create a patient record

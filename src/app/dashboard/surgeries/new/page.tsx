@@ -12,6 +12,8 @@ import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm 
 import { formatAge } from '@/lib/age';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
+import ProcedurePicker from '@/components/ProcedurePicker';
+import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 
@@ -180,6 +182,8 @@ export default function NewSurgeryPage() {
   const [listPlan, setListPlan] = useState<{ suggestedStart: string; cases: Array<{ start: string; end: string }> } | null>(null);
   const [unit, setUnit] = useState('');
   const [subspecialty, setSubspecialty] = useState('');
+  // Held in state so the picker can drive it; still submitted as a form field.
+  const [procedureName, setProcedureName] = useState('');
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
   // One or more unit supervising consultants may be attached to a booking.
   const [supervisingConsultantIds, setSupervisingConsultantIds] = useState<string[]>([]);
@@ -530,6 +534,15 @@ export default function NewSurgeryPage() {
       }
     }
 
+    // The procedure now comes from the picker, whose hidden input the browser
+    // cannot mark required. Checked here so an empty one fails on the form
+    // rather than as a server error after everything else was filled in.
+    if (!procedureName.trim()) {
+      setLoading(false);
+      setError('Select the procedure, or choose "Other" and name it.');
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
 
     const chosenSurgeon = surgeons.find((s) => s.id === selectedSurgeonId);
@@ -549,7 +562,7 @@ export default function NewSurgeryPage() {
       location: selectedLocation || null,
       theatreId: selectedTheatreId || null,
       indication: formData.get('indication'),
-      procedureName: formData.get('procedureName'),
+      procedureName: procedureName.trim(),
       scheduledDate: formData.get('scheduledDate'),
       scheduledTime: formData.get('scheduledTime'),
       // No `|| 60` fallback: a silent default is what produced lists that
@@ -1006,15 +1019,28 @@ export default function NewSurgeryPage() {
 
             <div>
               <label className="label">Subspecialty *</label>
-              <input
-                type="text"
+              <select
                 name="subspecialty"
                 required
                 value={subspecialty}
-                onChange={(e) => setSubspecialty(e.target.value)}
+                onChange={(e) => {
+                  setSubspecialty(e.target.value);
+                  // The procedure list is filtered by subspecialty, so a
+                  // change invalidates a procedure already chosen.
+                  setProcedureName('');
+                }}
                 className="input-field"
-                placeholder="e.g., Laparoscopic Surgery"
-              />
+              >
+                <option value="">Select subspecialty</option>
+                {SUBSPECIALTIES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+                {/* A unit whose subspecialty predates this list must still be
+                    selectable, or its bookings could not be edited. */}
+                {subspecialty && !SUBSPECIALTIES.includes(subspecialty as never) && (
+                  <option value={subspecialty}>{subspecialty}</option>
+                )}
+              </select>
             </div>
 
             <div>
@@ -1030,12 +1056,11 @@ export default function NewSurgeryPage() {
 
             <div className="md:col-span-2">
               <label className="label">Procedure Name *</label>
-              <input
-                type="text"
-                name="procedureName"
-                required
-                className="input-field"
-                placeholder="e.g., Laparoscopic Appendectomy"
+              <ProcedurePicker
+                subspecialty={subspecialty}
+                value={procedureName}
+                onChange={setProcedureName}
+                emergencyFirst={surgeryType === 'EMERGENCY'}
               />
             </div>
 

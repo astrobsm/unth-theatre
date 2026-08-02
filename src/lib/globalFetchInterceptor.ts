@@ -206,6 +206,11 @@ const ALWAYS_LIVE = [
   // to say how long a department has been silent; a stale copy would say a
   // shorter time than the truth, which is the one direction it must never err.
   '/api/theatre-ops/emergency-response',
+  // The procedure catalogue GROWS as surgeons add to it. A cached copy would
+  // not show the entry a colleague added an hour ago, so the next surgeon
+  // types it again — and the duplicate-prevention that makes "Other" safe
+  // only works if everybody is looking at the same list.
+  '/api/procedures',
 ];
 
 function isAlwaysLive(pathname: string): boolean {

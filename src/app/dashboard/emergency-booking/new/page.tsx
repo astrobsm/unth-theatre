@@ -11,6 +11,7 @@ import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { NoPaperPrescriptionDialog } from '@/components/NoPaperPrescriptionWarning';
+import ProcedurePicker from '@/components/ProcedurePicker';
 
 type OnDutyMember = {
   userId: string;
@@ -79,6 +80,7 @@ export default function NewEmergencyBookingPage() {
   const [packPick, setPackPick] = useState<PackPickerPayload>({ consumableRequests: [], drugDressingRequests: [] });
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnitOption[]>([]);
+
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
   // Tracks whether the anaesthetist field still reflects the on-call roster
@@ -111,6 +113,12 @@ export default function NewEmergencyBookingPage() {
     specialEquipment: '',
     specialRequirements: '',
   });
+
+  // The form stores the unit NAME; the procedure list is keyed by
+  // subspecialty. The units already carry it, so it is derived here rather
+  // than asked for twice. Declared AFTER `form` — it reads it.
+  const selectedUnitSubspecialty =
+    surgicalUnits.find((u) => u.name === form.surgicalUnit)?.subspecialty ?? '';
 
   // Fetch surgeons and anesthetists for dropdowns
   useEffect(() => {
@@ -473,7 +481,15 @@ export default function NewEmergencyBookingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="label">Procedure Name *</label>
-              <input name="procedureName" value={form.procedureName} onChange={handleChange} required className="input-field" />
+              {/* The subspecialty is not asked for separately on this form — it
+                  is carried by the surgical unit, so the picker derives it from
+                  whichever unit was chosen below. */}
+              <ProcedurePicker
+                subspecialty={selectedUnitSubspecialty}
+                value={form.procedureName}
+                onChange={(procedureName) => setForm((f) => ({ ...f, procedureName }))}
+                emergencyFirst
+              />
             </div>
             <div>
               <label className="label">Surgical Unit *</label>

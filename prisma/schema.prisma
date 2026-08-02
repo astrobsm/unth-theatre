@@ -9520,3 +9520,68 @@ model SurgeryTeamCheckIn {
   @@index([checkedInAt])
   @@map("surgery_team_check_ins")
 }
+
+/// Where a procedure name came from.
+enum ProcedureSource {
+  /// Seeded from the curated catalogue.
+  CATALOGUE
+  /// Added by a user at booking time through the "Other" option.
+  USER_ADDED
+}
+
+/// The procedure names a surgeon picks from when booking.
+///
+/// Seeded with a curated catalogue per subspecialty, and OPEN: anything
+/// missing can be added at booking and is then permanently available to
+/// everybody. That openness is the whole point and also the risk, so:
+///
+///   * `slug` is a normalised comparison key (see lib/procedures/normalise),
+///     and (subspecialty, slug) is UNIQUE. "Appendicectomy" typed by two
+///     surgeons on two days is one row, not two.
+///   * `subspecialty` MUST match surgical_units.subspecialty exactly. It is
+///     the join key for the dropdown; a near-miss yields an empty picker with
+///     no error, which is the worst way for this to fail.
+model SurgicalProcedure {
+  id String @id @default(uuid())
+
+  /// As it is shown, in the words whoever added it used.
+  name String
+
+  /// Must match surgical_units.subspecialty exactly.
+  subspecialty String
+
+  /// Normalised key for duplicate detection. Never displayed.
+  slug String
+
+  /// Grouping inside the subspecialty, shown as an optgroup in the picker.
+  category String?
+
+  source ProcedureSource @default(CATALOGUE)
+
+  /// Commonly done as an emergency. Affects ordering only — it never stops
+  /// anybody choosing anything, because the list a theatre actually runs does
+  /// not respect the distinction.
+  isEmergency Boolean @default(false)
+
+  /// Retired rather than deleted. A procedure that has been booked is part of
+  /// the record of those cases, and deleting it would orphan them.
+  isActive Boolean @default(true)
+
+  /// How often it has been booked. Drives the order of the dropdown so the
+  /// twenty operations a theatre actually does are not buried under four
+  /// hundred it does once a year.
+  usageCount Int       @default(0)
+  lastUsedAt DateTime?
+
+  /// Who added it, for a user-added entry. Null for the seeded catalogue.
+  createdById   String?
+  createdByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([subspecialty, slug])
+  @@index([subspecialty, isActive])
+  @@index([usageCount])
+  @@map("surgical_procedures")
+}
