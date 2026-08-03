@@ -178,6 +178,13 @@ const ALWAYS_LIVE = [
   '/api/app-version',
   '/api/emergency-display',
   '/api/emergency-alerts',
+  // The list of booked emergencies. Left out of this list, it was served from
+  // the 60-second fresh-window cache: a clinician booked an emergency, opened
+  // the board, did not see it, and booked it again — which is exactly what
+  // happened in production (two identical bookings fourteen minutes apart).
+  // An emergency board that can be a minute stale is not a board.
+  '/api/emergency-booking',
+  '/api/emergency-team-availability',
   '/api/radio',
   '/api/notifications',
   '/api/staff/availability',

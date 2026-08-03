@@ -418,7 +418,11 @@ export default function EmergencyBookingPage() {
     try {
       const params = new URLSearchParams();
       if (filter) params.set('status', filter);
-      const res = await fetch(`/api/emergency-booking?${params.toString()}`);
+      // no-store as well as the ALWAYS_LIVE entry in the fetch interceptor.
+      // Two guards because this list being one minute stale caused a clinician
+      // to book the same emergency twice: they booked, opened the board, did
+      // not see the case, and booked it again.
+      const res = await fetch(`/api/emergency-booking?${params.toString()}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setBookings(Array.isArray(data) ? data : []);

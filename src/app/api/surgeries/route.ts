@@ -777,6 +777,60 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // ---- Put it on the EMERGENCY BOARD as well -----------------------
+      // An emergency booked through this form used to create an alert (which
+      // drives the TV display) but no EmergencySurgeryBooking — and the
+      // booking row is what the "booked emergencies" list, the team
+      // availability card, the radio broadcast and the response-monitoring
+      // board all read. Five real emergencies had been booked this way and
+      // were invisible to every one of them.
+      //
+      // Idempotent: emergency_surgery_bookings.surgeryId is UNIQUE, so a retry
+      // or a replayed request cannot produce a second row.
+      //
+      // Wrapped so it can never fail the surgery. A booking that saved but did
+      // not reach the board is recoverable; a booking that did not save is a
+      // patient without a theatre slot.
+      try {
+        await prisma.emergencySurgeryBooking.create({
+          data: {
+            surgeryId: surgery.id,
+            patientName: patient.name,
+            folderNumber: patient.folderNumber || '',
+            age: patient.age ?? null,
+            gender: patient.gender ?? null,
+            ward: patient.ward ?? null,
+            // The form has no separate diagnosis field; the clinical
+            // indication is what was actually written about this patient.
+            diagnosis: validatedData.indication,
+            procedureName: validatedData.procedureName,
+            surgicalUnit: validatedData.unit,
+            indication: validatedData.indication,
+            // surgeonId is a required relation. Where the surgeon was typed as
+            // free text, the person who booked it is the accountable requester
+            // and always has an account.
+            surgeonId: resolvedSurgeonId || session.user.id,
+            surgeonName: validatedData.surgeonName || 'Not named',
+            anaesthesiaType: validatedData.anesthesiaType ?? null,
+            requiredByTime: new Date(`${validatedData.scheduledDate}T${validatedData.scheduledTime}`),
+            estimatedDuration: validatedData.estimatedDuration,
+            theatreId: validatedData.theatreId ?? null,
+            theatreName: validatedData.location ?? null,
+            priority: 'CRITICAL',
+            bloodRequired: validatedData.needBloodTransfusion,
+            bloodUnits: validatedData.needBloodTransfusion ? 2 : null,
+            specialRequirements: validatedData.otherSpecialNeeds ?? null,
+            status: 'SUBMITTED',
+          },
+        });
+      } catch (bookingErr) {
+        // P2002 = it is already on the board (idempotent replay). Anything else
+        // is worth knowing about, but never worth losing the surgery over.
+        if ((bookingErr as { code?: string })?.code !== 'P2002') {
+          console.error('[surgeries] emergency booked but not added to the emergency board:', bookingErr);
+        }
+      }
+
       // Log emergency alert creation
       await prisma.auditLog.create({
         data: {

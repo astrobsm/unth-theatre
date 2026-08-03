@@ -13,6 +13,7 @@ import {
   speakViaKokoro,
   isKokoroAvailable,
   isKokoroReady,
+  isKokoroWorkerReady,
   preloadKokoro,
   whenKokoroReady,
   type KokoroSpeakHooks,
@@ -86,17 +87,15 @@ export interface SpeakHooks {
   /**
    * This announcement must not cost the user interface a single frame.
    *
-   * Kokoro synthesises on the MAIN THREAD via onnxruntime WASM. Once the
-   * engine is warm that is invisible on a laptop and brutal on a mid-range
-   * Android: generating a sentence of emergency text blocks the thread for
-   * seconds, so the page stops responding and the Acknowledge button cannot be
-   * tapped — repeating on every announcement cycle. Reported from a phone as
-   * "the screen freezes and the buttons remain unclickable".
+   * It still gets the natural neural voice — synthesis runs in a Web Worker,
+   * off the main thread, so an emergency repeating every thirty seconds never
+   * touches the thread that draws the Acknowledge button.
    *
-   * With this set, the neural path is skipped entirely and the caller is told
-   * to use the device's built-in speechSynthesis, which the OS runs off the
-   * main thread. A plainer voice that leaves the button pressable is the right
-   * trade for an emergency; nothing else is.
+   * What it refuses is the IN-PAGE fallback engine. Kokoro through onnxruntime
+   * WASM on the main thread blocks for seconds per sentence on a mid-range
+   * Android — reported from a phone as "the screen freezes and the buttons
+   * remain unclickable". On a browser too old for module workers an urgent
+   * announcement therefore uses the device's own voice instead.
    */
   urgent?: boolean;
 }
@@ -171,8 +170,22 @@ async function speakAnnouncementNow(
   // Callers that can afford a moment pass `warmupWaitMs`, which waits out a
   // cold load up to that bound only — so a page's first announcement still
   // gets the natural voice, without any caller ever waiting indefinitely.
-  // An urgent announcement never runs main-thread synthesis. See SpeakHooks.
-  if (hooks.urgent) return false;
+  // An URGENT announcement uses the worker if it is warm, and nothing else
+  // neural. It never waits for a cold engine and never runs one in-page.
+  if (hooks.urgent) {
+    if (isKokoroWorkerReady()) {
+      try {
+        const ok = await speakViaKokoro(clean, hooks);
+        if (ok) return true;
+      } catch { /* fall through */ }
+    } else {
+      // Warm it for the NEXT repeat — an emergency repeats until acknowledged,
+      // so the second announcement usually gets the natural voice.
+      preloadKokoro();
+    }
+    // Straight to the device voice: instant, and the OS runs it off-thread.
+    return false;
+  }
 
   let ready = isKokoroReady();
   if (!ready && isKokoroAvailable()) {
