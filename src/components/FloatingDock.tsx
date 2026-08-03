@@ -61,22 +61,75 @@ const BASE_CLASS =
  * Mount once, near the root. Renders the anchor containers that DockSlot
  * portals into.
  */
+/**
+ * Is the on-screen keyboard open?
+ *
+ * A phone keyboard does not resize the window — it shrinks the VISUAL
+ * viewport. Anything anchored to `bottom: 0` therefore stays where it was,
+ * which on a phone means it lands in the middle of the screen, directly over
+ * whatever field the user is typing into.
+ *
+ * That is how an emergency announcement covered the password box on the
+ * sign-in screen: the panel had not moved, the usable screen had.
+ *
+ * Detected by comparing the two viewport heights. `visualViewport` is present
+ * on every browser this app supports; where it is missing the hook simply
+ * reports "closed" and behaviour is unchanged.
+ */
+function useKeyboardOpen(): boolean {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined;
+    if (!vv) return;
+
+    const read = () => {
+      // 150px of lost height is far more than a browser toolbar hiding and far
+      // less than any keyboard.
+      setOpen(window.innerHeight - vv.height > 150);
+    };
+    read();
+    vv.addEventListener('resize', read);
+    vv.addEventListener('scroll', read);
+    return () => {
+      vv.removeEventListener('resize', read);
+      vv.removeEventListener('scroll', read);
+    };
+  }, []);
+
+  return open;
+}
+
 export function FloatingDockRoot() {
+  const keyboardOpen = useKeyboardOpen();
+
   return (
     <>
-      {(Object.keys(ANCHOR_CLASS) as DockAnchor[]).map((anchor) => (
-        <div
-          key={anchor}
-          id={`dock-${anchor}`}
-          className={`${BASE_CLASS} ${ANCHOR_CLASS[anchor]}`}
-          style={{
-            // Respect notches / gesture bars so widgets are never cut off or
-            // stranded under the system UI on a phone.
-            paddingBottom: anchor === 'top-center' ? undefined : 'calc(1rem + env(safe-area-inset-bottom, 0px))',
-            paddingTop: anchor === 'top-center' ? 'calc(1rem + env(safe-area-inset-top, 0px))' : undefined,
-          }}
-        />
-      ))}
+      {(Object.keys(ANCHOR_CLASS) as DockAnchor[]).map((anchor) => {
+        // While the keyboard is up, the bottom cluster is hidden — it would
+        // otherwise sit on top of the field being typed into. The top-centre
+        // anchor stays: it holds the emergency acknowledgement, it is nowhere
+        // near the keyboard, and hiding it would mean an alert could be missed
+        // entirely because somebody happened to be typing.
+        const hidden = keyboardOpen && anchor !== 'top-center';
+        return (
+          <div
+            key={anchor}
+            id={`dock-${anchor}`}
+            className={`${BASE_CLASS} ${ANCHOR_CLASS[anchor]}`}
+            style={{
+              // Respect notches / gesture bars so widgets are never cut off or
+              // stranded under the system UI on a phone.
+              paddingBottom: anchor === 'top-center' ? undefined : 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+              paddingTop: anchor === 'top-center' ? 'calc(1rem + env(safe-area-inset-top, 0px))' : undefined,
+              // Hidden, not unmounted: the radio keeps polling and speaking
+              // while it is out of sight, and it comes straight back with its
+              // state intact when the keyboard closes.
+              visibility: hidden ? 'hidden' : undefined,
+            }}
+          />
+        );
+      })}
     </>
   );
 }

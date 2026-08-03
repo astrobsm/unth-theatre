@@ -2,6 +2,7 @@
 
 import { SessionProvider } from "next-auth/react";
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { OfflineProvider } from "@/components/OfflineProvider";
 import { MediaHubProvider } from "@/components/MediaHub";
@@ -45,6 +46,40 @@ function DeferUntilIdle({ children }: { children: React.ReactNode }) {
   return ready ? <>{children}</> : null;
 }
 
+/**
+ * Routes where NO floating widget may appear.
+ *
+ * Reported from a phone: an emergency announcement arrived while the user was
+ * signing in. The acknowledge banner took the top of the screen and the radio
+ * panel — anchored to the bottom, which the on-screen keyboard pushes into the
+ * middle — sat directly over the password field and the Sign In button. The
+ * page was unusable, and the one thing the user needed to do was authenticate
+ * so they could act on the emergency.
+ *
+ * Nothing here is worth showing to somebody who is not yet signed in: they
+ * cannot acknowledge anything, and the announcement will still be waiting a
+ * few seconds later.
+ */
+const NO_CHROME_PREFIXES = ['/auth', '/login', '/register', '/offline'];
+
+function useChromeAllowed(): boolean {
+  const pathname = usePathname();
+  if (!pathname) return true;
+  return !NO_CHROME_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function FloatingChrome() {
+  const allowed = useChromeAllowed();
+  if (!allowed) return null;
+  return (
+    <DeferUntilIdle>
+      <RadioPlayer />
+      <BackgroundMusicPlayer />
+      <MediaHubLauncher />
+    </DeferUntilIdle>
+  );
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
@@ -58,10 +93,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
               non-critical and only mounts once the page is idle, keeping the
               initial load fast. The radio still activates well within its
               normal polling window. */}
+          {/* Anything that DRAWS goes through FloatingChrome, which keeps it
+              off the sign-in screen. */}
+          <FloatingChrome />
+          {/* These register listeners and never draw, so they run everywhere —
+              push registration and update checks must keep working on the
+              login screen. */}
           <DeferUntilIdle>
-            <RadioPlayer />
-            <BackgroundMusicPlayer />
-            <MediaHubLauncher />
             <PushNotificationRegistrar />
             <NativeOfflineWarmup />
             <NativeUpdateChecker />

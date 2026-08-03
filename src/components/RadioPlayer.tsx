@@ -64,6 +64,15 @@ export default function RadioPlayer() {
   const dragOffsetRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playedRecentlyRef = useRef<Map<string, number>>(new Map());
+  // When the current item was last actually SPOKEN, and when it is next due.
+  // The panel reads these so what is on screen matches what is being heard —
+  // previously the banner appeared on the poll and the voice ran on its own
+  // repeat cycle, so the two looked unrelated.
+  const [lastSpokenAt, setLastSpokenAt] = useState<number | null>(null);
+  const [nextDueAt, setNextDueAt] = useState<number | null>(null);
+  // Re-renders once a second while an alert is live, purely so the countdown
+  // below moves. Cheap, and only while something is outstanding.
+  const [, setTicker] = useState(0);
   // IDs the user has acknowledged in this tab. Even if the server hasn't
   // yet flipped status to ACKNOWLEDGED (network race), the player will
   // refuse to play these again.
@@ -216,6 +225,14 @@ export default function RadioPlayer() {
     return () => clearTimeout(id);
   }, [mode, queue, speaking, collapse]);
 
+  // Move the countdown while something is outstanding. Stops entirely once
+  // the queue is clear, so an idle radio costs nothing.
+  useEffect(() => {
+    if (!nextDueAt) return;
+    const id = setInterval(() => setTicker((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [nextDueAt]);
+
   const markPlayed = useCallback(async (id: string) => {
     try {
       await fetch('/api/radio/played', {
@@ -330,12 +347,16 @@ export default function RadioPlayer() {
   // engine rather than settle for the fallback voice. Emergencies pass 0: being
   // heard immediately beats being heard beautifully.
   const speak = useCallback(
-    (text: string, onDone?: () => void, warmupWaitMs = 2500) => {
+    (text: string, onDone?: () => void, warmupWaitMs = 2500, urgent = false) => {
       if (typeof window === 'undefined' || muted) { onDone?.(); return; }
       if (!audioRef.current) audioRef.current = new Audio();
       void speakAnnouncement(text, {
         getAudio: () => audioRef.current as HTMLAudioElement,
         warmupWaitMs,
+        // Emergencies use the device's own voice. The neural engine
+        // synthesises on the main thread, which locks the page — including the
+        // Acknowledge button — for the duration, every time it repeats.
+        urgent,
         onStart: () => { setSpeaking(true); emitRadioActive(); },
         onEnd: () => { setSpeaking(false); emitRadioIdle(); },
       }).then((ok) => {
@@ -446,6 +467,8 @@ export default function RadioPlayer() {
       if (last > 0) return;
     }
     playedRecentlyRef.current.set(lastPlayedKey, now);
+    setLastSpokenAt(now);
+    setNextDueAt(top.repeatUntilAck ? now + (top.repeatEverySec || 30) * 1000 : null);
 
     const isEmergency = top.category === 'EMERGENCY' || top.priority >= 90;
     const prefix = isEmergency
@@ -460,7 +483,7 @@ export default function RadioPlayer() {
     };
 
     if (top.audioUrl) playAudio(top.audioUrl, onDone);
-    else speak(text, onDone, isEmergency ? 0 : 2500);
+    else speak(text, onDone, isEmergency ? 0 : 2500, isEmergency);
   }, [queue, enabled, isLeader, speak, playAudio, markPlayed]);
 
   // Acknowledge in a single tap — no code prompt. In a theatre, silencing the
@@ -523,6 +546,31 @@ export default function RadioPlayer() {
   const top = queue.find((q) => !suppressedRef.current.has(q.id));
   const isEmergency = top && (top.category === 'EMERGENCY' || top.priority >= 90);
 
+  /**
+   * What the AUDIO is doing, in words.
+   *
+   * The complaint this answers: the banner appeared and nothing was said, or
+   * the voice repeated while the banner sat unchanged, so the two looked
+   * unrelated. They were: the banner came from the poll, the speech ran on its
+   * own repeat timer, and neither knew about the other.
+   *
+   * Every reason the radio can be silent is now named on the panel rather than
+   * left for the user to infer from silence.
+   */
+  const audioStatus = (() => {
+    if (!top) return null;
+    if (!enabled) return { text: 'Radio off — tap the radio icon to hear announcements', tone: 'warn' as const };
+    if (muted) return { text: 'Muted — announcement not being spoken', tone: 'warn' as const };
+    if (!isLeader) return { text: 'Being announced in your other open window', tone: 'info' as const };
+    if (speaking) return { text: 'Announcing now', tone: 'live' as const };
+    if (nextDueAt) {
+      const secs = Math.max(0, Math.round((nextDueAt - Date.now()) / 1000));
+      return { text: `Repeats in ${secs}s until acknowledged`, tone: 'info' as const };
+    }
+    if (lastSpokenAt) return { text: 'Announced', tone: 'info' as const };
+    return { text: 'Preparing announcement…', tone: 'info' as const };
+  })();
+
   return (
     <>
     {/* Acknowledge lives at the TOP CENTRE: it is the highest-priority control
@@ -537,7 +585,7 @@ export default function RadioPlayer() {
           onClick={() => acknowledge(top.id)}
           disabled={ackBusy}
           title="Acknowledge emergency announcement"
-          className="flex items-center justify-center gap-2 w-[min(92vw,26rem)] px-5 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm sm:text-base shadow-2xl ring-4 ring-green-300/70 disabled:opacity-60 animate-pulse"
+          className="flex items-center justify-center gap-2 w-[min(92vw,26rem)] px-5 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm sm:text-base shadow-2xl ring-4 ring-green-300/70 disabled:opacity-60 orm-alert-attention"
         >
           {ackBusy ? (
             <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
@@ -548,6 +596,26 @@ export default function RadioPlayer() {
             {ackBusy ? 'ACKNOWLEDGING…' : 'ACKNOWLEDGE EMERGENCY'}
           </span>
         </button>
+        {/* What the radio is actually doing, under the button that silences it.
+            Without this the user hears nothing and has no way to tell whether
+            the alert is being announced elsewhere, is muted, or has simply not
+            reached its next repeat. */}
+        {audioStatus && (
+          <div
+            className={`mt-2 w-[min(92vw,26rem)] rounded-lg px-3 py-1.5 text-xs font-medium text-center shadow-lg ${
+              audioStatus.tone === 'warn'
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : audioStatus.tone === 'live'
+                ? 'bg-white text-green-800 border border-green-300'
+                : 'bg-white/95 text-gray-700 border border-gray-300'
+            }`}
+          >
+            {audioStatus.tone === 'live' && (
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-600 mr-1.5 align-middle" />
+            )}
+            {audioStatus.text}
+          </div>
+        )}
         {ackError && (
           <div
             role="alert"
@@ -570,7 +638,7 @@ export default function RadioPlayer() {
       style={pos ? { position: 'fixed', left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
       className={`${pos ? 'z-[10005]' : ''} w-[min(92vw,22rem)] rounded-xl overflow-hidden shadow-2xl border-2 ${
         isEmergency
-          ? 'bg-red-600 border-red-900 text-white animate-pulse'
+          ? 'bg-red-600 border-red-900 text-white orm-alert-edge'
           : 'bg-gradient-to-r from-slate-900 to-slate-800 border-primary-600 text-white'
       }`}
     >

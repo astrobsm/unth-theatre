@@ -114,7 +114,7 @@ export function MediaHubLauncher() {
             title="Open theatre radio"
             aria-label="Open theatre radio"
             className={`w-12 h-12 rounded-full shadow-2xl border-2 flex items-center justify-center text-white hover:scale-105 transition-transform ${
-              radioAlert ? 'bg-red-600 border-red-800 animate-pulse' : 'bg-slate-800 border-primary-600'
+              radioAlert ? 'bg-red-600 border-red-800 orm-alert-edge' : 'bg-slate-800 border-primary-600'
             }`}
           >
             <Radio className="w-5 h-5" />
@@ -138,7 +138,7 @@ export function MediaHubLauncher() {
           aria-label="Open media controls"
           className={`relative w-14 h-14 rounded-full shadow-2xl border-2 flex items-center justify-center text-white transition-transform hover:scale-105 ${
             radioAlert
-              ? 'bg-red-600 border-red-800 animate-pulse'
+              ? 'bg-red-600 border-red-800 orm-alert-edge'
               : 'bg-gradient-to-br from-slate-800 to-slate-900 border-primary-600'
           }`}
         >

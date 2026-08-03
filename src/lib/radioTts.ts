@@ -83,6 +83,22 @@ export interface SpeakHooks {
    * still spoken in the natural voice; emergency paths leave it at 0.
    */
   warmupWaitMs?: number;
+  /**
+   * This announcement must not cost the user interface a single frame.
+   *
+   * Kokoro synthesises on the MAIN THREAD via onnxruntime WASM. Once the
+   * engine is warm that is invisible on a laptop and brutal on a mid-range
+   * Android: generating a sentence of emergency text blocks the thread for
+   * seconds, so the page stops responding and the Acknowledge button cannot be
+   * tapped — repeating on every announcement cycle. Reported from a phone as
+   * "the screen freezes and the buttons remain unclickable".
+   *
+   * With this set, the neural path is skipped entirely and the caller is told
+   * to use the device's built-in speechSynthesis, which the OS runs off the
+   * main thread. A plainer voice that leaves the button pressable is the right
+   * trade for an emergency; nothing else is.
+   */
+  urgent?: boolean;
 }
 
 /**
@@ -155,6 +171,9 @@ async function speakAnnouncementNow(
   // Callers that can afford a moment pass `warmupWaitMs`, which waits out a
   // cold load up to that bound only — so a page's first announcement still
   // gets the natural voice, without any caller ever waiting indefinitely.
+  // An urgent announcement never runs main-thread synthesis. See SpeakHooks.
+  if (hooks.urgent) return false;
+
   let ready = isKokoroReady();
   if (!ready && isKokoroAvailable()) {
     preloadKokoro(); // background warm-up; never awaited
