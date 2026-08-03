@@ -175,9 +175,21 @@ export async function GET(request: NextRequest) {
             role: true,
           },
         },
+        // NOT `include: { patient: true }`. The full Surgery row carries
+        // consentFileData, consentFormData and complexityData — base64 file
+        // contents in @db.Text columns. One row measured 4.27 MB, and once
+        // most bookings had a linked surgery this response reached 25 MB and
+        // took 43 seconds, which is a serverless timeout, which is the 500
+        // the board was returning.
+        //
+        // The page reads none of it. These four scalars are all any consumer
+        // has ever needed to link a booking back to its surgery.
         surgery: {
-          include: {
-            patient: true,
+          select: {
+            id: true,
+            status: true,
+            scheduledDate: true,
+            scheduledTime: true,
           },
         },
       },

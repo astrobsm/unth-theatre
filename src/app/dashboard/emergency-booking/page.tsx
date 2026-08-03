@@ -446,27 +446,54 @@ export default function EmergencyBookingPage() {
   useEffect(() => {
     const controller = new AbortController();
     const run = async () => {
-      const results = await Promise.all(
-        bookings.map(async (b) => {
-          const when = b.requiredByTime || b.requestedAt;
-          if (!when) return null;
-          try {
-            const res = await fetch(
-              `/api/roster/on-duty?date=${encodeURIComponent(when)}`,
-              { signal: controller.signal }
-            );
-            if (!res.ok) return null;
-            const data: OnDutyTeam = await res.json();
-            return [b.id, data] as const;
-          } catch {
-            return null;
-          }
-        })
-      );
-      const next: Record<string, OnDutyTeam> = {};
-      for (const r of results) {
-        if (r) next[r[0]] = r[1];
+      // One request PER BOOKING fired all at once. With 78 emergencies on the
+      // board that was 78 simultaneous roster lookups, which exhausted the
+      // connection pool and returned 500s — for a roster that is the same for
+      // every case sharing a date and shift.
+      //
+      // So: ask once per distinct date+shift, and never more than a few at a
+      // time. Seventy-eight requests collapse to a handful.
+      const byWhen = new Map<string, string[]>();
+      for (const b of bookings) {
+        // Only the ACTIVE cards show an on-duty team; the past section is a
+        // plain table. Looking up the roster for a completed case from June
+        // was work whose result was never rendered.
+        if (!['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED', 'IN_PROGRESS'].includes(b.status)) continue;
+        const when = b.requiredByTime || b.requestedAt;
+        if (!when) continue;
+        const list = byWhen.get(when);
+        if (list) list.push(b.id);
+        else byWhen.set(when, [b.id]);
       }
+
+      const next: Record<string, OnDutyTeam> = {};
+      const entries = Array.from(byWhen.entries());
+      const CONCURRENCY = 4;
+
+      for (let i = 0; i < entries.length; i += CONCURRENCY) {
+        if (controller.signal.aborted) return;
+        const slice = entries.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          slice.map(async ([when, ids]) => {
+            try {
+              const res = await fetch(
+                `/api/roster/on-duty?date=${encodeURIComponent(when)}`,
+                { signal: controller.signal }
+              );
+              if (!res.ok) return null;
+              const data: OnDutyTeam = await res.json();
+              return [ids, data] as const;
+            } catch {
+              return null;
+            }
+          })
+        );
+        for (const r of results) {
+          if (!r) continue;
+          for (const id of r[0]) next[id] = r[1];
+        }
+      }
+
       setOnDutyTeams(next);
     };
     if (bookings.length) run();
