@@ -724,6 +724,33 @@ export default function EmergencyBookingPage() {
         ))}
       </div>
 
+      {/* Every emergency, reconciled in one line.
+          The page splits into an active list and a past table, and the past
+          table sits below fifty-odd expanded cards — so the totals never
+          appeared together and the board looked as though it was holding fewer
+          emergencies than it was. */}
+      {bookings.length > 0 && (
+        <div className="mb-6 rounded-lg border bg-white px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <span className="font-semibold text-gray-900">
+            {bookings.length} emergenc{bookings.length === 1 ? 'y' : 'ies'} recorded
+          </span>
+          <span className="text-red-700">
+            <strong>{activeBookings.length}</strong> active
+          </span>
+          <span className="text-gray-600">
+            <strong>{pastBookings.length}</strong> completed or cancelled
+          </span>
+          {pastBookings.length > 0 && (
+            <button
+              onClick={() => document.getElementById('past-emergency-cases')?.scrollIntoView({ behavior: 'smooth' })}
+              className="ml-auto text-blue-700 hover:underline"
+            >
+              Jump to past cases ↓
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Active Emergency Bookings */}
       {activeBookings.length > 0 && (
         <div className="mb-8">
@@ -1154,7 +1181,7 @@ export default function EmergencyBookingPage() {
 
       {/* Past Bookings */}
       {pastBookings.length > 0 && (
-        <div>
+        <div id="past-emergency-cases">
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Past Emergency Cases ({pastBookings.length})</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white rounded-lg shadow">
