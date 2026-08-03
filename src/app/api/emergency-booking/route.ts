@@ -10,6 +10,7 @@ import { recordProcedureUse } from '@/lib/procedures/usage';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { isSurgeonRole } from '@/lib/roleGroups';
+import { reconcileEmergencyBoard } from '@/lib/emergency/ensureBooking';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,6 +128,17 @@ export async function GET(request: NextRequest) {
     const priority = searchParams.get('priority');
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+
+    // ---- The completeness guarantee -----------------------------------
+    // Adopt any emergency that reached the database without a booking row —
+    // whatever route created it, including routes written after this code.
+    // Every write site calls ensureEmergencyBooking directly, so in practice
+    // this finds nothing; it exists so that a future path which forgets to
+    // call it cannot leave an emergency off this board.
+    //
+    // Bounded, and silent for anything older than a few hours: a tidy-up
+    // sweep must never broadcast last week's cases across the theatre.
+    await reconcileEmergencyBoard();
 
     const where: any = {};
 

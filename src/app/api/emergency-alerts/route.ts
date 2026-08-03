@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { sendPushToRoles } from '@/lib/fcm';
 import { z } from 'zod';
 import { isSurgeonRole } from '@/lib/roleGroups';
+import { ensureEmergencyBooking } from '@/lib/emergency/ensureBooking';
 
 export const dynamic = 'force-dynamic';
 
@@ -180,6 +181,11 @@ export async function POST(request: NextRequest) {
         surgeryType: 'EMERGENCY',
       },
     });
+
+    // Raising an alert makes this an emergency, so it belongs on the emergency
+    // board as well. Previously this route upgraded the surgery and the board
+    // never heard about it.
+    await ensureEmergencyBooking(validatedData.surgeryId, { fallbackUserId: session.user.id });
 
     // Create emergency alert
     const alert = await prisma.emergencySurgeryAlert.create({

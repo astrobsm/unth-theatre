@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { detectConflict } from '@/lib/concurrency';
+import { ensureEmergencyBooking } from '@/lib/emergency/ensureBooking';
 
 export const dynamic = 'force-dynamic';
 
@@ -275,6 +276,13 @@ export async function PUT(
         },
       },
     });
+
+    // An existing case upgraded to EMERGENCY must reach the emergency board
+    // too. This route is how a deteriorating elective becomes an emergency,
+    // and before this it changed the type and told nobody.
+    if (updatedSurgery.surgeryType === 'EMERGENCY') {
+      await ensureEmergencyBooking(updatedSurgery.id, { fallbackUserId: session.user.id });
+    }
 
     // Patient ward transfer (the patient may move wards after booking).
     let wardChange: { from: any; to: any } | null = null;
