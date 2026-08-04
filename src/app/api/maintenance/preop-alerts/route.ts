@@ -20,6 +20,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { authoriseCron } from '@/lib/cronAuth';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -44,19 +45,6 @@ import {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'];
-
-async function authorise(request: NextRequest): Promise<{ ok: boolean; who: string; status?: number }> {
-  const secret = process.env.CRON_SECRET;
-  if (secret && request.headers.get('authorization') === `Bearer ${secret}`) {
-    return { ok: true, who: 'scheduled' };
-  }
-  const session = await getServerSession(authOptions);
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (!session?.user) return { ok: false, who: '', status: 401 };
-  if (!role || !ADMIN_ROLES.includes(role)) return { ok: false, who: '', status: 403 };
-  return { ok: true, who: 'administrator' };
-}
 
 /** Equipment flags read as a list a person can act on. */
 function equipmentOf(s: {
@@ -112,7 +100,7 @@ async function silenceStaleCalls(now: Date): Promise<number> {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await authorise(request);
+  const auth = await authoriseCron(request);
   if (!auth.ok) {
     return NextResponse.json(
       { error: auth.status === 401 ? 'Sign in to continue.' : 'Only an administrator may run the alert job.' },

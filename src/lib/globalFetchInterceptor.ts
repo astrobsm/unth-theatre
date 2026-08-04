@@ -209,6 +209,10 @@ const ALWAYS_LIVE = [
   // after they marked themselves unavailable, and the coordinator would find
   // out from the empty theatre instead of from the screen.
   '/api/theatre-ops/check-in',
+  // What has been recorded so far, on a screen people tap repeatedly during a
+  // case. A cached copy would offer a milestone already logged and hide one
+  // just entered by a colleague in the same room.
+  '/api/theatre-ops/milestones',
   // A response clock served from cache is a stopped clock. This screen exists
   // to say how long a department has been silent; a stale copy would say a
   // shorter time than the truth, which is the one direction it must never err.

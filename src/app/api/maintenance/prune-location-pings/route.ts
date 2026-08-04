@@ -18,6 +18,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { authoriseCron } from '@/lib/cronAuth';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -28,8 +29,6 @@ export const runtime = 'nodejs';
 /** Days of history kept. Overridable, but the default is deliberately short. */
 const RETENTION_DAYS = Number(process.env.LOCATION_PING_RETENTION_DAYS ?? 90);
 
-const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'];
-
 /**
  * Who may run this.
  *
@@ -38,17 +37,6 @@ const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATR
  * after changing the retention period, rather than waiting a day for the
  * schedule to come round.
  */
-async function authorise(request: NextRequest): Promise<{ ok: boolean; who: string; status?: number }> {
-  const secret = process.env.CRON_SECRET;
-  const auth = request.headers.get('authorization');
-  if (secret && auth === `Bearer ${secret}`) return { ok: true, who: 'scheduled' };
-
-  const session = await getServerSession(authOptions);
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (!session?.user) return { ok: false, who: '', status: 401 };
-  if (!role || !ADMIN_ROLES.includes(role)) return { ok: false, who: '', status: 403 };
-  return { ok: true, who: 'administrator' };
-}
 
 /**
  * Vercel invokes a scheduled job with GET, so GET has to be the one that
@@ -61,7 +49,7 @@ async function authorise(request: NextRequest): Promise<{ ok: boolean; who: stri
  * what would happen first.
  */
 export async function GET(request: NextRequest) {
-  const auth = await authorise(request);
+  const auth = await authoriseCron(request);
   if (!auth.ok) {
     return NextResponse.json(
       { error: auth.status === 401 ? 'Sign in to continue.' : 'Only an administrator may prune location history.' },
@@ -74,7 +62,7 @@ export async function GET(request: NextRequest) {
 
 /** Explicit commit, for a caller that wants no ambiguity. */
 export async function POST(request: NextRequest) {
-  const auth = await authorise(request);
+  const auth = await authoriseCron(request);
   if (!auth.ok) {
     return NextResponse.json(
       { error: auth.status === 401 ? 'Sign in to continue.' : 'Only an administrator may prune location history.' },
