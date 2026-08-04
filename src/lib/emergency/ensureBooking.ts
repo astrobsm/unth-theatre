@@ -190,6 +190,29 @@ export interface ReconcileResult {
   examined: number;
   added: number;
   failed: number;
+  /** True when the sweep was skipped because one ran recently. */
+  throttled?: boolean;
+}
+
+/**
+ * How often the safety-net sweep may actually run.
+ *
+ * Every write site calls ensureEmergencyBooking directly, so this sweep
+ * normally finds nothing — and measured against production it cost 6.4
+ * seconds of the board's load time to find that nothing. A backstop should
+ * not be the slowest thing on the page.
+ *
+ * Five minutes keeps the guarantee (an emergency created by some future route
+ * is adopted within one refresh cycle) at a fraction of the cost.
+ */
+export const RECONCILE_EVERY_MS = 5 * 60 * 1000;
+let lastReconcileAt = 0;
+
+/**
+ * May the sweep run now? Pure so the throttle can be tested without a database.
+ */
+export function shouldRunReconcile(lastRunAt: number, now: number = Date.now()): boolean {
+  return now - lastRunAt >= RECONCILE_EVERY_MS;
 }
 
 /**
@@ -201,7 +224,12 @@ export interface ReconcileResult {
  * Bounded so it can run on a page load without becoming the slowest thing on
  * the screen. Anything older than a few hours is adopted silently.
  */
-export async function reconcileEmergencyBoard(limit = 25): Promise<ReconcileResult> {
+export async function reconcileEmergencyBoard(limit = 25, force = false): Promise<ReconcileResult> {
+  if (!force && !shouldRunReconcile(lastReconcileAt)) {
+    return { examined: 0, added: 0, failed: 0, throttled: true };
+  }
+  lastReconcileAt = Date.now();
+
   try {
     const orphans = await prisma.surgery.findMany({
       where: { surgeryType: 'EMERGENCY', emergencyBooking: { is: null } },

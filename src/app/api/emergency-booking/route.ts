@@ -138,7 +138,12 @@ export async function GET(request: NextRequest) {
     //
     // Bounded, and silent for anything older than a few hours: a tidy-up
     // sweep must never broadcast last week's cases across the theatre.
-    await reconcileEmergencyBoard();
+    // Not awaited, and throttled to once every five minutes. Measured against
+    // production it took 6.4 seconds to confirm there was nothing to do —
+    // which is not a price the board should pay on every load for a backstop.
+    // An emergency created by some future route is still adopted within one
+    // refresh cycle.
+    void reconcileEmergencyBoard();
 
     const where: any = {};
 

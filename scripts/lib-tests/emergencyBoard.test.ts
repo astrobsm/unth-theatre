@@ -9,7 +9,12 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ANNOUNCE_IF_NEWER_THAN_MS, shouldAnnounceOnAdoption } from './emergency/ensureBooking';
+import {
+  ANNOUNCE_IF_NEWER_THAN_MS,
+  RECONCILE_EVERY_MS,
+  shouldAnnounceOnAdoption,
+  shouldRunReconcile,
+} from './emergency/ensureBooking';
 
 const NOW = new Date('2026-08-03T21:00:00.000Z');
 const agoMs = (ms: number) => new Date(NOW.getTime() - ms);
@@ -46,5 +51,31 @@ describe('whether adopting a case also announces it', () => {
     // forever; a negative age is still inside the window, which is correct —
     // it is a brand new record either way.
     expect(shouldAnnounceOnAdoption(new Date(NOW.getTime() + HOUR), NOW)).toBe(true);
+  });
+});
+
+describe('the safety-net sweep is throttled', () => {
+  it('does not run again immediately', () => {
+    // Measured against production, the sweep took 6.4 seconds to confirm there
+    // was nothing to do. Every write site already calls ensureEmergencyBooking
+    // directly, so this is a backstop — and a backstop must not be the slowest
+    // thing on the page.
+    const now = 1_000_000_000;
+    expect(shouldRunReconcile(now - 1000, now)).toBe(false);
+  });
+
+  it('runs again once the interval has passed', () => {
+    const now = 1_000_000_000;
+    expect(shouldRunReconcile(now - RECONCILE_EVERY_MS, now)).toBe(true);
+    expect(shouldRunReconcile(now - RECONCILE_EVERY_MS - 1, now)).toBe(true);
+  });
+
+  it('always runs the very first time', () => {
+    // lastReconcileAt starts at 0, so a fresh server never skips the sweep.
+    expect(shouldRunReconcile(0, 1_000_000_000)).toBe(true);
+  });
+
+  it('is five minutes', () => {
+    expect(RECONCILE_EVERY_MS).toBe(5 * 60 * 1000);
   });
 });
