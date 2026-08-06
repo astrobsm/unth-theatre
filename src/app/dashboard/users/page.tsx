@@ -44,6 +44,67 @@ interface UploadResult {
 export default function UsersPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
+  // ---- Account clean-up ---------------------------------------------------
+  // Selection is deliberately opt-in per row: there is no "select all users"
+  // control, because the safe bulk action here is small and considered.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [deleteReport, setDeleteReport] = useState<
+    { id: string; name?: string; deleted: boolean; reason: string }[] | null
+  >(null);
+  const [dupGroups, setDupGroups] = useState<any[] | null>(null);
+  const [dupLoading, setDupLoading] = useState(false);
+
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const scanDuplicates = async () => {
+    setDupLoading(true);
+    try {
+      const res = await fetch('/api/users/delete', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) setDupGroups(data.groups || []);
+      else alert(data.error || 'Could not scan for duplicates');
+    } finally {
+      setDupLoading(false);
+    }
+  };
+
+  /** `force` confirms removal of approved-but-never-used accounts. */
+  const deleteSelected = async (force = false) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${ids.length} account${ids.length === 1 ? '' : 's'}?
+
+` +
+        'Accounts with any record against them will be refused and reported, ' +
+        'so nothing is lost silently. This cannot be undone.'
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setDeleteReport(null);
+    try {
+      const res = await fetch('/api/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, force }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Delete failed'); return; }
+      setDeleteReport(data.results || []);
+      setSelectedIds(new Set());
+      await fetchUsers();
+      if (dupGroups) await scanDuplicates();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -876,10 +937,120 @@ export default function UsersPage() {
           Showing {filteredUsers.length} of {users.length} user{users.length === 1 ? '' : 's'}
           {userQuery ? ` matching “${userSearch.trim()}”` : ''}.
         </p>
+
+        {/* ---- Account clean-up --------------------------------------------
+            Tick accounts to remove, or scan for people registered twice.
+            Nothing is deleted that has a record against it — the server checks
+            every one of the 151 tables that reference a user and reports what
+            it refused, rather than failing part-way through in silence. */}
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => deleteSelected(false)}
+              disabled={selectedIds.size === 0 || deleting}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {deleting ? 'Deleting…' : `Delete selected${selectedIds.size ? ` (${selectedIds.size})` : ''}`}
+            </button>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="px-3 py-2 rounded-lg text-sm border bg-white hover:bg-gray-100"
+              >
+                Clear selection
+              </button>
+            )}
+            <button
+              onClick={scanDuplicates}
+              disabled={dupLoading}
+              className="px-3 py-2 rounded-lg text-sm border bg-white hover:bg-gray-100 disabled:opacity-50"
+            >
+              {dupLoading ? 'Scanning…' : 'Find duplicate registrations'}
+            </button>
+            <span className="text-xs text-gray-500">
+              Accounts with any record against them are refused and listed, never removed quietly.
+            </span>
+          </div>
+
+          {/* What actually happened, per account. */}
+          {deleteReport && (
+            <div className="mt-3 rounded-lg border bg-white p-3 text-sm">
+              <div className="font-medium text-gray-900 mb-1">
+                {deleteReport.filter((r) => r.deleted).length} deleted,{' '}
+                {deleteReport.filter((r) => !r.deleted).length} refused
+              </div>
+              <ul className="space-y-1 max-h-56 overflow-y-auto">
+                {deleteReport.map((r) => (
+                  <li key={r.id} className={r.deleted ? 'text-green-700' : 'text-amber-800'}>
+                    <strong>{r.name || r.id.slice(0, 8)}</strong> — {r.reason}
+                  </li>
+                ))}
+              </ul>
+              {deleteReport.some((r) => !r.deleted && /confirm to proceed/i.test(r.reason)) && (
+                <button
+                  onClick={() => deleteSelected(true)}
+                  className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-600 text-white hover:bg-amber-700"
+                >
+                  These are approved but have never been used — delete them anyway
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Duplicate groups. */}
+          {dupGroups && (
+            <div className="mt-3 rounded-lg border bg-white p-3 text-sm">
+              {dupGroups.length === 0 ? (
+                <span className="text-gray-600">No duplicate registrations found.</span>
+              ) : (
+                <>
+                  <div className="font-medium text-gray-900 mb-2">
+                    {dupGroups.length} possible duplicate{dupGroups.length === 1 ? '' : ' groups'}
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">
+                    A shared email or staff code is near proof. A shared <strong>name</strong> is only a
+                    hint — plenty of people genuinely share one — so check before removing anything.
+                  </p>
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {dupGroups.map((g: any) => (
+                      <div key={g.kind + g.key} className="border rounded-lg p-2">
+                        <div className="text-xs text-gray-500 mb-1">
+                          matched on {g.kind === 'staffCode' ? 'staff code' : g.kind}: <strong>{g.key}</strong>
+                        </div>
+                        {g.members.map((m: any) => (
+                          <label
+                            key={m.id}
+                            className={`flex items-start gap-2 py-1 ${m.deletable ? 'cursor-pointer' : 'opacity-70'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              disabled={!m.deletable}
+                              checked={selectedIds.has(m.id)}
+                              onChange={() => toggleSelected(m.id)}
+                              className="mt-1 w-4 h-4"
+                            />
+                            <span>
+                              <span className="font-medium">{m.fullName}</span>{' '}
+                              <span className="text-gray-500">
+                                ({m.username}{m.staffCode ? ` · ${m.staffCode}` : ''} · {m.status})
+                              </span>
+                              <span className="block text-xs text-gray-500">{m.reason}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-3 py-3 w-10" />
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Name
                 </th>
@@ -905,7 +1076,16 @@ export default function UsersPage() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.id} className={selectedIds.has(user.id) ? 'bg-red-50' : undefined}>
+                  <td className="px-3 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(user.id)}
+                      onChange={() => toggleSelected(user.id)}
+                      aria-label={`Select ${user.fullName || user.username} for deletion`}
+                      className="w-4 h-4"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {user.fullName ? (
                       <ContactName type="user" id={user.id} name={user.fullName} />
