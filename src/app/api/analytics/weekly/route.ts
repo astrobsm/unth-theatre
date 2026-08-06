@@ -28,19 +28,20 @@ export async function GET(request: NextRequest) {
           lte: new Date(weekEnd),
         },
       },
-      include: {
-        patient: {
-          select: {
-            name: true,
-            folderNumber: true,
-          },
-        },
-        surgeon: {
-          select: {
-            fullName: true,
-          },
-        },
-        cancellation: true,
+      // A `select`, deliberately, NOT an `include`.
+      //
+      // Including the whole Surgery row pulls consentFileData, consentFormData
+      // and complexityData — base64 file contents in @db.Text columns. One row
+      // measured 4.27 MB; a month of cases came to 33 MB and 62 seconds, which
+      // is a serverless timeout, which is why the report failed with "an error
+      // occurred while generating the report".
+      //
+      // This report counts cases by unit and status. These are the only
+      // columns it reads.
+      select: {
+        unit: true,
+        status: true,
+        scheduledDate: true,
       },
       orderBy: { unit: "asc" },
     });

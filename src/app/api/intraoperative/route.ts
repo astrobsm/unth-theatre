@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { SURGERY_WITHOUT_ATTACHMENTS } from '@/lib/surgerySelect';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -109,7 +110,10 @@ export async function POST(request: NextRequest) {
       },
       include: {
         surgery: {
-          include: {
+          // Blob-free: see lib/surgerySelect. Including the whole row pulled
+          // base64 consent files into every record returned.
+          select: {
+            ...SURGERY_WITHOUT_ATTACHMENTS,
             patient: true,
             surgeon: true,
             anesthetist: true

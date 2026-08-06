@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { SURGERY_WITHOUT_ATTACHMENTS } from '@/lib/surgerySelect';
 import { getServerSession } from 'next-auth';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { pushToUsers } from '@/lib/pushAll';
@@ -79,14 +80,17 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         surgery: {
-          include: {
+          // Blob-free: see lib/surgerySelect. Including the whole row
+          // pulled base64 consent files into every list item.
+          select: {
+            ...SURGERY_WITHOUT_ATTACHMENTS,
             patient: true,
             surgeon: {
               select: {
                 id: true,
                 fullName: true,
-              },
-            },
+          },
+        },
           },
         },
         patient: true,
