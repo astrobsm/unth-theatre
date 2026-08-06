@@ -32,10 +32,19 @@ export default function ReportsPage() {
         });
         pdf.save(`Theatre_Weekly_Report_${weekStart}_to_${weekEnd}.pdf`);
       } else {
-        setError('Failed to fetch weekly data');
+        const body = await response.json().catch(() => ({}));
+        setError(
+          body.detail
+            ? `${body.error || 'Report failed'} — ${body.detail}`
+            : body.error || `Report failed (HTTP ${response.status})`
+        );
       }
     } catch (error) {
-      setError('An error occurred while generating the report');
+      setError(
+        error instanceof Error
+          ? `Could not build the report: ${error.message}`
+          : 'An error occurred while generating the report'
+      );
     } finally {
       setLoading(false);
     }
@@ -60,10 +69,22 @@ export default function ReportsPage() {
         });
         pdf.save(`Theatre_Monthly_Report_${month}.pdf`);
       } else {
-        setError('Failed to fetch monthly data');
+        // Show what the server actually said. "Failed to fetch monthly data"
+        // is indistinguishable from a network drop, a timeout and a bug.
+        const body = await response.json().catch(() => ({}));
+        setError(
+          body.detail
+            ? `${body.error || 'Report failed'} — ${body.detail}`
+            : body.error || `Report failed (HTTP ${response.status})`
+        );
       }
     } catch (error) {
-      setError('An error occurred while generating the report');
+      // A throw here is the PDF builder or the network, not the server.
+      setError(
+        error instanceof Error
+          ? `Could not build the report: ${error.message}`
+          : 'An error occurred while generating the report'
+      );
     } finally {
       setLoading(false);
     }

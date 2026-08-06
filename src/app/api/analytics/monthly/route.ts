@@ -141,8 +141,31 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching monthly analytics:", error);
+    // Say WHAT failed, to an administrator.
+    //
+    // "An error occurred while generating the report" told the user nothing
+    // and told me nothing either — it cost a deploy cycle to learn that the
+    // query was fine and the fault was elsewhere. An opaque 500 on a report a
+    // manager needs is a bug in its own right.
+    //
+    // Gated on role: a database error message can name columns and
+    // constraints, which is fine for the person administering the system and
+    // not for everybody with an account.
+    const session = await getServerSession(authOptions);
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    const maySeeDetail = !!role && [
+      'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
+    ].includes(role);
     return NextResponse.json(
-      { error: "Failed to fetch monthly analytics" },
+      {
+        error: "Failed to fetch monthly analytics",
+        ...(maySeeDetail
+          ? {
+              detail: error instanceof Error ? error.message : String(error),
+              at: error instanceof Error ? (error.stack || '').split(String.fromCharCode(10)).slice(0, 3).join(' | ') : undefined,
+            }
+          : {}),
+      },
       { status: 500 }
     );
   }
