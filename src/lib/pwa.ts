@@ -205,19 +205,31 @@ export function applyUpdate(): void {
 // ============================================================
 // Cache Management
 // ============================================================
+// `navigator.serviceWorker?.controller` — the FIRST `?.` is the one that
+// matters and was missing.
+//
+// Service workers require a secure context, so `navigator.serviceWorker` is
+// UNDEFINED over plain http on anything but localhost. Reading `.controller`
+// off it then throws "Cannot read properties of undefined (reading
+// 'controller')", which is precisely the error the dashboard was throwing when
+// opened from another device on the LAN at http://192.168.x.x:3000.
+//
+// `controller?.postMessage` only ever guarded the worker being absent, never
+// the API being absent. Anything that runs on a page a developer or a nurse
+// might open over http has to tolerate the whole API missing.
 export function requestCacheStatus(): void {
-  navigator.serviceWorker.controller?.postMessage({ type: 'GET_CACHE_STATUS' });
+  navigator.serviceWorker?.controller?.postMessage({ type: 'GET_CACHE_STATUS' });
 }
 
 export function precacheUrls(urls: string[]): void {
-  navigator.serviceWorker.controller?.postMessage({
+  navigator.serviceWorker?.controller?.postMessage({
     type: 'CACHE_URLS',
     payload: { urls },
   });
 }
 
 export function clearAllCaches(): void {
-  navigator.serviceWorker.controller?.postMessage({ type: 'CLEAR_CACHES' });
+  navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_CACHES' });
 }
 
 // ============================================================

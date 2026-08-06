@@ -94,10 +94,21 @@ export default function OfflineIndicator() {
     setInstalled(isPWAInstalled());
 
     // Register service worker
-    registerServiceWorker().then(() => {
-      // Pre-cache dashboard API routes
-      precacheUrls(DASHBOARD_ROUTES);
-    });
+    // registerServiceWorker() resolves to null where service workers are
+    // unavailable — over plain http on a LAN address, for instance. The .then
+    // still ran, and precacheUrls then read `.controller` off an undefined
+    // API and threw an unhandled rejection on every dashboard load.
+    registerServiceWorker()
+      .then((reg) => {
+        if (!reg) return;
+        // Pre-cache dashboard API routes
+        precacheUrls(DASHBOARD_ROUTES);
+      })
+      .catch((err) => {
+        // Never an unhandled rejection: offline pre-caching is a nicety and
+        // must not surface as a console error on a page that works fine.
+        console.warn('[pwa] service worker unavailable; offline pre-cache skipped', err);
+      });
 
     // Install prompt
     const cleanupInstall = setupInstallPrompt(() => {
