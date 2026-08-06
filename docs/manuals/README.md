@@ -12,6 +12,7 @@ Theatre Operations Intelligence work.
 | [Theatre Billing](./theatre-billing.md) | Finance, procurement, management |
 | [Per-role desks](./desks.md) | Consultants, inventory, vendor accounts, finance |
 | [Administrator guide](./administrator-guide.md) | System administrators and theatre management |
+| [Hybrid deployment](./hybrid-deployment.md) | Running from the cloud and a hospital server together |
 | [Technical reference](./technical-reference.md) | Whoever maintains the software |
 
 ## What these manuals do and do not cover
