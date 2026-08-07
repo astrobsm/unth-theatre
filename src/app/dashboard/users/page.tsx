@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
 import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil } from 'lucide-react';
 
@@ -610,6 +611,7 @@ export default function UsersPage() {
     ]);
     const autoTable = (autoTableMod as any).default || (autoTableMod as any);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
     const today = new Date().toLocaleDateString();
 
     doc.setFontSize(16);

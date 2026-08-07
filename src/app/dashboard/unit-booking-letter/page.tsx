@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import Link from 'next/link';
 import { ArrowLeft, Download, Printer, FileText, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -150,6 +151,7 @@ function formatTimeLabel(timeStr: string) {
 async function buildOrmPdf(unit: SurgicalUnit) {
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 56;
@@ -294,6 +296,7 @@ async function buildOrmPdf(unit: SurgicalUnit) {
 async function buildRosterPdf(dept: RosterDepartment) {
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 56;
@@ -440,6 +443,7 @@ interface TrainingDetails {
 async function buildTrainingPdf(dept: RosterDepartment, details: TrainingDetails) {
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 56;
@@ -607,6 +611,7 @@ interface CustomLetterInput {
 async function buildCustomPdf(input: CustomLetterInput) {
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 56;

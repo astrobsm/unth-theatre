@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useParams, useRouter } from 'next/navigation';
 import {
   FileText,
@@ -80,6 +81,7 @@ export default function SurgeryBOMPage() {
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
+  installPdfTextGuard(doc);
     const pageWidth = doc.internal.pageSize.width;
 
     // Header

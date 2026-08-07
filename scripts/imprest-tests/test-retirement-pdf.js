@@ -65,6 +65,9 @@ function loadTs(rel) {
       const p = path.resolve(path.dirname(file), id);
       return loadTs(path.relative(ROOT, fs.existsSync(p + '.ts') ? p + '.ts' : p));
     }
+    // The app's "@/..." path alias. Without it this harness dies with an
+    // opaque node_modules/@/... error that says nothing about the real cause.
+    if (id.startsWith('@/')) return loadTs(path.join('src', id.slice(2)) + '.ts');
     return require(path.join(ROOT, 'node_modules', id));
   };
   m._compile(js, file);

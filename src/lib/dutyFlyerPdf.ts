@@ -18,6 +18,7 @@
 // ============================================================
 
 import type { DutySheet } from '@/lib/workflowDuties';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 
 const LOGO_URL = '/unth-orm-logo.png';
 
@@ -41,6 +42,7 @@ async function loadImage(url: string): Promise<string | null> {
 export async function generateDutyFlyer(sheet: DutySheet): Promise<Blob> {
   const { default: jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(pdf);
 
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();

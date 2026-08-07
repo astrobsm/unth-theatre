@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -172,6 +173,7 @@ export default function SurgicalCatalogPage() {
       ]);
       const autoTable = (autoTableMod as any).default || (autoTableMod as any);
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
       const today = new Date().toLocaleString();
 
       doc.setFontSize(16);

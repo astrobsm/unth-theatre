@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import jsPDF from 'jspdf';
 
 export const runtime = 'nodejs';
@@ -6,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 function buildPdf(): ArrayBuffer {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  installPdfTextGuard(doc);
   const pageW = 210;
   const margin = 18;
   const innerW = pageW - margin * 2;

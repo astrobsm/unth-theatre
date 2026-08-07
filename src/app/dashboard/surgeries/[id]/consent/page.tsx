@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useParams, useRouter } from 'next/navigation';
 // jsPDF (~400 KB) loads only when a consent PDF is actually produced.
 import type jsPDF from 'jspdf';
@@ -188,6 +189,7 @@ export default function SurgeryConsentPage() {
   async function buildPdf(): Promise<jsPDF> {
     const { default: JsPDF } = await import('jspdf');
     const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+  installPdfTextGuard(doc);
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const margin = 14;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useRouter } from 'next/navigation';
 import { 
   Package, 
@@ -159,6 +160,7 @@ export default function TheatreSetupPage() {
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
+  installPdfTextGuard(doc);
     const pageWidth = doc.internal.pageSize.width;
 
     // Header
@@ -337,6 +339,7 @@ export default function TheatreSetupPage() {
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
+  installPdfTextGuard(doc);
     const pageWidth = doc.internal.pageSize.width;
 
     // Header

@@ -10,6 +10,7 @@
 // ./pdfGenerator.ts. The type-only imports below are erased at compile time and
 // cost nothing.
 import type jsPDF from "jspdf";
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import type { UserOptions } from "jspdf-autotable";
 import { isNarcotic } from "./narcotics";
 
@@ -113,6 +114,7 @@ export async function buildRegisterPdf(
 ) {
   const { JsPDF } = await loadPdfLibs();
   const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  installPdfTextGuard(doc);
   header(
     doc,
     `Prescription Register: ${fmt(fromIso)} – ${fmt(toIso)}`,
@@ -239,6 +241,7 @@ export async function buildRegisterPdf(
 export async function buildPatientPrescriptionPdf(rx: ReportPrescription) {
   const { JsPDF } = await loadPdfLibs();
   const doc = new JsPDF({ unit: "mm", format: "a4" });
+  installPdfTextGuard(doc);
   header(
     doc,
     `Prescription — ${rx.patientName}${rx.folderNumber ? " (" + rx.folderNumber + ")" : ""}`,

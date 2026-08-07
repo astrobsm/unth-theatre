@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { Download, Printer, MapPin, Receipt, Pill, Stethoscope, ListChecks, Phone, Loader2 } from 'lucide-react';
 // jsPDF + autoTable (~400 KB) load only when a guide is actually generated.
 import type jsPDF from 'jspdf';
@@ -67,6 +68,7 @@ export default function PatientPaymentGuidePage() {
       ]);
       const autoTable = (d: jsPDF, o: UserOptions) => autoTableFn(d, o);
       const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+  installPdfTextGuard(doc);
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
 

@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { Download, Share2, MessageCircle, Copy, Printer, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -59,6 +60,7 @@ const WHATSAPP_TEXT = [
 async function buildPdf(): Promise<{ doc: any; blob: Blob; filename: string }> {
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 56;

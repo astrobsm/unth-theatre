@@ -1,3 +1,4 @@
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 // jsPDF and autoTable are loaded dynamically to keep them out of the initial bundle
 
 /**
@@ -81,6 +82,7 @@ export async function generateWeeklyPDF(data: WeeklySummary) {
   const jsPDF = await getJsPDF();
   const autoTable = await getAutoTable();
   const doc = new jsPDF();
+  installPdfTextGuard(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header
@@ -187,6 +189,7 @@ export async function generateMonthlyPDF(data: MonthlySummary) {
   const jsPDF = await getJsPDF();
   const autoTable = await getAutoTable();
   const doc = new jsPDF();
+  installPdfTextGuard(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header
@@ -464,6 +467,7 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
   const jsPDF = await getJsPDF();
   const autoTable = await getAutoTable();
   const doc = new jsPDF();
+  installPdfTextGuard(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const marginX = 14;

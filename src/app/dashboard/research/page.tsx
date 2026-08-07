@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import {
@@ -259,6 +260,7 @@ export default function ResearchPage() {
     const { default: jsPDF } = await import('jspdf');
     const autoTable = (await import('jspdf-autotable')).default;
     const doc = new jsPDF();
+  installPdfTextGuard(doc);
     doc.setFontSize(16);
     doc.text('Theatre Research & Analytics Report', 14, 18);
     doc.setFontSize(10);

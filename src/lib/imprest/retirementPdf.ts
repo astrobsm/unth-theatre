@@ -18,6 +18,7 @@
 // ============================================================
 
 import { formatNaira } from './money';
+import { installPdfTextGuard } from '@/lib/pdfSafeText';
 
 export interface RetirementPdfInput {
   retirementNumber: string;
@@ -113,6 +114,7 @@ export async function generateRetirementForm(
   const autoTable = (autoTableMod as unknown as { default: (doc: unknown, opts: unknown) => void }).default;
 
   const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  installPdfTextGuard(pdf);
   const pageWidth = pdf.internal.pageSize.getWidth();
   const margin = 40;
   let y = margin;
