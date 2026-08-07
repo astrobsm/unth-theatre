@@ -92,13 +92,22 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate rates and averages
+    const round2 = (n: number) => Math.round(n * 100) / 100;
     Object.values(unitPerformance).forEach((perf: any) => {
+      // Numbers, not strings. `.toFixed()` returns a STRING, and the PDF
+      // builder calls `.toFixed(1)` on these — which threw
+      // "e.completionRate.toFixed is not a function" and killed the report.
+      // TypeScript could not catch it: the page reads the response as untyped
+      // JSON, so the declared `number` on the PDF side was never checked
+      // against what this route actually sent.
+      //
+      // Formatting is the presentation layer's job; an API sends values.
       perf.completionRate =
-        perf.booked > 0 ? ((perf.completed / perf.booked) * 100).toFixed(2) : 0;
+        perf.booked > 0 ? round2((perf.completed / perf.booked) * 100) : 0;
       perf.cancellationRate =
-        perf.booked > 0 ? ((perf.cancelled / perf.booked) * 100).toFixed(2) : 0;
+        perf.booked > 0 ? round2((perf.cancelled / perf.booked) * 100) : 0;
       perf.avgCost =
-        perf.completed > 0 ? (perf.totalCost / perf.completed).toFixed(2) : 0;
+        perf.completed > 0 ? round2(perf.totalCost / perf.completed) : 0;
     });
 
     // Week-by-week breakdown

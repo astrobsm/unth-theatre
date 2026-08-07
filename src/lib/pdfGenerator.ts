@@ -1,4 +1,23 @@
 // jsPDF and autoTable are loaded dynamically to keep them out of the initial bundle
+
+/**
+ * Format a number that arrived from JSON.
+ *
+ * The monthly analytics endpoint used to send `.toFixed(2)` — a STRING — and
+ * this file called `.toFixed(1)` on it, which threw
+ * "e.completionRate.toFixed is not a function" and killed the whole report.
+ * The endpoint now sends numbers, and this coerces anyway: a report is worth
+ * more than a type assumption, and a PDF should not die over a percentage.
+ */
+function fmt(value: unknown, dp = 1): string {
+  // null and undefined are MISSING, not zero. Number(null) is 0, which would
+  // print "0.0%" for a figure nobody recorded — a report that invents a number
+  // is worse than one that admits it has none.
+  if (value === null || value === undefined || value === '') return '—';
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n.toFixed(dp) : '—';
+}
+
 let _jsPDF: typeof import('jspdf').default | null = null;
 let _autoTable: typeof import('jspdf-autotable').default | null = null;
 
@@ -95,8 +114,8 @@ export async function generateWeeklyPDF(data: WeeklySummary) {
     unit.totalBooked.toString(),
     unit.totalCompleted.toString(),
     unit.totalCancelled.toString(),
-    `${unit.completionRate.toFixed(1)}%`,
-    `${unit.cancellationRate.toFixed(1)}%`,
+    `${fmt(unit.completionRate, 1)}%`,
+    `${fmt(unit.cancellationRate, 1)}%`,
   ]);
 
   autoTable(doc, {
@@ -199,7 +218,7 @@ export async function generateMonthlyPDF(data: MonthlySummary) {
     unit.booked.toString(),
     unit.completed.toString(),
     unit.cancelled.toString(),
-    `${unit.completionRate.toFixed(1)}%`,
+    `${fmt(unit.completionRate, 1)}%`,
     `₦${unit.totalCost.toLocaleString()}`,
   ]);
 

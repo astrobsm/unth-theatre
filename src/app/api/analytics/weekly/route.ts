@@ -68,10 +68,12 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate completion rates
+    // A NUMBER, not a string — .toFixed() returns a string and the PDF builder
+    // calls .toFixed(1) on this. Same fault as the monthly report.
     Object.values(unitSummary).forEach((summary: any) => {
       summary.completionRate =
         summary.booked > 0
-          ? ((summary.completed / summary.booked) * 100).toFixed(2)
+          ? Math.round((summary.completed / summary.booked) * 100 * 100) / 100
           : 0;
     });
 
