@@ -22,6 +22,9 @@ import { installPdfTextGuard } from '@/lib/pdfSafeText';
 
 const LOGO_URL = '/unth-orm-logo.png';
 
+/** jsPDF is loaded dynamically; this borrows its real instance type. */
+type JsPdfLike = InstanceType<typeof import('jspdf').default>;
+
 /** Load an image as a data URL. Returns null rather than failing the flyer. */
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -39,15 +42,17 @@ async function loadImage(url: string): Promise<string | null> {
   }
 }
 
-export async function generateDutyFlyer(sheet: DutySheet): Promise<Blob> {
-  const { default: jsPDF } = await import('jspdf');
-  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-  installPdfTextGuard(pdf);
-
+/**
+ * Draw one sheet onto the CURRENT page of `pdf`.
+ *
+ * Split out from generateDutyFlyer so the whole set can be produced as a single
+ * document: twenty-five separate downloads is something browsers block, and a
+ * single file is what actually gets walked to a printer.
+ */
+function drawSheet(pdf: JsPdfLike, sheet: DutySheet, logo: string | null): void {
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
   const M = 40;
-  const logo = await loadImage(LOGO_URL);
 
   // ---- Watermark ---------------------------------------------------------
   // Drawn FIRST so everything else sits on top of it, and kept very pale: a
@@ -146,6 +151,11 @@ export async function generateDutyFlyer(sheet: DutySheet): Promise<Blob> {
     y += Math.min(why.length, maxWhyLines) * (metaSize + 2) + gap;
   });
 
+  drawFooter(pdf, sheet, W, H, M);
+}
+
+function drawFooter(pdf: JsPdfLike, sheet: DutySheet, W: number, H: number, M: number): void {
+
   // ---- Footer ------------------------------------------------------------
   const footY = H - 78;
   pdf.setFillColor(240, 253, 244);
@@ -167,6 +177,34 @@ export async function generateDutyFlyer(sheet: DutySheet): Promise<Blob> {
     H - 26
   );
   pdf.text('UNTH ORM  ·  managed by NEXORA Innovations', W - M, H - 26, { align: 'right' });
+}
+
+/** One group, one page. */
+export async function generateDutyFlyer(sheet: DutySheet): Promise<Blob> {
+  const { default: jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' }) as unknown as JsPdfLike;
+  installPdfTextGuard(pdf);
+  drawSheet(pdf, sheet, await loadImage(LOGO_URL));
+  return pdf.output('blob');
+}
+
+/**
+ * Every group in one document, one page each — what an administrator sends to
+ * the printer once and then distributes.
+ */
+export async function generateAllDutyFlyers(sheets: DutySheet[]): Promise<Blob> {
+  const { default: jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' }) as unknown as JsPdfLike;
+  installPdfTextGuard(pdf);
+
+  // Loaded once rather than per page: the same image embedded twenty-five
+  // times over would be twenty-five copies in the file.
+  const logo = await loadImage(LOGO_URL);
+
+  sheets.forEach((sheet, i) => {
+    if (i > 0) pdf.addPage();
+    drawSheet(pdf, sheet, logo);
+  });
 
   return pdf.output('blob');
 }

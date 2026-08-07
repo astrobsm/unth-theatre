@@ -71,7 +71,7 @@ export const MODULES: AppModule[] = [
   { id: 'preop-reviews', label: 'Pre-op Reviews', paths: ['/dashboard/preop-reviews'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'], category: 'Pre-Op' },
   { id: 'prescription-approvals', label: 'Rx Approvals', paths: ['/dashboard/prescription-approvals'], defaultRoles: ['CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
   { id: 'prescriptions', label: 'Pharmacy', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
-  { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
+  { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER'], category: 'Pre-Op' },
   { id: 'anesthesia-setup', label: 'Anesthesia Setup', paths: ['/dashboard/anesthesia-setup'], defaultRoles: ['ANAESTHETIC_TECHNICIAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
 
   // Day-of-surgery logistics
@@ -92,7 +92,11 @@ export const MODULES: AppModule[] = [
   { id: 'scrub-management', label: 'Scrub Management', paths: ['/dashboard/scrub-management'], defaultRoles: ['SCRUB_CARE_PROVIDER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Logistics' },
 
   // Intra-operative
-  { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
+  // CLEANER belongs here: /api/cleaning/start REQUIRES role CLEANER, and its
+  // only UI is on this page. Without the module the one feature built purely
+  // for cleaners was unreachable by cleaners — which is why between-case
+  // cleaning times were never being recorded.
+  { id: 'theatre-reception', label: 'Theatre Reception', paths: ['/dashboard/theatre-reception'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'CLEANER'], category: 'Intra-Op' },
   { id: 'holding-area', label: 'Holding Area', paths: ['/dashboard/holding-area'], defaultRoles: ['SCRUB_NURSE', 'PORTER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'], category: 'Intra-Op' },
   { id: 'ward-entries', label: 'Ward Escort Log', paths: ['/dashboard/holding-area/ward-entries'], defaultRoles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'], category: 'Intra-Op' },
   { id: 'checklists', label: 'WHO Checklists', paths: ['/dashboard/checklists'], defaultRoles: ['SCRUB_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Intra-Op' },
@@ -120,7 +124,7 @@ export const MODULES: AppModule[] = [
   { id: 'plumbing-water-supply', label: 'Plumbing & Water', paths: ['/dashboard/plumbing-water-supply'], defaultRoles: ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR'], category: 'Facility' },
   { id: 'power-house', label: 'Power House', paths: ['/dashboard/power-house'], defaultRoles: ['POWER_PLANT_OPERATOR', 'WORKS_SUPERVISOR'], category: 'Facility' },
   { id: 'cssd', label: 'CSSD', paths: ['/dashboard/cssd'], defaultRoles: ['CSSD_STAFF', 'CSSD_SUPERVISOR'], category: 'Facility' },
-  { id: 'laundry', label: 'Laundry', paths: ['/dashboard/laundry', '/dashboard/laundry-supervisor'], defaultRoles: ['LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR'], category: 'Facility' },
+  { id: 'laundry', label: 'Laundry', paths: ['/dashboard/laundry', '/dashboard/laundry-supervisor'], defaultRoles: ['LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR', 'SCRUB_CARE_PROVIDER'], category: 'Facility' },
   { id: 'oxygen-control', label: 'Oxygen Control', paths: ['/dashboard/oxygen-control', '/dashboard/oxygen-supervisor'], defaultRoles: ['OXYGEN_UNIT_SUPERVISOR'], category: 'Facility' },
   { id: 'works-supervisor', label: 'Works Supervisor', paths: ['/dashboard/works-supervisor'], defaultRoles: ['WORKS_SUPERVISOR', 'PLUMBER', 'POWER_PLANT_OPERATOR'], category: 'Facility' },
 
@@ -128,7 +132,9 @@ export const MODULES: AppModule[] = [
   { id: 'alerts', label: 'Alerts', paths: ['/dashboard/alerts'], defaultRoles: ['*'], category: 'Alerts' },
   { id: 'radio', label: 'Theatre Radio', paths: ['/dashboard/radio'], defaultRoles: ['*'], category: 'Alerts' },
   { id: 'walkie-talkies', label: 'Walkie-Talkie Radios', paths: ['/dashboard/walkie-talkies'], defaultRoles: ['*'], category: 'Alerts' },
-  { id: 'fault-alerts', label: 'Fault Alerts', paths: ['/dashboard/fault-alerts'], defaultRoles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR', 'PLUMBER'], category: 'Alerts' },
+  // ANAESTHETIC_TECHNICIAN reports here as well as reads: they are the people
+  // who find faulty anaesthetic equipment, and previously had no way to say so.
+  { id: 'fault-alerts', label: 'Fault Alerts', paths: ['/dashboard/fault-alerts'], defaultRoles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR', 'PLUMBER', 'ANAESTHETIC_TECHNICIAN'], category: 'Alerts' },
   { id: 'emergency-alerts', label: 'Emergency Alerts', paths: ['/dashboard/emergency-alerts'], defaultRoles: [...CLINICAL_CORE], category: 'Alerts' },
   { id: 'mortality', label: 'Mortality Registry', paths: ['/dashboard/mortality'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Alerts' },
   { id: 'anonymous-tips', label: 'Anonymous Tips (Submit)', paths: ['/dashboard/anonymous-tips'], defaultRoles: ['*'], category: 'Alerts' },

@@ -70,7 +70,7 @@ export const DUTY_SHEETS: DutySheet[] = [
         task: 'Record "Time-out" when the WHO checklist is completed',
         when: 'Immediately after the time-out',
         why: 'It is the evidence the checklist happened. An unrecorded time-out cannot be shown to an accreditation visit.',
-        where: 'Record Milestones, or WHO Checklists',
+        where: 'Theatre Operations, or WHO Checklists',
       },
       {
         task: 'Record "Knife to skin"',
@@ -261,7 +261,7 @@ export const DUTY_SHEETS: DutySheet[] = [
         task: 'Complete the PACU assessment and Aldrete score',
         when: 'During recovery',
         why: 'It is the record that the patient was fit to leave, and the discharge decision rests on it.',
-        where: 'PACU',
+        where: 'PACU (Recovery)',
         critical: true,
       },
       {
@@ -338,7 +338,7 @@ export const DUTY_SHEETS: DutySheet[] = [
         task: 'Mark cleaning started and completed',
         when: 'At each point',
         why: 'This is the turnover time. It is the difference between "the theatre was slow" and "the theatre waited twenty minutes for a cleaner".',
-        where: 'Theatre Reception & Workflow',
+        where: 'Theatre Reception',
         critical: true,
       },
       {
@@ -354,7 +354,12 @@ export const DUTY_SHEETS: DutySheet[] = [
   {
     id: 'ward-nurse',
     title: 'Ward Nurse',
-    roles: ['NURSE', 'WARD_NURSE'],
+    // ORM has no ward-nurse role — ward staff work from the call-up printout
+    // rather than from an account. The sheet still matters, because the hour
+    // before theatre is theirs, so it is printed FOR them rather than matched
+    // to a login. (An earlier version listed 'NURSE' and 'WARD_NURSE' here;
+    // neither exists in UserRole, so it silently matched nobody.)
+    roles: [],
     headline: 'The hour before theatre is yours. Almost every late start begins on the ward.',
     duties: [
       {
@@ -381,6 +386,623 @@ export const DUTY_SHEETS: DutySheet[] = [
       },
     ],
     remember: 'When the alert arrives, the clock has already started.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'holding-area',
+    title: 'Holding Area Nurse',
+    // The holding area is manned by whoever is rostered to it — in ORM that is
+    // a scrub nurse. Kept as its own sheet rather than folded into the scrub
+    // sheet because the duties are genuinely different work.
+    roles: ['SCRUB_NURSE'],
+    headline:
+      'You are the last check before the theatre door, and the last person who can stop a case going wrong cheaply.',
+    duties: [
+      {
+        task: 'Record the patient as arrived in the holding area',
+        when: 'On arrival',
+        why: 'It closes the transport leg and tells the theatre the patient is in the building. Without it, time spent waiting here is counted against the theatre.',
+        where: 'Holding Area',
+        critical: true,
+      },
+      {
+        task: 'Verify identity, side, site, consent and fasting',
+        when: 'Before the patient goes through',
+        why: 'This is the last point at which a wrong-site or unconsented case can be stopped without it becoming an incident.',
+        where: 'Holding Area',
+        critical: true,
+      },
+      {
+        task: 'Transcribe the porter times and the ward nurse signature',
+        when: 'From the call-up printout, on arrival',
+        why: 'Those handwritten times are the only record of what happened on the ward. Untranscribed, they are lost the moment the paper is.',
+        where: 'Holding Area',
+        critical: true,
+      },
+      {
+        task: 'Say immediately if a patient is not fit to proceed',
+        when: 'As soon as you know',
+        why: 'A case stopped here costs one slot. The same case stopped in the room costs the rest of the list.',
+      },
+    ],
+    remember: 'Nothing goes through this door unverified. You are the last check there is.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'house-officer',
+    title: 'House Officer',
+    roles: ['HOUSE_OFFICER'],
+    headline:
+      'Most of what turns a patient back at the theatre door is paperwork that was yours to finish.',
+    duties: [
+      {
+        task: 'Complete consent before the day of surgery',
+        when: 'At least the day before',
+        why: 'Unsigned consent is the commonest reason a patient is sent back from the holding area, and it cannot be fixed at 08:00.',
+        critical: true,
+      },
+      {
+        task: 'Enter the haemoglobin with the time the sample was taken',
+        when: 'When the result comes back',
+        why: 'The sample must be within 48 hours of surgery. The booking form enforces it, so a missing or stale value blocks the case.',
+        where: 'Surgeries → the booking',
+        critical: true,
+      },
+      {
+        task: 'Record the bleeding-risk and nutrition assessments',
+        when: 'At booking',
+        why: 'Both are compulsory before a case can proceed, and your consultant sees exactly which of their cases are still missing them.',
+        where: 'Surgeries',
+      },
+      {
+        task: 'Raise the blood request in good time',
+        when: 'As soon as the case is booked',
+        why: 'Cross-matching takes hours the morning of surgery does not have.',
+        where: 'Blood Bank',
+      },
+      {
+        task: 'Chase outstanding investigations the day before, not on the day',
+        when: 'The evening before the list',
+        why: 'A result found missing at 08:00 is a lost slot; found the night before it is a phone call.',
+        where: 'Surgeries → the booking',
+      },
+    ],
+    remember: 'Everything you finish the day before is a case that starts on time.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'anaesthetic-technician',
+    title: 'Anaesthetic Technician',
+    roles: ['ANAESTHETIC_TECHNICIAN'],
+    headline:
+      'A machine that was never checked is found out at induction, with the patient already asleep.',
+    duties: [
+      {
+        task: 'Complete the anaesthesia machine check',
+        when: 'Before the first case of the day',
+        why: 'It is the record that the machine was safe. An unchecked machine cannot be defended after an incident.',
+        where: 'Anesthesia Setup',
+        critical: true,
+      },
+      {
+        task: 'Confirm drugs and airway equipment for each case',
+        when: 'Before each case',
+        why: 'The anaesthetist assumes it is in the room. Finding otherwise at induction stops the list with a patient on the table.',
+        where: 'Anesthesia Setup',
+        critical: true,
+      },
+      {
+        task: 'Report faulty equipment the moment you find it',
+        when: 'Immediately',
+        why: 'A reported fault reaches biomedical engineering and the theatre board at once. An unreported one is discovered by the next team.',
+        where: 'Fault Alerts',
+        critical: true,
+      },
+      {
+        task: 'Record the reason for any equipment-related delay',
+        when: 'Before 45 minutes',
+        why: 'Equipment is a delay category of its own. Recorded, it accumulates into the case for replacement; unrecorded, the theatre carries the blame.',
+        where: 'Theatre Operations → record a delay',
+      },
+      {
+        task: 'Check in for your assigned cases',
+        when: 'Before the list',
+        why: 'You are on the team roster, and the coordinator can only see who has answered.',
+        where: 'Theatre Operations → Team Check-in',
+      },
+    ],
+    remember: 'The machine check is the only proof the machine was safe.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'pharmacy',
+    title: 'Pharmacy',
+    roles: ['PHARMACIST'],
+    headline: 'A pack that is not ready is a case that does not start.',
+    duties: [
+      {
+        task: 'Dispense against the code the patient presents',
+        when: 'On presentation',
+        why: 'The code ties the drugs to the case. Dispensing without it leaves the case unbilled and the stock unaccounted for.',
+        where: 'Pharmacy',
+        critical: true,
+      },
+      {
+        task: 'Flag anything out of stock immediately',
+        when: 'As soon as you know',
+        why: 'A substitution decided in theatre wastes the list. Flagged early, the anaesthetist simply prescribes an alternative.',
+        critical: true,
+      },
+      {
+        task: 'Keep the controlled drug register current',
+        when: 'At every issue',
+        why: 'It is a statutory record, and the register report is generated from exactly what you enter.',
+        where: 'Pharmacy',
+        critical: true,
+      },
+      {
+        task: 'Record returns of unused drugs',
+        when: 'After the case',
+        why: 'Drugs never returned stay charged to the patient and outstanding against the case.',
+      },
+    ],
+    remember: 'No pack without a code, and no issue without a register entry.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'blood-bank',
+    title: 'Blood Bank',
+    roles: ['BLOODBANK_STAFF'],
+    headline: 'The theatre plans around your answer. Silence reads as blood being ready.',
+    duties: [
+      {
+        task: 'Acknowledge every blood request',
+        when: 'On receipt',
+        why: 'Until you do, the surgeon cannot tell an unread request from a fulfilled one — and they look identical from the theatre.',
+        where: 'Blood Bank',
+        critical: true,
+      },
+      {
+        task: 'Record cross-match completion',
+        when: 'When it is done',
+        why: 'The readiness board reads this. A case is not ready until the units are recorded as ready.',
+        where: 'Blood Bank',
+        critical: true,
+      },
+      {
+        task: 'Say so immediately when units are unavailable',
+        when: 'As soon as you know',
+        why: 'A case that discovers this at knife-to-skin is an emergency of its own making.',
+        critical: true,
+      },
+      {
+        task: 'Answer emergency call-outs',
+        when: 'When an emergency is booked',
+        why: 'The response board shows you as awaited until you reply.',
+        where: 'Theatre Operations → Team Check-in',
+      },
+    ],
+    remember: 'An unanswered request is read as blood ready. Say no early if the answer is no.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'laboratory',
+    title: 'Laboratory',
+    roles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST'],
+    headline: 'A result nobody can see has not been delivered.',
+    duties: [
+      {
+        task: 'Enter results into the system, not only onto paper',
+        when: 'As soon as they are available',
+        why: 'The booking form and the readiness checks read the entered value. A paper result, however correct, cannot unblock a case.',
+        where: 'Emergency Lab Workup',
+        critical: true,
+      },
+      {
+        task: 'Treat an emergency workup as an emergency',
+        when: 'On receipt',
+        why: 'Emergency requests are timed from the moment they were raised, and the delay is attributed to where it actually occurred.',
+        where: 'Emergency Lab Workup',
+        critical: true,
+      },
+      {
+        task: 'Flag a sample you cannot process',
+        when: 'Immediately',
+        why: 'A theatre waiting on a result that will never arrive is the most avoidable delay there is.',
+        critical: true,
+      },
+    ],
+    remember: 'Enter it, or as far as the theatre is concerned it does not exist.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'cssd',
+    title: 'CSSD',
+    roles: ['CSSD_STAFF', 'CSSD_SUPERVISOR'],
+    headline: 'Instruments are among the commonest causes of a late start anywhere in this hospital.',
+    duties: [
+      {
+        task: 'Record every sterilisation cycle',
+        when: 'At each cycle',
+        why: 'It is the evidence a set was processed, and it is the first thing an accreditation visit asks to see.',
+        where: 'CSSD',
+        critical: true,
+      },
+      {
+        task: 'Update set availability as sets go out and come back',
+        when: 'At issue and at return',
+        why: 'The list is planned from what the system says is available. A set recorded as available but sitting in the washer stops a case.',
+        where: 'CSSD',
+        critical: true,
+      },
+      {
+        task: 'Confirm CSSD readiness for the day list',
+        when: 'Before the list starts',
+        why: 'It tells the theatre the sets they need exist and are sterile — before the patient has been sent for.',
+        where: 'CSSD',
+        critical: true,
+      },
+      {
+        task: 'Report a set that fails or comes back incomplete',
+        when: 'Immediately',
+        why: 'A missing instrument found on the trolley is a recorded delay. Found here, it is a swap nobody notices.',
+      },
+    ],
+    remember: 'The list is planned from what you record as available. Keep it true.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'oxygen',
+    title: 'Oxygen Unit',
+    roles: ['OXYGEN_UNIT_SUPERVISOR'],
+    headline: 'Nobody notices oxygen until it is not there, and by then a patient is on the table.',
+    duties: [
+      {
+        task: 'Record cylinder and plant levels',
+        when: 'Daily',
+        why: 'The readiness board reads this. An unrecorded level is treated as unknown, and a theatre cannot plan around unknown.',
+        where: 'Oxygen Control',
+        critical: true,
+      },
+      {
+        task: 'Raise the alert while a level is falling, not once it is critical',
+        when: 'As soon as it trends low',
+        why: 'Replacement takes hours. An alert raised at critical is already too late to act on.',
+        where: 'Oxygen Control',
+        critical: true,
+      },
+      {
+        task: 'Confirm supply to each theatre before the list',
+        when: 'Each morning',
+        why: 'A theatre with confirmed supply is a theatre that can start.',
+        where: 'Oxygen Control',
+      },
+    ],
+    remember: 'Record the level every day. An unrecorded level is an unknown one.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'power-house',
+    title: 'Power House',
+    roles: ['POWER_PLANT_OPERATOR'],
+    headline: 'A theatre will not start a case it is not sure it can finish.',
+    duties: [
+      {
+        task: 'Record power status and the source in use',
+        when: 'At each changeover, and each shift',
+        why: 'The theatre readiness board reads this before a list is released.',
+        where: 'Power House',
+        critical: true,
+      },
+      {
+        task: 'Record fuel level and consumption',
+        when: 'Daily',
+        why: 'Fuel that runs out mid-case is a preventable emergency, and recorded consumption is what justifies the next order.',
+        where: 'Power House',
+        critical: true,
+      },
+      {
+        task: 'Confirm generator readiness before each list',
+        when: 'Each morning',
+        why: 'A generator nobody has checked is a generator nobody can rely on.',
+        where: 'Power House',
+        critical: true,
+      },
+      {
+        task: 'Log maintenance as it is done',
+        when: 'At each service',
+        why: 'It is the record that the plant was maintained, and it schedules the next service.',
+        where: 'Power House',
+      },
+    ],
+    remember: 'Theatres release their lists from what you record. Record it before the list, not after.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'water-plumbing',
+    title: 'Water Supply & Plumbing',
+    roles: ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR'],
+    headline: 'No water means no scrubbing, and no scrubbing means no operating.',
+    duties: [
+      {
+        task: 'Record water availability for each theatre',
+        when: 'Daily, before the list',
+        why: 'It is part of theatre readiness. A theatre without confirmed water is not ready, however clean the room is.',
+        where: 'Plumbing & Water',
+        critical: true,
+      },
+      {
+        task: 'Log every reported fault and act on it',
+        when: 'On report',
+        why: 'One scrub sink out of action takes a whole theatre with it. The log is how it gets prioritised over everything else.',
+        where: 'Plumbing & Water',
+        critical: true,
+      },
+      {
+        task: 'Confirm when a fault has been cleared',
+        when: 'On completion',
+        why: 'Until it is confirmed cleared, the theatre stays marked unready and the slot stays unused.',
+        critical: true,
+      },
+    ],
+    remember: 'Confirm the fix, not only the fault. An uncleared fault keeps a theatre shut.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'engineering',
+    title: 'Biomedical Engineering & Works',
+    roles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR'],
+    headline: 'Equipment that is broken and unrecorded gets discovered by a surgeon, mid-case.',
+    duties: [
+      {
+        task: 'Acknowledge fault reports',
+        when: 'On receipt',
+        why: 'The person who reported it cannot tell an unseen report from an unfixable one. Acknowledging closes that gap.',
+        where: 'Fault Alerts',
+        critical: true,
+      },
+      {
+        task: 'Update equipment status whenever it changes',
+        when: 'At each change',
+        why: 'The theatre plans from equipment status. A machine marked operational while it sits in your workshop stops a case.',
+        where: 'Fault Alerts',
+        critical: true,
+      },
+      {
+        task: 'Record preventive maintenance',
+        when: 'At each service',
+        why: 'It is the record that the device was maintained, and it schedules the next one.',
+        where: 'Fault Alerts',
+      },
+      {
+        task: 'Answer emergency call-outs for theatre equipment',
+        when: 'When called',
+        why: 'A theatre stopped by equipment is measured from the moment it stopped, not from when you were told.',
+        where: 'Theatre Operations → Team Check-in',
+      },
+    ],
+    remember: 'Status is what the theatre trusts. Change it the moment reality changes.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'laundry-scrubs',
+    title: 'Laundry & Scrub Care',
+    roles: ['LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR', 'SCRUB_CARE_PROVIDER'],
+    headline: 'A theatre without clean linen is a theatre that cannot open.',
+    duties: [
+      {
+        task: 'Record linen issued and returned, per theatre',
+        when: 'At each exchange',
+        why: 'It is how a shortage becomes visible before it stops a list rather than after.',
+        where: 'Laundry',
+        critical: true,
+      },
+      {
+        task: 'Record scrub issue and return against the staff member',
+        when: 'At issue and at return',
+        why: 'Unreturned scrubs are the commonest reason there are none left for the afternoon and night lists.',
+        where: 'Scrub Management',
+        critical: true,
+      },
+      {
+        task: 'Flag a shortage before the next list, not during it',
+        when: 'As soon as stock runs low',
+        why: 'Linen takes a full cycle to turn round, so a shortage flagged on the day cannot be solved on the day.',
+      },
+    ],
+    remember: 'Record the return, not only the issue. What is missing is what matters.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'procurement',
+    title: 'Procurement',
+    roles: ['PROCUREMENT_OFFICER'],
+    headline: 'A stock-out on the day is a cancelled case, and it was visible weeks earlier.',
+    duties: [
+      {
+        task: 'Work the reorder list every week',
+        when: 'Weekly',
+        why: 'The Inventory Desk shows exactly what is at or below its reorder level. Nothing on that list should ever be a surprise.',
+        where: 'Inventory Desk',
+        critical: true,
+      },
+      {
+        task: 'Keep vendor records and bank details current',
+        when: 'On any change',
+        why: 'Settlement pays what the record says. A stale account number is a payment that silently fails.',
+        where: 'Vendor Accounts',
+        critical: true,
+      },
+      {
+        task: 'Record what was received against what was ordered',
+        when: 'On delivery',
+        why: 'A short delivery that is not recorded becomes stock the system believes exists — until a case needs it.',
+        where: 'Theatre Supply Unit',
+        critical: true,
+      },
+      {
+        task: 'Review consignment stock held',
+        when: 'Monthly',
+        why: 'Consignment stock belongs to the vendor until it is used. Expired consignment is a commercial conversation, and it starts with knowing.',
+        where: 'Vendor Accounts',
+      },
+    ],
+    remember: 'Everything on the reorder list was predictable. Nothing on it should reach zero.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'catering',
+    title: 'Theatre Cafeteria',
+    roles: ['THEATRE_CAFETERIA_MANAGER'],
+    headline: 'A team that has not eaten is a team still working, badly, past its limit.',
+    duties: [
+      {
+        task: 'Read the day list and the duty roster',
+        when: 'Each morning',
+        why: 'Numbers come from who is actually rostered, not from an average day.',
+        where: 'Duty Roster',
+      },
+      {
+        task: 'Record meals provided per theatre and shift',
+        when: 'At each service',
+        why: 'It is the record behind both the cost and the next order. Nothing else in the system knows a meal was served.',
+        where: 'Theatre Meals',
+        critical: true,
+      },
+      {
+        task: 'Account for the night and call teams',
+        when: 'Daily',
+        why: 'The call team is the one most often missed and the one least able to leave the floor to find food.',
+        where: 'Duty Roster',
+      },
+    ],
+    remember: 'Cook for the roster, not for the average day.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'theatre-management',
+    title: 'Theatre Manager & Chairman',
+    roles: ['THEATRE_MANAGER', 'THEATRE_CHAIRMAN'],
+    headline:
+      'Your job here is to make sure the record is being kept, because everything else you are shown is built out of it.',
+    duties: [
+      {
+        task: 'Check record completeness before reading any figure',
+        when: 'Weekly',
+        why: 'A dashboard built on unrecorded milestones is not conservative, it is wrong. That is why completeness is shown as a headline figure.',
+        where: 'Theatre Performance',
+        critical: true,
+      },
+      {
+        task: 'Clear the unexplained-delay queue',
+        when: 'Weekly',
+        why: 'A flag nobody ever reviews teaches the whole theatre that flags do not matter.',
+        where: 'Theatre QA Review',
+        critical: true,
+      },
+      {
+        task: 'Act on the bottleneck report, not on individuals',
+        when: 'Monthly',
+        why: 'The reports break down by theatre, department and cause, and deliberately never by person. Fix the cause.',
+        where: 'Theatre Performance',
+      },
+      {
+        task: 'Close cases that finished but were never recorded as finished',
+        when: 'Weekly',
+        why: 'Cases left open accumulate on the emergency board and on every live list until somebody closes them.',
+        critical: true,
+      },
+    ],
+    remember: 'If completeness is low, nothing else on the dashboard means anything.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'executive',
+    title: 'CMD, CMAC & DC-MAC',
+    roles: ['CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'],
+    headline: 'The figures are only ever as honest as the recording underneath them.',
+    duties: [
+      {
+        task: 'Read record completeness first, before any performance figure',
+        when: 'At every review',
+        why: 'A theatre that records nothing shows no delays at all. Completeness tells you whether the rest is worth reading.',
+        where: 'Theatre Performance',
+        critical: true,
+      },
+      {
+        task: 'Sit the quality assurance review',
+        when: 'As scheduled',
+        why: 'Only a person can judge whether a delay was avoidable, and only with written reasoning. The software will never make that call.',
+        where: 'Theatre QA Review',
+        critical: true,
+      },
+      {
+        task: 'Use the department breakdown to direct resources',
+        when: 'Monthly',
+        why: 'Delays are attributed to causes and departments, never to individuals. That is precisely what makes the data safe to act on.',
+        where: 'Theatre Performance',
+      },
+    ],
+    remember: 'No figure here is about a person. Fix the system that produced it.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'system-admin',
+    title: 'System Administrator',
+    roles: ['ADMIN', 'SYSTEM_ADMINISTRATOR'],
+    headline: 'Most things staff say they cannot do turn out to be something that was never set up.',
+    duties: [
+      {
+        task: 'Approve or reject registrations promptly',
+        when: 'Daily',
+        why: 'A pending account cannot record anything, and the person gives up and goes back to paper.',
+        where: 'User Management',
+        critical: true,
+      },
+      {
+        task: 'Clear duplicate and unused registrations',
+        when: 'Monthly',
+        why: 'Duplicates split one person history across two accounts and make the roster ambiguous.',
+        where: 'User Management',
+      },
+      {
+        task: 'Keep the duty roster loaded',
+        when: 'Weekly',
+        why: 'On-call lookups, emergency team assembly and catering numbers all read the roster. An empty roster degrades all three silently.',
+        where: 'Duty Roster',
+        critical: true,
+      },
+      {
+        task: 'Check that the scheduled jobs are still running',
+        when: 'Weekly',
+        why: 'Pre-operative alerts and delay detection run unattended. When they stop, nothing fails visibly — they simply go quiet.',
+        critical: true,
+      },
+      {
+        task: 'Print and hand out these duty sheets',
+        when: 'On induction, and whenever a workflow changes',
+        why: 'Every group needs to know which taps are theirs. That is the entire reason this exists.',
+        where: 'Duty Flyers',
+      },
+    ],
+    remember: 'When a scheduled job stops, nothing breaks visibly. Check the quiet things.',
   },
 ];
 

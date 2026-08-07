@@ -15,7 +15,17 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Download, Printer, AlertCircle, FileText, Loader2 } from 'lucide-react';
 import { DUTY_SHEETS, criticalCount, sheetsForRole, type DutySheet } from '@/lib/workflowDuties';
-import { generateDutyFlyer, flyerFileName } from '@/lib/dutyFlyerPdf';
+import { generateDutyFlyer, generateAllDutyFlyers, flyerFileName } from '@/lib/dutyFlyerPdf';
+
+/** Download a blob under a given name. */
+function save(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function DutyFlyersPage() {
   const { data: session } = useSession();
@@ -30,13 +40,7 @@ export default function DutyFlyersPage() {
     setBusy(sheet.id);
     setError(null);
     try {
-      const blob = await generateDutyFlyer(sheet);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = flyerFileName(sheet);
-      a.click();
-      URL.revokeObjectURL(url);
+      save(await generateDutyFlyer(sheet), flyerFileName(sheet));
     } catch (e) {
       setError(e instanceof Error ? `Could not build the flyer: ${e.message}` : 'Could not build the flyer.');
     } finally {
@@ -44,23 +48,16 @@ export default function DutyFlyersPage() {
     }
   };
 
+  // One document, one page per group — rather than twenty-five separate
+  // downloads, which browsers block after the first few, and which nobody
+  // wants to feed to a printer one file at a time.
   const downloadAll = async () => {
     setBusy('all');
     setError(null);
     try {
-      for (const sheet of DUTY_SHEETS) {
-        const blob = await generateDutyFlyer(sheet);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = flyerFileName(sheet);
-        a.click();
-        URL.revokeObjectURL(url);
-        // Browsers throttle rapid successive downloads.
-        await new Promise((r) => setTimeout(r, 400));
-      }
+      save(await generateAllDutyFlyers(DUTY_SHEETS), 'ORM_Duty_Flyers_All_Groups.pdf');
     } catch (e) {
-      setError(e instanceof Error ? `Stopped after an error: ${e.message}` : 'Could not build every flyer.');
+      setError(e instanceof Error ? `Could not build the booklet: ${e.message}` : 'Could not build the booklet.');
     } finally {
       setBusy(null);
     }
@@ -84,16 +81,19 @@ export default function DutyFlyersPage() {
           className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center gap-2"
         >
           {busy === 'all' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          Download all {DUTY_SHEETS.length}
+          All {DUTY_SHEETS.length} groups as one PDF
         </button>
       </div>
 
       <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 flex gap-2">
         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
         <span>
-          Print these on A4 and pin them where the work happens — the scrub sink, the porters&apos;
-          room, the ward station. Each carries the hospital crest as a watermark. Duties numbered in{' '}
-          <strong>red</strong> are the ones without which a measurement is impossible.
+          Every staff group has a sheet. Print them on A4 and pin them where the work happens — the
+          scrub sink, the porters&apos; room, the ward station, the power house, the CSSD bench.
+          Each carries the hospital crest as a watermark, and duties numbered in <strong>red</strong>{' '}
+          are the ones without which a measurement is impossible. The <strong>Ward Nurse</strong>{' '}
+          sheet has no matching login — ward staff work from the call-up printout, so print theirs
+          and take it to them.
         </span>
       </div>
 
@@ -104,8 +104,9 @@ export default function DutyFlyersPage() {
       )}
 
       <div className="grid md:grid-cols-[260px,1fr] gap-5">
-        {/* Group list */}
-        <div className="space-y-1.5">
+        {/* Group list — twenty-five entries, so it scrolls rather than pushing
+            the preview off the bottom of the screen. */}
+        <div className="space-y-1.5 md:max-h-[72vh] md:overflow-y-auto md:pr-1">
           {mine.length > 0 && (
             <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
               Yours
