@@ -45,6 +45,9 @@ const ADMIN_VIEWERS = ['CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'];
 export const MODULES: AppModule[] = [
   // Overview
   { id: 'dashboard', label: 'Dashboard (Home)', paths: ['/dashboard'], defaultRoles: ['*'], category: 'Overview' },
+  // Every staff group has a duty sheet, so everyone may reach this — the
+  // point is that people find their own without being granted anything.
+  { id: 'duty-flyers', label: 'Duty Flyers', paths: ['/dashboard/duty-flyers'], defaultRoles: ['*'], category: 'Overview' },
   // Per-role desks. Each aggregates screens that already exist; the gating
   // below MIRRORS lib/dashboards/desks, which is what the API enforces. The
   // finance desk additionally admits imprest finance duty holders — a grant
