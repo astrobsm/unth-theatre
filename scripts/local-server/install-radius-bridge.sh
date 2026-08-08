@@ -87,6 +87,12 @@ sudo tee "$UNIT" >/dev/null <<EOF
 Description=ORM RADIUS bridge (Wi-Fi captive portal authentication)
 After=network-online.target postgresql.service
 Wants=postgresql.service
+# These belong in [Unit], not [Service]. Put in [Service] systemd ignores them
+# with a warning most people never read, and Restart=always then means an
+# unstartable service restarts forever — the failure that once reached 452
+# restarts here, with a dead website as the only visible symptom.
+StartLimitIntervalSec=60
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -96,10 +102,6 @@ EnvironmentFile=${ENV_FILE}
 ExecStart=${TSX} ${APP_DIR}/scripts/local-server/radius-bridge.ts
 Restart=always
 RestartSec=5
-# Ten failures in a minute means something is wrong that restarting will not
-# fix; stopping makes it visible instead of hiding it in a restart loop.
-StartLimitBurst=10
-StartLimitIntervalSec=60
 NoNewPrivileges=true
 PrivateTmp=true
 
