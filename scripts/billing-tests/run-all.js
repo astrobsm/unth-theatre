@@ -86,18 +86,43 @@ function describe(name, fn) {
   try { fn(); } finally { stack.pop(); }
 }
 
+// Async tests are supported, but only because every suite is DRAINED before
+// its results are reported (see drain() below). The previous version threw on
+// a returned promise rather than awaiting it — a deliberate guard, because a
+// promise that is neither awaited nor rejected counts as a pass while proving
+// nothing. Awaiting keeps that guarantee and allows genuinely async code.
+let pending = [];
+
 function it(name, fn) {
   const label = [...stack, name].join(' › ');
+  let r;
   try {
-    const r = fn();
-    if (r && typeof r.then === 'function') {
-      throw new Error('async test encountered — this runner is synchronous only');
-    }
-    passed++;
+    r = fn();
   } catch (err) {
     failed++;
     failures.push(`${label}\n      ${err?.message ?? err}`);
+    return;
   }
+  if (r && typeof r.then === 'function') {
+    pending.push(
+      r.then(
+        () => { passed++; },
+        (err) => {
+          failed++;
+          failures.push(`${label}\n      ${err?.message ?? err}`);
+        }
+      )
+    );
+    return;
+  }
+  passed++;
+}
+
+/** Settle every async test started so far. Must run before counting a suite. */
+async function drain() {
+  const inFlight = pending;
+  pending = [];
+  await Promise.all(inFlight);
 }
 it.each = undefined; // not used by these suites; fail loudly if that changes
 
@@ -171,10 +196,14 @@ const SCRIPT_SUITES = [];
 
 console.log(`Theatre billing domain tests (${SUITES.length} suites, run against src/lib/billing)\n`);
 
+async function runSuites() {
 for (const suite of SUITES) {
   const before = { passed, failed };
   try {
     loadTs(path.join(__dirname, suite));
+    // Await this suite's async tests before its line is printed, so the
+    // per-suite counts stay truthful and the ordering stays readable.
+    await drain();
   } catch (err) {
     failed++;
     failures.push(`${suite} (failed to load)\n      ${err?.message ?? err}`);
@@ -211,3 +240,9 @@ if (failures.length) {
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;
+}
+
+runSuites().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

@@ -3,6 +3,27 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { sessionCookieConfig } from "@/lib/authCookies";
+import {
+  failureMessage,
+  verifyStaffCredentials,
+  type CredentialDeps,
+} from "@/lib/staffCredentials";
+
+// The database side of credential checking, kept here so staffCredentials.ts
+// stays free of Prisma and can be tested without one.
+const prismaCredentialDeps: CredentialDeps = {
+  // Case-insensitive: staff sign in with any capitalisation, so
+  // "AstroDouglas" and "astrodouglas" are the same account.
+  findByUsername: (username) =>
+    prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
+    }),
+  // Matches both stored shapes at once — "08031234567" and "+2348031234567"
+  // share their last ten digits.
+  findByPhoneSuffix: (last10) =>
+    prisma.user.findMany({ where: { phoneNumber: { endsWith: last10 } } }),
+  comparePassword: (plain, hash) => bcrypt.compare(plain, hash),
+};
 
 // Evaluated once at module load, exactly as NextAuth does with its own
 // useSecureCookies, so the session cookie and the CSRF cookie always agree.
@@ -17,38 +38,27 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          throw new Error("Invalid credentials");
-        }
-
-        // Username matching is case-insensitive: staff can sign in with any
-        // capitalisation (e.g. "AstroDouglas" == "astrodouglas").
-        const user = await prisma.user.findFirst({
-          where: { username: { equals: credentials.username.trim(), mode: 'insensitive' } }
-        });
-
-        if (!user) {
-          throw new Error("User not found");
-        }
-
-        if (user.status !== "APPROVED") {
-          throw new Error("Account pending approval");
-        }
-
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
+        // Username OR phone number, using exactly the same check as the Wi-Fi
+        // captive portal so the two can never disagree about who may sign in.
+        // See lib/staffCredentials.ts, including why a phone number is not
+        // always sufficient on its own.
+        const result = await verifyStaffCredentials(
+          prismaCredentialDeps,
+          credentials?.username,
+          credentials?.password
         );
 
-        if (!isPasswordValid) {
-          throw new Error("Invalid password");
+        if (!result.ok) {
+          // These messages reach the sign-in screen, so they say what to do
+          // next rather than merely what went wrong.
+          throw new Error(failureMessage(result.reason));
         }
 
         return {
-          id: user.id,
-          name: user.fullName,
-          email: user.email,
-          role: user.role,
+          id: result.user.id,
+          name: result.user.fullName,
+          email: result.user.email,
+          role: result.user.role,
         };
       }
     })
