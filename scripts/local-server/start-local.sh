@@ -1,116 +1,169 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Start the ORM on the local server, correctly.
+# Start (or restart) the ORM on the local server, correctly.
 # -----------------------------------------------------------------------------
-# Use this instead of `npm run dev` directly, for one reason that matters:
+# THE MISTAKE THIS SCRIPT NOW PREVENTS
 #
-#   TZ MUST BE IN THE PROCESS ENVIRONMENT, NOT IN .env.local.
+# The first version of this script ran `npm run dev`. On this server that was
+# actively destructive: the app is served by PM2 running `next start`, and
+# `next dev` OVERWRITES .next with development artifacts. `next start` then
+# fails with "Could not find a production build in the '.next' directory" and
+# PM2 restarts it forever — it reached 452 restarts, and the only visible
+# symptom was a dead website.
 #
-# Node fixes its timezone when the process starts, which happens BEFORE Next
-# reads .env.local. A TZ written into an env file may therefore be ignored
-# entirely. Vercel runs in UTC; if this server runs in WAT, the two compute
-# different day boundaries and "today's list" can disagree between them at the
-# edges of the day. Clinical times are safe either way — lib/theatreOps/clock.ts
-# states the offset explicitly and never asks the host — but day windows are not.
+# So: production is the default, dev must be asked for explicitly, and if PM2
+# is managing the app, PM2 is used rather than a competing foreground process.
 #
-# It also refuses to start if the database is unreachable, rather than letting
-# every sign-in fail with a 500 that looks like a password problem.
+# It also refuses to start when the database is unreachable or the port is
+# already taken, because both produce failures that look like something else.
 #
-#   ./start-local.sh            development mode (what this server runs today)
-#   ./start-local.sh --prod     build once, then serve the production build
+#   ./start-local.sh              build if needed, then serve (via PM2 if present)
+#   ./start-local.sh --rebuild    force a fresh production build first
+#   ./start-local.sh --dev        development mode — DESTROYS the production build
 # =============================================================================
 
 set -euo pipefail
 APP_DIR="${ORM_APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$APP_DIR"
 
-PROD=0
-[[ "${1:-}" == "--prod" ]] && PROD=1
+MODE="prod"
+REBUILD=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dev) MODE="dev"; shift ;;
+    --rebuild) REBUILD=1; shift ;;
+    --prod) shift ;;                  # accepted: it is the default
+    -h|--help) sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
 
-if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; R=$'\e[31m'; N=$'\e[0m'; else B=""; G=""; R=""; N=""; fi
+if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'
+else B=""; G=""; Y=""; R=""; N=""; fi
 
+# TZ must be exported into the environment, not written to an env file: Node
+# fixes its timezone before Next reads .env.local, so a TZ there may be ignored.
+# Vercel runs UTC; a server on WAT computes different day boundaries, and
+# "today's list" then differs between the two at the edges of the day.
 export TZ=UTC
 echo "${B}TZ=UTC${N} (matches the cloud, so day boundaries agree)"
 
-# ---- Refuse to start blind --------------------------------------------------
-DB="$(grep -E '^DIRECT_URL=' .env.local 2>/dev/null | tail -1 | sed -E 's/^DIRECT_URL=//; s/^"//; s/"$//' || true)"
-if [[ -z "$DB" ]]; then
-  echo "${R}No DIRECT_URL in .env.local.${N} Run scripts/local-server/setup-local-db.sh first." >&2
-  exit 1
-fi
-
-# Prisma's URLs carry parameters that libpq does not accept. Handed a URL
-# ending in "?schema=public", psql fails with `invalid URI query parameter:
-# "schema"` BEFORE it opens a socket — so an unmodified check reports a
-# perfectly healthy database as unreachable. Strip only the Prisma-only keys
-# and leave anything libpq understands, such as sslmode, alone.
+# ---- Configuration sanity ---------------------------------------------------
+# Prisma URLs carry parameters libpq rejects. Given "?schema=public", psql fails
+# with `invalid URI query parameter: "schema"` before it opens a socket, which
+# reads as a database being down when it is perfectly healthy.
 libpq_url() {
   printf '%s' "$1" \
     | sed -E 's/([?&])(schema|connection_limit|pgbouncer|pool_timeout|socket_timeout)=[^&]*/\1/g' \
     | sed -E 's/\?&+/?/; s/&&+/\&/g; s/[?&]$//'
 }
+env_key() {
+  grep -E "^$1=" .env.local 2>/dev/null | tail -1 | sed -E "s/^$1=//; s/^\"//; s/\"$//" || true
+}
+
+DB="$(env_key DIRECT_URL)"
+if [[ -z "$DB" ]]; then
+  echo "${R}No DIRECT_URL in .env.local.${N} Run scripts/local-server/setup-local-db.sh first." >&2
+  exit 1
+fi
 
 if command -v psql >/dev/null; then
   # Captured rather than discarded: guessing at a cause prints confident
-  # nonsense, and the real message from psql is always more use.
+  # nonsense, and psql's own message is always more use.
   if ! PSQL_ERR="$(psql "$(libpq_url "$DB")" -tAXc 'select 1' 2>&1 >/dev/null)"; then
     echo "${R}The database is not reachable.${N}" >&2
     echo "  psql said: ${PSQL_ERR}" >&2
     case "$DB" in
-      *localhost*|*127.0.0.1*)
-        echo "  It is configured as local. Try: sudo systemctl start postgresql" >&2 ;;
-      *)
-        echo "  It still points at a REMOTE host, so sign-in will fail whenever the" >&2
-        echo "  internet is down. Run scripts/local-server/setup-local-db.sh." >&2 ;;
+      *localhost*|*127.0.0.1*) echo "  Configured as local. Try: sudo systemctl start postgresql" >&2 ;;
+      *) echo "  Still points at a REMOTE host, so sign-in fails whenever the" >&2
+         echo "  internet is down. Run scripts/local-server/setup-local-db.sh." >&2 ;;
     esac
     exit 1
   fi
   echo "${G}Database reachable.${N}"
-else
-  echo "psql not installed, skipping the database check"
 fi
 
-NEXTAUTH="$(grep -E '^NEXTAUTH_URL=' .env.local 2>/dev/null | tail -1 | sed -E 's/^NEXTAUTH_URL=//; s/^"//; s/"$//' || true)"
+NEXTAUTH="$(env_key NEXTAUTH_URL)"
 echo "Sign-in origin: ${B}${NEXTAUTH:-<unset>}${N}"
 case "$NEXTAUTH" in
   *vercel.app*)
-    echo "${R}NEXTAUTH_URL still points at the cloud.${N} Sign-in on this server will" >&2
-    echo "return 401 regardless of the database. Run setup-local-db.sh." >&2
+    echo "${R}NEXTAUTH_URL still points at the cloud.${N} Sign-in here returns 401" >&2
+    echo "regardless of the database. Run setup-local-db.sh." >&2
     exit 1 ;;
 esac
 
-# ---- The port must be the one NEXTAUTH_URL names ---------------------------
-# Next's default behaviour on a busy port is to quietly move to the next one.
-# That is the worst possible outcome here: the OLD process keeps serving the
-# origin staff are using, with the old database and the old NEXTAUTH_URL still
-# in memory, while this new one waits on a port nothing points at. Everything
-# then looks configured and nothing has changed. So: bind explicitly, and refuse
-# rather than drift.
 PORT="$(printf '%s' "$NEXTAUTH" | sed -E 's#^https?://[^:/]+##; s#^:##; s#/.*##')"
 [[ "$PORT" =~ ^[0-9]+$ ]] || PORT=3000
 export PORT
 echo "Port: ${B}${PORT}${N}"
 
+# ---- Is PM2 in charge? ------------------------------------------------------
+PM2_APP=""
+if command -v pm2 >/dev/null && pm2 jlist 2>/dev/null | grep -q '"name":"orm"'; then
+  PM2_APP="orm"
+  echo "PM2 manages ${B}orm${N} — using PM2 rather than a competing process."
+fi
+
+# ---- Dev mode is destructive here, so make it deliberate --------------------
+if [[ "$MODE" == "dev" ]]; then
+  echo
+  echo "${Y}Development mode overwrites .next with dev artifacts.${N}"
+  if [[ -n "$PM2_APP" ]]; then
+    echo "${R}PM2 is serving a PRODUCTION build from that same directory.${N}" >&2
+    echo "Running dev here breaks it with:" >&2
+    echo "    Could not find a production build in the '.next' directory" >&2
+    echo >&2
+    echo "Stop PM2 first if you really mean to develop on this machine:" >&2
+    echo "    pm2 stop ${PM2_APP}" >&2
+    echo "and afterwards rebuild before starting it again:" >&2
+    echo "    ./scripts/local-server/start-local.sh --rebuild" >&2
+    exit 1
+  fi
+  if command -v ss >/dev/null && ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; then
+    echo "${R}Port ${PORT} is already in use.${N} Free it first: sudo ss -ltnp 'sport = :${PORT}'" >&2
+    exit 1
+  fi
+  exec npm run dev
+fi
+
+# ---- Production -------------------------------------------------------------
+NEEDS_BUILD=0
+[[ $REBUILD == 1 ]] && NEEDS_BUILD=1
+# BUILD_ID is what `next start` looks for; .next existing is not enough, since a
+# dev run leaves the directory present but without it.
+[[ -f .next/BUILD_ID ]] || NEEDS_BUILD=1
+
+if [[ $NEEDS_BUILD == 1 ]]; then
+  if [[ ! -f .next/BUILD_ID && $REBUILD == 0 ]]; then
+    echo "${Y}No production build found${N} (.next/BUILD_ID missing) — building."
+    echo "A previous 'next dev' run is the usual reason."
+  fi
+  echo "${B}Generating the Prisma client${N}"
+  npx prisma generate
+  echo "${B}Building${N} (5-15 minutes)"
+  npm run build
+  echo "${G}Build complete.${N}"
+fi
+
+if [[ -n "$PM2_APP" ]]; then
+  echo "${B}Restarting via PM2${N} (--update-env so it picks up TZ and PORT)"
+  pm2 restart "$PM2_APP" --update-env
+  sleep 6
+  pm2 list
+  echo
+  echo "Recent output:"
+  pm2 logs "$PM2_APP" --lines 15 --nostream 2>/dev/null || true
+  echo
+  echo "If the restart count is climbing, the app is crash-looping — read the log above."
+  exit 0
+fi
+
 if command -v ss >/dev/null && ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; then
-  echo >&2
-  echo "${R}Port ${PORT} is already in use.${N}" >&2
-  echo "Almost certainly the previous 'next dev', still holding the OLD" >&2
-  echo "environment: the cloud database and the cloud NEXTAUTH_URL. It is what" >&2
-  echo "your browser is talking to, so nothing configured here has taken effect." >&2
-  echo >&2
-  echo "See what it is, then stop it:" >&2
-  echo "    sudo lsof -i :${PORT}" >&2
-  echo "    kill \$(sudo lsof -t -i:${PORT})" >&2
-  echo >&2
-  echo "Starting on a different port would NOT help: NEXTAUTH_URL names ${PORT}," >&2
-  echo "and sign-in returns 401 whenever the two disagree." >&2
+  echo "${R}Port ${PORT} is already in use${N} and PM2 does not own it." >&2
+  echo "  sudo ss -ltnp 'sport = :${PORT}'" >&2
+  echo "Starting elsewhere would not help: NEXTAUTH_URL names ${PORT}, and" >&2
+  echo "sign-in returns 401 whenever the two disagree." >&2
   exit 1
 fi
 
-if [[ $PROD == 1 ]]; then
-  echo; echo "${B}Building${N} (a few minutes; much faster to serve afterwards)"
-  npm run build
-  exec npm run start
-else
-  exec npm run dev
-fi
+exec npm run start

@@ -29,13 +29,42 @@ chmod +x scripts/local-server/*.sh
 ./scripts/local-server/setup-local-db.sh --url http://192.168.88.252:3000
 ```
 
-Then stop the running `next dev` and start it with the launcher:
+Then restart the app with the launcher:
 
 ```bash
 ./scripts/local-server/start-local.sh
 ```
 
 Sign in. Unplug the network and sign in again — that is the whole point.
+
+### This server runs a production build under PM2
+
+Not `next dev`. That matters more than it sounds:
+
+**`next dev` overwrites `.next` with development artifacts.** `next start` then
+fails with *"Could not find a production build in the '.next' directory"* and PM2
+restarts it forever — it reached 452 restarts here, and the only visible symptom
+was a dead website. So never run `npm run dev` on this machine while PM2 serves
+it. `start-local.sh` defaults to production, uses PM2 when PM2 owns the app, and
+refuses `--dev` outright while PM2 is running.
+
+If the build is missing, rebuild and restart:
+
+```bash
+./scripts/local-server/start-local.sh --rebuild
+```
+
+`ecosystem.config.cjs` in the repository root is the PM2 definition to use, and
+fixes two faults in the ad-hoc setup it replaces: `TZ` was never `UTC`, and a
+crashing app restarted without limit instead of stopping and being noticed.
+
+```bash
+pm2 delete orm 2>/dev/null; pm2 start ecosystem.config.cjs && pm2 save
+```
+
+It deliberately sets **no** database or auth variables. Next does not overwrite
+variables already in `process.env`, so a stale `DATABASE_URL` there would
+silently defeat the correct one in `.env.local` — and be very hard to find.
 
 `--url` must be **exactly** the address staff type, including the port and with
 no trailing slash. If you omit it the script uses the machine's first LAN IP.

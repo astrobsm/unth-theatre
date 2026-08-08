@@ -360,14 +360,19 @@ cat <<EOF
 
 ${B}Done.${N} The database is now on this machine.
 
-${B}One thing left, and it must be done by hand:${N}
-  The running app still holds the OLD environment in memory. Stop it, then
-  start it with the launcher — it exports TZ=UTC, which an env file cannot
-  reliably do, and refuses to start if the database is unreachable:
+${B}One thing left:${N}
+  The running app still holds the OLD environment in memory and must be
+  restarted. The launcher does it the right way round — it exports TZ=UTC
+  (which an env file cannot reliably do), refuses to start against an
+  unreachable database, and uses PM2 if PM2 is managing the app rather than
+  starting a second process that fights it for the port:
 
     cd $APP_DIR
-    # stop the running 'next dev', then:
     ./scripts/local-server/start-local.sh
+
+  ${Y}Do NOT run 'npm run dev' on this server if PM2 serves a production
+  build.${N} 'next dev' overwrites .next, and 'next start' then fails with
+  "Could not find a production build" and crash-loops.
 
   Then sign in at ${ORIGIN_URL} — with the network unplugged, if you want to
   prove the point.
