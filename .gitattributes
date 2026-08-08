@@ -1,3 +1,8 @@
+# Shell scripts MUST keep LF endings. They are authored on Windows but run on
+# the Ubuntu local server, and a CRLF shebang fails there with the notoriously
+# unhelpful "bad interpreter: /usr/bin/env bash^M".
+*.sh text eol=lf
+
 # Treat all binary asset formats as binary to prevent line-ending
 # conversion from corrupting them on Windows checkouts.
 *.pdf binary

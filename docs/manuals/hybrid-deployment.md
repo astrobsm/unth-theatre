@@ -184,6 +184,21 @@ without a conflict policy written down first, per table, agreed clinically.
 Two theatres editing one surgery in two databases is a patient-safety question
 before it is an engineering one.
 
+### What is scripted today, and what it is not
+
+`scripts/local-server/setup-local-db.sh` puts a full copy of the database on the
+local server and corrects `NEXTAUTH_URL`, which together are what make sign-in
+work with the internet down. Run it once while online; it is idempotent.
+
+Be clear about what that is: **an independent copy, not any of A, B or C above.**
+It buys immediate offline operation at the cost of divergence — the local server
+and the cloud both accept writes and neither learns of the other's. That is
+acceptable while one of them is the only one actually in use. It is not
+acceptable indefinitely, and `scripts/local-server/local-vs-cloud.sh` exists so
+the drift is visible rather than assumed.
+
+Choosing A, B or C is still the decision that has to be made.
+
 ### Whichever you choose
 
 - **One writer for migrations.** Schema changes must be applied in one place
