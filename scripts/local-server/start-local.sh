@@ -79,6 +79,34 @@ case "$NEXTAUTH" in
     exit 1 ;;
 esac
 
+# ---- The port must be the one NEXTAUTH_URL names ---------------------------
+# Next's default behaviour on a busy port is to quietly move to the next one.
+# That is the worst possible outcome here: the OLD process keeps serving the
+# origin staff are using, with the old database and the old NEXTAUTH_URL still
+# in memory, while this new one waits on a port nothing points at. Everything
+# then looks configured and nothing has changed. So: bind explicitly, and refuse
+# rather than drift.
+PORT="$(printf '%s' "$NEXTAUTH" | sed -E 's#^https?://[^:/]+##; s#^:##; s#/.*##')"
+[[ "$PORT" =~ ^[0-9]+$ ]] || PORT=3000
+export PORT
+echo "Port: ${B}${PORT}${N}"
+
+if command -v ss >/dev/null && ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; then
+  echo >&2
+  echo "${R}Port ${PORT} is already in use.${N}" >&2
+  echo "Almost certainly the previous 'next dev', still holding the OLD" >&2
+  echo "environment: the cloud database and the cloud NEXTAUTH_URL. It is what" >&2
+  echo "your browser is talking to, so nothing configured here has taken effect." >&2
+  echo >&2
+  echo "See what it is, then stop it:" >&2
+  echo "    sudo lsof -i :${PORT}" >&2
+  echo "    kill \$(sudo lsof -t -i:${PORT})" >&2
+  echo >&2
+  echo "Starting on a different port would NOT help: NEXTAUTH_URL names ${PORT}," >&2
+  echo "and sign-in returns 401 whenever the two disagree." >&2
+  exit 1
+fi
+
 if [[ $PROD == 1 ]]; then
   echo; echo "${B}Building${N} (a few minutes; much faster to serve afterwards)"
   npm run build
