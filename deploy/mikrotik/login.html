@@ -1,0 +1,49 @@
+<!--
+  MikroTik hotspot login page — hands over to the ORM portal.
+  ============================================================================
+  Upload this to the router, replacing the stock hotspot/login.html:
+      WebFig -> Files -> open the "hotspot" directory -> drag this in
+
+  The $(...) tokens are substituted by RouterOS before the page is served. They
+  are what let the ORM page complete the network login afterwards:
+
+      $(link-login-only)  where the credentials must be POSTed
+      $(link-orig)        where the person was originally heading
+      $(mac)              the device, shown so IT can identify it in support
+      $(error)            the router's own message after a failed attempt
+
+  The <noscript> fallback and the visible link matter more than they look: some
+  captive-portal mini-browsers restrict scripting, and a page that silently
+  does nothing is indistinguishable from a broken network.
+
+  NOTE: the hostname below must match NEXTAUTH_URL and must be allowed through
+  the walled garden, or this redirect leads somewhere the client cannot yet
+  reach — a portal that cannot load the portal.
+-->
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="refresh"
+      content="0; url=http://unth-theatre.orm/hotspot/login?link-login-only=$(link-login-only)&amp;dst=$(link-orig)&amp;mac=$(mac)&amp;error=$(error)"
+    />
+    <title>UNTH Theatre Wi-Fi</title>
+    <style>
+      body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+             background: #ecfdf5; color: #064e3b; display: grid;
+             place-items: center; height: 100vh; margin: 0; text-align: center; }
+      a { color: #047857; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <p>Taking you to the UNTH Theatre sign-in&hellip;</p>
+      <p>
+        <a href="http://unth-theatre.orm/hotspot/login?link-login-only=$(link-login-only)&amp;dst=$(link-orig)&amp;mac=$(mac)">
+          Tap here if nothing happens
+        </a>
+      </p>
+      <noscript><p>Tap the link above to sign in.</p></noscript>
+    </div>
+  </body>
+</html>

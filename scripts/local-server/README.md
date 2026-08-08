@@ -160,6 +160,55 @@ It works with a router DNS entry, and it is what was asked for. Be aware that
 reserved for mDNS and can behave oddly. Pass `--name` if you would rather avoid
 any chance of a future collision.
 
+## Wi-Fi captive portal — one sign-in for the network and the app
+
+Staff join `UNTH-THEATRE-ORM`, are redirected to an ORM-branded page, enter
+their ORM username (or phone number) and password once, and get **both** the
+network and the application.
+
+```bash
+./scripts/local-server/install-radius-bridge.sh --nas 192.168.88.1
+```
+
+That installs `orm-radius.service`, which answers the hotspot's authentication
+requests from the ORM database. **No password is ever copied into the router** —
+the router holds only a shared secret, and every check is a bcrypt comparison
+against the same `users` table the application uses.
+
+The script prints the RouterOS commands to paste, including the generated
+secret. Three of them are load-bearing:
+
+| Setting | Why it is not optional |
+| --- | --- |
+| `login-by=http-pap` | The default is CHAP, which requires the server to hold **plaintext** passwords. We hold bcrypt hashes, so CHAP can never succeed. |
+| `timeout=5s` on the RADIUS entry | bcrypt takes ~100–300ms by design. MikroTik's 300ms default is too tight, and a timeout looks exactly like a wrong password. |
+| Walled-garden entries for the server | Before authenticating, a client can reach nothing — including the portal. Without these it is redirected to a page it is not yet allowed to fetch. |
+
+Finally, upload `deploy/mikrotik/login.html` to the router's `hotspot` directory
+(WebFig → Files) so its stock page hands over to the ORM portal.
+
+Watch it work: `sudo journalctl -u orm-radius -f` — each attempt logs ACCEPT or
+REJECT with the reason and the resolved account.
+
+### Keep WPA2 on the SSID
+
+Most captive portals sit on open Wi-Fi. This one must not. Because CHAP is
+impossible, the portal password crosses the LAN in clear, and **WPA2 is what
+protects it** in the absence of a TLS certificate. Turn on client isolation too,
+so one phone cannot intercept another's traffic.
+
+### Duplicate accounts limit phone-number sign-in
+
+Measured against the live database: of 561 approved users, **20 have no phone
+number** and **111 are on accounts sharing a number with another approved
+account** — duplicate registrations of the same person, not shared handsets.
+
+Sign-in handles this without guessing: a number resolving to one person works;
+where duplicates share it, the account whose password matches is admitted; if
+several match, it refuses and asks for the username rather than risk signing
+somebody into a stale duplicate with a different role. Clearing the duplicates
+under **Users → clean-up** would make phone sign-in work for nearly everyone.
+
 ## The part that is now your decision
 
 **From the moment the local server writes to its own database, the two

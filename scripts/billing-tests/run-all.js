@@ -158,7 +158,15 @@ function loadTs(absNoExt) {
   if (cache.has(file)) return cache.get(file);
 
   const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    // esModuleInterop mirrors tsconfig.json. Without it, `import crypto from
+    // 'crypto'` compiles to an undefined `.default` and every node builtin
+    // fails at runtime with "Cannot read properties of undefined" — a harness
+    // artefact that says nothing about the code under test.
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      esModuleInterop: true,
+    },
     fileName: file,
   }).outputText;
 
