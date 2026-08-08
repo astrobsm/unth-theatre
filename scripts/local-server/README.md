@@ -109,6 +109,57 @@ with it.
 
 The dump is not hanging. Leave it.
 
+## Reaching it by name instead of by IP
+
+```bash
+./scripts/local-server/setup-hostname.sh --name unth-theatre.orm
+```
+
+That puts nginx in front on port 80 **and moves `NEXTAUTH_URL` to the new
+origin**. The second half is the part people miss: a DNS entry added at the
+router while `NEXTAUTH_URL` still names the IP produces a 401 on every sign-in,
+because NextAuth builds its callback and cookie from that value.
+
+Then, on the MikroTik:
+
+```
+/ip dns static add name=unth-theatre.orm address=<server-ip> ttl=1d comment="UNTH ORM"
+/ip dns set allow-remote-requests=yes
+/ip dns cache flush
+```
+
+Clients must be using the router for DNS. If DHCP hands out `8.8.8.8`, the name
+will never resolve:
+
+```
+/ip dhcp-server network print
+/ip dhcp-server network set [find] dns-server=<router-lan-ip>
+```
+
+### Then everybody uses the name
+
+A session cookie belongs to the host it was set on. Once `NEXTAUTH_URL` is the
+hostname, `http://<ip>:3000` will sign in and then behave as though signed out,
+because the browser will not send that cookie to a different host. Keep the IP
+and port for troubleshooting, not for staff.
+
+### Two things the nginx config handles that a generic proxy snippet would not
+
+- **`client_max_body_size 64m`.** Consent forms and imprest documents are stored
+  as base64 data URLs, so bodies far exceed nginx's 1 MB default. The failure is
+  a 413 that reads as the app rejecting an upload.
+- **Buffering off for `/api/emergency-display/stream`.** That endpoint is
+  Server-Sent Events. nginx buffers proxied responses by default, which would
+  withhold each announcement until a buffer filled — the emergency board would
+  connect, look healthy, and display nothing.
+
+### `.orm` is not a real top-level domain
+
+It works with a router DNS entry, and it is what was asked for. Be aware that
+`.internal` is the TLD formally reserved for private networks, and `.local` is
+reserved for mDNS and can behave oddly. Pass `--name` if you would rather avoid
+any chance of a future collision.
+
 ## The part that is now your decision
 
 **From the moment the local server writes to its own database, the two
