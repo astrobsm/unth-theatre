@@ -2,6 +2,11 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { sessionCookieConfig } from "@/lib/authCookies";
+
+// Evaluated once at module load, exactly as NextAuth does with its own
+// useSecureCookies, so the session cookie and the CSRF cookie always agree.
+const SESSION_COOKIE = sessionCookieConfig(process.env.NEXTAUTH_URL);
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -135,20 +140,21 @@ export const authOptions: NextAuthOptions = {
   jwt: {
     maxAge: 30 * 24 * 60 * 60,
   },
-  // Explicit cookie config so production (HTTPS) and dev behave deterministically.
-  // Using __Secure- prefix in production hardens the cookie; relying on the default
-  // can cause subtle mismatches between sign-in and getServerSession in some setups.
+  // Explicit cookie config, keyed on the ORIGIN rather than on NODE_ENV.
+  //
+  // This previously used NODE_ENV === "production", which made sign-in
+  // impossible on the hospital's local server: that runs `next start` (so
+  // NODE_ENV is production) over plain http on a LAN address, and browsers
+  // reject a `__Secure-`-prefixed cookie that was not set over a secure
+  // channel. See lib/authCookies.ts for the full account.
   cookies: {
     sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token",
+      name: SESSION_COOKIE.name,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: SESSION_COOKIE.secure,
       },
     },
   },
