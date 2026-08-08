@@ -32,12 +32,26 @@ function PortalForm() {
   const params = useSearchParams();
 
   // MikroTik substitutes these into its redirect. `link-login-only` is the URL
-  // its login form must be posted to; `dst` is where the user was originally
-  // heading, which we hand back so they land somewhere sensible.
+  // its login form must be posted to.
   const linkLoginOnly = params.get('link-login-only') || '';
-  const dst = params.get('dst') || params.get('link-orig') || '/dashboard';
   const routerError = params.get('error') || '';
   const mac = params.get('mac') || '';
+
+  // Where the router sends the browser once the network login succeeds.
+  //
+  // NOT `link-orig`, which is what MikroTik offers and what this used to use.
+  // On a captive portal link-orig is never a page anyone wanted: it is whatever
+  // connectivity check the phone fired off in the background —
+  // connectivitycheck.gstatic.com and friends — so honouring it dumps the user
+  // on a blank page having just signed in, and the app they were sent here for
+  // never appears.
+  //
+  // Built from the current origin rather than hardcoded, so this keeps working
+  // if the hospital moves to a different hostname or to https.
+  const [appDestination, setAppDestination] = useState('/dashboard');
+  useEffect(() => {
+    setAppDestination(`${window.location.origin}/dashboard`);
+  }, []);
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -82,7 +96,10 @@ function PortalForm() {
       for (const [name, value] of Object.entries({
         username: identifier.trim(),
         password,
-        dst,
+        // The router redirects here after it grants network access. The app
+        // session cookie was set moments ago, so the dashboard opens already
+        // signed in — which is the whole point of doing both in one form.
+        dst: appDestination,
       })) {
         const input = document.createElement('input');
         input.type = 'hidden';
