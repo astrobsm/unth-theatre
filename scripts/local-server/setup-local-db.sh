@@ -100,6 +100,16 @@ step "Reading the current configuration"
 # The cloud URLs may already have been moved to CLOUD_* by a previous run, so
 # look there first and fall back to the originals. Never printed: they contain
 # the database password.
+# Prisma URLs may carry parameters libpq rejects — "?schema=public" makes any
+# libpq tool fail with `invalid URI query parameter: "schema"` before it opens a
+# socket. pg_dump is a libpq tool, so the cloud URL goes through this first.
+# Only Prisma-only keys are removed; sslmode and friends are left alone.
+libpq_url() {
+  printf '%s' "$1" \
+    | sed -E 's/([?&])(schema|connection_limit|pgbouncer|pool_timeout|socket_timeout)=[^&]*/\1/g' \
+    | sed -E 's/\?&+/?/; s/&&+/\&/g; s/[?&]$//'
+}
+
 read_env_key() {
   local key="$1" file
   for file in "$APP_DIR/.env.local" "$APP_DIR/.env"; do
@@ -242,7 +252,7 @@ elif [[ $CLOUD_UP == 1 ]]; then
   # -Fc so the restore can run in parallel. Note that --no-owner has no effect
   # on a custom-format dump: the archive keeps the ownership entries either way
   # and they are stripped at RESTORE time, which is where it is passed below.
-  run pg_dump "$CLOUD_DIRECT" --schema=public --no-privileges \
+  run pg_dump "$(libpq_url "$CLOUD_DIRECT")" --schema=public --no-privileges \
       --no-comments --quote-all-identifiers -Fc -f "$DUMP"
   [[ -s "$DUMP" ]] || die "the dump came out empty — nothing was written to $DUMP"
   ok "dump written: $(du -h "$DUMP" | cut -f1)"

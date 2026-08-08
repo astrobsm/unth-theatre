@@ -33,8 +33,17 @@ read_env_key() {
   return 1
 }
 
-LOCAL_URL="$(read_env_key DIRECT_URL || true)"
-CLOUD_URL="$(read_env_key CLOUD_DIRECT_URL || true)"
+# Prisma URLs carry parameters libpq rejects: given "?schema=public", psql fails
+# with `invalid URI query parameter: "schema"` before opening a socket, which
+# reads as a database being down when it is perfectly healthy.
+libpq_url() {
+  printf '%s' "$1" \
+    | sed -E 's/([?&])(schema|connection_limit|pgbouncer|pool_timeout|socket_timeout)=[^&]*/\1/g' \
+    | sed -E 's/\?&+/?/; s/&&+/\&/g; s/[?&]$//'
+}
+
+LOCAL_URL="$(libpq_url "$(read_env_key DIRECT_URL || true)")"
+CLOUD_URL="$(libpq_url "$(read_env_key CLOUD_DIRECT_URL || true)")"
 [[ -n "$LOCAL_URL" ]] || { echo "no DIRECT_URL found — has setup-local-db.sh been run?" >&2; exit 1; }
 [[ -n "$CLOUD_URL" ]] || { echo "no CLOUD_DIRECT_URL found — nothing to compare against." >&2; exit 1; }
 
