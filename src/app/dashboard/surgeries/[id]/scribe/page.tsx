@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   ArrowLeft, Stethoscope, AlertTriangle, AlertCircle, Info, CheckCircle2, Loader2, RefreshCw, ShieldAlert,
+  ArrowRight, UserCheck,
 } from 'lucide-react';
+import { resolutionFor, resolutionHref } from '@/lib/scribeResolutions';
 
 type Severity = 'CRITICAL' | 'WARNING' | 'INFO' | 'OK';
-interface Finding { severity: Severity; category: string; title: string; detail: string; recommendation: string }
+interface Finding { severity: Severity; category: string; title: string; detail: string; recommendation: string; code?: string }
 interface ScribeResponse {
   surgery: { id: string; procedureName: string; surgeryType: string; subspecialty?: string; unit?: string; scheduledDate?: string; scheduledTime?: string; patient?: { name?: string; age?: number; ageUnit?: string; gender?: string; folderNumber?: string } };
   overall: Severity; headline: string; counts: { CRITICAL: number; WARNING: number; INFO: number };
@@ -85,6 +88,63 @@ export default function MedicalScribePage() {
             </div>
           </div>
 
+          {/* What this means for the patient's progress.
+              Deliberately does NOT clear the patient itself. Clearance is a
+              clinical judgement recorded by a person at the pre-operative
+              visit and again in the holding area, and a rules engine that
+              silently marked cases ready would be making that judgement for
+              them. This says whether the DATA still blocks the case, and links
+              to the people who decide. */}
+          {data.counts.CRITICAL === 0 ? (
+            <div className="rounded-lg border border-green-300 bg-green-50 p-4">
+              <p className="font-semibold text-green-900 flex items-center gap-2">
+                <UserCheck className="w-5 h-5" /> Nothing in the record blocks this case
+              </p>
+              <p className="text-sm text-green-800 mt-1">
+                No critical gaps remain. The patient can now be cleared at the pre-operative
+                visit, invited, and cleared again in the holding area.
+                {data.counts.WARNING > 0 && (
+                  <> {data.counts.WARNING} caution item(s) remain and are for clinical judgement.</>
+                )}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link href="/dashboard/pre-operative-visit" className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-800">
+                  Clear for call-up <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link href="/dashboard/holding-area" className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-50">
+                  Holding area
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-4">
+              <p className="font-semibold text-red-900 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5" />
+                {data.counts.CRITICAL} item(s) must be resolved before this patient can proceed
+              </p>
+              <ul className="mt-2 space-y-1">
+                {showFindings.filter((x) => x.severity === 'CRITICAL').map((x, i) => (
+                  <li key={i} className="text-sm text-red-800 flex items-start gap-2">
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-600 flex-shrink-0" />
+                    {x.title}
+                    {resolutionFor(x.code) && (
+                      <Link
+                        href={resolutionHref(x.code, String(id), `/dashboard/surgeries/${id}/scribe`) ?? '#'}
+                        className="underline font-medium hover:text-red-900 whitespace-nowrap"
+                      >
+                        {resolutionFor(x.code)!.label}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-red-700 mt-2">
+                Resolve each one, then re-run this check. The patient cannot be cleared until
+                these are closed.
+              </p>
+            </div>
+          )}
+
           {/* Findings */}
           <div className="space-y-3">
             {showFindings.length === 0 && (
@@ -106,6 +166,28 @@ export default function MedicalScribePage() {
                     </div>
                     <p className="text-sm text-gray-600 mt-1">{x.detail}</p>
                     <p className="text-sm mt-2"><span className="font-medium text-gray-800">Action:</span> <span className="text-gray-700">{x.recommendation}</span></p>
+
+                    {/* The fix, where there is a screen that performs it. A
+                        finding without one still reads perfectly well; it just
+                        has no button, which is better than a button that goes
+                        somewhere unhelpful. */}
+                    {(() => {
+                      const r = resolutionFor(x.code);
+                      const href = resolutionHref(x.code, String(id), `/dashboard/surgeries/${id}/scribe`);
+                      if (!r || !href) return null;
+                      return (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <Link
+                            href={href}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                          >
+                            {r.label} <ArrowRight className="w-4 h-4" />
+                          </Link>
+                          <p className="text-xs text-gray-500 mt-1.5">{r.hint}</p>
+                          <p className="text-xs text-gray-400">Usually: {r.who}</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

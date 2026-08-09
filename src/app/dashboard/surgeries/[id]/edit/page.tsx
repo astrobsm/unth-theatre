@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, Calendar, MapPin, AlertCircle, History } from 'lucide-react';
 import { WARDS } from '@/lib/constants';
+import { safeReturnTo } from '@/lib/scribeResolutions';
 
 interface Theatre { id: string; name: string; location: string }
 interface Surgeon { id: string; fullName: string; role?: string }
@@ -25,6 +26,14 @@ const SURGERY_TYPES = ['ELECTIVE', 'URGENT', 'EMERGENCY'] as const;
 
 export default function EditSurgeryPage() {
   const router = useRouter();
+
+  // Set when the user came from the pre-op safety check; see the consent page
+  // for why this is read from window.location rather than useSearchParams.
+  const [returnTo, setReturnTo] = useState('');
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('returnTo');
+    setReturnTo(safeReturnTo(q, ''));
+  }, []);
   const params = useParams<{ id: string }>();
   const id = params?.id as string;
 
@@ -211,6 +220,17 @@ export default function EditSurgeryPage() {
       {success && (
         <div className="bg-green-50 border-l-4 border-green-400 p-3 text-sm text-green-800">
           {success}
+          {/* Arrived from the pre-op safety check: offer the way straight back
+              so somebody closing four gaps watches the list shrink instead of
+              navigating and re-running the check by hand each time. */}
+          {returnTo && (
+            <a
+              href={returnTo}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-800"
+            >
+              Back to the safety check
+            </a>
+          )}
         </div>
       )}
 

@@ -17,6 +17,16 @@ export type Severity = 'CRITICAL' | 'WARNING' | 'INFO' | 'OK';
 export interface ScribeFinding {
   severity: Severity;
   category: string;
+  /**
+   * Stable machine key for findings that a person can actually DO something
+   * about, e.g. CONSENT_MISSING. Absent on findings that are observations
+   * rather than gaps — "elderly patient" has no form to fill in.
+   *
+   * The UI turns a code into a link to the screen that fixes it; see
+   * lib/scribeResolutions.ts. Codes must never be renamed casually: they are
+   * the contract between the analyser and that routing table.
+   */
+  code?: string;
   title: string;
   detail: string;
   recommendation: string;
@@ -71,8 +81,10 @@ const num = (v: unknown): number | null => (typeof v === 'number' && !Number.isN
 
 export function analyzePreopSafety(s: ScribeInput): ScribeResult {
   const f: ScribeFinding[] = [];
-  const add = (severity: Severity, category: string, title: string, detail: string, recommendation: string) =>
-    f.push({ severity, category, title, detail, recommendation });
+  const add = (
+    severity: Severity, category: string, title: string, detail: string,
+    recommendation: string, code?: string,
+  ) => f.push({ severity, category, title, detail, recommendation, code });
 
   const ageYears = s.patient && (s.patient.ageUnit ?? 'YEARS') === 'YEARS' ? num(s.patient.age) : 0;
   const isElective = (s.surgeryType ?? 'ELECTIVE') === 'ELECTIVE';
@@ -82,7 +94,7 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
   if (!consented) {
     add('CRITICAL', 'Consent', 'Informed consent not documented',
       'No signed electronic consent or uploaded consent form is on record for this booking.',
-      'Obtain and document valid informed consent (or emergency consent pathway) BEFORE the patient enters theatre.');
+      'Obtain and document valid informed consent (or emergency consent pathway) BEFORE the patient enters theatre.', 'CONSENT_MISSING');
   } else {
     add('OK', 'Consent', 'Consent documented', 'A signed/uploaded consent record is present.', 'Verify it matches the planned procedure at Sign-In.');
   }
@@ -90,7 +102,7 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
   // ── Haemoglobin ──
   const hb = num(s.recentHb);
   if (hb == null) {
-    add('WARNING', 'Haematology', 'Haemoglobin not documented', 'No recent Hb recorded at booking.', 'Obtain an FBC within 48 h of surgery.');
+    add('WARNING', 'Haematology', 'Haemoglobin not documented', 'No recent Hb recorded at booking.', 'Obtain an FBC within 48 h of surgery.', 'HB_MISSING');
   } else {
     if (hb < 7) add('CRITICAL', 'Haematology', `Severe anaemia (Hb ${hb} g/dL)`, 'Hb below 7 g/dL markedly increases peri-operative risk.',
       'Optimise / transfuse to a safe level and involve haematology before elective surgery; ensure crossmatched blood is available.');
@@ -100,7 +112,7 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
     // Sample recency
     if (s.hbSampleAt && s.scheduledDate) {
       const hrs = (new Date(s.scheduledDate).getTime() - new Date(s.hbSampleAt).getTime()) / 3_600_000;
-      if (hrs > 48) add('WARNING', 'Haematology', 'Haemoglobin sample is stale (> 48 h)', `Sample taken ${Math.round(hrs)} h before surgery.`, 'Repeat the FBC so the result is current within 48 h.');
+      if (hrs > 48) add('WARNING', 'Haematology', 'Haemoglobin sample is stale (> 48 h)', `Sample taken ${Math.round(hrs)} h before surgery.`, 'Repeat the FBC so the result is current within 48 h.', 'HB_STALE');
     }
   }
   if (s.needBloodTransfusion && !(s.bleedingRiskLevel)) {
@@ -109,26 +121,26 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
 
   // ── Electrolytes / renal ──
   const k = num(s.potassium);
-  if (k == null) add('WARNING', 'Biochemistry', 'Potassium not documented', 'No serum K+ recorded.', 'Check U&E before anaesthesia.');
+  if (k == null) add('WARNING', 'Biochemistry', 'Potassium not documented', 'No serum K+ recorded.', 'Check U&E before anaesthesia.', 'POTASSIUM_MISSING');
   else if (k < 2.5 || k > 6.5) add('CRITICAL', 'Biochemistry', `Dangerous potassium (${k} mmol/L)`, 'Severe hypo-/hyperkalaemia risks life-threatening arrhythmia.', 'Correct urgently with ECG monitoring and defer elective surgery until normalised.');
   else if (k < 3.5 || k > 5.5) add('WARNING', 'Biochemistry', `Abnormal potassium (${k} mmol/L)`, 'Outside the 3.5–5.1 mmol/L range.', 'Correct and recheck before induction; review causative drugs.');
   else add('OK', 'Biochemistry', `Potassium ${k} mmol/L`, 'Normal range.', 'No action.');
 
   const na = num(s.sodium);
-  if (na == null) add('WARNING', 'Biochemistry', 'Sodium not documented', 'No serum Na+ recorded.', 'Check U&E before anaesthesia.');
+  if (na == null) add('WARNING', 'Biochemistry', 'Sodium not documented', 'No serum Na+ recorded.', 'Check U&E before anaesthesia.', 'SODIUM_MISSING');
   else if (na < 120 || na > 155) add('CRITICAL', 'Biochemistry', `Severe dysnatraemia (Na ${na} mmol/L)`, 'Marked hypo-/hypernatraemia risks cerebral injury and arrhythmia.', 'Correct cautiously with senior input; defer elective surgery.');
   else if (na < 130 || na > 150) add('WARNING', 'Biochemistry', `Abnormal sodium (${na} mmol/L)`, 'Outside 135–145 mmol/L.', 'Identify cause and optimise before elective surgery.');
   else add('OK', 'Biochemistry', `Sodium ${na} mmol/L`, 'Normal range.', 'No action.');
 
   const cr = num(s.creatinine);
-  if (cr == null) add('WARNING', 'Renal', 'Creatinine not documented', 'No serum creatinine recorded.', 'Check renal function before anaesthesia.');
+  if (cr == null) add('WARNING', 'Renal', 'Creatinine not documented', 'No serum creatinine recorded.', 'Check renal function before anaesthesia.', 'CREATININE_MISSING');
   else if (cr > 300) add('CRITICAL', 'Renal', `Severe renal impairment (creatinine ${cr} µmol/L)`, 'High risk for fluid/electrolyte and drug-handling complications.', 'Involve nephrology/anaesthesia; adjust drug doses, avoid nephrotoxins, plan fluid strategy.');
   else if (cr > 110) add('WARNING', 'Renal', `Raised creatinine (${cr} µmol/L)`, 'Suggests renal impairment.', 'Adjust renally-cleared drugs, avoid NSAIDs/nephrotoxins, monitor fluids.');
   else add('OK', 'Renal', `Creatinine ${cr} µmol/L`, 'Normal range.', 'No action.');
 
   // ── Blood pressure ──
   const sys = num(s.bloodPressureSystolic), dia = num(s.bloodPressureDiastolic);
-  if (sys == null || dia == null) add('WARNING', 'Cardiovascular', 'Blood pressure not documented', 'No BP recorded at booking.', 'Record BP before theatre.');
+  if (sys == null || dia == null) add('WARNING', 'Cardiovascular', 'Blood pressure not documented', 'No BP recorded at booking.', 'Record BP before theatre.', 'BP_MISSING');
   else if (sys >= 180 || dia >= 110) add('WARNING', 'Cardiovascular', `Severe hypertension (${sys}/${dia} mmHg)`, 'Uncontrolled hypertension raises cardiovascular risk.', 'Optimise BP; consider deferring elective surgery and involve the physician/anaesthetist.');
   else if (sys < 90) add('WARNING', 'Cardiovascular', `Hypotension (${sys}/${dia} mmHg)`, 'Low BP may indicate hypovolaemia/sepsis.', 'Assess and resuscitate; identify the cause before anaesthesia.');
   else add('OK', 'Cardiovascular', `Blood pressure ${sys}/${dia} mmHg`, 'Acceptable range.', 'No action.');
@@ -136,7 +148,7 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
   // ── Serology / infection control ──
   const serology: Array<[string, string | null | undefined]> = [['HBsAg', s.hbsAgStatus], ['HCV', s.hcvStatus], ['HIV', s.hivStatus]];
   for (const [label, val] of serology) {
-    if (!val) { add('WARNING', 'Infection control', `${label} status not documented`, `No ${label} result recorded.`, `Obtain ${label} status; apply universal precautions meanwhile.`); continue; }
+    if (!val) { add('WARNING', 'Infection control', `${label} status not documented`, `No ${label} result recorded.`, `Obtain ${label} status; apply universal precautions meanwhile.`, 'VIROLOGY_MISSING'); continue; }
     if (val === 'POSITIVE') add('INFO', 'Infection control', `${label} positive`, `Patient is ${label}-positive.`, 'Apply strict universal/blood-borne-virus precautions, inform the theatre team, plan sharps handling and post-exposure protocol.');
     else if (val === 'PENDING' || val === 'NOT_DONE') add('WARNING', 'Infection control', `${label} result outstanding (${val.replace('_', ' ').toLowerCase()})`, `${label} is not yet resulted.`, `Chase the ${label} result before elective surgery; use universal precautions.`);
     else add('OK', 'Infection control', `${label} negative`, `${label} negative.`, 'Standard universal precautions.');
@@ -144,18 +156,18 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
 
   // ── Risk assessments ──
   const bleed = (s.bleedingRiskLevel || '').toUpperCase();
-  if (!bleed) add('WARNING', 'Risk', 'Bleeding-risk assessment missing', 'Not documented at booking.', 'Complete a bleeding-risk assessment.');
+  if (!bleed) add('WARNING', 'Risk', 'Bleeding-risk assessment missing', 'Not documented at booking.', 'Complete a bleeding-risk assessment.', 'BLEEDING_RISK_MISSING');
   else if (bleed === 'HIGH') add('WARNING', 'Risk', 'High bleeding risk', 'Flagged HIGH at booking.', 'Check clotting/platelets, correct coagulopathy, crossmatch, review anticoagulants, involve haematology.');
   else if (bleed === 'MODERATE') add('INFO', 'Risk', 'Moderate bleeding risk', 'Flagged MODERATE.', 'Ensure group & save and haemostatic readiness.');
 
   const nutrition = (s.nutritionalStatusAtBooking || '').toUpperCase();
-  if (!nutrition) add('WARNING', 'Risk', 'Nutritional assessment missing', 'Not documented at booking.', 'Complete a nutritional assessment.');
+  if (!nutrition) add('WARNING', 'Risk', 'Nutritional assessment missing', 'Not documented at booking.', 'Complete a nutritional assessment.', 'NUTRITION_MISSING');
   else if (nutrition === 'POOR') add('WARNING', 'Risk', 'Poor nutritional status', 'Increases infection, poor wound healing and dehiscence risk.', 'Optimise nutrition where time allows; flag to the surgical/dietetics team.');
   else if (nutrition === 'FAIR') add('INFO', 'Risk', 'Fair nutritional status', 'Suboptimal nutrition.', 'Consider optimisation for major/elective cases.');
 
   if (ageYears != null && ageYears > 45) {
     const ps = (s.pressureSoreRiskAtBooking || '').toUpperCase();
-    if (!ps) add('WARNING', 'Risk', 'Pressure-sore risk assessment missing (age > 45)', 'Required for patients over 45.', 'Complete a pressure-sore (e.g. Braden/Waterlow) assessment.');
+    if (!ps) add('WARNING', 'Risk', 'Pressure-sore risk assessment missing (age > 45)', 'Required for patients over 45.', 'Complete a pressure-sore (e.g. Braden/Waterlow) assessment.', 'PRESSURE_SORE_MISSING');
     else if (ps === 'HIGH') add('INFO', 'Risk', 'High pressure-sore risk', 'Flagged HIGH.', 'Use pressure-relieving positioning/padding and reposition per protocol.');
   }
 

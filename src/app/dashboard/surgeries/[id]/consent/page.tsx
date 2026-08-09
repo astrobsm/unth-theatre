@@ -11,6 +11,7 @@ import {
 import SignaturePad from '@/components/SignaturePad';
 import StaffComboInput from '@/components/StaffComboInput';
 import { formatAge } from '@/lib/age';
+import { safeReturnTo } from '@/lib/scribeResolutions';
 
 interface PatientInfo {
   id: string;
@@ -87,6 +88,17 @@ function emptyForm(): ConsentForm {
 export default function SurgeryConsentPage() {
   const params = useParams();
   const router = useRouter();
+
+  // Where to send the user back to, when they arrived from the pre-op safety
+  // check. Read from window.location instead of useSearchParams, which would
+  // require wrapping this page in a Suspense boundary to satisfy the app
+  // router. safeReturnTo refuses anything that is not an in-app path, so a
+  // crafted link cannot turn this into an open redirect.
+  const [returnTo, setReturnTo] = useState('');
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('returnTo');
+    setReturnTo(safeReturnTo(q, ''));
+  }, []);
   const surgeryId = params.id as string;
 
   const [patient, setPatient] = useState<PatientInfo | null>(null);
@@ -379,12 +391,25 @@ export default function SurgeryConsentPage() {
       </div>
 
       {completedAt && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          Consent completed ({signedElectronically ? 'signed electronically' : 'signed paper uploaded'}).
-          <button onClick={downloadPdf} className="ml-2 inline-flex items-center gap-1 underline">
-            <Download className="w-3.5 h-3.5" /> Download hard copy
-          </button>
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          <div className="flex items-center gap-2 flex-wrap">
+            <CheckCircle2 className="w-4 h-4" />
+            Consent completed ({signedElectronically ? 'signed electronically' : 'signed paper uploaded'}).
+            <button onClick={downloadPdf} className="ml-2 inline-flex items-center gap-1 underline">
+              <Download className="w-3.5 h-3.5" /> Download hard copy
+            </button>
+          </div>
+          {/* Sent here from the safety check: offer the way back rather than
+              redirecting, because the electronic path downloads the hard copy
+              and people need a moment to confirm the signature took. */}
+          {returnTo && (
+            <a
+              href={returnTo}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-800"
+            >
+              Back to the safety check
+            </a>
+          )}
         </div>
       )}
 
