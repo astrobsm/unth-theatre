@@ -24,6 +24,34 @@ INSERT INTO sync_node (id, node_id) VALUES (true, 'unset') ON CONFLICT (id) DO N
 CREATE OR REPLACE FUNCTION sync_node_id() RETURNS text
 LANGUAGE sql STABLE AS $$ SELECT node_id FROM sync_node WHERE id ORDER BY 1 LIMIT 1 $$;
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- A kill switch. Capture runs on every statement against every synced table,
+-- so there must be a way to stop it in one command without dropping triggers
+-- under load. It ships as FALSE: the triggers exist and do nothing until
+-- somebody turns them on deliberately, which is what makes applying this
+-- migration to a live database a non-event.
+ALTER TABLE sync_node ADD COLUMN IF NOT EXISTS capture_enabled boolean NOT NULL DEFAULT false;
+
+CREATE OR REPLACE FUNCTION sync_capture_enabled() RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT capture_enabled FROM sync_node WHERE id ORDER BY 1 LIMIT 1 $$;
+
+-- Columns never copied into a journal payload.
+--
+-- surgeries is 58 MB for 481 rows because consent forms are held as base64
+-- data URLs. Copying those into a journal entry on every edit would write
+-- ~120 KB per change into an append-only table and fill the local server's
+-- disk within weeks. Their SHA-256 is recorded instead, so a difference is
+-- still DETECTABLE without shipping megabytes; the bytes are fetched on demand.
+CREATE TABLE IF NOT EXISTS sync_omitted_columns (
+  table_name  text NOT NULL,
+  column_name text NOT NULL,
+  PRIMARY KEY (table_name, column_name)
+);
+INSERT INTO sync_omitted_columns (table_name, column_name) VALUES
+  ('surgeries','consentFileData'), ('surgeries','consentFormData'), ('surgeries','complexityData')
+ON CONFLICT DO NOTHING;
+
 -- ---------------------------------------------------------------------------
 -- The journal. Append-only, and the source of truth for what must be shipped.
 -- ---------------------------------------------------------------------------
@@ -47,6 +75,10 @@ CREATE TABLE IF NOT EXISTS sync_journal (
   -- Full row after the change (NULL for DELETE), and the columns that changed.
   payload        jsonb,
   changed_cols   text[],
+  -- Large columns held back from the payload, with a digest so a difference
+  -- between the nodes is still detectable without shipping the bytes.
+  omitted_cols   text[],
+  omitted_digest text,
 
   created_at     timestamptz NOT NULL DEFAULT now(),
 
@@ -137,8 +169,17 @@ BEGIN
   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS sync_origin text', t);
   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS sync_hlc text', t);
   EXECUTE format('DROP TRIGGER IF EXISTS zz_sync_capture ON %s', t);
+  EXECUTE format('DROP TRIGGER IF EXISTS zz_sync_capture_del ON %s', t);
+  -- BEFORE for writes, so the row is stamped by assigning to NEW. The first
+  -- version ran a SECOND UPDATE against the same row to stamp it, doubling
+  -- every write on hot tables like notifications and needing a re-entrancy
+  -- guard. Assignment costs nothing and removes both problems.
   EXECUTE format(
-    'CREATE TRIGGER zz_sync_capture AFTER INSERT OR UPDATE OR DELETE ON %s
+    'CREATE TRIGGER zz_sync_capture BEFORE INSERT OR UPDATE ON %s
+     FOR EACH ROW EXECUTE FUNCTION sync_capture()', t);
+  -- AFTER for deletes: there is no NEW to stamp.
+  EXECUTE format(
+    'CREATE TRIGGER zz_sync_capture_del AFTER DELETE ON %s
      FOR EACH ROW EXECUTE FUNCTION sync_capture()', t);
 END $$;
 
@@ -174,7 +215,16 @@ DECLARE
   v_new     integer := 0;
   v_hlc     text;
   v_cols    text[];
+  v_omit    text[];
+  v_digest  text;
+  v_payload jsonb;
 BEGIN
+  -- Off by default. One UPDATE on sync_node stops all capture instantly,
+  -- without dropping triggers on a live system.
+  IF NOT sync_capture_enabled() THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   -- A row arriving FROM the peer is applied with this set, so applying a
   -- change does not generate a journal entry that ships straight back and
   -- ping-pongs between the two nodes forever.
@@ -182,20 +232,17 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
-  v_hlc := sync_next_hlc();
-
   IF TG_OP = 'DELETE' THEN
     v_old  := to_jsonb(OLD);
-    v_id   := v_old ->> 'id';
     v_base := COALESCE((v_old ->> 'sync_version')::integer, 0);
     INSERT INTO sync_journal (table_name, row_id, op, base_version, new_version, hlc, origin_node, payload)
-    VALUES (TG_TABLE_NAME, v_id, 'DELETE', v_base, v_base, v_hlc, sync_node_id(), v_old);
+    VALUES (TG_TABLE_NAME, v_old ->> 'id', 'DELETE', v_base, v_base,
+            sync_next_hlc(), sync_node_id(), v_old);
     RETURN OLD;
   END IF;
 
-  v_row  := to_jsonb(NEW);
-  v_id   := v_row ->> 'id';
-  v_base := COALESCE((v_row ->> 'sync_version')::integer, 0);
+  v_row := to_jsonb(NEW);
+  v_id  := v_row ->> 'id';
 
   IF TG_OP = 'UPDATE' THEN
     v_old  := to_jsonb(OLD);
@@ -206,25 +253,58 @@ BEGIN
         AND n.key NOT IN ('sync_version','sync_origin','sync_hlc','updatedAt');
     -- An update that changed nothing of substance is not worth shipping.
     IF v_cols IS NULL THEN RETURN NEW; END IF;
+  ELSE
+    v_base := 0;
   END IF;
 
+  v_hlc := sync_next_hlc();
   v_new := v_base + 1;
 
-  -- Stamp the row without re-firing this trigger.
-  PERFORM set_config('orm.sync_applying', 'on', true);
-  EXECUTE format('UPDATE %I SET sync_version = $1, sync_origin = $2, sync_hlc = $3 WHERE id = $4', TG_TABLE_NAME)
-    USING v_new, sync_node_id(), v_hlc, v_id;
-  PERFORM set_config('orm.sync_applying', 'off', true);
+  -- This is a BEFORE trigger, so the row is stamped by assigning to NEW. The
+  -- first version ran a second UPDATE against the same row, which doubled
+  -- every write on hot tables and needed a re-entrancy guard to avoid
+  -- recursing. Assignment costs nothing and removes both problems.
+  NEW.sync_version := v_new;
+  NEW.sync_origin  := sync_node_id();
+  NEW.sync_hlc     := v_hlc;
 
-  v_row := jsonb_set(jsonb_set(jsonb_set(v_row,
-             '{sync_version}', to_jsonb(v_new)),
-             '{sync_origin}',  to_jsonb(sync_node_id())),
-             '{sync_hlc}',     to_jsonb(v_hlc));
+  v_payload := jsonb_set(jsonb_set(jsonb_set(v_row,
+                 '{sync_version}', to_jsonb(v_new)),
+                 '{sync_origin}',  to_jsonb(sync_node_id())),
+                 '{sync_hlc}',     to_jsonb(v_hlc));
 
-  INSERT INTO sync_journal (table_name, row_id, op, base_version, new_version, hlc, origin_node, payload, changed_cols)
-  VALUES (TG_TABLE_NAME, v_id, TG_OP, v_base, v_new, v_hlc, sync_node_id(), v_row, v_cols);
+  -- Hold back the large columns, keeping a digest so divergence stays visible.
+  SELECT array_agg(column_name) INTO v_omit
+    FROM sync_omitted_columns WHERE table_name = TG_TABLE_NAME;
+
+  IF v_omit IS NOT NULL THEN
+    SELECT encode(digest(
+             coalesce(string_agg(coalesce(v_payload ->> c, ''), '|' ORDER BY c), ''), 'sha256'), 'hex')
+      INTO v_digest FROM unnest(v_omit) AS c;
+    SELECT jsonb_object_agg(key, value) INTO v_payload
+      FROM jsonb_each(v_payload) WHERE key <> ALL (v_omit);
+  END IF;
+
+  INSERT INTO sync_journal (table_name, row_id, op, base_version, new_version, hlc,
+                            origin_node, payload, changed_cols, omitted_cols, omitted_digest)
+  VALUES (TG_TABLE_NAME, v_id, TG_OP, v_base, v_new, v_hlc, sync_node_id(),
+          v_payload, v_cols, v_omit, v_digest);
 
   RETURN NEW;
+END $$;
+
+-- Trim acknowledged entries. This is the ONLY thing that removes from the
+-- journal, and only entries the peer has confirmed. Unacknowledged entries are
+-- never trimmed at any age: that is the no-data-loss guarantee, and it means a
+-- long outage grows the journal rather than silently dropping work.
+CREATE OR REPLACE FUNCTION sync_trim(older_than interval DEFAULT '30 days') RETURNS bigint
+LANGUAGE plpgsql AS $$
+DECLARE n bigint;
+BEGIN
+  DELETE FROM sync_journal WHERE ack_at IS NOT NULL AND ack_at < now() - older_than;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  DELETE FROM sync_applied WHERE applied_at < now() - GREATEST(older_than, interval '30 days');
+  RETURN n;
 END $$;
 
 -- ---------------------------------------------------------------------------
