@@ -111,7 +111,7 @@ describe('the policy table', () => {
   });
 
   it('classifies consent and operative records as quarantine, never LWW', () => {
-    for (const t of ['post_op_notes', 'prescriptions', 'anaesthesia_consents', 'pre_op_visits']) {
+    for (const t of ['postop_prescriptions', 'anesthetic_prescriptions', 'pacu_assessments', 'pre_operative_visits']) {
       expect(policyFor(t)?.cls, t).toBe('QUARANTINE');
     }
   });
@@ -144,7 +144,7 @@ describe('conflicts, by class', () => {
   const conflicting = { exists: true, version: 9, hlc: 'A' };
 
   it('unions concurrent inserts on an append-only table', () => {
-    expect(decide(change({ table: 'theatre_milestones', op: 'INSERT', hlc: 'B' }), conflicting, NODES).action)
+    expect(decide(change({ table: 'patient_movements', op: 'INSERT', hlc: 'B' }), conflicting, NODES).action)
       .toBe('APPLY');
   });
 
@@ -164,7 +164,7 @@ describe('conflicts, by class', () => {
 
   it('never overwrites clinical content, whichever side is newer', () => {
     for (const hlc of ['A', 'Z']) {
-      expect(decide(change({ table: 'post_op_notes', hlc }), conflicting, NODES).action).toBe('QUARANTINE');
+      expect(decide(change({ table: 'postop_prescriptions', hlc }), conflicting, NODES).action).toBe('QUARANTINE');
     }
   });
 
