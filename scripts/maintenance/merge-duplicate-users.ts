@@ -59,6 +59,25 @@ interface Account {
 }
 interface Group { key: string; keeper: Account; duplicates: Account[] }
 
+/**
+ * Say which database is about to be modified, before touching it.
+ *
+ * Prisma reads `.env`, NOT `.env.local`. On the hospital's local server the
+ * local database URL lives in `.env.local` while `.env` still holds the cloud
+ * credentials, so a bare `npx tsx ...` silently targets PRODUCTION CLOUD while
+ * the operator believes they are working locally. That is a bad way to find
+ * out you have deleted the wrong rows, so the target is printed every run and
+ * a destructive command against a remote host has to be confirmed.
+ */
+function describeTarget(): { label: string; isLocal: boolean } {
+  const url = process.env.DATABASE_URL ?? '';
+  const m = /^postgres(?:ql)?:\/\/[^@]*@([^:/?]+)(?::(\d+))?\/([^?]+)/.exec(url);
+  if (!m) return { label: '(DATABASE_URL not set or unrecognised)', isLocal: false };
+  const [, host, port, db] = m;
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  return { label: `${host}${port ? ':' + port : ''}/${db}`, isLocal };
+}
+
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
 function saveBackup(name: string, data: unknown): string {
@@ -305,6 +324,22 @@ async function deletePending() {
 }
 
 (async () => {
+  const target = describeTarget();
+  console.log(`
+Database: ${target.label}${target.isLocal ? '  (local)' : '  (REMOTE)'}`);
+  if (APPLY && !target.isLocal && process.env.ORM_CONFIRM_REMOTE !== 'yes') {
+    console.error(`
+This would MODIFY A REMOTE database, which is probably not what you meant if
+you are on the hospital server. Prisma reads .env, not .env.local.
+
+To target the local database:
+    DB=$(grep -E '^DATABASE_URL=' .env.local | sed -E 's/^DATABASE_URL=//; s/^"//; s/"$//')
+    DATABASE_URL="$DB" npx tsx scripts/maintenance/merge-duplicate-users.ts ${command} --apply
+
+If you really do mean the remote one, set ORM_CONFIRM_REMOTE=yes.`);
+    process.exitCode = 2;
+    return;
+  }
   try {
     if (command === 'report') await report();
     else if (command === 'merge') await merge();
