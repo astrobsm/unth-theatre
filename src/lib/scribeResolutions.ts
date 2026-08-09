@@ -40,10 +40,10 @@ export interface Resolution {
  * form, because both are real in this hospital and refusing one of them just
  * moves the problem off the system.
  *
- * The rest are fields on the booking, so they share the edit form. That is not
- * ideal — a house officer entering one haemoglobin sees the whole booking —
- * but it is honest, and better than inventing a second place to record data
- * that would then disagree with the first.
+ * The rest go to the pre-op clinical data form. They were originally pointed at
+ * the booking edit page on the assumption it was the booking form reused. It is
+ * not: it edits ward, schedule and theatre, and has no clinical fields at all,
+ * so every lab finding led to a page where the value could not be entered.
  */
 export const RESOLUTIONS: Record<string, Resolution> = {
   CONSENT_MISSING: {
@@ -54,61 +54,61 @@ export const RESOLUTIONS: Record<string, Resolution> = {
   },
   HB_MISSING: {
     label: 'Enter haemoglobin',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Record the Hb result and the time the sample was taken.',
     who: 'House officer',
   },
   HB_STALE: {
     label: 'Update haemoglobin',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'The sample must be within 48 hours of surgery. Record the repeat result.',
     who: 'House officer',
   },
   POTASSIUM_MISSING: {
     label: 'Enter potassium',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Record the serum K+ from the U&E.',
     who: 'House officer',
   },
   SODIUM_MISSING: {
     label: 'Enter sodium',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Record the serum Na+ from the U&E.',
     who: 'House officer',
   },
   CREATININE_MISSING: {
     label: 'Enter creatinine',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Record the serum creatinine.',
     who: 'House officer',
   },
   BP_MISSING: {
     label: 'Enter blood pressure',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Record the most recent systolic and diastolic reading.',
     who: 'Ward nurse or house officer',
   },
   VIROLOGY_MISSING: {
     label: 'Enter virology',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Record the HBsAg, HCV and HIV status, or mark them as pending.',
     who: 'House officer',
   },
   BLEEDING_RISK_MISSING: {
     label: 'Assess bleeding risk',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Complete the bleeding-risk assessment on the booking.',
     who: 'Surgeon or house officer',
   },
   NUTRITION_MISSING: {
     label: 'Assess nutrition',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Complete the nutritional assessment on the booking.',
     who: 'Ward nurse or house officer',
   },
   PRESSURE_SORE_MISSING: {
     label: 'Assess pressure-sore risk',
-    path: '/edit',
+    path: '/preop-data',
     hint: 'Complete the Braden/Waterlow assessment. Required over 45 years.',
     who: 'Ward nurse',
   },
@@ -132,10 +132,17 @@ export function resolutionHref(
   const r = resolutionFor(code);
   if (!r || !surgeryId) return null;
   const base = `/dashboard/surgeries/${encodeURIComponent(surgeryId)}${r.path}`;
+
+  const params: string[] = [];
+  // The destination form focuses the field this finding is about, so somebody
+  // holding one result types one number instead of hunting a long form.
+  if (code) params.push(`code=${encodeURIComponent(code)}`);
   // Only ever an in-app path. An absolute or protocol-relative value here
   // would turn every finding into an open redirect.
-  if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//')) return base;
-  return `${base}?returnTo=${encodeURIComponent(returnTo)}`;
+  if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+    params.push(`returnTo=${encodeURIComponent(returnTo)}`);
+  }
+  return params.length ? `${base}?${params.join('&')}` : base;
 }
 
 /**

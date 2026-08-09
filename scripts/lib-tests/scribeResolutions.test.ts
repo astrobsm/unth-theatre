@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { analyzePreopSafety } from './medicalScribe';
+import { CODE_TO_FIELD, PREOP_FIELDS } from './preopData';
 import {
   RESOLUTIONS,
   isBlocking,
@@ -41,7 +42,7 @@ describe('every actionable finding has somewhere to go', () => {
     const result = analyzePreopSafety({});
     const consent = result.findings.find((f) => f.code === 'CONSENT_MISSING');
     expect(consent?.severity).toBe('CRITICAL');
-    expect(resolutionHref('CONSENT_MISSING', 'abc')).toBe('/dashboard/surgeries/abc/consent');
+    expect(resolutionHref('CONSENT_MISSING', 'abc')).toBe('/dashboard/surgeries/abc/consent?code=CONSENT_MISSING');
   });
 
   it('emits no code once consent is on record', () => {
@@ -69,11 +70,11 @@ describe('every actionable finding has somewhere to go', () => {
 describe('building the link', () => {
   it('appends returnTo so the user lands back on the check', () => {
     expect(resolutionHref('CONSENT_MISSING', 'abc', SCRIBE))
-      .toBe(`/dashboard/surgeries/abc/consent?returnTo=${encodeURIComponent(SCRIBE)}`);
+      .toBe(`/dashboard/surgeries/abc/consent?code=CONSENT_MISSING&returnTo=${encodeURIComponent(SCRIBE)}`);
   });
 
   it('encodes a surgery id rather than trusting it', () => {
-    expect(resolutionHref('CONSENT_MISSING', 'a/b')).toBe('/dashboard/surgeries/a%2Fb/consent');
+    expect(resolutionHref('CONSENT_MISSING', 'a/b')).toBe('/dashboard/surgeries/a%2Fb/consent?code=CONSENT_MISSING');
   });
 
   it('returns null for an unknown code or a missing id', () => {
@@ -93,7 +94,7 @@ describe('returnTo can never leave the application', () => {
     ]) {
       // Neither attached to a link...
       expect(resolutionHref('CONSENT_MISSING', 'abc', hostile))
-        .toBe('/dashboard/surgeries/abc/consent');
+        .toBe('/dashboard/surgeries/abc/consent?code=CONSENT_MISSING');
       // ...nor honoured when read back by the destination page.
       expect(safeReturnTo(hostile, '/fallback')).toBe('/fallback');
     }
@@ -115,5 +116,35 @@ describe('what stops a case', () => {
     expect(isBlocking('WARNING')).toBe(false);
     expect(isBlocking('INFO')).toBe(false);
     expect(isBlocking('OK')).toBe(false);
+  });
+});
+
+describe('the lab findings lead somewhere the value can be entered', () => {
+  it('does NOT send them to the booking edit page', () => {
+    // The original mistake: /edit covers ward, schedule and theatre and has no
+    // clinical fields, so every lab finding led to a dead end.
+    for (const code of Object.keys(RESOLUTIONS)) {
+      expect(RESOLUTIONS[code].path, code).not.toBe('/edit');
+    }
+  });
+
+  it('routes every lab and assessment code to the pre-op data form', () => {
+    for (const code of Object.keys(CODE_TO_FIELD)) {
+      expect(resolutionFor(code)?.path, code).toBe('/preop-data');
+    }
+  });
+
+  it('names a field the form actually renders, for each of them', () => {
+    // Without this a deep link focuses nothing and the user is dropped into a
+    // long form with no indication of which box to fill.
+    const rendered = new Set(PREOP_FIELDS.map((f) => f.name));
+    for (const [code, field] of Object.entries(CODE_TO_FIELD)) {
+      expect(rendered.has(field), `${code} -> ${field}`).toBe(true);
+    }
+  });
+
+  it('carries the code so the destination can focus that field', () => {
+    expect(resolutionHref('HB_MISSING', 'abc'))
+      .toBe('/dashboard/surgeries/abc/preop-data?code=HB_MISSING');
   });
 });
