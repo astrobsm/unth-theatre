@@ -49,6 +49,21 @@ const prisma = new PrismaClient();
 
 const [, , command, ...rest] = process.argv;
 const APPLY = rest.includes('--apply');
+/**
+ * Accounts a person has confirmed are the same individual, for groups the
+ * automatic rule deliberately refuses to guess at — same name, but different
+ * or missing phone numbers. Every account in the pair must be named, exactly,
+ * and usernames are case-sensitive ("Peters.alpha" and "peters.alpha" are two
+ * different accounts). They still have to share a normalised full name, and
+ * the survivor is still chosen by reference count, so "which account wins"
+ * stays one rule throughout.
+ *
+ *   --confirmed=chinenye,egbosimba.constance,divine,ezehdivine
+ */
+const CONFIRMED = new Set(
+  (rest.find((a) => a.startsWith('--confirmed='))?.slice('--confirmed='.length) ?? '')
+    .split(',').map((x) => x.trim()).filter(Boolean)
+);
 const OUT_DIR = path.join(process.cwd(), '.maintenance-backups');
 
 interface FkColumn { table: string; column: string }
@@ -180,13 +195,41 @@ async function findGroups(fks: FkColumn[]): Promise<{ groups: Group[]; ambiguous
     groups.push({ key, keeper: scored[0], duplicates: scored.slice(1) });
   }
 
-  // Same name but the phones differ or are missing: a person must decide.
+  // Same name but the phones differ or are missing: a person must decide, and
+  // names the accounts with --confirmed once they have.
   const merging = new Set(groups.flatMap((g) => [g.keeper.id, ...g.duplicates.map((d) => d.id)]));
   const ambiguous: string[] = [];
+  const extraIds: string[] = [];
+  const pending: Array<{ name: string; members: typeof users }> = [];
+
   for (const [name, members] of Array.from(byName.entries())) {
     if (members.length < 2) continue;
     if (members.every((m) => merging.has(m.id))) continue;
+    if (members.every((m) => CONFIRMED.has(m.username))) {
+      pending.push({ name, members });
+      extraIds.push(...members.map((m) => m.id));
+      continue;
+    }
     ambiguous.push(`${name} — ${members.map((m) => `${m.username}(${normPhone(m.phoneNumber) || 'no phone'})`).join(', ')}`);
+  }
+
+  if (pending.length) {
+    // Reference counts for these were not gathered above, because they were
+    // not candidates then.
+    const extra = await countRefsBulk(fks, extraIds);
+    for (const [key, set] of Array.from(extra.holders.entries())) {
+      const existing = holders.get(key);
+      if (existing) { for (const v of Array.from(set)) existing.add(v); }
+      else holders.set(key, set);
+    }
+    for (const { name, members } of pending) {
+      const scored: Account[] = members.map((m) => ({ ...m, refs: extra.totals.get(m.id) ?? 0 }));
+      scored.sort((a, b) =>
+        b.refs - a.refs ||
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        (b.staffCode ? 1 : 0) - (a.staffCode ? 1 : 0));
+      groups.push({ key: `confirmed:${name}`, keeper: scored[0], duplicates: scored.slice(1) });
+    }
   }
 
   return { groups, ambiguous, holders };
