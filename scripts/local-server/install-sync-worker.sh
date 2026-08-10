@@ -38,7 +38,8 @@ esac
 NODE_ID="$(psql "${DB_URL%%\?*}" -tAXc 'select node_id from sync_node where id' 2>/dev/null | tr -d '[:space:]' || true)"
 [[ -n "$NODE_ID" ]] || die "sync tables not found — apply the sync migration first"
 [[ "$NODE_ID" != "unset" ]] || die "node id is 'unset'. Set it before syncing:
-        psql \"${DB_URL%%\\?*}\" -c \"update sync_node set node_id='local-unth' where id;\""
+        DB=\$(grep -E '^DATABASE_URL=' .env.local | sed -E 's/^DATABASE_URL=//; s/^\"//; s/\"\$//')
+        psql \"\${DB%%\\?*}\" -c \"update sync_node set node_id='local-unth' where id;\""
 ok "node id: $NODE_ID"
 ok "peer: $PEER"
 
@@ -128,11 +129,18 @@ ${B}Watch it work${N}
   sudo journalctl -u orm-sync -f
 
 ${B}Where things stand${N}
-  psql "${DB_URL%%\?*}" -c "select count(*) filter (where ack_at is null) as waiting, count(*) as total from sync_journal;"
-  psql "${DB_URL%%\?*}" -c "select * from sync_state;"
+  First, put the connection string in a variable so the password is never
+  echoed to the terminal or into a shell history file:
+
+    DB=\$(grep -E '^DATABASE_URL=' .env.local | sed -E 's/^DATABASE_URL=//; s/^"//; s/"\$//')
+    DB=\${DB%%\?*}
+
+  Then:
+    psql "\$DB" -c "select count(*) filter (where ack_at is null) as waiting, count(*) as total from sync_journal;"
+    psql "\$DB" -c "select * from sync_state;"
 
 ${B}Conflicts a person must resolve${N}
-  psql "${DB_URL%%\?*}" -c "select table_name, row_id, reason, created_at from sync_conflicts where status='OPEN' order by created_at;"
+    psql "\$DB" -c "select table_name, row_id, reason, created_at from sync_conflicts where status='OPEN' order by created_at;"
 
 ${Y}Data now moves between the two databases.${N} Nothing is deleted by sync and
 nothing is overwritten in the clinical tables, but administrative rows will
