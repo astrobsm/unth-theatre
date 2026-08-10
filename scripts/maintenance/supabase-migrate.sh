@@ -45,8 +45,6 @@ fi
 # Send one SQL string. Returns the raw response body; the caller inspects it.
 run_sql() {
   local sql="$1"
-  # jq builds the JSON so that quotes, newlines and dollar-quoting in the SQL
-  # survive intact. Hand-rolled escaping here would corrupt a plpgsql body.
   local body
   # Node builds the JSON rather than jq: jq is not installed everywhere, and
   # node certainly is in this repo. Hand-rolled escaping would corrupt a
@@ -69,7 +67,11 @@ ok "authenticated, database reachable over HTTPS"
 
 # What has already been applied, so this is safe to re-run.
 APPLIED="$(run_sql "select migration_name from _prisma_migrations where finished_at is not null and rolled_back_at is null" \
-           | jq -r '.[]?.migration_name' 2>/dev/null || true)"
+  | node -e "
+    let s=''; process.stdin.on('data',d=>s+=d).on('end',()=>{
+      try { const r=JSON.parse(s); if(Array.isArray(r)) r.forEach(x=>console.log(x.migration_name)); }
+      catch { /* an error body yields no names; the probe above already proved the API works */ }
+    });" || true)"
 echo "  $(grep -c . <<< "$APPLIED" || echo 0) migration(s) already recorded"
 
 PENDING=()
