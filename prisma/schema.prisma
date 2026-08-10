@@ -8871,6 +8871,13 @@ enum ChargeKind {
   BLOOD
   OXYGEN
   EMERGENCY
+  // Added for the surgery estimate: an inpatient episode is priced per day,
+  // and post-operative services are neither theatre nor drugs. PROCEDURE
+  // remains the surgeon's professional fee and ANAESTHESIA the anaesthetist's,
+  // which is why those two are not duplicated here.
+  ADMISSION
+  NURSING
+  POSTOP_SERVICE
   OTHER
 }
 
@@ -9584,4 +9591,185 @@ model SurgicalProcedure {
   @@index([subspecialty, isActive])
   @@index([usageCount])
   @@map("surgical_procedures")
+}
+
+// ============================================================================
+// SURGERY ESTIMATE & COSTING
+// ----------------------------------------------------------------------------
+// What a planned operation is expected to cost the patient, itemised.
+//
+// It deliberately introduces NO new price masters. Prices already live in
+// `Tariff`, which is effective-dated (effectiveFrom/effectiveTo), stores kobo,
+// and supersedes by writing a new row rather than mutating an old one. Adding
+// SurgicalProcedurePrice / InvestigationPrice / MaterialPrice tables would
+// duplicate it and create two answers to "what did this cost in August".
+//
+// Bundles likewise reuse `SurgicalPack` — 55 already seeded across 11
+// subspecialties, consumable and ANAESTHESIA:: alike.
+//
+// THE ONE RULE THIS SCHEMA EXISTS TO ENFORCE: an estimate never changes
+// because a price changed afterwards. Every line carries a SNAPSHOT of the
+// price it was built from, so the document handed to a patient in August still
+// reads the same in September. The tariff id is kept for provenance, not for
+// display — nothing renders by joining back to a live price.
+// ============================================================================
+
+enum EstimateStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  ISSUED
+  REVISED
+  EXPIRED
+  CANCELLED
+  SUPERSEDED
+}
+
+enum EstimateSection {
+  PREOP_INVESTIGATION
+  SURGICAL_MATERIAL
+  ANAESTHESIA_MATERIAL
+  SURGICAL_FEE
+  ANAESTHESIA_FEE
+  THEATRE
+  ADMISSION
+  POSTOP_MEDICATION
+  POSTOP_MONITORING
+  OTHER_POSTOP
+}
+
+enum EstimateAdmissionType {
+  DAY_CASE
+  INPATIENT
+}
+
+model SurgeryEstimate {
+  id             String @id @default(uuid())
+  /// Shown to the patient. Never expose the uuid on a printed document.
+  estimateNumber String @unique
+
+  /// TEXT id — matches Surgery.id. Null while an estimate is drafted ahead of
+  /// a booking; set when it is attached to one.
+  surgeryId String?
+  /// TEXT id — matches Patient.id.
+  patientId String
+
+  status   EstimateStatus @default(DRAFT)
+  /// 1 for the first, incrementing per revision. See supersedesId.
+  revision Int            @default(1)
+  /// The estimate this one replaces. The original is kept and marked
+  /// SUPERSEDED rather than edited, so what the patient was first told
+  /// remains readable.
+  supersedesId   String?
+  revisionReason String?
+
+  // ---- Clinical context, snapshotted -------------------------------------
+  // Copied rather than joined: a patient renamed or a procedure re-coded must
+  // not silently alter a document already handed over.
+  patientName     String
+  folderNumber    String?
+  procedureName   String
+  diagnosis       String?
+  subspecialty    String?
+  unit            String?
+  surgeonName     String?
+  anaesthesiaType String?
+  surgeryType     String? // ELECTIVE | EMERGENCY, as at estimate time
+  plannedDate     DateTime?
+
+  admissionType    EstimateAdmissionType @default(INPATIENT)
+  /// Drives the admission calculation: daily charge x this.
+  expectedStayDays Int                   @default(0)
+
+  // ---- Money, in kobo, computed on the SERVER ----------------------------
+  // Integers throughout, as everywhere else in this schema. A float here is a
+  // rounding error that reaches a patient.
+  subtotalKobo Int @default(0)
+  /// Not assumed to equal the total; deposit policy is configurable.
+  depositKobo  Int @default(0)
+  totalKobo    Int @default(0)
+
+  /// How long the quoted prices stand. Past this the estimate reads EXPIRED.
+  validUntil DateTime?
+
+  // ---- Who did what ------------------------------------------------------
+  /// TEXT ids — match User.id. Names are snapshotted for the printed document.
+  preparedById   String?
+  preparedByName String?
+  approvedById   String?
+  approvedByName String?
+  approvedAt     DateTime?
+  issuedAt       DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+
+  /// Recorded when the document is sent, so sharing is auditable.
+  sharedToPhone  String?
+  sharedAt       DateTime?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines SurgeryEstimateLine[]
+
+  @@index([patientId, createdAt])
+  @@index([surgeryId])
+  @@index([status, createdAt])
+  @@map("surgery_estimates")
+}
+
+model SurgeryEstimateLine {
+  id         String          @id @default(uuid())
+  estimateId String
+  estimate   SurgeryEstimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  section EstimateSection
+  /// Which master this came from, for reporting. Matches the Tariff vocabulary.
+  kind    ChargeKind
+
+  // ---- The snapshot ------------------------------------------------------
+  // These are what the document renders. The ids below are provenance only.
+  description   String
+  unit          String @default("each")
+  quantity      Int    @default(1)
+  unitPriceKobo Int
+  totalKobo     Int
+
+  /// TEXT ids — the masters this line was built from. Kept so an auditor can
+  /// trace a figure, NOT so the line can be re-priced later.
+  tariffId          String?
+  inventoryItemId   String?
+  surgicalPackId    String?
+  investigationId   String?
+  medicationName    String?
+  /// The tariff window in force when this line was priced.
+  priceEffectiveFrom DateTime?
+
+  // ---- Computed quantities ------------------------------------------------
+  // For post-op medications and monitoring, quantity is usually derived
+  // (frequency x days). Both the inputs and the result are stored: the result
+  // because it is what was charged, the inputs because somebody will ask how
+  // "15" was arrived at.
+  frequencyPerDay Int?
+  durationDays    Int?
+
+  // ---- Overrides ----------------------------------------------------------
+  // An override is a person overruling the price master, so it records who and
+  // why. The original is never lost.
+  priceOverridden       Boolean @default(false)
+  originalUnitPriceKobo Int?
+  overrideReason        String?
+  /// TEXT id — matches User.id.
+  overriddenById        String?
+  overriddenByName      String?
+  overriddenAt          DateTime?
+
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([estimateId, section, sortOrder])
+  @@index([kind])
+  @@map("surgery_estimate_lines")
 }
