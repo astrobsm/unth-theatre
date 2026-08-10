@@ -90,6 +90,21 @@ CREATE TABLE IF NOT EXISTS sync_journal (
 );
 
 -- The worker's hot path: unshipped entries in causal order.
+-- Upgrade path for a journal created by an EARLIER version of this file.
+--
+-- CREATE TABLE IF NOT EXISTS silently skips the whole statement when the table
+-- exists, so columns added later never appear — while CREATE OR REPLACE
+-- FUNCTION above DOES update the trigger. The result is a new trigger writing
+-- to an old table, and every write to a captured table fails with
+-- "column omitted_cols does not exist". That took down the radio queue on the
+-- local server and would have done the same to the cloud.
+ALTER TABLE sync_journal ADD COLUMN IF NOT EXISTS omitted_cols   text[];
+ALTER TABLE sync_journal ADD COLUMN IF NOT EXISTS omitted_digest text;
+ALTER TABLE sync_journal ADD COLUMN IF NOT EXISTS shipped_at     timestamptz;
+ALTER TABLE sync_journal ADD COLUMN IF NOT EXISTS ack_at         timestamptz;
+ALTER TABLE sync_journal ADD COLUMN IF NOT EXISTS attempts       integer NOT NULL DEFAULT 0;
+ALTER TABLE sync_journal ADD COLUMN IF NOT EXISTS last_error     text;
+
 CREATE INDEX IF NOT EXISTS sync_journal_pending_idx
   ON sync_journal (hlc) WHERE ack_at IS NULL;
 CREATE INDEX IF NOT EXISTS sync_journal_row_idx ON sync_journal (table_name, row_id, hlc);
