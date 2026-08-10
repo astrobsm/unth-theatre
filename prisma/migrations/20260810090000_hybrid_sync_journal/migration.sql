@@ -316,14 +316,25 @@ DO $$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
+    -- PHASE 1 ONLY. Append-only event streams, where a conflict is impossible
+    -- by construction, plus the administrative tables whose conflicts are
+    -- scheduling rather than clinical.
     'audit_logs','notifications','patient_movements',
     'radio_announcements','surgery_team_check_ins','stock_movements','idempotency_keys',
-    'surgeries','theatre_allocations','rosters','equipment','theatre_meals','wards',
-    'preoperative_investigations','pre_operative_visits','holding_area_assessments',
-    'pacu_assessments','pacu_medications','pacu_vital_signs',
-    'anesthetic_prescriptions','postop_prescriptions','emergency_prescriptions',
-    'prescription_medication_items','blood_requests',
-    'users','user_module_grants','onboarding_submissions'
+    'surgeries','theatre_allocations','rosters','equipment','theatre_meals','wards'
+
+    -- PHASE 2, deliberately NOT enabled yet. These are classified in
+    -- lib/sync/syncPolicy.ts and will quarantine rather than overwrite, but
+    -- every conflict in them needs a person, so a clinician confirms the
+    -- classifications before capture is switched on:
+    --   preoperative_investigations, pre_operative_visits,
+    --   holding_area_assessments, pacu_assessments, pacu_medications,
+    --   pacu_vital_signs, anesthetic_prescriptions, postop_prescriptions,
+    --   emergency_prescriptions, prescription_medication_items, blood_requests
+    --
+    -- PHASE 3: users, user_module_grants, onboarding_submissions. Cloud
+    -- authoritative, and touching identity replication before the data layer
+    -- is proven would risk locking people out of a system they are operating.
   ] LOOP
     -- to_regclass returns NULL rather than raising, so a table that does not
     -- exist under that name is reported and skipped instead of aborting the

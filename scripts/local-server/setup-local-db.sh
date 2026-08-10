@@ -275,6 +275,24 @@ elif [[ $CLOUD_UP == 1 ]]; then
     -j 4 -h localhost -U "$DB_USER" -d "$DB_NAME" "$DUMP"
   ok "restore finished"
   rm -f "$DUMP"
+
+  # The clone carries the CLOUD's sync identity with it. Left alone, this
+  # server would believe it IS the cloud node: every row it wrote would be
+  # stamped origin=cloud, and the sync layer could never tell the two apart.
+  # Capture is also forced off, so a refresh can never silently start
+  # journalling on a node that was not deliberately switched on.
+  if PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -tAXc \
+       "select to_regclass('public.sync_node') is not null" 2>/dev/null | grep -q t; then
+    PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -qX -c \
+      "update sync_node set node_id = '${ORM_NODE_ID:-local-unth}', capture_enabled = false where id;" \
+      >/dev/null
+    # A journal cloned from the cloud describes the CLOUD's history, not ours.
+    # Replaying it as if we had written it would send the cloud its own
+    # changes back, attributed to us.
+    PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -qX \
+      -c "truncate sync_journal, sync_applied, sync_state;" >/dev/null 2>&1 || true
+    ok "sync identity reset to '${ORM_NODE_ID:-local-unth}', capture off, journal cleared"
+  fi
 elif [[ "$TABLES_BEFORE" -gt 0 ]]; then
   warn "using the ${TABLES_BEFORE} tables already held locally — run this again when online to refresh"
 else
