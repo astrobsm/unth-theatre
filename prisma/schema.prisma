@@ -621,6 +621,14 @@ model User {
 
   delaysReported    TheatreDelayRecord[] @relation("DelayReporter")
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("users")
 }
 
@@ -638,6 +646,14 @@ model UserModuleGrant {
 
   @@unique([userId, moduleId])
   @@index([userId])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("user_module_grants")
 }
 
@@ -673,6 +689,14 @@ model OnboardingSubmission {
 
   @@index([status])
   @@index([createdAt])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("onboarding_submissions")
 }
 
@@ -707,6 +731,15 @@ model Roster {
   @@index([staffCategory, date])
   @@index([location, date])
   @@index([status, date])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("rosters")
 }
 
@@ -726,6 +759,15 @@ model IdempotencyKey {
   createdAt      DateTime @default(now())
 
   @@index([createdAt])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("idempotency_keys")
 }
 
@@ -1138,6 +1180,15 @@ model Surgery {
   preopAlert        TheatrePreopAlert?        @relation("SurgeryPreopAlert")
   teamCheckIns      SurgeryTeamCheckIn[]      @relation("SurgeryTeamCheckIns")
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("surgeries")
 }
 
@@ -1399,6 +1450,15 @@ model AuditLog {
 
   user User @relation(fields: [userId], references: [id])
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("audit_logs")
 }
 
@@ -1462,6 +1522,15 @@ model TheatreAllocation {
   cleaner                     User?                @relation("CleanerAllocations", fields: [cleanerId], references: [id])
   porter                      User?                @relation("PorterAllocations", fields: [porterId], references: [id])
   setupLogs                   AnesthesiaSetupLog[] @relation("AllocationSetupLogs")
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("theatre_allocations")
 }
@@ -1704,6 +1773,15 @@ model Equipment {
   dailyStatusLogs    DailyEquipmentStatus[]
   equipmentChecks    EquipmentCheckLog[]
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("equipment")
 }
 
@@ -1779,6 +1857,15 @@ model PatientMovement {
   notes      String?
 
   surgery Surgery @relation(fields: [surgeryId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("patient_movements")
 }
@@ -2063,6 +2150,14 @@ model HoldingAreaAssessment {
   surgery   Surgery               @relation(fields: [surgeryId], references: [id])
   patient   Patient               @relation(fields: [patientId], references: [id])
   redAlerts HoldingAreaRedAlert[]
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("holding_area_assessments")
 }
@@ -2535,6 +2630,14 @@ model PACUAssessment {
   redAlerts  PACURedAlert[]
   medications PACUMedication[]
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("pacu_assessments")
 }
 
@@ -2560,6 +2663,14 @@ model PACUVitalSigns {
 
   // Relations
   pacuAssessment PACUAssessment @relation(fields: [pacuAssessmentId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("pacu_vital_signs")
 }
@@ -2609,6 +2720,14 @@ model PACUMedication {
 
   // Relations
   pacuAssessment PACUAssessment @relation(fields: [pacuAssessmentId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("pacu_medications")
 }
@@ -3573,6 +3692,14 @@ model AnestheticPrescription {
   additionalMedRequests    AdditionalMedicationRequest[]
   nonReturnQueries         MedicationNonReturnQuery[]
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("anesthetic_prescriptions")
 }
 
@@ -3606,6 +3733,14 @@ model PrescriptionMedicationItem {
 
   // Relations
   prescription AnestheticPrescription @relation(fields: [prescriptionId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("prescription_medication_items")
 }
@@ -3769,6 +3904,14 @@ model BloodRequest {
   acknowledgedBy User?   @relation("BloodAcknowledgedBy", fields: [acknowledgedById], references: [id])
   preparedBy     User?   @relation("BloodPreparedBy", fields: [preparedById], references: [id])
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("blood_requests")
 }
 
@@ -3873,6 +4016,15 @@ model Notification {
   readAt    DateTime?
 
   user User @relation(fields: [userId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("notifications")
 }
@@ -4690,6 +4842,14 @@ model PreoperativeInvestigation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("preoperative_investigations")
 }
 
@@ -4725,6 +4885,15 @@ model TheatreMeal {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("theatre_meals")
 }
@@ -5121,6 +5290,14 @@ model EmergencyPrescription {
   emergencyBooking EmergencySurgeryBooking       @relation(fields: [emergencyBookingId], references: [id])
   packedBy         User?                         @relation("EmergencyPrescriptionPacker", fields: [packedById], references: [id])
 
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("emergency_prescriptions")
 }
 
@@ -5247,6 +5424,15 @@ model Ward {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 
   @@map("wards")
 }
@@ -5397,6 +5583,14 @@ model PreOperativeVisit {
   @@index([surgeryId])
   @@index([visitDate])
   @@index([overallStatus])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("pre_operative_visits")
 }
 
@@ -6739,6 +6933,15 @@ model RadioAnnouncement {
   @@index([priority])
   @@index([category])
   @@index([createdAt])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("radio_announcements")
 }
 
@@ -7043,6 +7246,14 @@ model PostOpPrescription {
 
   @@index([surgeryId])
   @@index([status])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("postop_prescriptions")
 }
 
@@ -8778,6 +8989,15 @@ model StockMovement {
   @@index([surgeryId])
   @@index([type, occurredAt])
   @@index([reservationId])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("stock_movements")
 }
 
@@ -9525,6 +9745,15 @@ model SurgeryTeamCheckIn {
   @@unique([surgeryId, userId])
   @@index([surgeryId, status])
   @@index([checkedInAt])
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them, and an app-supplied value would break the
+  /// version chain conflict detection depends on.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("surgery_team_check_ins")
 }
 
@@ -9772,4 +10001,129 @@ model SurgeryEstimateLine {
   @@index([estimateId, section, sortOrder])
   @@index([kind])
   @@map("surgery_estimate_lines")
+}
+
+// ============================================================================
+// SYNC LAYER — declared for Prisma's benefit only
+// ----------------------------------------------------------------------------
+// These tables are created and maintained by
+// prisma/migrations/20260810090000_hybrid_sync_journal, in SQL, because they
+// need triggers and a plpgsql clock that Prisma cannot express.
+//
+// They are declared here for ONE reason: `prisma migrate diff` compares the
+// database against this schema, and anything it cannot see it generates a DROP
+// for. Before this block, a routine `migrate diff` produced DROP TABLE for all
+// seven of these plus DROP COLUMN for the sync metadata on every captured
+// table — which would have destroyed replication and any unshipped work still
+// sitting in the journal.
+//
+// Application code should not read or write these through Prisma. The worker
+// and the sync routes use raw SQL deliberately, because the semantics
+// (savepoints, capture suppression, FOR UPDATE on the clock) are not things an
+// ORM expresses well.
+// ============================================================================
+
+/// Which node this database is, and whether capture is switched on.
+model SyncNode {
+  id             Boolean  @id @default(true)
+  nodeId         String   @map("node_id")
+  captureEnabled Boolean  @default(false) @map("capture_enabled")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("sync_node")
+}
+
+/// Hybrid logical clock state. One row.
+model SyncClock {
+  id       Boolean @id @default(true)
+  physical BigInt  @default(0)
+  counter  Int     @default(0)
+
+  @@map("sync_clock")
+}
+
+/// Columns held back from journal payloads, with a digest instead.
+model SyncOmittedColumn {
+  tableName  String @map("table_name")
+  columnName String @map("column_name")
+
+  @@id([tableName, columnName])
+  @@map("sync_omitted_columns")
+}
+
+/// Append-only record of every change to a captured table.
+model SyncJournal {
+  id            String    @id @default(uuid())
+  tableName     String    @map("table_name")
+  rowId         String    @map("row_id")
+  op            String
+  baseVersion   Int       @default(0) @map("base_version")
+  newVersion    Int       @default(0) @map("new_version")
+  hlc           String
+  originNode    String    @map("origin_node")
+  payload       Json?
+  changedCols   String[]  @map("changed_cols")
+  omittedCols   String[]  @map("omitted_cols")
+  omittedDigest String?   @map("omitted_digest")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  shippedAt     DateTime? @map("shipped_at")
+  ackAt         DateTime? @map("ack_at")
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+
+  @@index([tableName, rowId, hlc])
+  @@index([originNode, createdAt])
+  @@map("sync_journal")
+}
+
+/// Entries received from the peer. Makes at-least-once delivery idempotent.
+model SyncApplied {
+  journalId String   @id @map("journal_id")
+  fromNode  String   @map("from_node")
+  tableName String   @map("table_name")
+  rowId     String   @map("row_id")
+  decision  String
+  reason    String?
+  appliedAt DateTime @default(now()) @map("applied_at")
+
+  @@index([appliedAt])
+  @@map("sync_applied")
+}
+
+/// The losing side of every conflict, kept in full. Nothing is discarded.
+model SyncRowConflict {
+  id             String    @id @default(uuid())
+  tableName      String    @map("table_name")
+  rowId          String    @map("row_id")
+  syncClass      String    @map("sync_class")
+  incoming       Json
+  incomingHlc    String    @map("incoming_hlc")
+  incomingNode   String    @map("incoming_node")
+  localSnapshot  Json?     @map("local_snapshot")
+  localHlc       String?   @map("local_hlc")
+  reason         String
+  status         String    @default("OPEN")
+  resolvedBy     String?   @map("resolved_by")
+  resolvedAt     DateTime? @map("resolved_at")
+  resolutionNote String?   @map("resolution_note")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([tableName, rowId])
+  @@map("sync_conflicts")
+}
+
+/// Per-peer progress, health and retry backoff state.
+model SyncState {
+  peerNode          String    @id @map("peer_node")
+  lastPushAt        DateTime? @map("last_push_at")
+  lastPushOkAt      DateTime? @map("last_push_ok_at")
+  lastPullAt        DateTime? @map("last_pull_at")
+  lastPullOkAt      DateTime? @map("last_pull_ok_at")
+  pullCursor        String    @default("") @map("pull_cursor")
+  consecutiveErrors Int       @default(0) @map("consecutive_errors")
+  nextAttemptAt     DateTime  @default(now()) @map("next_attempt_at")
+  lastError         String?   @map("last_error")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("sync_state")
 }
