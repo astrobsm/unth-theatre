@@ -293,6 +293,15 @@ elif [[ $CLOUD_UP == 1 ]]; then
       -c "truncate sync_journal, sync_applied, sync_state;" >/dev/null 2>&1 || true
     ok "sync identity reset to '${ORM_NODE_ID:-local-unth}', capture off, journal cleared"
   fi
+
+  # A clone carries whatever schema the cloud had AT THAT MOMENT, which is not
+  # the same as both nodes running the same migrations. That skew is what broke
+  # the radio queue: the local journal table was an older shape than the trigger
+  # inserting into it, and every write to a captured table failed with a 500.
+  if [[ -x "$APP_DIR/scripts/local-server/apply-migrations.sh" ]]; then
+    ok "applying any migrations the clone did not include"
+    "$APP_DIR/scripts/local-server/apply-migrations.sh" ||       warn "migrations did not all apply — run apply-migrations.sh and read the output"
+  fi
 elif [[ "$TABLES_BEFORE" -gt 0 ]]; then
   warn "using the ${TABLES_BEFORE} tables already held locally — run this again when online to refresh"
 else
