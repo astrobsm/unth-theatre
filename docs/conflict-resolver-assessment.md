@@ -78,10 +78,29 @@ exactly the code that rots when the rule lives in the UI.
 Pages under `src/app/dashboard/conflict-resolver/`, plus a sidebar entry in
 `layout.tsx` and a `modules.ts` grant. Mobile-first per §39.
 
+## DECIDED (2026-08-12)
+
+**No LLM. The analysis is a statistical engine.** Consensus percentages,
+disagreement clustering, minority detection and option comparison are all
+computed, so every figure in a published decision can be recomputed from the
+stored responses and defended. It works offline, costs nothing per analysis, and
+no stakeholder opinion leaves the hospital. It follows the Medical Scribe
+precedent, which is rules-based for the same reasons.
+
+The consequence to accept openly: §19's narrative sections (Executive Summary,
+Key Arguments, Rationale) are **drafted by a human** from the computed findings,
+not generated. The module structures and pre-fills them; it does not write prose.
+That is a smaller feature than §17-19 describes, and a more defensible one — a
+model's summary in a permanent institutional record cannot be traced back to
+source responses the way §18 requires.
+
+`AIAnalysisService` (§51) still exists as the abstraction, with a statistical
+implementation behind it, so a provider can be added later without touching
+callers.
+
 ## F. Risks
 
-1. **No AI provider exists.** §17–19 are the heart of the module and there is
-   nothing to call. This is a decision, not an implementation detail — see below.
+1. ~~No AI provider exists.~~ **Settled above: statistical engine, no LLM.**
 2. **Anonymity versus audit** (§13 against §30) genuinely conflict. Resolvable,
    but the rule must be stated once and enforced server-side: an anonymous
    decision stores `responded=true` on the stakeholder row and never a link from
