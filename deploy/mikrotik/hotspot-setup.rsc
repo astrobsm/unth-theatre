@@ -15,7 +15,8 @@
 
 :local srv    "192.168.88.252"
 :local secret "CHANGE-ME-same-as-RADIUS_SECRET"
-:local host   "unth-theatre.orm"
+:local host   "unth-theatre.link"
+:local alias  "unth-theatre.orm"
 
 # --- 1. The portal must be reachable BEFORE the person logs in --------------
 # The hotspot blocks everything until authentication. The login page lives on
@@ -24,13 +25,18 @@
 # This is the step that is invariably missed.
 /ip hotspot walled-garden
 add dst-host=$host action=allow comment="ORM captive portal"
+add dst-host=$alias action=allow comment="ORM captive portal (legacy name)"
 /ip hotspot walled-garden ip
+# THIS is the rule that matters now the portal is HTTPS. MikroTik can read a
+# hostname only in plain HTTP; inside TLS it sees an IP and nothing else. The
+# dst-host rules above would silently fail to match on their own.
 add dst-address=$srv action=accept comment="ORM app server (page assets, API)"
 
 # --- 2. Name resolution before login ----------------------------------------
 # The device must resolve unth-theatre.orm while still unauthenticated.
 /ip dns static
-add name=$host address=$srv comment="ORM"
+add name=$host address=$srv comment="ORM split-horizon — same name the cloud serves"
+add name=$alias address=$srv comment="ORM legacy name"
 
 # --- 3. RADIUS: the router asks the app who this person is ------------------
 # The app is the only place staff credentials exist, so the router delegates.
