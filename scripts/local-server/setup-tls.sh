@@ -2,10 +2,10 @@
 # =============================================================================
 # One address for home and hospital — the theatre server's half
 # -----------------------------------------------------------------------------
-#   sudo ./setup-tls.sh theatre.unthorm.com
+#   sudo ./setup-tls.sh unth-theatre.link
 #
-# Gives the LOCAL server a genuinely valid certificate for the SAME hostname
-# the cloud serves publicly. Staff then use one address everywhere: at home DNS
+# Gives the LOCAL server a genuinely valid certificate for the SAME hostname the
+# cloud serves publicly. Staff then use one address everywhere: at home DNS
 # sends them to Vercel, at the hospital the MikroTik answers with this machine,
 # and neither the browser nor the person notices the difference.
 #
@@ -15,51 +15,116 @@
 # allowed to resolve to 192.168.88.252 — a certificate says nothing about where
 # a host lives.
 #
-# Needs: outbound internet (Let's Encrypt + Cloudflare API). Nothing inbound.
+# Needs outbound internet (Let's Encrypt + the deSEC API). Nothing inbound.
 #
-# Before running, create a Cloudflare API token scoped to exactly one thing —
-#   Zone : DNS : Edit,  limited to this one zone
-# — at dash.cloudflare.com > My Profile > API Tokens. A global key would let
-# this machine edit every domain in the account; there is no reason for that.
+# DNS is at deSEC (desec.io), not Cloudflare. The domain is registered through
+# Canva, which registers via Cloudflare, and Cloudflare will not serve a zone
+# whose registration sits in a different Cloudflare account — it rejects the
+# nameservers outright. deSEC is free, has a real API, and is run by a German
+# non-profit.
+#
+# certbot --manual with hooks rather than a DNS plugin: Ubuntu packages no
+# certbot plugin for deSEC, and a hook calling the REST API directly has no
+# dependency that can rot. certbot stores the hook paths in the renewal config,
+# so `certbot renew` re-runs them unattended.
+#
+# Before running, create a token at desec.io > Token management.
 # =============================================================================
 
 set -euo pipefail
 
 HOST="${1:-}"
-[[ -n "$HOST" ]] || { echo "Usage: sudo $0 <hostname>   e.g. theatre.unthorm.com" >&2; exit 1; }
+[[ -n "$HOST" ]] || { echo "Usage: sudo $0 <hostname>   e.g. unth-theatre.link" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
 
-CF_INI="/etc/letsencrypt/cloudflare.ini"
+DESEC_INI="/etc/letsencrypt/desec.ini"
+AUTH_HOOK="/etc/letsencrypt/desec-auth.sh"
+CLEAN_HOOK="/etc/letsencrypt/desec-cleanup.sh"
 APP_PORT="${ORM_PORT:-3000}"
 EMAIL="${ORM_ADMIN_EMAIL:-sylvia4douglas@gmail.com}"
+SERVER_IP="${ORM_SERVER_IP:-192.168.88.252}"
 
-echo "==> Installing certbot with the Cloudflare DNS plugin"
+# The zone deSEC actually hosts. For a bare domain that is the host itself; for
+# theatre.unth-theatre.link it is still unth-theatre.link.
+ZONE="$(echo "$HOST" | awk -F. '{ if (NF>=2) print $(NF-1)"."$NF; else print $0 }')"
+
+echo "==> Installing certbot and nginx"
 apt-get update -qq
-apt-get install -y -qq certbot python3-certbot-dns-cloudflare nginx
+apt-get install -y -qq certbot nginx curl
 
-if [[ ! -f "$CF_INI" ]]; then
+if [[ ! -f "$DESEC_INI" ]]; then
   echo
-  echo "Paste the Cloudflare API token (Zone:DNS:Edit for this zone only):"
+  echo "Paste the deSEC API token (desec.io > Token management):"
   read -rs TOKEN
   echo
   [[ -n "$TOKEN" ]] || { echo "No token given." >&2; exit 1; }
-  install -m 600 /dev/null "$CF_INI"
-  printf 'dns_cloudflare_api_token = %s\n' "$TOKEN" > "$CF_INI"
-  # 600 before it is written, not after: a token must never exist on disk
-  # world-readable, not even for the moment between create and chmod.
-  echo "  saved to $CF_INI (0600)"
+  # 0600 before anything is written, not after: a token must never exist on
+  # disk world-readable, not even for the moment between create and chmod.
+  install -m 600 /dev/null "$DESEC_INI"
+  printf 'DESEC_TOKEN=%s\nDESEC_ZONE=%s\n' "$TOKEN" "$ZONE" > "$DESEC_INI"
+  echo "  saved to $DESEC_INI (0600)"
 else
-  echo "  using existing $CF_INI"
+  echo "  using existing $DESEC_INI"
 fi
 
+echo "==> Writing the DNS challenge hooks"
+# Let's Encrypt asks for a TXT record at _acme-challenge.<host>. certbot runs
+# the auth hook to publish it, verifies, then runs the cleanup hook.
+
+install -m 700 /dev/null "$AUTH_HOOK"
+cat > "$AUTH_HOOK" <<'AUTHEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+. /etc/letsencrypt/desec.ini
+
+# The record sits under _acme-challenge, named relative to the hosted zone.
+SUB="_acme-challenge"
+if [ "$CERTBOT_DOMAIN" != "$DESEC_ZONE" ]; then
+  SUB="_acme-challenge.${CERTBOT_DOMAIN%.$DESEC_ZONE}"
+fi
+
+# PUT replaces the whole rrset, so a stale value left by a failed run cannot
+# linger and make the next validation ambiguous. deSEC takes TXT records in DNS
+# presentation format, so the value carries its own quotes.
+curl -sS --fail -X PUT "https://desec.io/api/v1/domains/$DESEC_ZONE/rrsets/" \
+  -H "Authorization: Token $DESEC_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @- >/dev/null <<JSON
+[{"subname":"$SUB","type":"TXT","ttl":3600,"records":["\"$CERTBOT_VALIDATION\""]}]
+JSON
+
+# deSEC publishes in seconds, but Let's Encrypt queries the authoritative
+# servers directly and occasionally beats propagation. 45s costs nothing on a
+# job that runs twice a year and removes a class of intermittent failure.
+sleep 45
+AUTHEOF
+
+install -m 700 /dev/null "$CLEAN_HOOK"
+cat > "$CLEAN_HOOK" <<'CLEANEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+. /etc/letsencrypt/desec.ini
+
+SUB="_acme-challenge"
+if [ "$CERTBOT_DOMAIN" != "$DESEC_ZONE" ]; then
+  SUB="_acme-challenge.${CERTBOT_DOMAIN%.$DESEC_ZONE}"
+fi
+
+# An empty record list removes the rrset. Left behind, a spent challenge TXT
+# serves no purpose. Never fatal — the certificate is already issued by now.
+curl -sS -X PUT "https://desec.io/api/v1/domains/$DESEC_ZONE/rrsets/" \
+  -H "Authorization: Token $DESEC_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @- >/dev/null <<JSON || true
+[{"subname":"$SUB","type":"TXT","ttl":3600,"records":[]}]
+JSON
+CLEANEOF
+
 echo "==> Requesting a certificate for $HOST"
-# --dns-cloudflare-propagation-seconds: Cloudflare is fast but Let's Encrypt
-# checks authoritative servers, and 10s default fails often enough to be
-# annoying. 30 costs nothing on a job that runs twice a year.
 certbot certonly \
-  --dns-cloudflare \
-  --dns-cloudflare-credentials "$CF_INI" \
-  --dns-cloudflare-propagation-seconds 30 \
+  --manual --preferred-challenges dns \
+  --manual-auth-hook "$AUTH_HOOK" \
+  --manual-cleanup-hook "$CLEAN_HOOK" \
   -d "$HOST" \
   --non-interactive --agree-tos --email "$EMAIL" \
   --keep-until-expiring
@@ -72,8 +137,8 @@ cat > "/etc/nginx/sites-available/orm" <<NGINX
 server {
     listen 80;
     server_name $HOST unth-theatre.orm;
-    # unth-theatre.orm stays as an alias so anything already bookmarked, and
-    # the captive portal, keep working through the changeover.
+    # unth-theatre.orm stays an alias so existing bookmarks and the captive
+    # portal keep working through the changeover.
     return 301 https://\$host\$request_uri;
 }
 
@@ -85,8 +150,8 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$HOST/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    # Theatre uploads: consent scans and signed paper forms are photographed
-    # on phones and arrive large.
+    # Theatre uploads: consent scans and signed paper forms are photographed on
+    # phones and arrive large.
     client_max_body_size 25m;
 
     location / {
@@ -102,8 +167,8 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_cache_bypass \$http_upgrade;
 
-        # Server-sent events (the theatre board, radio queue) must not buffer,
-        # or updates arrive in clumps minutes late.
+        # Server-sent events (theatre board, radio queue) must not buffer, or
+        # updates arrive in clumps minutes late.
         proxy_buffering off;
         proxy_read_timeout 3600s;
     }
@@ -117,9 +182,9 @@ echo "==> Checking the nginx config before reloading"
 nginx -t
 systemctl reload nginx
 
-# Renewal: certbot's packaged timer runs twice daily and only acts inside the
-# last 30 days, so a few days offline over a renewal window is survivable.
 echo "==> Renewal"
+# certbot's packaged timer runs twice daily and acts only inside the last 30
+# days, so a few days offline across a renewal window is survivable.
 systemctl enable --now certbot.timer >/dev/null 2>&1 || true
 mkdir -p /etc/letsencrypt/renewal-hooks/deploy
 cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
@@ -128,21 +193,23 @@ cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
 systemctl reload nginx
 HOOK
 chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-certbot renew --dry-run 2>&1 | tail -3
+
+# Proves the hooks work now, rather than discovering they do not in 60 days.
+certbot renew --dry-run 2>&1 | tail -5
 
 cat <<DONE
 
-  Done on this machine. https://$HOST now works here.
+  Done on this machine. https://$HOST is served here.
 
   Three things remain, and the app WILL misbehave without the second one:
 
   1. MikroTik — answer this name with this server:
-       /ip dns static add name=$HOST address=192.168.88.252 comment="ORM split-horizon"
+       /ip dns static add name=$HOST address=$SERVER_IP comment="ORM split-horizon"
 
   2. NEXTAUTH_SECRET must be IDENTICAL here and on Vercel.
-     Sessions are signed JWTs. Same address plus different secrets means a
-     staff member signed in at home is silently signed out on arrival, and
-     cannot tell why. Compare:
+     Sessions are signed JWTs. One address with two different secrets means a
+     staff member signed in at home is silently signed out on arrival, with no
+     error that explains it. Compare
        grep NEXTAUTH_SECRET ~/unth-theatre/.env.local
      against the Vercel project's environment variable.
 
