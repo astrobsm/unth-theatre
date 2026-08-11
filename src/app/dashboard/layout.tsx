@@ -361,6 +361,10 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/admin/surgical-units', icon: Building2, label: 'Surgical Units', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-packs', icon: Package, label: 'Surgical Packs', badge: 'ADMIN' });
+    // What the hospital charges patients. Same roles as the access editor:
+    // changing prices is an administrative act, not a clinical one, and the
+    // API enforces the same list independently.
+    menuItems.push({ href: '/dashboard/settings/price-master', icon: FileSpreadsheet, label: 'Price Master', badge: 'ADMIN' });
   } else if (['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'].includes(session.user.role)) {
     // Non-admin roles that maintain pack/drug entries can also reach the catalog + packs.
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog' });
@@ -493,6 +497,9 @@ export default function DashboardLayout({
     ] },
     { type: 'group', label: 'Admin Board', icon: Shield, hrefs: [
       '/dashboard/admin/access',
+      // What the hospital charges patients. Everything the surgery estimate
+      // produces is derived from what is loaded here.
+      '/dashboard/settings/price-master',
       '/dashboard/announcements',
       '/dashboard/unit-booking-letter',
       '/dashboard/patient-payment-guide',
