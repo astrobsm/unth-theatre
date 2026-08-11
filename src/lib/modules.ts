@@ -153,6 +153,11 @@ export const MODULES: AppModule[] = [
   { id: 'presentation', label: 'Presentation', paths: ['/dashboard/presentation'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'training', label: 'Staff Training', paths: ['/training'], defaultRoles: ['*'], category: 'Reports' },
   { id: 'settings', label: 'Settings', paths: ['/dashboard/settings'], defaultRoles: ['*'], category: 'Reports' },
+  // Listed BEFORE nothing in particular, but gated separately from Settings:
+  // 'settings' is open to everyone, and what the hospital charges patients is
+  // not an ordinary clinical setting. The API enforces the same roles, so the
+  // menu entry is convenience rather than the boundary.
+  { id: 'price-master', label: 'Price Master', paths: ['/dashboard/settings/price-master'], defaultRoles: [], category: 'Admin' },
 
   // Imprest Management and Retirement
   // ---------------------------------
