@@ -102,30 +102,34 @@ export async function applyEntry(
     // Suppress capture while applying, or this write journals an entry that
     // ships straight back and the two nodes trade one row forever.
     await tx.$executeRawUnsafe(`select set_config('orm.sync_applying','on',true)`);
-    try {
-      if (e.op === 'DELETE') {
-        await tx.$executeRawUnsafe(`delete from ${q(e.table)} where id = $1`, e.rowId);
-      } else {
-        const payload = (e.payload ?? {}) as Record<string, unknown>;
-        // Only real columns. A payload key becomes an identifier in the SQL
-        // below, so an unfiltered key would be an injection point. Omitted
-        // large columns are simply absent and keep whatever this node holds.
-        const keys = Object.keys(payload).filter((k) => cols!.has(k));
-        if (keys.length) {
-          const values = keys.map((k) => payload[k]);
-          const ph = keys.map((_, i) => `$${i + 1}`);
-          const upd = keys.filter((k) => k !== 'id').map((k) => `${q(k)} = excluded.${q(k)}`);
-          await tx.$executeRawUnsafe(
-            `insert into ${q(e.table)} (${keys.map(q).join(',')}) values (${ph.join(',')})
-             on conflict (id) do update set ${upd.join(',')}`, ...values);
-        }
+
+    if (e.op === 'DELETE') {
+      await tx.$executeRawUnsafe(`delete from ${q(e.table)} where id = $1`, e.rowId);
+    } else {
+      const payload = (e.payload ?? {}) as Record<string, unknown>;
+      // Only real columns. A payload key becomes an identifier in the SQL
+      // below, so an unfiltered key would be an injection point. Omitted
+      // large columns are simply absent and keep whatever this node holds.
+      const keys = Object.keys(payload).filter((k) => cols!.has(k));
+      if (keys.length) {
+        const values = keys.map((k) => payload[k]);
+        const ph = keys.map((_, i) => `$${i + 1}`);
+        const upd = keys.filter((k) => k !== 'id').map((k) => `${q(k)} = excluded.${q(k)}`);
+        await tx.$executeRawUnsafe(
+          `insert into ${q(e.table)} (${keys.map(q).join(',')}) values (${ph.join(',')})
+           on conflict (id) do update set ${upd.join(',')}`, ...values);
       }
-      await markApplied(tx, e, fromNode, 'APPLY', decision.reason);
-    } finally {
-      // Restored even if the write fails, so a later statement in the same
-      // session cannot silently skip capture.
-      await tx.$executeRawUnsafe(`select set_config('orm.sync_applying','off',true)`);
     }
+    await markApplied(tx, e, fromNode, 'APPLY', decision.reason);
+
+    // NO finally resetting the flag. set_config(..., true) is TRANSACTION-local,
+    // so a rollback discards it automatically — the reset was never needed.
+    //
+    // Worse, it actively destroyed diagnostics: when a statement failed, the
+    // transaction was already aborted, so the reset itself failed with 25P02
+    // "current transaction is aborted" and REPLACED the real error. Two days of
+    // logs said only that something had gone wrong, never what.
+    await tx.$executeRawUnsafe(`select set_config('orm.sync_applying','off',true)`);
   });
 
   return { id: e.id, decision: 'APPLY', reason: decision.reason };
