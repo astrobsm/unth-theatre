@@ -112,12 +112,34 @@ export async function applyEntry(
       // large columns are simply absent and keep whatever this node holds.
       const keys = Object.keys(payload).filter((k) => cols!.has(k));
       if (keys.length) {
-        const values = keys.map((k) => payload[k]);
-        const ph = keys.map((_, i) => `$${i + 1}`);
+        // The row is rebuilt by POSTGRES from one jsonb parameter, not by
+        // binding each column as a separate value.
+        //
+        // The journal captures rows with to_jsonb, so every value arrives as
+        // JSON: a timestamp is the string "2026-08-10T09:00:00", an enum is a
+        // string, an array is a JSON array. Bound individually, the driver
+        // sends each as `text` and Postgres rejects it — "column createdAt is
+        // of type timestamp without time zone but expression is of type text".
+        // That one error silently stopped every row carrying a date, which is
+        // very nearly every row.
+        //
+        // jsonb_populate_record coerces the whole payload against the table's
+        // own row type, so timestamps, enums, arrays, jsonb columns and
+        // numerics are all converted by the same code Postgres uses for its
+        // own I/O. Casting each column by hand would have fixed timestamps and
+        // broken again at the first enum.
+        const colList = keys.map(q).join(', ');
         const upd = keys.filter((k) => k !== 'id').map((k) => `${q(k)} = excluded.${q(k)}`);
+        // Only an id means there is nothing to change; DO UPDATE SET with an
+        // empty list is a syntax error.
+        const onConflict = upd.length
+          ? `do update set ${upd.join(', ')}`
+          : 'do nothing';
         await tx.$executeRawUnsafe(
-          `insert into ${q(e.table)} (${keys.map(q).join(',')}) values (${ph.join(',')})
-           on conflict (id) do update set ${upd.join(',')}`, ...values);
+          `insert into ${q(e.table)} (${colList})
+           select ${colList} from jsonb_populate_record(null::${q(e.table)}, $1::jsonb)
+           on conflict (id) ${onConflict}`,
+          JSON.stringify(payload));
       }
     }
     await markApplied(tx, e, fromNode, 'APPLY', decision.reason);
