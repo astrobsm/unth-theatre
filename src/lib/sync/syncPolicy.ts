@@ -55,6 +55,17 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'wards', cls: 'LWW', why: 'Reference data. Renaming or adding a ward has no clinical history to lose.' },
 
   // ---- Class 3: quarantine ----------------------------------------------
+  // The parent of nearly everything else here. It was missing from this list,
+  // and its absence is why cloud bookings could not land locally at all: a
+  // surgery arrived referencing a patient this node had never seen, and
+  // surgeries_patientId_fkey rejected it.
+  //
+  // Chosen for conflict-risk originally; the set must ALSO be closed under its
+  // foreign keys, or a child can never be inserted anywhere.
+  //
+  // QUARANTINE, not LWW: this row carries blood group and allergies. A new
+  // patient still inserts cleanly — only two divergent EDITS need a person.
+  { table: 'patients', cls: 'QUARANTINE', why: 'Identity, blood group and allergies. Silently overwriting either is a patient-safety event.' },
   { table: 'preoperative_investigations', cls: 'QUARANTINE', why: 'A result is a claim about a patient. Two differing claims need a person.' },
   { table: 'pre_operative_visits', cls: 'QUARANTINE', why: 'Clearance decisions; silently overwriting one hides that it was ever made.' },
   { table: 'holding_area_assessments', cls: 'QUARANTINE', why: 'The last check before the theatre door; both versions must survive.' },

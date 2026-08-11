@@ -125,6 +125,55 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
   return { sent: acked.length, failed: false };
 }
 
+/** Park an entry that could not be applied, in full, for a later retry. */
+async function defer(e: JournalEntryWire, fromNode: string, err: unknown): Promise<void> {
+  const msg = err instanceof Error ? err.message : String(err);
+  // First few lines only: a Prisma error carries a stack that buries the
+  // constraint name, which is the one part worth reading here.
+  const brief = msg.split(/\r?\n/).slice(0, 3).join(' ');
+  console.warn(`[sync] deferring ${e.table}/${e.rowId}: ${brief}`);
+  await prisma.$executeRawUnsafe(
+    `insert into sync_deferred (journal_id, from_node, table_name, row_id, entry, attempts, last_error, last_try_at)
+     values ($1::uuid, $2, $3, $4, $5::jsonb, 1, $6, now())
+     on conflict (journal_id) do update set
+       attempts = sync_deferred.attempts + 1, last_error = excluded.last_error, last_try_at = now()`,
+    e.id, fromNode, e.table, e.rowId, JSON.stringify(e), msg.slice(0, 2000));
+}
+
+/**
+ * Retry what was parked, oldest first — the order in which a parent deferred
+ * before its child is retried before it, which is the order that resolves.
+ *
+ * Runs BEFORE the pull so a parent applied last cycle unblocks its children
+ * this cycle, rather than a cycle later.
+ */
+async function retryDeferred(node: string): Promise<void> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; from_node: string; entry: JournalEntryWire; attempts: number }>>(
+    `select id, from_node, entry, attempts from sync_deferred
+      where resolved_at is null order by first_seen_at limit 200`);
+  if (!rows.length) return;
+
+  let healed = 0;
+  for (const r of rows) {
+    try {
+      const result = await applyEntry(db, r.entry, r.from_node, node, columnCache);
+      await prisma.$executeRawUnsafe(
+        `update sync_deferred set resolved_at = now(), last_try_at = now(), last_error = $2 where id = $1::uuid`,
+        r.id, `Resolved: ${result.decision}`);
+      healed++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await prisma.$executeRawUnsafe(
+        `update sync_deferred set attempts = attempts + 1, last_try_at = now(), last_error = $2 where id = $1::uuid`,
+        r.id, msg.slice(0, 2000));
+      // Still blocked. Left alone deliberately: it is visible in sync_deferred
+      // and costs one retry a cycle, which is cheaper than dropping a change.
+    }
+  }
+  const stuck = rows.length - healed;
+  console.log(`[sync] deferred queue: ${healed} applied, ${stuck} still waiting`);
+}
+
 /** Fetch and apply what the peer originated and we have not seen. */
 async function pull(node: string): Promise<number> {
   const state = await prisma.$queryRawUnsafe<Array<{ pull_cursor: string }>>(
@@ -137,6 +186,7 @@ async function pull(node: string): Promise<number> {
   if (!res.ok) throw Object.assign(new Error(`pull failed: ${res.error}`), { status: res.status });
 
   let applied = 0;
+  let deferred = 0;
   for (const e of res.data.entries) {
     try {
       const r = await applyEntry(db, e, res.data.node, node, columnCache);
@@ -145,15 +195,21 @@ async function pull(node: string): Promise<number> {
         console.warn(`[sync] quarantined ${e.table}/${e.rowId}: ${r.reason}`);
       }
     } catch (err) {
-      // Stop at the first failure rather than skipping past it. Advancing the
-      // cursor over an entry we could not apply would lose it silently, and
-      // this loop will retry from here on the next cycle.
-      console.error(`[sync] could not apply ${e.id} (${e.table}):`, err);
-      throw err;
+      // Park it and carry on. Stopping here protected the entry but blocked
+      // every one behind it — one surgery whose patient had not yet arrived
+      // held up the entire queue indefinitely.
+      //
+      // Skipping is only safe because the whole entry is stored first, so the
+      // cursor can advance without losing it. Most of these are ordering, not
+      // corruption, and resolve themselves once the parent lands.
+      await defer(e, res.data.node, err);
+      deferred++;
     }
   }
 
-  // Only after every entry in the batch succeeded.
+  if (deferred) console.warn(`[sync] ${deferred} entr(y/ies) deferred; will retry next cycle`);
+
+  // Safe now that a failure parks the entry rather than losing it.
   await prisma.$executeRawUnsafe(
     `insert into sync_state (peer_node, pull_cursor, last_pull_at, last_pull_ok_at, consecutive_errors, last_error)
      values ('cloud', $1, now(), now(), 0, null)
@@ -174,6 +230,9 @@ async function cycle(): Promise<void> {
   }
 
   const pushed = await push(node);
+  // Before the pull: a parent applied last cycle unblocks its children now.
+  await retryDeferred(node);
+
   const pulled = await pull(node);
 
   await prisma.$executeRawUnsafe(

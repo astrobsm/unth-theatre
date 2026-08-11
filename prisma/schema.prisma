@@ -10127,3 +10127,24 @@ model SyncState {
 
   @@map("sync_state")
 }
+
+/// Entries that could not be applied yet — almost always because a parent row
+/// has not arrived. Declared here only so `prisma migrate diff` sees it and
+/// does not generate a DROP for it, which it did to the whole sync layer once.
+model SyncDeferred {
+  id          String    @id @default(uuid()) @db.Uuid
+  journalId   String    @unique @map("journal_id") @db.Uuid
+  fromNode    String    @map("from_node")
+  tableName   String    @map("table_name")
+  rowId       String    @map("row_id")
+  entry       Json      @db.JsonB
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastTryAt   DateTime? @map("last_try_at") @db.Timestamptz(6)
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(6)
+
+  @@index([firstSeenAt])
+  @@index([tableName, resolvedAt])
+  @@map("sync_deferred")
+}
