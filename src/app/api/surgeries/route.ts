@@ -12,6 +12,7 @@ import { resolveBasePack, BASE_PACK_LABEL } from "@/lib/baseConsumablePack";
 import { checkSlot } from "@/lib/theatreOps/scheduling";
 import { recordProcedureUse } from "@/lib/procedures/usage";
 import { ensureEmergencyBooking } from "@/lib/emergency/ensureBooking";
+import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
 
 export const dynamic = 'force-dynamic';
 
@@ -802,6 +803,17 @@ export async function POST(request: NextRequest) {
     // Feeds the ordering of the procedure picker. Deliberately not awaited in
     // a way that could fail the booking — a statistic is not worth a case.
     void recordProcedureUse(validatedData.subspecialty, validatedData.procedureName);
+
+    // A DRAFT estimate, so costing starts from something that exists rather
+    // than from someone remembering to create it. Same reasoning as above: an
+    // estimate is a convenience and must never be able to fail a booking, so it
+    // is voided rather than awaited and never throws.
+    void safeCreateDraftEstimate({
+      surgeryId: surgery.id,
+      patientId: surgery.patientId,
+      createdById: (session?.user as { id?: string } | undefined)?.id ?? null,
+      createdByName: (session?.user as { name?: string } | undefined)?.name ?? null,
+    });
 
     await rememberResult(idemKey, 201, surgery, 'POST /api/surgeries');
     return NextResponse.json(surgery, { status: 201 });

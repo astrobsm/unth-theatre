@@ -27,6 +27,15 @@
  * mark — the reader should not be able to tell anything was substituted.
  */
 const REPLACEMENTS: Record<string, string> = {
+  // The naira sign, U+20A6, has NO WinAnsi slot — so by the rule above it did
+  // not merely fail to print, it corrupted every string it appeared in. Which
+  // means every money figure in the analytics PDFs has been arriving mangled,
+  // and nobody connected the two because the lines WITHOUT an amount printed
+  // perfectly.
+  //
+  // "NGN" rather than "N": on a financial document handed to a patient or filed
+  // by an auditor, an ambiguous currency mark is worse than a verbose one.
+  '₦': 'NGN ',
   '→': '->',
   '←': '<-',
   '⇒': '=>',
