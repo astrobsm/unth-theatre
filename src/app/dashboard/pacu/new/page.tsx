@@ -9,6 +9,13 @@ interface Surgery {
   id: string;
   procedureName: string;
   scheduledDate: string;
+  scheduledTime?: string;
+  status?: string;
+  /// Whether theatre has marked the case complete. Cases that are NOT complete
+  /// are still offered — the patient is in recovery either way, and the nurse
+  /// can tick it off here.
+  isCompleted?: boolean;
+  surgeonName?: string | null;
   pacuAssessment?: { id: string } | null;
   patient: {
     id: string;
@@ -16,13 +23,24 @@ interface Surgery {
     folderNumber: string;
     age: number;
     gender: string;
+    ward?: string | null;
   };
+}
+
+interface PacuSummary {
+  bookedToday: number;
+  alreadyAdmitted: number;
+  eligible: number;
+  notYetCompleted: number;
 }
 
 export default function NewPACUAssessment() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
+  const [summary, setSummary] = useState<PacuSummary | null>(null);
+  const [search, setSearch] = useState('');
+  const [marking, setMarking] = useState(false);
   const [selectedSurgeryId, setSelectedSurgeryId] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -121,19 +139,60 @@ export default function NewPACUAssessment() {
 
   const fetchCompletedSurgeries = async () => {
     try {
-      const response = await fetch('/api/surgeries?status=COMPLETED');
+      // Today's whole list, complete or not, minus anyone already in recovery.
+      const response = await fetch('/api/pacu/eligible');
       if (response.ok) {
         const data = await response.json();
-        const list = Array.isArray(data) ? data : [];
-        setSurgeries(list.filter((s: Surgery) => !s.pacuAssessment));
+        setSurgeries(data.eligible ?? []);
+        setSummary(data.summary ?? null);
       }
     } catch (error) {
       console.error('Error fetching surgeries:', error);
-      setError('Failed to load completed surgeries');
+      setError("Failed to load today's theatre list");
     } finally {
       setLoading(false);
     }
   };
+
+  /**
+   * Tick a case complete from here.
+   *
+   * The recovery nurse is often the first person with a free hand. Requiring
+   * someone in theatre to press a button first meant a patient could be lying in
+   * recovery with nothing recorded — so this calls the same endpoint theatre
+   * uses, and the action is attributed to whoever pressed it in the audit log.
+   */
+  const markCompleted = async (surgeryId: string) => {
+    setMarking(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/surgeries/${surgeryId}/complete`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'Could not mark the case as completed.');
+        return;
+      }
+      // Reflected locally rather than refetching: a refetch would rebuild the
+      // list and lose the selection the nurse just made.
+      setSurgeries((prev) => prev.map((s) =>
+        s.id === surgeryId ? { ...s, isCompleted: true, status: 'COMPLETED' } : s));
+    } catch {
+      setError('Could not reach the server to mark the case as completed.');
+    } finally {
+      setMarking(false);
+    }
+  };
+
+  // Name, folder number or procedure. Client-side: one day's list is short, and
+  // a request per keystroke would lag behind the typing on a theatre tablet.
+  const visible = surgeries.filter((s) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [s.patient?.name ?? '', s.patient?.folderNumber ?? '', s.procedureName]
+      .some((f) => f.toLowerCase().includes(q));
+  });
+
+  const selected = surgeries.find((s) => s.id === selectedSurgeryId) ?? null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -221,24 +280,87 @@ export default function NewPACUAssessment() {
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6 space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Completed Surgery *
+            Search patient
+          </label>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Patient name, folder number or procedure"
+            autoComplete="off"
+            aria-label="Search today's theatre list"
+            className="mb-4 w-full rounded-lg border border-gray-300 px-4 py-3 text-base focus:border-transparent focus:ring-2 focus:ring-primary-500"
+          />
+
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Today&apos;s theatre list *
           </label>
           <select
             value={selectedSurgeryId}
             onChange={(e) => setSelectedSurgeryId(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            title="Select completed surgery"
-            aria-label="Select completed surgery"
+            title="Select a case from today's list"
+            aria-label="Select a case from today's list"
             required
           >
-            <option value="">-- Select a surgery --</option>
-            {surgeries.map((surgery) => (
+            <option value="">-- Select a patient --</option>
+            {visible.map((surgery) => (
               <option key={surgery.id} value={surgery.id}>
-                {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'}) - {surgery.procedureName} -{' '}
-                {new Date(surgery.scheduledDate).toLocaleDateString()}
+                {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'})
+                {' - '}{surgery.procedureName}
+                {surgery.scheduledTime ? ` - ${surgery.scheduledTime}` : ''}
+                {surgery.isCompleted ? '' : '  [not yet marked complete]'}
               </option>
             ))}
           </select>
+
+          {/* An empty list has distinct causes; saying which saves a nurse from
+              wondering whether the app is broken. */}
+          {surgeries.length === 0 && !loading && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              {summary && summary.bookedToday === 0
+                ? 'No surgeries are booked for today.'
+                : 'Every case on today’s list has already been admitted to recovery.'}
+            </div>
+          )}
+
+          {surgeries.length > 0 && visible.length === 0 && (
+            <p className="mt-2 text-sm text-gray-600">
+              No patient matches &ldquo;{search.trim()}&rdquo;. {surgeries.length} case
+              {surgeries.length === 1 ? '' : 's'} awaiting recovery today.
+            </p>
+          )}
+
+          {/* The completion tick. Shown only when it is actually needed, so it
+              cannot be pressed out of habit on a case theatre already closed. */}
+          {selected && !selected.isCompleted && (
+            <div className="mt-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">
+                This case is not yet marked as completed.
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                Theatre has not closed it off. If the operation has finished and the
+                patient is with you, tick it here — it records the same thing, under
+                your name.
+              </p>
+              <button
+                type="button"
+                onClick={() => markCompleted(selected.id)}
+                disabled={marking}
+                className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:bg-gray-300"
+              >
+                {marking ? 'Marking as completed…' : 'Mark surgery as completed'}
+              </button>
+            </div>
+          )}
+
+          {selected?.isCompleted && (
+            <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-700">
+              <div><strong>Surgery completed.</strong> Ready to admit to recovery.</div>
+              {selected.surgeonName && <div>Surgeon: {selected.surgeonName}</div>}
+              {selected.patient?.ward && <div>Ward: {selected.patient.ward}</div>}
+            </div>
+          )}
         </div>
 
         {selectedSurgeryId && (
@@ -634,10 +756,18 @@ export default function NewPACUAssessment() {
         <div className="flex gap-4 pt-4">
           <button
             type="submit"
-            disabled={submitting || !selectedSurgeryId}
+            // Blocked until the case is marked complete. The nurse has the tick
+            // above, so this is one click away rather than a dead end — but a
+            // recovery record against a case theatre still shows as in progress
+            // makes both records wrong.
+            disabled={submitting || !selectedSurgeryId || (selected ? !selected.isCompleted : false)}
             className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-300 transition-colors"
           >
-            {submitting ? 'Admitting to PACU...' : 'Admit to PACU'}
+            {submitting
+              ? 'Admitting to PACU...'
+              : selected && !selected.isCompleted
+                ? 'Mark the surgery completed first'
+                : 'Admit to PACU'}
           </button>
           <button
             type="button"
