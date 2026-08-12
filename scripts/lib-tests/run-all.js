@@ -48,6 +48,12 @@ function makeExpect() {
       toContain: (x) => check(
         typeof actual === 'string' ? actual.includes(x) : Array.isArray(actual) && actual.includes(x),
         `to contain ${show(x)}`),
+      // Accepts a RegExp or a substring, as vitest does. Tests that assert on a
+      // human-readable reason string need this — checking the exact wording
+      // makes them brittle against a comma.
+      toMatch: (p) => check(
+        typeof actual === 'string' && (p instanceof RegExp ? p.test(actual) : actual.includes(p)),
+        `to match ${p instanceof RegExp ? String(p) : show(p)} (got ${show(actual)})`),
       toBeGreaterThan: (n) => check(actual > n, `to be > ${show(n)}`),
       toBeLessThan: (n) => check(actual < n, `to be < ${show(n)}`),
       toBeGreaterThanOrEqual: (n) => check(actual >= n, `to be >= ${show(n)}`),

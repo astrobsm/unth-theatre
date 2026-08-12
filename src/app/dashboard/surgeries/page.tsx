@@ -9,6 +9,7 @@ import { SYNC_INTERVALS } from '@/lib/sync';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
+import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
 
 interface Surgery {
   id: string;
@@ -29,6 +30,9 @@ interface Surgery {
   indication?: string;
   scheduledDate: string;
   scheduledTime: string;
+  /// When the booking was actually made. Already returned by the API.
+  createdAt?: string | null;
+  surgeryType?: string | null;
   status: string;
   listOrder?: number | null;
   subspecialty: string;
@@ -463,18 +467,19 @@ export default function SurgeriesPage() {
       body += `<h2 class="team">${groupNo}. ${escape(team)} <span class="count">(${items.length} case${items.length === 1 ? '' : 's'})</span></h2>`;
       body += `<table><thead><tr>
         <th style="width:3%">#</th>
-        <th style="width:12%">Patient</th>
-        <th style="width:6%">Folder</th>
+        <th style="width:11%">Patient</th>
+        <th style="width:5%">Folder</th>
         <th style="width:6%">Age / Sex</th>
-        <th style="width:7%">Ward</th>
-        <th style="width:16%">Procedure</th>
-        <th style="width:11%">Diagnosis / Indication</th>
-        <th style="width:9%">Surgeon</th>
-        <th style="width:8%">Theatre</th>
+        <th style="width:6%">Ward</th>
+        <th style="width:14%">Procedure</th>
+        <th style="width:9%">Diagnosis / Indication</th>
+        <th style="width:8%">Surgeon</th>
+        <th style="width:7%">Theatre</th>
         <th style="width:8%">Date &amp; Time</th>
-        <th style="width:7%">Anaesthesia</th>
-        <th style="width:5%">Special</th>
-        <th style="width:5%">Status</th>
+        <th style="width:9%">Booked</th>
+        <th style="width:6%">Anaesthesia</th>
+        <th style="width:4%">Special</th>
+        <th style="width:4%">Status</th>
       </tr></thead><tbody>`;
       items.forEach((s, i) => {
         const needs = summariseSpecialNeeds(s);
@@ -491,6 +496,15 @@ export default function SurgeriesPage() {
           <td>${escape(s.surgeon?.fullName || s.surgeonName || 'Not assigned')}</td>
           <td>${escape(theatreLabel)}${s.supervisingConsultantName ? `<br/><span class="sub">Consultant: ${escape(s.supervisingConsultantName)}</span>` : ''}</td>
           <td>${escape(formatDate(s.scheduledDate))}<br/><span class="sub">${escape(s.scheduledTime || '')}</span></td>
+          <td>${escape(formatBookedAtShort(s.createdAt))}${(() => {
+            const late = bookingLateness({
+              scheduledDate: s.scheduledDate, bookedAt: s.createdAt, surgeryType: s.surgeryType,
+            });
+            // Tagged in the printout as well as on screen: the printed list is
+            // what goes to the morning meeting, and a flag only visible on a
+            // phone is a flag nobody discusses.
+            return late.isLate ? `<br/><span class="late">LATE BOOKING</span>` : '';
+          })()}</td>
           <td>${escape(formatAnaesthesia(s.anesthesiaType))}</td>
           <td>${needs.length === 0 ? '<span class="sub">—</span>' : needs.map(n => `<span class="badge">${escape(n)}</span>`).join(' ')}</td>
           <td><span class="status status-${s.status}">${escape(s.status)}</span></td>
@@ -523,6 +537,12 @@ export default function SurgeriesPage() {
         th { background:#e0e7ff; font-size:10px; text-transform:uppercase; }
         .sub { color:#64748b; font-size:10px; }
         .badge { display:inline-block; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; padding:1px 5px; border-radius:8px; font-size:9px; margin:1px 2px 1px 0; white-space:nowrap; }
+        /* Bold and boxed rather than merely coloured: theatre lists are often
+           printed on a monochrome laser printer, where a red tint disappears
+           entirely and the flag silently stops existing. */
+        .late { display:inline-block; margin-top:2px; font-weight:800; font-size:9px; letter-spacing:.3px;
+                color:#000; background:#fde68a; border:1.5px solid #000; padding:1px 4px; border-radius:2px;
+                white-space:nowrap; }
         .status { padding:2px 6px; border-radius:8px; font-weight:bold; font-size:9px; }
         .status-SCHEDULED { background:#dbeafe; color:#1e40af; }
         .status-IN_PROGRESS { background:#fef3c7; color:#92400e; }
@@ -691,7 +711,7 @@ export default function SurgeriesPage() {
       {/* Surgeries Table */}
       <div className="card">
         {loading ? (
-          <TableSkeleton rows={6} columns={8} />
+          <TableSkeleton rows={6} columns={9} />
         ) : filteredSurgeries.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />
@@ -718,6 +738,9 @@ export default function SurgeriesPage() {
                     Date & Time
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Booked
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Special Needs
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -732,7 +755,7 @@ export default function SurgeriesPage() {
                 {groupedSchedule.map((group) => (
                   <Fragment key={group.key}>
                     <tr className="bg-indigo-50/70">
-                      <td colSpan={8} className="px-6 py-2">
+                      <td colSpan={9} className="px-6 py-2">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-800">
                           {!dateFilter && group.dateLabel && (
                             <span className="text-indigo-500">{group.dateLabel}</span>
@@ -810,6 +833,32 @@ export default function SurgeriesPage() {
                         {formatDate(surgery.scheduledDate)}
                       </div>
                       <div className="text-sm text-gray-500">{surgery.scheduledTime}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const late = bookingLateness({
+                          scheduledDate: surgery.scheduledDate,
+                          bookedAt: surgery.createdAt,
+                          surgeryType: surgery.surgeryType,
+                        });
+                        return (
+                          <>
+                            <div className="text-sm text-gray-900">
+                              {formatBookedAtShort(surgery.createdAt)}
+                            </div>
+                            {late.isLate && (
+                              // title carries the reason, so the judgement can be
+                              // checked rather than argued with.
+                              <span
+                                title={late.reason}
+                                className="mt-1 inline-block rounded border-2 border-red-700 bg-red-100 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-red-800"
+                              >
+                                Late booking
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       {(() => {
