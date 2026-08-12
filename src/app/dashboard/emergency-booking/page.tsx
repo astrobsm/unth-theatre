@@ -334,6 +334,57 @@ export default function EmergencyBookingPage() {
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
+
+  // --- Emergency theatre assignment ---------------------------------------
+  // Theatre-side staff commit a room, which also ACKNOWLEDGES the case and puts
+  // it on the radio. Before this, a surgeon could book a critical case with no
+  // way of knowing whether theatre had seen it.
+  const [theatreOptions, setTheatreOptions] = useState<{ id: string; name: string }[]>([]);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignChoice, setAssignChoice] = useState<Record<string, string>>({});
+  // Keyed by booking: a single shared message would appear under every card
+  // on the board, including cases it had nothing to do with.
+  const [assignNote, setAssignNote] = useState<Record<string, string>>({});
+
+  const canAssignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
+    'THEATRE_CHAIRMAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'NURSE_MANAGER']
+    .includes((session?.user as { role?: string } | undefined)?.role ?? '');
+
+  useEffect(() => {
+    if (!canAssignTheatre) return;
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => {
+        const list = Array.isArray(d) ? d : (d?.theatres ?? []);
+        setTheatreOptions(list.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
+      })
+      .catch(() => {});
+  }, [canAssignTheatre]);
+
+  const assignTheatre = async (bookingId: string) => {
+    const theatreId = assignChoice[bookingId];
+    if (!theatreId) return;
+    setAssigningId(bookingId);
+    setAssignNote((p) => ({ ...p, [bookingId]: '' }));
+    try {
+      const res = await fetch('/api/emergency-booking/assign-theatre', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, theatreId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAssignNote((p) => ({ ...p, [bookingId]: body.error || 'Could not assign the theatre.' }));
+        return;
+      }
+      setAssignNote((p) => ({ ...p, [bookingId]: body.message || 'Theatre assigned.' }));
+      await fetchBookings();
+    } catch {
+      setAssignNote((p) => ({ ...p, [bookingId]: 'Could not reach the server.' }));
+    } finally {
+      setAssigningId(null);
+    }
+  };
   const [reviewBooking, setReviewBooking] = useState<EmergencyBooking | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
 
@@ -994,6 +1045,53 @@ export default function EmergencyBookingPage() {
                             Unavailable
                           </button>
                         </>
+                      )}
+
+                      {/* Assign theatre — theatre-side staff only.
+                          One press assigns the room, acknowledges the case and
+                          announces it on the radio, because in a real emergency
+                          nobody does three separate administrative steps. */}
+                      {canAssignTheatre && booking.status !== 'CANCELLED' && booking.status !== 'COMPLETED' && (
+                        <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border-2 border-red-200 bg-red-50 p-2">
+                          <select
+                            value={assignChoice[booking.id] ?? ''}
+                            onChange={(e) => setAssignChoice((p) => ({ ...p, [booking.id]: e.target.value }))}
+                            aria-label="Choose a theatre for this emergency"
+                            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">
+                              {booking.theatreName ? `Current: ${booking.theatreName}` : '-- Choose theatre --'}
+                            </option>
+                            {theatreOptions.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => assignTheatre(booking.id)}
+                            disabled={!assignChoice[booking.id] || assigningId === booking.id}
+                            className="flex items-center gap-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:bg-gray-300"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            {assigningId === booking.id
+                              ? 'Assigning…'
+                              : booking.status === 'THEATRE_ASSIGNED'
+                                ? 'Change theatre'
+                                : 'Assign theatre & acknowledge'}
+                          </button>
+                          {booking.status === 'THEATRE_ASSIGNED' && (
+                            <span className="text-xs font-semibold text-green-800">
+                              Acknowledged{booking.theatreName ? ` — ${booking.theatreName}` : ''}
+                            </span>
+                          )}
+                          <span className="text-xs text-red-800">
+                            Assigning also acknowledges the case and announces it on the radio.
+                          </span>
+                          {assignNote[booking.id] && (
+                            <p className="w-full text-sm font-medium text-gray-900">
+                              {assignNote[booking.id]}
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       {/* Pre-Anaesthetic Review (Anaesthetists only) — hidden for LOCAL/NONE */}
