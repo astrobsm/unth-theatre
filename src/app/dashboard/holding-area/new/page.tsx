@@ -9,16 +9,33 @@ interface Surgery {
   id: string;
   procedureName: string;
   scheduledDate: string;
+  scheduledTime?: string;
+  surgeonName?: string | null;
+  /// When the ward was asked to send this patient. Only called-up patients are
+  /// offered here, so this is always present.
+  calledAt?: string;
+  calledFromWard?: string | null;
+  porterName?: string | null;
   patient: {
     id: string;
     name: string;
     folderNumber: string;
+    ward?: string | null;
   };
+}
+
+interface Summary {
+  bookedToday: number;
+  calledUp: number;
+  alreadyInHolding: number;
+  eligible: number;
 }
 
 export default function NewHoldingAreaAssessment() {
   const router = useRouter();
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [search, setSearch] = useState('');
   const [selectedSurgeryId, setSelectedSurgeryId] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -30,18 +47,31 @@ export default function NewHoldingAreaAssessment() {
 
   const fetchScheduledSurgeries = async () => {
     try {
-      const response = await fetch('/api/surgeries?status=SCHEDULED');
+      // Today's cases that have been called up from the ward — not every
+      // SCHEDULED case ever booked, which is what this used to load.
+      const response = await fetch('/api/holding-area/eligible');
       if (response.ok) {
         const data = await response.json();
-        setSurgeries(data);
+        setSurgeries(data.eligible ?? []);
+        setSummary(data.summary ?? null);
       }
     } catch (error) {
       console.error('Error fetching surgeries:', error);
-      setError('Failed to load scheduled surgeries');
+      setError('Failed to load patients called up for today');
     } finally {
       setLoading(false);
     }
   };
+
+  // Name or folder number. Filtered on the client because the list is one day's
+  // cases — a dozen or so — and a round trip per keystroke would be slower than
+  // the typing on a theatre tablet.
+  const visible = surgeries.filter((s) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [s.patient?.name ?? '', s.patient?.folderNumber ?? '', s.procedureName]
+      .some((f) => f.toLowerCase().includes(q));
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,7 +128,7 @@ export default function NewHoldingAreaAssessment() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">New Holding Area Assessment</h1>
         <p className="text-gray-600 mt-2">
-          Admit a patient to the holding area for preoperative safety verification
+          Admit a patient called up for today's list to the holding area for preoperative safety verification
         </p>
       </div>
 
@@ -109,9 +139,29 @@ export default function NewHoldingAreaAssessment() {
       )}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6">
+        <div className="mb-4">
+          <label htmlFor="patient-search" className="block text-sm font-medium text-gray-700 mb-2">
+            Search patient
+          </label>
+          <input
+            id="patient-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Patient name, folder number or procedure"
+            autoComplete="off"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          {search.trim() && (
+            <p className="mt-1 text-xs text-gray-500">
+              {visible.length} of {surgeries.length} matching
+            </p>
+          )}
+        </div>
+
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Scheduled Surgery *
+            Patient called up for today *
           </label>
           <select
             value={selectedSurgeryId}
@@ -119,19 +169,67 @@ export default function NewHoldingAreaAssessment() {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             required
           >
-            <option value="">-- Select a surgery --</option>
-            {surgeries.map((surgery) => (
+            <option value="">-- Select a patient --</option>
+            {visible.map((surgery) => (
               <option key={surgery.id} value={surgery.id}>
-                {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'}) - {surgery.procedureName} -{' '}
-                {new Date(surgery.scheduledDate).toLocaleDateString()}
+                {surgery.patient?.name || 'Unknown Patient'} ({surgery.patient?.folderNumber || 'N/A'})
+                {' - '}{surgery.procedureName}
+                {surgery.scheduledTime ? ` - ${surgery.scheduledTime}` : ''}
               </option>
             ))}
           </select>
-          {surgeries.length === 0 && (
-            <p className="mt-2 text-sm text-gray-500">
-              No scheduled surgeries available. Please schedule a surgery first.
+
+          {/* An empty list has three different causes with three different
+              fixes, so it says which one rather than leaving the nurse to
+              guess whether the app is broken. */}
+          {surgeries.length === 0 && !loading && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              {summary && summary.bookedToday === 0 ? (
+                <>No surgeries are booked for today.</>
+              ) : summary && summary.calledUp === 0 ? (
+                <>
+                  {summary.bookedToday} case{summary.bookedToday === 1 ? '' : 's'} booked for today, but
+                  no patient has been called up yet. Use{' '}
+                  <a href="/dashboard/call-for-patient" className="font-semibold underline">
+                    Call for Patient
+                  </a>{' '}
+                  to ask the ward to send someone first.
+                </>
+              ) : (
+                <>
+                  Every patient called up today is already in the holding area.
+                </>
+              )}
+            </div>
+          )}
+
+          {surgeries.length > 0 && visible.length === 0 && (
+            <p className="mt-2 text-sm text-gray-600">
+              No patient matches &ldquo;{search.trim()}&rdquo;. {surgeries.length} patient
+              {surgeries.length === 1 ? ' is' : 's are'} called up for today.
             </p>
           )}
+
+          {/* Context for the selected patient: which ward they are coming from
+              and when they were called. A nurse standing at the door needs to
+              know whether to expect them or to chase the porter. */}
+          {selectedSurgeryId && (() => {
+            const s = surgeries.find((x) => x.id === selectedSurgeryId);
+            if (!s) return null;
+            return (
+              <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-700">
+                <div><strong>Ward:</strong> {s.calledFromWard || s.patient?.ward || 'Not recorded'}</div>
+                {s.calledAt && (
+                  <div>
+                    <strong>Called up:</strong>{' '}
+                    {new Date(s.calledAt).toLocaleTimeString('en-NG', { hour: 'numeric', minute: '2-digit' })}
+                  </div>
+                )}
+                {s.porterName && <div><strong>Porter:</strong> {s.porterName}</div>}
+                {s.surgeonName && <div><strong>Surgeon:</strong> {s.surgeonName}</div>}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -147,7 +245,7 @@ export default function NewHoldingAreaAssessment() {
         <div className="flex gap-4">
           <button
             type="submit"
-            disabled={submitting || surgeries.length === 0}
+            disabled={submitting || !selectedSurgeryId}
             className="flex-1 bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? 'Creating Assessment...' : 'Admit to Holding Area'}
