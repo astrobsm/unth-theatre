@@ -982,31 +982,25 @@ export default function NewSurgeryPage() {
               </select>
             </div>
 
-            {/* Theatre dropdown — filtered by selected location.
-                Auto-suggested by day-of-week from the unit's schedule. */}
+            {/* Theatre is NO LONGER chosen by the person booking.
+                A unit gets a room for the session and works its own list in it —
+                it does not get a different theatre per patient. When each booker
+                picked one, a single unit's cases ended up scattered across three
+                rooms by three different people, and nobody saw it until the
+                morning.
+                The theatre manager or nurses now assign one theatre per unit per
+                day, from the scheduled list. The state below is kept because the
+                roster lookup still uses it once a theatre HAS been assigned. */}
             <div>
-              <label className="label">
-                Theatre to be used
-                {surgeryType === 'EMERGENCY' && (
-                  <span className="text-xs text-red-600 ml-1">(optional — perioperative nurse will assign)</span>
-                )}
-              </label>
-              <select
-                value={selectedTheatreId}
-                onChange={(e) => setSelectedTheatreId(e.target.value)}
-                disabled={!selectedLocation}
-                className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
-                title="Select theatre"
-              >
-                <option value="">— Select Theatre —</option>
-                {theatres
-                  .filter((t) => !selectedLocation || t.location === selectedLocation)
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} {t.status !== 'AVAILABLE' ? `(${t.status})` : ''}
-                    </option>
-                  ))}
-              </select>
+              <label className="label">Theatre</label>
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
+                <p className="font-semibold">Assigned by theatre, not at booking.</p>
+                <p className="mt-1">
+                  Book the case against your unit. The theatre manager or nurses assign
+                  a theatre to each unit&apos;s list for the day, and it will appear on
+                  the scheduled list once assigned.
+                </p>
+              </div>
               {autoSuggestNote && (
                 <p className="text-xs text-indigo-700 mt-1">{autoSuggestNote}</p>
               )}
