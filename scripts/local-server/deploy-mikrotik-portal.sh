@@ -76,10 +76,17 @@ fi
 
 echo
 echo "${B}1. Reachable?${N}"
-RUN_SSH "/system identity print" >/dev/null 2>&1 \
-  || die "cannot log in to $RUSER@$ROUTER over SSH.
-        Enable it on the router:  /ip service enable ssh
-        and confirm the address and username."
+# stderr is NOT discarded here. An earlier version swallowed it and printed a
+# guess instead of the reason — the same mistake that left a sync failure
+# unreadable for two days. Whatever the router says, the operator sees.
+if ! RUN_SSH "/system identity print" >/dev/null; then
+  die "cannot log in to $RUSER@$ROUTER over SSH — the router's own message is above.
+        Common causes:
+          wrong password              confirm it works in Winbox
+          ssh service disabled        /ip service enable ssh
+          user lacks the ssh policy   /user print detail
+          wrong address or username   pass them: $0 <router-ip> <user>"
+fi
 ok "SSH works"
 
 echo
