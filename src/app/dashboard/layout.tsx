@@ -260,6 +260,9 @@ export default function DashboardLayout({
     { href: '/dashboard/theatre-setup', icon: Stethoscope, label: 'Theatre Setup' },
     { href: '/dashboard/theatre-supply', icon: Boxes, label: 'Theatre Supply Unit', badge: 'NEW' },
     { href: '/dashboard/theatre-billing', icon: Receipt, label: 'Theatre Billing', badge: 'NEW' },
+    // What a patient is told an operation will cost, before it happens. Distinct
+    // from Theatre Billing, which is what they are charged afterwards.
+    { href: '/dashboard/estimates', icon: Receipt, label: 'Cost Estimates', badge: 'NEW' },
     { href: '/dashboard/theatre-supply/reports', icon: FileBarChart, label: 'Supply Reports', badge: 'NEW' },
     { href: '/dashboard/theatre-supply/import', icon: FileSpreadsheet, label: 'Bulk Import', badge: 'NEW' },
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
@@ -451,6 +454,7 @@ export default function DashboardLayout({
     ] },
     { type: 'group', label: 'Surgeries', icon: Calendar, hrefs: [
       '/dashboard/surgeries',
+      '/dashboard/estimates',
       '/dashboard/cancellations',
       '/dashboard/surgeries/completed',
       '/dashboard/admin/surgical-catalog',
