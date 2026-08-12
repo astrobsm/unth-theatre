@@ -7,12 +7,6 @@ import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill } fr
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
-import {
-  ANAESTHESIA_CONSUMABLES,
-  CONSUMABLE_CATEGORY_STANDARD,
-  CONSUMABLE_CATEGORY_SPECIAL,
-  type AnaesthesiaConsumable,
-} from '@/lib/anaesthesia-consumables';
 import SignaturePad from '@/components/SignaturePad';
 import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
@@ -296,53 +290,6 @@ export default function NewPreOpReviewPage() {
   const [prescriptionUrgency, setPrescriptionUrgency] = useState<'ROUTINE' | 'URGENT' | 'EMERGENCY'>('ROUTINE');
   const [prescriptionSpecialInstructions, setPrescriptionSpecialInstructions] = useState('');
 
-  // Anaesthesia consumables states
-  const [selectedConsumable, setSelectedConsumable] = useState('');
-  const [selectedConsumableSize, setSelectedConsumableSize] = useState('');
-  const [consumableQuantity, setConsumableQuantity] = useState('1');
-  const [consumableNotes, setConsumableNotes] = useState('');
-
-  // Flat lookup of all consumables by name
-  const findConsumable = (name: string): AnaesthesiaConsumable | undefined => {
-    for (const grp of ANAESTHESIA_CONSUMABLES) {
-      const found = grp.items.find((c) => c.name === name);
-      if (found) return found;
-    }
-    return undefined;
-  };
-
-  // Add selected consumable to the prescription list (wired to pharmacy)
-  const addConsumable = () => {
-    const consumable = findConsumable(selectedConsumable);
-    if (!consumable) return;
-    if (consumable.sizes && consumable.sizes.length > 0 && !selectedConsumableSize) return;
-    const qty = consumableQuantity.trim() || '1';
-
-    const displayName = selectedConsumableSize
-      ? `${consumable.name} ${selectedConsumableSize}`
-      : consumable.name;
-
-    const newItem: PrescribedMedication = {
-      id: Date.now().toString(),
-      category: consumable.specialCase ? CONSUMABLE_CATEGORY_SPECIAL : CONSUMABLE_CATEGORY_STANDARD,
-      name: displayName,
-      dose: qty,
-      unit: consumable.unit,
-      route: '—',
-      timing: 'Theatre (intra-operative)',
-      notes: [consumable.specialCase ? `For: ${consumable.specialCase}` : '', consumableNotes.trim()]
-        .filter(Boolean)
-        .join(' — '),
-    };
-
-    setPrescribedMedications([...prescribedMedications, newItem]);
-
-    // Reset consumable selection
-    setSelectedConsumable('');
-    setSelectedConsumableSize('');
-    setConsumableQuantity('1');
-    setConsumableNotes('');
-  };
 
   // Get medication details from selected category and name
   const getMedicationDetails = () => {
@@ -1177,97 +1124,6 @@ export default function NewPreOpReviewPage() {
                     <Plus className="w-4 h-4" />
                     Add Medication
                   </button>
-                </div>
-              </div>
-
-              {/* Anaesthesia Consumables Selection */}
-              <div className="bg-amber-50 rounded-lg p-4 mb-4 border border-amber-100">
-                <h3 className="font-medium mb-1">Add Anaesthesia Consumable</h3>
-                <p className="text-xs text-gray-500 mb-3">
-                  Select consumables for the pharmacy to pack. Special-case items (e.g. tumour surgery) are only required when clinically indicated.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {/* Consumable Selection */}
-                  <div className="lg:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Consumable</label>
-                    <select
-                      value={selectedConsumable}
-                      onChange={(e) => {
-                        setSelectedConsumable(e.target.value);
-                        setSelectedConsumableSize('');
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                    >
-                      <option value="">Select consumable</option>
-                      {ANAESTHESIA_CONSUMABLES.map((grp) => (
-                        <optgroup key={grp.group} label={grp.group}>
-                          {grp.items.map((item) => (
-                            <option key={item.name} value={item.name}>{item.name}</option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Size Selection */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-                    <select
-                      value={selectedConsumableSize}
-                      onChange={(e) => setSelectedConsumableSize(e.target.value)}
-                      disabled={!findConsumable(selectedConsumable)?.sizes?.length}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 disabled:bg-gray-100"
-                    >
-                      <option value="">
-                        {findConsumable(selectedConsumable)?.sizes?.length ? 'Select size' : 'N/A'}
-                      </option>
-                      {findConsumable(selectedConsumable)?.sizes?.map((size) => (
-                        <option key={size} value={size}>{size}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Quantity */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quantity {findConsumable(selectedConsumable)?.unit && `(${findConsumable(selectedConsumable)?.unit})`}
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={consumableQuantity}
-                      onChange={(e) => setConsumableQuantity(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-
-                  {/* Consumable Notes */}
-                  <div className="lg:col-span-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-                    <input
-                      type="text"
-                      value={consumableNotes}
-                      onChange={(e) => setConsumableNotes(e.target.value)}
-                      placeholder="Special instructions for this consumable..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-
-                  {/* Add Consumable Button */}
-                  <div className="flex items-end justify-end">
-                    <button
-                      type="button"
-                      onClick={addConsumable}
-                      disabled={
-                        !selectedConsumable ||
-                        (!!findConsumable(selectedConsumable)?.sizes?.length && !selectedConsumableSize)
-                      }
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition w-full justify-center"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Consumable
-                    </button>
-                  </div>
                 </div>
               </div>
 
