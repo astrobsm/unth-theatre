@@ -50,7 +50,7 @@ ZONE="$(echo "$HOST" | awk -F. '{ if (NF>=2) print $(NF-1)"."$NF; else print $0 
 
 echo "==> Installing certbot and nginx"
 apt-get update -qq
-apt-get install -y -qq certbot nginx curl
+apt-get install -y -qq certbot nginx curl dnsutils
 
 if [[ ! -f "$DESEC_INI" ]]; then
   echo
@@ -93,10 +93,30 @@ curl -sS --fail -X PUT "https://desec.io/api/v1/domains/$DESEC_ZONE/rrsets/" \
 [{"subname":"$SUB","type":"TXT","ttl":3600,"records":["\"$CERTBOT_VALIDATION\""]}]
 JSON
 
-# deSEC publishes in seconds, but Let's Encrypt queries the authoritative
-# servers directly and occasionally beats propagation. 45s costs nothing on a
-# job that runs twice a year and removes a class of intermittent failure.
-sleep 45
+# Do NOT just sleep. A fixed wait is a guess, and the guess was wrong: with 45s
+# Let's Encrypt's PRIMARY vantage point saw the record while its SECONDARY still
+# got NXDOMAIN, which fails the whole request.
+#
+# So poll until BOTH of deSEC's authoritative nameservers actually serve the
+# value, then allow a short margin for Let's Encrypt's own resolvers. This
+# replaces "hope 45 seconds is enough" with "confirm it is there".
+for attempt in $(seq 1 40); do
+  ok=1
+  for ns in ns1.desec.io ns2.desec.org; do
+    if ! dig +short +time=3 +tries=1 TXT "$SUB.$DESEC_ZONE" "@$ns" 2>/dev/null          | grep -qF "$CERTBOT_VALIDATION"; then
+      ok=0
+    fi
+  done
+  if [ "$ok" = "1" ]; then
+    echo "  challenge visible on both nameservers after ${attempt} check(s)"
+    # Let's Encrypt uses several resolvers from several networks; a short margin
+    # after the authoritative servers agree costs 15s and removes the remaining
+    # race.
+    sleep 15
+    break
+  fi
+  sleep 5
+done
 AUTHEOF
 
 install -m 700 /dev/null "$CLEAN_HOOK"
