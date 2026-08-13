@@ -1,0 +1,362 @@
+code,name,kind,amount,effective from,unit,used in packs,specialties,max qty per pack,priced already
+SUCTION-TUBING,Suction tubing,CONSUMABLE,,2026-08-13,piece,29,Cardiothoracic Surgery; General Surgery; Maxillofacial Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Plastic Surgery; Urology,1,no
+YANKAUER-SUCTION-HANDLE,Yankauer suction handle,CONSUMABLE,,2026-08-13,piece,29,Cardiothoracic Surgery; General Surgery; Maxillofacial Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Plastic Surgery; Urology,1,no
+FORMALIN-10-SPECIMEN-BOTTLE,Formalin (10%) specimen bottle,CONSUMABLE,,2026-08-13,bottle,26,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Plastic Surgery; Urology,1,no
+HISTOLOGY-REQUEST-LABEL,Histology request/label,CONSUMABLE,,2026-08-13,piece,26,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Plastic Surgery; Urology,1,no
+SPECIMEN-CONTAINER,Specimen container,CONSUMABLE,,2026-08-13,piece,26,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Plastic Surgery; Urology,2,no
+DIATHERMY-MONOPOLAR-PENCIL-WITH-HOLSTER,Diathermy (monopolar) pencil with holster,CONSUMABLE,,2026-08-13,piece,19,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Obstetrics & Gynaecology; Orthopaedics; Urology,1,no
+DIATHERMY-PATIENT-PLATE-RETURN-ELECTRODE,Diathermy patient plate (return electrode),CONSUMABLE,,2026-08-13,piece,19,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Obstetrics & Gynaecology; Orthopaedics; Urology,1,no
+DIATHERMY-SCRATCH-CLEANING-PAD,Diathermy scratch/cleaning pad,CONSUMABLE,,2026-08-13,piece,19,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Obstetrics & Gynaecology; Orthopaedics; Urology,1,no
+VICRYL-SUTURE,Vicryl suture,CONSUMABLE,,2026-08-13,piece,19,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Urology,4,no
+SCALPEL-BLADE-NO-15,Scalpel blade No. 15,CONSUMABLE,,2026-08-13,piece,15,Cardiothoracic Surgery; General Surgery; Maxillofacial Surgery; Obstetrics & Gynaecology; Orthopaedics; Paediatric Surgery; Plastic Surgery; Urology,2,no
+NORMAL-SALINE-0-9-1-L,Normal Saline 0.9% (1 L),DRUG,,2026-08-13,litre,12,Cardiothoracic Surgery; Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); General Surgery; Neurosurgery; Obstetric (anaesthesia); Obstetrics & Gynaecology; Orthopaedics; Spinal (anaesthesia); Urology,3,no
+RINGER-S-LACTATE-HARTMANN-S-1-L,Ringer's Lactate (Hartmann's) (1 L),DRUG,,2026-08-13,litre,12,Cardiothoracic Surgery; Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); General Surgery; Neurosurgery; Obstetric (anaesthesia); Obstetrics & Gynaecology; Orthopaedics; Spinal (anaesthesia); Urology,2,no
+SCALPEL-BLADE-NO-10,Scalpel blade No. 10,CONSUMABLE,,2026-08-13,piece,11,Cardiothoracic Surgery; General Surgery; Obstetrics & Gynaecology; Orthopaedics; Urology,2,no
+PARACETAMOL-IV-1-G,Paracetamol (IV) (1 g),DRUG,,2026-08-13,vial,9,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General (anaesthesia); General Surgery; Maxillofacial Surgery; Obstetrics & Gynaecology; Orthopaedics; Plastic Surgery; Urology,1,no
+DICLOFENAC-75-MG,Diclofenac (75 mg),DRUG,,2026-08-13,ampoule,8,Cardiothoracic Surgery; ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Obstetrics & Gynaecology; Orthopaedics; Plastic Surgery; Urology,1,no
+NYLON-SUTURE-SKIN,Nylon suture (skin),CONSUMABLE,,2026-08-13,piece,8,ENT (Otorhinolaryngology); General Surgery; Maxillofacial Surgery; Orthopaedics; Urology,2,no
+SPO2-PULSE-OXIMETER-SENSOR,SpO2 (pulse oximeter) sensor,CONSUMABLE,,2026-08-13,piece,7,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Local (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),1,no
+STERILE-LUBRICATING-JELLY,Sterile lubricating jelly,CONSUMABLE,,2026-08-13,sachet,7,General Surgery; Neurosurgery; Obstetrics & Gynaecology; Urology,1,no
+URINE-DRAINAGE-BAG,Urine drainage bag,CONSUMABLE,,2026-08-13,piece,7,General Surgery; Neurosurgery; Obstetrics & Gynaecology; Urology,1,no
+ASSORTED-SYRINGES-2-5-10-20-ML,Assorted syringes (2/5/10/20 ml),CONSUMABLE,,2026-08-13,piece,6,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),6,no
+BIPOLAR-DIATHERMY-LEAD,Bipolar diathermy + lead,CONSUMABLE,,2026-08-13,piece,6,Maxillofacial Surgery; Paediatric Surgery; Plastic Surgery,1,no
+ECG-ELECTRODES,ECG electrodes,CONSUMABLE,,2026-08-13,piece,6,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),5,no
+FOLEY-CATHETER,Foley catheter,CONSUMABLE,,2026-08-13,piece,6,General Surgery; Neurosurgery; Obstetrics & Gynaecology; Urology,1,no
+HYPODERMIC-DRAWING-UP-NEEDLES,Hypodermic/drawing-up needles,CONSUMABLE,,2026-08-13,piece,6,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),6,no
+IV-CANNULA,IV cannula,CONSUMABLE,,2026-08-13,piece,6,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),2,no
+IV-GIVING-SET,IV giving set,CONSUMABLE,,2026-08-13,piece,6,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),1,no
+NIBP-CUFF-APPROPRIATE-SIZE,NIBP cuff (appropriate size),CONSUMABLE,,2026-08-13,piece,6,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); General (anaesthesia); Regional (anaesthesia); Sedation (anaesthesia); Spinal (anaesthesia),1,no
+CLOSED-SUCTION-DRAIN,Closed-suction drain,CONSUMABLE,,2026-08-13,piece,5,Maxillofacial Surgery; Neurosurgery; Orthopaedics,2,no
+DEXTROSE-5-500-ML,Dextrose 5% (500 ml),DRUG,,2026-08-13,litre,5,Cardiothoracic Surgery; Neurosurgery; Obstetrics & Gynaecology; Orthopaedics,1,no
+TRANEXAMIC-ACID-1-G,Tranexamic acid (1 g),DRUG,,2026-08-13,ampoule,5,Cardiothoracic Surgery; Neurosurgery; Obstetric (anaesthesia); Obstetrics & Gynaecology; Orthopaedics,1,no
+BONE-WAX,Bone wax,CONSUMABLE,,2026-08-13,piece,4,Cardiothoracic Surgery; Maxillofacial Surgery; Neurosurgery; Orthopaedics,2,no
+CEFAZOLIN-OR-CEFTRIAXONE-1-G-2-G,Cefazolin (or Ceftriaxone 1 g) (2 g),DRUG,,2026-08-13,vial,4,Obstetrics & Gynaecology; Orthopaedics; Plastic Surgery,2,no
+NYLON-SUTURE,Nylon suture,CONSUMABLE,,2026-08-13,piece,4,General Surgery; Ophthalmology; Plastic Surgery,3,no
+ATROPINE-0-6-MG,Atropine (0.6 mg),DRUG,,2026-08-13,ampoule,3,Adjunct (anaesthesia); General (anaesthesia); Spinal (anaesthesia),2,no
+BIPOLAR-DIATHERMY-FORCEPS-LEAD,Bipolar diathermy forceps + lead,CONSUMABLE,,2026-08-13,piece,3,ENT (Otorhinolaryngology); Neurosurgery,1,no
+BIPOLAR-FORCEPS-LEAD,Bipolar forceps + lead,CONSUMABLE,,2026-08-13,piece,3,Neurosurgery,1,no
+CHLORHEXIDINE-0-5-IN-ALCOHOL-SKIN-PREP,Chlorhexidine 0.5% in alcohol skin prep,CONSUMABLE,,2026-08-13,applicator,3,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); Spinal (anaesthesia),1,no
+MONOCRYL-SUTURE-SUBCUTICULAR,Monocryl suture (subcuticular),CONSUMABLE,,2026-08-13,piece,3,General Surgery; Paediatric Surgery,2,no
+NASOGASTRIC-TUBE,Nasogastric tube,CONSUMABLE,,2026-08-13,piece,3,General (anaesthesia); General Surgery,1,no
+PROLENE-SUTURE-VASCULAR,Prolene suture (vascular),CONSUMABLE,,2026-08-13,piece,3,Cardiothoracic Surgery; Urology,2,no
+REDIVAC-CLOSED-SUCTION-DRAIN,Redivac/closed suction drain,CONSUMABLE,,2026-08-13,piece,3,General Surgery,2,no
+STERILE-GLOVES,Sterile gloves,CONSUMABLE,,2026-08-13,pair,3,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); Spinal (anaesthesia),1,no
+STERILE-NEURAXIAL-DRAPE-PACK,Sterile neuraxial drape + pack,CONSUMABLE,,2026-08-13,pack,3,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia); Spinal (anaesthesia),1,no
+VICRYL-POLYGLACTIN-SUTURE,Vicryl (polyglactin) suture,CONSUMABLE,,2026-08-13,piece,3,General Surgery; Obstetrics & Gynaecology,4,no
+3-WAY-FOLEY-CATHETER,3-way Foley catheter,CONSUMABLE,,2026-08-13,piece,2,Urology,1,no
+BALANCED-SALT-SOLUTION-BSS,Balanced Salt Solution (BSS),CONSUMABLE,,2026-08-13,bottle,2,Ophthalmology,1,no
+CEFTRIAXONE-1-G,Ceftriaxone (1 g),DRUG,,2026-08-13,vial,2,General Surgery; Urology,1,no
+CO-AMOXICLAV-AUGMENTIN-1-2-G,Co-amoxiclav (Augmentin) (1.2 g),DRUG,,2026-08-13,vial,2,ENT (Otorhinolaryngology); Maxillofacial Surgery,1,no
+CORRUGATED-CLOSED-DRAIN,Corrugated/closed drain,CONSUMABLE,,2026-08-13,piece,2,Maxillofacial Surgery; Orthopaedics,1,no
+DEXAMETHASONE-8-MG,Dexamethasone (8 mg),DRUG,,2026-08-13,ampoule,2,ENT (Otorhinolaryngology); Neurosurgery,2,no
+EPHEDRINE-3-6-MG,Ephedrine (3–6 mg),DRUG,,2026-08-13,ampoule,2,Adjunct (anaesthesia); General (anaesthesia),2,no
+EPIDURAL-INFUSION-PUMP-SET,Epidural infusion pump set,CONSUMABLE,,2026-08-13,set,2,Combined Spinal-Epidural (anaesthesia); Epidural (anaesthesia),1,no
+FINE-SUCTION-CATHETERS,Fine suction catheters,CONSUMABLE,,2026-08-13,piece,2,ENT (Otorhinolaryngology),3,no
+METRONIDAZOLE-IV-INFUSION-500-MG,Metronidazole (IV infusion) (500 mg),DRUG,,2026-08-13,bag,2,General Surgery; Obstetrics & Gynaecology,1,no
+MONOCRYL-SUTURE,Monocryl suture,CONSUMABLE,,2026-08-13,piece,2,Plastic Surgery,3,no
+NEUROSURGICAL-PATTIES-COTTONOIDS,Neurosurgical patties/cottonoids,CONSUMABLE,,2026-08-13,pack,2,Neurosurgery,1,no
+NEUROSURGICAL-PATTIES-COTTONOIDS-ASSORTED,Neurosurgical patties/cottonoids (assorted),CONSUMABLE,,2026-08-13,pack,2,Neurosurgery,2,no
+NYLON-STAPLES-SKIN,Nylon/staples (skin),CONSUMABLE,,2026-08-13,piece,2,Neurosurgery; Orthopaedics,2,no
+PARACETAMOL-IV-PR-15-MG-KG,Paracetamol (IV/PR) (15 mg/kg),DRUG,,2026-08-13,vial,2,Paediatric (anaesthesia); Paediatric Surgery,1,no
+PARAFFIN-TULLE-GRAS-NON-ADHERENT-GAUZE,Paraffin/tulle gras (non-adherent) gauze,CONSUMABLE,,2026-08-13,piece,2,Plastic Surgery,3,no
+PROLENE-SUTURE,Prolene suture,CONSUMABLE,,2026-08-13,piece,2,Cardiothoracic Surgery,2,no
+SUXAMETHONIUM-1-1-5-MG-KG,Suxamethonium (1–1.5 mg/kg),DRUG,,2026-08-13,ampoule,2,Adjunct (anaesthesia); General (anaesthesia),1,no
+UNDERWATER-SEAL-DRAINAGE-SYSTEM,Underwater-seal drainage system,CONSUMABLE,,2026-08-13,set,2,Cardiothoracic Surgery,1,no
+VICRYL-SUTURE-BOWEL,Vicryl suture (bowel),CONSUMABLE,,2026-08-13,piece,2,General Surgery; Paediatric Surgery,4,no
+VICRYL-SUTURE-DEEP,Vicryl suture (deep),CONSUMABLE,,2026-08-13,piece,2,Orthopaedics; Plastic Surgery,3,no
+VICRYL-SUTURE-MUCOSA,Vicryl suture (mucosa),CONSUMABLE,,2026-08-13,piece,2,Maxillofacial Surgery,3,no
+5-FLUOROURACIL-ALTERNATIVE-50-MG-ML,5-Fluorouracil (alternative) (50 mg/ml),DRUG,,2026-08-13,vial,1,Ophthalmology,1,no
+50-DEXTROSE-HYPOGLYCAEMIA-RESCUE,50% Dextrose (hypoglycaemia rescue),DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+ABSORBABLE-HAEMOSTAT-SURGICEL,Absorbable haemostat (Surgicel),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,2,no
+ABSORBABLE-HAEMOSTAT-SURGICEL-GELFOAM,Absorbable haemostat (Surgicel/Gelfoam),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,2,no
+ABSORBABLE-HAEMOSTAT-SURGICEL-GELFOAM,Absorbable haemostat (Surgicel/Gelfoam),DRUG,,2026-08-13,piece,1,Neurosurgery,2,no
+ADENOID-CURETTE,Adenoid curette,CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),1,no
+ADRENALINE-EPINEPHRINE-1-1000-1-10-000-10-MCG-KG-ANAPHYLAXIS-ARREST,"Adrenaline (Epinephrine) 1:1000 / 1:10,000 (10 mcg/kg (anaphylaxis/arrest))",DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),2,no
+ADRENALINE-1-1000-TOPICAL-SOAKS,Adrenaline 1:1000 (topical soaks),DRUG,,2026-08-13,ampoule,1,ENT (Otorhinolaryngology),1,no
+AMIODARONE-300-MG,Amiodarone (300 mg),DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+AMPUTATION-SAW-GIGLI-OSCILLATING-BLADE,Amputation saw (Gigli/oscillating) blade,CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,1,no
+ARTERIAL-LINE-CANNULA-TRANSDUCER-SET,Arterial line cannula + transducer set,CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+ATRACURIUM-0-5-MG-KG,Atracurium (0.5 mg/kg),DRUG,,2026-08-13,ampoule,1,Paediatric (anaesthesia),1,no
+ATROPINE-20-MCG-KG-MIN-100-MCG,Atropine (20 mcg/kg (min 100 mcg)),DRUG,,2026-08-13,ampoule,1,Paediatric (anaesthesia),1,no
+BALANCED-SALT-SOLUTION-BSS-FOR-IRRIGATION-500-ML,Balanced Salt Solution (BSS) for irrigation (500 ml),DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+BEVACIZUMAB-AVASTIN-ANTI-VEGF-1-25-MG-0-05-ML,Bevacizumab (Avastin) — anti-VEGF (1.25 mg/0.05 ml),DRUG,,2026-08-13,vial,1,Ophthalmology,1,no
+BIOPSY-FORCEPS-CUP,Biopsy forceps (cup),CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),1,no
+BIOPSY-GUN-REUSABLE-DISPOSABLE,Biopsy gun (reusable/disposable),CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+BIOPSY-NEEDLE-18G-SPRING-LOADED,"Biopsy needle (18G, spring-loaded)",CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+BLADDER-IRRIGATION-SET,Bladder irrigation set,CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+BLADDER-IRRIGATION-SET-DRAINAGE-BAG,Bladder irrigation set + drainage bag,CONSUMABLE,,2026-08-13,set,1,Urology,1,no
+BLOCK-PACK-DRAPE-GAUZE-GALLIPOT,"Block pack (drape, gauze, gallipot)",CONSUMABLE,,2026-08-13,pack,1,Regional (anaesthesia),1,no
+BONE-FILE-RASP,Bone file/rasp,CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,1,no
+BONE-FLAP-FIXATION-CLAMPS,Bone flap fixation clamps,CONSUMABLE,,2026-08-13,set,1,Neurosurgery,1,no
+BONE-FLAP-FIXATION-SYSTEM,Bone flap fixation system,CONSUMABLE,,2026-08-13,set,1,Neurosurgery,1,no
+BONE-PLATE-DCP-LOCKING-SIZE-PER-TEMPLATING,Bone plate (DCP/locking) — size per templating,CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,1,no
+BONE-WAX,Bone wax,DRUG,,2026-08-13,piece,1,Neurosurgery,2,no
+BOUGIE-INTUBATING-STYLET,Bougie / intubating stylet,CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+BOUGIE-AIRWAY-EXCHANGE-CATHETER,Bougie + airway exchange catheter,CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+BOYLE-DAVIS-MOUTH-GAG-BLADES,Boyle-Davis mouth gag + blades,CONSUMABLE,,2026-08-13,set,1,ENT (Otorhinolaryngology),1,no
+BUPIVACAINE-0-1-0-25-EPIDURAL,Bupivacaine 0.1–0.25% (epidural),DRUG,,2026-08-13,vial,1,Combined Spinal-Epidural (anaesthesia),2,no
+BUPIVACAINE-0-25-CAUDAL-WOUND-MAX-2-MG-KG,Bupivacaine 0.25% (caudal/wound) (max 2 mg/kg),DRUG,,2026-08-13,vial,1,Paediatric Surgery,1,no
+BUPIVACAINE-0-25-0-5-MAX-2-MG-KG,Bupivacaine 0.25% / 0.5% (max 2 mg/kg),DRUG,,2026-08-13,vial,1,Local (anaesthesia),1,no
+BUPIVACAINE-0-25-0-5-TITRATED-TO-LEVEL,Bupivacaine 0.25% / 0.5% (titrated to level),DRUG,,2026-08-13,vial,1,Epidural (anaesthesia),2,no
+BUPIVACAINE-0-5-INTERCOSTAL-PARAVERTEBRAL-MAX-2-MG-KG,Bupivacaine 0.5% (intercostal/paravertebral) (max 2 mg/kg),DRUG,,2026-08-13,vial,1,Cardiothoracic Surgery,1,no
+BUPIVACAINE-0-5-MAX-2-MG-KG,Bupivacaine 0.5% (max 2 mg/kg),DRUG,,2026-08-13,vial,1,Plastic Surgery,1,no
+CALCIUM-GLUCONATE-10,Calcium gluconate 10%,DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+CAPNOGRAPHY-SAMPLING-LINE,Capnography sampling line,CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+CAPNOGRAPHY-SAMPLING-LINE-NASAL,Capnography sampling line (nasal),CONSUMABLE,,2026-08-13,piece,1,Sedation (anaesthesia),1,no
+CARBETOCIN-ALT-UTEROTONIC-100-MCG,Carbetocin (alt uterotonic) (100 mcg),DRUG,,2026-08-13,ampoule,1,Obstetric (anaesthesia),1,no
+CARBOPROST-HAEMABATE-250-MCG,Carboprost (Haemabate) (250 mcg),DRUG,,2026-08-13,ampoule,1,Obstetrics & Gynaecology,1,no
+CATHETER-FIXATION-DRESSING,Catheter fixation dressing,CONSUMABLE,,2026-08-13,piece,1,Epidural (anaesthesia),1,no
+CATHETER-MOUNT,Catheter mount,CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+CEFTRIAXONE-2-G,Ceftriaxone (2 g),DRUG,,2026-08-13,vial,1,Neurosurgery,2,no
+CEFUROXIME-50-MG-KG,Cefuroxime (50 mg/kg),DRUG,,2026-08-13,vial,1,Paediatric Surgery,1,no
+CEFUROXIME-OR-CEFAZOLIN-2-G-1-5-G,Cefuroxime (or Cefazolin 2 g) (1.5 g),DRUG,,2026-08-13,vial,1,Cardiothoracic Surgery,2,no
+CELLULOSE-SPONGES-WECK-CEL,Cellulose sponges (weck-cel),CONSUMABLE,,2026-08-13,pack,1,Ophthalmology,1,no
+CENTRAL-LINE-DRESSING-FIXATION,Central line dressing + fixation,CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+CENTRAL-VENOUS-CATHETER-KIT-MULTI-LUMEN,Central venous catheter kit (multi-lumen),CONSUMABLE,,2026-08-13,kit,1,Adjunct (anaesthesia),1,no
+CERCLAGE-WIRE,Cerclage wire,CONSUMABLE,,2026-08-13,roll,1,Orthopaedics,1,no
+CHEST-DRAIN-INTERCOSTAL,Chest drain (intercostal),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,1,no
+CHEST-DRAINS,Chest drains,CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,2,no
+CHLORPHENAMINE-10-MG,Chlorphenamine (10 mg),DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+CIPROFLOXACIN-FOR-PROSTATE-BIOPSY-500-MG,Ciprofloxacin (for prostate biopsy) (500 mg),DRUG,,2026-08-13,tablet,1,Urology,1,no
+COMPRESSION-BANDAGE-LIMB,Compression bandage (limb),CONSUMABLE,,2026-08-13,set,1,Cardiothoracic Surgery,1,no
+COMPRESSIVE-PENILE-DRESSING,Compressive penile dressing,CONSUMABLE,,2026-08-13,set,1,Paediatric Surgery,1,no
+CORTICAL-CANCELLOUS-LOCKING-SCREWS-ASSORTED,Cortical/cancellous/locking screws (assorted),CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+CRANIAL-FIXATION-PLATE-SCREW-SET,Cranial fixation plate & screw set,CONSUMABLE,,2026-08-13,set,1,Neurosurgery,1,no
+CRANIAL-FIXATION-PLATES-SCREWS-BURR-HOLE-COVERS,Cranial fixation plates/screws (burr-hole covers),CONSUMABLE,,2026-08-13,set,1,Neurosurgery,1,no
+CRESCENT-BLADE,Crescent blade,CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+CSE-KIT-TUOHY-SPINAL-NEEDLE-THROUGH-NEEDLE-CATHETER-FILTER,CSE kit (Tuohy + spinal needle-through-needle + catheter + filter),CONSUMABLE,,2026-08-13,kit,1,Combined Spinal-Epidural (anaesthesia),1,no
+DEXAMETHASONE-4-8-MG,Dexamethasone (4–8 mg),DRUG,,2026-08-13,ampoule,1,General (anaesthesia),1,no
+DEXAMETHASONE-FACIAL-SWELLING-8-MG,Dexamethasone (facial swelling) (8 mg),DRUG,,2026-08-13,ampoule,1,Maxillofacial Surgery,1,no
+DEXAMETHASONE-PERINEURAL-ADJUNCT-4-MG,Dexamethasone (perineural adjunct) (4 mg),DRUG,,2026-08-13,ampoule,1,Regional (anaesthesia),1,no
+DEXAMETHASONE-ANTIBIOTIC-OINTMENT,Dexamethasone + antibiotic ointment,DRUG,,2026-08-13,tube,1,Ophthalmology,1,no
+DEXAMETHASONE-ONDANSETRON,Dexamethasone + Ondansetron,DRUG,,2026-08-13,set,1,Paediatric (anaesthesia),1,no
+DEXMEDETOMIDINE-OPTIONAL,Dexmedetomidine (optional),DRUG,,2026-08-13,vial,1,Sedation (anaesthesia),1,no
+DEXTROSE-5-10,Dextrose 5% / 10%,DRUG,,2026-08-13,bag,1,Adjunct (anaesthesia),1,no
+DONOR-SITE-DRESSING-ALGINATE-FOAM,Donor-site dressing (alginate/foam),CONSUMABLE,,2026-08-13,set,1,Plastic Surgery,1,no
+DRILL-BITS-GUIDE,Drill bits + guide,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+DRILL-BITS-IRRIGATION,Drill bits + irrigation,CONSUMABLE,,2026-08-13,set,1,Maxillofacial Surgery,1,no
+DURAL-SUBSTITUTE-GRAFT,Dural substitute (graft),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,1,no
+DURAL-SUTURE-NUROLON-SILK,Dural suture (Nurolon/Silk),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,2,no
+ECHOGENIC-INSULATED-BLOCK-NEEDLE,Echogenic/insulated block needle,CONSUMABLE,,2026-08-13,piece,1,Regional (anaesthesia),1,no
+ENDOTRACHEAL-TUBE-CUFFED,Endotracheal tube (cuffed),CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),2,no
+EPIDURAL-KIT-TUOHY-NEEDLE-CATHETER-FILTER-LOR-SYRINGE,Epidural kit (Tuohy needle + catheter + filter + LOR syringe),CONSUMABLE,,2026-08-13,kit,1,Epidural (anaesthesia),1,no
+ERGOMETRINE-0-5-MG,Ergometrine (0.5 mg),DRUG,,2026-08-13,ampoule,1,Obstetrics & Gynaecology,1,no
+EYE-PAD-PROTECTIVE-SHIELD,Eye pad + protective shield,CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+EYE-PAD-SHIELD,Eye pad + shield,CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+EYE-SPECULUM-WIRE-ADJUSTABLE,Eye speculum (wire/adjustable),CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+FACE-MASK-ANAESTHETIC-SIZED,"Face mask (anaesthetic, sized)",CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+FENTANYL-0-5-1-MCG-KG,Fentanyl (0.5–1 mcg/kg),DRUG,,2026-08-13,ampoule,1,Sedation (anaesthesia),1,no
+FENTANYL-1-MCG-KG,Fentanyl (1 mcg/kg),DRUG,,2026-08-13,ampoule,1,Paediatric (anaesthesia),1,no
+FENTANYL-1-2-MCG-KG,Fentanyl (1–2 mcg/kg),DRUG,,2026-08-13,ampoule,1,General (anaesthesia),2,no
+FENTANYL-10-25-MCG-IT-50-100-MCG-EPIDURAL,Fentanyl (10–25 mcg IT / 50–100 mcg epidural),DRUG,,2026-08-13,ampoule,1,Combined Spinal-Epidural (anaesthesia),1,no
+FENTANYL-EPIDURAL-ADJUNCT-50-100-MCG,Fentanyl (epidural adjunct) (50–100 mcg),DRUG,,2026-08-13,ampoule,1,Epidural (anaesthesia),1,no
+FENTANYL-INTRATHECAL-ADJUNCT-10-25-MCG,Fentanyl (intrathecal adjunct) (10–25 mcg),DRUG,,2026-08-13,ampoule,1,Spinal (anaesthesia),1,no
+FENTANYL-PRESERVATIVE-FREE-MORPHINE-15-MCG-100-MCG,Fentanyl + Preservative-free Morphine (15 mcg + 100 mcg),DRUG,,2026-08-13,ampoule,1,Obstetric (anaesthesia),1,no
+FIBREOPTIC-SCOPE-DRAPE-ADJUNCTS,Fibreoptic scope drape/adjuncts,CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+FINE-ABSORBABLE-SUTURE,Fine absorbable suture,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,2,no
+FINE-ABSORBABLE-SUTURE-PDS-VICRYL,Fine absorbable suture (PDS/Vicryl),CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,3,no
+FINE-BIPOLAR-LEAD,Fine bipolar + lead,CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,1,no
+FINE-BIPOLAR-DIATHERMY-LEAD,Fine bipolar diathermy + lead,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+FINE-INFILTRATION-NEEDLES-25G-23G-SYRINGES,Fine infiltration needles (25G/23G) + syringes,CONSUMABLE,,2026-08-13,piece,1,Local (anaesthesia),4,no
+FINE-SKIN-HOOKS-VESSEL-LOOPS,Fine skin hooks / vessel loops,CONSUMABLE,,2026-08-13,pack,1,Plastic Surgery,1,no
+FINE-SUCTION-TONSIL-SUCKER,Fine suction (tonsil sucker),CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),1,no
+FINE-SUCTION-CATHETERS-ASSORTED,Fine suction catheters (assorted),CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),2,no
+FLUMAZENIL-BENZODIAZEPINE-REVERSAL-200-MCG,Flumazenil (benzodiazepine reversal) (200 mcg),DRUG,,2026-08-13,ampoule,1,Sedation (anaesthesia),1,no
+FOREIGN-BODY-GRASPING-FORCEPS,Foreign-body grasping forceps,CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),1,no
+FORMALIN-SPECIMEN-BOTTLES,Formalin specimen bottles,CONSUMABLE,,2026-08-13,bottle,1,ENT (Otorhinolaryngology),2,no
+FORMALIN-SPECIMEN-BOTTLES-LABELLED-BY-SITE,Formalin specimen bottles (labelled by site),CONSUMABLE,,2026-08-13,bottle,1,Urology,6,no
+FRONT-OF-NECK-ACCESS-CRICOTHYROIDOTOMY-KIT-SCALPEL,Front-of-neck-access (cricothyroidotomy) kit + scalpel,CONSUMABLE,,2026-08-13,kit,1,Adjunct (anaesthesia),1,no
+GENTAMICIN-5-MG-KG,Gentamicin (5 mg/kg),DRUG,,2026-08-13,ampoule,1,Urology,1,no
+GTN-FOR-HYPERTENSION-ISCHAEMIA,GTN (for hypertension/ischaemia),DRUG,,2026-08-13,vial,1,Adjunct (anaesthesia),1,no
+GUEDEL-OROPHARYNGEAL-AIRWAYS-ASSORTED,Guedel oropharyngeal airways (assorted),CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),2,no
+HAEMOSTATIC-CLIPS-DUCTAL,Haemostatic clips (ductal),CONSUMABLE,,2026-08-13,pack,1,Cardiothoracic Surgery,1,no
+HAEMOSTATIC-CLIPS-HEM-O-LOK-LIGACLIP,Haemostatic clips (Hem-o-lok/Ligaclip),CONSUMABLE,,2026-08-13,pack,1,Urology,1,no
+HEAVY-BUPIVACAINE-0-5-2-2-5-ML,Heavy Bupivacaine 0.5% (2–2.5 ml),DRUG,,2026-08-13,ampoule,1,Obstetric (anaesthesia),1,no
+HEAVY-BUPIVACAINE-0-5-HYPERBARIC-2-3-ML-10-15-MG,Heavy Bupivacaine 0.5% (hyperbaric) (2–3 ml (10–15 mg)),DRUG,,2026-08-13,ampoule,1,Spinal (anaesthesia),1,no
+HEAVY-BUPIVACAINE-0-5-INTRATHECAL-1-5-2-5-ML,Heavy Bupivacaine 0.5% (intrathecal) (1.5–2.5 ml),DRUG,,2026-08-13,ampoule,1,Combined Spinal-Epidural (anaesthesia),1,no
+HIGH-SPEED-DRILL-CRANIOTOME-BURR,High-speed drill/craniotome burr,CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,1,no
+HME-FILTER-HEAT-MOISTURE-EXCHANGER,HME filter (heat & moisture exchanger),CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+HUMBY-WATSON-KNIFE-BLADE-OR-DERMATOME-BLADE,Humby/Watson knife blade (or dermatome blade),CONSUMABLE,,2026-08-13,piece,1,Plastic Surgery,1,no
+HYDROCORTISONE-200-MG,Hydrocortisone (200 mg),DRUG,,2026-08-13,vial,1,Adjunct (anaesthesia),1,no
+HYDRODISSECTION-CANNULA,Hydrodissection cannula,CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+INTRACAMERAL-CEFUROXIME-1-MG-0-1-ML,Intracameral Cefuroxime (1 mg/0.1 ml),DRUG,,2026-08-13,vial,1,Ophthalmology,1,no
+INTRALIPID-20-LA-TOXICITY-RESCUE-1-5-ML-KG-BOLUS,Intralipid 20% (LA toxicity rescue) (1.5 ml/kg bolus),DRUG,,2026-08-13,bag,1,Regional (anaesthesia),1,no
+INTRALIPID-20-LA-TOXICITY,Intralipid 20% (LA toxicity),DRUG,,2026-08-13,bag,1,Adjunct (anaesthesia),1,no
+INTRAMEDULLARY-NAIL-LOCKING-BOLTS-IF-NAILING,Intramedullary nail + locking bolts (if nailing),CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+INTRODUCER-NEEDLE,Introducer needle,CONSUMABLE,,2026-08-13,piece,1,Spinal (anaesthesia),1,no
+K-WIRES-ASSORTED,K-wires (assorted),CONSUMABLE,,2026-08-13,pack,1,Orthopaedics,1,no
+KERATOME-SIDE-PORT-BLADE,Keratome + side-port blade,CONSUMABLE,,2026-08-13,set,1,Ophthalmology,1,no
+KETAMINE-ANALGO-SEDATION-0-25-0-5-MG-KG,Ketamine (analgo-sedation) (0.25–0.5 mg/kg),DRUG,,2026-08-13,vial,1,Sedation (anaesthesia),1,no
+LABETALOL-HYDRALAZINE,Labetalol / Hydralazine,DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+LARGE-ABDOMINAL-DRAIN-ROBINSON-REDIVAC,Large abdominal drain (Robinson/Redivac),CONSUMABLE,,2026-08-13,piece,1,General Surgery,2,no
+LARGE-CLOSED-SUCTION-DRAIN,Large closed-suction drain,CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+LARYNGEAL-MASK-AIRWAY-LMA,Laryngeal mask airway (LMA),CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+LARYNGOSCOPE-BLADES-MAC-3-4-SPARE-BATTERIES,Laryngoscope blades (Mac 3/4) + spare batteries,CONSUMABLE,,2026-08-13,set,1,General (anaesthesia),1,no
+LIDOCAINE-1-2-FASTER-ONSET,Lidocaine 1–2% (faster onset),DRUG,,2026-08-13,vial,1,Regional (anaesthesia),1,no
+LIDOCAINE-2-WITH-ADRENALINE-1-200-000-3-ML-TEST-DOSE,"Lidocaine 2% with Adrenaline 1:200,000 (3 ml test dose)",DRUG,,2026-08-13,vial,1,Epidural (anaesthesia),1,no
+LIGHTWEIGHT-POLYPROPYLENE-MESH,Lightweight polypropylene mesh,CONSUMABLE,,2026-08-13,piece,1,General Surgery,1,no
+LIGNOCAINE-1-2-ADRENALINE-1-200-000-MAX-3-MG-KG-PLAIN-7-MG-KG-WITH-ADRENALINE,"Lignocaine 1% / 2% (± Adrenaline 1:200,000) (max 3 mg/kg plain, 7 mg/kg with adrenaline)",DRUG,,2026-08-13,vial,1,Local (anaesthesia),2,no
+LIGNOCAINE-2-20-ML,Lignocaine 2% (20 ml),DRUG,,2026-08-13,vial,1,General Surgery,1,no
+LIGNOCAINE-2-PERIBULBAR-SUB-TENON-2-5-ML,Lignocaine 2% (peribulbar/sub-Tenon) (2–5 ml),DRUG,,2026-08-13,vial,1,Ophthalmology,1,no
+LIGNOCAINE-2-PLAIN,Lignocaine 2% (plain),DRUG,,2026-08-13,vial,1,General (anaesthesia),1,no
+LIGNOCAINE-2-WITH-ADRENALINE-1-100-000,"Lignocaine 2% with Adrenaline 1:100,000",DRUG,,2026-08-13,vial,1,ENT (Otorhinolaryngology),1,no
+LIGNOCAINE-2-WITH-ADRENALINE-1-200-000-MAX-7-MG-KG-WITH-ADRENALINE,"Lignocaine 2% with Adrenaline 1:200,000 (max 7 mg/kg (with adrenaline))",DRUG,,2026-08-13,vial,1,Plastic Surgery,2,no
+LIGNOCAINE-2-WITH-ADRENALINE-1-80-000-DENTAL,"Lignocaine 2% with Adrenaline 1:80,000 (dental)",DRUG,,2026-08-13,cartridge,1,Maxillofacial Surgery,2,no
+LINEAR-CUTTER-STAPLER-RELOAD-IF-BOWEL-RESECTION,Linear cutter/stapler reload (if bowel resection),CONSUMABLE,,2026-08-13,piece,1,General Surgery,1,no
+LINEAR-STAPLER-VASCULAR-PARENCHYMA-RELOADS,Linear stapler + vascular/parenchyma reloads,CONSUMABLE,,2026-08-13,set,1,Cardiothoracic Surgery,1,no
+MAGNESIUM-SULFATE-2-G,Magnesium sulfate (2 g),DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+MANNITOL-20-0-5-1-G-KG,Mannitol 20% (0.5–1 g/kg),DRUG,,2026-08-13,bag,1,Neurosurgery,1,no
+METOCLOPRAMIDE-10-MG,Metoclopramide (10 mg),DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+METRONIDAZOLE-500-MG,Metronidazole (500 mg),DRUG,,2026-08-13,bag,1,Maxillofacial Surgery,1,no
+METRONIDAZOLE-7-5-MG-KG,Metronidazole (7.5 mg/kg),DRUG,,2026-08-13,bag,1,Paediatric Surgery,1,no
+MICROBIOLOGY-SPECIMEN-CONTAINERS-C-S,Microbiology specimen containers (C/S),CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,3,no
+MICROLARYNGEAL-TUBE-MLT,Microlaryngeal tube (MLT),CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),1,no
+MICROSCOPE-DRAPE,Microscope drape,CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,1,no
+MIDAZOLAM-0-02-0-05-MG-KG,Midazolam (0.02–0.05 mg/kg),DRUG,,2026-08-13,ampoule,1,Sedation (anaesthesia),1,no
+MINERAL-OIL-LIQUID-PARAFFIN-GLIDE,Mineral oil / liquid paraffin (glide),CONSUMABLE,,2026-08-13,bottle,1,Plastic Surgery,1,no
+MISOPROSTOL-200-MCG,Misoprostol (200 mcg),DRUG,,2026-08-13,tablet,1,Obstetrics & Gynaecology,4,no
+MITOMYCIN-C-MMC-0-02-0-2-MG-ML,Mitomycin C (MMC) (0.02% (0.2 mg/ml)),DRUG,,2026-08-13,vial,1,Ophthalmology,1,no
+MMF-SCREWS-ARCH-BARS-WIRES,MMF screws / arch bars + wires,CONSUMABLE,,2026-08-13,set,1,Maxillofacial Surgery,1,no
+MONO-CORTICAL-BI-CORTICAL-SCREWS-ASSORTED,Mono-cortical/bi-cortical screws (assorted),CONSUMABLE,,2026-08-13,set,1,Maxillofacial Surgery,1,no
+MONOCRYL-SKIN,Monocryl (skin),CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+MONOCRYL-SUBCUTICULAR,Monocryl (subcuticular),CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+MONOCRYL-NYLON-SKIN,Monocryl/Nylon (skin),CONSUMABLE,,2026-08-13,piece,1,Obstetrics & Gynaecology,1,no
+MONOPOLAR-DIATHERMY-PENCIL-PLATE,Monopolar diathermy pencil + plate,CONSUMABLE,,2026-08-13,set,1,Neurosurgery,1,no
+NALOXONE-OPIOID-REVERSAL-400-MCG,Naloxone (opioid reversal) (400 mcg),DRUG,,2026-08-13,ampoule,1,Sedation (anaesthesia),1,no
+NASAL-CANNULA-HUDSON-O2-MASK,Nasal cannula / Hudson O2 mask,CONSUMABLE,,2026-08-13,piece,1,Sedation (anaesthesia),1,no
+NEOSTIGMINE-GLYCOPYRROLATE-50-MCG-KG-10-MCG-KG,Neostigmine + Glycopyrrolate (50 mcg/kg + 10 mcg/kg),DRUG,,2026-08-13,ampoule,1,General (anaesthesia),1,no
+NERVE-STIMULATOR-ELECTRODE-PADS,Nerve stimulator electrode pads,CONSUMABLE,,2026-08-13,set,1,Regional (anaesthesia),1,no
+NEURO-PATTIES-RIBBON-GAUZE-NASAL,Neuro-patties / ribbon gauze (nasal),CONSUMABLE,,2026-08-13,pack,1,ENT (Otorhinolaryngology),1,no
+NEUROSURGICAL-PATTIES,Neurosurgical patties,CONSUMABLE,,2026-08-13,pack,1,Neurosurgery,1,no
+NORMAL-SALINE-FOR-IRRIGATION,Normal saline for irrigation,CONSUMABLE,,2026-08-13,litre,1,Orthopaedics,3,no
+NORMAL-SALINE-FOR-LAVAGE,Normal saline for lavage,CONSUMABLE,,2026-08-13,litre,1,Orthopaedics,6,no
+NYLON-SUTURE-DRAIN-SKIN,Nylon suture (drain/skin),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,2,no
+NYLON-SUTURE-OPHTHALMIC,Nylon suture (ophthalmic),CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+NYLON-SUTURE-SCALP,Nylon suture (scalp),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,2,no
+NYLON-SUTURE-SCALP-ABDOMEN,Nylon suture (scalp/abdomen),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,2,no
+NYLON-SUTURE-STAY-SKIN,Nylon suture (stay/skin),CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),2,no
+NYLON-PROLENE-SUTURE-TENDON-CORE,Nylon/Prolene suture (tendon core),CONSUMABLE,,2026-08-13,piece,1,Plastic Surgery,2,no
+NYLON-STAPLES-SCALP,Nylon/staples (scalp),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,2,no
+ONDANSETRON-4-MG,Ondansetron (4 mg),DRUG,,2026-08-13,ampoule,1,General (anaesthesia),1,no
+OPHTHALMIC-BLADE-CRESCENT-KERATOME-SIDE-PORT,Ophthalmic blade (crescent/keratome/side-port),CONSUMABLE,,2026-08-13,set,1,Ophthalmology,1,no
+OPHTHALMIC-DRAPE-FENESTRATED-ADHESIVE,"Ophthalmic drape (fenestrated, adhesive)",CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+OPHTHALMIC-VISCOELASTIC-OVD-E-G-HPMC,"Ophthalmic viscoelastic (OVD, e.g. HPMC)",DRUG,,2026-08-13,syringe,1,Ophthalmology,1,no
+OPHTHALMIC-VISCOELASTIC-OVD,Ophthalmic viscoelastic (OVD),CONSUMABLE,,2026-08-13,syringe,1,Ophthalmology,1,no
+OPTICAL-MAGNIFICATION-LOUPES-DRAPE,Optical magnification loupes drape,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+OXYTOCIN-10-IU,Oxytocin (10 IU),DRUG,,2026-08-13,ampoule,1,Obstetrics & Gynaecology,5,no
+OXYTOCIN-5-IU-SLOW-IV-THEN-INFUSION,Oxytocin (5 IU slow IV then infusion),DRUG,,2026-08-13,ampoule,1,Obstetric (anaesthesia),5,no
+PAEDIATRIC-BREATHING-CIRCUIT-AYRE-S-T-PIECE-JACKSON-REES,Paediatric breathing circuit (Ayre’s T-piece/Jackson-Rees),CONSUMABLE,,2026-08-13,piece,1,Paediatric (anaesthesia),1,no
+PAEDIATRIC-CHEST-DRAIN,Paediatric chest drain,CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,1,no
+PAEDIATRIC-ECG-ELECTRODES-SMALL-NIBP-CUFF-SPO2,Paediatric ECG electrodes + small NIBP cuff + SpO2,CONSUMABLE,,2026-08-13,set,1,Paediatric (anaesthesia),1,no
+PAEDIATRIC-ETT-UNCUFFED-MICROCUFF-ASSORTED,"Paediatric ETT (uncuffed/microcuff, assorted)",CONSUMABLE,,2026-08-13,piece,1,Paediatric (anaesthesia),3,no
+PAEDIATRIC-FACE-MASKS-GUEDEL-AIRWAYS,Paediatric face masks + Guedel airways,CONSUMABLE,,2026-08-13,set,1,Paediatric (anaesthesia),1,no
+PAEDIATRIC-FOLEY-CATHETER,Paediatric Foley catheter,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+PAEDIATRIC-IV-CANNULA-22G-24G,Paediatric IV cannula (22G/24G),CONSUMABLE,,2026-08-13,piece,1,Paediatric (anaesthesia),2,no
+PAEDIATRIC-LMA-SIZES-1-2-5,Paediatric LMA (sizes 1–2.5),CONSUMABLE,,2026-08-13,piece,1,Paediatric (anaesthesia),1,no
+PAEDIATRIC-NG-TUBE,Paediatric NG tube,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+PAEDIATRIC-NG-FEEDING-TUBE,Paediatric NG/feeding tube,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+PAEDIATRIC-STOMA-APPLIANCE,Paediatric stoma appliance,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+PAEDIATRIC-URETHRAL-CATHETER-STENT,Paediatric urethral catheter/stent,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+PDS-LOOP-MASS-CLOSURE,PDS loop (mass closure),CONSUMABLE,,2026-08-13,piece,1,Obstetrics & Gynaecology,1,no
+PDS-LOOP-SUTURE-MASS-CLOSURE,PDS loop suture (mass closure),CONSUMABLE,,2026-08-13,piece,1,General Surgery,2,no
+PDS-SUTURE,PDS suture,CONSUMABLE,,2026-08-13,piece,1,General Surgery,2,no
+PDS-SUTURE-TENDON,PDS suture (tendon),CONSUMABLE,,2026-08-13,piece,1,Plastic Surgery,2,no
+PDS-VICRYL-BLADDER,PDS/Vicryl (bladder),CONSUMABLE,,2026-08-13,piece,1,Urology,2,no
+PELVIC-DRAIN,Pelvic drain,CONSUMABLE,,2026-08-13,piece,1,Obstetrics & Gynaecology,1,no
+PELVIC-RETROPUBIC-DRAIN,Pelvic/retropubic drain,CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+PERICOSTAL-HEAVY-VICRYL-RIB-APPROXIMATION,Pericostal / heavy Vicryl (rib approximation),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,2,no
+PHENYLEPHRINE-INFUSION-BOLUSES,Phenylephrine (infusion/boluses),DRUG,,2026-08-13,ampoule,1,Obstetric (anaesthesia),2,no
+PHENYLEPHRINE-OR-EPHEDRINE,Phenylephrine (or Ephedrine),DRUG,,2026-08-13,ampoule,1,Combined Spinal-Epidural (anaesthesia),1,no
+PHENYLEPHRINE-OR-EPHEDRINE-50-100-MCG-BOLUSES,Phenylephrine (or Ephedrine) (50–100 mcg boluses),DRUG,,2026-08-13,ampoule,1,Spinal (anaesthesia),1,no
+PHENYTOIN-15-MG-KG-LOADING,Phenytoin (15 mg/kg loading),DRUG,,2026-08-13,ampoule,1,Neurosurgery,1,no
+PLASTER-OF-PARIS-SYNTHETIC-CAST-WOOL,Plaster of Paris / synthetic cast + wool,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+PNEUMATIC-TOURNIQUET-CUFF-WRAP,Pneumatic tourniquet cuff + wrap,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+POSTERIOR-CHAMBER-IOL-PCIOL,Posterior-chamber IOL (PCIOL),CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+POVIDONE-IODINE-5-OCULAR,Povidone-iodine 5% (ocular),DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+PRESERVATIVE-FREE-MORPHINE-OPTIONAL-100-200-MCG,Preservative-free Morphine (optional) (100–200 mcg),DRUG,,2026-08-13,ampoule,1,Spinal (anaesthesia),1,no
+PRESERVATIVE-FREE-MORPHINE-OPTIONAL-2-4-MG,Preservative-free Morphine (optional) (2–4 mg),DRUG,,2026-08-13,ampoule,1,Epidural (anaesthesia),1,no
+PRESSURE-TRANSDUCER-FLUSH-SET,Pressure transducer + flush set,CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+PROLENE-POLYPROPYLENE-SUTURE,Prolene (polypropylene) suture,CONSUMABLE,,2026-08-13,piece,1,General Surgery,2,no
+PROLENE-SUTURE-VASCULAR-BRONCHUS,Prolene suture (vascular/bronchus),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,3,no
+PROPARACAINE-TOPICAL-ANAESTHETIC,Proparacaine (topical anaesthetic),DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+PROPARACAINE-TETRACAINE-TOPICAL-ANAESTHETIC-DROPS,Proparacaine/Tetracaine (topical anaesthetic) drops,DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+PROPOFOL-TITRATED-TCI-TITRATE,Propofol (titrated / TCI) (titrate),DRUG,,2026-08-13,ampoule,1,Sedation (anaesthesia),1,no
+PROPOFOL-SEVOFLURANE-INDUCTION-PROPOFOL-3-4-MG-KG,Propofol / Sevoflurane induction (Propofol 3–4 mg/kg),DRUG,,2026-08-13,ampoule,1,Paediatric (anaesthesia),1,no
+PROPOFOL-1-1-5-2-5-MG-KG,Propofol 1% (1.5–2.5 mg/kg),DRUG,,2026-08-13,ampoule,1,General (anaesthesia),2,no
+PULSE-LAVAGE-BULB-IRRIGATION,Pulse lavage / bulb irrigation,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+PULSE-LAVAGE-SALINE-3-L,Pulse lavage + saline 3 L,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+PULSE-LAVAGE-SET,Pulse lavage set,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+RANGE-OF-ETTS-SMALL-SIZES-INCL-5-0-6-0,Range of ETTs (small sizes incl. 5.0–6.0),CONSUMABLE,,2026-08-13,piece,1,Adjunct (anaesthesia),3,no
+RANITIDINE-OMEPRAZOLE,Ranitidine/Omeprazole,DRUG,,2026-08-13,ampoule,1,Adjunct (anaesthesia),1,no
+RECIPROCATING-OSCILLATING-SAW-BLADE,Reciprocating/oscillating saw blade,CONSUMABLE,,2026-08-13,piece,1,Maxillofacial Surgery,1,no
+RECONSTRUCTION-PLATE-LOCKING-SCREWS,Reconstruction plate + locking screws,CONSUMABLE,,2026-08-13,set,1,Maxillofacial Surgery,1,no
+RINGER-S-LACTATE-0-45-SALINE-DEXTROSE-MAINTENANCE-PER-WEIGHT,Ringer's Lactate / 0.45% saline+dextrose (maintenance) (per weight),DRUG,,2026-08-13,bag,1,Paediatric Surgery,1,no
+RINGER-S-LACTATE-MAINTENANCE-FLUID-PER-WEIGHT,Ringer's Lactate / maintenance fluid (per weight),DRUG,,2026-08-13,bag,1,Paediatric (anaesthesia),1,no
+ROCURONIUM-HIGH-DOSE-RSI-ALT-1-2-MG-KG,Rocuronium (high-dose RSI alt) (1.2 mg/kg),DRUG,,2026-08-13,vial,1,Adjunct (anaesthesia),1,no
+ROCURONIUM-OR-ATRACURIUM-0-6-MG-KG,Rocuronium (or Atracurium) (0.6 mg/kg),DRUG,,2026-08-13,vial,1,General (anaesthesia),1,no
+ROPIVACAINE-0-5-OR-BUPIVACAINE-0-5-BLOCK-DEPENDENT-WITHIN-MAX,"Ropivacaine 0.5% (or Bupivacaine 0.5%) (block-dependent, within max)",DRUG,,2026-08-13,vial,1,Regional (anaesthesia),2,no
+SALBUTAMOL-NEBULES-HYDROCORTISONE-REACTIVE-AIRWAY,Salbutamol nebules + Hydrocortisone (reactive airway),DRUG,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+SAW-BLADE-OSCILLATING,Saw blade / oscillating,CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,1,no
+SECOND-GENERATION-SUPRAGLOTTIC-AIRWAY-I-GEL-PROSEAL,Second-generation supraglottic airway (i-gel/ProSeal),CONSUMABLE,,2026-08-13,piece,1,Adjunct (anaesthesia),2,no
+SEVOFLURANE-VOLATILE,Sevoflurane (volatile),DRUG,,2026-08-13,bottle,1,General (anaesthesia),1,no
+SHUNT-PASSER-TUNNELER,Shunt passer/tunneler,CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,1,no
+SILK-SUTURE,Silk suture,CONSUMABLE,,2026-08-13,piece,1,General Surgery,2,no
+SILK-PROLENE-TIES-DUCTAL-LIGATION,Silk/Prolene ties (ductal ligation),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,3,no
+SIMCOE-I-A-CANNULA,Simcoe / I-A cannula,CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+SKIN-GLUE-ADHESIVE-STRIPS,Skin glue / adhesive strips,CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+SKIN-GRAFT-MESHER-MESH-PLATE,Skin graft mesher / mesh plate,CONSUMABLE,,2026-08-13,piece,1,Plastic Surgery,1,no
+SKIN-MARKER,Skin marker,CONSUMABLE,,2026-08-13,piece,1,General Surgery,1,no
+SKIN-MARKER-RULER,Skin marker + ruler,CONSUMABLE,,2026-08-13,piece,1,Plastic Surgery,1,no
+SKIN-PREP-CHLORHEXIDINE,Skin prep (chlorhexidine),CONSUMABLE,,2026-08-13,applicator,1,Regional (anaesthesia),1,no
+SKIN-PREP-CHLORHEXIDINE-POVIDONE,Skin prep (chlorhexidine/povidone),CONSUMABLE,,2026-08-13,bottle,1,Local (anaesthesia),1,no
+SKIN-STAPLER-NYLON-2-0,Skin stapler / Nylon 2-0,CONSUMABLE,,2026-08-13,piece,1,General Surgery,1,no
+SODIUM-BICARBONATE-8-4,Sodium bicarbonate 8.4%,DRUG,,2026-08-13,bottle,1,Adjunct (anaesthesia),1,no
+SODIUM-CITRATE-RANITIDINE-METOCLOPRAMIDE,Sodium citrate + Ranitidine + Metoclopramide,DRUG,,2026-08-13,set,1,Obstetric (anaesthesia),1,no
+SODIUM-CITRATE-0-3M-30-ML,Sodium citrate 0.3M (30 ml),DRUG,,2026-08-13,bottle,1,Adjunct (anaesthesia),1,no
+SOLUBLE-INSULIN-SLIDING-SCALE,Soluble insulin (sliding scale),DRUG,,2026-08-13,vial,1,Adjunct (anaesthesia),1,no
+SPINAL-NEEDLE-PENCIL-POINT,Spinal needle (pencil-point),CONSUMABLE,,2026-08-13,piece,1,Spinal (anaesthesia),1,no
+STAPLES-CHROMIC-4-0-GRAFT-FIXATION,Staples / Chromic 4-0 (graft fixation),CONSUMABLE,,2026-08-13,piece,1,Plastic Surgery,1,no
+STERILE-GLOVES-PROBE-COVER,Sterile gloves + probe cover,CONSUMABLE,,2026-08-13,set,1,Urology,1,no
+STERILE-WATER-GLYCINE-FOR-IRRIGATION-3-L,Sterile water / Glycine for irrigation (3 L),DRUG,,2026-08-13,litre,1,Urology,3,no
+STERNAL-WIRE,Sternal wire,CONSUMABLE,,2026-08-13,pack,1,Cardiothoracic Surgery,1,no
+STUMP-COMPRESSION-DRESSING-CREPE,Stump/compression dressing + crepe,CONSUMABLE,,2026-08-13,set,1,Orthopaedics,1,no
+SUBDURAL-SOFT-CLOSED-DRAIN,Subdural/soft closed drain,CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,1,no
+SUCTION-CATHETERS-ASSORTED,Suction catheters (assorted),CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),2,no
+SUCTION-CATHETERS-YANKAUER,Suction catheters + Yankauer,CONSUMABLE,,2026-08-13,set,1,Sedation (anaesthesia),1,no
+SUPRAPUBIC-CATHETER,Suprapubic catheter,CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+TEMPERATURE-PROBE,Temperature probe,CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
+THIOPENTONE-ALT-INDUCTION-3-5-MG-KG,Thiopentone (alt induction) (3–5 mg/kg),DRUG,,2026-08-13,vial,1,General (anaesthesia),1,no
+THROAT-PACK,Throat pack,CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),1,no
+TIE-OVER-FOAM-BOLSTER-DRESSING,Tie-over / foam bolster dressing,CONSUMABLE,,2026-08-13,set,1,Plastic Surgery,1,no
+TITANIUM-MINI-MICRO-PLATES-ASSORTED,Titanium mini/micro plates (assorted),CONSUMABLE,,2026-08-13,set,1,Maxillofacial Surgery,1,no
+TONSILLAR-SWABS-ON-HOLDER,Tonsillar swabs (on holder),CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),5,no
+TOPICAL-ANTIBIOTIC-CIPROFLOXACIN-MOXIFLOXACIN-DROPS,Topical antibiotic (Ciprofloxacin/Moxifloxacin) drops,DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+TOPICAL-ANTIBIOTIC-STEROID-DROPS,Topical antibiotic-steroid drops,DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+TOPICAL-LIGNOCAINE-SPRAY-AIRWAY,Topical Lignocaine spray (airway),CONSUMABLE,,2026-08-13,bottle,1,ENT (Otorhinolaryngology),1,no
+TRACHEAL-DILATOR-HOOK-IN-SET,Tracheal dilator + hook (in set),CONSUMABLE,,2026-08-13,set,1,ENT (Otorhinolaryngology),1,no
+TRACHEOSTOMY-TAPE-TIES-KEYHOLE-DRESSING,Tracheostomy tape/ties + keyhole dressing,CONSUMABLE,,2026-08-13,set,1,ENT (Otorhinolaryngology),1,no
+TRACHEOSTOMY-TUBE-CUFFED-SPARE,Tracheostomy tube (cuffed) + spare,CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),2,no
+TRIAMCINOLONE-KENALOG-KELOID-10-40-MG-ML,Triamcinolone (Kenalog) — keloid (10–40 mg/ml),DRUG,,2026-08-13,vial,1,Plastic Surgery,1,no
+TRIAMCINOLONE-KENALOG-4-MG-0-1-ML,Triamcinolone (Kenalog) (4 mg/0.1 ml),DRUG,,2026-08-13,vial,1,Ophthalmology,1,no
+TROPICAMIDE-PHENYLEPHRINE-MYDRIATIC-DROPS,Tropicamide + Phenylephrine (mydriatic) drops,DRUG,,2026-08-13,bottle,1,Ophthalmology,1,no
+ULTRASOUND-PROBE-COVER-GEL-FOR-CVC,Ultrasound probe cover + gel (for CVC),CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+ULTRASOUND-PROBE-COVER-STERILE-GEL,Ultrasound probe cover + sterile gel,CONSUMABLE,,2026-08-13,set,1,Regional (anaesthesia),1,no
+UNDERWATER-SEAL-DRAINAGE-BOTTLE-SYSTEM,Underwater-seal drainage bottle/system,CONSUMABLE,,2026-08-13,set,1,Cardiothoracic Surgery,1,no
+VASCULAR-TIES-VICRYL,Vascular ties / Vicryl,CONSUMABLE,,2026-08-13,piece,1,Urology,4,no
+VEIN-STRIPPER-DISPOSABLE,Vein stripper (disposable),CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,1,no
+VICRYL-SCROTAL-SKIN,Vicryl (scrotal skin),CONSUMABLE,,2026-08-13,piece,1,Urology,1,no
+VICRYL-SILK-TIES,Vicryl / Silk ties,CONSUMABLE,,2026-08-13,piece,1,Cardiothoracic Surgery,4,no
+VICRYL-SUTURE-FASCIA,Vicryl suture (fascia),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,3,no
+VICRYL-SUTURE-GALEA,Vicryl suture (galea),CONSUMABLE,,2026-08-13,piece,1,Neurosurgery,2,no
+VICRYL-SUTURE-HAEMOSTATIC,Vicryl suture (haemostatic),CONSUMABLE,,2026-08-13,piece,1,Urology,2,no
+VICRYL-SUTURE-LIGATURE,Vicryl suture (ligature),CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,4,no
+VICRYL-SUTURE-MUSCLE-FASCIA,Vicryl suture (muscle/fascia),CONSUMABLE,,2026-08-13,piece,1,Orthopaedics,4,no
+VICRYL-SUTURE-OPHTHALMIC,Vicryl suture (ophthalmic),CONSUMABLE,,2026-08-13,piece,1,Ophthalmology,1,no
+VICRYL-SUTURE-SAC-TRANSFIXION,Vicryl suture (sac transfixion),CONSUMABLE,,2026-08-13,piece,1,Paediatric Surgery,1,no
+VICRYL-TIE,Vicryl tie,CONSUMABLE,,2026-08-13,piece,1,General Surgery,4,no
+VICRYL-TIE-TONSILLAR-PILLAR-IF-NEEDED,"Vicryl tie (tonsillar pillar, if needed)",CONSUMABLE,,2026-08-13,piece,1,ENT (Otorhinolaryngology),2,no
+VIDEO-LARYNGOSCOPE-BLADE-HANDLE,Video laryngoscope blade + handle,CONSUMABLE,,2026-08-13,set,1,Adjunct (anaesthesia),1,no
+VOLAR-PLASTER-SPLINT-WOOL,Volar/plaster splint + wool,CONSUMABLE,,2026-08-13,set,1,Plastic Surgery,1,no
+VP-SHUNT-SYSTEM-VALVE-PROXIMAL-PERITONEAL-CATHETER,VP shunt system (valve + proximal + peritoneal catheter),CONSUMABLE,,2026-08-13,set,1,Neurosurgery,1,no
+WARM-SALINE-FOR-IRRIGATION,Warm saline for irrigation,CONSUMABLE,,2026-08-13,litre,1,Neurosurgery,2,no
+YANKAUER-SUCTION,Yankauer suction,CONSUMABLE,,2026-08-13,piece,1,General (anaesthesia),1,no
