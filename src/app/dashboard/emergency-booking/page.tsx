@@ -340,6 +340,9 @@ export default function EmergencyBookingPage() {
   // it on the radio. Before this, a surgeon could book a critical case with no
   // way of knowing whether theatre had seen it.
   const [theatreOptions, setTheatreOptions] = useState<{ id: string; name: string }[]>([]);
+  const [nurseOptions, setNurseOptions] = useState<{ id: string; fullName: string }[]>([]);
+  const [assignScrub, setAssignScrub] = useState<Record<string, string>>({});
+  const [assignCirc, setAssignCirc] = useState<Record<string, string>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignChoice, setAssignChoice] = useState<Record<string, string>>({});
   // Keyed by booking: a single shared message would appear under every card
@@ -359,6 +362,18 @@ export default function EmergencyBookingPage() {
         setTheatreOptions(list.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
       })
       .catch(() => {});
+
+    Promise.all([
+      fetch('/api/users?role=SCRUB_NURSE&status=APPROVED').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/users?role=CIRCULATING_NURSE&status=APPROVED').then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([a, b]) => {
+        const flat = [...(Array.isArray(a) ? a : a?.users ?? []), ...(Array.isArray(b) ? b : b?.users ?? [])];
+        const byId = new Map<string, { id: string; fullName: string }>();
+        for (const u of flat) if (u?.id) byId.set(u.id, { id: u.id, fullName: u.fullName });
+        setNurseOptions(Array.from(byId.values()));
+      })
+      .catch(() => {});
   }, [canAssignTheatre]);
 
   const assignTheatre = async (bookingId: string) => {
@@ -370,7 +385,13 @@ export default function EmergencyBookingPage() {
       const res = await fetch('/api/emergency-booking/assign-theatre', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId, theatreId }),
+        body: JSON.stringify({
+          bookingId, theatreId,
+          // Only when chosen, so assigning a room does not clear a team somebody
+          // named a minute earlier.
+          ...(assignScrub[bookingId] ? { scrubNurseId: assignScrub[bookingId] } : {}),
+          ...(assignCirc[bookingId] ? { circulatingNurseId: assignCirc[bookingId] } : {}),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1066,6 +1087,28 @@ export default function EmergencyBookingPage() {
                               <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                           </select>
+                          <select
+                            value={assignScrub[booking.id] ?? ''}
+                            onChange={(e) => setAssignScrub((p) => ({ ...p, [booking.id]: e.target.value }))}
+                            aria-label="Scrub nurse for this emergency"
+                            className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                          >
+                            <option value="">-- scrub nurse --</option>
+                            {nurseOptions.map((n) => (
+                              <option key={`s-${n.id}`} value={n.id}>{n.fullName}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={assignCirc[booking.id] ?? ''}
+                            onChange={(e) => setAssignCirc((p) => ({ ...p, [booking.id]: e.target.value }))}
+                            aria-label="Circulating nurse for this emergency"
+                            className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                          >
+                            <option value="">-- circulating nurse --</option>
+                            {nurseOptions.map((n) => (
+                              <option key={`c-${n.id}`} value={n.id}>{n.fullName}</option>
+                            ))}
+                          </select>
                           <button
                             onClick={() => assignTheatre(booking.id)}
                             disabled={!assignChoice[booking.id] || assigningId === booking.id}
@@ -1076,7 +1119,7 @@ export default function EmergencyBookingPage() {
                               ? 'Assigning…'
                               : booking.status === 'THEATRE_ASSIGNED'
                                 ? 'Change theatre'
-                                : 'Assign theatre & acknowledge'}
+                                : 'Assign theatre, team & acknowledge'}
                           </button>
                           {booking.status === 'THEATRE_ASSIGNED' && (
                             <span className="text-xs font-semibold text-green-800">
@@ -1084,7 +1127,8 @@ export default function EmergencyBookingPage() {
                             </span>
                           )}
                           <span className="text-xs text-red-800">
-                            Assigning also acknowledges the case and announces it on the radio.
+                            Assigning also acknowledges the case, names the team on the theatre
+                            readiness board, and announces it on the radio.
                           </span>
                           {assignNote[booking.id] && (
                             <p className="w-full text-sm font-medium text-gray-900">

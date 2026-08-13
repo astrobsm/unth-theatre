@@ -39,7 +39,10 @@ export async function POST(req: NextRequest) {
       { status: 403 });
   }
 
-  let body: { unit?: string; date?: string; theatreId?: string };
+  let body: {
+    unit?: string; date?: string; theatreId?: string;
+    scrubNurseId?: string | null; circulatingNurseId?: string | null;
+  };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 }); }
 
@@ -71,7 +74,11 @@ export async function POST(req: NextRequest) {
       status: { in: [...REASSIGNABLE] },
       OR: [{ unit }, { subspecialty: unit }],
     },
-    select: { id: true, theatreId: true, procedureName: true, patient: { select: { name: true } } },
+    select: {
+      id: true, theatreId: true, procedureName: true, scheduledDate: true,
+      surgeryType: true, unit: true, subspecialty: true,
+      patient: { select: { name: true } },
+    },
   });
 
   if (cases.length === 0) {
@@ -91,8 +98,55 @@ export async function POST(req: NextRequest) {
   await prisma.$transaction(async (tx) => {
     await tx.surgery.updateMany({
       where: { id: { in: cases.map((c) => c.id) } },
-      data: { theatreId: theatre.id },
+      data: {
+        theatreId: theatre.id,
+        // scrubNurseId also lives on Surgery and several existing views read it
+        // from there. Written in both places so nothing shows a stale name.
+        ...(body.scrubNurseId !== undefined ? { scrubNurseId: body.scrubNurseId || null } : {}),
+      },
     });
+
+    // The nursing team belongs on TheatreAllocation, which is what the theatre
+    // readiness page and the call-for-patient board already read. Writing it here
+    // is what makes the assignment appear on those screens rather than only on
+    // this one.
+    if (body.scrubNurseId !== undefined || body.circulatingNurseId !== undefined) {
+      for (const c of cases) {
+        const existing = await tx.theatreAllocation.findFirst({
+          where: { surgeryId: c.id },
+          select: { id: true },
+        });
+
+        const team = {
+          theatreId: theatre.id,
+          scrubNurseId: body.scrubNurseId || null,
+          circulatingNurseId: body.circulatingNurseId || null,
+          surgicalUnit: unit,
+          surgeryType: c.surgeryType ?? null,
+        };
+
+        if (existing) {
+          await tx.theatreAllocation.update({ where: { id: existing.id }, data: team });
+        } else {
+          // A whole session, not a slot: the unit works its list through the day
+          // and the individual case times live on the surgeries themselves.
+          const day = new Date(c.scheduledDate ?? startOfDay);
+          const dayStart = new Date(day); dayStart.setHours(8, 0, 0, 0);
+          const dayEnd = new Date(day); dayEnd.setHours(18, 0, 0, 0);
+          await tx.theatreAllocation.create({
+            data: {
+              ...team,
+              surgeryId: c.id,
+              allocationType: 'SURGERY',
+              date: startOfDay,
+              startTime: dayStart,
+              endTime: dayEnd,
+              allocatedBy: user.name ?? user.id ?? 'theatre',
+            },
+          });
+        }
+      }
+    }
 
     if (user.id) {
       await tx.auditLog.create({
@@ -110,6 +164,8 @@ export async function POST(req: NextRequest) {
             theatre: theatre.name,
             caseCount: cases.length,
             movedFromAnotherTheatre: moved.length,
+            scrubNurseId: body.scrubNurseId ?? null,
+            circulatingNurseId: body.circulatingNurseId ?? null,
             surgeryIds: cases.map((c) => c.id),
           }),
         },

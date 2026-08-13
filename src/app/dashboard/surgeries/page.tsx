@@ -383,6 +383,9 @@ export default function SurgeriesPage() {
   // longer chooses, which is why this control exists here rather than on the
   // booking form.
   const [theatreOptions, setTheatreOptions] = useState<{ id: string; name: string }[]>([]);
+  const [scrubOptions, setScrubOptions] = useState<{ id: string; fullName: string }[]>([]);
+  const [unitScrub, setUnitScrub] = useState<Record<string, string>>({});
+  const [unitCirc, setUnitCirc] = useState<Record<string, string>>({});
   const [unitChoice, setUnitChoice] = useState<Record<string, string>>({});
   const [assigningKey, setAssigningKey] = useState<string | null>(null);
   // Keyed by group: one shared message would appear under every unit heading,
@@ -402,6 +405,20 @@ export default function SurgeriesPage() {
         setTheatreOptions(list.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
       })
       .catch(() => {});
+
+    // Scrub and circulating nurses come from the same pool; the roles are a
+    // rotation, not a job title, so one list serves both pickers.
+    Promise.all([
+      fetch('/api/users?role=SCRUB_NURSE&status=APPROVED').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/users?role=CIRCULATING_NURSE&status=APPROVED').then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([a, b]) => {
+        const flat = [...(Array.isArray(a) ? a : a?.users ?? []), ...(Array.isArray(b) ? b : b?.users ?? [])];
+        const byId = new Map<string, { id: string; fullName: string }>();
+        for (const u of flat) if (u?.id) byId.set(u.id, { id: u.id, fullName: u.fullName });
+        setScrubOptions(Array.from(byId.values()));
+      })
+      .catch(() => {});
   }, [canAssignTheatre]);
 
   const assignUnitTheatre = async (groupKey: string, unit: string, date: string) => {
@@ -413,7 +430,13 @@ export default function SurgeriesPage() {
       const res = await fetch('/api/theatres/assign-unit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ unit, date, theatreId }),
+        body: JSON.stringify({
+          unit, date, theatreId,
+          // Sent only when chosen, so assigning a theatre alone does not wipe a
+          // nursing team somebody set earlier.
+          ...(unitScrub[groupKey] ? { scrubNurseId: unitScrub[groupKey] } : {}),
+          ...(unitCirc[groupKey] ? { circulatingNurseId: unitCirc[groupKey] } : {}),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -873,13 +896,35 @@ export default function SurgeriesPage() {
                                   <option key={t.id} value={t.id}>{t.name}</option>
                                 ))}
                               </select>
+                              <select
+                                value={unitScrub[group.key] ?? ''}
+                                onChange={(e) => setUnitScrub((p) => ({ ...p, [group.key]: e.target.value }))}
+                                aria-label={`Scrub nurse for ${group.unit}`}
+                                className="rounded border border-gray-300 px-2 py-1 text-xs"
+                              >
+                                <option value="">-- scrub nurse --</option>
+                                {scrubOptions.map((n) => (
+                                  <option key={`s-${n.id}`} value={n.id}>{n.fullName}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={unitCirc[group.key] ?? ''}
+                                onChange={(e) => setUnitCirc((p) => ({ ...p, [group.key]: e.target.value }))}
+                                aria-label={`Circulating nurse for ${group.unit}`}
+                                className="rounded border border-gray-300 px-2 py-1 text-xs"
+                              >
+                                <option value="">-- circulating nurse --</option>
+                                {scrubOptions.map((n) => (
+                                  <option key={`c-${n.id}`} value={n.id}>{n.fullName}</option>
+                                ))}
+                              </select>
                               <button
                                 type="button"
                                 onClick={() => assignUnitTheatre(group.key, group.unit, group.date)}
                                 disabled={!unitChoice[group.key] || assigningKey === group.key}
                                 className="rounded bg-indigo-600 px-3 py-1 text-xs font-bold text-white hover:bg-indigo-700 disabled:bg-gray-300"
                               >
-                                {assigningKey === group.key ? 'Assigning…' : 'Assign theatre to unit'}
+                                {assigningKey === group.key ? 'Assigning…' : 'Assign theatre & team'}
                               </button>
                             </span>
                           )}

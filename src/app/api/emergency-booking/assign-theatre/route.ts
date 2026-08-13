@@ -37,7 +37,10 @@ export async function POST(req: NextRequest) {
       { status: 403 });
   }
 
-  let body: { bookingId?: string; theatreId?: string; theatreName?: string };
+  let body: {
+    bookingId?: string; theatreId?: string; theatreName?: string;
+    scrubNurseId?: string | null; circulatingNurseId?: string | null;
+  };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 }); }
 
@@ -102,8 +105,47 @@ export async function POST(req: NextRequest) {
     if (booking.surgeryId && body.theatreId) {
       await tx.surgery.update({
         where: { id: booking.surgeryId },
-        data: { theatreId: body.theatreId },
+        data: {
+          theatreId: body.theatreId,
+          ...(body.scrubNurseId !== undefined ? { scrubNurseId: body.scrubNurseId || null } : {}),
+        },
       });
+
+      // The nursing team on TheatreAllocation, which is what the theatre
+      // readiness page reads. An emergency needs this more than an elective
+      // case does: the readiness screen is how the team discovers a room is
+      // being turned over for a case nobody planned for.
+      if (body.scrubNurseId !== undefined || body.circulatingNurseId !== undefined) {
+        const existing = await tx.theatreAllocation.findFirst({
+          where: { surgeryId: booking.surgeryId },
+          select: { id: true },
+        });
+        const team = {
+          theatreId: body.theatreId,
+          scrubNurseId: body.scrubNurseId || null,
+          circulatingNurseId: body.circulatingNurseId || null,
+          surgeryType: 'EMERGENCY' as const,
+        };
+        if (existing) {
+          await tx.theatreAllocation.update({ where: { id: existing.id }, data: team });
+        } else {
+          const now = new Date();
+          const end = new Date(now.getTime() + 4 * 3600_000);
+          await tx.theatreAllocation.create({
+            data: {
+              ...team,
+              surgeryId: booking.surgeryId,
+              allocationType: 'EMERGENCY',
+              // Starts NOW, not at a session boundary. An emergency is not
+              // scheduled into a slot; it takes the room from this moment.
+              date: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+              startTime: now,
+              endTime: end,
+              allocatedBy: user.name ?? user.id ?? 'theatre',
+            },
+          });
+        }
+      }
     }
 
     // The radio. Written directly rather than by calling /api/radio/announce,
@@ -111,6 +153,13 @@ export async function POST(req: NextRequest) {
     // independently of the assignment — the assignment must not roll back
     // because an announcement did not queue.
     const critical = booking.priority === 'CRITICAL';
+    // Named in the announcement, because the point of the radio is that the
+    // people concerned hear it without being told individually.
+    const scrubName = body.scrubNurseId
+      ? (await tx.user.findUnique({
+          where: { id: body.scrubNurseId }, select: { fullName: true },
+        }))?.fullName ?? null
+      : null;
     await tx.radioAnnouncement.create({
       data: {
         category: 'EMERGENCY',
@@ -122,6 +171,7 @@ export async function POST(req: NextRequest) {
           `Patient ${booking.patientName}.`,
           `Surgeon ${booking.surgeonName}.`,
           booking.anesthetistName ? `Anaesthetist ${booking.anesthetistName}.` : null,
+          scrubName ? `Scrub nurse ${scrubName}.` : null,
           `Acknowledged by ${user.name ?? 'theatre'}.`,
         ].filter(Boolean).join(' '),
         priority: critical ? 100 : 90,
@@ -142,6 +192,8 @@ export async function POST(req: NextRequest) {
             from: booking.theatreName ?? null,
             to: theatreName,
             previousStatus: booking.status,
+            scrubNurseId: body.scrubNurseId ?? null,
+            circulatingNurseId: body.circulatingNurseId ?? null,
             patientName: booking.patientName,
             procedureName: booking.procedureName,
           }),
