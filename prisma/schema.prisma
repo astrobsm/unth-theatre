@@ -10261,3 +10261,293 @@ model ProcedurePackMap {
   @@index([subspecialty, isActive])
   @@map("procedure_pack_maps")
 }
+
+// ============================================================
+// Conflict Resolver — structured decisions without a meeting
+// ------------------------------------------------------------
+// 9 models, not the specification's 17. Recommendation folds into analysis,
+// publication is a status with dates, comments belong on a review, and the
+// existing AuditLog and notification systems are reused rather than duplicated.
+//
+// The analysis is STATISTICAL, not a language model: every figure in a published
+// decision can be recomputed from the stored responses and defended.
+// ============================================================
+
+enum ConflictStatus {
+  DRAFT
+  OPEN_FOR_RESPONSES
+  RESPONSE_CLOSED
+  ANALYSING
+  UNDER_REVIEW
+  REVISION_REQUIRED
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHED
+  IMPLEMENTED
+  CLOSED
+  ARCHIVED
+  CANCELLED
+}
+
+enum ConflictUrgency {
+  CRITICAL
+  HIGH
+  NORMAL
+  LOW
+}
+
+/// How much of a respondent's identity is retained.
+///
+/// This must be settled BEFORE any response exists: an anonymous decision stores
+/// `responded` on the stakeholder row and never a link from answer to person, and
+/// that cannot be retrofitted once answers are in the table.
+enum ConflictAnonymity {
+  IDENTIFIED
+  CONFIDENTIAL
+  ANONYMOUS
+}
+
+enum ConflictQuestionType {
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  YES_NO
+  LIKERT
+  RATING
+  RANKING
+  SHORT_TEXT
+  LONG_TEXT
+  NUMERIC
+  PERCENTAGE
+}
+
+enum ConflictStakeholderRole {
+  STAKEHOLDER
+  CHAIR
+  REVIEWER
+  OBSERVER
+}
+
+model ConflictDecision {
+  id     String @id @default(uuid())
+  /// Shown on the published decision, e.g. "CR-2026-000124".
+  number String @unique
+
+  title            String
+  problemStatement String            @db.Text
+  decisionRequired String            @db.Text
+  category         String
+  urgency          ConflictUrgency   @default(NORMAL)
+  status           ConflictStatus    @default(DRAFT)
+  anonymity        ConflictAnonymity @default(IDENTIFIED)
+
+  opensAt  DateTime?
+  closesAt DateTime?
+
+  /// Quorum as a percentage of those invited. Null means none required.
+  quorumPercent Int?
+
+  /// Version of the PUBLISHED decision. Amending publishes a new version and
+  /// leaves the old one readable — a policy people acted on is never rewritten.
+  version      Int     @default(1)
+  supersedesId String?
+
+  publishedAt   DateTime?
+  effectiveFrom DateTime?
+  reviewDueAt   DateTime?
+
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stakeholders ConflictStakeholder[]
+  questions    ConflictQuestion[]
+  responses    ConflictResponse[]
+  evidence     ConflictEvidence[]
+  analyses     ConflictAnalysis[]
+  reviews      ConflictReview[]
+  approvals    ConflictApproval[]
+
+  @@index([status, closesAt])
+  @@index([category, publishedAt])
+  @@map("conflict_decisions")
+}
+
+model ConflictStakeholder {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  /// TEXT id — matches User.id.
+  userId   String
+  userName String
+  userRole String?
+  role     ConflictStakeholderRole @default(STAKEHOLDER)
+
+  /// Set when they answer. On an ANONYMOUS decision this is the ONLY record that
+  /// they took part — there is no link from their answers back to here.
+  responded   Boolean   @default(false)
+  respondedAt DateTime?
+
+  invitedAt  DateTime  @default(now())
+  remindedAt DateTime?
+
+  @@unique([decisionId, userId])
+  @@index([userId, responded])
+  @@map("conflict_stakeholders")
+}
+
+model ConflictQuestion {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  type     ConflictQuestionType
+  prompt   String  @db.Text
+  helpText String?
+  /// Choices, scale labels or ranking items, by type.
+  options  Json?
+  required Boolean @default(true)
+  order    Int     @default(0)
+
+  /// Show this question only when another was answered a certain way.
+  showIfQuestionId String?
+  showIfValue      String?
+
+  answers ConflictAnswer[]
+
+  @@index([decisionId, order])
+  @@map("conflict_questions")
+}
+
+model ConflictResponse {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  /// NULL on an anonymous decision. The stakeholder row records that they
+  /// responded; nothing records what they said.
+  userId   String?
+  userName String?
+  userRole String?
+
+  submittedAt DateTime @default(now())
+  /// Client-generated, so an offline submission cannot arrive twice.
+  idempotencyKey String? @unique
+
+  answers ConflictAnswer[]
+
+  @@index([decisionId, submittedAt])
+  @@map("conflict_responses")
+}
+
+model ConflictAnswer {
+  id         String           @id @default(uuid())
+  responseId String
+  response   ConflictResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   ConflictQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  /// One shape per question type; only one is populated.
+  choiceValue  String?
+  choiceValues Json?
+  numericValue Float?
+  textValue    String? @db.Text
+  ranking      Json?
+
+  @@index([questionId])
+  @@index([responseId])
+  @@map("conflict_answers")
+}
+
+model ConflictEvidence {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  fileName    String?
+  mimeType    String?
+  /// Base64, matching how every other attachment in ORM is stored today.
+  fileData    String? @db.Text
+  url         String?
+
+  addedById   String?
+  addedByName String?
+  addedAt     DateTime @default(now())
+
+  @@index([decisionId])
+  @@map("conflict_evidence")
+}
+
+model ConflictAnalysis {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  /// Bumped on each recomputation; earlier analyses are kept, never overwritten.
+  version Int @default(1)
+
+  /// Computed, not generated: per-question distributions, consensus strength,
+  /// disagreement clusters, minority positions.
+  statistics Json
+
+  respondedCount Int
+  invitedCount   Int
+  quorumMet      Boolean @default(false)
+
+  /// Written by a PERSON from the computed findings. The module structures and
+  /// pre-fills these; it does not write prose, because a model's summary in a
+  /// permanent institutional record cannot be traced to source responses.
+  executiveSummary String? @db.Text
+  keyArguments     String? @db.Text
+  risks            String? @db.Text
+  recommendation   String? @db.Text
+  rationale        String? @db.Text
+  conditions       String? @db.Text
+
+  generatedAt     DateTime @default(now())
+  generatedById   String?
+  generatedByName String?
+
+  @@index([decisionId, version])
+  @@map("conflict_analyses")
+}
+
+model ConflictReview {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  reviewerId   String?
+  reviewerName String?
+  /// COMMENT | REVISION_REQUESTED | ENDORSED | REJECTED
+  outcome   String
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([decisionId, createdAt])
+  @@map("conflict_reviews")
+}
+
+model ConflictApproval {
+  id         String           @id @default(uuid())
+  decisionId String
+  decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  /// Position in the approval chain, so a hierarchy is configurable per hospital.
+  level        Int
+  approverRole String?
+  approverId   String?
+  approverName String?
+  /// PENDING | APPROVED | REJECTED
+  decisionMade String    @default("PENDING")
+  comment      String?   @db.Text
+  decidedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([decisionId, level])
+  @@index([decisionId])
+  @@map("conflict_approvals")
+}

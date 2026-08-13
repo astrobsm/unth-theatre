@@ -79,6 +79,22 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'blood_requests', cls: 'QUARANTINE', why: 'Availability disagreements must surface, not resolve quietly.' },
 
   // ---- Class 4: cloud authoritative --------------------------------------
+  // ── Conflict Resolver ────────────────────────────────────────────────────
+  // A response submitted on either node was still submitted, and must never be
+  // overwritten by the other — losing one silently changes a consensus figure
+  // that a published policy rests on.
+  { table: 'conflict_responses', cls: 'APPEND_ONLY', why: 'A stakeholder response given on either node was still given. Union, never overwrite.' },
+  { table: 'conflict_answers', cls: 'APPEND_ONLY', why: 'The answers within a response; same reasoning.' },
+  { table: 'conflict_reviews', cls: 'APPEND_ONLY', why: 'A reviewer comment is a statement someone made. It is not editable history.' },
+  // Policy is decided centrally: a decision, its questions and its approvals are
+  // the cloud's to own, or two nodes could publish different versions of one
+  // policy.
+  { table: 'conflict_decisions', cls: 'CLOUD_AUTHORITATIVE', why: 'Policy is decided centrally; two nodes must not publish different versions.' },
+  { table: 'conflict_questions', cls: 'CLOUD_AUTHORITATIVE', why: 'Editing a question after answers exist would invalidate them, so one node owns it.' },
+  { table: 'conflict_stakeholders', cls: 'CLOUD_AUTHORITATIVE', why: 'Who was invited is part of the quorum calculation.' },
+  { table: 'conflict_analyses', cls: 'CLOUD_AUTHORITATIVE', why: 'Recomputed from responses; the cloud has all of them.' },
+  { table: 'conflict_approvals', cls: 'CLOUD_AUTHORITATIVE', why: 'An approval chain with two truths is not an approval chain.' },
+
   { table: 'users', cls: 'CLOUD_AUTHORITATIVE', why: 'A merged or revoked account must not be resurrected by a stale local copy.' },
   { table: 'user_module_grants', cls: 'CLOUD_AUTHORITATIVE', why: 'Access control is decided centrally.' },
   { table: 'onboarding_submissions', cls: 'CLOUD_AUTHORITATIVE', why: 'Imported centrally; local copies are read-only in practice.' },
