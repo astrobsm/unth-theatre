@@ -376,6 +376,27 @@ export default function RadioPlayer() {
   // So: when playback is blocked, hold the announcement, show one prompt, and
   // replay it the moment anybody touches the page. The unlock is remembered for
   // the life of the page.
+  // A NEW announcement always reopens the alert at full size. Without this, one
+  // shrink would silently apply to every emergency for the rest of the shift —
+  // the failure mode that makes "dismissible" alerts dangerous.
+  //
+  // Derived from `queue` inside the effect rather than from `top`, which is
+  // computed after an early return; a hook placed there would run conditionally.
+  const lastAckIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pending = queue.find((q) => !suppressedRef.current.has(q.id));
+    const id = pending?.requireAck ? pending.id : null;
+    if (id && id !== lastAckIdRef.current) {
+      lastAckIdRef.current = id;
+      setAckCollapsed(false);
+    }
+    if (!id) lastAckIdRef.current = null;
+  }, [queue]);
+
+  // Emergency alerts can be shrunk, never dismissed. Reported problem: the full
+  // control covers the page being worked on, and an alert that blocks the work
+  // gets worked around rather than obeyed.
+  const [ackCollapsed, setAckCollapsed] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const pendingRef = useRef<{ kind: 'audio'; url: string; onDone?: () => void } | null>(null);
 
@@ -676,13 +697,54 @@ export default function RadioPlayer() {
         min(92vw,22rem) wide — on a phone the panel covered it and swallowed the
         taps. The dock now guarantees separation rather than relying on offsets.
         Sized responsively so the label never wraps mid-word on a narrow screen. */}
-    {top?.requireAck && (
+    {top?.requireAck && ackCollapsed && (
+      /* Collapsed: a small badge, still one tap to acknowledge.
+         Staff reported the full control covering the page they were working on.
+         An alert that blocks the work gets worked around, so it can be shrunk —
+         but never dismissed, and a NEW announcement always reopens it full size
+         (see the effect above). Acknowledging remains a single tap either way. */
       <DockSlot anchor="top-center" order={DOCK_ORDER.acknowledge}>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => acknowledge(top.id)}
+            disabled={ackBusy}
+            title="Acknowledge emergency announcement"
+            className="flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-green-700 disabled:opacity-60"
+          >
+            {ackBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            ACKNOWLEDGE
+          </button>
+          <button
+            onClick={() => setAckCollapsed(false)}
+            title="Show the full emergency alert"
+            aria-label="Show the full emergency alert"
+            className="rounded-full bg-white/90 px-2 py-1.5 text-xs font-bold text-green-800 shadow"
+          >
+            ⤢
+          </button>
+        </div>
+      </DockSlot>
+    )}
+
+    {top?.requireAck && !ackCollapsed && (
+      <DockSlot anchor="top-center" order={DOCK_ORDER.acknowledge}>
+        {/* Minimise sits ABOVE the button, not inside it: a control that shrinks
+            the alert must never be mistakable for the one that acknowledges it. */}
+        <div className="mb-1 flex w-[min(92vw,26rem)] justify-end">
+          <button
+            onClick={() => setAckCollapsed(true)}
+            title="Shrink this alert — it stays until acknowledged"
+            aria-label="Shrink this alert"
+            className="rounded bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-black/60"
+          >
+            SHRINK ⤡
+          </button>
+        </div>
         <button
           onClick={() => acknowledge(top.id)}
           disabled={ackBusy}
           title="Acknowledge emergency announcement"
-          className="flex items-center justify-center gap-2 w-[min(92vw,26rem)] px-5 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm sm:text-base shadow-2xl ring-4 ring-green-300/70 disabled:opacity-60 orm-alert-attention"
+          className="flex items-center justify-center gap-2 w-[min(92vw,26rem)] px-5 py-3.5 rounded-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm sm:text-base shadow-2xl ring-2 ring-green-300/70 disabled:opacity-60 orm-alert-attention"
         >
           {ackBusy ? (
             <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
