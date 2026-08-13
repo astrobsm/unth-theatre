@@ -368,6 +368,59 @@ export default function RadioPlayer() {
     [muted, emitRadioActive, emitRadioIdle, speakBrowser]
   );
 
+  // --- Audio unlock -------------------------------------------------------
+  // Browsers block audio until the page has had a user gesture. A theatre wall
+  // display or a shared tablet may go a whole shift without one, which is
+  // exactly where an unheard emergency announcement matters most.
+  //
+  // So: when playback is blocked, hold the announcement, show one prompt, and
+  // replay it the moment anybody touches the page. The unlock is remembered for
+  // the life of the page.
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const pendingRef = useRef<{ kind: 'audio'; url: string; onDone?: () => void } | null>(null);
+
+  // Any gesture anywhere on the page satisfies the browser, so the prompt is a
+  // fallback rather than the only route. Capture phase and once-only: it must not
+  // interfere with the click it rides along with.
+  useEffect(() => {
+    if (!audioBlocked) return;
+    const onGesture = () => unlockAudioRef.current?.();
+    window.addEventListener('pointerdown', onGesture, { capture: true, once: true });
+    window.addEventListener('keydown', onGesture, { capture: true, once: true });
+    return () => {
+      window.removeEventListener('pointerdown', onGesture, { capture: true });
+      window.removeEventListener('keydown', onGesture, { capture: true });
+    };
+  }, [audioBlocked]);
+
+  const unlockAudioRef = useRef<(() => void) | null>(null);
+
+  const unlockAudio = useCallback(() => {
+    setAudioBlocked(false);
+    if (!audioRef.current) audioRef.current = new Audio();
+    const held = pendingRef.current;
+    pendingRef.current = null;
+    const a = audioRef.current;
+    // Play() inside the gesture handler is what actually grants permission; a
+    // later call, however soon, is blocked again.
+    a.play().then(() => {
+      if (!held) return;
+      a.src = held.url;
+      a.onended = () => { emitRadioIdle(); held.onDone?.(); };
+      a.onerror = () => { emitRadioIdle(); held.onDone?.(); };
+      emitRadioActive();
+      void a.play();
+    }).catch(() => {
+      // Still refused. Keep the prompt up rather than pretending it worked.
+      setAudioBlocked(true);
+      pendingRef.current = held;
+    });
+  }, [emitRadioActive, emitRadioIdle]);
+
+  // Kept in a ref so the one-shot gesture listener above always calls the
+  // current version without re-registering on every render.
+  useEffect(() => { unlockAudioRef.current = unlockAudio; }, [unlockAudio]);
+
   const playAudio = useCallback(
     (url: string, onDone?: () => void) => {
       if (muted) { onDone?.(); return; }
@@ -379,7 +432,30 @@ export default function RadioPlayer() {
         a.onended = () => { emitRadioIdle(); onDone?.(); };
         a.onerror = () => { emitRadioIdle(); onDone?.(); };
         emitRadioActive();
-        a.play().catch(() => { emitRadioIdle(); onDone?.(); });
+        a.play().catch((err: unknown) => {
+          emitRadioIdle();
+
+          // A browser refuses to play audio until the page has had a user
+          // gesture, and it refuses with NotAllowedError. This used to be
+          // swallowed and the announcement marked done — so on a wall display
+          // nobody had tapped since boot, EVERY announcement appeared on screen
+          // in silence, and nothing anywhere recorded that it had not been
+          // heard. That is the reported "alerts with no audio".
+          //
+          // Distinguished from a real playback failure, because the two need
+          // opposite responses: a blocked announcement must be kept and
+          // replayed once someone taps, a broken one must be let go.
+          const name = (err as { name?: string } | null)?.name;
+          if (name === 'NotAllowedError' || name === 'AbortError') {
+            setAudioBlocked(true);
+            // NOT marked done. It waits for the unlock below.
+            pendingRef.current = { kind: 'audio', url, onDone };
+            return;
+          }
+
+          console.warn('[radio] audio failed to play', err);
+          onDone?.();
+        });
       } catch {
         emitRadioIdle();
         onDone?.();
@@ -573,6 +649,23 @@ export default function RadioPlayer() {
 
   return (
     <>
+    {/* Audio unlock prompt.
+        Deliberately NOT a modal: a theatre screen must never have its content
+        covered by an administrative notice. It sits as a slim bar and the whole
+        bar is the target, so an unlock takes one tap anywhere along it.
+        Any click on the page also unlocks — see the capture listener above —
+        so most users will never see this resolve explicitly. */}
+    {audioBlocked && (
+      <button
+        type="button"
+        onClick={unlockAudio}
+        className="fixed left-0 right-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-bold text-black shadow-lg hover:bg-amber-400"
+      >
+        <span aria-hidden>🔇</span>
+        Tap to enable theatre audio — announcements are showing but not sounding
+      </button>
+    )}
+
     {/* Acknowledge lives at the TOP CENTRE: it is the highest-priority control
         in the app, so it gets the one screen position nothing else occupies.
         Previously it shared `bottom-4` with the radio panel, which is
