@@ -87,6 +87,25 @@ export default function NewEmergencyBookingPage() {
   // pick (true) or was manually overridden by the user (false).
   const [anesthetistAuto, setAnesthetistAuto] = useState(true);
 
+  /**
+   * Who may override the roster's anaesthetist.
+   *
+   * Only the anaesthetic service itself, plus administrators. A surgeon or house
+   * officer booking a case states what is needed; it is not their call who
+   * provides it, and letting them choose is how an anaesthetist first learns of a
+   * case by being named on it.
+   *
+   * This is the escape hatch for the real gap: no roster uploaded for the period.
+   * Someone must still be able to say who is covering, and it should be the
+   * resident anaesthetist.
+   */
+  // ANAESTHETIST is the resident grade in this schema — there is no
+  // RESIDENT_ANAESTHETIST role, and naming one here would have looked correct
+  // while silently never matching anybody.
+  const canAssignAnaesthetist = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'ANAESTHETIST',
+    'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN']
+    .includes((session?.user as { role?: string } | undefined)?.role ?? '');
+
   const [form, setForm] = useState({
     patientName: '',
     folderNumber: '',
@@ -511,30 +530,33 @@ export default function NewEmergencyBookingPage() {
                 Selected from the surgical units database.
               </p>
             </div>
+            {/* Theatre is NOT chosen by the person booking an emergency.
+                A surgeon or house officer with a septic abdomen in front of them
+                should not be picking rooms. The day's designated emergency
+                theatre is filled in automatically where one exists, and theatre
+                staff confirm or change it from the emergency board — the same
+                press that acknowledges the case and announces it on the radio. */}
             <div>
-              <label className="label">Theatre to be used</label>
-              <select
-                name="theatreId"
-                value={form.theatreId}
-                onChange={(e) => {
-                  const theatreId = e.target.value;
-                  const t = theatres.find((x) => x.id === theatreId);
-                  setForm((prev) => ({
-                    ...prev,
-                    theatreId,
-                    theatreName: t?.name || '',
-                  }));
-                }}
-                className="input-field"
-              >
-                <option value="">— Select Theatre —</option>
-                {theatres.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
-                Auto-filled with the theatre designated for emergency surgeries on the selected day.
-              </p>
+              <label className="label">Theatre</label>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                {form.theatreName ? (
+                  <>
+                    <p className="font-semibold">{form.theatreName}</p>
+                    <p className="mt-1 text-xs">
+                      Designated emergency theatre for the day. Theatre staff will confirm
+                      it when they acknowledge the case.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold">Assigned by theatre.</p>
+                    <p className="mt-1 text-xs">
+                      Submit the booking now. A scrub nurse or the theatre manager assigns
+                      the room and it goes out on the radio.
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
             <div className="md:col-span-2">
               <label className="label">Indication (Reason for Emergency) *</label>
@@ -549,30 +571,59 @@ export default function NewEmergencyBookingPage() {
                 ))}
               </select>
             </div>
+            {/* The anaesthetic team comes from the DUTY ROSTER, not from the
+                booker's judgement about who is around.
+                The picker remains for one role only: where no roster has been
+                uploaded, the resident anaesthetist assigns the team. Everyone
+                else sees who is on call and cannot change it — and critically,
+                the booking submits either way. An emergency must never wait on
+                a roster upload. */}
             <div>
-              <label className="label">Anesthetist</label>
-              <select
-                name="anesthetistId"
-                value={form.anesthetistId}
-                onChange={(e) => {
-                  // A manual change stops the auto-sync with the on-call roster.
-                  setAnesthetistAuto(false);
-                  handleChange(e);
-                }}
-                disabled={form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE'}
-                className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
-              >
-                <option value="">Select anesthetist</option>
-                {anesthetists.map(a => (
-                  <option key={a.id} value={a.id}>{a.fullName}</option>
-                ))}
-                {onDuty?.team.anaesthetist?.userId &&
-                  !anesthetists.some((a) => a.id === onDuty.team.anaesthetist!.userId) && (
-                    <option value={onDuty.team.anaesthetist.userId}>
-                      {onDuty.team.anaesthetist.name} (on call)
-                    </option>
+              <label className="label">Anaesthetist</label>
+              {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') ? null
+                : canAssignAnaesthetist ? (
+                <select
+                  name="anesthetistId"
+                  value={form.anesthetistId}
+                  onChange={(e) => {
+                    // A manual change stops the auto-sync with the on-call roster.
+                    setAnesthetistAuto(false);
+                    handleChange(e);
+                  }}
+                  className="input-field"
+                >
+                  <option value="">
+                    {onDuty?.team.anaesthetist?.userId ? 'Use the on-call anaesthetist' : 'Assign an anaesthetist'}
+                  </option>
+                  {anesthetists.map(a => (
+                    <option key={a.id} value={a.id}>{a.fullName}</option>
+                  ))}
+                  {onDuty?.team.anaesthetist?.userId &&
+                    !anesthetists.some((a) => a.id === onDuty.team.anaesthetist!.userId) && (
+                      <option value={onDuty.team.anaesthetist.userId}>
+                        {onDuty.team.anaesthetist.name} (on call)
+                      </option>
+                    )}
+                </select>
+              ) : (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800">
+                  {onDuty?.team.anaesthetist?.name ? (
+                    <>
+                      <p className="font-semibold">{onDuty.team.anaesthetist.name}</p>
+                      <p className="mt-1 text-xs">On call from the duty roster.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold">Assigned from the duty roster.</p>
+                      <p className="mt-1 text-xs">
+                        No roster is uploaded for this period, so the resident anaesthetist
+                        will assign the team. Submit the booking now — it does not wait
+                        for this.
+                      </p>
+                    </>
                   )}
-              </select>
+                </div>
+              )}
               {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') ? (
                 <p className="mt-1 text-xs text-green-700">
                   No anaesthetist needed for {form.anaesthesiaType} anaesthesia — anaesthetic review is not required.

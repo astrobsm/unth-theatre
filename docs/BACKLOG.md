@@ -57,14 +57,16 @@ an assign button against each unit heading. Each group shows the assigned theatr
 "No theatre assigned", or "Split across N theatres" where an earlier per-case
 assignment scattered the list.
 
-### 2.2 Emergency booking: no theatre or team selection
-The surgeon or house officer should book the case and nothing else.
+### 2.2 Emergency booking: no theatre or team selection — DONE
+Theatre is now filled from the day's designated emergency theatre and confirmed by
+theatre staff on the board; the booker sees it but cannot change it. The
+anaesthetist comes from the duty roster, with the picker visible only to the
+anaesthetic service (ANAESTHETIST / CONSULTANT_ANAESTHETIST) plus theatre manager
+and admins — that is the escape hatch for an unuploaded roster. The booking
+submits either way.
 
-- Remove theatre and anaesthetic-team pickers from the emergency form
-- Auto-assign the anaesthetic team from the duty roster
-- Where no roster is uploaded, the resident anaesthetist assigns the team —
-  and **the booking must still submit** in the meantime
-- Never block an emergency booking on an administrative gap
+Note: there is no RESIDENT_ANAESTHETIST role in the schema; ANAESTHETIST is the
+resident grade.
 
 ### 2.3 Consent and laboratory results mandatory **[safety]**
 - **Elective:** hard block. No consent or labs, no submission.
