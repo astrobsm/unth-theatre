@@ -371,42 +371,113 @@ export default function SurgeriesPage() {
   // Group the filtered cases by day, then by theatre, so each day's schedule is
   // laid out theatre-by-theatre. Cases inside a theatre are ordered by start time;
   // "Unassigned theatre" always sinks to the bottom of each day.
+  // Grouped by UNIT, matching the printed list.
+  //
+  // It used to group by theatre, which put the cart before the horse: a unit
+  // books its list, and theatre then gives that unit a room. Grouping by theatre
+  // meant every unassigned case landed in one "Unassigned" heap with no way to
+  // see whose cases they were, and no single place to press to assign them.
+  // --- Per-unit theatre assignment ----------------------------------------
+  // The theatre manager or a perioperative nurse gives a unit a room for the day
+  // and every case in that unit's list moves with it. The person booking no
+  // longer chooses, which is why this control exists here rather than on the
+  // booking form.
+  const [theatreOptions, setTheatreOptions] = useState<{ id: string; name: string }[]>([]);
+  const [unitChoice, setUnitChoice] = useState<Record<string, string>>({});
+  const [assigningKey, setAssigningKey] = useState<string | null>(null);
+  // Keyed by group: one shared message would appear under every unit heading,
+  // including the ones it had nothing to do with.
+  const [unitNote, setUnitNote] = useState<Record<string, string>>({});
+
+  const canAssignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
+    'THEATRE_CHAIRMAN', 'NURSE_MANAGER', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'NURSE']
+    .includes((session?.user as { role?: string } | undefined)?.role ?? '');
+
+  useEffect(() => {
+    if (!canAssignTheatre) return;
+    fetch('/api/theatres')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => {
+        const list = Array.isArray(d) ? d : (d?.theatres ?? []);
+        setTheatreOptions(list.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
+      })
+      .catch(() => {});
+  }, [canAssignTheatre]);
+
+  const assignUnitTheatre = async (groupKey: string, unit: string, date: string) => {
+    const theatreId = unitChoice[groupKey];
+    if (!theatreId) return;
+    setAssigningKey(groupKey);
+    setUnitNote((p) => ({ ...p, [groupKey]: '' }));
+    try {
+      const res = await fetch('/api/theatres/assign-unit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unit, date, theatreId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUnitNote((p) => ({ ...p, [groupKey]: body.error || 'Could not assign the theatre.' }));
+        return;
+      }
+      setUnitNote((p) => ({ ...p, [groupKey]: body.message || 'Theatre assigned.' }));
+      await fetchSurgeries();
+    } catch {
+      setUnitNote((p) => ({ ...p, [groupKey]: 'Could not reach the server.' }));
+    } finally {
+      setAssigningKey(null);
+    }
+  };
+
+  const unitOf = (s: Surgery) => (s.unit || s.subspecialty || 'Unassigned unit').trim();
+
   const groupedSchedule = (() => {
     const sorted = [...filteredSurgeries].sort((a, b) => {
       const dateA = (a.scheduledDate || '').slice(0, 10);
       const dateB = (b.scheduledDate || '').slice(0, 10);
       if (dateA !== dateB) return dateA.localeCompare(dateB);
-      const thA = theatreOf(a);
-      const thB = theatreOf(b);
-      const unA = thA.toLowerCase().startsWith('unassigned') ? 1 : 0;
-      const unB = thB.toLowerCase().startsWith('unassigned') ? 1 : 0;
-      if (unA !== unB) return unA - unB;
-      if (thA.toLowerCase() !== thB.toLowerCase()) return thA.localeCompare(thB);
-      // Manual order (listOrder) takes precedence within a theatre/unit list;
-      // cases without an explicit order fall back to their scheduled time.
+      const unitA = unitOf(a);
+      const unitB = unitOf(b);
+      if (unitA.toLowerCase() !== unitB.toLowerCase()) return unitA.localeCompare(unitB);
+      // Manual order (listOrder) takes precedence within a unit's list; cases
+      // without an explicit order fall back to their scheduled time.
       const loA = a.listOrder ?? Number.MAX_SAFE_INTEGER;
       const loB = b.listOrder ?? Number.MAX_SAFE_INTEGER;
       if (loA !== loB) return loA - loB;
       return (a.scheduledTime || '').localeCompare(b.scheduledTime || '');
     });
-    const groups: { key: string; dateLabel: string; theatre: string; rows: Surgery[] }[] = [];
+
+    const groups: {
+      key: string; dateLabel: string; date: string; unit: string;
+      theatres: string[]; rows: Surgery[];
+    }[] = [];
+
     for (const s of sorted) {
       const dayKey = (s.scheduledDate || '').slice(0, 10);
-      const theatre = theatreOf(s);
-      const key = `${dayKey}__${theatre}`;
+      const unit = unitOf(s);
+      const key = `${dayKey}__${unit}`;
       const last = groups[groups.length - 1];
       if (!last || last.key !== key) {
         groups.push({
-          key,
-          theatre,
+          key, unit, date: dayKey,
           dateLabel: s.scheduledDate
             ? new Date(s.scheduledDate).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })
             : '',
+          theatres: [],
           rows: [s],
         });
       } else {
         last.rows.push(s);
       }
+    }
+
+    // Which theatre(s) the unit's cases currently sit in. More than one means a
+    // previous per-case assignment scattered them, which is worth showing rather
+    // than hiding behind a single label.
+    for (const g of groups) {
+      g.theatres = Array.from(new Set(
+        g.rows.map((r) => theatreOf(r)).filter((t) => t && !t.toLowerCase().startsWith('unassigned'))
+      ));
     }
     return groups;
   })();
@@ -756,14 +827,67 @@ export default function SurgeriesPage() {
                   <Fragment key={group.key}>
                     <tr className="bg-indigo-50/70">
                       <td colSpan={9} className="px-6 py-2">
-                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-800">
-                          {!dateFilter && group.dateLabel && (
-                            <span className="text-indigo-500">{group.dateLabel}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-800">
+                            {!dateFilter && group.dateLabel && (
+                              <span className="text-indigo-500">{group.dateLabel}</span>
+                            )}
+                            <span>{group.unit}</span>
+                            <span className="font-medium normal-case text-indigo-400">
+                              · {group.rows.length} case{group.rows.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+
+                          {/* Where this unit is operating. More than one theatre
+                              means an earlier per-case assignment scattered the
+                              list, which is worth showing rather than hiding. */}
+                          {group.theatres.length === 1 && (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+                              {group.theatres[0]}
+                            </span>
                           )}
-                          <span>{group.theatre}</span>
-                          <span className="text-indigo-400 font-medium normal-case">
-                            · {group.rows.length} case{group.rows.length === 1 ? '' : 's'}
-                          </span>
+                          {group.theatres.length > 1 && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                              Split across {group.theatres.length} theatres
+                            </span>
+                          )}
+                          {group.theatres.length === 0 && (
+                            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">
+                              No theatre assigned
+                            </span>
+                          )}
+
+                          {/* Assign a theatre to the WHOLE unit for the day. The
+                              unit works its list in one room; it does not get a
+                              different theatre per patient. */}
+                          {canAssignTheatre && (
+                            <span className="ml-auto flex items-center gap-2">
+                              <select
+                                value={unitChoice[group.key] ?? ''}
+                                onChange={(e) => setUnitChoice((p) => ({ ...p, [group.key]: e.target.value }))}
+                                aria-label={`Choose a theatre for ${group.unit}`}
+                                className="rounded border border-gray-300 px-2 py-1 text-xs"
+                              >
+                                <option value="">-- theatre --</option>
+                                {theatreOptions.map((t) => (
+                                  <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => assignUnitTheatre(group.key, group.unit, group.date)}
+                                disabled={!unitChoice[group.key] || assigningKey === group.key}
+                                className="rounded bg-indigo-600 px-3 py-1 text-xs font-bold text-white hover:bg-indigo-700 disabled:bg-gray-300"
+                              >
+                                {assigningKey === group.key ? 'Assigning…' : 'Assign theatre to unit'}
+                              </button>
+                            </span>
+                          )}
+                          {unitNote[group.key] && (
+                            <span className="w-full text-xs font-medium normal-case text-gray-800">
+                              {unitNote[group.key]}
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>

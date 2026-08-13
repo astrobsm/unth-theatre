@@ -11,7 +11,12 @@ paperwork features.
 
 ## 1. Now — patient-safety communication
 
-### 1.1 Radio announcements play silently **[safety]**
+### 1.1 Radio announcements play silently — DONE (`c61281d`, `ee6d4ca`)
+NotAllowedError is now distinguished from real failures, blocked announcements are
+held rather than marked delivered, and any gesture unlocks audio. The prompt sits
+in the FloatingDock below the acknowledge button rather than over it.
+
+### 1.1 (original description, kept for context)
 `src/components/RadioPlayer.tsx:382`
 
 ```ts
@@ -46,16 +51,11 @@ trusting the timing.
 
 ## 2. Next — requested and half-built
 
-### 2.1 Group the day's list by unit, with a per-unit assign button
-The API is done (`POST /api/theatres/assign-unit`, commit `0d87dc8`) and the
-booking form no longer offers a theatre. What is missing is the screen: the
-scheduled list still groups by theatre, so there is nowhere to press.
-
-- Group `groupedSchedule` in `src/app/dashboard/surgeries/page.tsx` by unit
-- Prominent assign-theatre control against each unit's group
-- Show the currently assigned theatre per unit
-
-**Until this lands, the feature is unreachable from the UI.**
+### 2.1 Group the day's list by unit, with a per-unit assign button — DONE
+The list now groups by unit, matching the printed export, with a theatre picker and
+an assign button against each unit heading. Each group shows the assigned theatre,
+"No theatre assigned", or "Split across N theatres" where an earlier per-case
+assignment scattered the list.
 
 ### 2.2 Emergency booking: no theatre or team selection
 The surgeon or house officer should book the case and nothing else.
