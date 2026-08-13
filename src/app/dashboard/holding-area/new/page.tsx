@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
+import { outstandingLabel } from '@/lib/preopRequirements';
 
 interface Surgery {
   id: string;
@@ -15,6 +16,10 @@ interface Surgery {
   /// offered here, so this is always present.
   calledAt?: string;
   calledFromWard?: string | null;
+  /// Comma-separated items deferred at booking, e.g. "CONSENT".
+  preopOutstanding?: string | null;
+  preopOverrideReason?: string | null;
+  preopOverrideByName?: string | null;
   porterName?: string | null;
   patient: {
     id: string;
@@ -227,6 +232,29 @@ export default function NewHoldingAreaAssessment() {
                 )}
                 {s.porterName && <div><strong>Porter:</strong> {s.porterName}</div>}
                 {s.surgeonName && <div><strong>Surgeon:</strong> {s.surgeonName}</div>}
+
+                {/* Deferred at booking and still outstanding. Shown here in red
+                    because the holding area is the last point at which somebody
+                    can get consent before the patient is anaesthetised. It does
+                    NOT block admission — the patient is already at the door and
+                    turning them away helps nobody — but it must be impossible to
+                    miss. */}
+                {s.preopOutstanding && (
+                  <div className="mt-2 rounded border-2 border-red-600 bg-red-50 p-2">
+                    <p className="text-sm font-extrabold uppercase tracking-wide text-red-800">
+                      {outstandingLabel(s.preopOutstanding.split(',')) ?? 'PRE-OP ITEMS OUTSTANDING'}
+                    </p>
+                    {s.preopOverrideReason && (
+                      <p className="mt-1 text-xs text-red-900">
+                        Deferred at booking: {s.preopOverrideReason}
+                        {s.preopOverrideByName ? ` — ${s.preopOverrideByName}` : ''}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs font-semibold text-red-900">
+                      Obtain this before the patient goes through to theatre.
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })()}

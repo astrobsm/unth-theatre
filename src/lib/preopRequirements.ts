@@ -56,6 +56,19 @@ export interface PreopCheckInput {
   override?: PreopOverride | null;
   /** Patient age, for the checks that only apply over 45. */
   patientAge?: number | null;
+  /**
+   * Labs are gathered by a different workflow, so do not require them here.
+   *
+   * Set for EMERGENCY bookings. The emergency booking form has never collected
+   * labs — the emergency lab workup module does, after the case is booked, which
+   * is the correct order for a patient who needs theatre now. Requiring them at
+   * booking would make an override necessary for every single emergency, and an
+   * override that is always needed stops being a deliberate act and becomes a
+   * box to tick.
+   *
+   * Consent is still required, and still deferrable with a reason.
+   */
+  labsHandledElsewhere?: boolean;
 }
 
 export type MissingItem =
@@ -108,22 +121,26 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
 
   // Haemoglobin needs its sample time too: a figure with no date cannot be
   // checked against the 48-hour rule, so it is not usable evidence.
-  if (!present(input.labs?.recentHb) || !present(input.labs?.hbSampleAt)) {
+  if (!input.labsHandledElsewhere
+      && (!present(input.labs?.recentHb) || !present(input.labs?.hbSampleAt))) {
     missing.push('HAEMOGLOBIN');
   }
 
-  if (!present(input.labs?.potassium) || !present(input.labs?.sodium)
-      || !present(input.labs?.creatinine)) {
+  if (!input.labsHandledElsewhere
+      && (!present(input.labs?.potassium) || !present(input.labs?.sodium)
+          || !present(input.labs?.creatinine))) {
     missing.push('ELECTROLYTES');
   }
 
-  if (!present(input.labs?.hivStatus) || !present(input.labs?.hbsAgStatus)
-      || !present(input.labs?.hcvStatus)) {
+  if (!input.labsHandledElsewhere
+      && (!present(input.labs?.hivStatus) || !present(input.labs?.hbsAgStatus)
+          || !present(input.labs?.hcvStatus))) {
     missing.push('VIRAL_SCREEN');
   }
 
-  if (!present(input.labs?.bloodPressureSystolic)
-      || !present(input.labs?.bloodPressureDiastolic)) {
+  if (!input.labsHandledElsewhere
+      && (!present(input.labs?.bloodPressureSystolic)
+          || !present(input.labs?.bloodPressureDiastolic))) {
     missing.push('BLOOD_PRESSURE');
   }
 

@@ -11,6 +11,7 @@ import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { isSurgeonRole } from '@/lib/roleGroups';
 import { reconcileEmergencyBoard } from '@/lib/emergency/ensureBooking';
+import { checkPreopRequirements } from '@/lib/preopRequirements';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,6 +99,9 @@ const createEmergencyBookingSchema = z.object({
     .optional(),
   // Electronic UNTH consent form captured & signed inline at emergency booking.
   consentForm: z.any().optional(),
+  // A named clinician deferring consent or labs on an emergency. The reason comes
+  // from the client; who is doing it is taken from the session, never the body.
+  preopOverrideReason: z.string().trim().nullish(),
 });
 
 function getDayBounds(inputDate: Date) {
@@ -453,6 +457,40 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the emergency booking
+    // ── Consent and pre-operative requirements ──────────────────────────────
+    // Mandatory here too, but deferrable: a hard block would mean theatre never
+    // hears about the case, and the safest place for an unconsented emergency
+    // patient is a booked theatre with a team on the way. The deferral is stamped
+    // with a person and a reason, and the case carries what is outstanding until
+    // somebody clears it.
+    const preop = checkPreopRequirements({
+      urgency: 'EMERGENCY',
+      // The emergency booking form does not collect labs, and should not: the
+      // emergency lab workup module gathers them after the case is booked, which
+      // is the right order for a patient who needs theatre now. CONSENT is the
+      // requirement enforced here.
+      labsHandledElsewhere: true,
+      labs: {},
+      consent: {
+        hasUploadedFile: Boolean(validatedData.consentFile?.base64),
+        signedElectronically: Boolean(validatedData.consentForm),
+      },
+      override: {
+        reason: validatedData.preopOverrideReason ?? null,
+        byId: (session?.user as { id?: string } | undefined)?.id ?? null,
+        byName: (session?.user as { name?: string } | undefined)?.name ?? null,
+      },
+    });
+
+    if (!preop.ok) {
+      return NextResponse.json({
+        error: 'This emergency is missing required documentation. Give a clinical reason to proceed without it.',
+        missing: preop.missing,
+        missingDetail: preop.messages,
+        overrideRequired: true,
+      }, { status: 400 });
+    }
+
     const booking = await prisma.emergencySurgeryBooking.create({
       data: {
         patientName: validatedData.patientName,
@@ -544,6 +582,15 @@ export async function POST(request: NextRequest) {
         needBloodTransfusion: validatedData.bloodRequired || false,
         otherSpecialNeeds: validatedData.specialEquipment || null,
         remarks: validatedData.specialRequirements || null,
+        ...(preop.overrideAccepted
+          ? {
+              preopOverrideReason: validatedData.preopOverrideReason ?? null,
+              preopOverrideById: (session?.user as { id?: string } | undefined)?.id ?? null,
+              preopOverrideByName: (session?.user as { name?: string } | undefined)?.name ?? null,
+              preopOverrideAt: new Date(),
+              preopOutstanding: preop.outstanding.join(','),
+            }
+          : {}),
         ...(validatedData.consentFile
           ? {
               consentFileName: validatedData.consentFile.name,

@@ -58,6 +58,11 @@ export async function GET(req: NextRequest) {
       surgeonName: true,
       // Surgery has theatreId (a soft reference), not a theatre name column.
       theatreId: true,
+      // What consent or labs were deferred at booking. The holding area is the
+      // last check before the theatre door, so this is where it must show.
+      preopOutstanding: true,
+      preopOverrideReason: true,
+      preopOverrideByName: true,
       patient: { select: { id: true, name: true, folderNumber: true, ward: true } },
     },
     orderBy: [{ scheduledTime: 'asc' }],

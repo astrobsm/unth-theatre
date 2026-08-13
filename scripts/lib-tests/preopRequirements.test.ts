@@ -184,6 +184,46 @@ describe('emergency — deferrable, with a recorded reason', () => {
   });
 });
 
+describe('labsHandledElsewhere — the emergency booking path', () => {
+  it('requires consent but not labs', () => {
+    // The emergency booking form does not collect labs; the emergency lab workup
+    // module gathers them after booking, which is the right order for a patient
+    // who needs theatre now.
+    const r = checkPreopRequirements({
+      urgency: 'EMERGENCY', labs: {}, consent: { signedElectronically: true },
+      labsHandledElsewhere: true,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.missing).toEqual([]);
+  });
+
+  it('still blocks a missing consent, and still allows a deferral', () => {
+    const blocked = checkPreopRequirements({
+      urgency: 'EMERGENCY', labs: {}, consent: {}, labsHandledElsewhere: true,
+    });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.missing).toEqual(['CONSENT']);
+    expect(blocked.overrideRequired).toBe(true);
+
+    const deferred = checkPreopRequirements({
+      urgency: 'EMERGENCY', labs: {}, consent: {}, labsHandledElsewhere: true,
+      override: { reason: 'Unconscious, no next of kin present', byId: 'u1' },
+    });
+    expect(deferred.ok).toBe(true);
+    expect(deferred.outstanding).toEqual(['CONSENT']);
+  });
+
+  it('does NOT weaken the elective path', () => {
+    // The flag is set by the emergency route only. If an elective caller ever set
+    // it, consent would still be enforced and no override would be honoured.
+    const r = checkPreopRequirements({
+      urgency: 'ELECTIVE', labs: {}, consent: {}, labsHandledElsewhere: true,
+      override: { reason: 'Trying to get around the rule', byId: 'u1' },
+    });
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe('outstandingLabel', () => {
   it('names consent alone', () => {
     expect(outstandingLabel(['CONSENT'])).toBe('CONSENT OUTSTANDING');
