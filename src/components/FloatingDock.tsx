@@ -36,6 +36,9 @@ export type DockAnchor = 'top-center' | 'bottom-left' | 'bottom-right';
  */
 export const DOCK_ORDER = {
   acknowledge: 10,
+  // Below acknowledge deliberately. The unlock prompt is important but it must
+  // never sit on top of the one control that silences an emergency.
+  audioUnlock: 15,
   install: 10,
   update: 20,
   mediaHub: 10,

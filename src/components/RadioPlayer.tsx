@@ -650,20 +650,24 @@ export default function RadioPlayer() {
   return (
     <>
     {/* Audio unlock prompt.
-        Deliberately NOT a modal: a theatre screen must never have its content
-        covered by an administrative notice. It sits as a slim bar and the whole
-        bar is the target, so an unlock takes one tap anywhere along it.
-        Any click on the page also unlocks — see the capture listener above —
-        so most users will never see this resolve explicitly. */}
+        In the DOCK, not a fixed bar of its own — the first version pinned itself
+        to top-0 and would have covered the ACKNOWLEDGE EMERGENCY button, which is
+        precisely the obstruction complaint it was meant to respect. The dock
+        already guarantees these controls stack instead of overlapping.
+        Not a modal either: a theatre screen must never have its content covered
+        by an administrative notice. Any click on the page also unlocks, so most
+        users will never see this resolve explicitly. */}
     {audioBlocked && (
-      <button
-        type="button"
-        onClick={unlockAudio}
-        className="fixed left-0 right-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-bold text-black shadow-lg hover:bg-amber-400"
-      >
-        <span aria-hidden>🔇</span>
-        Tap to enable theatre audio — announcements are showing but not sounding
-      </button>
+      <DockSlot anchor="top-center" order={DOCK_ORDER.audioUnlock}>
+        <button
+          type="button"
+          onClick={unlockAudio}
+          className="flex w-[min(92vw,26rem)] items-center justify-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-xs font-bold text-black shadow-lg hover:bg-amber-400 sm:text-sm"
+        >
+          <span aria-hidden>🔇</span>
+          <span className="truncate">Tap to enable theatre audio</span>
+        </button>
+      </DockSlot>
     )}
 
     {/* Acknowledge lives at the TOP CENTRE: it is the highest-priority control
