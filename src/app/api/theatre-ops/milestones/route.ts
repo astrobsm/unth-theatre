@@ -129,6 +129,38 @@ export async function GET(request: NextRequest) {
 // ---------------------------------------------------------------------------
 // POST — record one milestone
 // ---------------------------------------------------------------------------
+/**
+ * What each milestone says aloud.
+ *
+ * Only the phases worth interrupting a room for. A milestone announced for every
+ * step trains people to ignore the radio, so the quiet ones stay on the screen
+ * where they belong.
+ *
+ * Written to be understood on one hearing: what happened, then to whom, then
+ * where.
+ */
+const MILESTONE_SPEECH: Partial<Record<string, {
+  title: string;
+  say: (c: { patient: string; theatre: string; procedure: string }) => string;
+}>> = {
+  INSIDE_THEATRE: {
+    title: 'Patient in theatre',
+    say: (c) => `${c.patient} is now inside ${c.theatre} for ${c.procedure}.`,
+  },
+  SURGERY_STARTED: {
+    title: 'Surgery started',
+    say: (c) => `Surgery has started in ${c.theatre}. ${c.procedure}, ${c.patient}.`,
+  },
+  SURGERY_ENDED: {
+    title: 'Surgery ended',
+    say: (c) => `Surgery has ended in ${c.theatre}. ${c.patient}. Recovery, please prepare.`,
+  },
+  RECOVERY_ROOM: {
+    title: 'Patient in recovery',
+    say: (c) => `${c.patient} has been transferred to recovery from ${c.theatre}.`,
+  },
+};
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   const me = session?.user as { id?: string; role?: string; fullName?: string; name?: string } | undefined;
@@ -163,10 +195,24 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         status: true,
+        // Read for the spoken announcement below. A milestone read aloud as
+        // "patient is in theatre" with no name or room is useless in a complex
+        // with several theatres running.
+        procedureName: true,
+        theatreId: true,
+        patient: { select: { name: true } },
         movements: { select: { phase: true, timestamp: true } },
       },
     });
     if (!surgery) return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+
+    // Surgery carries theatreId, not a name. Resolved here so the announcement
+    // names the room rather than a uuid.
+    const theatreName = surgery.theatreId
+      ? (await prisma.theatreSuite.findUnique({
+          where: { id: surgery.theatreId }, select: { name: true },
+        }))?.name ?? null
+      : null;
 
     const recorded = surgery.movements
       .filter((m) => isPhase(m.phase))
@@ -205,6 +251,42 @@ export async function POST(request: NextRequest) {
         .update({ where: { id: surgery.id }, data: { status: nextStatus as never } })
         .catch(() => { /* the milestone is what matters */ });
     }
+
+    // ── Announce it NOW ─────────────────────────────────────────────────────
+    // The milestone was previously recorded and nothing else happened, so any
+    // announcement depended on something else noticing later. Milestones heard
+    // late are worse than not heard at all: people stop trusting the timing and
+    // then stop listening.
+    //
+    // Written in the same request as the movement, so "prompt" means at the moment
+    // it is recorded rather than at the next poll. Deliberately not awaited in a
+    // way that can fail the milestone — the timeline entry is the clinical record;
+    // the announcement is a convenience.
+    void (async () => {
+      try {
+        const spoken = MILESTONE_SPEECH[phase];
+        if (!spoken) return;
+        await prisma.radioAnnouncement.create({
+          data: {
+            category: 'WORKFLOW',
+            title: `${spoken.title} — ${theatreName ?? 'theatre'}`,
+            message: spoken.say({
+              patient: surgery.patient?.name ?? 'the patient',
+              theatre: theatreName ?? 'theatre',
+              procedure: surgery.procedureName ?? 'the procedure',
+            }),
+            // Below an emergency (100) and above routine chatter, so a milestone
+            // never talks over a critical alert but is not queued behind music.
+            priority: 70,
+            urgency: 'MEDIUM',
+            location: theatreName ?? null,
+            triggerSource: 'EVENT',
+          },
+        });
+      } catch (err) {
+        console.error('[milestones] could not queue the announcement', err);
+      }
+    })();
 
     const now = [...recorded, { phase, timestamp: when }];
     return NextResponse.json({
