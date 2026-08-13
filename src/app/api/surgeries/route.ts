@@ -15,6 +15,7 @@ import { ensureEmergencyBooking } from "@/lib/emergency/ensureBooking";
 import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
 import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
+import { buildPackRequests } from '@/lib/packRequests';
 
 export const dynamic = 'force-dynamic';
 
@@ -715,7 +716,32 @@ export async function POST(request: NextRequest) {
       requestedById: requesterId,
       requestedByName: requesterName,
     }));
-    const extraRows = (consumableRequests ?? []).map((c) => ({
+    // ── Packs from the confirmed procedure mapping ──────────────────────────
+    // Fills in what the form did not send. A booker who chose items explicitly is
+    // not overridden — they were looking at the patient; the mapping is a default,
+    // not an authority.
+    //
+    // Never fails the booking: if the mapping screen has not been completed the
+    // case is still booked, and the unmapped procedures are reported so somebody
+    // can finish it.
+    let mapped: Awaited<ReturnType<typeof buildPackRequests>> = {
+      consumables: [], drugs: [], packsUsed: [], unmapped: [],
+    };
+    try {
+      mapped = await buildPackRequests(
+        validatedData.procedureName,
+        Array.isArray(validatedData.additionalProcedures)
+          ? validatedData.additionalProcedures.join('\n')
+          : validatedData.additionalProcedures ?? null
+      );
+    } catch (err) {
+      console.error('[surgeries] could not build pack requests from the mapping', err);
+    }
+
+    const effectiveConsumables = (consumableRequests?.length ? consumableRequests : mapped.consumables);
+    const effectiveDrugs = (drugDressingRequests?.length ? drugDressingRequests : mapped.drugs);
+
+    const extraRows = (effectiveConsumables ?? []).map((c) => ({
       surgeryId: surgery.id,
       templateId: c.templateId ?? null,
       name: c.name,
@@ -729,9 +755,9 @@ export async function POST(request: NextRequest) {
     }));
     await prisma.surgeryConsumableRequest.createMany({ data: [...basePackRows, ...extraRows] });
 
-    if (drugDressingRequests && drugDressingRequests.length) {
+    if (effectiveDrugs && effectiveDrugs.length) {
       await prisma.surgeryDrugDressingRequest.createMany({
-        data: drugDressingRequests.map((d) => ({
+        data: effectiveDrugs.map((d) => ({
           surgeryId: surgery.id,
           templateId: d.templateId ?? null,
           name: d.name,
@@ -756,7 +782,7 @@ export async function POST(request: NextRequest) {
               userId: p.id,
               type: "STOCK_ALERT",
               title: "New surgical drug/dressing pack request",
-              message: `${drugDressingRequests.length} item(s) requested for ${patient.name} (${validatedData.procedureName}) — ${new Date(validatedData.scheduledDate).toLocaleDateString()}.`,
+              message: `${effectiveDrugs.length} item(s) requested for ${patient.name} (${validatedData.procedureName}) — ${new Date(validatedData.scheduledDate).toLocaleDateString()}.`,
               link: `/dashboard/medication-tracking?surgery=${surgery.id}`,
             },
           });
@@ -764,7 +790,7 @@ export async function POST(request: NextRequest) {
         // Push to phones/PWAs too (native FCM + web-push; no-ops if unconfigured).
         void pushToUsers(pharmacists.map((p) => p.id), {
           title: '💊 New drug/dressing pack request',
-          body: `${drugDressingRequests.length} item(s) for ${patient.name} — ${validatedData.procedureName}.`,
+          body: `${effectiveDrugs.length} item(s) for ${patient.name} — ${validatedData.procedureName}.`,
           url: `/dashboard/medication-tracking?surgery=${surgery.id}`,
           priority: 'HIGH', tag: 'pharmacy-pack',
         });
@@ -786,14 +812,14 @@ export async function POST(request: NextRequest) {
               userId: p.id,
               type: "STOCK_ALERT",
               title: "New consumables pre-pack request",
-              message: `${consumableRequests.length} item(s) requested for ${patient.name} — ${validatedData.procedureName} on ${new Date(validatedData.scheduledDate).toLocaleDateString()}.`,
+              message: `${effectiveConsumables.length} item(s) requested for ${patient.name} — ${validatedData.procedureName} on ${new Date(validatedData.scheduledDate).toLocaleDateString()}.`,
               link: `/dashboard/consumable-pack-provider?surgery=${surgery.id}`,
             },
           });
         }
         void pushToUsers(packers.map((p) => p.id), {
           title: '📦 New consumables pre-pack request',
-          body: `${consumableRequests.length} item(s) for ${patient.name} — ${validatedData.procedureName}.`,
+          body: `${effectiveConsumables.length} item(s) for ${patient.name} — ${validatedData.procedureName}.`,
           url: `/dashboard/consumable-pack-provider?surgery=${surgery.id}`,
           priority: 'HIGH', tag: 'consumable-pack',
         });

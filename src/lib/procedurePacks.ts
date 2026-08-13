@@ -16,6 +16,9 @@ export interface PackItemLike {
   category?: string | null;
   drugType?: string | null;
   dosage?: string | null;
+  /** Route of administration, for drugs. Carried through the merge untouched. */
+  route?: string | null;
+  notes?: string | null;
   /** Which pack contributed it, kept so a merged list can be explained. */
   sourcePackId?: string | null;
   sourcePackName?: string | null;
