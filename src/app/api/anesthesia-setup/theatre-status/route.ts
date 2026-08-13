@@ -78,6 +78,31 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Explicitly assigned theatre team for the day's cases. Read once rather than
+    // per theatre: one query for the whole board instead of one per room.
+    const dayCaseIds = (await prisma.surgery.findMany({
+      where: { scheduledDate: { gte: startOfDay, lte: endOfDay } },
+      select: { id: true },
+    })).map((s) => s.id);
+
+    const assignedTeam = dayCaseIds.length
+      ? await prisma.theatreTeamAssignment.findMany({
+          where: { surgeryId: { in: dayCaseIds }, removedAt: null },
+          select: { surgeryId: true, role: true, userId: true, userName: true },
+          orderBy: { assignedAt: 'asc' },
+        })
+      : [];
+
+    // Phone numbers matter here: this board is what somebody reads when they need
+    // to call the person who has not arrived.
+    const teamPhones = assignedTeam.length
+      ? await prisma.user.findMany({
+          where: { id: { in: Array.from(new Set(assignedTeam.map((a) => a.userId))) } },
+          select: { id: true, phoneNumber: true },
+        })
+      : [];
+    const phoneById = new Map(teamPhones.map((u) => [u.id, u.phoneNumber ?? null]));
+
     // Get the day's surgeries (for surgeon + anaesthetist contacts per theatre)
     const surgeries = await prisma.surgery.findMany({
       where: {
@@ -88,6 +113,7 @@ export async function GET(request: NextRequest) {
         status: { not: 'CANCELLED' },
       },
       select: {
+        id: true,
         theatreId: true,
         theatreTechnicianId: true,
         surgeonName: true,
@@ -134,9 +160,15 @@ export async function GET(request: NextRequest) {
 
       // Surgeons (and any surgery-level anaesthetists) scheduled in this theatre
       const theatreSurgeries = surgeries.filter(s => s.theatreId === theatre.id);
+      const theatreSurgeryIds = new Set(theatreSurgeries.map((s) => s.id));
       const surgeonMap = new Map<string, { name: string; phone: string | null }>();
       const anaesthetistMap = new Map<string, { name: string; phone: string | null }>();
       const technicianMap = new Map<string, { name: string; phone: string | null }>();
+      // Nurses named through the team table, in addition to the single pair on
+      // the allocation. Both are shown: a unit may have named a second scrub
+      // nurse for a long list.
+      const scrubFromTeam: { name: string; phone: string | null }[] = [];
+      const circFromTeam: { name: string; phone: string | null }[] = [];
       for (const s of theatreSurgeries) {
         const surgeon = contact(s.surgeon) || (s.surgeonName ? { name: s.surgeonName, phone: null } : null);
         if (surgeon) surgeonMap.set(surgeon.name + (surgeon.phone || ''), surgeon);
@@ -147,6 +179,25 @@ export async function GET(request: NextRequest) {
         const tech = contact(techById.get((s as any).theatreTechnicianId || ''));
         if (tech) technicianMap.set(tech.name + (tech.phone || ''), tech);
       }
+      // People assigned explicitly by their own service, from
+      // TheatreTeamAssignment — several per category, unlike the single columns
+      // on TheatreAllocation. Merged into the same maps so the readiness board
+      // shows one list per role rather than two that must be reconciled by eye.
+      for (const a of assignedTeam) {
+        if (!theatreSurgeryIds.has(a.surgeryId)) continue;
+        const entry = { name: a.userName, phone: phoneById.get(a.userId) ?? null };
+        const key = entry.name + (entry.phone || '');
+        if (a.role === 'CONSULTANT_ANAESTHETIST' || a.role === 'ANAESTHETIST') {
+          anaesthetistMap.set(key, entry);
+        } else if (a.role === 'ANAESTHETIC_TECHNICIAN') {
+          technicianMap.set(key, entry);
+        } else if (a.role === 'SCRUB_NURSE') {
+          scrubFromTeam.push(entry);
+        } else if (a.role === 'CIRCULATING_NURSE') {
+          circFromTeam.push(entry);
+        }
+      }
+
       const surgeons = Array.from(surgeonMap.values());
       const surgeryAnaesthetists = Array.from(anaesthetistMap.values());
       const surgeryTechnicians = Array.from(technicianMap.values());
@@ -176,6 +227,10 @@ export async function GET(request: NextRequest) {
         surgeons,
         surgeryAnaesthetists,
         surgeryTechnicians,
+        // Named alongside the allocation's pair rather than replacing them, so a
+        // board never silently loses somebody who was assigned the other way.
+        teamScrubNurses: scrubFromTeam,
+        teamCirculatingNurses: circFromTeam,
         totalAllocations: theatreAllocations.length,
       };
     });

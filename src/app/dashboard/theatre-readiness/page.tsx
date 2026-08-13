@@ -49,6 +49,10 @@ interface TheatreStatus {
   surgeons: StaffContact[];
   surgeryAnaesthetists: StaffContact[];
   surgeryTechnicians?: StaffContact[];
+  /// Named explicitly by the nursing staff through the team assignment, in
+  /// addition to the single pair carried on the allocation.
+  teamScrubNurses?: StaffContact[];
+  teamCirculatingNurses?: StaffContact[];
   totalAllocations: number;
 }
 
@@ -441,9 +445,26 @@ export default function TheatreReadinessDashboard() {
                   <StaffRow label="Consultant Anaesthetist" contact={theatre.staffAssignments?.anaesthetistConsultant ?? null} color="bg-green-50" />
                   <StaffRow label="Senior Reg. Anaesthesia" contact={theatre.staffAssignments?.anaesthetistSeniorRegistrar ?? null} color="bg-green-50" />
                   <StaffRow label="Registrar Anaesthesia" contact={theatre.staffAssignments?.anaesthetistRegistrar ?? null} color="bg-green-50" />
-                  {/* Anaesthetist(s) named directly on the surgery, if not already in the roster */}
+                  {/* Anaesthetists and technicians, from the case record AND from
+                      an explicit assignment by the anaesthetic service. Both feed
+                      one list per role in the API, so this renders whatever was
+                      named however it was named. */}
                   {theatre.surgeryAnaesthetists && theatre.surgeryAnaesthetists.length > 0 && theatre.surgeryAnaesthetists.map((s, i) => (
                     <StaffRow key={`anae-${i}`} label="Anaesthetist (case)" contact={s} color="bg-green-50" />
+                  ))}
+                  {theatre.surgeryTechnicians?.map((t, i) => (
+                    <StaffRow key={`tech-${i}`} label="Anaesthetic Technician" contact={t} color="bg-green-50" />
+                  ))}
+                  {/* Extra nurses named through the team assignment. Shown as
+                      well as the allocation's pair, never instead of them: a unit
+                      may have named a second scrub nurse for a long list, and a
+                      board that silently replaced one with the other would leave
+                      somebody unaccounted for. */}
+                  {theatre.teamScrubNurses?.map((n, i) => (
+                    <StaffRow key={`ts-${i}`} label="Scrub Nurse (assigned)" contact={n} color="bg-blue-50" />
+                  ))}
+                  {theatre.teamCirculatingNurses?.map((n, i) => (
+                    <StaffRow key={`tc-${i}`} label="Circulating Nurse (assigned)" contact={n} color="bg-blue-50" />
                   ))}
                   <StaffRow label="Cleaner" contact={theatre.staffAssignments?.cleaner ?? null} color="bg-gray-50" />
                   <StaffRow label="Porter" contact={theatre.staffAssignments?.porter ?? null} color="bg-gray-50" />
