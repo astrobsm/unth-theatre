@@ -998,6 +998,10 @@ model Surgery {
   procedureName      String
   scheduledDate      DateTime
   scheduledTime      String
+  /// Further procedures in the same operation, newline-separated. A tumour
+  /// resection with a skin graft is one case with two procedures; the packs for
+  /// each are merged, taking the HIGHER quantity rather than the sum.
+  additionalProcedures String?
   estimatedDuration  Int                    @default(60) // Estimated duration in minutes
   status             SurgeryStatus          @default(SCHEDULED)
   surgeryType        SurgeryType            @default(ELECTIVE)
@@ -10214,4 +10218,46 @@ model TheatreTeamAssignment {
   @@index([surgeryId, role])
   @@index([userId, assignedAt])
   @@map("theatre_team_assignments")
+}
+
+/// Which packs a procedure needs — confirmed once by an administrator, then used
+/// at every booking without guessing.
+///
+/// Name matching can suggest a pack but must never choose one: which pack a
+/// hemicolectomy needs is a clinical judgement, and auto-requesting the wrong pack
+/// is worse than requesting none because somebody opens it before noticing. So the
+/// suggestion is reviewed once and stored here, and booking reads this table.
+model ProcedurePackMap {
+  id String @id @default(uuid())
+
+  /// Normalised procedure name, so "Suture 2/0"-style spelling drift does not
+  /// create two mappings for one operation.
+  procedureKey  String
+  /// As a clinician typed it, for display.
+  procedureName String
+  subspecialty  String?
+
+  /// TEXT ids — match SurgicalPack.id.
+  consumablePackId String?
+  pharmacyPackId   String?
+  /// Snapshotted for display, so a renamed pack does not make an old mapping
+  /// unreadable.
+  consumablePackName String?
+  pharmacyPackName   String?
+
+  /// How the mapping came about, and whether a person has agreed to it.
+  /// A mapping is NOT used at booking until confirmedAt is set.
+  suggestedBasis String?
+  confirmedAt    DateTime?
+  confirmedById  String?
+  confirmedByName String?
+
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([procedureKey])
+  @@index([subspecialty, isActive])
+  @@map("procedure_pack_maps")
 }
