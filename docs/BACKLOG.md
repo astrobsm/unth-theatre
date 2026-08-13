@@ -119,6 +119,19 @@ statistical engine, no LLM; 9 models, not the spec's 17.
 - Wizard, survey builder, response capture, statistical analysis, review,
   approval, publication, institutional PDF export
 
+### 3.3 Theatre music library and player
+Phase 1 assessment: `docs/music-module-assessment.md`. Not started.
+
+Two blockers must clear first, both already listed above:
+- **1.1** — audio does not play at all; a music player built on it would be silent
+- nginx `client_max_body_size 25m` is too small for audio uploads
+
+Key finding: ORM has **no filesystem storage** — every upload today is base64 in a
+Postgres text column, which is exactly what a music library must not do. This
+module introduces the first real file storage, which means music files are NOT in
+database backups, and the music tables must be excluded from sync (they reference
+local paths).
+
 ---
 
 ## 4. Infrastructure and security
