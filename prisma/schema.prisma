@@ -10551,3 +10551,224 @@ model ConflictApproval {
   @@index([decisionId])
   @@map("conflict_approvals")
 }
+
+// ============================================================
+// Communications — one path out of ORM
+// ------------------------------------------------------------
+// Six models, not the specification's seventeen. WorkflowInstance is dropped
+// deliberately: the cron checkers already recompute state each run, and storing
+// instances would create a second source of truth about whether a theatre is
+// ready.
+//
+// SENDING IS CLOUD-ONLY. The theatre server has no public inbound address, so
+// webhooks can only reach Vercel — and if both nodes could send, a message queued
+// locally and then synced would go out twice, once from each. The local node
+// enqueues; the cloud transmits.
+// ============================================================
+
+enum CommChannel {
+  IN_APP
+  PUSH
+  RADIO
+  EMAIL
+  WHATSAPP
+  SMS
+}
+
+enum CommStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+  /// Time-sensitive and no longer worth sending — a reminder for a case that has
+  /// already started helps nobody and erodes trust in the rest.
+  EXPIRED
+}
+
+enum CommPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+/// How much a message may say. Classified per template so the rule cannot be
+/// decided per-send by whoever is in a hurry.
+enum CommSensitivity {
+  /// No patient information at all — safe on any channel.
+  OPERATIONAL
+  /// Names a patient. Acceptable to staff, never to an external vendor.
+  PATIENT_IDENTIFIED
+  /// Clinical detail. Never leaves the app: the message says "log in to ORM".
+  CLINICAL
+}
+
+model CommunicationTemplate {
+  id      String      @id @default(uuid())
+  /// Stable key the code refers to, e.g. "THEATRE_SETUP_OVERDUE".
+  code    String
+  channel CommChannel
+  /// Bumped rather than edited in place, so a message sent last month can still
+  /// be shown exactly as it was worded.
+  version Int         @default(1)
+
+  subject String?
+  body    String  @db.Text
+  /// Names of the variables this body expects, for validation before sending.
+  variables Json?
+
+  sensitivity CommSensitivity @default(OPERATIONAL)
+
+  /// WhatsApp only: Meta approves templates, and an unapproved one cannot be
+  /// sent however correct it looks.
+  providerTemplateId String?
+  providerStatus     String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([code, channel, version])
+  @@index([code, channel, isActive])
+  @@map("communication_templates")
+}
+
+model CommunicationMessage {
+  id String @id @default(uuid())
+
+  channel  CommChannel
+  priority CommPriority @default(NORMAL)
+  status   CommStatus   @default(QUEUED)
+
+  /// TEXT id — matches User.id. Null for an external recipient.
+  recipientUserId String?
+  recipientName   String?
+  /// Phone or email, by channel. Never both.
+  recipientAddress String?
+
+  templateCode String?
+  /// Rendered at QUEUE time, not at send time. What was queued is what goes out,
+  /// even if the template changes in between.
+  renderedSubject String?
+  renderedBody    String  @db.Text
+
+  /// What this is about, so a message can be traced back to the thing that
+  /// caused it. Soft references, matching the convention used elsewhere.
+  relatedType String?
+  relatedId   String?
+  ruleId      String?
+  escalationLevel Int?
+
+  /// Prevents a duplicate when an offline queue replays or a cron re-runs.
+  /// Built from event + rule + recipient + channel.
+  idempotencyKey String @unique
+
+  providerMessageId String?
+  failureReason     String?
+  attempts          Int       @default(0)
+  queuedAt          DateTime  @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  /// After this, sending is pointless. See CommStatus.EXPIRED.
+  expiresAt         DateTime?
+
+  createdById   String?
+  createdByName String?
+
+  events CommunicationEvent[]
+
+  @@index([status, priority, queuedAt])
+  @@index([recipientUserId, queuedAt])
+  @@index([relatedType, relatedId])
+  @@map("communication_messages")
+}
+
+/// Provider receipts. Append-only and deduplicated: a webhook that arrives twice
+/// must not move a message backwards from READ to DELIVERED.
+model CommunicationEvent {
+  id        String @id @default(uuid())
+  messageId String
+  message   CommunicationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  status    CommStatus
+  /// The provider's own event id, where it has one.
+  providerEventId String?
+  payload   Json?
+  occurredAt DateTime @default(now())
+
+  @@unique([messageId, providerEventId])
+  @@index([messageId, occurredAt])
+  @@map("communication_events")
+}
+
+model WorkflowRule {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+
+  /// The ORM event or scheduled check this responds to.
+  trigger String
+  /// Evaluated by a pure function, so a rule can be tested without sending.
+  conditions Json?
+  /// Channel, template and recipient resolution.
+  actions    Json
+
+  priority CommPriority @default(NORMAL)
+
+  /// Off by default. A rule that sends the moment it is created is how a
+  /// misconfigured loop reaches real people.
+  isActive Boolean @default(false)
+  /// Renders and logs without transmitting, for testing against live data.
+  dryRun   Boolean @default(true)
+
+  escalationPolicyId String?
+
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([trigger, isActive])
+  @@map("workflow_rules")
+}
+
+model EscalationPolicy {
+  id   String @id @default(uuid())
+  name String @unique
+  /// [{ level, afterMinutes, recipients: [...], channels: [...] }]
+  levels Json
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("escalation_policies")
+}
+
+model FeedbackRequest {
+  id String @id @default(uuid())
+
+  /// TEXT ids — match Patient.id / Surgery.id.
+  patientId String?
+  surgeryId String?
+
+  /// SHA-256 of the token. The token itself is never stored, so a database read
+  /// cannot open somebody's feedback form.
+  tokenHash String @unique
+  expiresAt DateTime
+
+  requestedById   String?
+  requestedByName String?
+  requestedAt     DateTime  @default(now())
+  submittedAt     DateTime?
+  /// The submission itself, kept separate from the request that invited it.
+  responseData    Json?
+
+  @@index([patientId])
+  @@index([expiresAt, submittedAt])
+  @@map("feedback_requests")
+}

@@ -79,6 +79,21 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'blood_requests', cls: 'QUARANTINE', why: 'Availability disagreements must surface, not resolve quietly.' },
 
   // ---- Class 4: cloud authoritative --------------------------------------
+  // ── Communications ───────────────────────────────────────────────────────
+  // Sending is CLOUD-ONLY: the theatre server has no public inbound address, so
+  // webhooks reach only the cloud — and if both nodes sent, a message queued
+  // locally and then synced would go out twice, once from each.
+  //
+  // So the local node QUEUES and the cloud TRANSMITS. A queued message must
+  // therefore travel up (append-only), while its delivery status is the cloud's
+  // to own and travel down.
+  { table: 'communication_messages', cls: 'APPEND_ONLY', why: 'A message queued on either node was still requested. The cloud transmits it; nothing may overwrite the request.' },
+  { table: 'communication_events', cls: 'APPEND_ONLY', why: 'Provider receipts. A webhook arriving twice must not move a message backwards from READ to DELIVERED.' },
+  { table: 'communication_templates', cls: 'CLOUD_AUTHORITATIVE', why: 'Wording and provider approval are decided centrally; two nodes must not send different versions of one template.' },
+  { table: 'workflow_rules', cls: 'CLOUD_AUTHORITATIVE', why: 'A rule enabled on one node only would fire inconsistently, and the kill switch must work everywhere at once.' },
+  { table: 'escalation_policies', cls: 'CLOUD_AUTHORITATIVE', why: 'Who gets escalated to is an institutional decision.' },
+  { table: 'feedback_requests', cls: 'APPEND_ONLY', why: 'A request issued and a response submitted are both events; neither is editable.' },
+
   // ── Conflict Resolver ────────────────────────────────────────────────────
   // A response submitted on either node was still submitted, and must never be
   // overwritten by the other — losing one silently changes a consensus figure
