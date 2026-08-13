@@ -10164,3 +10164,54 @@ model SyncDeferred {
   @@index([tableName, resolvedAt])
   @@map("sync_deferred")
 }
+
+/// Which theatre-team role a person was assigned to for a case.
+enum TheatreTeamRole {
+  SCRUB_NURSE
+  CIRCULATING_NURSE
+  CONSULTANT_ANAESTHETIST
+  ANAESTHETIST
+  ANAESTHETIC_TECHNICIAN
+}
+
+/// A person assigned to a case, in a stated role, by a named person.
+///
+/// TheatreAllocation already carries one column per role, which cannot express
+/// "two technicians on this case" — and in practice more than one person covers a
+/// category. So the team is rows, not columns: any number per role, each with its
+/// own attribution.
+///
+/// The attribution is the point as much as the assignment. Anaesthesia is
+/// assigned by the anaesthetists and technicians by the technicians, so "who put
+/// me on this list" must have an answer.
+model TheatreTeamAssignment {
+  id        String @id @default(uuid())
+  /// TEXT id — matches Surgery.id. Not FK-constrained, matching the convention
+  /// used elsewhere for soft references to surgeries.
+  surgeryId String
+  role      TheatreTeamRole
+  /// TEXT id — matches User.id.
+  userId    String
+  /// Snapshotted: a rota printed today must still read correctly if the person
+  /// is later renamed or leaves.
+  userName  String
+
+  assignedById   String?
+  assignedByName String?
+  assignedByRole String?
+  assignedAt     DateTime @default(now())
+
+  /// Set instead of deleting, so a removal is still a recorded decision.
+  removedAt     DateTime?
+  removedById   String?
+  removedByName String?
+
+  createdAt DateTime @default(now())
+
+  /// The same person twice in the same role on one case is a mistake, not an
+  /// intention. Withdrawn rows are excluded by the partial index below instead.
+  @@unique([surgeryId, role, userId])
+  @@index([surgeryId, role])
+  @@index([userId, assignedAt])
+  @@map("theatre_team_assignments")
+}
