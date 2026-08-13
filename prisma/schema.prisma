@@ -1160,6 +1160,22 @@ model Surgery {
   consentSignedElectronically Boolean   @default(false)
   consentCompletedAt          DateTime?
 
+  // ── Deferred pre-operative requirements (emergencies only) ────────────────
+  // Consent and pre-op labs are mandatory. An ELECTIVE case cannot be booked
+  // without them. An EMERGENCY can, because a hard block would mean theatre
+  // never hears about the case at all — but only with a named clinician and a
+  // reason, recorded here.
+  //
+  // A deferral is a debt, not a discharge: preopOutstanding holds what is still
+  // missing and drives the CONSENT OUTSTANDING flag on the board and in the
+  // holding area until somebody clears it.
+  preopOverrideReason   String?
+  preopOverrideById     String?
+  preopOverrideByName   String?
+  preopOverrideAt       DateTime?
+  /// Comma-separated MissingItem values, e.g. "CONSENT,HAEMOGLOBIN".
+  preopOutstanding      String?
+
   // Patient-facing codes generated at booking. The surgeon (or anaesthetist)
   // copies these and gives them to the patient, who presents the relevant code
   // to the provider — keying it in reveals exactly what was requested.

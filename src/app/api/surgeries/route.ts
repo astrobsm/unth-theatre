@@ -13,6 +13,7 @@ import { checkSlot } from "@/lib/theatreOps/scheduling";
 import { recordProcedureUse } from "@/lib/procedures/usage";
 import { ensureEmergencyBooking } from "@/lib/emergency/ensureBooking";
 import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
+import { checkPreopRequirements } from '@/lib/preopRequirements';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,6 +138,10 @@ const surgerySchema = z.object({
   })).optional(),
 
   // ── Informed consent file uploaded at booking (base64) ──
+  // Emergencies only: a named clinician deferring a mandatory requirement.
+  // The reason comes from the client; WHO is taken from the session below, never
+  // from the body — a client-supplied name is not an attribution.
+  preopOverrideReason: z.string().trim().nullish(),
   consentFile: z.object({
     name: z.string().min(1),
     mimeType: z.string().min(1),
@@ -554,6 +559,50 @@ export async function POST(request: NextRequest) {
     const consumablePackCode = await generateUniqueSurgeryCode(prisma, 'consumablePackCode', 'consumable');
     const pharmacyDrugCode = await generateUniqueSurgeryCode(prisma, 'pharmacyDrugCode', 'pharmacy');
 
+    // ── Consent and pre-op requirements ─────────────────────────────────────
+    // The labs above are enforced by the schema. Consent is checked here because
+    // it can arrive two ways — a scanned paper form or an electronic signature —
+    // and either satisfies it.
+    //
+    // Elective: hard block. Emergency: a named clinician may defer, with a
+    // reason, because a hard block would mean theatre never hears about the case.
+    const preop = checkPreopRequirements({
+      urgency: surgeryType,
+      labs: {
+        recentHb: validatedData.recentHb,
+        hbSampleAt: validatedData.hbSampleAt,
+        potassium: validatedData.potassium,
+        sodium: validatedData.sodium,
+        creatinine: validatedData.creatinine,
+        hbsAgStatus: validatedData.hbsAgStatus,
+        hcvStatus: validatedData.hcvStatus,
+        hivStatus: validatedData.hivStatus,
+        bloodPressureSystolic: validatedData.bloodPressureSystolic,
+        bloodPressureDiastolic: validatedData.bloodPressureDiastolic,
+      },
+      consent: {
+        hasUploadedFile: Boolean(consentFile?.base64),
+        signedElectronically: Boolean(consentForm),
+      },
+      override: {
+        reason: validatedData.preopOverrideReason ?? null,
+        byId: (session?.user as { id?: string } | undefined)?.id ?? null,
+        byName: (session?.user as { name?: string } | undefined)?.name ?? null,
+      },
+    });
+
+    if (!preop.ok) {
+      return NextResponse.json({
+        error: preop.overrideRequired
+          ? 'This emergency is missing required documentation. Give a clinical reason to proceed without it.'
+          : 'Consent and pre-operative results are required before a case can be booked.',
+        missing: preop.missing,
+        missingDetail: preop.messages,
+        // Tells the form whether to offer the override box or simply refuse.
+        overrideRequired: preop.overrideRequired,
+      }, { status: 400 });
+    }
+
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
@@ -565,6 +614,17 @@ export async function POST(request: NextRequest) {
         // theatre/date. The Pharmacist sees this name as "To be collected by".
         anesthetistId: resolvedAnaesthetistId,
         surgeryType: surgeryType,
+        // A deferral is a debt, not a discharge: what is still missing stays on
+        // the record and drives the outstanding flag on the boards.
+        ...(preop.overrideAccepted
+          ? {
+              preopOverrideReason: validatedData.preopOverrideReason ?? null,
+              preopOverrideById: (session?.user as { id?: string } | undefined)?.id ?? null,
+              preopOverrideByName: (session?.user as { name?: string } | undefined)?.name ?? null,
+              preopOverrideAt: new Date(),
+              preopOutstanding: preop.outstanding.join(','),
+            }
+          : {}),
         scheduledDate: new Date(validatedData.scheduledDate),
         // Hb sample timestamp (drives the "within 48 h" safety rule).
         hbSampleAt: hbSampleAt ? new Date(hbSampleAt) : null,
