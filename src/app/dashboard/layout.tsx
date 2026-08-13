@@ -369,6 +369,7 @@ export default function DashboardLayout({
     // API enforces the same list independently.
     menuItems.push({ href: '/dashboard/settings/price-master', icon: FileSpreadsheet, label: 'Price Master', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/procedure-packs', icon: FileSpreadsheet, label: 'Procedure Packs', badge: 'ADMIN' });
+    menuItems.push({ href: '/dashboard/estimates', icon: FileSpreadsheet, label: 'Cost Estimates' });
   } else if (['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'].includes(session.user.role)) {
     // Non-admin roles that maintain pack/drug entries can also reach the catalog + packs.
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog' });
@@ -506,6 +507,7 @@ export default function DashboardLayout({
       // produces is derived from what is loaded here.
       '/dashboard/settings/price-master',
       '/dashboard/admin/procedure-packs',
+      '/dashboard/estimates',
       '/dashboard/announcements',
       '/dashboard/unit-booking-letter',
       '/dashboard/patient-payment-guide',
