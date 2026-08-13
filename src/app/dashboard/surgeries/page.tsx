@@ -10,6 +10,7 @@ import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
+import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 
 interface Surgery {
   id: string;
@@ -391,6 +392,9 @@ export default function SurgeriesPage() {
   // Keyed by group: one shared message would appear under every unit heading,
   // including the ones it had nothing to do with.
   const [unitNote, setUnitNote] = useState<Record<string, string>>({});
+  // One unit's team panel open at a time — five multi-selects per heading would
+  // bury the list itself.
+  const [teamOpen, setTeamOpen] = useState<string | null>(null);
 
   const canAssignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
     'THEATRE_CHAIRMAN', 'NURSE_MANAGER', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'NURSE']
@@ -920,6 +924,13 @@ export default function SurgeriesPage() {
                               </select>
                               <button
                                 type="button"
+                                onClick={() => setTeamOpen((k) => (k === group.key ? null : group.key))}
+                                className="rounded border border-slate-400 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              >
+                                {teamOpen === group.key ? 'Hide team' : 'Assign team'}
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => assignUnitTheatre(group.key, group.unit, group.date)}
                                 disabled={!unitChoice[group.key] || assigningKey === group.key}
                                 className="rounded bg-indigo-600 px-3 py-1 text-xs font-bold text-white hover:bg-indigo-700 disabled:bg-gray-300"
@@ -927,6 +938,19 @@ export default function SurgeriesPage() {
                                 {assigningKey === group.key ? 'Assigning…' : 'Assign theatre & team'}
                               </button>
                             </span>
+                          )}
+                          {/* The anaesthetic team and technicians for the unit's
+                              whole list. Behind a toggle: five categories of
+                              multi-select on every unit heading would bury the
+                              list this page exists to show. */}
+                          {teamOpen === group.key && (
+                            <div className="w-full">
+                              <TheatreTeamAssigner
+                                unit={group.unit}
+                                date={group.date}
+                                readFromSurgeryId={group.rows[0]?.id}
+                              />
+                            </div>
                           )}
                           {unitNote[group.key] && (
                             <span className="w-full text-xs font-medium normal-case text-gray-800">

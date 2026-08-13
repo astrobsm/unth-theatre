@@ -12,6 +12,7 @@ import {
   User, Users, Building2, Siren, Phone, Calendar, MapPin, Navigation,
   Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2
 } from 'lucide-react';
+import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 
 // ==================== BNF DRUG DIRECTORY ====================
 interface DrugEntry { name: string; unit: string; commonDoses: string[]; }
@@ -195,6 +196,9 @@ interface EmergencyBooking {
   requestedAt: string;
   requiredByTime?: string;
   theatreName?: string;
+  /// Set once the booking has produced a surgery record; the team is assigned
+  /// against that, not against the booking.
+  surgeryId?: string | null;
   bloodRequired: boolean;
   bloodUnits?: number;
   surgeon?: { fullName: string; phoneNumber?: string };
@@ -1130,6 +1134,25 @@ export default function EmergencyBookingPage() {
                             Assigning also acknowledges the case, names the team on the theatre
                             readiness board, and announces it on the radio.
                           </span>
+                          {/* Anaesthetic team and technicians, assigned by their
+                              own service. Rendered inside the expanded panel so
+                              it does not add height to every card on the board —
+                              an emergency list must stay scannable. */}
+                          {isExpanded && booking.surgeryId && (
+                            <div className="w-full">
+                              <TheatreTeamAssigner
+                                surgeryIds={[booking.surgeryId]}
+                                readFromSurgeryId={booking.surgeryId}
+                                compact
+                              />
+                            </div>
+                          )}
+                          {!isExpanded && booking.surgeryId && (
+                            <p className="w-full text-xs text-gray-600">
+                              Open <strong>Team Status</strong> to assign the anaesthetic team,
+                              technicians and nurses.
+                            </p>
+                          )}
                           {assignNote[booking.id] && (
                             <p className="w-full text-sm font-medium text-gray-900">
                               {assignNote[booking.id]}
