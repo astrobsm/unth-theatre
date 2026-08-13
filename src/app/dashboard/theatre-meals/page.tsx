@@ -28,6 +28,8 @@ interface StaffEntry {
   role: string;
   meta?: string;
   hasActivity: boolean | null;
+  /// QUALIFYING | SYSTEM_ONLY | NONE — null for a free-text member with no account.
+  activityLevel?: string | null;
 }
 
 interface DailyStaffResponse {
@@ -41,6 +43,10 @@ interface DailyStaffResponse {
     uniqueIdentified: number;
     loggedIn: number;
     notLoggedIn: number;
+    /// Did recognised theatre work today. This is the number that decides lunch.
+    qualifying?: number;
+    /// Used the system but no theatre work recorded — look before dispensing.
+    systemOnly?: number;
   };
 }
 
@@ -65,7 +71,7 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function ActivityBadge({ status }: { status: boolean | null }) {
+function ActivityBadge({ status, level }: { status: boolean | null; level?: string | null }) {
   if (status === true) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">
@@ -73,10 +79,19 @@ function ActivityBadge({ status }: { status: boolean | null }) {
       </span>
     );
   }
+  if (level === 'SYSTEM_ONLY') {
+    // Used the system, but nothing that counts as theatre work. Amber, not red:
+    // it means "look", not "refuse".
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+        <XCircle className="w-3 h-3" /> In system, no theatre work
+      </span>
+    );
+  }
   if (status === false) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-300">
-        <XCircle className="w-3 h-3" /> No activity
+        <XCircle className="w-3 h-3" /> No theatre work
       </span>
     );
   }
@@ -106,7 +121,7 @@ function StaffCard({ title, entries, emptyText }: { title: string; entries: Staf
                 <p className="text-sm font-medium text-gray-900 truncate">{e.name}</p>
                 {e.meta && <p className="text-xs text-gray-500 truncate">{e.meta}</p>}
               </div>
-              <ActivityBadge status={e.hasActivity} />
+              <ActivityBadge status={e.hasActivity} level={e.activityLevel} />
             </li>
           ))}
         </ul>
@@ -286,18 +301,26 @@ function DailyStaffTab() {
           <div className="card p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
             <div className="flex items-center gap-2 text-green-900">
               <CheckCircle2 className="w-5 h-5" />
-              <span className="text-xs font-semibold uppercase">Logged in (eligible)</span>
+              {/* "Logged in (eligible)" was the claim this module existed to
+                  stop making. Using the system is not working; a case that ran,
+                  a patient transported or a theatre task completed is. */}
+              <span className="text-xs font-semibold uppercase">Theatre work recorded</span>
             </div>
-            <p className="text-3xl font-bold text-green-900 mt-1">{data.totals.loggedIn}</p>
-            <p className="text-xs text-green-700 mt-1">Active in system today — dispense meals</p>
+            <p className="text-3xl font-bold text-green-900 mt-1">{data.totals.qualifying ?? 0}</p>
+            <p className="text-xs text-green-700 mt-1">Qualifying activity today — dispense</p>
           </div>
           <div className="card p-4 bg-gradient-to-br from-red-50 to-red-100 border-red-200">
             <div className="flex items-center gap-2 text-red-900">
               <XCircle className="w-5 h-5" />
-              <span className="text-xs font-semibold uppercase">Not yet active</span>
+              <span className="text-xs font-semibold uppercase">Check before dispensing</span>
             </div>
-            <p className="text-3xl font-bold text-red-900 mt-1">{data.totals.notLoggedIn}</p>
-            <p className="text-xs text-red-700 mt-1">Hold meals until staff logs activity</p>
+            <p className="text-3xl font-bold text-red-900 mt-1">
+              {(data.totals.systemOnly ?? 0) + data.totals.notLoggedIn}
+            </p>
+            {/* Deliberately not "refuse". Pharmacy, CSSD, biomedical and recovery
+                have no activity pathway in ORM yet, so an outright block would
+                starve people who worked a full shift. A person looks. */}
+            <p className="text-xs text-red-700 mt-1">No theatre work recorded — confirm before dispensing</p>
           </div>
         </div>
       )}
