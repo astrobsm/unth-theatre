@@ -184,6 +184,8 @@ export default function NewSurgeryPage() {
   const [subspecialty, setSubspecialty] = useState('');
   // Held in state so the picker can drive it; still submitted as a form field.
   const [procedureName, setProcedureName] = useState('');
+  // Further procedures in the same operation; the principal one stays above.
+  const [extraProcedures, setExtraProcedures] = useState<string[]>([]);
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
   // One or more unit supervising consultants may be attached to a booking.
   const [supervisingConsultantIds, setSupervisingConsultantIds] = useState<string[]>([]);
@@ -563,6 +565,7 @@ export default function NewSurgeryPage() {
       theatreId: selectedTheatreId || null,
       indication: formData.get('indication'),
       procedureName: procedureName.trim(),
+      additionalProcedures: extraProcedures.map((p) => p.trim()).filter(Boolean),
       scheduledDate: formData.get('scheduledDate'),
       scheduledTime: formData.get('scheduledTime'),
       // No `|| 60` fallback: a silent default is what produced lists that
@@ -1056,6 +1059,50 @@ export default function NewSurgeryPage() {
                 onChange={setProcedureName}
                 emergencyFirst={surgeryType === 'EMERGENCY'}
               />
+
+              {/* Further procedures in the SAME operation — a tumour resection
+                  with a skin graft is one case, one patient, one trip to theatre.
+                  Kept as a secondary control rather than a list of equals: the
+                  principal procedure is what the case is called on every board
+                  and document, and making them equal would leave nothing to put
+                  in a table row. */}
+              {extraProcedures.map((proc, i) => (
+                <div key={i} className="mt-2 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-500">+</span>
+                  <input
+                    type="text"
+                    value={proc}
+                    onChange={(e) => setExtraProcedures((prev) =>
+                      prev.map((p, idx) => (idx === i ? e.target.value : p)))}
+                    placeholder="Additional procedure in the same operation"
+                    aria-label={`Additional procedure ${i + 1}`}
+                    className="input-field flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setExtraProcedures((prev) => prev.filter((_, idx) => idx !== i))}
+                    aria-label="Remove this procedure"
+                    className="rounded px-2 py-1 text-sm font-bold text-red-600 hover:bg-red-50"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setExtraProcedures((prev) => [...prev, ''])}
+                className="mt-2 text-sm font-semibold text-indigo-700 hover:underline"
+              >
+                + Add another procedure to this operation
+              </button>
+
+              {extraProcedures.some((p) => p.trim()) && (
+                <p className="mt-1 text-xs text-gray-600">
+                  Packs for each procedure are combined, taking the higher quantity
+                  where both need the same item — not the sum.
+                </p>
+              )}
             </div>
 
             {/* Surgery Type Selection */}

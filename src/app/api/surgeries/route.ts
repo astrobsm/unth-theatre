@@ -14,6 +14,7 @@ import { recordProcedureUse } from "@/lib/procedures/usage";
 import { ensureEmergencyBooking } from "@/lib/emergency/ensureBooking";
 import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
+import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,10 @@ const surgerySchema = z.object({
   theatreId: z.string().nullish(),
   indication: z.string(),
   procedureName: z.string(),
+  /// Further procedures in the same operation, e.g. a skin graft with a tumour
+  /// resection. Newline- or semicolon-separated; the principal procedure keeps its
+  /// own field so nothing that reads procedureName today has to change.
+  additionalProcedures: z.array(z.string()).or(z.string()).nullish(),
   scheduledDate: z.string(),
   // Both MANDATORY. A case with no committed start time cannot be assessed for
   // delay, and a case with no expected duration cannot have the next one
@@ -614,6 +619,16 @@ export async function POST(request: NextRequest) {
         // theatre/date. The Pharmacist sees this name as "To be collected by".
         anesthetistId: resolvedAnaesthetistId,
         surgeryType: surgeryType,
+        // Normalised through the same parser the merge logic uses, so a repeated
+        // or blank entry cannot reach the record.
+        additionalProcedures: serialiseAdditional(
+          parseProcedures(
+            validatedData.procedureName,
+            Array.isArray(validatedData.additionalProcedures)
+              ? validatedData.additionalProcedures.join('\n')
+              : validatedData.additionalProcedures ?? null
+          )
+        ),
         // A deferral is a debt, not a discharge: what is still missing stays on
         // the record and drives the outstanding flag on the boards.
         ...(preop.overrideAccepted
