@@ -78,46 +78,78 @@ export async function GET(request: NextRequest) {
         }),
       ]);
 
-    if (roster) {
+    // ── Rostered is EXPECTED, not eligible ──────────────────────────────────
+    // The previous first branch was `if (roster) return eligible`, which granted
+    // a meal for appearing on a roster and — worse — short-circuited the activity
+    // checks written directly below it. The evidence this hospital already
+    // collects was being calculated and then skipped for exactly the people most
+    // likely to be rostered.
+    //
+    // Tri-state rather than a flat block, deliberately. Several roles have no
+    // activity pathway in ORM yet (pharmacy, CSSD, biomedical, recovery). Denying
+    // them today would starve people who genuinely worked, which is a worse fault
+    // than feeding someone who did not. So roster-only becomes ELIGIBLE PENDING
+    // VERIFICATION: the meals screen shows it, a person confirms it, and it is
+    // recorded — rather than being waved through invisibly.
+
+    // Did the case actually run with this person on it? Assignment is not work;
+    // a case that reached theatre and started or finished is.
+    const caseWorked = await prisma.surgery.findFirst({
+      where: {
+        scheduledDate: { gte: start, lt: end },
+        status: { in: ['IN_PROGRESS', 'COMPLETED'] },
+        OR: [{ surgeonId: userId }, { anesthetistId: userId }, { scrubNurseId: userId }],
+      },
+      select: { id: true, procedureName: true, status: true },
+    });
+
+    const activity =
+      caseWorked
+        ? { source: 'CASE_WORKED', details: { task: `${caseWorked.procedureName} — ${caseWorked.status.toLowerCase()}` } }
+        : transportCredit
+          ? { source: 'PATIENT_TRANSPORT', details: { task: 'Transported a patient to the holding area' } }
+          : theatreTaskCredit
+            ? { source: 'THEATRE_TASK', details: { task: 'Theatre reception / cleaning task', theatre: theatreTaskCredit.theatreName } }
+            : null;
+
+    if (activity) {
       return NextResponse.json({
         eligible: true,
-        source: "ROSTER",
-        details: {
-          shift: roster.shift,
-          staffCategory: roster.staffCategory,
-          location: roster.location,
-        },
+        verified: true,
+        source: activity.source,
+        details: activity.details,
       });
     }
-    if (surgicalMembership) {
+
+    // Expected, but nothing recorded. Not refused — flagged.
+    const expected = roster ?? surgicalMembership ?? null;
+    if (expected) {
       return NextResponse.json({
         eligible: true,
-        source: "SURGICAL_TEAM",
-        details: {
-          role: surgicalMembership.role,
-          procedure: surgicalMembership.surgery.procedureName,
-          time: surgicalMembership.surgery.scheduledTime,
-        },
+        // The meals screen must show this differently and ask somebody to confirm.
+        verified: false,
+        requiresVerification: true,
+        source: roster ? 'ROSTER_ONLY' : 'ASSIGNED_ONLY',
+        reason: roster
+          ? 'Rostered today, but no theatre activity has been recorded yet.'
+          : 'Assigned to a case today, but the case has not started and no activity is recorded.',
+        details: roster
+          ? { shift: roster.shift, staffCategory: roster.staffCategory, location: roster.location }
+          : {
+              role: surgicalMembership!.role,
+              procedure: surgicalMembership!.surgery.procedureName,
+              time: surgicalMembership!.surgery.scheduledTime,
+            },
       });
     }
-    if (transportCredit) {
-      return NextResponse.json({
-        eligible: true,
-        source: "PATIENT_TRANSPORT",
-        details: { task: "Transported a patient to the holding area" },
-      });
-    }
-    if (theatreTaskCredit) {
-      return NextResponse.json({
-        eligible: true,
-        source: "THEATRE_TASK",
-        details: {
-          task: "Theatre reception / cleaning task",
-          theatre: theatreTaskCredit.theatreName,
-        },
-      });
-    }
-    return NextResponse.json({ eligible: false, source: null, details: null });
+
+    return NextResponse.json({
+      eligible: false,
+      verified: false,
+      source: null,
+      reason: 'Not rostered, not assigned to a case, and no theatre activity recorded today.',
+      details: null,
+    });
   } catch (error) {
     console.error("[/api/meals/eligibility GET]", error);
     return NextResponse.json(
