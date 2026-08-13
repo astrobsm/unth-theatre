@@ -1,220 +1,159 @@
-# ORM backlog — everything outstanding
+# ORM backlog
 
-Compiled 2026-08-12 from the full working session. Kept in the repo rather than a
-chat so it survives, and so anyone can see what was asked for and what is left.
-
-Ordered by consequence, not by when it was asked. Items marked **[safety]** affect
-clinical communication or patient records and should not be queued behind
-paperwork features.
+Refreshed 2026-08-13. Ordered by consequence, and split by who can act — half of
+what is left needs a person at the hospital, not more code.
 
 ---
 
-## 1. Now — patient-safety communication
+## 1. Needs you
 
-### 1.1 Radio announcements play silently — DONE (`c61281d`, `ee6d4ca`)
-NotAllowedError is now distinguished from real failures, blocked announcements are
-held rather than marked delivered, and any gesture unlocks audio. The prompt sits
-in the FloatingDock below the acknowledge button rather than over it.
-
-### 1.1 (original description, kept for context)
-`src/components/RadioPlayer.tsx:382`
-
-```ts
-a.play().catch(() => { emitRadioIdle(); onDone?.(); });
-```
-
-Browsers reject `play()` with `NotAllowedError` until the page has had a user
-gesture. That `catch` discards the rejection and marks the announcement **done**,
-so the visual alert appears, no audio plays, and nothing records that it did not.
-On a wall display nobody has tapped since boot, that is every announcement.
-
-- Distinguish `NotAllowedError` from real playback failure
-- One-tap "Enable theatre audio" prompt; remember the unlock; replay the queue
-- An announcement that was never heard must NOT be marked completed — leave it
-  pending or log it unheard, so the rate of this is measurable
-- Interim for staff: tap each display once after it loads
-
-### 1.2 Emergency alert layout obstructs the view **[safety]**
-Buttons and overlays cover the case detail underneath. Staff work around
-obstructions by ignoring them, which is the opposite of the intent.
-
-- Bounded banner rather than a floating overlay
-- Dismissible without losing access to the case
-- Critical information legible at distance (theatre display, not a phone)
-
-### 1.3 Milestone announcements are late **[safety]**
-Trace the trigger path — likely polling where an event-driven push would be
-immediate. Milestones that arrive late are worse than absent, because people stop
-trusting the timing.
-
----
-
-## 2. Next — requested and half-built
-
-### 2.1 Group the day's list by unit, with a per-unit assign button — DONE
-The list now groups by unit, matching the printed export, with a theatre picker and
-an assign button against each unit heading. Each group shows the assigned theatre,
-"No theatre assigned", or "Split across N theatres" where an earlier per-case
-assignment scattered the list.
-
-### 2.2 Emergency booking: no theatre or team selection — DONE
-Theatre is now filled from the day's designated emergency theatre and confirmed by
-theatre staff on the board; the booker sees it but cannot change it. The
-anaesthetist comes from the duty roster, with the picker visible only to the
-anaesthetic service (ANAESTHETIST / CONSULTANT_ANAESTHETIST) plus theatre manager
-and admins — that is the escape hatch for an unuploaded roster. The booking
-submits either way.
-
-Note: there is no RESIDENT_ANAESTHETIST role in the schema; ANAESTHETIST is the
-resident grade.
-
-### 2.3 Consent and laboratory results mandatory **[safety]**
-- **Elective:** hard block. No consent or labs, no submission.
-- **Emergency:** same requirement, with a **recorded clinical override** —
-  the booker states why (unconscious, next of kin absent, life-threatening
-  delay), stamped with their name, and the case carries a prominent
-  CONSENT OUTSTANDING flag on the board and in the holding area until resolved.
-
-Agreed explicitly: a hard block on an emergency would mean theatre never hears
-about the case, and the safest place for an unconsented emergency patient is a
-booked theatre with a team on the way.
-
-### 2.4 Procedure → pack mapping, and multi-procedure booking
-- Attach a consumable pack and a pharmacy pack to every procedure in the catalogue
-- On selection, auto-request to the pack provider and prescribe to pharmacy
-- Allow **several procedures per case** (e.g. tumour resection + skin grafting)
-- Overlapping packs merge on the **higher** quantity, not the sum — a combined
-  case does not need two full sets of the same sutures
-- The mapping itself is a clinical judgement: build a best-effort match by
-  subspecialty and name, then have an admin confirm it. Auto-requesting the wrong
-  pack is worse than requesting none, because someone opens it before noticing.
-
----
-
-## 3. Then — modules in progress
-
-### 3.1 Surgery estimate — finish the user-facing half
-Done: calculation engine, price resolution, pack loader, service layer, create /
-detail / share / PDF routes, institutional PDF layer, WhatsApp message builder,
-auto-draft at booking. 69 tests.
-
-Remaining:
-- Estimate list and detail pages, and the builder UI
-- Wire `buildEstimatePdf` to a download button
-- WhatsApp share UI over the existing endpoint
-- Approval flow on screen
-- Sidebar entries (`layout.tsx` is hardcoded — `modules.ts` alone does nothing)
-- **Verify the PDF renders in a browser.** Never confirmed: the node-side render
-  hung, and jsPDF is a browser library. The watermark uses graphics-state opacity
-  and `angle`, neither of which has been seen working here.
-
-### 3.2 Conflict Resolver — everything past Phase 1
-Assessment committed (`docs/conflict-resolver-assessment.md`). Decisions settled:
-statistical engine, no LLM; 9 models, not the spec's 17.
-
-- Schema + migration, and **classify every new table in `syncPolicy.ts`** or it
-  will not cross between nodes — responses must be `APPEND_ONLY`
-- Settle the §13 anonymity vs §30 audit rule BEFORE any response exists: an
-  anonymous decision stores `responded=true` and never a link from answer to
-  user. It cannot be retrofitted.
-- State machine as one pure tested function
-- Wizard, survey builder, response capture, statistical analysis, review,
-  approval, publication, institutional PDF export
-
-### 3.3 Theatre music library and player
-Phase 1 assessment: `docs/music-module-assessment.md`. Not started.
-
-Two blockers must clear first, both already listed above:
-- **1.1** — audio does not play at all; a music player built on it would be silent
-- nginx `client_max_body_size 25m` is too small for audio uploads
-
-Key finding: ORM has **no filesystem storage** — every upload today is base64 in a
-Postgres text column, which is exactly what a music library must not do. This
-module introduces the first real file storage, which means music files are NOT in
-database backups, and the music tables must be excluded from sync (they reference
-local paths).
-
----
-
-## 4. Infrastructure and security
-
-### 4.1 Captive portal — finish it
-Blocked on RouterOS **device-mode**, which needs a physical button press:
-
-```
-/system/device-mode/update fetch=yes     # then press reset / power-cycle
-```
-
-Then `scripts/local-server/deploy-mikrotik-portal.sh` does the rest.
-
-- Router SSH credentials are unknown — create a dedicated `orm-deploy` user
-  (`/user add name=orm-deploy password="..." group=full`)
-- **Until the portal serves HTTPS, staff passwords cross the LAN in clear text.**
-  Interim options: disable the hotspot and put a WPA2 key on the TP-Link, or tell
-  staff not to use the Wi-Fi sign-in page.
-
-### 4.2 Server housekeeping
+### 1.1 Deploy to the theatre server — FOUR migrations pending
 ```bash
-sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
-pm2 startup && pm2 save
+su - emmanuel                       # not root: pm2 is per-user
+cd ~/unth-theatre && git pull --ff-only
+bash scripts/local-server/apply-migrations.sh
+npm run build && pm2 restart orm --update-env
 ```
-Plus Tailscale subnet routing, so the router is reachable from home:
-```bash
-echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-tailscale.conf
-sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
-sudo tailscale up --ssh --advertise-routes=192.168.88.0/24
+`preop_override`, `theatre_team_assignments`, `procedure_pack_maps`,
+`conflict_resolver`. Everything below assumes this has happened.
+
+### 1.2 Finish the captive portal
+The router has been power-cycled. Remaining:
 ```
-then approve the route in the Tailscale admin console.
+/system/device-mode/print          # expect fetch: yes
+/tool fetch url=".../login.html"  dst-path="hotspot/login.html"  check-certificate=no
+/tool fetch url=".../alogin.html" dst-path="hotspot/alogin.html" check-certificate=no
+```
+then paste the walled-garden / RADIUS / profile block with the secret from
+`.env.local`, and `sudo systemctl restart orm-radius`.
 
-### 4.3 `npm run build` on the server migrates the CLOUD
-Prisma reads `.env` (cloud) while Next reads `.env.local` (local). A build on the
-theatre server touches the cloud's migration state. Worked around by calling
-`apply-migrations.sh` separately; it should be fixed properly.
+**Until this is done, staff passwords cross the LAN in clear text.** Tell people
+not to use the Wi-Fi sign-in page.
 
-### 4.4 Credentials to rotate
-All of these appeared in a chat log:
-- Supabase **access token** (still valid — used twice on 12 Aug)
+### 1.3 Price the 361 pack items
+`docs/pack-pricelist.csv` → fill the `amount` column → Settings → Price Master.
+Sorted by how many packs use each item; the first fifty cover most of the
+complex. **Estimates produce nothing until this is done.**
+
+Re-run with `--unpriced-only` to see what is left; empty means finished.
+
+### 1.4 Confirm procedure → pack mappings
+Admin Board → Procedure Packs. **None are confirmed, so bookings attach no packs
+yet** — by design, since a wrong pack gets opened before anyone notices. The top
+twenty by booking count is an afternoon.
+
+### 1.5 Rotate three credentials
+All appeared in a chat log:
+- Supabase **access token** — still valid, used twice on 12 Aug
 - Supabase **database password**
 - MikroTik **admin password**
-- RADIUS shared secret — regenerated 12 Aug, verify both sides match
 
-### 4.5 Verify `NEXTAUTH_SECRET` matches
-Server fingerprint `0412d2e901e5` (sha256, first 12). Compare with Vercel. One
-address with two signing secrets silently signs staff out when they change
-building, with no error explaining it.
+### 1.6 Verify NEXTAUTH_SECRET matches Vercel
+Server fingerprint `0412d2e901e5` (sha256, first 12). One address with two signing
+secrets silently signs staff out when they change building.
 
-### 4.6 Vercel environment
-- `NEXTAUTH_URL` → `https://unth-theatre.link`
-- `NEXT_PUBLIC_APP_URL` → `https://unth-theatre.link` (builds the WhatsApp link)
-- Redeploy afterwards; env changes need a new deployment
+### 1.7 Vercel environment
+`NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL` → `https://unth-theatre.link`, then
+redeploy. `NEXT_PUBLIC_APP_URL` builds the link in the WhatsApp estimate message.
 
 ---
 
-## 5. Data and follow-ups
+## 2. Needs me — ordered
 
-- **Pre-capture rows never synced.** Capture journals future changes only, so
-  rows created before it was enabled do not cross. One patient was seeded by
-  hand; a general backfill was never done.
+### 2.1 Meals screen: render the tri-state **[do first]**
+`/api/meals/eligibility` now returns `verified: false` + `requiresVerification`
+for roster-only, but `/dashboard/theatre-meals` does not show it. **A rule nobody
+can see is worse than no rule** — it currently neither enforces nor informs.
+Smallest remaining change with real consequence.
+
+### 2.2 Verify the estimate PDF renders in a browser
+Never done. The node-side render hung, and jsPDF is a browser library. The
+watermark uses graphics-state opacity and text `angle`, neither seen working here.
+It is the patient-facing artefact and it is unproven.
+
+### 2.3 Conflict Resolver — everything past the schema
+Schema, migration and sync classification are committed (`bd0b74c`). Remaining:
+- State machine as one pure tested function (13 statuses, illegal transitions)
+- Statistical engine — consensus, disagreement clusters, minority positions
+- Decision wizard and survey builder
+- Response capture, offline-tolerant (idempotency key already on the model)
+- Review, approval chain, publication
+- Institutional PDF export, reusing `institutionalPdf.ts`
+
+### 2.4 Estimates builder UI
+List, PDF, approve and WhatsApp all work. Costing lines BY HAND does not — there
+is no screen to add or edit a line, only autofill from packs.
+
+### 2.5 Meal activity engine
+Per `docs/meal-activity-assessment.md`: `StaffActivity`, `ActivityRule`,
+`MealEligibilitySnapshot`, and ~22 endpoint hooks. Gives pharmacy, CSSD,
+biomedical and recovery a pathway — they have none today, which is exactly why
+2.1 is tri-state rather than a block.
+
+### 2.6 Music module
+`docs/music-module-assessment.md`. Not started. Autoplay is now fixed, but nginx
+still caps uploads at 25 MB, and ORM has no filesystem storage at all — this
+module would introduce the first, with the backup consequences that brings.
+
+### 2.7 Infrastructure
+- **`npm run build` on the server migrates the CLOUD.** Prisma reads `.env`, Next
+  reads `.env.local`. Bit us twice on 13 Aug — once applying a migration early,
+  once failing a build when the network dropped.
+- `sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target`
+- `pm2 startup && pm2 save`
+- Tailscale subnet routing (`--advertise-routes=192.168.88.0/24`) so the MikroTik
+  is reachable from home — would already have saved a trip.
+
+---
+
+## 3. Loose ends
+
+- **Pre-capture rows never synced.** Capture journals future changes only. One
+  patient was seeded by hand; no general backfill was done.
 - **10 anaesthetist placeholder accounts** still need real names.
 - **Phase-2 clinical sync classifications** need a clinician to confirm.
-- **Same-origin cache risk:** one address now serves two databases, so the
-  service worker and offline vault are shared between hospital and cloud. If
-  anyone reports a stale list after moving between them, the fix is a cache key
-  that includes which node served the data.
+- **Same-origin cache risk.** One address now serves two databases, so the service
+  worker and offline vault are shared between hospital and cloud. If a stale list
+  is reported after moving between them, the fix is a cache key that includes
+  which node served the data.
 
 ---
 
-## Done on 12 Aug 2026, for reference
+## Done — 12–13 Aug 2026
 
-- Bi-directional sync fixed and verified — 75 entries, 0 deferred
-- `unth-theatre.link` live in both buildings; DNS-01 certificate with working
-  renewal simulation
-- Tailscale remote access to the server
-- Booking-time column + LATE BOOKING flag (elective, after 15:00 the day before)
-- Holding area: today's called-up patients only, with search
-- PACU: today's list, search, completion tick, admitted patients removed
-- Estimate engine, pricing, pack loader, service, routes, institutional PDF layer
-- Emergency board: assign theatre = acknowledge + radio announcement
-- Elective booking: theatre choice removed; per-unit assignment API
-- Captive portal deployment automated
-- Naira sign corrupting every money figure in existing PDFs — fixed
+**Sync** — bi-directional sync fixed and verified (75 entries, 0 deferred). Three
+faults, each hiding the next: an error handler that destroyed its own diagnostics,
+JSON values bound as native types, and a missing parent table with head-of-line
+blocking.
+
+**Single address** — `unth-theatre.link` live in both buildings, DNS-01
+certificate with a working renewal simulation. Tailscale remote access.
+
+**Safety** — radio audio no longer fails silently; emergency alerts can be shrunk
+but never dismissed, and reopen on each new alert; milestones announce at the
+moment they are recorded.
+
+**Booking** — booking-time column and LATE BOOKING flag; list grouped by unit with
+per-unit theatre assignment; theatre choice removed from both booking forms;
+emergency team from the roster; consent mandatory with a recorded override for
+emergencies, shown in the holding area.
+
+**Team** — scrub, circulating, consultant anaesthetist, anaesthetist and
+technicians, several per role, each assigned by their own service and attributed;
+visible on the readiness board.
+
+**Estimates** — engine, pricing, pack loader, institutional PDF layer, WhatsApp
+share, auto-draft at booking, and the screen they are given out from. 69 tests.
+
+**Packs** — merge by the maximum not the sum, mapping confirmed once by a person,
+review screen, multi-procedure booking, automatic requests. 27 tests.
+
+**Holding area / PACU** — today's called-up patients only, search, completion
+tick, admitted patients removed.
+
+**Meals** — `if (roster) return eligible` removed; activity decides, with a
+tri-state for roles that have no pathway yet.
+
+**Also** — the naira sign was corrupting every money figure in existing PDFs, and
+`prisma migrate diff` twice proposed destroying the sync layer and was caught both
+times.
