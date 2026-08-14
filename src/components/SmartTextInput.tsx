@@ -225,6 +225,21 @@ export function SmartTextInput({
     const build = (async () => {
       const createWorkerFn = await createWorkerLazy();
       const worker = await createWorkerFn('eng', 1, {
+        // Served by THIS app, not a public CDN. tesseract.js otherwise fetches
+        // its core and language data from tessdata.projectnaptha.com on first
+        // use — slow on a hospital connection, blocked behind the captive
+        // portal, and impossible offline. These files are placed in
+        // public/tesseract at build time by
+        // scripts/maintenance/fetch-tesseract-assets.js.
+        //
+        // Relative paths, so this works identically on unth-theatre.link whether
+        // that resolves to Vercel or to the theatre server.
+        workerPath: '/tesseract/worker.min.js',
+        corePath: '/tesseract',
+        langPath: '/tesseract',
+        // The files are already gzipped; without this the loader appends its own
+        // .gz and asks for eng.traineddata.gz.gz.
+        gzip: true,
         logger: (m) => {
           // The DOWNLOAD is the slow part, so it is shown. Previously only
           // "recognizing text" was reported, which is why the bar appeared stuck
