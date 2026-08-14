@@ -44,8 +44,31 @@ async function buildWorker() {
   const { createWorker } = await import('tesseract.js');
   // The language data sits in public/tesseract, put there at build time. Read
   // from disk rather than fetched, so this works with no internet.
+  //
+  // This is the "fast" model, and it stays that way. The accurate float model
+  // was tried and measured: on both a clean render and a deliberately degraded
+  // one it scored identically (98.1% of characters correct), and on the server
+  // it aborted outright —
+  //   Aborted(missing function: _ZN9tesseract13DotProductSSEEPKfS1_i)
+  // because the float model needs SIMD dot-product entry points that the LSTM
+  // WASM core we ship does not export. It would have cost 12.8 MB per deploy to
+  // turn imperfect recognition into none.
   const langPath = path.join(process.cwd(), 'public', 'tesseract');
-  return createWorker('eng', 1, { langPath, gzip: true });
+
+  const worker = await createWorker('eng', 1, { langPath, gzip: true });
+
+  await worker.setParameters({
+    // A photograph carries no DPI, so tesseract guesses from pixel dimensions.
+    // Its guess is what produced "Image too small to scale!! (1x36)" — telling
+    // it 300 removes the guess and with it a whole class of segmentation
+    // failure on pages photographed close up.
+    user_defined_dpi: '300',
+    // Clinical notes are full of numbers that matter (doses, folder numbers).
+    // Without this, runs of digits get glued to neighbouring words.
+    preserve_interword_spaces: '1',
+  });
+
+  return worker;
 }
 
 function getWorker(): Promise<OcrWorker> {

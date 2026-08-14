@@ -274,7 +274,13 @@ export function SmartTextInput({
           }
         },
       });
-      await worker.setParameters({ preserve_interword_spaces: '1' });
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+        // A photograph carries no DPI, so tesseract guesses from pixel
+        // dimensions — and its guess is what produced the one-pixel-wide
+        // "lines" it then refused to recognise. Stating 300 removes the guess.
+        user_defined_dpi: '300',
+      });
       return worker;
     })();
 
