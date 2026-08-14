@@ -104,6 +104,8 @@ export function SmartTextInput({
   // What the recogniser is actually doing. "Processing image... 5%" with no stage
   // is indistinguishable from a hang, which is how this was reported.
   const [ocrStage, setOcrStage] = useState<string>('');
+  // When the recogniser last reported movement, for the stall watchdog.
+  const lastOcrProgressRef = useRef<number>(Date.now());
   const [showSettings, setShowSettings] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(language);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -217,7 +219,18 @@ export function SmartTextInput({
    *   - the real progress reported, including the download phase, so "5%" means
    *     something rather than being a fixed guess
    */
-  const OCR_INIT_TIMEOUT_MS = 45_000;
+  /**
+   * How long with NO PROGRESS before giving up.
+   *
+   * Not a total time limit. The first use downloads the recogniser — several
+   * megabytes — and on a theatre connection that legitimately takes minutes. A
+   * total deadline killed work that was moving perfectly well and then blamed the
+   * network, which is precisely what was reported: "Reading the image… 11%"
+   * beside "could not be downloaded".
+   *
+   * A stall timer instead: as long as the percentage keeps changing, it waits.
+   */
+  const OCR_STALL_TIMEOUT_MS = 60_000;
 
   const getOcrWorker = useCallback(async (): Promise<TesseractWorker> => {
     if (ocrWorkerRef.current) return ocrWorkerRef.current;
@@ -245,10 +258,15 @@ export function SmartTextInput({
           // "recognizing text" was reported, which is why the bar appeared stuck
           // before recognition had even begun.
           if (m.status && typeof m.progress === 'number') {
+            // Any movement at all resets the stall timer.
+            lastOcrProgressRef.current = Date.now();
             const pct = Math.round(m.progress * 100);
             if (m.status.includes('loading') || m.status.includes('download')) {
               setOcrProgress(Math.min(40, pct));
-              setOcrStage('Loading recogniser…');
+              // Says it happens ONCE. Several megabytes on a theatre connection
+              // is a long wait, and a bar creeping up with no explanation reads
+              // as a fault rather than a one-time setup.
+              setOcrStage('Setting up text reading (one time only)…');
             } else if (m.status === 'recognizing text') {
               setOcrProgress(40 + Math.round(pct * 0.6));
               setOcrStage('Reading the image…');
@@ -260,16 +278,24 @@ export function SmartTextInput({
       return worker;
     })();
 
+    // Watchdog: gives up only when nothing has moved for a minute. Every progress
+    // report pushes the deadline out, so a slow download finishes rather than
+    // being killed at an arbitrary moment.
     const worker = await Promise.race([
       build,
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(
-            'The text recogniser could not be downloaded. This needs internet the first time it is used — try again on a better connection, or type the notes instead.'
-          )),
-          OCR_INIT_TIMEOUT_MS
-        )
-      ),
+      new Promise<never>((_, reject) => {
+        const tick = setInterval(() => {
+          if (Date.now() - lastOcrProgressRef.current > OCR_STALL_TIMEOUT_MS) {
+            clearInterval(tick);
+            reject(new Error(
+              'The recogniser stopped downloading. It needs internet the first time it is used — try again on a better connection, or type the notes instead.'
+            ));
+          }
+        }, 5_000);
+        // Stops the interval once the build settles either way, so a finished
+        // download does not leave a timer running for the life of the page.
+        void build.finally(() => clearInterval(tick)).catch(() => {});
+      }),
     ]);
 
     ocrWorkerRef.current = worker;
@@ -338,6 +364,8 @@ export function SmartTextInput({
     setIsProcessingOCR(true);
     setOcrProgress(0);
     setOcrStage('Preparing…');
+    // Reset, or the time since the LAST photograph would count as a stall.
+    lastOcrProgressRef.current = Date.now();
     setMode('ocr');
 
     try {
