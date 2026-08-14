@@ -167,6 +167,16 @@ export class FilesystemDocumentStore implements DocumentStore {
       await fs.rename(tmp, full);
     } catch (err) {
       await fs.unlink(tmp).catch(() => {});
+
+      // Two writes of the same document racing each other. The offline queue
+      // retries, and a phone that reconnects mid-upload can genuinely send the
+      // same scan twice at once; on Windows the losing rename fails with EPERM
+      // rather than silently overwriting. Because the name is the content hash,
+      // whatever is now at the destination is byte-identical to what we were
+      // about to write, so the other writer has already done the job.
+      if (await this.exists(key)) {
+        return { sha256: hash, key, size: bytes.length, contentType, deduplicated: true };
+      }
       throw err;
     }
 
