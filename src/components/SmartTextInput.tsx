@@ -363,14 +363,69 @@ export function SmartTextInput({
     // the user can act on if the download stalls.
     setIsProcessingOCR(true);
     setOcrProgress(0);
-    setOcrStage('Preparing…');
-    // Reset, or the time since the LAST photograph would count as a stall.
+    setOcrStage('Reading…');
     lastOcrProgressRef.current = Date.now();
     setMode('ocr');
 
+    // ── Server first ────────────────────────────────────────────────────────
+    // The phone uploads a couple of hundred kilobytes; the server holds the
+    // recogniser in memory and does the work. That removes the 22 MB per-device
+    // download that made this fail three times, and it works on a handset that
+    // could never have run the recogniser itself.
+    //
+    // The browser path below remains as a fallback for a phone that is offline
+    // with the recogniser already cached — the one case where the server cannot
+    // help and the device can.
     try {
-      // Built here rather than at the first recognize() call, so a failure to
-      // download is reported before any image work begins.
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Could not read the photograph.'));
+        reader.readAsDataURL(file);
+      });
+
+      setOcrProgress(35);
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl }),
+      });
+
+      if (res.ok) {
+        const body = await res.json();
+        setOcrProgress(100);
+        if (body.text) {
+          const current = valueRef.current;
+          onChangeRef.current(current + (current ? '\n' : '') + body.text);
+          if (typeof body.confidence === 'number') setConfidence(body.confidence / 100);
+        } else {
+          setErrorMessage(body.message ?? 'No text could be made out.');
+        }
+        setIsProcessingOCR(false);
+        setOcrStage('');
+        return;
+      }
+
+      // A 4xx is a real answer about this image — too large, not an image — so
+      // it is shown rather than silently retried in the browser, which would
+      // fail the same way after a long wait.
+      if (res.status >= 400 && res.status < 500) {
+        const body = await res.json().catch(() => ({}));
+        setErrorMessage(body.error ?? 'The server could not read that image.');
+        setIsProcessingOCR(false);
+        setOcrStage('');
+        return;
+      }
+      console.warn('[OCR] server unavailable, falling back to the browser');
+    } catch (serverErr) {
+      // Offline, or the server is unreachable. Fall through to the browser.
+      console.warn('[OCR] could not reach the server, falling back', serverErr);
+    }
+
+    setOcrStage('Reading on this device…');
+    lastOcrProgressRef.current = Date.now();
+
+    try {
       await getOcrWorker();
       // Create image element
       const img = document.createElement('img');
