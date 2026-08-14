@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import { apiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
 
@@ -246,7 +247,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('GET /api/notifications/timeline error:', error);
-    return NextResponse.json({ error: 'Failed to fetch timeline' }, { status: 500 });
+    return apiError('notifications.timeline', error);
   }
 }

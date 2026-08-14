@@ -16,6 +16,7 @@ import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
 import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
 import { buildPackRequests } from '@/lib/packRequests';
+import { apiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
 
@@ -300,11 +301,7 @@ export async function GET(request: NextRequest) {
     return jsonWithETag(request, enriched);
 
   } catch (error) {
-    console.error("Surgeries fetch error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return apiError("surgeries.GET", error);
   }
 }
 

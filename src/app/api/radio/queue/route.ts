@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { withApiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 // 1. Promotes scheduled broadcasts whose time has arrived (or whose interval
 //    has elapsed) into RadioAnnouncement rows.
 // 2. Returns PENDING / PLAYING announcements ordered by priority desc.
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -398,3 +399,5 @@ export async function GET(_req: NextRequest) {
 
   return NextResponse.json({ queue, serverTime: now.toISOString() });
 }
+
+export const GET = withApiError('radio.queue', handleGET);
