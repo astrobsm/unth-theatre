@@ -16,11 +16,27 @@ and only the first one decides what gets deployed.
 |---|---|
 | Harness | Built — `scripts/ocr-benchmark.js` in the repository root |
 | Metrics | Built — CER, WER, and accuracy on numbers, doses and drug names |
-| External datasets | Audited; **none downloaded yet** |
-| **UNTH corpus** | **Empty. Awaiting the hospital.** |
+| External datasets | African Medical Records downloaded, 140/140 files |
+| **Working corpus** | **African Medical Records** — 62 documents, 15 writers |
+| **UNTH corpus** | Empty. Still the definitive benchmark when it exists |
 
-**No engine has been ranked and none can be** until the UNTH corpus exists.
-Anything the harness prints today is a test of the harness.
+## Working corpus
+
+Engine selection proceeds against **African Medical Records** rather than
+waiting for UNTH pages. It is Nigerian handwritten clinical documentation with
+exact ground truth, which makes it the closest available stand-in, and waiting
+would stall the whole module.
+
+Split writer-disjoint into `unth/splits/tune.txt` (42 documents, 10 writers) and
+`unth/splits/test-locked.txt` (20 documents, 5 writers). **Tune against the
+first, measure once against the second.** Splitting by document instead would
+let tuning fit one person's hand and then be tested on that same hand, which
+reports memorisation as accuracy.
+
+Results are labelled as African Medical Records results. Not caution for its own
+sake: the first engine measured scores 4.7% on numbers here, and when UNTH pages
+arrive the difference between the two numbers is itself information about how
+far a proxy carries.
 
 ---
 
