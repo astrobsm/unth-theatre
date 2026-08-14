@@ -313,16 +313,22 @@ export function SmartTextInput({
 
   // Advanced Multi-Pass OCR for 99% confidence on poor handwriting
   const processImageForOCR = async (file: File | Blob) => {
-    if (!ocrWorkerRef.current) {
-      setErrorMessage('OCR not initialized. Please try again.');
-      return;
-    }
-
+    // No "is it initialised" guard. The worker is now built ON DEMAND, so this
+    // check was refusing the very first use — the one time it is guaranteed not
+    // to exist yet. That was my own regression from making it lazy, and it is
+    // exactly the kind of guard that outlives the assumption behind it.
+    //
+    // getOcrWorker() builds it, reuses it afterwards, and fails with a sentence
+    // the user can act on if the download stalls.
     setIsProcessingOCR(true);
     setOcrProgress(0);
+    setOcrStage('Preparing…');
     setMode('ocr');
 
     try {
+      // Built here rather than at the first recognize() call, so a failure to
+      // download is reported before any image work begins.
+      await getOcrWorker();
       // Create image element
       const img = document.createElement('img');
       const imageUrl = URL.createObjectURL(file);
@@ -516,8 +522,18 @@ export function SmartTextInput({
       URL.revokeObjectURL(imageUrl);
     } catch (error) {
       console.error('OCR error:', error);
-      setErrorMessage('Failed to process image. Try a clearer image.');
+      // The recogniser's own message when there is one — "could not be
+      // downloaded, this needs internet the first time" is actionable, whereas
+      // "try a clearer image" sends somebody to photograph the page again for a
+      // fault that has nothing to do with the photograph.
+      const detail = error instanceof Error ? error.message : '';
+      setErrorMessage(
+        detail && detail.length > 20
+          ? detail
+          : 'Could not read that image. Try a clearer photograph, or type the notes instead.'
+      );
     } finally {
+      setOcrStage('');
       setIsProcessingOCR(false);
       setOcrProgress(0);
       setMode('text');
