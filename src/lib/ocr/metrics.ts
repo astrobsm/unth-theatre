@@ -237,7 +237,7 @@ function criticalMatches(kind: CriticalKind, truthToken: string, got: string | n
   if (kind === 'NUMBER') {
     // Every complete number in the output token, so "k+4.1" yields ["4.1"] and
     // "15" yields ["15"] — the first matches "4.1", the second never matches "5".
-    const numbers = have.match(/\d+(?:[.,]\d+)?/g) ?? [];
+    const numbers: string[] = have.match(/\d+(?:[.,]\d+)?/g) ?? [];
     return numbers.includes(want.replace(/^[<>~]/, ''));
   }
 
