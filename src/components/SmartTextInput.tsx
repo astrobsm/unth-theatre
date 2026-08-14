@@ -437,187 +437,80 @@ export function SmartTextInput({
         img.src = imageUrl;
       });
 
-      // Create base canvas
+      // ── One clean pass ──────────────────────────────────────────────────
+      // The multi-pass pipeline below was chasing "99% confidence" by trying a
+      // dozen combinations of thresholds and scale factors. In practice it turned
+      // a photograph into noise: the console showed Tesseract segmenting
+      // 1-pixel-wide slivers as text lines — "Image too small to scale!!
+      // (1x36 vs min width of 3)" — and then failing to read any of them.
+      //
+      // A photograph of a page needs very little help. Greyscale, a modest
+      // upscale when the image is small, and nothing else. Aggressive
+      // thresholding destroys the strokes it is supposed to sharpen, and on
+      // handwriting it is worse than doing nothing.
+      //
+      // naturalWidth/naturalHeight, not width/height: the latter are the
+      // RENDERED size and can be 0 or 1 for an image that was never laid out,
+      // which is one way a degenerate canvas gets built.
+      const srcW = img.naturalWidth || img.width;
+      const srcH = img.naturalHeight || img.height;
+
+      if (!srcW || !srcH || srcW < 8 || srcH < 8) {
+        throw new Error('That photograph is too small to read.');
+      }
+
+      // Tesseract wants roughly 300 dpi. A phone photo of a page is usually
+      // plenty; a small crop is not, so it is scaled up rather than left tiny.
+      // Capped, because a very large canvas is slow and adds nothing.
+      const targetMin = 1000;
+      const upscale = Math.min(3, Math.max(1, targetMin / Math.min(srcW, srcH)));
+      const outW = Math.round(srcW * upscale);
+      const outH = Math.round(srcH * upscale);
+
       const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      
+      canvas.width = outW;
+      canvas.height = outH;
+      // willReadFrequently: this canvas is read back pixel by pixel below, and
+      // without the hint the browser keeps it on the GPU and every read stalls.
+      // The console was full of exactly that warning.
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
       if (!ctx) {
         throw new Error('Cannot create canvas context');
       }
 
-      ctx.drawImage(img, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, outW, outH);
 
-      // Apply basic TensorFlow enhancement first
-      if (tfInitialized) {
-        applyImageEnhancements(canvas, {
-          contrast: 1.3,
-          brightness: 1.1,
-          sharpen: true,
-          denoise: true,
-        });
+      // Greyscale only. Luminance weights, so coloured ink and highlighter do
+      // not vanish the way a plain average makes them.
+      const px = ctx.getImageData(0, 0, outW, outH);
+      const d = px.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        d[i] = d[i + 1] = d[i + 2] = g;
       }
+      ctx.putImageData(px, 0, 0);
 
-      // Multi-pass OCR with different preprocessing strategies
-      const allResults: AdvancedOCRResult[] = [];
-      const strategies = OCR_CONFIG.PREPROCESSING_STRATEGIES;
-      const totalPasses = strategies.length * OCR_CONFIG.SCALE_FACTORS.length;
-      let currentPass = 0;
-
-      console.log(`Starting advanced multi-pass OCR with ${totalPasses} processing combinations...`);
-
-      // Process with each preprocessing strategy
-      for (const strategy of strategies) {
-        // Process with different scale factors
-        for (const scale of OCR_CONFIG.SCALE_FACTORS) {
-          try {
-            // Create a copy of the canvas for this pass
-            const passCanvas = document.createElement('canvas');
-            passCanvas.width = canvas.width;
-            passCanvas.height = canvas.height;
-            const passCtx = passCanvas.getContext('2d');
-            
-            if (passCtx) {
-              passCtx.drawImage(canvas, 0, 0);
-              
-              // Apply strategy-specific preprocessing
-              switch (strategy) {
-                case 'otsu_threshold':
-                  AdvancedImagePreprocessor.applyAdaptiveThreshold(passCanvas);
-                  break;
-                case 'morphology_clean':
-                  AdvancedImagePreprocessor.applyMorphology(passCanvas, 'dilate');
-                  AdvancedImagePreprocessor.applyAdaptiveThreshold(passCanvas);
-                  break;
-                case 'deskew_enhance':
-                  AdvancedImagePreprocessor.deskewImage(passCanvas, 0);
-                  AdvancedImagePreprocessor.applyCLAHE(passCanvas);
-                  break;
-                case 'bilateral_sharpen':
-                  AdvancedImagePreprocessor.applyBilateralFilter(passCanvas, 9, 75, 75);
-                  AdvancedImagePreprocessor.applyAdaptiveThreshold(passCanvas);
-                  break;
-                case 'clahe_morphology':
-                  AdvancedImagePreprocessor.applyCLAHE(passCanvas);
-                  AdvancedImagePreprocessor.applyMorphology(passCanvas, 'open');
-                  break;
-                case 'multi_scale_process':
-                  // Scale up the image
-                  const scaledCanvas = AdvancedImagePreprocessor.scaleImage(passCanvas, scale);
-                  AdvancedImagePreprocessor.applyAdaptiveThreshold(scaledCanvas);
-                  passCanvas.width = scaledCanvas.width;
-                  passCanvas.height = scaledCanvas.height;
-                  passCtx.drawImage(scaledCanvas, 0, 0);
-                  break;
-              }
-
-              // Apply scaling if not already done
-              if (strategy !== 'multi_scale_process' && scale !== 1.0) {
-                const scaledVersion = AdvancedImagePreprocessor.scaleImage(passCanvas, scale);
-                passCanvas.width = scaledVersion.width;
-                passCanvas.height = scaledVersion.height;
-                passCtx.drawImage(scaledVersion, 0, 0);
-              }
-
-              // Invert if needed (for light text on dark background)
-              AdvancedImagePreprocessor.invertIfNeeded(passCanvas);
-
-              // Run OCR on this preprocessed version
-              const { data } = await (await getOcrWorker()).recognize(passCanvas);
-              
-              if (data.text && data.text.trim().length > 0) {
-                // Apply medical corrections to improve accuracy
-                const correctedText = applyMedicalCorrections(data.text);
-                
-                allResults.push({
-                  text: correctedText,
-                  confidence: data.confidence / 100,
-                  strategy: strategy,
-                  scale: scale
-                });
-
-                console.log(`Pass ${currentPass + 1}/${totalPasses}: Strategy="${strategy}", Scale=${scale}, Confidence=${(data.confidence).toFixed(1)}%`);
-              }
-            }
-          } catch (passError) {
-            console.warn(`OCR pass failed for ${strategy} at scale ${scale}:`, passError);
-          }
-
-          currentPass++;
-          setOcrProgress(Math.round((currentPass / totalPasses) * 80)); // 80% for OCR passes
-        }
-      }
-
-      // Try rotation angles for deskewing if results are poor
-      const bestSoFar = allResults.reduce((best, curr) => curr.confidence > best.confidence ? curr : best, { confidence: 0 } as AdvancedOCRResult);
-      
-      if (bestSoFar.confidence < 0.85) {
-        console.log('Low confidence detected, trying rotation corrections...');
-        for (const angle of OCR_CONFIG.ROTATION_ANGLES.filter(a => a !== 0)) {
-          try {
-            const rotatedCanvas = document.createElement('canvas');
-            rotatedCanvas.width = canvas.width;
-            rotatedCanvas.height = canvas.height;
-            const rotCtx = rotatedCanvas.getContext('2d');
-            
-            if (rotCtx) {
-              rotCtx.drawImage(canvas, 0, 0);
-              AdvancedImagePreprocessor.deskewImage(rotatedCanvas, angle);
-              AdvancedImagePreprocessor.applyAdaptiveThreshold(rotatedCanvas);
-
-              const { data } = await (await getOcrWorker()).recognize(rotatedCanvas);
-              
-              if (data.text && data.text.trim().length > 0) {
-                const correctedText = applyMedicalCorrections(data.text);
-                allResults.push({
-                  text: correctedText,
-                  confidence: data.confidence / 100,
-                  strategy: `rotation_${angle}deg`,
-                  scale: 1.0
-                });
-              }
-            }
-          } catch (rotError) {
-            console.warn(`Rotation ${angle}° failed:`, rotError);
-          }
-        }
-      }
-
-      setOcrProgress(90); // 90% - about to fuse results
-
-      // Fuse all OCR results for best accuracy
-      let finalResult: AdvancedOCRResult;
-      
-      if (allResults.length > 0) {
-        finalResult = fuseOCRResults(allResults);
-        console.log(`OCR complete: ${allResults.length} passes, Final confidence: ${(finalResult.confidence * 100).toFixed(1)}%`);
-      } else {
-        throw new Error('No text could be extracted from any OCR pass');
-      }
+      // Straight to the recogniser. No thresholding, no rotation sweep, no
+      // scale ladder — the pipeline that produced the 1-pixel lines.
+      const worker = await getOcrWorker();
+      const { data } = await worker.recognize(canvas);
+      const singlePassText = (data.text ?? '').trim();
 
       setOcrProgress(100);
-
-      // Clean up extracted text
-      const cleanedText = finalResult.text
-        .replace(/\n{3,}/g, '\n\n')
-        .replace(/\s{2,}/g, ' ')
-        .replace(/[^\x20-\x7E\n]/g, '') // Remove non-printable characters
-        .trim();
-
-      if (cleanedText) {
-        const newValue = value + (value ? '\n\n' : '') + cleanedText;
-        onChange(newValue);
-        setConfidence(finalResult.confidence);
-        setHistory(prev => [...prev, value]);
-        
-        // Log success message
-        console.log(`✅ Advanced OCR successful: ${cleanedText.length} chars, ${(finalResult.confidence * 100).toFixed(1)}% confidence`);
+      if (singlePassText) {
+        const current = valueRef.current;
+        onChangeRef.current(current + (current ? '\n' : '') + singlePassText);
+        setConfidence((data.confidence ?? 0) / 100);
       } else {
-        setErrorMessage('No text detected in image');
+        setErrorMessage('No text could be made out. Try a straighter, better-lit photograph.');
       }
+      setIsProcessingOCR(false);
+      setOcrStage('');
+      return;
 
-      URL.revokeObjectURL(imageUrl);
     } catch (error) {
       console.error('OCR error:', error);
       // The recogniser's own message when there is one — "could not be
