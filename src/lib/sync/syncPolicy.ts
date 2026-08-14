@@ -94,6 +94,28 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'escalation_policies', cls: 'CLOUD_AUTHORITATIVE', why: 'Who gets escalated to is an institutional decision.' },
   { table: 'feedback_requests', cls: 'APPEND_ONLY', why: 'A request issued and a response submitted are both events; neither is editable.' },
 
+  // ── Clinical OCR ─────────────────────────────────────────────────────────
+  // These rows carry only metadata and text. The scanned FILE is not in the
+  // database and does not travel through this journal: it goes to the document
+  // store, and the two nodes reconcile it by content hash. Sending multi-
+  // megabyte scans through the row journal would be the end of sync working at
+  // all, which is why documents were kept out of Postgres in the first place.
+  { table: 'ocr_documents', cls: 'LWW', why: 'Metadata about one scan. Status and review flags advance; the original key and hash never change once written.' },
+  { table: 'ocr_provider_runs', cls: 'APPEND_ONLY', why: 'A run happened. Two nodes running different engines on the same document produced two real results, and provider comparison depends on keeping both.' },
+  { table: 'ocr_pages', cls: 'APPEND_ONLY', why: 'Uniquely keyed by document and page number; a page recognised on either node is the same page.' },
+  { table: 'ocr_tokens', cls: 'APPEND_ONLY', why: 'The word-level record of what an engine read. Corrections are recorded as versions and verifications, never by rewriting what the engine actually output.' },
+  { table: 'ocr_versions', cls: 'APPEND_ONLY', why: 'Never destroy a previous version. Two nodes correcting the same document produce two versions, both of which a clinician must see.' },
+
+  // QUARANTINE, not LWW. This row is the record that a named clinician
+  // confirmed a drug dose or a patient identifier against the original
+  // document. If two nodes hold different verifications of the same scan, one
+  // of them attributes a clinical confirmation to somebody who did not make it.
+  // That must be resolved by a person, never by a timestamp.
+  { table: 'ocr_verifications', cls: 'QUARANTINE', why: 'Attributed clinical confirmation of high-risk values. A silent overwrite would credit or blame the wrong clinician.' },
+
+  { table: 'ocr_quality_assessments', cls: 'APPEND_ONLY', why: 'A measurement taken at capture time on one device. Two are two observations, not a conflict.' },
+  { table: 'ocr_signature_regions', cls: 'APPEND_ONLY', why: 'Where a signature sits on a page does not change once detected.' },
+
   // ── Conflict Resolver ────────────────────────────────────────────────────
   // A response submitted on either node was still submitted, and must never be
   // overwritten by the other — losing one silently changes a consensus figure

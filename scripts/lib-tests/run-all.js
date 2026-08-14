@@ -67,22 +67,80 @@ function makeExpect() {
       toThrow: (expected) => {
         let threw = false;
         let message = '';
-        try { actual(); } catch (err) { threw = true; message = err?.message ?? String(err); }
+        let error;
+        try { actual(); } catch (err) { threw = true; error = err; message = err?.message ?? String(err); }
         if (negated) {
           if (threw) fail(`expected not to throw, but threw: ${message}`);
           return;
         }
         if (!threw) fail('expected function to throw, but it did not');
-        if (expected instanceof RegExp && !expected.test(message)) {
-          fail(`expected throw matching ${expected}, got "${message}"`);
-        } else if (typeof expected === 'string' && !message.includes(expected)) {
-          fail(`expected throw containing "${expected}", got "${message}"`);
-        }
+        assertThrownMatches(error, message, expected, fail);
       },
     };
   };
 
-  const expect = (actual) => ({ ...matchers(actual, false), not: matchers(actual, true) });
+  /**
+   * Shared by toThrow and by the rejects matcher below.
+   *
+   * Handles an error CLASS as well as a RegExp or substring. It used to ignore
+   * a class silently, which meant `toThrow(DocumentTooLargeError)` passed when
+   * the code threw something else entirely — an assertion that looked specific
+   * and checked nothing.
+   */
+  function assertThrownMatches(error, message, expected, fail) {
+    if (expected === undefined) return;
+    if (typeof expected === 'function' && expected.prototype instanceof Error) {
+      if (!(error instanceof expected)) {
+        fail(`expected throw of ${expected.name}, got ${error?.constructor?.name}: "${message}"`);
+      }
+      return;
+    }
+    if (expected instanceof RegExp) {
+      if (!expected.test(message)) fail(`expected throw matching ${expected}, got "${message}"`);
+      return;
+    }
+    if (typeof expected === 'string' && !message.includes(expected)) {
+      fail(`expected throw containing "${expected}", got "${message}"`);
+    }
+  }
+
+  /**
+   * expect(promise).rejects.toThrow(...) and .resolves.toBe(...), as vitest has.
+   *
+   * Without these, an async assertion produced an unhandled rejection that took
+   * down the whole run rather than failing one test — and any test written that
+   * way proved nothing.
+   */
+  const asyncMatchers = (promise, negated) => ({
+    rejects: {
+      toThrow: async (expected) => {
+        let threw = false, message = '', error;
+        try { await promise; }
+        catch (err) { threw = true; error = err; message = err?.message ?? String(err); }
+        if (negated) {
+          if (threw) fail(`expected not to reject, but rejected: ${message}`);
+          return;
+        }
+        if (!threw) fail('expected promise to reject, but it resolved');
+        assertThrownMatches(error, message, expected, fail);
+      },
+    },
+    resolves: new Proxy({}, {
+      get: (_t, name) => async (...args) => {
+        const value = await promise;
+        return matchers(value, negated)[name](...args);
+      },
+    }),
+  });
+
+  const expect = (actual) => ({
+    ...matchers(actual, false),
+    ...(actual && typeof actual.then === 'function' ? asyncMatchers(actual, false) : {}),
+    not: {
+      ...matchers(actual, true),
+      ...(actual && typeof actual.then === 'function' ? asyncMatchers(actual, true) : {}),
+    },
+  });
   return expect;
 }
 

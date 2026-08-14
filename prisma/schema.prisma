@@ -362,24 +362,24 @@ enum ExtraRequestStatus {
 }
 
 model User {
-  id                 String     @id @default(uuid())
-  staffId            String?    @unique
-  username           String     @unique
-  email              String?    @unique
-  password           String
-  fullName           String
-  role               UserRole
-  status             UserStatus @default(PENDING)
-  phoneNumber        String?
-  extension          String?    // Internal theatre extension / bleep for roster contact display
-  department         String?
-  staffCode          String?    @unique // Code for cleaners, porters, and other staff to log duties
+  id                    String               @id @default(uuid())
+  staffId               String?              @unique
+  username              String               @unique
+  email                 String?              @unique
+  password              String
+  fullName              String
+  role                  UserRole
+  status                UserStatus           @default(PENDING)
+  phoneNumber           String?
+  extension             String? // Internal theatre extension / bleep for roster contact display
+  department            String?
+  staffCode             String?              @unique // Code for cleaners, porters, and other staff to log duties
   // Live staff availability (P3 workforce board). A single current snapshot per
   // user; self-set or admin-overridden. AVAILABLE | BUSY | IN_THEATRE |
   // TRANSPORTING_PATIENT | PREPARING_THEATRE | CLEANING_THEATRE |
   // ON_EMERGENCY_CASE | BREAK | OFF_DUTY | ON_LEAVE | UNAVAILABLE
   availabilityStatus    String?
-  availabilityNote      String?  // current assignment / free note
+  availabilityNote      String? // current assignment / free note
   currentLocation       String?
   availabilityUpdatedAt DateTime?
   // Where that location actually is, when the device gave a fix. Written only
@@ -394,18 +394,18 @@ model User {
   /// judged against.
   locationCapturedAt    DateTime?
   locationSource        StaffLocationSource?
-  resetToken         String? // Password reset token
-  resetTokenExpiry   DateTime? // Reset token expiration
-  isFirstLogin       Boolean    @default(true) // Track if user has logged in before
-  mustChangePassword Boolean    @default(false) // Force password change on next login
+  resetToken            String? // Password reset token
+  resetTokenExpiry      DateTime? // Reset token expiration
+  isFirstLogin          Boolean              @default(true) // Track if user has logged in before
+  mustChangePassword    Boolean              @default(false) // Force password change on next login
   // House Officer rotation tracking (null for non-HOs)
-  rotationSpecialty  String? // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
-  rotationStartDate  DateTime?
-  rotationEndDate    DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-  approvedBy         String?
-  approvedAt         DateTime?
+  rotationSpecialty     String? // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
+  rotationStartDate     DateTime?
+  rotationEndDate       DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  approvedBy            String?
+  approvedAt            DateTime?
 
   // Relations
   surgeries           Surgery[]             @relation("SurgeonSurgeries")
@@ -571,11 +571,11 @@ model User {
   labResultsVerified       EmergencyLabTest[]    @relation("LabResultVerifier")
 
   // Plumbing & Water Supply Relations
-  plumbingFaultsReported     PlumbingFault[]       @relation("PlumbingFaultReporter")
-  plumbingFaultsAssigned     PlumbingFault[]       @relation("PlumbingFaultAssignee")
-  plumbingFaultsAcknowledged PlumbingFault[]       @relation("PlumbingFaultAcknowledger")
-  plumbingFaultsResolved     PlumbingFault[]       @relation("PlumbingFaultResolver")
-  plumbingWaterStatuses      PlumbingWaterStatus[] @relation("PlumbingStatusLogger")
+  plumbingFaultsReported     PlumbingFault[]        @relation("PlumbingFaultReporter")
+  plumbingFaultsAssigned     PlumbingFault[]        @relation("PlumbingFaultAssignee")
+  plumbingFaultsAcknowledged PlumbingFault[]        @relation("PlumbingFaultAcknowledger")
+  plumbingFaultsResolved     PlumbingFault[]        @relation("PlumbingFaultResolver")
+  plumbingWaterStatuses      PlumbingWaterStatus[]  @relation("PlumbingStatusLogger")
   waterSupplyReadinessLogs   WaterSupplyReadiness[] @relation("WaterReadinessLogger")
 
   // Nurse Handover Relations
@@ -588,11 +588,11 @@ model User {
   grantsIssued UserModuleGrant[] @relation("GrantedByUser")
 
   // Pre-pack & post-op pharmacy back-relations
-  consumablePacks    SurgeryConsumableRequest[]   @relation("ConsumablePackedBy")
-  consumableRequested SurgeryConsumableRequest[]  @relation("ConsumableRequestedBy")
-  drugDressingPacks  SurgeryDrugDressingRequest[] @relation("DrugDressingPackedBy")
-  postOpRxPrescribed PostOpPrescription[]         @relation("PostOpPrescribedBy")
-  postOpRxPacked     PostOpPrescription[]         @relation("PostOpPackedBy")
+  consumablePacks     SurgeryConsumableRequest[]   @relation("ConsumablePackedBy")
+  consumableRequested SurgeryConsumableRequest[]   @relation("ConsumableRequestedBy")
+  drugDressingPacks   SurgeryDrugDressingRequest[] @relation("DrugDressingPackedBy")
+  postOpRxPrescribed  PostOpPrescription[]         @relation("PostOpPrescribedBy")
+  postOpRxPacked      PostOpPrescription[]         @relation("PostOpPackedBy")
 
   // ---------------------------------------------------------------------
   // Imprest Management and Retirement System
@@ -617,17 +617,23 @@ model User {
   stockMovements    StockMovement[]    @relation("StockMovementActor")
   stockReservations StockReservation[] @relation("StockReservationRequester")
 
-  locationPings     StaffLocationPing[] @relation("StaffLocationPings")
+  locationPings StaffLocationPing[] @relation("StaffLocationPings")
 
-  delaysReported    TheatreDelayRecord[] @relation("DelayReporter")
+  delaysReported TheatreDelayRecord[] @relation("DelayReporter")
 
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion         Int                    @default(0) @map("sync_version")
+  syncOrigin          String?                @map("sync_origin")
+  syncHlc             String?                @map("sync_hlc")
+  ocrCaptured         OcrDocument[]          @relation("OcrCapturedBy")
+  ocrVerified         OcrDocument[]          @relation("OcrVerifiedBy")
+  ocrTokenCorrections OcrToken[]             @relation("OcrCorrectedBy")
+  ocrVersionsAuthored OcrVersion[]           @relation("OcrVersionAuthor")
+  ocrVerifications    OcrVerification[]      @relation("OcrVerificationBy")
+  ocrQualityCaptures  OcrQualityAssessment[] @relation("OcrQualityCapturedBy")
 
   @@map("users")
 }
@@ -641,11 +647,8 @@ model UserModuleGrant {
   grantedById String?
   grantedAt   DateTime @default(now())
 
-  user      User  @relation("UserGrants", fields: [userId], references: [id], onDelete: Cascade)
-  grantedBy User? @relation("GrantedByUser", fields: [grantedById], references: [id], onDelete: SetNull)
-
-  @@unique([userId, moduleId])
-  @@index([userId])
+  user        User    @relation("UserGrants", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy   User?   @relation("GrantedByUser", fields: [grantedById], references: [id], onDelete: SetNull)
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
@@ -654,6 +657,8 @@ model UserModuleGrant {
   syncOrigin  String? @map("sync_origin")
   syncHlc     String? @map("sync_hlc")
 
+  @@unique([userId, moduleId])
+  @@index([userId])
   @@map("user_module_grants")
 }
 
@@ -686,17 +691,16 @@ model OnboardingSubmission {
   userAgent         String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-
-  @@index([status])
-  @@index([createdAt])
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion       Int       @default(0) @map("sync_version")
+  syncOrigin        String?   @map("sync_origin")
+  syncHlc           String?   @map("sync_hlc")
 
+  @@index([status])
+  @@index([createdAt])
   @@map("onboarding_submissions")
 }
 
@@ -726,20 +730,19 @@ model Roster {
   // A PUBLISHED row staged for removal: stays live (visible to on-duty) until the
   // next Publish, which deletes it. Lets published rosters be edited draft-style.
   pendingRemoval Boolean @default(false)
-
-  @@index([date, theatreId, shift])
-  @@index([staffCategory, date])
-  @@index([location, date])
-  @@index([status, date])
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them, and an app-supplied value would break the
   /// version chain conflict detection depends on.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion    Int     @default(0) @map("sync_version")
+  syncOrigin     String? @map("sync_origin")
+  syncHlc        String? @map("sync_hlc")
 
+  @@index([date, theatreId, shift])
+  @@index([staffCategory, date])
+  @@index([location, date])
+  @@index([status, date])
   @@map("rosters")
 }
 
@@ -757,17 +760,16 @@ model IdempotencyKey {
   responseBody   String   @db.Text
   route          String?
   createdAt      DateTime @default(now())
-
-  @@index([createdAt])
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them, and an app-supplied value would break the
   /// version chain conflict detection depends on.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion    Int      @default(0) @map("sync_version")
+  syncOrigin     String?  @map("sync_origin")
+  syncHlc        String?  @map("sync_hlc")
 
+  @@index([createdAt])
   @@map("idempotency_keys")
 }
 
@@ -826,9 +828,9 @@ model InventoryItem {
   checkoutItems     CheckoutItem[]     @relation("CheckoutItems")
 
   // Theatre supply chain: the physical lots of this catalogue item.
-  stockBatches      StockBatch[]
+  stockBatches StockBatch[]
 
-  tariffs           Tariff[]           @relation("TariffItem")
+  tariffs Tariff[] @relation("TariffItem")
 
   @@map("inventory_items")
 }
@@ -887,19 +889,19 @@ model MaintenanceAlert {
 }
 
 model Patient {
-  id           String   @id @default(uuid())
-  folderNumber String   @unique
-  ptNumber     String?  @unique
-  name         String
-  age          Int
-  ageUnit      String   @default("YEARS") // YEARS | MONTHS | WEEKS | DAYS — supports neonate/infant ages
-  gender       String
-  ward         String
-  phoneNumber       String? // Patient's own phone number for communication
-  caregiverName     String? // Optional next-of-kin / caregiver name
-  caregiverPhone    String? // Optional caregiver phone number to reach for information
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(uuid())
+  folderNumber   String   @unique
+  ptNumber       String?  @unique
+  name           String
+  age            Int
+  ageUnit        String   @default("YEARS") // YEARS | MONTHS | WEEKS | DAYS — supports neonate/infant ages
+  gender         String
+  ward           String
+  phoneNumber    String? // Patient's own phone number for communication
+  caregiverName  String? // Optional next-of-kin / caregiver name
+  caregiverPhone String? // Optional caregiver phone number to reach for information
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Preoperative Assessment Fields
   // DVT Risk Assessment
@@ -977,39 +979,40 @@ model Patient {
 
   // Nurse Handover Relations
   nurseHandovers NurseHandover[] @relation("HandoverPatient")
+  ocrDocuments   OcrDocument[]
 
   @@map("patients")
 }
 
 model Surgery {
-  id                 String                 @id @default(uuid())
-  patientId          String
-  surgeonId          String?
-  surgeonName        String? // Direct entry of surgeon name
-  assistantSurgeonId String?
-  anesthetistId      String?
-  scrubNurseId       String?
-  theatreTechnicianId String? // Assigned anaesthetic technician (soft ref to User.id, no FK to keep migration safe)
-  subspecialty       String
-  unit               String // Surgical unit/department
-  location           String? // Operating location/complex (e.g., Professor Ojukwu Theatre Complex, Eye Theatre, A&E, Cardiothoracic Centre)
-  theatreId          String? // Optional FK-style id of the chosen TheatreSuite (string match, no FK to keep migration safe)
-  indication         String // Clinical indication
-  procedureName      String
-  scheduledDate      DateTime
-  scheduledTime      String
+  id                   String                 @id @default(uuid())
+  patientId            String
+  surgeonId            String?
+  surgeonName          String? // Direct entry of surgeon name
+  assistantSurgeonId   String?
+  anesthetistId        String?
+  scrubNurseId         String?
+  theatreTechnicianId  String? // Assigned anaesthetic technician (soft ref to User.id, no FK to keep migration safe)
+  subspecialty         String
+  unit                 String // Surgical unit/department
+  location             String? // Operating location/complex (e.g., Professor Ojukwu Theatre Complex, Eye Theatre, A&E, Cardiothoracic Centre)
+  theatreId            String? // Optional FK-style id of the chosen TheatreSuite (string match, no FK to keep migration safe)
+  indication           String // Clinical indication
+  procedureName        String
+  scheduledDate        DateTime
+  scheduledTime        String
   /// Further procedures in the same operation, newline-separated. A tumour
   /// resection with a skin graft is one case with two procedures; the packs for
   /// each are merged, taking the HIGHER quantity rather than the sum.
   additionalProcedures String?
-  estimatedDuration  Int                    @default(60) // Estimated duration in minutes
-  status             SurgeryStatus          @default(SCHEDULED)
-  surgeryType        SurgeryType            @default(ELECTIVE)
+  estimatedDuration    Int                    @default(60) // Estimated duration in minutes
+  status               SurgeryStatus          @default(SCHEDULED)
+  surgeryType          SurgeryType            @default(ELECTIVE)
   // Operative magnitude: MAJOR | INTERMEDIATE | MINOR. Nullable so existing
   // rows migrate cleanly; captured at booking and used to scale the mandatory
   // base consumable pack (gauze bundle, glove/gown counts, etc.).
-  magnitude          String?
-  readinessStatus    SurgeryReadinessStatus @default(PENDING_CHECKS)
+  magnitude            String?
+  readinessStatus      SurgeryReadinessStatus @default(PENDING_CHECKS)
 
   // Anesthesia
   anesthesiaType AnesthesiaType?
@@ -1031,19 +1034,19 @@ model Surgery {
   // ── Compulsory pre-operative safety labs & assessments (captured at booking) ──
   // Nullable in the DB so existing rows migrate cleanly; the booking form and the
   // POST /api/surgeries Zod schema enforce them as required for new bookings.
-  recentHb               Float?    // Haemoglobin g/dL — sample within 48 h of surgery
-  hbSampleAt             DateTime? // When the Hb sample was drawn (drives the 48 h rule)
-  potassium              Float?    // Serum K+ mmol/L
-  sodium                 Float?    // Serum Na+ mmol/L
-  creatinine             Float?    // Serum creatinine µmol/L
-  hbsAgStatus            String?   // NEGATIVE | POSITIVE | PENDING | NOT_DONE
-  hcvStatus              String?   // NEGATIVE | POSITIVE | PENDING | NOT_DONE
-  hivStatus              String?   // NEGATIVE | POSITIVE | PENDING | NOT_DONE
-  bloodPressureSystolic  Int?      // mmHg
-  bloodPressureDiastolic Int?      // mmHg
+  recentHb                   Float? // Haemoglobin g/dL — sample within 48 h of surgery
+  hbSampleAt                 DateTime? // When the Hb sample was drawn (drives the 48 h rule)
+  potassium                  Float? // Serum K+ mmol/L
+  sodium                     Float? // Serum Na+ mmol/L
+  creatinine                 Float? // Serum creatinine µmol/L
+  hbsAgStatus                String? // NEGATIVE | POSITIVE | PENDING | NOT_DONE
+  hcvStatus                  String? // NEGATIVE | POSITIVE | PENDING | NOT_DONE
+  hivStatus                  String? // NEGATIVE | POSITIVE | PENDING | NOT_DONE
+  bloodPressureSystolic      Int? // mmHg
+  bloodPressureDiastolic     Int? // mmHg
   // Risk assessments — bleeding & nutrition compulsory for all; pressure-sore
   // compulsory for patients older than 45 (enforced on the booking form).
-  bleedingRiskLevel      String?   // LOW | MODERATE | HIGH
+  bleedingRiskLevel          String? // LOW | MODERATE | HIGH
   nutritionalStatusAtBooking String? // GOOD | FAIR | POOR
   pressureSoreRiskAtBooking  String? // LOW | MEDIUM | HIGH (age > 45)
 
@@ -1173,12 +1176,12 @@ model Surgery {
   // A deferral is a debt, not a discharge: preopOutstanding holds what is still
   // missing and drives the CONSENT OUTSTANDING flag on the board and in the
   // holding area until somebody clears it.
-  preopOverrideReason   String?
-  preopOverrideById     String?
-  preopOverrideByName   String?
-  preopOverrideAt       DateTime?
+  preopOverrideReason String?
+  preopOverrideById   String?
+  preopOverrideByName String?
+  preopOverrideAt     DateTime?
   /// Comma-separated MissingItem values, e.g. "CONSENT,HAEMOGLOBIN".
-  preopOutstanding      String?
+  preopOutstanding    String?
 
   // Patient-facing codes generated at booking. The surgeon (or anaesthetist)
   // copies these and gives them to the patient, who presents the relevant code
@@ -1193,21 +1196,22 @@ model Surgery {
   stockMovements    StockMovement[]    @relation("StockMovementSurgery")
   stockReservations StockReservation[] @relation("StockReservationSurgery")
 
-  invoice           Invoice?           @relation("InvoiceSurgery")
+  invoice Invoice? @relation("InvoiceSurgery")
 
-  delayRecords      TheatreDelayRecord[]      @relation("SurgeryDelayRecords")
-  unexplainedDelay  TheatreUnexplainedDelay?  @relation("SurgeryUnexplainedDelay")
-  preopAlert        TheatrePreopAlert?        @relation("SurgeryPreopAlert")
-  teamCheckIns      SurgeryTeamCheckIn[]      @relation("SurgeryTeamCheckIns")
+  delayRecords     TheatreDelayRecord[]     @relation("SurgeryDelayRecords")
+  unexplainedDelay TheatreUnexplainedDelay? @relation("SurgeryUnexplainedDelay")
+  preopAlert       TheatrePreopAlert?       @relation("SurgeryPreopAlert")
+  teamCheckIns     SurgeryTeamCheckIn[]     @relation("SurgeryTeamCheckIns")
 
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them, and an app-supplied value would break the
   /// version chain conflict detection depends on.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion  Int           @default(0) @map("sync_version")
+  syncOrigin   String?       @map("sync_origin")
+  syncHlc      String?       @map("sync_hlc")
+  ocrDocuments OcrDocument[]
 
   @@map("surgeries")
 }
@@ -1637,7 +1641,7 @@ model TheatreSetup {
   readyAnnouncedAt   DateTime? // when the radio readiness announcement was raised
 
   // Mandatory walkie-talkie sign-out (captured at material collection)
-  walkieTalkieId          String?   // serial/number of the walkie-talkie signed out for this theatre
+  walkieTalkieId          String? // serial/number of the walkie-talkie signed out for this theatre
   walkieTalkieSignedOutAt DateTime? // when the nurse signed out & picked up the walkie-talkie
 
   notes     String?
@@ -2617,15 +2621,15 @@ model PACUAssessment {
   redAlertResolvedAt    DateTime?
 
   // Discharge Readiness
-  dischargeReadiness      PACUDischargeReadiness @default(NOT_READY)
-  dischargeTime           DateTime?
-  dischargedTo            String? // Ward/ICU name
-  dischargeVitalsStable   Boolean                @default(false)
-  dischargePainControlled Boolean                @default(false)
-  dischargeFullyConscious Boolean                @default(false)
-  dischargeNauseaFree     Boolean                @default(false)
-  dischargeAbleToMobilize          Boolean       @default(false)
-  dischargeNoActiveBleedingOrOozing Boolean      @default(false)
+  dischargeReadiness                PACUDischargeReadiness @default(NOT_READY)
+  dischargeTime                     DateTime?
+  dischargedTo                      String? // Ward/ICU name
+  dischargeVitalsStable             Boolean                @default(false)
+  dischargePainControlled           Boolean                @default(false)
+  dischargeFullyConscious           Boolean                @default(false)
+  dischargeNauseaFree               Boolean                @default(false)
+  dischargeAbleToMobilize           Boolean                @default(false)
+  dischargeNoActiveBleedingOrOozing Boolean                @default(false)
 
   // Final Assessment
   medicationsGivenInPACU String? // JSON array
@@ -2644,10 +2648,10 @@ model PACUAssessment {
   updatedAt DateTime @updatedAt
 
   // Relations
-  surgery    Surgery          @relation(fields: [surgeryId], references: [id])
-  patient    Patient          @relation(fields: [patientId], references: [id])
-  vitalSigns PACUVitalSigns[]
-  redAlerts  PACURedAlert[]
+  surgery     Surgery          @relation(fields: [surgeryId], references: [id])
+  patient     Patient          @relation(fields: [patientId], references: [id])
+  vitalSigns  PACUVitalSigns[]
+  redAlerts   PACURedAlert[]
   medications PACUMedication[]
 
   /// Sync metadata, maintained by the capture trigger in the sync migration.
@@ -5597,20 +5601,19 @@ model PreOperativeVisit {
   nurseSignature String?
 
   // Audit
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([surgeryId])
-  @@index([visitDate])
-  @@index([overallStatus])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion Int      @default(0) @map("sync_version")
+  syncOrigin  String?  @map("sync_origin")
+  syncHlc     String?  @map("sync_hlc")
 
+  @@index([surgeryId])
+  @@index([visitDate])
+  @@index([overallStatus])
   @@map("pre_operative_visits")
 }
 
@@ -6093,11 +6096,11 @@ enum FeedbackCategory {
 }
 
 model StaffFeedback {
-  id        String           @id @default(uuid())
-  category  FeedbackCategory
-  title     String?
-  message   String
-  rating    Int? // optional 1-5 satisfaction rating
+  id       String           @id @default(uuid())
+  category FeedbackCategory
+  title    String?
+  message  String
+  rating   Int? // optional 1-5 satisfaction rating
 
   // Author (logged-in staff). Stored as plain fields so we do not need to
   // back-relate to the large User model.
@@ -6127,20 +6130,20 @@ model PatientFeedback {
   relationship String? // e.g. "Patient", "Relative", "Caregiver"
 
   // Experience ratings (1-5)
-  overallRating       Int?
-  staffCourtesyRating Int?
-  cleanlinessRating   Int?
-  waitTimeRating      Int?
-  communicationRating Int?
+  overallRating        Int?
+  staffCourtesyRating  Int?
+  cleanlinessRating    Int?
+  waitTimeRating       Int?
+  communicationRating  Int?
   painManagementRating Int?
 
   // Which stage of the journey
   journeyStage String? // e.g. Admission, Pre-op, Surgery, Recovery, Discharge
 
   // Free text
-  whatWentWell    String?
-  whatToImprove   String?
-  message         String?
+  whatWentWell  String?
+  whatToImprove String?
+  message       String?
 
   wouldRecommend Boolean?
 
@@ -6155,7 +6158,6 @@ model PatientFeedback {
   @@index([status])
   @@map("patient_feedback")
 }
-
 
 model EmergencyLabNotification {
   id String @id @default(uuid())
@@ -6947,21 +6949,20 @@ model RadioAnnouncement {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  acks RadioAcknowledgment[]
-
-  @@index([status])
-  @@index([priority])
-  @@index([category])
-  @@index([createdAt])
+  acks        RadioAcknowledgment[]
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them, and an app-supplied value would break the
   /// version chain conflict detection depends on.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion Int                   @default(0) @map("sync_version")
+  syncOrigin  String?               @map("sync_origin")
+  syncHlc     String?               @map("sync_hlc")
 
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([createdAt])
   @@map("radio_announcements")
 }
 
@@ -7092,29 +7093,29 @@ enum SurgeryPackStatus {
 }
 
 model SurgeryConsumableRequest {
-  id           String                     @id @default(uuid())
-  surgeryId    String
-  templateId   String?
-  name         String // Snapshot at time of booking
-  category     SurgicalConsumableCategory @default(OTHER)
-  size         String?
-  unit         String                     @default("piece")
-  quantity     Int                        @default(1)
-  notes        String?
-  status       SurgeryPackStatus          @default(REQUESTED)
+  id              String                     @id @default(uuid())
+  surgeryId       String
+  templateId      String?
+  name            String // Snapshot at time of booking
+  category        SurgicalConsumableCategory @default(OTHER)
+  size            String?
+  unit            String                     @default("piece")
+  quantity        Int                        @default(1)
+  notes           String?
+  status          SurgeryPackStatus          @default(REQUESTED)
   requestedById   String? // User who created/booked this request
   requestedByName String? // Snapshot of requester name at booking time
-  packedById   String?
-  packedByName String?
-  packedAt     DateTime?
-  packNotes    String?
-  createdAt    DateTime                   @default(now())
-  updatedAt    DateTime                   @updatedAt
+  packedById      String?
+  packedByName    String?
+  packedAt        DateTime?
+  packNotes       String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
-  surgery  Surgery                     @relation("SurgeryConsumableRequests", fields: [surgeryId], references: [id])
-  template SurgicalConsumableTemplate? @relation(fields: [templateId], references: [id])
-  packedBy User?                       @relation("ConsumablePackedBy", fields: [packedById], references: [id])
-  requestedBy User?                    @relation("ConsumableRequestedBy", fields: [requestedById], references: [id])
+  surgery     Surgery                     @relation("SurgeryConsumableRequests", fields: [surgeryId], references: [id])
+  template    SurgicalConsumableTemplate? @relation(fields: [templateId], references: [id])
+  packedBy    User?                       @relation("ConsumablePackedBy", fields: [packedById], references: [id])
+  requestedBy User?                       @relation("ConsumableRequestedBy", fields: [requestedById], references: [id])
 
   @@index([surgeryId])
   @@index([status])
@@ -7163,17 +7164,17 @@ enum SurgicalPackKind {
 }
 
 model SurgicalPack {
-  id           String           @id @default(uuid())
-  name         String
-  subspecialty String // e.g. "General Surgery", "Obstetrics & Gynaecology"
-  kind         SurgicalPackKind
-  description  String?
-  isActive     Boolean          @default(false) // draft until an admin activates it
-  sortOrder    Int              @default(0)
-  createdById  String?
+  id            String           @id @default(uuid())
+  name          String
+  subspecialty  String // e.g. "General Surgery", "Obstetrics & Gynaecology"
+  kind          SurgicalPackKind
+  description   String?
+  isActive      Boolean          @default(false) // draft until an admin activates it
+  sortOrder     Int              @default(0)
+  createdById   String?
   createdByName String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   items SurgicalPackItem[]
 
@@ -7182,20 +7183,20 @@ model SurgicalPack {
 }
 
 model SurgicalPackItem {
-  id       String @id @default(uuid())
-  packId   String
-  name     String
-  quantity Int    @default(1)
-  unit     String @default("piece")
+  id        String  @id @default(uuid())
+  packId    String
+  name      String
+  quantity  Int     @default(1)
+  unit      String  @default("piece")
   // Consumable-pack fields (ignored for pharmacy packs)
-  category String? // a SurgicalConsumableCategory value
-  size     String?
+  category  String? // a SurgicalConsumableCategory value
+  size      String?
   // Pharmacy-pack fields (ignored for consumable packs)
-  drugType String? // a SurgicalDrugDressingType value
-  dosage   String?
-  route    String?
-  notes    String?
-  sortOrder Int   @default(0)
+  drugType  String? // a SurgicalDrugDressingType value
+  dosage    String?
+  route     String?
+  notes     String?
+  sortOrder Int     @default(0)
 
   pack SurgicalPack @relation(fields: [packId], references: [id], onDelete: Cascade)
 
@@ -7263,17 +7264,16 @@ model PostOpPrescription {
   patient      Patient @relation("PostOpPrescriptionsPatient", fields: [patientId], references: [id])
   prescribedBy User    @relation("PostOpPrescribedBy", fields: [prescribedById], references: [id])
   packedBy     User?   @relation("PostOpPackedBy", fields: [packedById], references: [id])
-
-  @@index([surgeryId])
-  @@index([status])
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion  Int     @default(0) @map("sync_version")
+  syncOrigin   String? @map("sync_origin")
+  syncHlc      String? @map("sync_hlc")
 
+  @@index([surgeryId])
+  @@index([status])
   @@map("postop_prescriptions")
 }
 
@@ -7535,7 +7535,7 @@ model ScrubTransaction {
 
   status ScrubTxnStatus @default(ISSUED)
 
-  issuedAt     DateTime  @default(now())
+  issuedAt     DateTime @default(now())
   issuedById   String?
   issuedByName String?
 
@@ -7697,8 +7697,8 @@ model ScrubPickup {
   role     String?
   color    String? // role-based scrub colour at time of pickup
 
-  topSerial    String? // serial code of the scrub top handed out
-  pantsSerial  String? // serial code of the scrub pants handed out
+  topSerial      String? // serial code of the scrub top handed out
+  pantsSerial    String? // serial code of the scrub pants handed out
   footwearSerial String?
 
   topSize      String?
@@ -7720,7 +7720,6 @@ model ScrubPickup {
   @@index([pickedUpAt])
   @@map("scrub_pickups")
 }
-
 
 // ===========================================================================
 // IMPREST MANAGEMENT AND RETIREMENT SYSTEM
@@ -7947,10 +7946,10 @@ model BudgetHead {
   description String?
   isActive    Boolean @default(true)
 
-  voteCodes     VoteCode[]
-  imprests      Imprest[]
-  expenditures  Expenditure[]
-  categories    ExpenseCategory[]
+  voteCodes    VoteCode[]
+  imprests     Imprest[]
+  expenditures Expenditure[]
+  categories   ExpenseCategory[]
 
   version        Int       @default(1)
   createdAt      DateTime  @default(now())
@@ -8149,16 +8148,16 @@ model Imprest {
 
   /// Which quarter's standing imprest this is. One active imprest per quarter,
   /// and the next cannot be raised until this one is retired and approved.
-  quarter Quarter?
+  quarter                Quarter?
   /// Treasury voucher on which Hospital Management released the funds — quoted
   /// on the retirement so Accounts can trace the release.
-  treasuryVoucherNumber String?
+  treasuryVoucherNumber  String?
   /// Set when the retirement is submitted, and when Management approves it.
-  retirementDate DateTime? @db.Date
-  approvalDate   DateTime? @db.Date
+  retirementDate         DateTime? @db.Date
+  approvalDate           DateTime? @db.Date
   /// False until this imprest is fully retired and approved. The gate on
   /// releasing the next quarter's funds.
-  eligibleForNextQuarter Boolean @default(false)
+  eligibleForNextQuarter Boolean   @default(false)
 
   financialYearId String        @db.Uuid
   financialYear   FinancialYear @relation(fields: [financialYearId], references: [id])
@@ -8234,8 +8233,8 @@ model Expenditure {
 
   date DateTime @db.Date
 
-  vendorId String? @db.Uuid
-  vendor   Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  vendorId      String? @db.Uuid
+  vendor        Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   /// Copied at posting time so a historic schedule survives a vendor rename.
   vendorName    String
   vendorPhone   String?
@@ -8259,7 +8258,7 @@ model Expenditure {
   /// Kobo.
   totalCost     BigInt
 
-  paymentMethod PaymentMethod
+  paymentMethod        PaymentMethod
   /// Payment voucher raised for this line, and the instrument it was paid by.
   /// Required by Accounts when reconciling against the bank.
   paymentVoucherNumber String?
@@ -8269,16 +8268,16 @@ model Expenditure {
   voucherNumber String?
   receiptNumber String?
   invoiceNumber String?
-  receiptDate   DateTime?     @db.Date
+  receiptDate   DateTime? @db.Date
 
   /// Kobo. What was charged against the imprest.
-  amountPaid      BigInt
+  amountPaid     BigInt
   /// Kobo.
-  vat             BigInt @default(0)
+  vat            BigInt @default(0)
   /// Kobo.
-  withholdingTax  BigInt @default(0)
+  withholdingTax BigInt @default(0)
   /// Kobo. What the vendor received after withholding.
-  netAmount       BigInt
+  netAmount      BigInt
 
   budgetHeadId String?     @db.Uuid
   budgetHead   BudgetHead? @relation(fields: [budgetHeadId], references: [id], onDelete: SetNull)
@@ -8440,7 +8439,7 @@ model Retirement {
   expenditures Expenditure[]
   approvals    Approval[]
   signatures   Signature[]
-  attachments  Attachment[]      @relation("ImprestAttachmentRetirement")
+  attachments  Attachment[]        @relation("ImprestAttachmentRetirement")
   documents    GeneratedDocument[]
 
   version        Int       @default(1)
@@ -8471,8 +8470,8 @@ model Approval {
   sequence Int
   decision ApprovalDecision?
 
-  actorId String?
-  actor   User?   @relation("ImprestApprovalActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId          String?
+  actor            User?   @relation("ImprestApprovalActor", fields: [actorId], references: [id], onDelete: SetNull)
   /// Copied so the approval sheet still reads correctly after a transfer.
   actorName        String?
   actorDesignation String?
@@ -8543,11 +8542,11 @@ model GeneratedDocument {
   /// SHA-256 of the rendered PDF — the verification page compares against this.
   checksum   String
   byteSize   Int
-  pageCount  Int    @default(1)
+  pageCount  Int     @default(1)
   watermark  String?
 
-  issuedAt    DateTime @default(now())
-  issuedById  String?
+  issuedAt     DateTime @default(now())
+  issuedById   String?
   issuedByName String?
 
   /// Incremented whenever the verification URL is opened, for the audit file.
@@ -8569,7 +8568,7 @@ model ImprestAuditLog {
   entityLabel String?
 
   actorId   String?
-  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actor     User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
   actorName String?
   /// Witness copy of the imprest duty the actor held at the time. Kept as the
   /// imprest role (not the clinical role) because that is what governs the
@@ -8603,9 +8602,9 @@ model ImprestAuditLog {
 }
 
 model ImprestNotification {
-  id       String               @id @default(uuid()) @db.Uuid
+  id       String                  @id @default(uuid()) @db.Uuid
   type     ImprestNotificationType
-  severity NotificationSeverity @default(INFO)
+  severity NotificationSeverity    @default(INFO)
   title    String
   body     String
 
@@ -8643,13 +8642,13 @@ model SyncMutationLog {
 
   payload Json
 
-  state        SyncMutationState @default(PENDING)
-  errorCode    String?
-  errorMessage String?
+  state          SyncMutationState @default(PENDING)
+  errorCode      String?
+  errorMessage   String?
   appliedVersion Int?
 
   clientCreatedAt DateTime
-  receivedAt      DateTime @default(now())
+  receivedAt      DateTime  @default(now())
   processedAt     DateTime?
 
   @@index([deviceId])
@@ -8670,11 +8669,11 @@ model SyncConflict {
   clientPayload Json
   serverRecord  Json
 
-  detectedAt DateTime            @default(now())
-  resolution ConflictResolution?
-  resolvedAt DateTime?
+  detectedAt   DateTime            @default(now())
+  resolution   ConflictResolution?
+  resolvedAt   DateTime?
   resolvedById String?
-  notes      String?
+  notes        String?
 
   @@index([entity, entityId])
   @@index([userId])
@@ -8708,22 +8707,22 @@ model OrganisationSetting {
   logoAttachmentId       String? @db.Uuid
   currentFinancialYearId String? @db.Uuid
 
-  defaultRetirementDays   Int     @default(30)
-  enforceOverspendBlock   Boolean @default(true)
-  budgetWarningThreshold  Float   @default(90)
+  defaultRetirementDays     Int     @default(30)
+  enforceOverspendBlock     Boolean @default(true)
+  budgetWarningThreshold    Float   @default(90)
   /// Kobo.
-  requireReceiptAbove     BigInt  @default(0)
-  vatRate                 Float   @default(7.5)
-  withholdingTaxRate      Float   @default(5)
-  sessionIdleTimeoutMinutes Int   @default(20)
+  requireReceiptAbove       BigInt  @default(0)
+  vatRate                   Float   @default(7.5)
+  withholdingTaxRate        Float   @default(5)
+  sessionIdleTimeoutMinutes Int     @default(20)
 
   certificationText String @default("I certify that the above expenditure was incurred solely for the purpose stated, that the goods and services were received, and that the supporting receipts attached are genuine.")
 
   /// Ordered WorkflowStage[] describing the approval chain.
   approvalChain Json
 
-  version   Int      @default(1)
-  updatedAt DateTime @updatedAt
+  version     Int      @default(1)
+  updatedAt   DateTime @updatedAt
   updatedById String?
 
   @@map("imprest_organisation_settings")
@@ -8769,11 +8768,11 @@ model ImprestRoleAssignment {
   departmentId String?     @db.Uuid
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
-  isActive    Boolean   @default(true)
-  assignedAt  DateTime  @default(now())
+  isActive     Boolean   @default(true)
+  assignedAt   DateTime  @default(now())
   assignedById String?
-  revokedAt   DateTime?
-  revokedById String?
+  revokedAt    DateTime?
+  revokedById  String?
 
   @@unique([userId, role, departmentId])
   @@index([userId])
@@ -8855,19 +8854,19 @@ enum StockReservationStatus {
 /// The Theatre Supply Unit's physical stores. Seeded, but editable — a hospital
 /// may have no cold chain store, and may add others.
 model StockLocation {
-  id          String  @id @default(uuid())
-  code        String  @unique
-  name        String
-  description String?
+  id            String  @id @default(uuid())
+  code          String  @unique
+  name          String
+  description   String?
   /// Controlled drugs require a witness to issue from this store.
-  isControlled Boolean @default(false)
+  isControlled  Boolean @default(false)
   /// Emergency stock cannot be drawn for an elective case without authorisation.
-  isEmergency Boolean @default(false)
+  isEmergency   Boolean @default(false)
   /// Vendor consignment: stock here belongs to a vendor until it is consumed.
   isConsignment Boolean @default(false)
   /// Cold chain stores record the range they must stay within.
-  minTempC Float?
-  maxTempC Float?
+  minTempC      Float?
+  maxTempC      Float?
 
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
@@ -8903,10 +8902,10 @@ model StockBatch {
 
   /// Ownership. VENDOR stock is consignment: it becomes the hospital's only on
   /// consumption, which is what makes it billable and settleable.
-  owner StockOwner @default(HOSPITAL)
+  owner    StockOwner @default(HOSPITAL)
   /// @db.Uuid — matches the imprest Vendor.id, NOT the TEXT ids above.
-  vendorId String? @db.Uuid
-  vendor   Vendor? @relation("StockBatchVendor", fields: [vendorId], references: [id])
+  vendorId String?    @db.Uuid
+  vendor   Vendor?    @relation("StockBatchVendor", fields: [vendorId], references: [id])
 
   /// All kobo. purchasePrice is what it cost; sellingPrice is what the patient
   /// is billed; vendorPrice is what the vendor is owed once it is consumed.
@@ -8966,7 +8965,7 @@ model StockMovement {
   batchId String
   batch   StockBatch @relation(fields: [batchId], references: [id])
 
-  type StockMovementType
+  type     StockMovementType
   /// Always positive; the type says which way it goes.
   quantity Int
 
@@ -9002,22 +9001,21 @@ model StockMovement {
   /// What the scanner actually read, kept verbatim for dispute resolution.
   scannedCode String?
 
-  occurredAt DateTime @default(now())
-  createdAt  DateTime @default(now())
-
-  @@index([batchId, occurredAt])
-  @@index([surgeryId])
-  @@index([type, occurredAt])
-  @@index([reservationId])
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them, and an app-supplied value would break the
   /// version chain conflict detection depends on.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion Int      @default(0) @map("sync_version")
+  syncOrigin  String?  @map("sync_origin")
+  syncHlc     String?  @map("sync_hlc")
 
+  @@index([batchId, occurredAt])
+  @@index([surgeryId])
+  @@index([type, occurredAt])
+  @@index([reservationId])
   @@map("stock_movements")
 }
 
@@ -9229,8 +9227,8 @@ model Invoice {
   dueAt    DateTime?
   paidAt   DateTime?
 
-  cancelledAt    DateTime?
-  cancelReason   String?
+  cancelledAt  DateTime?
+  cancelReason String?
 
   notes String?
 
@@ -9241,9 +9239,9 @@ model Invoice {
   /// TEXT ids — match User.id.
   createdById String?
   issuedById  String?
-  version     Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
   @@index([status])
@@ -9297,14 +9295,14 @@ model Payment {
   method PaymentMethodKind @default(CASH)
 
   /// Bank teller number, POS reference, cheque number — whatever proves it.
-  reference String?
+  reference       String?
   /// Scan of the teller slip, as a data URL, matching how the app handles other
   /// evidence so it queues offline like everything else.
   evidenceDataUrl String?
 
-  receivedAt   DateTime @default(now())
+  receivedAt     DateTime @default(now())
   /// TEXT id — matches User.id.
-  receivedById String?
+  receivedById   String?
   receivedByName String?
 
   notes String?
@@ -9530,7 +9528,7 @@ model TheatreDelayRecord {
   /// A code from lib/theatreOps/delays. Stored as text rather than an enum so
   /// the taxonomy can grow without a migration — it is a classification, not a
   /// state machine, and an unknown code degrades to "Other" rather than failing.
-  categoryCode String
+  categoryCode  String
   categoryGroup String?
 
   narrative String
@@ -9760,20 +9758,19 @@ model SurgeryTeamCheckIn {
 
   checkedInAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  /// One current answer per person per case. Changing your mind updates it.
-  @@unique([surgeryId, userId])
-  @@index([surgeryId, status])
-  @@index([checkedInAt])
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
   /// them: the trigger owns them, and an app-supplied value would break the
   /// version chain conflict detection depends on.
-  syncVersion Int     @default(0) @map("sync_version")
-  syncOrigin  String? @map("sync_origin")
-  syncHlc     String? @map("sync_hlc")
+  syncVersion Int      @default(0) @map("sync_version")
+  syncOrigin  String?  @map("sync_origin")
+  syncHlc     String?  @map("sync_hlc")
 
+  /// One current answer per person per case. Changing your mind updates it.
+  @@unique([surgeryId, userId])
+  @@index([surgeryId, status])
+  @@index([checkedInAt])
   @@map("surgery_team_check_ins")
 }
 
@@ -9903,9 +9900,9 @@ model SurgeryEstimate {
   /// TEXT id — matches Patient.id.
   patientId String
 
-  status   EstimateStatus @default(DRAFT)
+  status         EstimateStatus @default(DRAFT)
   /// 1 for the first, incrementing per revision. See supersedesId.
-  revision Int            @default(1)
+  revision       Int            @default(1)
   /// The estimate this one replaces. The original is kept and marked
   /// SUPERSEDED rather than edited, so what the patient was first told
   /// remains readable.
@@ -9953,8 +9950,8 @@ model SurgeryEstimate {
   cancelReason   String?
 
   /// Recorded when the document is sent, so sharing is auditable.
-  sharedToPhone  String?
-  sharedAt       DateTime?
+  sharedToPhone String?
+  sharedAt      DateTime?
 
   notes String?
 
@@ -9988,11 +9985,11 @@ model SurgeryEstimateLine {
 
   /// TEXT ids — the masters this line was built from. Kept so an auditor can
   /// trace a figure, NOT so the line can be re-priced later.
-  tariffId          String?
-  inventoryItemId   String?
-  surgicalPackId    String?
-  investigationId   String?
-  medicationName    String?
+  tariffId           String?
+  inventoryItemId    String?
+  surgicalPackId     String?
+  investigationId    String?
+  medicationName     String?
   /// The tariff window in force when this line was priced.
   priceEffectiveFrom DateTime?
 
@@ -10007,7 +10004,7 @@ model SurgeryEstimateLine {
   // ---- Overrides ----------------------------------------------------------
   // An override is a person overruling the price master, so it records who and
   // why. The original is never lost.
-  priceOverridden       Boolean @default(false)
+  priceOverridden       Boolean   @default(false)
   originalUnitPriceKobo Int?
   overrideReason        String?
   /// TEXT id — matches User.id.
@@ -10015,7 +10012,7 @@ model SurgeryEstimateLine {
   overriddenByName      String?
   overriddenAt          DateTime?
 
-  sortOrder Int @default(0)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
   @@index([estimateId, section, sortOrder])
@@ -10189,7 +10186,7 @@ enum TheatreTeamRole {
 /// assigned by the anaesthetists and technicians by the technicians, so "who put
 /// me on this list" must have an answer.
 model TheatreTeamAssignment {
-  id        String @id @default(uuid())
+  id        String          @id @default(uuid())
   /// TEXT id — matches Surgery.id. Not FK-constrained, matching the convention
   /// used elsewhere for soft references to surgeries.
   surgeryId String
@@ -10238,8 +10235,8 @@ model ProcedurePackMap {
   subspecialty  String?
 
   /// TEXT ids — match SurgicalPack.id.
-  consumablePackId String?
-  pharmacyPackId   String?
+  consumablePackId   String?
+  pharmacyPackId     String?
   /// Snapshotted for display, so a renamed pack does not make an old mapping
   /// unreadable.
   consumablePackName String?
@@ -10247,9 +10244,9 @@ model ProcedurePackMap {
 
   /// How the mapping came about, and whether a person has agreed to it.
   /// A mapping is NOT used at booking until confirmedAt is set.
-  suggestedBasis String?
-  confirmedAt    DateTime?
-  confirmedById  String?
+  suggestedBasis  String?
+  confirmedAt     DateTime?
+  confirmedById   String?
   confirmedByName String?
 
   isActive  Boolean  @default(true)
@@ -10403,12 +10400,12 @@ model ConflictQuestion {
   decision   ConflictDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
 
   type     ConflictQuestionType
-  prompt   String  @db.Text
+  prompt   String               @db.Text
   helpText String?
   /// Choices, scale labels or ranking items, by type.
   options  Json?
-  required Boolean @default(true)
-  order    Int     @default(0)
+  required Boolean              @default(true)
+  order    Int                  @default(0)
 
   /// Show this question only when another was answered a certain way.
   showIfQuestionId String?
@@ -10431,9 +10428,9 @@ model ConflictResponse {
   userName String?
   userRole String?
 
-  submittedAt DateTime @default(now())
+  submittedAt    DateTime @default(now())
   /// Client-generated, so an offline submission cannot arrive twice.
-  idempotencyKey String? @unique
+  idempotencyKey String?  @unique
 
   answers ConflictAnswer[]
 
@@ -10523,9 +10520,9 @@ model ConflictReview {
   reviewerId   String?
   reviewerName String?
   /// COMMENT | REVISION_REQUESTED | ENDORSED | REJECTED
-  outcome   String
-  comment   String?  @db.Text
-  createdAt DateTime @default(now())
+  outcome      String
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now())
 
   @@index([decisionId, createdAt])
   @@map("conflict_reviews")
@@ -10616,8 +10613,8 @@ model CommunicationTemplate {
   /// be shown exactly as it was worded.
   version Int         @default(1)
 
-  subject String?
-  body    String  @db.Text
+  subject   String?
+  body      String  @db.Text
   /// Names of the variables this body expects, for validation before sending.
   variables Json?
 
@@ -10645,12 +10642,12 @@ model CommunicationMessage {
   status   CommStatus   @default(QUEUED)
 
   /// TEXT id — matches User.id. Null for an external recipient.
-  recipientUserId String?
-  recipientName   String?
+  recipientUserId  String?
+  recipientName    String?
   /// Phone or email, by channel. Never both.
   recipientAddress String?
 
-  templateCode String?
+  templateCode    String?
   /// Rendered at QUEUE time, not at send time. What was queued is what goes out,
   /// even if the template changes in between.
   renderedSubject String?
@@ -10658,9 +10655,9 @@ model CommunicationMessage {
 
   /// What this is about, so a message can be traced back to the thing that
   /// caused it. Soft references, matching the convention used elsewhere.
-  relatedType String?
-  relatedId   String?
-  ruleId      String?
+  relatedType     String?
+  relatedId       String?
+  ruleId          String?
   escalationLevel Int?
 
   /// Prevents a duplicate when an offline queue replays or a cron re-runs.
@@ -10690,15 +10687,15 @@ model CommunicationMessage {
 /// Provider receipts. Append-only and deduplicated: a webhook that arrives twice
 /// must not move a message backwards from READ to DELIVERED.
 model CommunicationEvent {
-  id        String @id @default(uuid())
+  id        String               @id @default(uuid())
   messageId String
   message   CommunicationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  status    CommStatus
+  status          CommStatus
   /// The provider's own event id, where it has one.
   providerEventId String?
-  payload   Json?
-  occurredAt DateTime @default(now())
+  payload         Json?
+  occurredAt      DateTime   @default(now())
 
   @@unique([messageId, providerEventId])
   @@index([messageId, occurredAt])
@@ -10711,7 +10708,7 @@ model WorkflowRule {
   description String?
 
   /// The ORM event or scheduled check this responds to.
-  trigger String
+  trigger    String
   /// Evaluated by a pure function, so a rule can be tested without sending.
   conditions Json?
   /// Channel, template and recipient resolution.
@@ -10737,8 +10734,8 @@ model WorkflowRule {
 }
 
 model EscalationPolicy {
-  id   String @id @default(uuid())
-  name String @unique
+  id     String @id @default(uuid())
+  name   String @unique
   /// [{ level, afterMinutes, recipients: [...], channels: [...] }]
   levels Json
 
@@ -10758,7 +10755,7 @@ model FeedbackRequest {
 
   /// SHA-256 of the token. The token itself is never stored, so a database read
   /// cannot open somebody's feedback form.
-  tokenHash String @unique
+  tokenHash String   @unique
   expiresAt DateTime
 
   requestedById   String?
@@ -10771,4 +10768,279 @@ model FeedbackRequest {
   @@index([patientId])
   @@index([expiresAt, submittedAt])
   @@map("feedback_requests")
+}
+
+// ===========================================================================
+// Clinical OCR & document intelligence
+//
+// Files are NOT here. Scans live in the document store (src/lib/documents/store.ts);
+// these tables hold metadata, extracted text, confidence and a content-addressed
+// reference. See docs/ocr-platform-assessment.md section 2 for why.
+//
+// The sync* columns are owned by the capture trigger, as everywhere else in this
+// schema. Declared only so `prisma migrate diff` does not read them as drift.
+// ===========================================================================
+
+model OcrDocument {
+  id             String  @id @default(uuid())
+  patientId      String?
+  surgeryId      String?
+  documentType   String
+  classifiedAuto Boolean @default(false)
+
+  /// The original capture. Never overwritten: the spec requires it to survive
+  /// every later correction, and for consent it stays the authoritative artefact.
+  originalKey      String
+  originalSha256   String
+  originalBytes    Int
+  originalMimeType String
+  /// What the recogniser actually saw, kept so a disputed reading can be traced.
+  processedKey     String?
+
+  status    String @default("PENDING")
+  pageCount Int    @default(1)
+
+  /// Null until an engine has run. Nullable rather than 0 on purpose: absent
+  /// confidence and zero confidence must not render the same way.
+  overallConfidence Float?
+  imageQualityScore Int?
+
+  requiresReview Boolean @default(true)
+  reviewReason   String?
+
+  capturedById String
+  capturedAt   DateTime  @default(now())
+  verifiedById String?
+  verifiedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  patient    Patient? @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  surgery    Surgery? @relation(fields: [surgeryId], references: [id], onDelete: Restrict)
+  capturedBy User     @relation("OcrCapturedBy", fields: [capturedById], references: [id], onDelete: Restrict)
+  verifiedBy User?    @relation("OcrVerifiedBy", fields: [verifiedById], references: [id], onDelete: Restrict)
+
+  pages              OcrPage[]
+  tokens             OcrToken[]
+  runs               OcrProviderRun[]
+  versions           OcrVersion[]
+  verifications      OcrVerification[]
+  qualityAssessments OcrQualityAssessment[]
+  signatureRegions   OcrSignatureRegion[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([patientId])
+  @@index([surgeryId])
+  @@index([status])
+  @@index([originalSha256, patientId])
+  @@map("ocr_documents")
+}
+
+/// One row per engine run, never replaced. Provider comparison needs several
+/// runs on the same document, and local vs cloud results must be shown side by
+/// side rather than the later one silently overwriting the earlier.
+model OcrProviderRun {
+  id            String    @id @default(uuid())
+  documentId    String
+  provider      String
+  modelVersion  String?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  durationMs    Int?
+  status        String    @default("RUNNING")
+  failureReason String?
+  confidence    Float?
+  /// The engine's own output, untouched, kept separate from the verified
+  /// transcription so the two can never be mistaken for one another.
+  rawText       String?
+  rawPayload    Json?
+  isPrimary     Boolean   @default(false)
+
+  document OcrDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tokens   OcrToken[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([documentId])
+  @@map("ocr_provider_runs")
+}
+
+model OcrPage {
+  id          String  @id @default(uuid())
+  documentId  String
+  pageNumber  Int
+  imageKey    String?
+  width       Int?
+  height      Int?
+  rotation    Int     @default(0)
+  confidence  Float?
+  /// PRINTED | HANDWRITTEN | MIXED | UNKNOWN
+  contentKind String  @default("UNKNOWN")
+
+  document   OcrDocument          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tokens     OcrToken[]
+  signatures OcrSignatureRegion[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([documentId, pageNumber])
+  @@map("ocr_pages")
+}
+
+/// The word-level record that lets the system refuse to guess. Each word keeps
+/// its own confidence and its own box, so an uncertain word can be highlighted
+/// and the clinician shown that exact region of the original image.
+model OcrToken {
+  id            String    @id @default(uuid())
+  documentId    String
+  pageId        String
+  runId         String?
+  lineIndex     Int       @default(0)
+  tokenIndex    Int       @default(0)
+  text          String
+  confidence    Float?
+  bboxX         Int?
+  bboxY         Int?
+  bboxW         Int?
+  bboxH         Int?
+  isHandwritten Boolean   @default(false)
+  isUncertain   Boolean   @default(false)
+  uncertainWhy  String?
+  /// Alternatives OFFERED, never applied. Clinical context may identify
+  /// candidates; it may never select one.
+  alternatives  Json?
+  isVerified    Boolean   @default(false)
+  correctedText String?
+  correctedById String?
+  correctedAt   DateTime?
+
+  document    OcrDocument     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  page        OcrPage         @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  run         OcrProviderRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  correctedBy User?           @relation("OcrCorrectedBy", fields: [correctedById], references: [id], onDelete: Restrict)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([documentId])
+  @@index([pageId])
+  @@map("ocr_tokens")
+}
+
+/// Never destroy a previous version.
+model OcrVersion {
+  id            String   @id @default(uuid())
+  documentId    String
+  versionNumber Int
+  /// RAW_OCR | CLINICIAN_CORRECTION | VERIFIED
+  kind          String
+  text          String
+  confidence    Float?
+  authorId      String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  document      OcrDocument       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author        User              @relation("OcrVersionAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  verifications OcrVerification[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([documentId, versionNumber])
+  @@map("ocr_versions")
+}
+
+model OcrVerification {
+  id                 String   @id @default(uuid())
+  documentId         String
+  versionId          String?
+  verifiedById       String
+  verifiedAt         DateTime @default(now())
+  /// ACCEPTED | CORRECTED | REJECTED | MARKED_ILLEGIBLE
+  outcome            String
+  tokensReviewed     Int      @default(0)
+  tokensCorrected    Int      @default(0)
+  /// High-risk values need explicit confirmation. Keeping the count and the
+  /// categories means an audit can show what the clinician was actually asked
+  /// to confirm, not merely that they clicked.
+  highRiskConfirmed  Int      @default(0)
+  highRiskCategories String?
+  note               String?
+  ipAddress          String?
+
+  document   OcrDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version    OcrVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  verifiedBy User        @relation("OcrVerificationBy", fields: [verifiedById], references: [id], onDelete: Restrict)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([documentId])
+  @@map("ocr_verifications")
+}
+
+/// Kept per attempt, including rejected ones: how often capture fails and why
+/// is what tells us whether to fix the guidance or the recogniser.
+model OcrQualityAssessment {
+  id              String   @id @default(uuid())
+  documentId      String?
+  capturedById    String
+  score           Int
+  sharpness       Int?
+  exposure        Int?
+  contrast        Int?
+  glare           Int?
+  skewDegrees     Float?
+  resolutionPx    Int?
+  cornersDetected Int?
+  failedChecks    String?
+  /// True when the user was warned and chose "Proceed anyway".
+  proceededAnyway Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  document   OcrDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  capturedBy User         @relation("OcrQualityCapturedBy", fields: [capturedById], references: [id], onDelete: Restrict)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@map("ocr_quality_assessments")
+}
+
+/// Recorded as present and located, NEVER transcribed into clinical text.
+model OcrSignatureRegion {
+  id         String   @id @default(uuid())
+  documentId String
+  pageId     String
+  /// SIGNATURE | STAMP | INITIALS
+  kind       String
+  bboxX      Int
+  bboxY      Int
+  bboxW      Int
+  bboxH      Int
+  confidence Float?
+  createdAt  DateTime @default(now())
+
+  document OcrDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  page     OcrPage     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([documentId])
+  @@map("ocr_signature_regions")
 }
