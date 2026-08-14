@@ -30,9 +30,24 @@ const OUT = path.join(ROOT, 'public', 'tesseract');
 /** Copied out of node_modules — no download needed, they are already here. */
 const LOCAL_COPIES = [
   ['tesseract.js/dist/worker.min.js', 'worker.min.js'],
-  ['tesseract.js-core/tesseract-core-simd-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js'],
-  ['tesseract.js-core/tesseract-core-lstm.wasm.js', 'tesseract-core-lstm.wasm.js'],
 ];
+
+/**
+ * The whole core directory, not a chosen few.
+ *
+ * The first attempt copied the .wasm.js loaders and not the .wasm binaries they
+ * fetch, so OCR failed instantly on a 404 for a file nobody had thought about.
+ * Which variant gets loaded depends on what the BROWSER supports — plain, SIMD,
+ * or relaxed SIMD — and that is decided at runtime on the device, not here. So
+ * every variant is copied and the browser picks.
+ *
+ * Only the -lstm variants. The recogniser is created with oem 1 (LSTM only), so
+ * the combined legacy+LSTM cores can never be loaded — copying them was 26 MB of
+ * files that would never be requested. Three variants remain because SIMD
+ * support differs between an old theatre PC and a modern phone.
+ */
+const CORE_DIR = 'tesseract.js-core';
+const CORE_PATTERN = /-lstm\.(wasm|wasm\.js|js)$/;
 
 /**
  * The language data. "4.0.0_fast" rather than the full model: about 2 MB instead
@@ -73,6 +88,21 @@ function download(url, dest, redirectsLeft = 5) {
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
+
+  // Everything the core package ships, so no variant is missing at runtime.
+  const coreSrcDir = path.join(ROOT, 'node_modules', CORE_DIR);
+  if (fs.existsSync(coreSrcDir)) {
+    for (const name of fs.readdirSync(coreSrcDir)) {
+      if (!CORE_PATTERN.test(name) || name === 'index.js') continue;
+      const src = path.join(coreSrcDir, name);
+      const dst = path.join(OUT, name);
+      if (fs.existsSync(dst) && fs.statSync(dst).size === fs.statSync(src).size) continue;
+      fs.copyFileSync(src, dst);
+      console.log(`  copied ${name} (${(fs.statSync(dst).size / 1e6).toFixed(1)} MB)`);
+    }
+  } else {
+    console.warn('  warn   tesseract.js-core not found in node_modules');
+  }
 
   for (const [from, to] of LOCAL_COPIES) {
     const src = path.join(ROOT, 'node_modules', from);

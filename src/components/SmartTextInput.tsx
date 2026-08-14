@@ -541,12 +541,21 @@ export function SmartTextInput({
       // downloaded, this needs internet the first time" is actionable, whereas
       // "try a clearer image" sends somebody to photograph the page again for a
       // fault that has nothing to do with the photograph.
-      const detail = error instanceof Error ? error.message : '';
+      // The recogniser's own message, whenever there is one. The previous
+      // version only used it when longer than 20 characters, so a short but
+      // precise failure — a 404 for a missing core file, say — was replaced by
+      // "try a clearer photograph" and sent somebody to re-photograph a page for
+      // a fault that had nothing to do with the photograph. That is exactly how
+      // the missing .wasm binaries stayed hidden.
+      const detail = error instanceof Error ? error.message.trim() : '';
       setErrorMessage(
-        detail && detail.length > 20
-          ? detail
+        detail
+          ? `Could not read that image: ${detail}`
           : 'Could not read that image. Try a clearer photograph, or type the notes instead.'
       );
+      // Always logged in full, so a fault that is awkward to reproduce on a
+      // phone can still be diagnosed from the console.
+      console.error('[OCR] failed', error);
     } finally {
       setOcrStage('');
       setIsProcessingOCR(false);
