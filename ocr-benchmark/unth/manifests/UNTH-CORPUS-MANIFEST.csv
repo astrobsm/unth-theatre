@@ -1,0 +1,2 @@
+id,filename,document_type,writer_id,handwritten,printed,photographed,poor_quality,lighting,perspective,glare,folded,contains_drugs,contains_doses,contains_numbers,contains_signature,deidentified,ground_truth_file,notes
+UNTH-ANA-001,anaesthetic-chart-01.jpg,anaesthetic_chart,WRITER-001,true,true,true,false,normal,normal,false,false,true,true,true,true,true,anaesthetic-chart-01.txt,EXAMPLE ROW - delete when real pages are added

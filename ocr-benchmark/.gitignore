@@ -1,0 +1,39 @@
+# Clinical documents and external datasets are NOT committed.
+#
+# UNTH-DATA-GOVERNANCE.md forbids putting identifiable patient documents in this
+# repository, and forbids redistributing external datasets whose licences do not
+# permit it. A rule people have to remember is not a control; this file is the
+# control. Anyone with repository access can read anything committed here, and a
+# document committed once stays in the history after it is deleted.
+#
+# If you find yourself wanting to force-add an image, the answer is no. Ask.
+
+# Every image, anywhere under this tree.
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.tif
+*.tiff
+*.pdf
+*.heic
+
+# Ground-truth transcriptions contain the clinical text of the documents, which
+# can identify a case even when the image does not.
+unth/ground-truth/*
+!unth/ground-truth/.gitkeep
+!unth/ground-truth/EXAMPLE.txt
+
+# External datasets: large, and several may not be redistributed.
+external/*/*
+!external/*/.gitkeep
+!external/**/PROVENANCE.md
+
+# Reports may quote transcribed clinical text verbatim in error tables.
+reports/**
+!reports/.gitkeep
+
+# The manifest and metadata are safe to commit ONLY because they carry no
+# patient identifiers and no writer names — see UNTH-DATA-GOVERNANCE.md §3.
+!unth/manifests/*.csv
+!unth/metadata/*.json
