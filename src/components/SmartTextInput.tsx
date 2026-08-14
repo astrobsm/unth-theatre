@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { acceptUtterance, stripTrailing } from '@/lib/speech-dedupe';
 import { 
   Mic, 
   MicOff, 
@@ -100,6 +101,9 @@ export function SmartTextInput({
   const [interimTranscript, setInterimTranscript] = useState('');
   const [confidence, setConfidence] = useState<number | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
+  // What the recogniser is actually doing. "Processing image... 5%" with no stage
+  // is indistinguishable from a hang, which is how this was reported.
+  const [ocrStage, setOcrStage] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(language);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -113,6 +117,11 @@ export function SmartTextInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const speechServiceRef = useRef<SpeechRecognitionService | null>(null);
+  // Last accepted utterance, for the echo/containment check above.
+  const dedupeRef = useRef<{ lastText: string; lastAt: number } | null>(null);
+  // The raw text of that utterance, so a replacement can strip exactly what it
+  // appended rather than guessing at the end of the field.
+  const lastAppendedRef = useRef<string>('');
   const ocrWorkerRef = useRef<TesseractWorker | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Keep refs to the latest value/onChange so the speech service callbacks
@@ -145,8 +154,29 @@ export function SmartTextInput({
         medicalMode,
         onResult: (transcript, isFinal, conf) => {
           if (isFinal) {
+            // Continuous recognition restarts itself every few seconds, and when
+            // the new session starts before the old one has finished delivering,
+            // BOTH emit the same final phrase — the reported
+            // "25 year old woman 25 year old woman 25 year old woman".
+            //
+            // Deduplicated on the text rather than by chasing each browser's
+            // timing: the same phrase inside a short window is one utterance, and
+            // a longer version of what was just appended REPLACES it so nothing
+            // spoken is lost.
+            const decision = acceptUtterance(transcript, dedupeRef.current, Date.now());
+            dedupeRef.current = decision.state;
+            if (!decision.accept) {
+              setInterimTranscript('');
+              return;
+            }
+
             const current = valueRef.current;
-            const newValue = current + (current ? ' ' : '') + transcript;
+            const base = decision.replacePrevious
+              ? stripTrailing(current, lastAppendedRef.current)
+              : current;
+            const newValue = base + (base ? ' ' : '') + transcript;
+            lastAppendedRef.current = transcript;
+
             onChangeRef.current(newValue);
             setInterimTranscript('');
             setConfidence(conf);
@@ -170,37 +200,73 @@ export function SmartTextInput({
     };
   }, [enableSpeech, selectedLanguage, medicalMode]);
 
-  // Initialize OCR worker with optimized settings for handwriting
+  /**
+   * Build the OCR worker, on demand and with a deadline.
+   *
+   * Reported: "Processing image... 5%" that never finishes. Tesseract downloads
+   * its WASM core and ~10 MB of English training data from a CDN on first use.
+   * On a hospital connection that is slow, and behind the captive portal it can
+   * be blocked outright — with no timeout anywhere, the promise simply never
+   * settled and the bar sat at 5% for ever.
+   *
+   * Three changes:
+   *   - built when the user actually asks for OCR, not on page load, so a page
+   *     with a photo button no longer pulls 10 MB from everybody who opens it
+   *   - a hard deadline, so a stalled download becomes a sentence the user can
+   *     act on instead of an eternal spinner
+   *   - the real progress reported, including the download phase, so "5%" means
+   *     something rather than being a fixed guess
+   */
+  const OCR_INIT_TIMEOUT_MS = 45_000;
+
+  const getOcrWorker = useCallback(async (): Promise<TesseractWorker> => {
+    if (ocrWorkerRef.current) return ocrWorkerRef.current;
+
+    const build = (async () => {
+      const createWorkerFn = await createWorkerLazy();
+      const worker = await createWorkerFn('eng', 1, {
+        logger: (m) => {
+          // The DOWNLOAD is the slow part, so it is shown. Previously only
+          // "recognizing text" was reported, which is why the bar appeared stuck
+          // before recognition had even begun.
+          if (m.status && typeof m.progress === 'number') {
+            const pct = Math.round(m.progress * 100);
+            if (m.status.includes('loading') || m.status.includes('download')) {
+              setOcrProgress(Math.min(40, pct));
+              setOcrStage('Loading recogniser…');
+            } else if (m.status === 'recognizing text') {
+              setOcrProgress(40 + Math.round(pct * 0.6));
+              setOcrStage('Reading the image…');
+            }
+          }
+        },
+      });
+      await worker.setParameters({ preserve_interword_spaces: '1' });
+      return worker;
+    })();
+
+    const worker = await Promise.race([
+      build,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(
+            'The text recogniser could not be downloaded. This needs internet the first time it is used — try again on a better connection, or type the notes instead.'
+          )),
+          OCR_INIT_TIMEOUT_MS
+        )
+      ),
+    ]);
+
+    ocrWorkerRef.current = worker;
+    return worker;
+  }, []);
+
+  // Kept only to tear the worker down; it is no longer created on mount.
   useEffect(() => {
     const initOCRWorker = async () => {
-      if (enableOCR && !ocrWorkerRef.current) {
-        try {
-          // Create worker with enhanced settings for handwriting recognition
-          const createWorkerFn = await createWorkerLazy();
-          const worker = await createWorkerFn('eng', 1, {
-            logger: (m) => {
-              if (m.status === 'recognizing text') {
-                // Don't override our multi-pass progress
-                if (m.progress > 0) {
-                  console.log(`Tesseract: ${m.status} - ${Math.round(m.progress * 100)}%`);
-                }
-              }
-            },
-          });
-
-          // Set optimized parameters for handwriting recognition
-          // Note: Some Tesseract.js parameters may not work exactly like command-line Tesseract
-          // Focus on core parameters that are well-supported
-          await worker.setParameters({
-            preserve_interword_spaces: '1',
-          });
-
-          ocrWorkerRef.current = worker;
-          console.log('✅ OCR Worker initialized with handwriting-optimized settings');
-        } catch (error) {
-          console.error('Failed to initialize OCR worker:', error);
-        }
-      }
+      // Deliberately empty: see getOcrWorker. Building a 10 MB worker for every
+      // page that merely OFFERS a photo button is what made this feel broken.
+      return;
     };
 
     initOCRWorker();
@@ -354,7 +420,7 @@ export function SmartTextInput({
               AdvancedImagePreprocessor.invertIfNeeded(passCanvas);
 
               // Run OCR on this preprocessed version
-              const { data } = await ocrWorkerRef.current!.recognize(passCanvas);
+              const { data } = await (await getOcrWorker()).recognize(passCanvas);
               
               if (data.text && data.text.trim().length > 0) {
                 // Apply medical corrections to improve accuracy
@@ -396,7 +462,7 @@ export function SmartTextInput({
               AdvancedImagePreprocessor.deskewImage(rotatedCanvas, angle);
               AdvancedImagePreprocessor.applyAdaptiveThreshold(rotatedCanvas);
 
-              const { data } = await ocrWorkerRef.current!.recognize(rotatedCanvas);
+              const { data } = await (await getOcrWorker()).recognize(rotatedCanvas);
               
               if (data.text && data.text.trim().length > 0) {
                 const correctedText = applyMedicalCorrections(data.text);
@@ -581,7 +647,10 @@ export function SmartTextInput({
           <div className="px-4 py-2 bg-purple-50 border-t border-purple-100">
             <div className="flex items-center gap-2 text-purple-700 text-sm mb-1">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Processing image... {ocrProgress}%</span>
+              {/* Names the stage. A bare percentage that stops moving is
+                  indistinguishable from a hang; "Loading recogniser" tells the
+                  user it is a download and that it only happens once. */}
+              <span>{ocrStage || 'Processing image'}… {ocrProgress}%</span>
             </div>
             <div className="w-full bg-purple-200 rounded-full h-1.5">
               <div 
