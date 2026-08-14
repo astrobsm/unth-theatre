@@ -76,6 +76,52 @@ describe('acceptUtterance — the reported fault', () => {
   });
 });
 
+describe('the exact sequence from the reported screenshot', () => {
+  it('collapses growing fragments into the phrases actually spoken', () => {
+    // Read off the screenshot. These are not repeats of one phrase — they are
+    // PROGRESSIVELY LONGER fragments, each delivered as final, which is what
+    // produced "25 25 25 year 25 year old 25 year old woman…".
+    const fragments = [
+      '25',
+      '25',
+      '25 year',
+      '25 year old',
+      '25 year old woman',
+      '25 year old woman',
+      '25 year old woman',
+      '25 year old woman with',
+      '25 year old woman with',
+      'do you',
+      'do you like',
+    ];
+
+    let state = null as Parameters<typeof acceptUtterance>[1];
+    const field: string[] = [];
+    let t = T;
+    for (const f of fragments) {
+      const r = acceptUtterance(f, state, t);
+      state = r.state;
+      if (r.accept) {
+        if (r.replacePrevious) field.pop();
+        field.push(f);
+      }
+      t += 250;   // fragments arrive a few hundred ms apart
+    }
+
+    // Two utterances, each in its fullest form — not eleven fragments.
+    expect(field).toEqual(['25 year old woman with', 'do you like']);
+  });
+
+  it('keeps a later sentence when the speaker moves on', () => {
+    // "do you" does not extend "25 year old woman with", so it starts a new
+    // phrase rather than being swallowed.
+    const a = acceptUtterance('25 year old woman with', null, T);
+    const b = acceptUtterance('do you', a.state, T + 200);
+    expect(b.accept).toBe(true);
+    expect(b.replacePrevious).toBeUndefined();
+  });
+});
+
 describe('acceptUtterance — must not silence a real speaker', () => {
   it('allows the same phrase again after the window', () => {
     // Somebody genuinely repeating themselves pauses for longer than a

@@ -784,11 +784,18 @@ export function SmartTextInput({
             )}
           </div>
 
-          {/* Right side - Status and settings */}
-          <div className="flex items-center gap-2">
-            {/* Confidence indicator */}
-            {confidence !== null && (
-              <div className="flex items-center gap-1 text-xs text-gray-500">
+          {/* Right side - Status and settings.
+              min-w-0 lets this shrink instead of forcing the row wider than the
+              phone. Without it the toolbar overflowed and "0% confidence" wrapped
+              to one letter per line down the edge of the field, which is what the
+              reported screenshot shows. */}
+          <div className="flex min-w-0 items-center gap-2">
+            {/* Confidence indicator.
+                Hidden below sm: on a phone the toolbar has no room for it, and a
+                recogniser's self-reported confidence is not what a clinician is
+                looking at while dictating. */}
+            {confidence !== null && confidence > 0 && (
+              <div className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-xs text-gray-500 sm:flex">
                 <span>{Math.round(confidence * 100)}% confidence</span>
               </div>
             )}
