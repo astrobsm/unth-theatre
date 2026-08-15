@@ -1,86 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import path from 'path';
 import { authOptions } from '@/lib/auth';
+import { ProviderRegistry, policyFromEnv } from '@/lib/ocr/providers';
+import { TesseractProvider } from '@/lib/ocr/providers/tesseract';
+import { GoogleDocumentAiProvider } from '@/lib/ocr/providers/googleDocAI';
+import { assessTokens, assessDocument } from '@/lib/ocr/confidence';
+import { apiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
-// Reading a page can take a while on modest hardware; the default would cut it
-// off mid-recognition.
 export const maxDuration = 60;
 
 /**
  * POST /api/ocr   { image: "data:image/jpeg;base64,..." }
  *
- * Read text from a photograph, ON THE SERVER.
+ * Read text from a photograph, on the server, using whichever engine the
+ * administrator has enabled.
  *
- * The client used to do this. That meant every phone downloaded about 22 MB of
- * recogniser before it could read its first page — minutes on a theatre
- * connection, repeated for every device and every cleared cache, and impossible
- * on a handset with no storage to spare. It was reported as broken three times
- * and it was really just slow, which amounts to the same thing at a bedside.
+ * This used to call tesseract directly. It now goes through the registry, so
+ * configuring GOOGLE_DOCAI_* and OCR_PROVIDERS changes what the scan button
+ * uses with no code change — and so the rule that a cloud engine cannot run
+ * without explicit acceptance is enforced in one place rather than here.
  *
- * Doing it here inverts the economics: the phone uploads a couple of hundred
- * kilobytes, the server holds the recogniser in memory between requests, and a
- * theatre PC does the arithmetic instead of a phone. It also works on a device
- * that could never have run it.
- *
- * The local theatre server does this over the LAN with no internet at all, which
- * is the case that matters most here.
+ * The response now carries per-word assessment as well as text. A caller that
+ * only wants the text can ignore it; a caller that means to put this in a
+ * clinical record must not, because it is the only thing that says which words
+ * a person has to check.
  */
 
-/** ~8 MP JPEG. Beyond this the camera is being used wrongly, not the OCR. */
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
-/**
- * One worker for the whole process, kept warm.
- *
- * Building it costs seconds and loads the language data; doing that per request
- * would put the old per-device cost back, just on the server.
- */
-type OcrWorker = Awaited<ReturnType<typeof buildWorker>>;
-let workerPromise: Promise<OcrWorker> | null = null;
-
-async function buildWorker() {
-  const { createWorker } = await import('tesseract.js');
-  // The language data sits in public/tesseract, put there at build time. Read
-  // from disk rather than fetched, so this works with no internet.
-  //
-  // This is the "fast" model, and it stays that way. The accurate float model
-  // was tried and measured: on both a clean render and a deliberately degraded
-  // one it scored identically (98.1% of characters correct), and on the server
-  // it aborted outright —
-  //   Aborted(missing function: _ZN9tesseract13DotProductSSEEPKfS1_i)
-  // because the float model needs SIMD dot-product entry points that the LSTM
-  // WASM core we ship does not export. It would have cost 12.8 MB per deploy to
-  // turn imperfect recognition into none.
-  const langPath = path.join(process.cwd(), 'public', 'tesseract');
-
-  const worker = await createWorker('eng', 1, { langPath, gzip: true });
-
-  await worker.setParameters({
-    // A photograph carries no DPI, so tesseract guesses from pixel dimensions.
-    // Its guess is what produced "Image too small to scale!! (1x36)" — telling
-    // it 300 removes the guess and with it a whole class of segmentation
-    // failure on pages photographed close up.
-    user_defined_dpi: '300',
-    // Clinical notes are full of numbers that matter (doses, folder numbers).
-    // Without this, runs of digits get glued to neighbouring words.
-    preserve_interword_spaces: '1',
-  });
-
-  return worker;
-}
-
-function getWorker(): Promise<OcrWorker> {
-  if (!workerPromise) {
-    workerPromise = buildWorker().catch((err) => {
-      // Cleared on failure, or one bad start would poison every later request
-      // for the life of the process.
-      workerPromise = null;
-      throw err;
-    });
+// Built once per process. Registration is cheap; the engines themselves are
+// lazy, so nothing loads a model until a request actually selects it.
+let registry: ProviderRegistry | null = null;
+function getRegistry(): ProviderRegistry {
+  if (!registry) {
+    registry = new ProviderRegistry()
+      .register(new TesseractProvider())
+      .register(new GoogleDocumentAiProvider());
   }
-  return workerPromise;
+  return registry;
 }
 
 export async function POST(req: NextRequest) {
@@ -98,8 +56,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Send an image as a data URL.' }, { status: 400 });
   }
 
-  const base64 = image.slice(image.indexOf(',') + 1);
-  const buffer = Buffer.from(base64, 'base64');
+  const mimeType = image.slice(5, image.indexOf(';')) || 'image/jpeg';
+  const buffer = Buffer.from(image.slice(image.indexOf(',') + 1), 'base64');
 
   if (buffer.length === 0) {
     return NextResponse.json({ error: 'That image was empty.' }, { status: 400 });
@@ -111,37 +69,52 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const worker = await getWorker();
-    const { data } = await worker.recognize(buffer);
+    const result = await getRegistry().recognise(buffer, mimeType, policyFromEnv());
 
-    const text = (data.text ?? '').trim();
-    if (!text) {
-      // Not an error: a blank page or an unreadable photograph is a real answer,
-      // and telling somebody "failed" would send them to retry a photograph that
-      // genuinely has nothing legible on it.
+    // Word-level assessment: which words were uncertain, and which are
+    // high-risk regardless of how certain the engine was. A dose at 100%
+    // confidence still requires a human, because a recogniser's confidence is
+    // a statement about pixels and not about medicine.
+    const assessed = assessTokens(
+      result.words.map((w) => ({ text: w.text, confidence: w.confidence })),
+    );
+    const document = assessDocument(assessed);
+
+    if (!result.text.trim()) {
+      // Not an error. A blank or unreadable page is a real answer, and calling
+      // it a failure sends somebody to re-photograph a page with nothing
+      // legible on it.
       return NextResponse.json({
-        text: '',
-        confidence: 0,
+        text: '', confidence: 0, provider: result.provider,
+        requiresReview: true,
         message: 'No text could be made out. Try a straighter, better-lit photograph.',
       });
     }
 
     return NextResponse.json({
-      text,
-      // 0–100 as tesseract reports it. Shown so a clinician can judge whether to
-      // trust what came back rather than assume it.
-      confidence: Math.round(data.confidence ?? 0),
+      text: result.text,
+      provider: result.provider,
+      modelVersion: result.modelVersion,
+      confidence: result.confidence === null ? null : Math.round(result.confidence * 100),
+      durationMs: result.durationMs,
+      requiresReview: document.requiresReview,
+      reviewReason: document.reviewReason,
+      uncertainCount: document.uncertainCount,
+      highRiskCount: document.highRiskCount,
+      words: assessed.map((a, i) => ({
+        text: a.text,
+        confidence: a.confidence,
+        band: a.band,
+        isUncertain: a.isUncertain,
+        highRisk: a.highRisk,
+        reason: a.reason,
+        bbox: result.words[i]?.bbox ?? null,
+      })),
     });
   } catch (err) {
     // The real reason, logged in full and summarised to the caller. Three
-    // rounds of this fault were prolonged by error handling that replaced the
-    // cause with a guess.
-    console.error('[ocr] recognition failed', err);
-    const detail = err instanceof Error ? err.message : '';
-    return NextResponse.json({
-      error: detail
-        ? `Could not read the image: ${detail}`
-        : 'Could not read the image.',
-    }, { status: 500 });
+    // rounds of OCR faults in this system were prolonged by error handling
+    // that replaced the cause with a guess.
+    return apiError('ocr', err);
   }
 }
