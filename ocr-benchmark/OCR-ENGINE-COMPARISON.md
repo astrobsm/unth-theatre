@@ -113,3 +113,50 @@ Reproduce with:
     node ocr-benchmark/scripts/run-african-benchmark.js --json reports/out.json
 
 Full per-document results: `reports/african-medical-records-tesseract.json`
+
+---
+
+## CRAFT + TrOCR — 15 August 2026
+
+6 documents from the tuning split (not the full corpus; the signal is strong but
+the sample is small).
+
+| | tesseract (62 docs) | CRAFT+TrOCR (6 docs) |
+|---|---|---|
+| Numbers, doses, drug names | 4.7% | **26.1%** |
+| Character error rate | 76.0% | 71.1% |
+| Word error rate | 140.8% | 125.7% |
+| Seconds per document | ~1 | **123–181** |
+
+**Five and a half times better on the metric that matters, and still nowhere
+near safe.** 26.1% means three of every four clinical numbers are wrong. Four
+order-of-magnitude errors in six documents, including "100" read as "9.7".
+
+Verdict: NOT SAFE. The threshold is 98%.
+
+### Two conclusions
+
+**The local-engine route is exhausted.** TrOCR is the strongest handwriting
+recogniser that runs offline, and it is not close. Trying PaddleOCR next would
+be optimism, not method: it is a scene-text engine like EasyOCR, it would need
+Docker or an older Python, and it would have to be five times better than the
+purpose-built handwriting model to reach the bar.
+
+**Two to three minutes per page rules it out anyway.** That is on a development
+machine faster than the theatre server. A scan a clinician waits three minutes
+for will not be used, and a theatre will go back to paper.
+
+### What this leaves
+
+Cloud document intelligence — Azure Read or Google Document AI. Both have
+genuine handwriting models trained on far more data than TrOCR, and both return
+per-word confidence, which the verification screen needs.
+
+Both mean sending clinical documents to a third party. That is now a decision
+UNTH has to take on evidence rather than in the abstract: three local engines
+measured, none usable for handwriting, and the alternative to the cloud is that
+handwritten documents cannot be scanned at all.
+
+The honest fallback if UNTH declines: keep OCR for printed documents only, and
+have staff type or dictate handwritten notes. That is a real option, not a
+failure — dictation already exists in ORM and works.
