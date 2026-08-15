@@ -345,8 +345,17 @@ export class SpeechRecognitionService {
       clearTimeout(this.restartTimeout);
     }
 
-    // Exponential backoff: 1s, 2s, 4s based on consecutive errors
-    const delay = Math.min(1000 * Math.pow(2, this.consecutiveErrors), 4000);
+    // A healthy restart must be near-instant; backoff is for FAILURES only.
+    //
+    // Phones end the recognition session after every pause — iOS and Android
+    // both ignore continuous:true — so a restart happens after each phrase
+    // rather than rarely. The old formula waited a full second even with zero
+    // errors, which on a desktop is invisible and on a phone is a second of
+    // deafness after every sentence. That is what "dictation loses words on
+    // the phone" was: not recognition quality, a gap in listening.
+    const delay = this.consecutiveErrors === 0
+      ? 80
+      : Math.min(1000 * Math.pow(2, this.consecutiveErrors - 1), 4000);
 
     this.restartTimeout = setTimeout(() => {
       // Re-check user intent at restart time — they may have toggled off in the meantime
