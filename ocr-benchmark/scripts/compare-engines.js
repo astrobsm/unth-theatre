@@ -90,8 +90,7 @@ const ENGINES = {
       const mime = p.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
       out.push((await provider.recognise(bytes, mime)).text);
     }
-    return out.join('
-');
+    return out.join('\n');
   },
   async easyocr(imagePaths) { return runSidecar(imagePaths, ['--easyocr-only']); },
 };
