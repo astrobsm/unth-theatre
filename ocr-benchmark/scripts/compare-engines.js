@@ -68,6 +68,31 @@ const ENGINES = {
   },
 
   async trocr(imagePaths) { return runSidecar(imagePaths, []); },
+
+  // Sends documents to Google. Refuses to run without the same explicit
+  // acceptance the application requires, so a benchmark cannot become the
+  // route by which patient documents first leave the hospital.
+  async googledocai(imagePaths) {
+    if (process.env.OCR_EXTERNAL_PROCESSING_ACCEPTED !== 'yes') {
+      throw new Error(
+        'This engine sends documents outside the hospital. Set '
+        + 'OCR_EXTERNAL_PROCESSING_ACCEPTED=yes only once UNTH has accepted that.',
+      );
+    }
+    const { GoogleDocumentAiProvider } = requireTs('src/lib/ocr/providers/googleDocAI.ts');
+    const provider = new GoogleDocumentAiProvider();
+    if (!(await provider.available())) {
+      throw new Error('Set GOOGLE_DOCAI_PROJECT_ID, GOOGLE_DOCAI_PROCESSOR_ID and GOOGLE_DOCAI_CREDENTIALS.');
+    }
+    const out = [];
+    for (const p of imagePaths) {
+      const bytes = fs.readFileSync(p);
+      const mime = p.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+      out.push((await provider.recognise(bytes, mime)).text);
+    }
+    return out.join('
+');
+  },
   async easyocr(imagePaths) { return runSidecar(imagePaths, ['--easyocr-only']); },
 };
 
