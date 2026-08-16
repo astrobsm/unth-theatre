@@ -49,7 +49,7 @@ describe('queries', () => {
   });
 
   it('drops a query already responded to', () => {
-    for (const status of ['RESPONDED', 'RESOLVED', 'CLOSED', 'WITHDRAWN']) {
+    for (const status of ['RESPONDED', 'RESOLVED', 'DISMISSED']) {
       const items = board({ queries: [query({ status })] });
       expect(items.filter((i) => i.kind === 'QUERY')).toHaveLength(0);
     }

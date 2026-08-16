@@ -168,9 +168,22 @@ const asDate = (v: Date | string | null | undefined): Date | null => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-/** A query still needing this person to do something. */
+/**
+ * A query still needing this person to do something.
+ *
+ * The closed set is the real DisciplinaryQueryStatus enum, checked against the
+ * schema. An earlier version listed CLOSED and WITHDRAWN, which do not exist,
+ * and omitted DISMISSED, which does — so a dismissed query would have sat on
+ * somebody's board indefinitely with nothing they could do about it.
+ *
+ * ESCALATED is deliberately still open: it means the deadline passed and the
+ * matter went upward, which is precisely when the recipient most needs to see
+ * it.
+ */
+const CLOSED_STATUSES = ['RESPONDED', 'RESOLVED', 'DISMISSED'];
+
 function isOpen(status: string): boolean {
-  return !['RESPONDED', 'RESOLVED', 'CLOSED', 'WITHDRAWN'].includes((status ?? '').toUpperCase());
+  return !CLOSED_STATUSES.includes((status ?? '').toUpperCase());
 }
 
 export function buildPersonalBoard(input: BoardInput): BoardItem[] {
