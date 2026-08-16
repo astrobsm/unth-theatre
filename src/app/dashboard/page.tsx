@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import MyTheatreTeam from '@/components/MyTheatreTeam';
+import PersonalBoard from '@/components/PersonalBoard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -192,6 +193,11 @@ export default function DashboardPage() {
           )}
         </button>
       </div>
+
+      {/* What this person must do today, above everything else. A query with a
+          deadline and a compulsory duty are worth more of the fold than a
+          navigation card. */}
+      <PersonalBoard />
 
       {/* Compact emergency access — the two most critical links only. The large
           multi-button quick-access grid and charts were removed for speed. */}
