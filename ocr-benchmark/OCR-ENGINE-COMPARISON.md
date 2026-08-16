@@ -160,3 +160,51 @@ handwritten documents cannot be scanned at all.
 The honest fallback if UNTH declines: keep OCR for printed documents only, and
 have staff type or dictate handwritten notes. That is a real option, not a
 failure — dictation already exists in ORM and works.
+
+---
+
+## Google Document AI — 16 August 2026
+
+42 documents, the writer-disjoint tuning split. 3 failed outright.
+
+| | tesseract (62) | CRAFT+TrOCR (6) | **Google (42)** |
+|---|---|---|---|
+| Numbers, doses, drug names | 4.7% | 26.1% | **60.7%** |
+| Character error rate | 76.0% | 71.1% | **28.6%** |
+| Word error rate | 140.8% | 125.7% | **50.6%** |
+| Order-of-magnitude errors | 21 | 4 | **7** |
+| Seconds per page | ~1 | 123–181 | **~5** |
+
+**Verdict: NOT SAFE.** Best by a wide margin and still short of the 98%
+threshold. Four in ten clinical numbers are wrong.
+
+### A correction, recorded because it matters
+
+An interim run over ten documents showed **zero** order-of-magnitude errors, and
+that was reported as a meaningful advantage. The full split has **seven**,
+including "38.2" read as "3802" — a temperature turned into a four-digit
+number.
+
+The ten-document figure was not wrong arithmetic; it was too small a sample
+answering a question about rare events. Order-of-magnitude errors occur roughly
+once every six documents here, so a ten-document run had a real chance of
+containing none by luck. Rare-but-lethal failures need the whole corpus, and an
+interim number about them should not be quoted as a finding.
+
+### What it is good for
+
+Google is the first engine measured that could be genuinely useful. At 60.7%
+with a 28.6% character error rate, most of a page comes back roughly right, and
+five seconds a page is fast enough to use.
+
+That makes it a viable ASSISTANT — a first draft a clinician corrects — but only
+behind a verification screen that highlights uncertain words and forces
+confirmation of every dose. Without one, the text lands directly in a clinical
+field and 40% of the numbers in it are wrong.
+
+### Still to do before this is a deployment decision
+
+- The locked test split has not been touched. It is for one measurement at the
+  end, after the verification screen exists.
+- Three documents failed outright and have not been investigated.
+- Every figure here is African Medical Records, not UNTH.
