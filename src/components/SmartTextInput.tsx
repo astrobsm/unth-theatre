@@ -29,6 +29,7 @@ const createWorkerLazy = async () => {
 import { SpeechRecognitionService, createSpeechRecognition } from '@/lib/speech-recognition';
 import { applyHumanVoice } from '@/lib/humanVoice';
 import { applyImageEnhancements, initializeTensorFlow } from '@/lib/tensorflow-ocr';
+import OcrVerificationPanel, { type VerificationWord } from '@/components/OcrVerificationPanel';
 import { 
   AdvancedImagePreprocessor, 
   applyMedicalCorrections, 
@@ -98,6 +99,11 @@ export function SmartTextInput({
   const [mode, setMode] = useState<InputMode>('text');
   const [isListening, setIsListening] = useState(false);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
+  /** A scan awaiting a clinician's check. Nothing reaches the field until
+   *  they accept it. */
+  const [pendingScan, setPendingScan] = useState<{
+    imageDataUrl: string; text: string; words: VerificationWord[]; provider: string;
+  } | null>(null);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [confidence, setConfidence] = useState<number | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -401,8 +407,19 @@ export function SmartTextInput({
         const body = await res.json();
         setOcrProgress(100);
         if (body.text) {
-          const current = valueRef.current;
-          onChangeRef.current(current + (current ? '\n' : '') + body.text);
+          // NOT written straight into the field any more.
+          //
+          // The best engine measured reads 60.7% of clinical numbers correctly
+          // on real handwriting, with seven order-of-magnitude errors across
+          // forty-two documents. Text that good is a useful first draft and is
+          // dangerous in a record unchecked, so it goes to the verification
+          // panel and the clinician decides what lands in the field.
+          setPendingScan({
+            imageDataUrl: dataUrl,
+            text: body.text,
+            words: Array.isArray(body.words) ? body.words : [],
+            provider: body.provider ?? 'unknown',
+          });
           if (typeof body.confidence === 'number') setConfidence(body.confidence / 100);
         } else {
           setErrorMessage(body.message ?? 'No text could be made out.');
@@ -680,6 +697,31 @@ export function SmartTextInput({
                 style={{ width: `${ocrProgress}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* A scan waiting to be checked. Shown in place of writing straight
+            into the field: the best engine measured gets four in ten clinical
+            numbers wrong, so a person decides what lands in the record. */}
+        {pendingScan && (
+          <div className="border-t bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-800">
+                Check this scan before it is saved
+              </span>
+              <span className="text-xs text-slate-500">read by {pendingScan.provider}</span>
+            </div>
+            <OcrVerificationPanel
+              imageDataUrl={pendingScan.imageDataUrl}
+              words={pendingScan.words}
+              fallbackText={pendingScan.text}
+              onCancel={() => setPendingScan(null)}
+              onAccept={(verifiedText) => {
+                const current = valueRef.current;
+                onChangeRef.current(current + (current ? '\n' : '') + verifiedText);
+                setPendingScan(null);
+              }}
+            />
           </div>
         )}
 
