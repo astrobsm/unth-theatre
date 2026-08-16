@@ -17,6 +17,31 @@ import {
 } from '@/lib/institutionalPdf';
 import { SECTION_LABELS, SECTION_ORDER, type EstimateSection } from './calculate';
 
+/**
+ * Which section headings the PDF will print, in order.
+ *
+ * Known sections first, in their established order, then anything the caller
+ * used that is not one of them.
+ *
+ * That second part is the point. Unrecognised sections used to be dropped
+ * silently: the lines vanished from the page while their money stayed in the
+ * total, so the estimate showed a figure larger than the charges printed
+ * beneath it — a patient quoted for items nobody could see. Found by
+ * generating a PDF and reading the text back, not by reading the code, which
+ * had looked correct for weeks.
+ *
+ * Exported so the behaviour can be tested without rendering a document.
+ */
+export function sectionsToRender(lines: Array<{ section: string }>): string[] {
+  const known: string[] = SECTION_ORDER.filter(
+    (s) => lines.some((l) => l.section === s));
+  const unknown = Array.from(new Set(
+    lines.map((l) => l.section)
+      .filter((s) => !SECTION_ORDER.includes(s as EstimateSection)),
+  ));
+  return [...known, ...unknown];
+}
+
 export interface EstimatePdfLine {
   section: string;
   description: string;
@@ -128,8 +153,7 @@ export async function buildEstimatePdf(data: EstimatePdfData): Promise<Blob> {
   // ---- Charges, grouped ---------------------------------------------------
   // Grouped and sub-totalled because a patient reads an estimate to find out
   // what they must bring money for, and a single 40-row list answers nothing.
-  const present = SECTION_ORDER.filter(
-    (s) => data.lines.some((l) => l.section === s));
+  const present = sectionsToRender(data.lines);
 
   for (const section of present) {
     const rows = data.lines.filter((l) => l.section === section);
