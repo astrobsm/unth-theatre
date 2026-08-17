@@ -577,6 +577,10 @@ export async function POST(request: NextRequest) {
     // reason, because a hard block would mean theatre never hears about the case.
     const preop = checkPreopRequirements({
       urgency: surgeryType,
+      // Pharmacy prepares from drugDressingRequests; the pack provider picks
+      // from consumableRequests. Both are now required rather than optional.
+      prescriptionItemCount: drugDressingRequests?.length ?? 0,
+      consumableRequestCount: consumableRequests?.length ?? 0,
       labs: {
         recentHb: validatedData.recentHb,
         hbSampleAt: validatedData.hbSampleAt,

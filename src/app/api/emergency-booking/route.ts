@@ -471,6 +471,13 @@ export async function POST(request: NextRequest) {
       // requirement enforced here.
       labsHandledElsewhere: true,
       labs: {},
+      // Required even here. The labs are gathered afterwards by their own
+      // workflow, but nothing collects the drugs and the pack later — an
+      // emergency case needs them picked more urgently than an elective one,
+      // not less. Deferrable with a reason, like everything else on an
+      // emergency booking.
+      prescriptionItemCount: validatedData.drugDressingRequests?.length ?? 0,
+      consumableRequestCount: validatedData.consumableRequests?.length ?? 0,
       consent: {
         hasUploadedFile: Boolean(validatedData.consentFile?.base64),
         signedElectronically: Boolean(validatedData.consentForm),

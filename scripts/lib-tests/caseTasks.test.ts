@@ -162,3 +162,50 @@ describe('personalCaseTasks', () => {
     expect(personalCaseTasks([surgery()], 'surgeon-1', NOW)).toHaveLength(0);
   });
 });
+
+describe('an unallocated theatre is not a fault until the case is close', () => {
+  // Theatre is no longer chosen when the case is booked. The theatre manager
+  // and the nurses allocate it through the team assignment nearer the day, so
+  // "no theatre" is the normal state of a freshly booked case rather than
+  // something anybody has failed to do.
+  const unallocated = () => surgery({ theatreId: null });
+
+  // 08:00 against a 09:00 case is one hour away — inside the two-hour window.
+  const EARLY = new Date('2026-08-18T05:30:00.000Z'); // 3.5 hours before
+
+  it('says nothing to the scrub nurse hours ahead', () => {
+    const tasks = caseTasksFor(unallocated(), 'scrub-1', EARLY);
+    expect(tasks.map((t) => t.id)).not.toContain('s1:no-theatre');
+  });
+
+  it('says nothing to the technician hours ahead', () => {
+    const tasks = caseTasksFor(unallocated(), 'tech-1', EARLY);
+    expect(tasks.map((t) => t.id)).not.toContain('s1:tech-no-theatre');
+  });
+
+  it('raises it for the scrub nurse once the case is imminent', () => {
+    const tasks = caseTasksFor(unallocated(), 'scrub-1', NOW);
+    expect(tasks.map((t) => t.id)).toContain('s1:no-theatre');
+  });
+
+  it('raises it for the technician once the case is imminent', () => {
+    const tasks = caseTasksFor(unallocated(), 'tech-1', NOW);
+    expect(tasks.map((t) => t.id)).toContain('s1:tech-no-theatre');
+  });
+
+  it('is critical once the case is already past its time', () => {
+    const late = new Date('2026-08-18T10:00:00.000Z'); // an hour after 09:00
+    const tasks = caseTasksFor(unallocated(), 'scrub-1', late);
+    const t = tasks.find((x) => x.id === 's1:no-theatre');
+    expect(t?.severity).toBe('CRITICAL');
+  });
+
+  it('does not ask the technician to confirm setup for a room that does not exist', () => {
+    // The two are mutually exclusive: with no theatre there is nothing to
+    // prepare, and the escalation replaces the setup task rather than joining
+    // it.
+    const tasks = caseTasksFor(unallocated(), 'tech-1', NOW).map((t) => t.id);
+    expect(tasks).toContain('s1:tech-no-theatre');
+    expect(tasks).not.toContain('s1:setup');
+  });
+});

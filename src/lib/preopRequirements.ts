@@ -69,6 +69,20 @@ export interface PreopCheckInput {
    * Consent is still required, and still deferrable with a reason.
    */
   labsHandledElsewhere?: boolean;
+  /**
+   * What the case is being sent to Pharmacy and to the pack provider with.
+   *
+   * Both were optional, and the result was cases arriving with nothing
+   * prepared and nothing picked — discovered at the theatre door, which is the
+   * most expensive possible moment to discover it. Required now, on the same
+   * terms as consent: hard for an elective case, deferrable with a named
+   * reason for an emergency.
+   *
+   * Counted rather than passed as booleans because "sent a prescription with
+   * no drugs on it" and "sent no prescription" are the same event to Pharmacy.
+   */
+  prescriptionItemCount?: number | null;
+  consumableRequestCount?: number | null;
 }
 
 export type MissingItem =
@@ -76,7 +90,9 @@ export type MissingItem =
   | 'HAEMOGLOBIN'
   | 'ELECTROLYTES'
   | 'VIRAL_SCREEN'
-  | 'BLOOD_PRESSURE';
+  | 'BLOOD_PRESSURE'
+  | 'PRESCRIPTION'
+  | 'CONSUMABLES';
 
 export interface PreopCheckResult {
   /** May this booking be submitted? */
@@ -102,6 +118,8 @@ const LABEL: Record<MissingItem, string> = {
   ELECTROLYTES: 'Serum sodium, potassium and creatinine',
   VIRAL_SCREEN: 'HIV, HBsAg and HCV status',
   BLOOD_PRESSURE: 'Blood pressure',
+  PRESCRIPTION: 'Pharmacy prescription — the drugs and fluids Pharmacy must prepare',
+  CONSUMABLES: 'Consumables request — the pack the theatre will be opened with',
 };
 
 const present = (v: unknown): boolean =>
@@ -143,6 +161,13 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
           || !present(input.labs?.bloodPressureDiastolic))) {
     missing.push('BLOOD_PRESSURE');
   }
+
+  // Pharmacy and the pack provider work from these. Unlike the labs there is
+  // no separate workflow that collects them later, so they are required even
+  // when labsHandledElsewhere is set for an emergency — an emergency case
+  // needs its drugs picked more urgently than an elective one, not less.
+  if (!((input.prescriptionItemCount ?? 0) > 0)) missing.push('PRESCRIPTION');
+  if (!((input.consumableRequestCount ?? 0) > 0)) missing.push('CONSUMABLES');
 
   if (missing.length === 0) {
     return {

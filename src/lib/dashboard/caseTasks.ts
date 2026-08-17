@@ -155,11 +155,16 @@ export function caseTasksFor(
 
   // ---- Scrub nurse: reception and theatre readiness -----------------------
   if (role === 'SCRUB_NURSE') {
-    if (!surgery.theatreId) {
+    // Only once the case is close. Theatre is no longer chosen at booking —
+    // the theatre manager and the nurses allocate it through the team
+    // assignment, which happens nearer the day. Raising this the moment a case
+    // is booked would put "no theatre allocated" on every case on the list
+    // every morning, which is how a board stops being read.
+    if (!surgery.theatreId && (imminent || overdue)) {
       add('no-theatre',
         `No theatre assigned — ${surgery.procedureName}`,
         `${patient} has no theatre allocated. Assign one so the team and the porters know where to bring the patient.`,
-        imminent || overdue ? 'CRITICAL' : 'HIGH');
+        overdue ? 'CRITICAL' : 'HIGH');
     }
     if (!started && (imminent || overdue)) {
       add('reception',
@@ -171,12 +176,15 @@ export function caseTasksFor(
 
   // ---- Technician: the room itself ---------------------------------------
   if (role === 'TECHNICIAN') {
-    if (!surgery.theatreId) {
+    // Same reasoning as the scrub nurse above: unallocated is the normal state
+    // of a freshly booked case, and only becomes the technician's problem when
+    // the case is nearly due and there is still no room to prepare.
+    if (!surgery.theatreId && (imminent || overdue)) {
       add('tech-no-theatre',
         `Theatre not allocated — ${surgery.procedureName}`,
         `${patient} has no theatre assigned, so setup cannot be confirmed. Raise this with the theatre manager.`,
-        imminent || overdue ? 'CRITICAL' : 'HIGH');
-    } else if (!started && (imminent || overdue)) {
+        overdue ? 'CRITICAL' : 'HIGH');
+    } else if (surgery.theatreId && !started && (imminent || overdue)) {
       add('setup',
         `Confirm theatre setup — ${surgery.procedureName}`,
         `${patient} is due ${overdue ? `and is already past ${surgery.scheduledTime ?? 'the scheduled time'}` : `in ${minutesAway} minutes`}. Confirm the room, equipment and anaesthetic machine are ready.`,

@@ -519,6 +519,22 @@ export default function NewSurgeryPage() {
     if (patientAgeYears > 45 && !preop.pressureSoreRiskAtBooking) {
       missing.push('pressure-sore risk assessment (required for patients over 45)');
     }
+    // Consent, the pharmacy prescription and the consumables pack are required
+    // by the server too — checked here so the answer arrives before the form is
+    // submitted rather than after it is filled in.
+    if (!consentFile && !isConsentSigned(consentForm)) {
+      missing.push('informed consent (upload the signed form, or complete it on the app)');
+    }
+    // Counted from BOTH sources, exactly as the payload below is built: items
+    // picked from the catalogue and items brought in by an applied pack. Either
+    // satisfies the requirement, and checking only one would refuse a booking
+    // the server would have accepted.
+    if (Object.keys(selectedDrugs).length + packPick.drugDressingRequests.length === 0) {
+      missing.push('pharmacy prescription (the drugs and fluids Pharmacy must prepare)');
+    }
+    if (Object.keys(selectedConsumables).length + packPick.consumableRequests.length === 0) {
+      missing.push('consumables request (the pack the theatre will be opened with)');
+    }
     if (missing.length) {
       setLoading(false);
       setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
