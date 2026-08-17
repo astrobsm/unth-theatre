@@ -21,6 +21,7 @@ import {
   clinicClock,
   clinicDateKey,
   isClockTime,
+  queryElectiveTime,
   scheduledInstant,
 } from './theatreOps/clock';
 
@@ -120,5 +121,57 @@ describe('reading an instant back in clinic time', () => {
     const i = scheduledInstant(new Date('2026-08-03T00:00:00.000Z'), '14:45') as Date;
     expect(clinicClock(i)).toBe('14:45');
     expect(clinicDateKey(i)).toBe('2026-08-03');
+  });
+});
+
+describe('an elective time that looks like an AM/PM slip', () => {
+  // Both of these are real bookings from the list of 17 August 2026, saved by
+  // a phone whose time picker opens on AM.
+  it('questions a myomectomy booked for a quarter past two in the morning', () => {
+    const q = queryElectiveTime('02:15', 'ELECTIVE');
+    expect(q).not.toBe(null);
+    expect(q!.didYouMean).toBe('14:15');
+  });
+
+  it('questions a case booked for twenty to one in the morning', () => {
+    const q = queryElectiveTime('00:40', 'ELECTIVE');
+    expect(q!.didYouMean).toBe('12:40');
+    // Named back in 12-hour terms, because "00:40" is precisely the notation
+    // the person misread in the first place.
+    expect(q!.message).toContain('12:40 in the morning');
+  });
+
+  it('says nothing about an ordinary list time', () => {
+    for (const t of ['07:00', '09:00', '11:20', '14:30', '18:00']) {
+      expect(queryElectiveTime(t, 'ELECTIVE'), t).toBe(null);
+    }
+  });
+
+  it('never questions an emergency', () => {
+    // For an emergency, 02:15 is simply Tuesday.
+    expect(queryElectiveTime('02:15', 'EMERGENCY')).toBe(null);
+    expect(queryElectiveTime('02:15', 'URGENT')).toBe(null);
+  });
+
+  it('queries a late evening start but offers no mirror for it', () => {
+    // Adding twelve hours to 21:00 would suggest 09:00 the following morning,
+    // which is a different day and not a correction anybody asked for.
+    const q = queryElectiveTime('21:00', 'ELECTIVE');
+    expect(q).not.toBe(null);
+    expect(q!.didYouMean).toBe(null);
+  });
+
+  it('leaves an unreadable time to the validator', () => {
+    // Not this function's job to reject it, and returning a query for it would
+    // put a "did you mean" beside a value that cannot be saved at all.
+    expect(queryElectiveTime('25:70', 'ELECTIVE')).toBe(null);
+    expect(queryElectiveTime('', 'ELECTIVE')).toBe(null);
+    expect(queryElectiveTime(null)).toBe(null);
+  });
+
+  it('treats an unstated surgery type as elective', () => {
+    // The booking form defaults to ELECTIVE, so an absent type is the common
+    // case and must still be checked.
+    expect(queryElectiveTime('02:15')).not.toBe(null);
   });
 });

@@ -10,6 +10,7 @@ import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { formatAge } from '@/lib/age';
+import { queryElectiveTime } from '@/lib/theatreOps/clock';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import ProcedurePicker from '@/components/ProcedurePicker';
@@ -1274,6 +1275,31 @@ export default function NewSurgeryPage() {
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
               />
+              {/* The time picker is 12-hour on most phones and opens on AM, so
+                  choosing 2:15 for an afternoon case saves 02:15. Asked, never
+                  corrected: an early start is unusual, not impossible. */}
+              {(() => {
+                const q = queryElectiveTime(scheduledTime, surgeryType);
+                if (!q) return null;
+                return (
+                  <p className="text-xs mt-1 rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
+                    <span className="font-medium">Check the time.</span> {q.message}
+                    {q.didYouMean && (
+                      <>
+                        {' '}Did you mean{' '}
+                        <button
+                          type="button"
+                          onClick={() => setScheduledTime(q.didYouMean as string)}
+                          className="font-semibold text-amber-900 underline"
+                        >
+                          {q.didYouMean}
+                        </button>
+                        ?
+                      </>
+                    )}
+                  </p>
+                );
+              })()}
               {listPlan && (
                 <p className="text-xs text-gray-600 mt-1">
                   {listPlan.cases.length === 0

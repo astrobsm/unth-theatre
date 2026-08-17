@@ -10,6 +10,7 @@ import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
 import { jsonWithETag } from "@/lib/etag";
 import { resolveBasePack, BASE_PACK_LABEL } from "@/lib/baseConsumablePack";
 import { checkSlot } from "@/lib/theatreOps/scheduling";
+import { isClockTime } from "@/lib/theatreOps/clock";
 import { recordProcedureUse } from "@/lib/procedures/usage";
 import { ensureEmergencyBooking } from "@/lib/emergency/ensureBooking";
 import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
@@ -39,9 +40,14 @@ const surgerySchema = z.object({
   // delay, and a case with no expected duration cannot have the next one
   // scheduled after it — so a silent default of 60 minutes was quietly
   // producing lists that could not happen.
+  // Range-checked, not merely shaped. The regex alone accepted "25:70", which
+  // then became an Invalid Date wherever the booking was combined with its
+  // date — and an unreadable time is dropped from delay and urgency
+  // calculations rather than flagged, so the case would simply stop being
+  // counted. isClockTime is the same check the rest of theatreOps uses.
   scheduledTime: z
     .string()
-    .regex(/^\d{1,2}:\d{2}$/, 'Give the start time as HH:MM, for example 09:00'),
+    .refine(isClockTime, 'Give the start time as HH:MM on a 24-hour clock, for example 09:00 or 14:30'),
   estimatedDuration: z
     .number({ required_error: 'How long is the case expected to take, in minutes?' })
     .int()
