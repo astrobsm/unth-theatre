@@ -5,8 +5,25 @@ import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-// Roles permitted to mark a surgery as completed.
-const ALLOWED = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'];
+/**
+ * Roles permitted to mark a surgery as completed.
+ *
+ * The scrub nurse and the recovery room nurse are here for the same reason:
+ * the case is finished when the patient leaves the theatre, and by then the
+ * surgeon is frequently not the person at a screen. A patient cannot be
+ * admitted to PACU until the case reads COMPLETED, so leaving this to the
+ * surgeon alone means recovery is blocked on somebody who has already moved
+ * on — and the recovery nurse, who is with the patient, could not record what
+ * had plainly happened.
+ *
+ * Who actually pressed it is recorded in the audit log below, so widening the
+ * list costs no accountability.
+ */
+const ALLOWED = [
+  'SURGEON', 'CONSULTANT_SURGEON',
+  'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
+  'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR',
+];
 
 // POST - Mark a surgery as COMPLETED so PACU can admit the patient and the
 // surgeon can write the post-operative note.
@@ -21,7 +38,7 @@ export async function POST(
     }
     if (!ALLOWED.includes(session.user.role)) {
       return NextResponse.json(
-        { error: 'Only the surgeon, theatre manager or an administrator can mark a surgery as completed' },
+        { error: 'Only the surgical team, the scrub or recovery room nurse, the theatre manager or an administrator can mark a surgery as completed' },
         { status: 403 }
       );
     }
@@ -65,7 +82,14 @@ export async function POST(
         action: 'UPDATE',
         tableName: 'surgeries',
         recordId: params.id,
-        changes: JSON.stringify({ status: { from: surgery.status, to: 'COMPLETED' }, completedAt: now }),
+        // The role is recorded alongside the user because "who closed this
+        // case" is a different question from "which account was used", and it
+        // is the one asked when a completion time is later disputed.
+        changes: JSON.stringify({
+          status: { from: surgery.status, to: 'COMPLETED' },
+          completedAt: now,
+          completedBy: { userId: session.user.id, role: session.user.role },
+        }),
       },
     });
 
