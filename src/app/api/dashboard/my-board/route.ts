@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { buildPersonalBoard, boardSummary, QUERY_CUTOFF } from '@/lib/dashboard/personalBoard';
+import { personalCaseTasks } from '@/lib/dashboard/caseTasks';
 import { apiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
@@ -63,11 +64,16 @@ export async function GET(_req: NextRequest) {
             { surgeonId: userId },
             { anesthetistId: userId },
             { supervisingConsultantId: userId },
+            { scrubNurseId: userId },
+            { theatreTechnicianId: userId },
           ],
         },
         select: {
           id: true, procedureName: true, scheduledDate: true, scheduledTime: true,
           status: true, theatreId: true,
+          surgeonId: true, anesthetistId: true, scrubNurseId: true,
+          theatreTechnicianId: true, supervisingConsultantId: true,
+          consentFileData: true, consentFormData: true, preopOutstanding: true,
           patient: { select: { name: true, folderNumber: true } },
         },
         orderBy: { scheduledDate: 'asc' },
@@ -77,24 +83,41 @@ export async function GET(_req: NextRequest) {
       prisma.systemNotification.findMany({
         where: {
           createdAt: { gte: start },
-          OR: [{ userId }, { userId: null }],
+          // Addressed to THIS person only. Including broadcasts (userId null)
+          // put every "surgery in 24 min" in the hospital on every surgeon's
+          // board, which is what made the first version unreadable.
+          userId,
         },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }).catch(() => []),
     ]);
 
-    const tasks = surgeries.map((s) => ({
-      id: s.id,
-      title: `${s.procedureName} — ${s.patient?.name ?? 'patient'}`,
-      detail: [
-        s.patient?.folderNumber ? `Folder ${s.patient.folderNumber}` : null,
-        s.scheduledTime ? `Due ${s.scheduledTime}` : null,
-        s.status,
-      ].filter(Boolean).join(' · '),
-      actionUrl: `/dashboard/surgeries/${s.id}`,
-      dueAt: s.scheduledDate,
-    }));
+    // Only what is OUTSTANDING, and only for the role this person holds on the
+    // case. Being named on a case is not a task: a case in order needs nothing
+    // from anybody, and listing it teaches people the board is noise.
+    const tasks = personalCaseTasks(
+      surgeries.map((s) => ({
+        id: s.id,
+        procedureName: s.procedureName,
+        scheduledDate: s.scheduledDate,
+        scheduledTime: s.scheduledTime,
+        status: s.status,
+        surgeonId: s.surgeonId,
+        anesthetistId: s.anesthetistId,
+        scrubNurseId: s.scrubNurseId,
+        theatreTechnicianId: s.theatreTechnicianId,
+        supervisingConsultantId: s.supervisingConsultantId,
+        theatreId: s.theatreId,
+        consentFileData: s.consentFileData,
+        consentFormData: s.consentFormData,
+        preopOutstanding: s.preopOutstanding,
+        patientName: s.patient?.name ?? null,
+        folderNumber: s.patient?.folderNumber ?? null,
+      })),
+      userId,
+      now,
+    );
 
     // A notification marked HIGH or CRITICAL is a warning; the rest are noise
     // on a board whose value depends on being short.
