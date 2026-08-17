@@ -21,9 +21,36 @@ import { ImprestStatus, Quarter, RetirementStatus, STANDING_IMPREST_KOBO, Workfl
 // Quarters
 // ---------------------------------------------------------------------------
 
-/** The quarter a date falls in. Q1 = January–March. */
+/**
+ * The theatre and its paperwork run on WAT, not on the machine's timezone.
+ *
+ * Kept as a plain offset because Nigeria has no daylight saving: WAT is UTC+1
+ * all year, so there is no rule to look up and nothing to get wrong.
+ */
+const WAT_OFFSET_MINUTES = 60;
+
+/**
+ * The quarter a date falls in, judged in WAT. Q1 = January–March.
+ *
+ * The month is read in WAT rather than in the machine's local timezone, and
+ * both kinds of caller need that.
+ *
+ * A date-only string such as '2026-04-01' is parsed as UTC midnight. Reading it
+ * with getMonth() asked the machine's timezone, so anywhere west of UTC the
+ * first day of a quarter fell back into the previous one — 1 April filed as Q1.
+ * That never showed on a machine set to WAT, and never on Vercel, which runs
+ * UTC; it appeared the moment the date was read on a workstation set to a
+ * western timezone. Since the quarter is written into the imprest record, a
+ * release approved on the first of April would have been filed against the
+ * quarter that was supposed to have been retired already.
+ *
+ * The pages that pass a live `new Date()` want the quarter it is *in Enugu*,
+ * which is the same answer. Reading those in UTC would have been wrong for the
+ * hour after midnight WAT on four days of the year.
+ */
 export function quarterOf(date: Date | string): Quarter {
-  const month = new Date(date).getMonth(); // 0-11
+  const wat = new Date(new Date(date).getTime() + WAT_OFFSET_MINUTES * 60_000);
+  const month = wat.getUTCMonth(); // 0-11, in WAT
   if (month < 3) return Quarter.Q1;
   if (month < 6) return Quarter.Q2;
   if (month < 9) return Quarter.Q3;

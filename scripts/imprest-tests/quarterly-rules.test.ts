@@ -43,6 +43,24 @@ describe('quarters', () => {
     expect(quarterOf('2026-12-31')).toBe(Quarter.Q4);
   });
 
+  it('reads the quarter in WAT, not in the timezone of the machine', () => {
+    // A date-only string is parsed as UTC midnight. Reading the month locally
+    // put the first day of a quarter in the previous one on any workstation
+    // west of UTC, which is how a release approved on 1 April was filed against
+    // the quarter it was meant to replace. These assert the WAT answer, so they
+    // fail on a machine set to Lagos, London or Los Angeles alike.
+    expect(quarterOf('2026-04-01')).toBe(Quarter.Q2);
+    expect(quarterOf('2026-07-01')).toBe(Quarter.Q3);
+    expect(quarterOf('2026-10-01')).toBe(Quarter.Q4);
+    expect(quarterOf('2026-01-01')).toBe(Quarter.Q1);
+
+    // The last instant of a quarter in WAT still belongs to it, though the same
+    // moment is already the next quarter in UTC.
+    expect(quarterOf(new Date('2026-03-31T23:30:00.000+01:00'))).toBe(Quarter.Q1);
+    // And the first instant of the next one, an hour before UTC agrees.
+    expect(quarterOf(new Date('2026-04-01T00:30:00.000+01:00'))).toBe(Quarter.Q2);
+  });
+
   it('gives the calendar bounds of a quarter', () => {
     const q1 = quarterRange(Quarter.Q1, 2026);
     expect(q1.start.toISOString().slice(0, 10)).toBe('2026-01-01');
