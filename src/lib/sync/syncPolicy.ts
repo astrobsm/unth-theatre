@@ -41,7 +41,8 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'audit_logs', cls: 'APPEND_ONLY', why: 'Immutable by definition; an edited audit log is not an audit log.' },
   { table: 'notifications', cls: 'APPEND_ONLY', why: 'Insert then read; the read flag is per-node noise, not clinical data.' },
   { table: 'patient_movements', cls: 'APPEND_ONLY', why: 'The single patient timeline, milestones included. Two nodes recording different events both happened.' },
-  { table: 'radio_announcements', cls: 'APPEND_ONLY', why: 'A log of what was announced. An announcement made on one node was still made.' },
+  { table: 'radio_acknowledgments', cls: 'APPEND_ONLY', why: 'Who confirmed hearing an announcement, and when. The record that an announcement was answered; two nodes recording different confirmations both happened.' },
+  { table: 'patient_transfers', cls: 'APPEND_ONLY', why: 'A movement between two locations at a time, by a named person. It has no lifecycle to conflict over — the row is the event.' },
   { table: 'surgery_team_check_ins', cls: 'APPEND_ONLY', why: 'One row per person per case, uniquely keyed; union is safe.' },
   { table: 'stock_movements', cls: 'APPEND_ONLY', why: 'A ledger. Quantities are derived by summing, never by overwriting a balance.' },
   { table: 'idempotency_keys', cls: 'APPEND_ONLY', why: 'Replay protection must be shared, or a retry across nodes double-applies.' },
@@ -53,6 +54,20 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'equipment', cls: 'LWW', why: 'Current status of a device; history lives in maintenance records.' },
   { table: 'theatre_meals', cls: 'LWW', why: 'Administrative counts.' },
   { table: 'wards', cls: 'LWW', why: 'Reference data. Renaming or adding a ward has no clinical history to lose.' },
+  // Reclassified from APPEND_ONLY on 17 August 2026. It was never append-only:
+  // status walks PENDING → PLAYING → PLAYED → ACKNOWLEDGED → EXPIRED, and
+  // lastPlayedAt, acknowledgedAt and acknowledgedById are all written after
+  // the insert by seven different routes. decide() saw those updates arrive on
+  // a table declared insert-only and quarantined every one of them as
+  // "classification looks wrong" — which is exactly what it is for, and is why
+  // 45 conflicts sat open with nothing for a person to actually decide.
+  // The record of WHO acknowledged lives in radio_acknowledgments above, so
+  // resolving the announcement row by clock loses no audit trail.
+  { table: 'radio_announcements', cls: 'LWW', why: 'Playback state of one announcement. The latest status is the true one; the acknowledgement record lives in radio_acknowledgments.' },
+  // LWW for the descriptive fields; quantity and reorderLevel are protected in
+  // PROTECTED_COLUMNS, because a stock count cannot be merged by taking the
+  // later of two absolute values.
+  { table: 'inventory_items', cls: 'LWW', why: 'Current state of a stock item. Renames and prices resolve by clock; the counts do not, and are quarantined.' },
 
   // ---- Class 3: quarantine ----------------------------------------------
   // The parent of nearly everything else here. It was missing from this list,
@@ -163,6 +178,33 @@ export const SURGERY_CLINICAL_COLUMNS = new Set([
   'complexityData', 'postOpNotes',
 ]);
 
+/**
+ * Columns that quarantine even when their table is LWW.
+ *
+ * The same reasoning as the surgeries list above, applied wherever an LWW row
+ * carries one field that must not be resolved by "whoever wrote last".
+ *
+ * inventory_items.quantity is the second such case and it is not clinical, it
+ * is arithmetic. Two nodes each issuing stock from the same item both compute
+ * a new absolute quantity from the value they hold; last-writer-wins keeps one
+ * and discards the other, so the item ends up showing stock that has already
+ * been issued. Nothing about that failure is visible — the number simply
+ * reads high, which is the one direction that matters, because stock believed
+ * to be on the shelf is stock nobody orders.
+ *
+ * The ledger in stock_movements is append-only and holds BOTH issues, so the
+ * truth is never lost; it is the cached total on the item that cannot be
+ * merged automatically. Quarantining sends it to a person, who can read the
+ * ledger and set the count.
+ *
+ * Note this only bites on CONCURRENT edits. A node updating stock in sequence
+ * applies normally, which is almost every update.
+ */
+export const PROTECTED_COLUMNS: Record<string, Set<string>> = {
+  surgeries: SURGERY_CLINICAL_COLUMNS,
+  inventory_items: new Set(['quantity', 'reorderLevel']),
+};
+
 export type Decision =
   | { action: 'APPLY'; reason: string }
   | { action: 'IGNORE'; reason: string }
@@ -235,11 +277,14 @@ export function decide(
         : { action: 'IGNORE', reason: 'Local change to a cloud-authoritative table; cloud state stands.' };
 
     case 'LWW': {
-      // Clinical columns are exempt even on an LWW table.
-      const clinical = change.table === 'surgeries'
-        && (change.changedColumns ?? []).some((c) => SURGERY_CLINICAL_COLUMNS.has(c));
-      if (clinical) {
-        return { action: 'QUARANTINE', reason: 'Clinical column on an administrative row; not overwritten automatically.' };
+      // Some columns are exempt even on an LWW table. Looked up per table
+      // rather than tested against surgeries by name, so adding a protected
+      // column is a change to the data above and not to this branch.
+      const protectedCols = PROTECTED_COLUMNS[change.table];
+      const touched = protectedCols
+        && (change.changedColumns ?? []).some((c) => protectedCols.has(c));
+      if (touched) {
+        return { action: 'QUARANTINE', reason: `Protected column on an LWW row in "${change.table}"; not overwritten automatically.` };
       }
       return change.hlc > local.hlc
         ? { action: 'APPLY', reason: 'Later by hybrid logical clock.' }

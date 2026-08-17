@@ -1,0 +1,45 @@
+-- ============================================================
+-- Capture for the tables the dashboard actually counts
+-- ------------------------------------------------------------
+-- The two nodes were reported as showing different numbers. Total Surgeries
+-- and Total Patients came from tables that already replicate, and those are
+-- being reconciled by backfill. The other two tiles did not:
+--
+--   "Low Stock Items"  reads inventory_items
+--   pending transfers  reads patient_transfers
+--
+-- Neither was classified for sync at all, so neither has ever replicated. On
+-- 17 August 2026 they happened to agree — 17 rows and 10 rows on both sides —
+-- purely because nobody had yet changed one on a single node. The first stock
+-- adjustment made in theatre would have separated them silently and for good.
+-- Two dashboards agreeing by luck is not the same as agreeing.
+--
+-- radio_acknowledgments joins them for a different reason: radio_announcements
+-- is reclassified LWW in this release, and resolving an announcement row by
+-- clock is only safe because the record of WHO acknowledged it lives here. It
+-- would be a poor trade to make the announcement converge by dropping the
+-- evidence, so the evidence has to travel too.
+--
+-- ------------------------------------------------------------
+-- ABOUT THE STOCK COUNTS. inventory_items is LWW, but quantity and
+-- reorderLevel are listed in PROTECTED_COLUMNS and quarantine instead of
+-- resolving. Two nodes each issuing from the same item both write an absolute
+-- quantity computed from the value they held; taking the later one discards an
+-- issue that really happened, and the shelf then reads higher than it is —
+-- the one direction that matters, because stock believed present is stock
+-- nobody reorders. stock_movements already carries both issues as an
+-- append-only ledger, so a person can read it and set the count. That is a
+-- decision for a person, once, rather than a wrong number forever.
+--
+-- These are enabled on BOTH nodes. Unlike identity, stock and patient
+-- movements genuinely originate in theatre as well as in the cloud, and the
+-- local node's writes are the ones that would otherwise be lost.
+--
+-- Existing rows are not journaled by this; capture records future changes
+-- only. Reconcile what is already here with:
+--   ./scripts/local-server/backfill-from-cloud.sh --apply inventory_items patient_transfers
+-- ============================================================
+
+SELECT sync_enable_table('inventory_items');
+SELECT sync_enable_table('patient_transfers');
+SELECT sync_enable_table('radio_acknowledgments');

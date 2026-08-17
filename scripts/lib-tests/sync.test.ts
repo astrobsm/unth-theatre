@@ -210,3 +210,73 @@ describe('both nodes reach the same answer', () => {
     expect(mirrored.action).toBe('IGNORE');
   });
 });
+
+describe('the tables the dashboard counts', () => {
+  // Two dashboards disagreeing is what started this. Total Surgeries and
+  // Total Patients came from tables that already replicated; these two did
+  // not, and agreed only because nobody had yet changed one on a single node.
+  it('replicates what the dashboard tiles are counted from', () => {
+    for (const t of ['inventory_items', 'patient_transfers', 'surgeries', 'patients']) {
+      expect(isSynced(t), t).toBe(true);
+    }
+  });
+
+  it('treats a patient transfer as an event, not a state', () => {
+    // The row records a movement between two locations at a time. There is no
+    // lifecycle on it to disagree about, so two nodes' transfers are unioned.
+    expect(policyFor('patient_transfers')?.cls).toBe('APPEND_ONLY');
+  });
+
+  it('does not resolve a stock count by taking the later write', () => {
+    // Both nodes issue from the same item and each writes an absolute
+    // quantity computed from what it held. Last-writer-wins would discard an
+    // issue that really happened and leave the shelf reading high, which is
+    // the direction that matters: stock believed present is stock nobody
+    // reorders. The ledger has both; a person sets the count.
+    const d = decide(
+      {
+        table: 'inventory_items', op: 'UPDATE', baseVersion: 3,
+        hlc: 'Z', originNode: 'cloud', changedColumns: ['quantity'],
+      },
+      { exists: true, version: 7, hlc: 'A' }, NODES);
+    expect(d.action).toBe('QUARANTINE');
+  });
+
+  it('still resolves the descriptive fields of a stock item by clock', () => {
+    // The protection is for the counts, not the whole row. A rename or a price
+    // correction has no arithmetic to lose and should not need a person.
+    const d = decide(
+      {
+        table: 'inventory_items', op: 'UPDATE', baseVersion: 3,
+        hlc: 'Z', originNode: 'cloud', changedColumns: ['name', 'supplier'],
+      },
+      { exists: true, version: 7, hlc: 'A' }, NODES);
+    expect(d.action).toBe('APPLY');
+  });
+});
+
+describe('radio announcements were never append-only', () => {
+  it('is classified by the lifecycle it actually has', () => {
+    // status walks PENDING -> PLAYING -> PLAYED -> ACKNOWLEDGED -> EXPIRED,
+    // and seven routes write to it after the insert. Declared APPEND_ONLY, so
+    // every one of those updates quarantined as "classification looks wrong"
+    // and 45 conflicts sat open with nothing for a person to decide.
+    expect(policyFor('radio_announcements')?.cls).toBe('LWW');
+  });
+
+  it('no longer quarantines an ordinary playback update', () => {
+    const d = decide(
+      {
+        table: 'radio_announcements', op: 'UPDATE', baseVersion: 2,
+        hlc: 'Z', originNode: 'cloud', changedColumns: ['status', 'lastPlayedAt'],
+      },
+      { exists: true, version: 5, hlc: 'A' }, NODES);
+    expect(d.action).toBe('APPLY');
+  });
+
+  it('keeps the acknowledgement record itself append-only', () => {
+    // Resolving the announcement row by clock is only safe because who
+    // acknowledged it is recorded separately and cannot be overwritten.
+    expect(policyFor('radio_acknowledgments')?.cls).toBe('APPEND_ONLY');
+  });
+});
