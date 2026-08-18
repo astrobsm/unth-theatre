@@ -44,6 +44,35 @@ case "$DB" in
      echo "  ${Y}note${N} target is REMOTE, confirmed by ORM_CONFIRM_REMOTE" ;;
 esac
 
+# ---------------------------------------------------------------------------
+# The .env / .env.local trap
+# ---------------------------------------------------------------------------
+# This script reads .env.local and correctly targets the theatre database. The
+# PRISMA CLI does not: it reads .env. On 18 August that difference meant
+# `npm run build` on the theatre server ran `prisma migrate deploy` against
+# Supabase — the production cloud — and was stopped only by the network being
+# unable to reach the pooler. `build:local` would have been worse still, since
+# it runs `prisma db push --accept-data-loss`.
+#
+# So it is said out loud here, where somebody about to run migrations will see
+# it, rather than left to be discovered by whichever command succeeds first.
+if [[ -f "$APP_DIR/.env" ]]; then
+  ENV_DB="$(grep -E '^DATABASE_URL=' "$APP_DIR/.env" | tail -1 | sed -E 's/^DATABASE_URL=//; s/^"//; s/"$//' || true)"
+  case "$ENV_DB" in
+    ''|*localhost*|*127.0.0.1*) ;;
+    *)
+      echo
+      echo "  ${R}WARNING${N} .env points DATABASE_URL at a REMOTE database, .env.local at the local one."
+      echo "          Every prisma CLI command on this box reads .env, so it targets the CLOUD:"
+      echo "            npm run build        runs 'prisma migrate deploy' against the cloud"
+      echo "            npm run build:local  runs 'prisma db push --accept-data-loss' against it"
+      echo "          On this server build with:  ${B}npm run build:server${N}  (generate + next build, no migrations)"
+      echo "          Migrations here are this script's job, and it uses .env.local."
+      echo
+      ;;
+  esac
+fi
+
 command -v psql >/dev/null || die "psql not found"
 psql "$PSQL_DB" -tAXc 'select 1' >/dev/null 2>&1 || die "cannot reach the database"
 

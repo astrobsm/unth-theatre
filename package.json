@@ -8,6 +8,7 @@
     "dev:watch": "node dev-server.js",
     "build": "node scripts/maintenance/fetch-tesseract-assets.js && prisma generate && node scripts/db-bootstrap.js && prisma migrate deploy && next build",
     "build:local": "prisma generate && prisma db push --accept-data-loss && next build",
+    "build:server": "node scripts/maintenance/fetch-tesseract-assets.js && prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "test:offline": "node scripts/offline-tests/run-all.js",
