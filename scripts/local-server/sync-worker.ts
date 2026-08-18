@@ -58,6 +58,17 @@ let consecutiveErrors = 0;
  */
 let pushBatchSize = BATCH_SIZE;
 
+/**
+ * Set when a timeout shrank the batch this cycle.
+ *
+ * The next attempt is then a DIFFERENT request rather than a repeat of a failed
+ * one, so it gets a short wait instead of the exponential backoff.
+ */
+let shrankThisCycle = false;
+
+/** How long to wait before attempting a smaller batch. */
+const SHRINK_RETRY_MS = 10_000;
+
 async function thisNode(): Promise<string> {
   const r = await prisma.$queryRawUnsafe<Array<{ node_id: string }>>(
     'select node_id from sync_node where id limit 1');
@@ -131,6 +142,7 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
       if (shrunk !== pushBatchSize) {
         console.warn(`[sync] push of ${entries.length} timed out — batch ${pushBatchSize} -> ${shrunk}`);
         pushBatchSize = shrunk;
+        shrankThisCycle = true;
       }
     }
     throw Object.assign(new Error(`push failed: ${res.error}`), { status: res.status });
@@ -268,6 +280,7 @@ async function cycle(): Promise<void> {
   // from the cloud either, for a fault that had nothing to do with the
   // downward direction. The error is held and rethrown after the pull has had
   // its turn, so the backoff and the alerting still see it.
+  shrankThisCycle = false;
   let pushed = { sent: 0, failed: true };
   let pushError: unknown = null;
   try {
@@ -330,8 +343,18 @@ async function loop(): Promise<void> {
         return;
       }
 
-      waitMs = backoffMs(consecutiveErrors);
-      console.warn(`[sync] ${message} — retrying in ${Math.round(waitMs / 1000)}s (failure ${consecutiveErrors})`);
+      if (shrankThisCycle) {
+        // We are not repeating a failed request, we are attempting a smaller
+        // one. Exponential backoff answers "the peer is struggling"; it is the
+        // wrong answer to "we sent too much", and applying it here means the
+        // batch takes fifteen-minute steps to find a size that works while the
+        // queue keeps growing. A short wait converges in minutes instead.
+        waitMs = SHRINK_RETRY_MS;
+        console.warn(`[sync] ${message} — retrying smaller in ${Math.round(waitMs / 1000)}s (batch now ${pushBatchSize})`);
+      } else {
+        waitMs = backoffMs(consecutiveErrors);
+        console.warn(`[sync] ${message} — retrying in ${Math.round(waitMs / 1000)}s (failure ${consecutiveErrors})`);
+      }
     }
 
     if (ONCE) return;
