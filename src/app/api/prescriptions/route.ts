@@ -50,6 +50,16 @@ export async function GET(request: NextRequest) {
 
     if (status) {
       where.status = status;
+    } else {
+      // Superseded versions are kept forever, but they are history rather than
+      // work. Without this a pharmacist packing a case would see the amended
+      // prescription AND the one it replaced, with nothing on the list saying
+      // which to pack — which is the failure the versioning exists to prevent.
+      //
+      // Only applied when no explicit status was asked for, so a caller that
+      // genuinely wants the superseded rows — the version history on a case —
+      // can still request them by name.
+      where.status = { not: 'SUPERSEDED' };
     }
 
     if (urgency) {

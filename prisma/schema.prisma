@@ -3527,6 +3527,12 @@ enum PrescriptionStatus {
   RECONCILED // Post-surgery reconciliation complete
   RETURNED // Unused medications returned to pharmacy
   QUERY_ISSUED // Non-return query issued to anaesthetist
+  /// Withdrawn before it was acted on. Distinct from REJECTED, which is a
+  /// consultant declining to approve — this is the prescriber standing it down.
+  CANCELLED
+  /// Replaced by a later version. The row keeps its medications exactly as
+  /// they were prescribed and points at what replaced it; it is never edited.
+  SUPERSEDED
 }
 
 enum MedicationUrgency {
@@ -3772,6 +3778,24 @@ model AnestheticPrescription {
 
   // Status
   status PrescriptionStatus @default(DRAFT)
+
+  /// An amendment is a NEW ROW, never an edit. The previous version keeps its
+  /// medications exactly as prescribed, is marked SUPERSEDED, and points at
+  /// what replaced it — so pharmacy can always answer "what was I asked for,
+  /// and by whom, at the moment I packed this". An overwritten row cannot.
+  version            Int       @default(1)
+  /// Both ends of the link are stored so the chain can be walked either way.
+  supersedesId       String?
+  supersededById     String?
+  supersededAt       DateTime?
+  amendedById        String?
+  amendedByName      String?
+  amendedAt          DateTime?
+  /// Read by pharmacy before re-packing, so the API requires it.
+  amendmentReason    String?   @db.Text
+  cancelledById      String?
+  cancelledAt        DateTime?
+  cancellationReason String?   @db.Text
 
   // Special Instructions
   specialInstructions String?
