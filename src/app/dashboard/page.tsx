@@ -21,6 +21,7 @@ import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import MyTheatreTeam from '@/components/MyTheatreTeam';
 import PersonalBoard from '@/components/PersonalBoard';
+import PerioperativeTracker from '@/components/PerioperativeTracker';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -198,6 +199,11 @@ export default function DashboardPage() {
           deadline and a compulsory duty are worth more of the fold than a
           navigation card. */}
       <PersonalBoard />
+
+      {/* Where this surgeon's patients actually are. Renders nothing for
+          anybody with no cases of their own, so it costs the rest of the
+          hospital no space at all. */}
+      <PerioperativeTracker />
 
       {/* Compact emergency access — the two most critical links only. The large
           multi-button quick-access grid and charts were removed for speed. */}
