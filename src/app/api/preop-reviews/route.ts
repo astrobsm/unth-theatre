@@ -55,8 +55,22 @@ const createPreOpReviewSchema = z.object({
   specialConsiderations: optStr,
   riskLevel: optStr,
   riskFactors: optStr,
+  // Retained so an older client, or a review being migrated, can still send
+  // them. The form no longer collects either.
   reviewNotes: optStr,
   recommendations: optStr,
+  // The decision the review turns on, and what would change it. Accepted here
+  // as well as on PATCH because the form creates and completes in one action —
+  // without this, zod would strip them silently and the whole workflow would
+  // appear to save and record nothing.
+  fitnessDecision: optEnum(['FIT', 'NOT_FIT']),
+  optimisationRequirements: z.array(z.object({
+    category: z.string().min(1),
+    action: z.string(),
+    responsible: z.string().nullish(),
+    targetCompletion: z.string().nullish(),
+    priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
+  })).optional(),
   // Ward presence at the planned review time.
   patientInWardAtReview: z.boolean().optional().nullable(),
   patientAbsenceNote: optStr,
@@ -208,7 +222,10 @@ export async function POST(request: NextRequest) {
     const validatedData = createPreOpReviewSchema.parse(body);
 
     // Extract prescription + pack-consumable data before creating review
-    const { prescription, anaesthesiaConsent, consumableRequests, ...reviewData } = validatedData;
+    const {
+      prescription, anaesthesiaConsent, consumableRequests,
+      optimisationRequirements, ...reviewData
+    } = validatedData;
 
     // Check if review already exists for this surgery
     const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
@@ -231,6 +248,11 @@ export async function POST(request: NextRequest) {
         anesthetistId: session.user.id,
         anesthetistName: session.user.name || '',
         status: 'IN_PROGRESS',
+        // Stamped with the decision so "who decided this, and when" is answered
+        // by the row itself rather than inferred from the audit log.
+        ...(reviewData.fitnessDecision
+          ? { fitnessDecidedAt: new Date(), fitnessDecidedById: session.user.id }
+          : {}),
         ...(anaesthesiaConsent
           ? {
               anaesthesiaConsentText: anaesthesiaConsent.text,
@@ -254,6 +276,24 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // What must be addressed before an unfit patient can proceed. Written after
+    // the review exists because each row is keyed to it.
+    if (optimisationRequirements?.length) {
+      await prisma.anaestheticOptimisationRequirement.createMany({
+        data: optimisationRequirements.map((r) => ({
+          reviewId: review.id,
+          surgeryId: review.surgeryId,
+          patientId: review.patientId,
+          category: r.category,
+          action: r.action,
+          responsible: r.responsible ?? null,
+          targetCompletion: r.targetCompletion ? new Date(r.targetCompletion) : null,
+          priority: r.priority,
+          raisedById: session.user.id,
+        })),
+      });
+    }
 
     // Create anesthetic prescription if medications were added
     if (prescription && prescription.medications.length > 0) {

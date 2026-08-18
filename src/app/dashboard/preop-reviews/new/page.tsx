@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
@@ -12,6 +12,7 @@ import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/Anaes
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaesthesiaConsent';
+import { OPTIMISATION_CATEGORIES, CATEGORY_LABELS } from '@/lib/anaesthesia/fitness';
 import ContactName from '@/components/ContactName';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -258,11 +259,21 @@ export default function NewPreOpReviewPage() {
   const [paymentInfo, setPaymentInfo] = useState<{ patientName: string; folderNumber: string; hasRx: boolean } | null>(null);
   
   // Smart text input states for dictation/OCR fields
-  const [anestheticPlan, setAnestheticPlan] = useState('');
-  const [specialConsiderations, setSpecialConsiderations] = useState('');
+  // FIT / NOT_FIT, and what would change the answer. These replace the four
+  // free-text fields this form used to end in.
+  const [fitnessDecision, setFitnessDecision] = useState<'' | 'FIT' | 'NOT_FIT'>('');
+  const [requirements, setRequirements] = useState<Array<{
+    category: string; action: string; responsible: string;
+    targetCompletion: string; priority: string;
+  }>>([]);
+
+  const updateRequirement = (
+    index: number,
+    patch: Partial<{ category: string; action: string; responsible: string; targetCompletion: string; priority: string }>,
+  ) => {
+    setRequirements((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  };
   const [riskFactors, setRiskFactors] = useState('');
-  const [reviewNotes, setReviewNotes] = useState('');
-  const [recommendations, setRecommendations] = useState('');
 
   // Anaesthesia consent (WHO-aligned) — electronic signature or uploaded scan.
   const [consentMethod, setConsentMethod] = useState<'ELECTRONIC' | 'UPLOADED'>('ELECTRONIC');
@@ -409,16 +420,25 @@ export default function NewPreOpReviewPage() {
       airwayClass: formData.get('airwayClass'),
       neckMovement: formData.get('neckMovement'),
       dentition: formData.get('dentition'),
-      // Anesthetic Plan
+      // Anesthetic Plan. The two free-text fields that used to sit here are no
+      // longer collected — drug choices belong on the prescription and airway
+      // findings in the assessment. Existing values on older reviews are left
+      // untouched in the database.
       proposedAnesthesiaType: formData.get('proposedAnesthesiaType'),
-      anestheticPlan: formData.get('anestheticPlan'),
-      specialConsiderations: formData.get('specialConsiderations'),
       // Risk Assessment
       riskLevel: formData.get('riskLevel'),
       riskFactors: formData.get('riskFactors'),
-      // Review Notes
-      reviewNotes: formData.get('reviewNotes'),
-      recommendations: formData.get('recommendations'),
+      // The decision the review now turns on, and what would change it.
+      fitnessDecision: fitnessDecision || undefined,
+      optimisationRequirements: fitnessDecision === 'NOT_FIT'
+        ? requirements.map((r) => ({
+            category: r.category,
+            action: r.action,
+            responsible: r.responsible || null,
+            targetCompletion: r.targetCompletion || null,
+            priority: r.priority,
+          }))
+        : undefined,
       // Ward presence at planned review time
       patientInWardAtReview: patientInWard,
       patientAbsenceNote: !patientInWard ? (patientAbsenceNote.trim() || null) : null,
@@ -662,41 +682,115 @@ export default function NewPreOpReviewPage() {
 
         {selectedSurgeryId && (
           <>
-            {/* Review Notes & Recommendations */}
+            {/* FITNESS FOR PROPOSED ANAESTHESIA
+                Replaces "Review Notes & Recommendations". Those were two prose
+                boxes that never answered the question the rest of the theatre
+                needs answered, and which everybody downstream had to interpret
+                for themselves. */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Review Notes & Recommendations</h2>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Mic className="w-4 h-4" />
-                  <span>Dictation enabled</span>
+              <div className="flex items-center gap-3 mb-4">
+                <Stethoscope className="w-6 h-6 text-indigo-600" />
+                <h2 className="text-xl font-semibold">Fitness for Proposed Anaesthesia</h2>
+              </div>
+
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Decision *
+              </label>
+              <select
+                name="fitnessDecision"
+                required
+                value={fitnessDecision}
+                onChange={(e) => setFitnessDecision(e.target.value as '' | 'FIT' | 'NOT_FIT')}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select a decision</option>
+                <option value="FIT">FIT FOR PROPOSED ANAESTHESIA</option>
+                <option value="NOT_FIT">NOT FIT FOR PROPOSED ANAESTHESIA</option>
+              </select>
+
+              {fitnessDecision === 'NOT_FIT' && (
+                <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                  <h3 className="font-semibold text-amber-900">Requirements to Achieve Fitness</h3>
+                  <p className="mt-1 text-sm text-amber-900">
+                    Say what must be addressed before this patient can proceed. The case is
+                    blocked from theatre until an anaesthetist reassesses — completing these
+                    is evidence for that reassessment, not a substitute for it.
+                  </p>
+
+                  {requirements.map((r, i) => (
+                    <div key={i} className="mt-3 rounded-lg border border-amber-200 bg-white p-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
+                          value={r.category}
+                          onChange={(e) => updateRequirement(i, { category: e.target.value })}
+                          className="input-field"
+                        >
+                          <option value="">What kind of requirement?</option>
+                          {OPTIMISATION_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={r.priority}
+                          onChange={(e) => updateRequirement(i, { priority: e.target.value })}
+                          className="input-field"
+                        >
+                          <option value="CRITICAL">Critical</option>
+                          <option value="HIGH">High</option>
+                          <option value="MEDIUM">Medium</option>
+                          <option value="LOW">Low</option>
+                        </select>
+                      </div>
+                      <textarea
+                        value={r.action}
+                        onChange={(e) => updateRequirement(i, { action: e.target.value })}
+                        rows={2}
+                        className="input-field mt-2"
+                        placeholder="Precisely what must be done — a category on its own is not an instruction"
+                      />
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          value={r.responsible}
+                          onChange={(e) => updateRequirement(i, { responsible: e.target.value })}
+                          className="input-field"
+                          placeholder="Responsible person or team"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={r.targetCompletion}
+                          onChange={(e) => updateRequirement(i, { targetCompletion: e.target.value })}
+                          className="input-field"
+                          title="Target completion"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setRequirements((prev) => prev.filter((_, x) => x !== i))}
+                        className="mt-2 text-xs font-medium text-red-700 underline"
+                      >
+                        Remove this requirement
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setRequirements((prev) => [...prev, {
+                      category: '', action: '', responsible: '', targetCompletion: '', priority: 'MEDIUM',
+                    }])}
+                    className="mt-3 inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white"
+                  >
+                    <Plus className="h-4 w-4" /> Add a requirement
+                  </button>
+
+                  {requirements.length === 0 && (
+                    <p className="mt-2 text-sm font-medium text-red-700">
+                      At least one requirement is needed. Without it the case stalls with
+                      nobody knowing what would move it.
+                    </p>
+                  )}
                 </div>
-              </div>
-              <div className="space-y-4">
-                <SmartTextInput
-                  label="Review Notes"
-                  value={reviewNotes}
-                  onChange={setReviewNotes}
-                  placeholder="Overall assessment notes - dictate your findings"
-                  rows={4}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  enableReadBack={true}
-                  medicalMode={true}
-                  helpText="Speak your assessment notes or photograph written notes"
-                />
-                <SmartTextInput
-                  label="Recommendations"
-                  value={recommendations}
-                  onChange={setRecommendations}
-                  placeholder="Recommendations for optimization, further investigations, or precautions"
-                  rows={4}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  enableReadBack={true}
-                  medicalMode={true}
-                  helpText="Dictate recommendations - use read back to verify"
-                />
-              </div>
+              )}
             </div>
 
             {/* Anaesthesia Consent (WHO-aligned) */}
@@ -919,29 +1013,16 @@ export default function NewPreOpReviewPage() {
                   <option value="GENERAL_WITH_REGIONAL">General + Regional</option>
                 </select>
               </div>
-              <div className="space-y-4">
-                <SmartTextInput
-                  label="Anesthetic Plan Details"
-                  value={anestheticPlan}
-                  onChange={setAnestheticPlan}
-                  placeholder="Detailed anesthetic plan, drug choices, monitoring requirements, etc."
-                  rows={4}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  medicalMode={true}
-                  helpText="Dictate your anesthetic plan with drug choices and monitoring"
-                />
-                <SmartTextInput
-                  label="Special Considerations"
-                  value={specialConsiderations}
-                  onChange={setSpecialConsiderations}
-                  placeholder="Difficult airway, risk of aspiration, special positioning, etc."
-                  rows={3}
-                  enableSpeech={true}
-                  enableOCR={true}
-                  medicalMode={true}
-                />
-              </div>
+              {/* "Anesthetic Plan Details" and "Special Considerations" were
+                  free-text boxes duplicating what the structured assessment and
+                  the prescription below already capture — drug choices belong on
+                  the prescription, airway findings in the airway assessment.
+                  Two records of the same fact disagree eventually, and the prose
+                  one is the copy nobody updates. */}
+              <p className="text-sm text-gray-600">
+                Drug choices and monitoring belong on the anaesthetic prescription below.
+                Airway, aspiration risk and positioning are recorded in the assessment above.
+              </p>
             </div>
 
             {/* Anesthetic Prescription Section */}

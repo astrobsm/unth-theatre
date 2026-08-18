@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { detectConflict } from '@/lib/concurrency';
 import { ensureEmergencyBooking } from '@/lib/emergency/ensureBooking';
 import { checkSlot } from '@/lib/theatreOps/scheduling';
+import { blocksReadyForTheatre } from '@/lib/anaesthesia/fitness';
 
 export const dynamic = 'force-dynamic';
 
@@ -286,6 +287,46 @@ export async function PUT(
           },
           { status: 409 }
         );
+      }
+    }
+
+    // ── A patient declared unfit does not reach the theatre ─────────────────
+    // §19's rule, enforced where READY is actually written rather than only on
+    // the screen that offers the button. Checked only when something is trying
+    // to move the case TO ready — an unfit case may still be edited, and
+    // refusing every edit would push people to work around the flag instead of
+    // resolving it.
+    if (readinessStatus === 'READY' && existingSurgery.readinessStatus !== 'READY') {
+      const review = await prisma.preOperativeAnestheticReview.findFirst({
+        where: { surgeryId: id },
+        orderBy: { reviewDate: 'desc' },
+        select: {
+          fitnessDecision: true,
+          optimisationRequirements: { select: { status: true, category: true, action: true } },
+        },
+      });
+
+      // Local anaesthesia needs no anaesthetic review, so a case that never
+      // required one is not blocked for lacking it. Anything else with no
+      // review at all is blocked: not-recorded is not permission.
+      const needsReview = String(existingSurgery.anesthesiaType ?? '').toUpperCase() !== 'LOCAL';
+      if (needsReview) {
+        const blocked = blocksReadyForTheatre({
+          decision: review?.fitnessDecision ?? null,
+          requirements: review?.optimisationRequirements ?? [],
+        });
+        if (blocked) {
+          return NextResponse.json(
+            {
+              error: blocked,
+              code: 'NOT_FIT_FOR_ANAESTHESIA',
+              outstanding: (review?.optimisationRequirements ?? [])
+                .filter((r) => r.status !== 'VERIFIED')
+                .map((r) => r.action),
+            },
+            { status: 409 },
+          );
+        }
       }
     }
 
