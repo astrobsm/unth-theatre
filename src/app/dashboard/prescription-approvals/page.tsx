@@ -19,7 +19,9 @@ import {
   Syringe,
   AlertOctagon,
   Shield,
+  Pencil,
 } from 'lucide-react';
+import PrescriptionAmendDialog from '@/components/PrescriptionAmendDialog';
 
 interface Medication {
   id?: string;
@@ -47,6 +49,10 @@ interface Prescription {
   specialInstructions?: string;
   urgency: 'ROUTINE' | 'URGENT' | 'EMERGENCY';
   status: string;
+  /** Absent on prescriptions written before versioning existed; they are v1. */
+  version?: number;
+  amendmentReason?: string | null;
+  supersedesId?: string | null;
   isLateArrival?: boolean;
   prescriptionNotes?: string;
   rejectionReason?: string;
@@ -77,6 +83,9 @@ export default function PrescriptionApprovalsPage() {
   const [approving, setApproving] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
+  /** The prescription being amended, or null. Holds the row rather than the id
+   *  because the dialog needs its current medications to start from. */
+  const [amending, setAmending] = useState<Prescription | null>(null);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -587,6 +596,25 @@ export default function PrescriptionApprovalsPage() {
                       </div>
                     )}
 
+                    {/* An amended prescription says so, and says why.
+                        A consultant approving version 3 without knowing there
+                        were versions 1 and 2 is approving with less
+                        information than the record holds. */}
+                    {(rx.version ?? 1) > 1 && (
+                      <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
+                        <p className="font-semibold text-indigo-900">
+                          Version {rx.version} — this prescription was amended
+                        </p>
+                        {rx.amendmentReason && (
+                          <p className="mt-1 text-indigo-800">{rx.amendmentReason}</p>
+                        )}
+                        <p className="mt-1 text-xs text-indigo-700">
+                          The previous version is preserved on the record, marked superseded.
+                          Any approval it carried does not apply here.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Rejection Reason */}
                     {rx.status === 'REJECTED' && rx.rejectionReason && (
                       <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -636,6 +664,19 @@ export default function PrescriptionApprovalsPage() {
                           >
                             <XCircle className="w-4 h-4" />
                             Reject Prescription
+                          </button>
+                          {/* "Edit and submit" rather than approve-as-is. The
+                              amendment creates a new version and preserves this
+                              one, so a consultant correcting a dose no longer
+                              has to reject the whole prescription and ask for it
+                              to be rewritten. */}
+                          <button
+                            onClick={() => setAmending(rx)}
+                            disabled={approving === rx.id}
+                            className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Edit &amp; Resubmit
                           </button>
                         </div>
                       </div>
@@ -687,6 +728,21 @@ export default function PrescriptionApprovalsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {amending && (
+        <PrescriptionAmendDialog
+          prescriptionId={amending.id}
+          status={amending.status}
+          version={amending.version}
+          patientName={amending.patientName}
+          initialMedications={parseMedications(amending.medications)}
+          onClose={() => setAmending(null)}
+          // Refetch rather than patching the row in place: the amendment
+          // creates a new prescription and supersedes this one, so the list
+          // this page is showing is now wrong in two places, not one.
+          onAmended={fetchPrescriptions}
+        />
       )}
     </div>
   );
