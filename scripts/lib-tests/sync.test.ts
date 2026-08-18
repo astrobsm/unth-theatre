@@ -280,3 +280,88 @@ describe('radio announcements were never append-only', () => {
     expect(policyFor('radio_acknowledgments')?.cls).toBe('APPEND_ONLY');
   });
 });
+
+describe('cloud-authoritative means unconditionally', () => {
+  // The hole this closes: "unconditionally" was enforced only when the two
+  // nodes had diverged. A local edit made while both sides agreed matched the
+  // in-sequence shortcut and was applied — so the theatre server could become
+  // the cloud's version of a user account, which is precisely the lockout the
+  // phase-3 migration was written to avoid.
+  const AT_CLOUD = { thisNode: 'cloud', cloudNode: 'cloud' };
+
+  it('ignores a LOCAL update even when it is in sequence', () => {
+    const d = decide(
+      { table: 'users', op: 'UPDATE', baseVersion: 4, hlc: 'Z', originNode: 'local-unth' },
+      { exists: true, version: 4, hlc: 'A' }, // same version: no conflict at all
+      AT_CLOUD);
+    expect(d.action).toBe('IGNORE');
+  });
+
+  it('ignores a LOCAL update that IS concurrent', () => {
+    const d = decide(
+      { table: 'users', op: 'UPDATE', baseVersion: 2, hlc: 'Z', originNode: 'local-unth' },
+      { exists: true, version: 5, hlc: 'A' },
+      AT_CLOUD);
+    expect(d.action).toBe('IGNORE');
+  });
+
+  it('applies a CLOUD update in both cases', () => {
+    for (const baseVersion of [4, 2]) {
+      const d = decide(
+        { table: 'users', op: 'UPDATE', baseVersion, hlc: 'Z', originNode: 'cloud' },
+        { exists: true, version: 4, hlc: 'A' },
+        { thisNode: 'local-unth', cloudNode: 'cloud' });
+      expect(d.action, String(baseVersion)).toBe('APPLY');
+    }
+  });
+
+  it('still accepts a row the receiving node has never seen', () => {
+    // Somebody who registers on the theatre server has to be able to reach the
+    // cloud somehow, and a brand-new row is not in conflict with anything.
+    const d = decide(
+      { table: 'users', op: 'INSERT', baseVersion: 0, hlc: 'Z', originNode: 'local-unth' },
+      null, AT_CLOUD);
+    expect(d.action).toBe('APPLY');
+  });
+
+  it('leaves in-sequence behaviour alone for every other class', () => {
+    // The shortcut is right for everything else: an in-sequence edit to a
+    // scheduling row is simply not a conflict.
+    const d = decide(
+      { table: 'surgeries', op: 'UPDATE', baseVersion: 4, hlc: 'Z', originNode: 'local-unth' },
+      { exists: true, version: 4, hlc: 'A' },
+      AT_CLOUD);
+    expect(d.action).toBe('APPLY');
+  });
+});
+
+describe('the synced set is closed under its foreign keys', () => {
+  // The failure this prevents has now happened twice. A child row arrives on a
+  // node that has never seen its parent, the foreign key refuses it, and it
+  // parks in sync_deferred forever — silently, because a deferred row looks
+  // exactly like a row nobody has created yet.
+  //
+  // Notifications waited six days on missing users. Bookings arrived in the
+  // cloud stripped of their pack lists because the request tables were not
+  // synced, and would have parked on their templates had those been forgotten
+  // too. Each pair below is a relationship that cost something to learn.
+  const MUST_TRAVEL_TOGETHER: Array<[child: string, parent: string]> = [
+    ['surgeries', 'patients'],
+    ['surgeries', 'users'],
+    ['notifications', 'users'],
+    ['audit_logs', 'users'],
+    ['surgery_consumable_requests', 'surgeries'],
+    ['surgery_consumable_requests', 'surgical_consumable_templates'],
+    ['surgery_drug_dressing_requests', 'surgeries'],
+    ['surgery_drug_dressing_requests', 'surgical_drug_dressing_templates'],
+    ['patient_movements', 'surgeries'],
+    ['radio_acknowledgments', 'radio_announcements'],
+  ];
+
+  it('never syncs a child whose parent is left behind', () => {
+    const orphaned = MUST_TRAVEL_TOGETHER
+      .filter(([child, parent]) => isSynced(child) && !isSynced(parent))
+      .map(([child, parent]) => `${child} needs ${parent}`);
+    expect(orphaned).toEqual([]);
+  });
+});

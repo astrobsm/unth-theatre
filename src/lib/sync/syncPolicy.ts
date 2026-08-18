@@ -68,6 +68,21 @@ export const TABLE_POLICIES: TablePolicy[] = [
   // PROTECTED_COLUMNS, because a stock count cannot be merged by taking the
   // later of two absolute values.
   { table: 'inventory_items', cls: 'LWW', why: 'Current state of a stock item. Renames and prices resolve by clock; the counts do not, and are quarantined.' },
+  // ── What a booked case is packed with ────────────────────────────────────
+  // A case booked in theatre reached the cloud without its lists, because
+  // neither request table replicated: the booking appeared outside the
+  // hospital stripped of the consumables and drugs it had been booked with,
+  // which reads as a booking somebody forgot to complete.
+  //
+  // The templates come with them because the set must be CLOSED UNDER ITS
+  // FOREIGN KEYS. A request carries templateId, so a request arriving on a
+  // node that has never seen that template is rejected by the FK and parks in
+  // sync_deferred forever — which is exactly how the notifications backlog
+  // happened, and the mistake is only ever made once per relationship.
+  { table: 'surgery_consumable_requests', cls: 'LWW', why: 'A supply line for one case. Status walks REQUESTED to PACKED; the latest state is the true one, and withdrawals are recorded as CANCELLED rather than deleted.' },
+  { table: 'surgery_drug_dressing_requests', cls: 'LWW', why: 'The pharmacy half of the same list, with the same lifecycle.' },
+  { table: 'surgical_consumable_templates', cls: 'LWW', why: 'Reference data, and the parent of every consumable request. Must travel or its children cannot be inserted.' },
+  { table: 'surgical_drug_dressing_templates', cls: 'LWW', why: 'Reference data, and the parent of every drug or dressing request.' },
 
   // ---- Class 3: quarantine ----------------------------------------------
   // The parent of nearly everything else here. It was missing from this list,
@@ -251,6 +266,26 @@ export function decide(
       : { action: 'APPLY', reason: 'New row.' };
   }
 
+  // Cloud-authoritative tables are decided BEFORE the in-sequence shortcut.
+  //
+  // The shortcut below applies any change whose baseVersion matches what we
+  // hold, on the reasoning that it is not a conflict. For every other class
+  // that is right. For this one it was a hole: "the cloud is authoritative,
+  // unconditionally" was enforced only when two nodes had diverged, so a local
+  // edit made while the two sides agreed sailed straight through and became
+  // the cloud's version of a user, a grant, or an onboarding decision.
+  //
+  // That is the lockout the phase-3 migration was written to avoid, and it was
+  // reachable the whole time. An INSERT is still accepted, because a row the
+  // receiving node has never seen is handled above and is not a conflict with
+  // anything — a person who registers on the theatre server has to be able to
+  // reach the cloud somehow.
+  if (policy.cls === 'CLOUD_AUTHORITATIVE') {
+    return change.originNode === opts.cloudNode
+      ? { action: 'APPLY', reason: 'Cloud is authoritative for this table.' }
+      : { action: 'IGNORE', reason: 'Local change to a cloud-authoritative table; cloud state stands.' };
+  }
+
   // Not a conflict: the sender was working from what we currently hold.
   if (change.baseVersion === local.version) {
     return { action: 'APPLY', reason: 'In sequence; sender had our current version.' };
@@ -271,10 +306,10 @@ export function decide(
         ? { action: 'APPLY', reason: 'Append-only; union of both sides.' }
         : { action: 'QUARANTINE', reason: `Update on append-only table "${change.table}" — classification looks wrong.` };
 
-    case 'CLOUD_AUTHORITATIVE':
-      return change.originNode === opts.cloudNode
-        ? { action: 'APPLY', reason: 'Cloud is authoritative for this table.' }
-        : { action: 'IGNORE', reason: 'Local change to a cloud-authoritative table; cloud state stands.' };
+    // CLOUD_AUTHORITATIVE is settled above, before the in-sequence shortcut,
+    // and so cannot reach this switch. It is not repeated here: a second
+    // branch would read as live and invite somebody to edit the copy that
+    // never runs.
 
     case 'LWW': {
       // Some columns are exempt even on an LWW table. Looked up per table
