@@ -32,7 +32,13 @@ function summarise(rows: PackRow[]) {
 const RX_PACKED = ['PACKED', 'DISPENSED', 'COLLECTED', 'IN_USE', 'RECONCILED'];
 const RX_INPROGRESS = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_PACKED', 'LATE_ARRIVAL', 'QUERY_ISSUED'];
 function summariseRx(rows: PackRow[]) {
-  const active = rows.filter((r) => !['REJECTED', 'RETURNED'].includes(r.status));
+  // SUPERSEDED and CANCELLED are excluded alongside the two that were already
+  // here. Both statuses arrived with prescription versioning today, and leaving
+  // them in counted a replaced prescription as though it were still owed:
+  // total would include the old version, which can never be packed because it
+  // no longer exists as a request, so `ready` would never become true and the
+  // case would read as PACKING for the rest of its life.
+  const active = rows.filter((r) => !['REJECTED', 'RETURNED', 'SUPERSEDED', 'CANCELLED'].includes(r.status));
   const total = active.length;
   const prescribed = total > 0;
   const packedCount = active.filter((r) => RX_PACKED.includes(r.status)).length;
