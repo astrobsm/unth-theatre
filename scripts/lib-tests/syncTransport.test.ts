@@ -15,6 +15,9 @@ import {
   byHlc,
   isRetryable,
   validatePush,
+  MIN_BATCH_SIZE,
+  nextBatchSize,
+  isTimeout,
 } from './sync/transport';
 
 describe('backoff', () => {
@@ -126,5 +129,55 @@ describe('validating an incoming batch', () => {
     for (const b of [null, undefined, 'x', 42, []]) {
       expect(validatePush(b).ok, String(b)).toBe(false);
     }
+  });
+});
+
+describe('a batch that can get smaller', () => {
+  // The 18 August stall. 176 unsent entries, 154 of them notifications, a batch
+  // too large to transmit and apply inside the 60-second timeout — and the next
+  // attempt assembled the identical batch and failed identically. Twenty
+  // consecutive failures against a backlog that could only shrink by being
+  // sent. Nothing was broken; the batch simply had no way to get smaller.
+  it('halves the batch after a timeout', () => {
+    expect(nextBatchSize(200, 'timeout')).toBe(100);
+    expect(nextBatchSize(100, 'timeout')).toBe(50);
+  });
+
+  it('keeps halving until something can actually get through', () => {
+    let size = 200;
+    for (let i = 0; i < 10; i++) size = nextBatchSize(size, 'timeout');
+    expect(size).toBe(MIN_BATCH_SIZE);
+  });
+
+  it('never reaches zero, because zero is not progress', () => {
+    // One small batch per cycle is slow. Slow drains; stuck does not.
+    expect(nextBatchSize(1, 'timeout')).toBeGreaterThan(0);
+    expect(nextBatchSize(MIN_BATCH_SIZE, 'timeout')).toBe(MIN_BATCH_SIZE);
+  });
+
+  it('grows back gradually on success, not straight back to the size that failed', () => {
+    expect(nextBatchSize(10, 'ok')).toBe(15);
+    expect(nextBatchSize(100, 'ok')).toBe(150);
+  });
+
+  it('never grows past the protocol limit the peer enforces', () => {
+    // The push endpoint rejects anything over BATCH_SIZE outright, so growing
+    // past it would trade a timeout for a 400.
+    expect(nextBatchSize(BATCH_SIZE, 'ok')).toBe(BATCH_SIZE);
+    expect(nextBatchSize(BATCH_SIZE - 1, 'ok')).toBe(BATCH_SIZE);
+  });
+
+  it('recognises the abort message the runtime actually produces', () => {
+    // What the log showed for twenty cycles.
+    expect(isTimeout('push failed: This operation was aborted')).toBe(true);
+    expect(isTimeout('The operation timed out')).toBe(true);
+    expect(isTimeout('AbortError')).toBe(true);
+  });
+
+  it('does not treat an authentication failure as a timeout', () => {
+    // A 403 fails at any size. Shrinking the batch for it would turn a clear
+    // error into a slow mysterious one.
+    expect(isTimeout('push failed: HTTP 403')).toBe(false);
+    expect(isTimeout(null)).toBe(false);
   });
 });

@@ -77,6 +77,58 @@ export const BATCH_SIZE = 200;
 /** Give up on a single attempt after this. The link here is a domestic uplink. */
 export const REQUEST_TIMEOUT_MS = 60_000;
 
+/**
+ * Never go below this. One entry per cycle is slow but it is progress, and
+ * progress is the property that matters.
+ */
+export const MIN_BATCH_SIZE = 5;
+
+/**
+ * How large the next push should be, given how the last one went.
+ *
+ * THIS EXISTS BECAUSE A FIXED BATCH SIZE DEADLOCKS. On 18 August the theatre
+ * server accumulated 176 unsent entries, 154 of them notifications. That batch
+ * could not be transmitted and applied inside the 60-second timeout, so the
+ * push was aborted — and the next attempt assembled the identical batch and was
+ * aborted identically. Twenty consecutive failures, a backlog that could only
+ * shrink by being sent, and a queue that grew while it retried.
+ *
+ * Nothing was broken: not the token, not the network, not a foreign key.
+ * The batch was simply too big to ever succeed, and it had no way to get
+ * smaller.
+ *
+ * So a timeout HALVES the batch. Ten entries will go where two hundred will
+ * not, and once they are acknowledged the backlog is genuinely smaller. Success
+ * grows the batch back gently, because the small size is a response to
+ * conditions rather than a new permanent truth.
+ *
+ * Deliberately not applied to non-timeout failures. A 403 fails at any size,
+ * and shrinking the batch in response would turn a clear authentication error
+ * into a slow mysterious one.
+ */
+export function nextBatchSize(
+  current: number,
+  outcome: 'ok' | 'timeout',
+  { max = BATCH_SIZE, min = MIN_BATCH_SIZE }: { max?: number; min?: number } = {},
+): number {
+  const clamp = (n: number) => Math.max(min, Math.min(max, n));
+  if (outcome === 'timeout') return clamp(Math.floor(current / 2));
+  // Grow by half again, so recovery takes a few cycles rather than snapping
+  // straight back to a size that has just been shown not to work.
+  return clamp(Math.ceil(current * 1.5));
+}
+
+/**
+ * Did this failure look like the request running out of time?
+ *
+ * The message is the AbortController's, which differs by runtime, so both
+ * spellings are matched rather than relying on one.
+ */
+export function isTimeout(error: string | null | undefined): boolean {
+  const e = (error ?? '').toLowerCase();
+  return e.includes('abort') || e.includes('timeout') || e.includes('timed out');
+}
+
 export interface BackoffOptions {
   baseMs?: number;
   maxMs?: number;

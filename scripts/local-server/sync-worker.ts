@@ -25,7 +25,7 @@
 import { PrismaClient } from '@prisma/client';
 import {
   BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION,
-  backoffMs, isRetryable,
+  backoffMs, isRetryable, isTimeout, nextBatchSize,
   type JournalEntryWire, type PullResponse, type PushResponse,
 } from '../../src/lib/sync/transport';
 import { applyEntry, type TxRunner } from '../../src/lib/sync/applyEntry';
@@ -46,6 +46,17 @@ const columnCache = new Map<string, Set<string>>();
 
 let stopping = false;
 let consecutiveErrors = 0;
+
+/**
+ * How many entries to attempt per push, adjusted by what happens.
+ *
+ * Starts at the protocol maximum and halves on a timeout. A fixed size
+ * deadlocks: on 18 August a 176-entry backlog could not be transmitted inside
+ * the request timeout, so the push aborted, and the next cycle assembled the
+ * identical batch and aborted identically — twenty times, against a queue that
+ * could only shrink by being sent.
+ */
+let pushBatchSize = BATCH_SIZE;
 
 async function thisNode(): Promise<string> {
   const r = await prisma.$queryRawUnsafe<Array<{ node_id: string }>>(
@@ -87,7 +98,7 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
        from sync_journal
       where ack_at is null and origin_node = $1
       order by hlc
-      limit $2`, node, BATCH_SIZE);
+      limit $2`, node, pushBatchSize);
 
   if (!rows.length) return { sent: 0, failed: false };
 
@@ -110,6 +121,18 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     await prisma.$executeRawUnsafe(
       `update sync_journal set last_error = $2 where id = any($1::uuid[])`,
       entries.map((e) => e.id), res.error);
+
+    // A timeout means this batch was too big to get through, not that the link
+    // is broken. Halve it so the next cycle attempts something that can
+    // actually succeed — otherwise the identical batch fails forever and the
+    // backlog only grows.
+    if (isTimeout(res.error)) {
+      const shrunk = nextBatchSize(pushBatchSize, 'timeout');
+      if (shrunk !== pushBatchSize) {
+        console.warn(`[sync] push of ${entries.length} timed out — batch ${pushBatchSize} -> ${shrunk}`);
+        pushBatchSize = shrunk;
+      }
+    }
     throw Object.assign(new Error(`push failed: ${res.error}`), { status: res.status });
   }
 
@@ -122,6 +145,13 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
   }
   const quarantined = res.data.results.filter((r) => r.decision === 'QUARANTINE').length;
   if (quarantined) console.warn(`[sync] peer quarantined ${quarantined} change(s) — a person must resolve them`);
+
+  // It got through, so ease the batch back up. Gradually: the smaller size was
+  // a response to conditions, and snapping straight back to one that has just
+  // been shown not to work would stall again on the next large backlog.
+  const grown = nextBatchSize(pushBatchSize, 'ok');
+  if (grown !== pushBatchSize) pushBatchSize = grown;
+
   return { sent: acked.length, failed: false };
 }
 
@@ -229,20 +259,46 @@ async function cycle(): Promise<void> {
     return;
   }
 
-  const pushed = await push(node);
+  // Push first, still: the hospital's own work exists in one place only, so if
+  // the link closes mid-cycle that is what should already have left.
+  //
+  // But a failing push must NOT starve the pull. It did, and that is why one
+  // stalled direction became two: the push threw, the cycle unwound, and the
+  // pull was never attempted — so for two and a half hours nothing came DOWN
+  // from the cloud either, for a fault that had nothing to do with the
+  // downward direction. The error is held and rethrown after the pull has had
+  // its turn, so the backoff and the alerting still see it.
+  let pushed = { sent: 0, failed: true };
+  let pushError: unknown = null;
+  try {
+    pushed = await push(node);
+  } catch (e) {
+    pushError = e;
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn(`[sync] ${message} — continuing to the pull so the other direction keeps moving`);
+  }
+
   // Before the pull: a parent applied last cycle unblocks its children now.
   await retryDeferred(node);
 
   const pulled = await pull(node);
 
-  await prisma.$executeRawUnsafe(
-    `insert into sync_state (peer_node, last_push_at, last_push_ok_at, consecutive_errors, last_error)
-     values ('cloud', now(), now(), 0, null)
-     on conflict (peer_node) do update set
-       last_push_at = now(), last_push_ok_at = now(),
-       consecutive_errors = 0, last_error = null, updated_at = now()`);
+  // Only claim a good push when there actually was one. Stamping
+  // last_push_ok_at after a failure is how a stalled queue reads as healthy.
+  if (!pushError) {
+    await prisma.$executeRawUnsafe(
+      `insert into sync_state (peer_node, last_push_at, last_push_ok_at, consecutive_errors, last_error)
+       values ('cloud', now(), now(), 0, null)
+       on conflict (peer_node) do update set
+         last_push_at = now(), last_push_ok_at = now(),
+         consecutive_errors = 0, last_error = null, updated_at = now()`);
+  }
 
   if (pushed.sent || pulled) console.log(`[sync] pushed ${pushed.sent}, applied ${pulled}`);
+
+  // Rethrown after the pull, so the loop's backoff and the operator-facing
+  // error state behave exactly as before.
+  if (pushError) throw pushError;
 }
 
 async function loop(): Promise<void> {
