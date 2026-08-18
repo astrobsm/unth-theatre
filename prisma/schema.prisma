@@ -7248,6 +7248,17 @@ model SurgeryConsumableRequest {
   packedByName    String?
   packedAt        DateTime?
   packNotes       String?
+
+  /// Changed after booking. Nothing is deleted: removing an item cancels it
+  /// and records who and why, because the provider may already have picked it
+  /// and a list that silently loses a line looks like a list that never had
+  /// it.
+  addedAfterBooking Boolean   @default(false)
+  additionReason    String?
+  removedById       String?
+  removedAt         DateTime?
+  removalReason     String?
+
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
 
@@ -7277,6 +7288,14 @@ model SurgeryDrugDressingRequest {
   packedByName String?
   packedAt     DateTime?
   packNotes    String?
+
+  /// Same as the consumables list above: changed after booking, never deleted.
+  addedAfterBooking Boolean   @default(false)
+  additionReason    String?
+  removedById       String?
+  removedAt         DateTime?
+  removalReason     String?
+
   createdAt    DateTime                 @default(now())
   updatedAt    DateTime                 @updatedAt
 

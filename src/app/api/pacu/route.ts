@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { pushToUsers } from '@/lib/pushAll';
 
 export const dynamic = 'force-dynamic';
 
@@ -192,6 +193,69 @@ export async function POST(request: NextRequest) {
         notes: 'Admitted into recovery room (PACU) after initial assessment',
       }
     });
+
+    // ── Receiving the patient IS the end of the case ────────────────────────
+    // A patient in recovery has plainly finished surgery, and requiring
+    // somebody to say so separately means the case sits open until whoever
+    // left the theatre remembers. The recovery nurse is the person actually
+    // present, so admission closes the case — and the surgeon and the scrub
+    // nurse who managed it are told, because they are the two people who would
+    // otherwise discover it from a list.
+    const surgery = await prisma.surgery.findUnique({
+      where: { id: surgeryId },
+      select: {
+        id: true, status: true, procedureName: true, actualStartTime: true,
+        surgeonId: true, scrubNurseId: true,
+        patient: { select: { name: true, folderNumber: true } },
+      },
+    });
+
+    if (surgery && !['COMPLETED', 'CANCELLED'].includes(String(surgery.status).toUpperCase())) {
+      const now = new Date();
+      await prisma.surgery.update({
+        where: { id: surgeryId },
+        data: {
+          status: 'COMPLETED',
+          completedAt: now,
+          actualEndTime: now,
+          surgeryEndTime: now,
+          // Where the start was never captured, fall back to now so the timing
+          // stays internally consistent rather than negative.
+          actualStartTime: surgery.actualStartTime ?? now,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'UPDATE',
+          tableName: 'surgeries',
+          recordId: surgeryId,
+          changes: JSON.stringify({
+            status: { from: surgery.status, to: 'COMPLETED' },
+            completedAt: now,
+            // How it was closed matters as much as when: this was inferred
+            // from a recovery admission rather than asserted by the theatre.
+            closedBy: { userId: session.user.id, role: (session.user as { role?: string }).role },
+            trigger: 'PACU_ADMISSION',
+          }),
+        },
+      }).catch(() => {});
+
+      const tell = [surgery.surgeonId, surgery.scrubNurseId].filter((x): x is string => !!x);
+      if (tell.length) {
+        const who = surgery.patient?.name ?? 'The patient';
+        await pushToUsers(tell, {
+          title: 'Case completed — patient in recovery',
+          body: `${who}${surgery.patient?.folderNumber ? ` (${surgery.patient.folderNumber})` : ''} `
+            + `has been received in recovery, and ${surgery.procedureName} is now marked completed.`,
+          url: `/dashboard/surgeries/${surgeryId}`,
+        }).catch(() => {
+          // A failed notification must not undo the admission or the closure,
+          // both of which are already written.
+        });
+      }
+    }
 
     console.log('PACU assessment created successfully:', assessment.id);
 

@@ -20,6 +20,7 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import SurgeryPackEditor from '@/components/SurgeryPackEditor';
 
 interface Surgery {
   id: string;
@@ -481,6 +482,11 @@ export default function SurgeryDetailPage() {
           </div>
         )}
       </div>
+
+      {/* The lists this case will be packed with. Read-only for anyone who is
+          not on the surgical team — the component decides that from the API,
+          so the rule lives in one place rather than being re-derived here. */}
+      <SurgeryPackEditor surgeryId={surgeryId} />
     </div>
   );
 }
