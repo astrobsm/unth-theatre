@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { detectConflict } from '@/lib/concurrency';
+import { canCompleteReview, canDeclareFit } from '@/lib/anaesthesia/fitness';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,19 @@ const updatePreOpReviewSchema = z.object({
   recommendations: z.string().optional(),
   status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'APPROVED']).optional(),
   consultantAnesthetistId: z.string().optional(),
+
+  // The decision the whole review now turns on, and the requirements that say
+  // what would change it. Both optional here because a review is saved
+  // repeatedly while it is being written; they are enforced at COMPLETED.
+  fitnessDecision: z.enum(['FIT', 'NOT_FIT']).optional(),
+  optimisationRequirements: z.array(z.object({
+    category: z.string().min(1),
+    action: z.string(),
+    responsible: z.string().nullish(),
+    targetCompletion: z.string().nullish(),
+    priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
+  })).optional(),
+  reassessmentNote: z.string().optional(),
 });
 
 // GET - Fetch single pre-op review
@@ -151,11 +165,66 @@ export async function PATCH(
     const conflict = detectConflict(request, existingReview, 'pre-op review');
     if (conflict) return conflict;
 
+    // ── The review cannot end without a decision ────────────────────────────
+    // Enforced on the way to COMPLETED rather than on every save, because a
+    // review is written over several saves and blocking the intermediate ones
+    // would just teach people to fill the field with anything early.
+    const { optimisationRequirements, ...reviewFields } = validatedData;
+    const finishing = validatedData.status === 'COMPLETED' || validatedData.status === 'APPROVED';
+    const decision = validatedData.fitnessDecision ?? existingReview.fitnessDecision ?? null;
+
+    if (finishing) {
+      const verdict = canCompleteReview({
+        decision: decision as 'FIT' | 'NOT_FIT' | null,
+        // Requirements sent with this request, or the ones already stored —
+        // a review completed in a second call must not be judged as though it
+        // had none.
+        requirements: optimisationRequirements ?? await prisma.anaestheticOptimisationRequirement.findMany({
+          where: { reviewId: params.id },
+          select: { category: true, action: true, status: true },
+        }),
+        reviewerId: existingReview.anesthetistId,
+      });
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { error: verdict.problems[0], problems: verdict.problems },
+          { status: 422 },
+        );
+      }
+    }
+
+    // Only an anaesthetist may move the fitness decision. The people most
+    // motivated to get a case moving are exactly the ones who must not be able
+    // to overrule it.
+    const changingDecision = validatedData.fitnessDecision
+      && validatedData.fitnessDecision !== existingReview.fitnessDecision;
+    if (changingDecision && !canDeclareFit({ role: (session.user as { role?: string }).role })) {
+      return NextResponse.json(
+        { error: 'Only an anaesthetist may record or change fitness for the proposed anaesthesia.' },
+        { status: 403 },
+      );
+    }
+
     // Update review
     const updatedReview = await prisma.preOperativeAnestheticReview.update({
       where: { id: params.id },
       data: {
-        ...validatedData,
+        ...reviewFields,
+        ...(changingDecision
+          ? {
+              fitnessDecidedAt: new Date(),
+              fitnessDecidedById: (session.user as { id?: string }).id ?? null,
+              // Moving from NOT_FIT to FIT is a reassessment, and is stamped as
+              // one. Without this the flag could be lifted with nothing
+              // recording that a person looked at the patient again.
+              ...(existingReview.fitnessDecision === 'NOT_FIT' && validatedData.fitnessDecision === 'FIT'
+                ? {
+                    reassessedAt: new Date(),
+                    reassessedById: (session.user as { id?: string }).id ?? null,
+                  }
+                : {}),
+            }
+          : {}),
         lastOralIntake: validatedData.lastOralIntake
           ? new Date(validatedData.lastOralIntake)
           : undefined,
@@ -184,6 +253,28 @@ export async function PATCH(
         },
       },
     });
+
+    // Requirements arriving with this request are CREATED, never used to
+    // replace the stored set. Deleting the ones already there to make the list
+    // match would destroy the record of a requirement that was raised and then
+    // reconsidered — and the status field exists precisely so a requirement
+    // that stops being relevant can be closed rather than erased. The form
+    // therefore sends only what has been newly added.
+    if (optimisationRequirements?.length) {
+      await prisma.anaestheticOptimisationRequirement.createMany({
+        data: optimisationRequirements.map((r) => ({
+          reviewId: params.id,
+          surgeryId: existingReview.surgeryId,
+          patientId: existingReview.patientId,
+          category: r.category,
+          action: r.action,
+          responsible: r.responsible ?? null,
+          targetCompletion: r.targetCompletion ? new Date(r.targetCompletion) : null,
+          priority: r.priority,
+          raisedById: (session.user as { id?: string }).id ?? existingReview.anesthetistId,
+        })),
+      });
+    }
 
     // Create audit log
     await prisma.auditLog.create({

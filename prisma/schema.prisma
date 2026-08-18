@@ -3487,6 +3487,32 @@ enum PreOpReviewStatus {
   APPROVED
 }
 
+/// The one question the rest of the theatre needs answered: may this patient
+/// have this anaesthetic today. Two values, because the prose it replaced was
+/// read two ways by two people.
+enum AnaestheticFitness {
+  FIT
+  NOT_FIT
+}
+
+/// COMPLETED and VERIFIED are deliberately distinct. The person who does the
+/// work says COMPLETED; somebody checking says VERIFIED. Collapsed into one,
+/// the only evidence a correction happened is the word of whoever was asked
+/// to do it.
+enum OptimisationStatus {
+  OUTSTANDING
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+}
+
+enum OptimisationPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
 enum PrescriptionStatus {
   DRAFT
   PENDING_APPROVAL
@@ -3605,8 +3631,30 @@ model PreOperativeAnestheticReview {
   rejectionReason String?
 
   // General Notes
+  /// Superseded by fitnessDecision and the optimisation requirements below,
+  /// and RETAINED rather than dropped. Reviews written before that change
+  /// carry real clinical prose in these columns; deleting them to tidy the
+  /// model would destroy the record of what an anaesthetist actually said.
+  /// The form no longer collects them. Where a value exists it is shown, read
+  /// only, so an old review still reads as it was written.
   reviewNotes     String?
   recommendations String?
+
+  /// Mandatory before a review can be completed. Nullable in the column
+  /// because reviews written before this existed have no answer, and
+  /// backfilling one would be inventing a clinical decision nobody made.
+  fitnessDecision     AnaestheticFitness?
+  fitnessDecidedAt    DateTime?
+  fitnessDecidedById  String?
+
+  /// Set when an anaesthetist has reassessed after the requirements were
+  /// addressed. Without it, completing every task changes nothing — a patient
+  /// declared unfit stays unfit until a person says otherwise.
+  reassessedAt   DateTime?
+  reassessedById String?
+  reassessmentNote String? @db.Text
+
+  optimisationRequirements AnaestheticOptimisationRequirement[] @relation("ReviewOptimisation")
 
   // Anaesthesia consent (WHO-aligned legal text) — signed electronically by the
   // patient/representative or an uploaded photo/scan of the signed form.
@@ -3633,6 +3681,57 @@ model PreOperativeAnestheticReview {
   prescriptions         AnestheticPrescription[]
 
   @@map("preoperative_anesthetic_reviews")
+}
+
+/// What must be addressed before an unfit patient can proceed.
+///
+/// One row per thing that has to happen, because the free text it replaces
+/// could not be assigned, counted, or chased. A requirement with no owner is a
+/// wish, so `responsible` is recorded; a requirement with no action is a
+/// category, so `action` is required in the API rather than merely present.
+///
+/// Rows are never deleted when a requirement stops being relevant — the status
+/// moves and the history stays, in line with preserving clinical history when
+/// a record is amended.
+model AnaestheticOptimisationRequirement {
+  id String @id @default(uuid())
+
+  reviewId  String
+  surgeryId String
+  patientId String?
+
+  /// Free-text-backed so an institution can add a category without a
+  /// migration. The offered list lives in lib/anaesthesia/fitness.ts.
+  category String
+  action   String @db.Text
+
+  /// Who is being asked — a person, a team, or a unit.
+  responsible      String?
+  targetCompletion DateTime?
+
+  priority OptimisationPriority @default(MEDIUM)
+  status   OptimisationStatus   @default(OUTSTANDING)
+
+  raisedById String
+  raisedAt   DateTime @default(now())
+
+  /// Claimed done, and separately confirmed. Both carry who and when.
+  completedById String?
+  completedAt   DateTime?
+  verifiedById  String?
+  verifiedAt    DateTime?
+
+  notes String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  review PreOperativeAnestheticReview @relation("ReviewOptimisation", fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([surgeryId])
+  @@index([reviewId])
+  @@index([status])
+  @@map("anaesthetic_optimisation_requirements")
 }
 
 // Anesthetic Prescription Model
