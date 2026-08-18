@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { detectConflict } from '@/lib/concurrency';
 import { ensureEmergencyBooking } from '@/lib/emergency/ensureBooking';
+import { checkSlot } from '@/lib/theatreOps/scheduling';
 
 export const dynamic = 'force-dynamic';
 
@@ -229,6 +230,64 @@ export async function PUT(
       depositConfirmed,
       patientWard,
     } = body;
+
+    // ── Double-booking guard, on the path that now does the allocating ──────
+    // The theatre is no longer chosen when a case is booked; the theatre
+    // manager and the nurses allocate it here, nearer the day. The overlap
+    // check used to live only in the booking POST, so moving allocation to
+    // this route without moving the check would have left nothing at all
+    // preventing two cases being put in one room at one time.
+    //
+    // Only runs when something that affects the slot actually changes, so an
+    // unrelated edit — a remark, a deposit — is never refused for a clash it
+    // did not create.
+    const nextTheatreId = theatreId !== undefined ? (theatreId || null) : existingSurgery.theatreId;
+    const nextTime = scheduledTime || existingSurgery.scheduledTime;
+    const nextDate = scheduledDate ? new Date(scheduledDate) : existingSurgery.scheduledDate;
+    const slotChanged =
+      (theatreId !== undefined && (theatreId || null) !== existingSurgery.theatreId)
+      || (!!scheduledTime && scheduledTime !== existingSurgery.scheduledTime)
+      || (!!scheduledDate && new Date(scheduledDate).getTime() !== existingSurgery.scheduledDate?.getTime());
+
+    if (slotChanged && nextTheatreId && nextTime && nextDate
+        && !['CANCELLED', 'COMPLETED'].includes(String(existingSurgery.status).toUpperCase())) {
+      const dayStart = new Date(nextDate); dayStart.setUTCHours(0, 0, 0, 0);
+      const dayEnd = new Date(nextDate); dayEnd.setUTCHours(23, 59, 59, 999);
+
+      const sameRoom = await prisma.surgery.findMany({
+        where: {
+          scheduledDate: { gte: dayStart, lte: dayEnd },
+          theatreId: nextTheatreId,
+          status: { notIn: ['CANCELLED', 'COMPLETED'] },
+          id: { not: id },
+        },
+        select: { id: true, scheduledTime: true, estimatedDuration: true },
+      });
+
+      const verdict = checkSlot({
+        scheduledTime: nextTime,
+        estimatedDuration: existingSurgery.estimatedDuration || 60,
+        existing: sameRoom.map((x) => ({
+          id: x.id,
+          scheduledTime: x.scheduledTime,
+          estimatedDuration: x.estimatedDuration || 60,
+        })),
+        // Belt and braces: this case is already excluded by the query above,
+        // but naming it here means the rule holds if that query ever changes.
+        ignoreId: id,
+      });
+
+      if (!verdict.ok) {
+        return NextResponse.json(
+          {
+            error: `This theatre: ${verdict.message}`,
+            code: verdict.code,
+            suggestedStart: verdict.suggestedStart,
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     const updateData: any = {};
 

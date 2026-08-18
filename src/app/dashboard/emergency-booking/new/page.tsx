@@ -83,28 +83,10 @@ export default function NewEmergencyBookingPage() {
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
-  // Tracks whether the anaesthetist field still reflects the on-call roster
-  // pick (true) or was manually overridden by the user (false).
-  const [anesthetistAuto, setAnesthetistAuto] = useState(true);
 
-  /**
-   * Who may override the roster's anaesthetist.
-   *
-   * Only the anaesthetic service itself, plus administrators. A surgeon or house
-   * officer booking a case states what is needed; it is not their call who
-   * provides it, and letting them choose is how an anaesthetist first learns of a
-   * case by being named on it.
-   *
-   * This is the escape hatch for the real gap: no roster uploaded for the period.
-   * Someone must still be able to say who is covering, and it should be the
-   * resident anaesthetist.
-   */
-  // ANAESTHETIST is the resident grade in this schema — there is no
-  // RESIDENT_ANAESTHETIST role, and naming one here would have looked correct
-  // while silently never matching anybody.
-  const canAssignAnaesthetist = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'ANAESTHETIST',
-    'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN']
-    .includes((session?.user as { role?: string } | undefined)?.role ?? '');
+  // The manual-override state that used to live here is gone with the picker.
+  // Nobody overrides the roster from this form any more, so the field always
+  // reflects who is on call and there is no second source to keep in sync.
 
   const [form, setForm] = useState({
     patientName: '',
@@ -266,14 +248,13 @@ export default function NewEmergencyBookingPage() {
         }
         const data: OnDutyTeam = await res.json();
         setOnDuty(data);
-        // Auto-select the anaesthetist on call duty for the selected day from the
-        // roster. Keep it in sync as the date changes unless the user has manually
-        // overridden the field.
-        setForm((prev) => {
-          if (!anesthetistAuto && prev.anesthetistId) return prev;
-          const onCallId = data.team.anaesthetist?.userId || '';
-          return { ...prev, anesthetistId: onCallId };
-        });
+        // Whoever is on call for the selected day. Followed unconditionally now
+        // that the form has no override — there is no manual choice left to
+        // preserve, so the field simply tracks the roster as the date changes.
+        setForm((prev) => ({
+          ...prev,
+          anesthetistId: data.team.anaesthetist?.userId || '',
+        }));
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         setOnDuty(null);
@@ -571,41 +552,19 @@ export default function NewEmergencyBookingPage() {
                 ))}
               </select>
             </div>
-            {/* The anaesthetic team comes from the DUTY ROSTER, not from the
-                booker's judgement about who is around.
-                The picker remains for one role only: where no roster has been
-                uploaded, the resident anaesthetist assigns the team. Everyone
-                else sees who is on call and cannot change it — and critically,
-                the booking submits either way. An emergency must never wait on
-                a roster upload. */}
+            {/* The anaesthetist is NO LONGER chosen by the person booking.
+                Anaesthesia assigns its own people, through the team assignment
+                on the case — "each service assigns its own people", which is
+                the rule /api/theatres/assign-team already enforces. A booker
+                choosing an anaesthetist was that rule being bypassed at the one
+                moment nobody had time to check it.
+                Who is on call is still shown, because the booker needs to know
+                who is coming; it is displayed rather than selected. The booking
+                submits either way — an emergency must never wait on a roster
+                upload or on an assignment. */}
             <div>
               <label className="label">Anaesthetist</label>
-              {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') ? null
-                : canAssignAnaesthetist ? (
-                <select
-                  name="anesthetistId"
-                  value={form.anesthetistId}
-                  onChange={(e) => {
-                    // A manual change stops the auto-sync with the on-call roster.
-                    setAnesthetistAuto(false);
-                    handleChange(e);
-                  }}
-                  className="input-field"
-                >
-                  <option value="">
-                    {onDuty?.team.anaesthetist?.userId ? 'Use the on-call anaesthetist' : 'Assign an anaesthetist'}
-                  </option>
-                  {anesthetists.map(a => (
-                    <option key={a.id} value={a.id}>{a.fullName}</option>
-                  ))}
-                  {onDuty?.team.anaesthetist?.userId &&
-                    !anesthetists.some((a) => a.id === onDuty.team.anaesthetist!.userId) && (
-                      <option value={onDuty.team.anaesthetist.userId}>
-                        {onDuty.team.anaesthetist.name} (on call)
-                      </option>
-                    )}
-                </select>
-              ) : (
+              {(form.anaesthesiaType === 'LOCAL' || form.anaesthesiaType === 'NONE') ? null : (
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800">
                   {onDuty?.team.anaesthetist?.name ? (
                     <>
@@ -614,11 +573,11 @@ export default function NewEmergencyBookingPage() {
                     </>
                   ) : (
                     <>
-                      <p className="font-semibold">Assigned from the duty roster.</p>
+                      <p className="font-semibold">Assigned by anaesthesia.</p>
                       <p className="mt-1 text-xs">
-                        No roster is uploaded for this period, so the resident anaesthetist
-                        will assign the team. Submit the booking now — it does not wait
-                        for this.
+                        No roster is uploaded for this period. Submit the booking now —
+                        it does not wait for this. Anaesthesia assigns the case from the
+                        team assignment on the scheduled list.
                       </p>
                     </>
                   )}
@@ -628,7 +587,7 @@ export default function NewEmergencyBookingPage() {
                 <p className="mt-1 text-xs text-green-700">
                   No anaesthetist needed for {form.anaesthesiaType} anaesthesia — anaesthetic review is not required.
                 </p>
-              ) : onDuty?.team.anaesthetist?.userId && anesthetistAuto ? (
+              ) : onDuty?.team.anaesthetist?.userId ? (
                 <p className="mt-1 text-xs text-blue-700">
                   Auto-filled from the duty roster: {onDuty.team.anaesthetist.name} (on-call anaesthetist for the selected day).
                 </p>

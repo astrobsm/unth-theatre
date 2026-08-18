@@ -83,6 +83,25 @@ export async function GET(request: NextRequest) {
 
     const surgeryIds = surgeries.map((s) => s.id);
 
+    // Theatre names for the day's cases.
+    //
+    // Looked up rather than joined: surgeries.theatreId is a soft reference
+    // with no foreign key, kept that way deliberately to keep migrations safe.
+    // It matters more now than it did — the theatre is no longer chosen when a
+    // case is booked, so "which room is this in" is a question this page
+    // answers rather than one the booking already settled.
+    const theatreIds = Array.from(
+      new Set(surgeries.map((s) => s.theatreId).filter((x): x is string => !!x)),
+    );
+    const theatreNames = new Map<string, string>();
+    if (theatreIds.length) {
+      const rooms = await prisma.theatreSuite.findMany({
+        where: { id: { in: theatreIds } },
+        select: { id: true, name: true },
+      });
+      for (const r of rooms) theatreNames.set(r.id, r.name);
+    }
+
     const [consumables, drugs, prescriptions, providers, pharmacists] = await Promise.all([
       surgeryIds.length
         ? prisma.surgeryConsumableRequest.findMany({
@@ -270,6 +289,10 @@ export async function GET(request: NextRequest) {
         unit: s.unit,
         subspecialty: s.subspecialty,
         location: s.location || null,
+        // Null until somebody allocates a room, which is now a normal state for
+        // a freshly booked case rather than a fault. The page says so plainly
+        // instead of leaving a blank that reads as missing data.
+        theatre: s.theatreId ? (theatreNames.get(s.theatreId) ?? null) : null,
         scheduledTime: s.scheduledTime,
         status: s.status,
         magnitude: s.magnitude || null,

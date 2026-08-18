@@ -53,6 +53,8 @@ type CaseRow = {
   scheduledTime: string;
   status: string;
   magnitude: string | null;
+  /** Null until a room is allocated, which now happens after booking. */
+  theatre: string | null;
   consumable: PackSummary;
   pharmacy: PackSummary;
   anaesthesia: PackSummary;
@@ -429,8 +431,19 @@ export default function CaseReadinessPage() {
               <PackPill label="Anaesthesia" pack={c.anaesthesia} />
             </div>
 
-            {/* Contacts */}
+            {/* Theatre and team. Both are assigned after booking now, so this
+                page is where they are read — and an unallocated room is stated
+                rather than left blank, because a blank reads as missing data
+                and sends somebody looking for a bug. */}
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className={`rounded-lg border px-3 py-2 text-sm ${
+                c.theatre
+                  ? 'border-gray-200 bg-white text-gray-900'
+                  : 'border-amber-300 bg-amber-50 text-amber-900'
+              }`}>
+                <p className="text-xs uppercase tracking-wide opacity-70">Theatre</p>
+                <p className="font-semibold">{c.theatre ?? 'Not yet allocated'}</p>
+              </div>
               <ContactChip role="Consultant" contact={c.contacts.consultant} />
               <ContactChip role="Booked by" contact={c.contacts.bookedBy} />
               <ContactChip role="Anaesthetist" contact={c.contacts.anaesthetist} />
