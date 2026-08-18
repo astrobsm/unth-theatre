@@ -150,7 +150,26 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
 
   // Acknowledge ONLY what the peer reported on. An entry it never mentioned
   // stays unacknowledged and is sent again, which is the whole no-loss rule.
-  const acked = res.data.results.map((r) => r.id);
+  //
+  // And NOT what it could not classify. UNKNOWN_TABLE means the peer has no
+  // policy for that table — it is running older code — which is a statement
+  // about the peer, not a decision about the change. Acknowledging it deletes
+  // the entry here while the peer never wrote it there, which is how pack
+  // lists booked in theatre vanished between the two databases while the
+  // queue read as empty and nothing was parked on either side.
+  const unknown = res.data.results.filter((r) => r.decision === 'UNKNOWN_TABLE');
+  const acked = res.data.results.filter((r) => r.decision !== 'UNKNOWN_TABLE').map((r) => r.id);
+
+  if (unknown.length) {
+    const tables = Array.from(new Set(unknown.map((u) => {
+      const entry = entries.find((e) => e.id === u.id);
+      return entry?.table ?? 'unknown';
+    })));
+    console.warn(
+      `[sync] peer could not classify ${unknown.length} change(s) on: ${tables.join(', ')}. `
+      + 'It is running older code. These stay queued and will land once it is updated — '
+      + 'they are NOT lost, but they are NOT there yet either.');
+  }
   if (acked.length) {
     await prisma.$executeRawUnsafe(
       `update sync_journal set ack_at = now(), last_error = null where id = any($1::uuid[])`, acked);
@@ -235,6 +254,15 @@ async function pull(node: string): Promise<number> {
       if (r.decision === 'APPLY') applied++;
       if (r.decision === 'QUARANTINE') {
         console.warn(`[sync] quarantined ${e.table}/${e.rowId}: ${r.reason}`);
+      }
+      // We cannot classify this table, so we cannot apply it — and the cursor
+      // is about to move past it. Park it, exactly as an ordering failure is
+      // parked, so it is visible in sync_deferred and applies by itself once
+      // this node is updated. Skipping it silently would lose it: the cursor
+      // never comes back.
+      if (r.decision === 'UNKNOWN_TABLE') {
+        await defer(e, res.data.node, new Error(r.reason));
+        deferred++;
       }
     } catch (err) {
       // Park it and carry on. Stopping here protected the entry but blocked

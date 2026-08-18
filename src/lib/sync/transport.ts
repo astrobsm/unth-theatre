@@ -36,7 +36,14 @@ export interface PushRequest {
 
 export interface EntryResult {
   id: string;
-  decision: 'APPLY' | 'IGNORE' | 'QUARANTINE';
+  /**
+   * UNKNOWN_TABLE is NOT acknowledged by the sender. The other three are
+   * settled outcomes — the peer considered the change and acted. This one
+   * means the peer could not classify the table at all, which is a statement
+   * about the peer's code rather than about the change, and treating it as
+   * settled deletes the entry on both sides.
+   */
+  decision: 'APPLY' | 'IGNORE' | 'QUARANTINE' | 'UNKNOWN_TABLE';
   reason: string;
 }
 

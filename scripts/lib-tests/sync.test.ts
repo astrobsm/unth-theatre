@@ -96,12 +96,17 @@ describe('the clock survives a broken system clock', () => {
 
 describe('the policy table', () => {
   it('refuses to sync a table nobody classified', () => {
-    // The default must be silence, not a guess.
+    // The default must be silence, not a guess: nothing is written.
     expect(isSynced('some_table_nobody_thought_about')).toBe(false);
     const d = decide(
       { table: 'some_table_nobody_thought_about', op: 'UPDATE', baseVersion: 1, hlc: 'z', originNode: 'cloud' },
       { exists: true, version: 2, hlc: 'a' }, NODES);
-    expect(d.action).toBe('IGNORE');
+
+    // This asserted IGNORE until 18 August, and that was the bug rather than
+    // the specification. Not writing the row is right; telling the SENDER it
+    // was handled is not, because the sender then deletes its copy and the
+    // change exists nowhere. UNKNOWN_TABLE keeps it queued instead.
+    expect(d.action).toBe('UNKNOWN_TABLE');
   });
 
   it('gives every classified table a stated reason', () => {
@@ -363,5 +368,41 @@ describe('the synced set is closed under its foreign keys', () => {
       .filter(([child, parent]) => isSynced(child) && !isSynced(parent))
       .map(([child, parent]) => `${child} needs ${parent}`);
     expect(orphaned).toEqual([]);
+  });
+});
+
+describe('a table the receiving node has never heard of', () => {
+  // The failure that cost the most to find. decide() returned IGNORE for a
+  // table with no policy, the push endpoint reported IGNORE, and the sender
+  // acknowledged it as settled and deleted the entry — while the receiver had
+  // written nothing. Pack lists booked in theatre disappeared between the two
+  // databases with an EMPTY outbound queue and nothing parked on either side,
+  // because every trace of them had been cleaned up as successfully handled.
+  //
+  // IGNORE and "I do not know what this is" are opposite outcomes. The first
+  // is a decision; the second is a statement about the peer's code.
+  it('is not reported as ignored', () => {
+    const d = decide(
+      { table: 'a_table_this_node_has_never_heard_of', op: 'INSERT', baseVersion: 0, hlc: 'A', originNode: 'local-unth' },
+      null, NODES);
+    expect(d.action).toBe('UNKNOWN_TABLE');
+    expect(d.action).not.toBe('IGNORE');
+  });
+
+  it('says the peer is probably out of date, so the message is actionable', () => {
+    const d = decide(
+      { table: 'surgery_consumable_requests_v2', op: 'INSERT', baseVersion: 0, hlc: 'A', originNode: 'cloud' },
+      null, NODES);
+    expect(d.reason).toContain('older code');
+  });
+
+  it('still ignores a classified table whose policy says the local version stands', () => {
+    // The genuine IGNORE must keep working, or the sender would stop
+    // acknowledging real decisions and the queue would never drain.
+    const d = decide(
+      { table: 'users', op: 'UPDATE', baseVersion: 4, hlc: 'Z', originNode: 'local-unth' },
+      { exists: true, version: 4, hlc: 'A' },
+      { thisNode: 'cloud', cloudNode: 'cloud' });
+    expect(d.action).toBe('IGNORE');
   });
 });

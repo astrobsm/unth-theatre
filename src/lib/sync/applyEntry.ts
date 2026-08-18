@@ -44,8 +44,19 @@ export async function applyEntry(
 ): Promise<EntryResult> {
   // A table with no policy on THIS node is never written, however the peer
   // labelled it. Classification is a local decision.
+  //
+  // Reported as UNKNOWN_TABLE rather than IGNORE, and deliberately NOT
+  // recorded in sync_applied. Recording it would make the answer permanent:
+  // the replay guard above returns the stored decision first, so once this
+  // node learned the table the entry would still come back "ignored" from the
+  // record and never actually apply. The sender keeps it queued instead, and
+  // it lands the moment this node is updated.
   if (!isSynced(e.table)) {
-    return await recordOnly(db, e, fromNode, 'IGNORE', `Table "${e.table}" is not synced on this node.`);
+    return {
+      id: e.id,
+      decision: 'UNKNOWN_TABLE',
+      reason: `Table "${e.table}" has no sync policy on this node — it is probably running older code.`,
+    };
   }
 
   const seen = await db.$queryRawUnsafe<Array<{ decision: string; reason: string | null }>>(

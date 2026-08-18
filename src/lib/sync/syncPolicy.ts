@@ -223,7 +223,21 @@ export const PROTECTED_COLUMNS: Record<string, Set<string>> = {
 export type Decision =
   | { action: 'APPLY'; reason: string }
   | { action: 'IGNORE'; reason: string }
-  | { action: 'QUARANTINE'; reason: string };
+  | { action: 'QUARANTINE'; reason: string }
+  /**
+   * This node has no policy for the table, so it cannot say what to do.
+   *
+   * Deliberately NOT an IGNORE, though for a long time it was one. The two are
+   * opposite outcomes wearing the same word: IGNORE means "I considered this
+   * and the local version stands", and the sender is right to treat it as
+   * settled and drop the entry. This means "I do not know what this is",
+   * which almost always means the peer is running older code — and dropping
+   * the entry then destroys it silently, on both sides, forever.
+   *
+   * That is exactly how pack lists booked in theatre never reached the cloud
+   * while the outbound queue read as empty and nothing was parked anywhere.
+   */
+  | { action: 'UNKNOWN_TABLE'; reason: string };
 
 export interface IncomingChange {
   table: string;
@@ -256,7 +270,11 @@ export function decide(
 ): Decision {
   const policy = policyFor(change.table);
   if (!policy) {
-    return { action: 'IGNORE', reason: `Table "${change.table}" has no sync policy; not replicated.` };
+    return {
+      action: 'UNKNOWN_TABLE',
+      reason: `Table "${change.table}" has no sync policy on this node. `
+        + 'It is probably running older code than the sender; the change is kept, not discarded.',
+    };
   }
 
   // Nothing here yet: every class simply accepts the row.
