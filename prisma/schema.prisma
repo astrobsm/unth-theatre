@@ -3269,6 +3269,22 @@ model AnesthesiaSetupLog {
   setupNotes     String?
   blockingIssues String? // Issues preventing readiness
 
+  /// The compliance declaration, acknowledged and recorded.
+  ///
+  /// The VERSION is stored alongside the acknowledgement, not just a boolean:
+  /// a dialog somebody dismissed proves nothing afterwards, and once the
+  /// wording is revised there is otherwise no way to say which text a person
+  /// actually agreed to. Certification is refused without both.
+  complianceAcknowledged        Boolean   @default(false)
+  complianceAcknowledgedAt      DateTime?
+  complianceDeclarationVersion  String?
+
+  /// Where a theatre was declared NOT ready, and by whom. Separate from
+  /// blockingIssues, which is free notes — this is the moment somebody stood
+  /// the theatre down.
+  deficiencyReportedAt   DateTime?
+  deficiencyReportedById String?
+
   // End of Day
   endOfDayLogged Boolean   @default(false)
   endOfDayTime   DateTime?

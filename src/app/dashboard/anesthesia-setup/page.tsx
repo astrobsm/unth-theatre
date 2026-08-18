@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { THEATRES, FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
+import TheatreSetupDeclaration from '@/components/TheatreSetupDeclaration';
+import { outstandingChecks } from '@/lib/theatreOps/setupCertification';
 
 interface Theatre {
   id: string;
@@ -59,6 +61,8 @@ export default function AnesthesiaSetupPage() {
 
   const [setupNotes, setSetupNotes] = useState('');
   const [blockingIssues, setBlockingIssues] = useState('');
+  /** The declaration dialog. The only place a certification can originate. */
+  const [showDeclaration, setShowDeclaration] = useState(false);
 
   // Equipment check states
   const [equipmentCheck, setEquipmentCheck] = useState({
@@ -277,7 +281,15 @@ export default function AnesthesiaSetupPage() {
     }
   };
 
-  const updateChecklist = async (markAsReady = false) => {
+  /**
+   * Save progress, certify ready, or stand the theatre down.
+   *
+   * `extra` carries the acknowledgement for a certification, or the deficiency
+   * for a stand-down. Certification is never sent from here directly — it goes
+   * through the declaration dialog, which is the only place the acknowledgement
+   * can be produced.
+   */
+  const updateChecklist = async (markAsReady = false, extra: Record<string, unknown> = {}) => {
     if (!currentSetupLog) return;
 
     setLoading(true);
@@ -291,6 +303,7 @@ export default function AnesthesiaSetupPage() {
           setupNotes,
           blockingIssues,
           markAsReady,
+          ...extra,
         }),
       });
 
@@ -522,12 +535,31 @@ export default function AnesthesiaSetupPage() {
               </div>
             </div>
 
-            <div className="flex gap-2 mt-4">
+            <div className="flex flex-wrap gap-2 mt-4">
               <button onClick={() => updateChecklist(false)} className="btn-secondary" disabled={loading}>
                 Save Progress
               </button>
-              <button onClick={() => updateChecklist(true)} className="btn-primary" disabled={loading}>
+              {/* Opens the declaration rather than certifying directly. The
+                  acknowledgement can only be produced there, so there is no
+                  path to READY that skips it. */}
+              <button onClick={() => setShowDeclaration(true)} className="btn-primary" disabled={loading}>
                 ✓ Mark as Ready
+              </button>
+              {/* As easy to reach as the button above, deliberately. A
+                  technician who cannot make the theatre ready needs a route
+                  that works, or the only one that works is the false one. */}
+              <button
+                onClick={() => {
+                  if (!blockingIssues.trim()) {
+                    setMessage('✗ Say what is wrong in "issues preventing readiness" first — the anaesthetist needs to know whether the case can move room or must wait.');
+                    return;
+                  }
+                  updateChecklist(false, { markNotReady: true, deficiency: blockingIssues });
+                }}
+                className="rounded-lg border-2 border-red-600 px-4 py-2 font-medium text-red-700 hover:bg-red-50"
+                disabled={loading}
+              >
+                Theatre NOT ready
               </button>
             </div>
           </div>
@@ -665,6 +697,25 @@ export default function AnesthesiaSetupPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {showDeclaration && currentSetupLog && (
+        <TheatreSetupDeclaration
+          theatreName={(currentSetupLog as any).theatreName || 'this theatre'}
+          // Computed from the checklist in front of the technician, so the
+          // dialog names the same outstanding items the server would refuse on
+          // rather than letting them press confirm and be rejected.
+          outstanding={outstandingChecks(checklist)}
+          submitting={loading}
+          onCancel={() => setShowDeclaration(false)}
+          onConfirm={async (ack) => {
+            await updateChecklist(true, {
+              declarationAcknowledged: ack.acknowledged,
+              declarationVersion: ack.version,
+            });
+            setShowDeclaration(false);
+          }}
+        />
       )}
     </div>
   );
