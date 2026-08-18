@@ -166,6 +166,25 @@ export function outstandingRequirements(rs: OptimisationRequirement[]): Optimisa
   return rs.filter(isOutstanding);
 }
 
+/**
+ * Reviews written before this are not blocked for lacking a decision.
+ *
+ * The field did not exist, so every review already in the database has no
+ * answer — and enforcing against them would have stopped cases at the theatre
+ * door on the morning of the deploy, for a form nobody had been asked to fill
+ * in yet. A rule that first appears as a blocked patient is a rule people
+ * learn to route around.
+ *
+ * A fixed constant rather than a rolling window, for the same reason
+ * QUERY_CUTOFF is one: the boundary must not move, so a case does not become
+ * blocked overnight because the window slid past it.
+ *
+ * THE GRACE COVERS ABSENCE ONLY. A review that actually says NOT_FIT is
+ * blocked however old it is — grandfathering a recorded clinical decision
+ * would be the opposite of what a cutoff is for.
+ */
+export const FITNESS_DECISION_REQUIRED_FROM = new Date('2026-08-18T00:00:00.000Z');
+
 export interface FitnessState {
   decision: FitnessDecision | null | undefined;
   requirements?: OptimisationRequirement[] | null;
@@ -174,6 +193,18 @@ export interface FitnessState {
    * addressed. Without it, completing every task changes nothing.
    */
   reassessedAt?: Date | string | null;
+  /**
+   * When the review was written — or, where there is none, when the case was
+   * booked. Used only to grandfather records that predate the requirement.
+   */
+  recordedAt?: Date | string | null;
+}
+
+/** Did this record predate the requirement to record a decision? */
+export function predatesFitnessRequirement(recordedAt: Date | string | null | undefined): boolean {
+  if (!recordedAt) return false; // Unknown age is treated as current, not as old.
+  const d = recordedAt instanceof Date ? recordedAt : new Date(recordedAt);
+  return !Number.isNaN(d.getTime()) && d < FITNESS_DECISION_REQUIRED_FROM;
 }
 
 /**
@@ -191,6 +222,10 @@ export function blocksReadyForTheatre(state: FitnessState): string | null {
       : 'Patient is not fit for the proposed anaesthesia. The requirements are addressed; an anaesthetist must reassess before the case can proceed.';
   }
   if (!state.decision) {
+    // Grandfathered: the field did not exist when this was written. Only the
+    // ABSENCE of a decision is excused — the NOT_FIT branch above is reached
+    // first and is never dated out.
+    if (predatesFitnessRequirement(state.recordedAt)) return null;
     return 'Fitness for the proposed anaesthesia has not been recorded.';
   }
   return null;

@@ -16,6 +16,7 @@ import {
   canDeclareFit,
   fitnessLabel,
   outstandingRequirements,
+  predatesFitnessRequirement,
   type OptimisationRequirement,
 } from './anaesthesia/fitness';
 
@@ -155,5 +156,49 @@ describe('what a board shows', () => {
     // Two very different things that a single "not fit" badge would merge.
     expect(fitnessLabel({ decision: null })).toBe('NOT YET REVIEWED');
     expect(fitnessLabel({ decision: 'FIT' })).toBe('FIT FOR PROPOSED ANAESTHESIA');
+  });
+});
+
+describe('reviews written before the decision existed', () => {
+  // The field did not exist, so every review already in the database has no
+  // answer. Enforcing against them would have stopped cases at the theatre
+  // door on the morning of the deploy, for a form nobody had been asked to
+  // fill in — and a rule that first appears as a blocked patient is a rule
+  // people learn to route around.
+  const BEFORE = new Date('2026-08-15T10:00:00.000Z');
+  const AFTER = new Date('2026-08-19T10:00:00.000Z');
+
+  it('does not block an old review that never recorded a decision', () => {
+    expect(blocksReadyForTheatre({ decision: null, recordedAt: BEFORE })).toBe(null);
+  });
+
+  it('still blocks a new review that has not recorded one', () => {
+    expect(blocksReadyForTheatre({ decision: null, recordedAt: AFTER })).not.toBe(null);
+  });
+
+  it('blocks when the age is unknown', () => {
+    // Unknown is treated as current, not as old. Failing open on a missing
+    // timestamp would make the grace period trivially reachable.
+    expect(blocksReadyForTheatre({ decision: null, recordedAt: null })).not.toBe(null);
+    expect(blocksReadyForTheatre({ decision: null })).not.toBe(null);
+  });
+
+  it('NEVER grandfathers a recorded NOT FIT, however old', () => {
+    // THE assertion for this cutoff. Excusing an actual clinical decision
+    // because of its age is the opposite of what a grace period is for.
+    const msg = blocksReadyForTheatre({
+      decision: 'NOT_FIT',
+      requirements: [requirement()],
+      recordedAt: new Date('2020-01-01T00:00:00.000Z'),
+    });
+    expect(msg).not.toBe(null);
+    expect(msg).toContain('not fit for the proposed anaesthesia');
+  });
+
+  it('does not move the boundary as time passes', () => {
+    // A fixed constant, not a rolling window: a case must not become blocked
+    // overnight because the window slid past it.
+    expect(predatesFitnessRequirement(BEFORE)).toBe(true);
+    expect(predatesFitnessRequirement(AFTER)).toBe(false);
   });
 });

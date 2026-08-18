@@ -302,6 +302,7 @@ export async function PUT(
         orderBy: { reviewDate: 'desc' },
         select: {
           fitnessDecision: true,
+          createdAt: true,
           optimisationRequirements: { select: { status: true, category: true, action: true } },
         },
       });
@@ -314,6 +315,12 @@ export async function PUT(
         const blocked = blocksReadyForTheatre({
           decision: review?.fitnessDecision ?? null,
           requirements: review?.optimisationRequirements ?? [],
+          // Grandfathers cases that predate the requirement, so the rule does
+          // not first appear as a patient stopped at the theatre door for a
+          // form nobody had been asked to fill in. The review's own age where
+          // there is one; the booking's where there is not. A recorded NOT_FIT
+          // is never excused by this — that branch is reached first.
+          recordedAt: review?.createdAt ?? existingSurgery.createdAt,
         });
         if (blocked) {
           return NextResponse.json(
