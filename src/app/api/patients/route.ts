@@ -6,6 +6,47 @@ import { z } from "zod";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * A date-and-time coming from an HTML `datetime-local` input.
+ *
+ * The browser sends "2026-08-18T17:46" — no seconds, no timezone. That is not
+ * ISO-8601, and Prisma rejects it outright:
+ *
+ *     Invalid value for argument `anticoagulantLastDose`:
+ *     premature end of input. Expected ISO-8601 DateTime.
+ *
+ * The four "last dose" fields were declared as plain strings and handed
+ * straight to the database, so registering any patient who is on an
+ * anticoagulant, an antiplatelet, an ACE inhibitor or an ARB — and who had a
+ * last dose recorded — failed with a 500. Staff met it while booking, because
+ * registration is the first step of booking, and reported it as "internal
+ * server error while trying to book a case".
+ *
+ * assessmentDate three lines below was already converted correctly, which is
+ * why it worked and these did not.
+ *
+ * An unparseable value is REJECTED rather than quietly dropped. These dates
+ * feed the bleeding-risk assessment, and a surgeon reading "no recent dose"
+ * for a patient on dabigatran is worse than a form that asks for the date
+ * again.
+ */
+const optionalDateTime = z
+  .union([z.string(), z.date()])
+  .optional()
+  .nullable()
+  .transform((val, ctx) => {
+    if (val === null || val === undefined || val === '') return null;
+    const d = val instanceof Date ? val : new Date(val);
+    if (Number.isNaN(d.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Not a valid date and time.',
+      });
+      return z.NEVER;
+    }
+    return d;
+  });
+
 const patientSchema = z.object({
   // Basic Information
   name: z.string().min(1),
@@ -45,16 +86,16 @@ const patientSchema = z.object({
   // Medications Affecting Surgery
   onAnticoagulants: z.boolean().optional(),
   anticoagulantName: z.string().optional().nullable().transform(val => val || null),
-  anticoagulantLastDose: z.string().optional().nullable().transform(val => val || null),
+  anticoagulantLastDose: optionalDateTime,
   onAntiplatelets: z.boolean().optional(),
   antiplateletName: z.string().optional().nullable().transform(val => val || null),
-  antiplateletLastDose: z.string().optional().nullable().transform(val => val || null),
+  antiplateletLastDose: optionalDateTime,
   onACEInhibitors: z.boolean().optional(),
   aceInhibitorName: z.string().optional().nullable().transform(val => val || null),
-  aceInhibitorLastDose: z.string().optional().nullable().transform(val => val || null),
+  aceInhibitorLastDose: optionalDateTime,
   onARBs: z.boolean().optional(),
   arbName: z.string().optional().nullable().transform(val => val || null),
-  arbLastDose: z.string().optional().nullable().transform(val => val || null),
+  arbLastDose: optionalDateTime,
   otherMedications: z.string().optional().nullable().transform(val => val || null),
   
   // WHO Operative Fitness Risk Assessment
