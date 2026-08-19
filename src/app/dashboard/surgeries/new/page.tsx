@@ -15,7 +15,7 @@ import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarn
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import ProcedurePicker from '@/components/ProcedurePicker';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
-import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { isOfflineQueued, queuedMessage } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
@@ -714,7 +714,11 @@ export default function NewSurgeryPage() {
         // Offline: the write was queued (no server-generated codes/id yet).
         // Confirm and return to the list instead of showing an empty codes modal.
         if (isOfflineQueued(response)) {
-          notify.success(OFFLINE_SAVED_MESSAGE);
+          // Two different situations wearing one status code. A timed-out write
+          // has usually ALREADY reached the server, so the message has to say
+          // "do not enter it again" — that sentence is the difference between
+          // one case on the list and two.
+          notify.success(queuedMessage(response));
           setLoading(false);
           router.push('/dashboard/surgeries');
           return;

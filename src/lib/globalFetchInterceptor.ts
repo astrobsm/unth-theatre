@@ -573,6 +573,78 @@ function genIdempotencyKey(): string {
   return `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// ============================================================
+// A write must always finish, one way or the other
+// ------------------------------------------------------------
+// `fetch` rejects when a connection FAILS. It does not reject when a connection
+// is established and then goes quiet — which is the characteristic behaviour of
+// theatre wifi, and of a phone walking out of range of an access point
+// mid-request. The socket stays open, the promise stays pending, and it stays
+// pending for as long as the page is on screen.
+//
+// That is the "hangs on Scheduling indefinitely" report, exactly. The button
+// sits disabled because the `finally` that re-enables it is waiting on an
+// await that will never return. The offline queue never engages either, because
+// nothing ever threw.
+//
+// Worse, the request usually ARRIVED. The server booked the case, wrote the
+// pack lists and sent the notifications, and the reply is what went missing.
+// The surgeon, told nothing, books it again — which is where the duplicated
+// cases on the list came from.
+//
+// So a mutation now has a deadline. On expiry it aborts, which throws, which
+// drops into the offline path below: the request is queued and replayed
+// CARRYING THE SAME IDEMPOTENCY KEY it was first sent with. If the original did
+// reach the server, the replay returns that stored response instead of creating
+// a second case — /api/surgeries already records its result under that key for
+// precisely this purpose. The user gets a confirmation either way.
+//
+// Thirty seconds is chosen against the work, not the network: a booking writes
+// the case, both pack lists, the audit record and several notifications, and on
+// a loaded server that is a few seconds. Thirty leaves generous room for a slow
+// but functioning link while being far short of "indefinitely".
+const MUTATION_DEADLINE_MS = 30_000;
+
+async function fetchWithDeadline(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  // No AbortController (very old browser): behave exactly as before rather
+  // than refusing to send. A hang is bad; not being able to book at all is
+  // worse.
+  if (typeof AbortController === 'undefined') {
+    return originalFetch(input, init);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MUTATION_DEADLINE_MS);
+
+  // A caller's own signal must keep working. Without this, passing a signal to
+  // a mutation would silently lose the ability to cancel it.
+  const callerSignal = init?.signal;
+  const onCallerAbort = () => controller.abort();
+  callerSignal?.addEventListener('abort', onCallerAbort);
+
+  try {
+    return await originalFetch(input, { ...init, signal: controller.signal });
+  } catch (e) {
+    // Distinguish OUR deadline from a genuine offline failure and from the
+    // caller cancelling. They lead to the same queue but must not lead to the
+    // same sentence: telling somebody on a working connection that they are
+    // offline is the kind of small lie that costs trust in everything else the
+    // screen says.
+    if (controller.signal.aborted && !callerSignal?.aborted) {
+      const err = new Error('The server did not answer in time.');
+      err.name = 'DeadlineExceeded';
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
+  }
+}
+
 async function handleMutationFetch(
   url: string,
   input: RequestInfo | URL,
@@ -587,7 +659,7 @@ async function handleMutationFetch(
     ? { ...init, headers: { ...headersToObject(init?.headers), 'X-Idempotency-Key': idemKey } }
     : init;
   try {
-    const response = await originalFetch(input, firstInit);
+    const response = await fetchWithDeadline(input, firstInit);
     return response;
   } catch (networkError) {
     // Offline — queue the mutation
@@ -663,6 +735,9 @@ async function handleMutationFetch(
         'Content-Type': 'application/json',
         'X-Offline-Queued': 'true',
         'X-Offline-Record-Id': pending.clientId,
+        // 'timeout' means the link was up and the server simply did not answer
+        // in time, which needs a different sentence from "you are offline".
+        'X-Offline-Reason': (networkError as Error)?.name === 'DeadlineExceeded' ? 'timeout' : 'offline',
       },
     });
   }
