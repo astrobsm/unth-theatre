@@ -69,11 +69,38 @@ C="$(libpq "$(read_env_key CLOUD_DIRECT_URL || true)")"
 
 count() { psql "$1" -X -tAc "select count(*) from \"$2\";" 2>/dev/null || echo ''; }
 
+# Reading the CLOUD crosses the hospital uplink, which is exactly as reliable as
+# hospital uplinks usually are. The very first scheduled run, at 20:00 on
+# 19 August, found it unreadable and correctly refused to act — and in doing so
+# lost the whole night to a blip that had cleared within the hour.
+#
+# So a failure is retried before it is believed. Three attempts a minute apart:
+# long enough to ride out a reconnect, short enough that the job is finished
+# well before anybody is back in theatre. The alternative — running the schedule
+# more often — would mean the expensive upward half could start at a time
+# nobody chose.
+count_with_retry() {
+  local url="$1" table="$2" tries="${3:-3}" n=1 v
+  while :; do
+    v="$(count "$url" "$table")"
+    [[ -n "$v" ]] && { printf '%s' "$v"; return 0; }
+    [[ $n -ge $tries ]] && return 1
+    say "reconcile: could not read $table (attempt $n of $tries) — retrying in 60s"
+    sleep 60
+    n=$(( n + 1 ))
+  done
+}
+
 stamp() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 say()   { echo "$(stamp) $*"; }
 
-up_local="$(count "$L" "$UP_TABLE")";     up_cloud="$(count "$C" "$UP_TABLE")"
-dn_local="$(count "$L" "$DOWN_TABLE")";   dn_cloud="$(count "$C" "$DOWN_TABLE")"
+# The local reads are not retried — a local database that will not answer is a
+# different and much larger problem than a flaky uplink, and retrying it would
+# only delay saying so.
+up_local="$(count "$L" "$UP_TABLE")"
+dn_local="$(count "$L" "$DOWN_TABLE")"
+up_cloud="$(count_with_retry "$C" "$UP_TABLE" || true)"
+dn_cloud="$(count_with_retry "$C" "$DOWN_TABLE" || true)"
 
 # An unreadable side is not "no difference". Saying nothing here would report a
 # broken uplink as a healthy night.
