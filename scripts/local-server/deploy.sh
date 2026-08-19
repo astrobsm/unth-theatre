@@ -33,7 +33,26 @@ set -euo pipefail
 APP_USER="${ORM_APP_USER:-emmanuel}"
 APP_DIR="${ORM_APP_DIR:-/home/$APP_USER/unth-theatre}"
 CHECK=0
-[[ "${1:-}" == "--check" ]] && CHECK=1
+REEXECED=0
+for arg in "$@"; do
+  case "$arg" in
+    --check)     CHECK=1 ;;
+    --reexeced)  REEXECED=1 ;;   # internal; see the self-update guard below
+  esac
+done
+
+# This script pulls the repository that contains this script, so a deploy can
+# replace deploy.sh while bash is part-way through reading it. Bash reads a
+# script incrementally and remembers a BYTE OFFSET, not a line: rewrite the file
+# underneath it and execution resumes at that offset in the NEW file, part-way
+# through whatever now occupies those bytes. It does not usually crash — it runs
+# a fragment of a command, which is far worse than crashing on a box that is
+# about to restart theatre.
+#
+# So the pull records whether this file changed and re-executes if it did. At
+# most once: the second run finds nothing to pull and the hashes match.
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+self_hash() { sha1sum "$SELF" 2>/dev/null | cut -d' ' -f1; }
 
 if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'
 else B=""; G=""; Y=""; R=""; N=""; fi
@@ -96,11 +115,19 @@ else
     as_app "git checkout -- package-lock.json"
   fi
 
+  SELF_BEFORE="$(self_hash)"
   as_app "git pull --ff-only" || die "pull failed — git's own reason is printed above. Two that recur:
         'dubious ownership'  git is running as the wrong user; this script uses
                              $APP_USER for exactly that reason.
         'local changes'      something in the tree was edited on this server."
   ok "up to date"
+
+  # See the self-update note at the top. Done here, immediately after the pull,
+  # because every line below this point is one bash has not read yet.
+  if [[ $REEXECED -eq 0 && -n "$SELF_BEFORE" && "$(self_hash)" != "$SELF_BEFORE" ]]; then
+    warn "this deploy updated deploy.sh itself — restarting with the new version"
+    exec bash "$SELF" --reexeced $([[ $CHECK -eq 1 ]] && echo --check)
+  fi
 fi
 
 step "3/6  Migrations (local database, from .env.local)"
