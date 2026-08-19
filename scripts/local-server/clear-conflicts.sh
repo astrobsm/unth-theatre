@@ -118,13 +118,19 @@ These were quarantined as 'classification looks wrong', which was true: playback
 are not append-only inserts. The incoming version was NOT applied — a days-old playback status \
 would move a finished announcement backwards. Both versions are retained on this row."
 
-psql "$U" -X -v ON_ERROR_STOP=1 -q -c "
+# The note and the operator name are BOUND, not interpolated. $NOTE contains
+# 'classification looks wrong' — apostrophes and all — and pasting that straight
+# into the statement ends the SQL string literal early, which is a syntax error
+# rather than anything subtle. psql's :'var' form quotes and escapes the value
+# itself, so the note can say whatever it needs to say.
+psql "$U" -X -v ON_ERROR_STOP=1 -q \
+  -v who="$WHO" -v note="$NOTE" -v tbl="$TABLE" -c "
   update sync_conflicts
      set status = 'RESOLVED_KEEP_LOCAL',
-         resolved_by = '$WHO',
+         resolved_by = :'who',
          resolved_at = now(),
-         resolution_note = '$NOTE'
-   where status = 'OPEN' and table_name = '$TABLE';"
+         resolution_note = :'note'
+   where status = 'OPEN' and table_name = :'tbl';"
 
 REMAIN="$(psql "$U" -tAXc "select count(*) from sync_conflicts where status='OPEN' and table_name='$TABLE'")"
 echo
