@@ -146,11 +146,30 @@ if [[ $owed_up -gt 0 ]]; then
     say "reconcile: scope it by hand, e.g."
     say "reconcile:   ./scripts/local-server/rejournal.sh --table $UP_TABLE --since <date> --apply"
   else
+    # VERIFIED BY COUNTING, not by trusting an exit code.
+    #
+    # The first live run of this script reported "queued" and had queued
+    # nothing at all. rejournal.sh exits 0 whether or not it produced a single
+    # journal entry, and its mechanism — `update ... set "updatedAt" =
+    # "updatedAt"` — is a no-op update, which sync_capture() deliberately
+    # discards: "an update that changed nothing of substance is not worth
+    # shipping". The tool cannot do what it says, and this script believed it.
+    #
+    # So the queue is measured before and after. A run that moves nothing says
+    # so, loudly, instead of reporting a success that leaves 230 rows on one
+    # side of the hospital.
+    queued_before="$(psql "$L" -X -tAc "select count(*) from sync_journal where table_name = '$UP_TABLE';" 2>/dev/null || echo 0)"
     say "reconcile: re-journalling $owed_up row(s) for the cloud"
-    if ./scripts/local-server/rejournal.sh --table "$UP_TABLE" --apply >/dev/null 2>&1; then
-      say "reconcile: queued. The uplink will drain it at roughly ten rows a minute."
+    ./scripts/local-server/rejournal.sh --table "$UP_TABLE" --apply 2>&1 | sed 's/^/  rejournal: /'
+    queued_after="$(psql "$L" -X -tAc "select count(*) from sync_journal where table_name = '$UP_TABLE';" 2>/dev/null || echo 0)"
+
+    if [[ "$queued_after" -gt "$queued_before" ]]; then
+      say "reconcile: queued $(( queued_after - queued_before )) entr(y/ies). The uplink drains at roughly ten a minute."
     else
-      say "reconcile: re-journal FAILED — see rejournal.sh output"
+      say "reconcile: RE-JOURNAL PRODUCED NOTHING — $owed_up row(s) are still missing from the cloud."
+      say "reconcile: rejournal.sh relies on a no-op update, which the capture trigger discards"
+      say "reconcile:   (\"an update that changed nothing of substance is not worth shipping\")."
+      say "reconcile: these rows need copying up directly. This is not self-healing."
     fi
   fi
 fi
