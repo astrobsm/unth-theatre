@@ -45,6 +45,14 @@ sudo systemctl enable tailscaled
 tailscale ip -4
 ```
 
+Then, in the admin console (`login.tailscale.com/admin/machines`), open this
+machine and **disable key expiry** on it. A node key expires by default, and an
+expired server drops off the tailnet silently — at which point the only way to
+put it back is to stand next to it, which is the one thing Tailscale was
+installed to avoid. Note which account the machine is listed under, too: it is
+not discoverable from anywhere else, and signing in from a new laptop with the
+wrong identity shows an empty tailnet that looks exactly like a broken install.
+
 **Check:** install Tailscale on your laptop, sign in with the same account, and
 from the laptop:
 
@@ -88,16 +96,25 @@ Leases`) and write it down — in AP mode it becomes a DHCP client and
 
 ```bash
 cd ~/unth-theatre
-git pull --ff-only
-bash scripts/local-server/apply-migrations.sh   # LOCAL db — npm run build targets the CLOUD
-npm run build
-pm2 restart orm --update-env
+git pull --ff-only                            # only to fetch deploy.sh itself, first time
+./scripts/local-server/deploy.sh --check      # says what would happen, changes nothing
+./scripts/local-server/deploy.sh
 ```
+
+Use the script, not the commands that used to be written here. That sequence
+contained all three traps that cost an evening on 18 August: `npm run build`
+reads `.env` and therefore migrates the **cloud** database from this box;
+restarting only pm2 leaves the systemd sync worker running old code with nothing
+saying so; and running the whole thing as root leaves `.next` and `node_modules`
+root-owned, which breaks the *next* deploy in a way that reads as a corrupted
+checkout. `deploy.sh` handles all three, and runs migrations before the build so
+a Prisma client can never be ahead of its database.
 
 **Check:**
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/auth/login   # expect 200
+systemctl is-active orm-sync                                               # expect active
 ```
 
 ---

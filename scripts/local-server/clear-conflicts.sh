@@ -15,8 +15,10 @@
 # APPEND_ONLY, so decide() saw every playback status update — PENDING to
 # PLAYING to PLAYED to ACKNOWLEDGED, written by seven different routes — and
 # quarantined each one as "classification looks wrong". Which it was. The
-# classification was corrected to LWW on 18 August and new ones stopped
-# immediately, but the existing queue does not clear itself.
+# classification was corrected to LWW on 17 August (3869a43, 17:56 +0100) and
+# new ones stopped immediately — the newest conflict in the queue is from 16:03
+# UTC that day, fifty-three minutes before the fix — but the existing queue does
+# not clear itself.
 #
 # WHY THESE ARE CLOSED WITHOUT APPLYING THE INCOMING VERSION
 #
@@ -111,7 +113,7 @@ if [[ $APPLY -ne 1 ]]; then
 fi
 
 WHO="$(id -un)@$(hostname)"
-NOTE="Closed in bulk after the table was reclassified from APPEND_ONLY to LWW on 2026-08-18. \
+NOTE="Closed in bulk after the table was reclassified from APPEND_ONLY to LWW on 2026-08-17 (3869a43). \
 These were quarantined as 'classification looks wrong', which was true: playback status updates \
 are not append-only inserts. The incoming version was NOT applied — a days-old playback status \
 would move a finished announcement backwards. Both versions are retained on this row."
