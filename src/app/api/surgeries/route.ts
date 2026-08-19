@@ -754,33 +754,83 @@ export async function POST(request: NextRequest) {
     const effectiveConsumables = (consumableRequests?.length ? consumableRequests : mapped.consumables);
     const effectiveDrugs = (drugDressingRequests?.length ? drugDressingRequests : mapped.drugs);
 
-    const extraRows = (effectiveConsumables ?? []).map((c) => ({
-      surgeryId: surgery.id,
-      templateId: c.templateId ?? null,
-      name: c.name,
-      category: c.category as any,
-      size: c.size ?? null,
-      unit: c.unit ?? "piece",
-      quantity: c.quantity,
-      notes: c.notes ?? null,
-      requestedById: requesterId,
-      requestedByName: requesterName,
-    }));
+    // ── The template names the item, not the client ──────────────────────────
+    // The booking form sends a display label beside each templateId, resolved
+    // against whichever slice of the catalogue that screen had loaded. When the
+    // slice does not contain the template — a subspecialty filter changed after
+    // the item was picked, a search narrowed the list — the form falls back to
+    // "Unknown", and takes category OTHER and the default size and unit with it.
+    //
+    // Twenty lines across two cases were stored exactly that way, every one of
+    // them carrying a templateId that resolves perfectly well: the pack provider
+    // was asked to find "Unknown x2" when the case had requested a urine bag.
+    //
+    // The label was never the fact. The templateId is, and this side holds the
+    // catalogue, so the template wins wherever there is one. What the client
+    // sent survives only for free-text lines, which genuinely have no template.
+    const packTemplateIds = Array.from(new Set(
+      (effectiveConsumables ?? []).map((c) => c.templateId).filter((x): x is string => !!x)
+    ));
+    const packTemplates = packTemplateIds.length
+      ? await prisma.surgicalConsumableTemplate.findMany({
+          where: { id: { in: packTemplateIds } },
+          select: { id: true, name: true, category: true, size: true, unit: true },
+        })
+      : [];
+    const packTemplateById = new Map(packTemplates.map((t) => [t.id, t]));
+
+    const extraRows = (effectiveConsumables ?? []).map((c) => {
+      const t = c.templateId ? packTemplateById.get(c.templateId) : undefined;
+      return {
+        surgeryId: surgery.id,
+        templateId: c.templateId ?? null,
+        name: t?.name ?? c.name,
+        category: (t?.category ?? c.category) as any,
+        // Size and unit describe the catalogue item, so they come from it too —
+        // a line labelled from a template but sized from a guess is a different
+        // item wearing the right name.
+        size: t ? t.size : (c.size ?? null),
+        unit: t?.unit ?? c.unit ?? "piece",
+        quantity: c.quantity,
+        notes: c.notes ?? null,
+        requestedById: requesterId,
+        requestedByName: requesterName,
+      };
+    });
     await prisma.surgeryConsumableRequest.createMany({ data: [...basePackRows, ...extraRows] });
 
     if (effectiveDrugs && effectiveDrugs.length) {
+      // Same reasoning as the consumables above: the template names the drug.
+      // Dosage and route are NOT overridden — the form offers the template's
+      // defaults and lets the prescriber change them, so what arrives is a
+      // clinical decision about this patient and must not be quietly replaced
+      // by the catalogue default.
+      const drugTemplateIds = Array.from(new Set(
+        effectiveDrugs.map((d) => d.templateId).filter((x): x is string => !!x)
+      ));
+      const drugTemplates = drugTemplateIds.length
+        ? await prisma.surgicalDrugDressingTemplate.findMany({
+            where: { id: { in: drugTemplateIds } },
+            select: { id: true, name: true, type: true, unit: true },
+          })
+        : [];
+      const drugTemplateById = new Map(drugTemplates.map((t) => [t.id, t]));
+
       await prisma.surgeryDrugDressingRequest.createMany({
-        data: effectiveDrugs.map((d) => ({
-          surgeryId: surgery.id,
-          templateId: d.templateId ?? null,
-          name: d.name,
-          type: d.type as any,
-          dosage: d.dosage ?? null,
-          route: d.route ?? null,
-          quantity: d.quantity,
-          unit: d.unit ?? "vial",
-          notes: d.notes ?? null,
-        })),
+        data: effectiveDrugs.map((d) => {
+          const t = d.templateId ? drugTemplateById.get(d.templateId) : undefined;
+          return {
+            surgeryId: surgery.id,
+            templateId: d.templateId ?? null,
+            name: t?.name ?? d.name,
+            type: (t?.type ?? d.type) as any,
+            dosage: d.dosage ?? null,
+            route: d.route ?? null,
+            quantity: d.quantity,
+            unit: t?.unit ?? d.unit ?? "vial",
+            notes: d.notes ?? null,
+          };
+        }),
       });
 
       // Notify pharmacists so they can begin packing as soon as the booking lands
