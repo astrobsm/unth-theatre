@@ -155,6 +155,11 @@ const surgerySchema = z.object({
   // The reason comes from the client; WHO is taken from the session below, never
   // from the body — a client-supplied name is not an attribution.
   preopOverrideReason: z.string().trim().nullish(),
+  /// Set only when the booker has been shown an existing identical case and has
+  /// said they mean to book a second one. Absent on every ordinary booking, so
+  /// the duplicate check is on by default and has to be opted out of
+  /// deliberately rather than opted into.
+  allowDuplicate: z.boolean().optional(),
   consentFile: z.object({
     name: z.string().min(1),
     mimeType: z.string().min(1),
@@ -616,6 +621,47 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // ── Is this case already booked? ────────────────────────────────────────
+    // On 19 August the orthopaedic team booked a case, saw no confirmation, and
+    // tried again several times. Across the database that pattern has produced
+    // 24 duplicated cases, 16 of them re-submitted within ten minutes of the
+    // first — one of them 4.6 seconds apart. A duplicated case is not a
+    // cosmetic problem: it takes a second theatre slot and has a second pack
+    // prepared for a patient who is only having one operation.
+    //
+    // This is NOT a hard block. A second genuine operation on the same patient,
+    // same day, is unusual but real, and a system that refused it outright
+    // would be wrong in a way nobody could work around. It asks instead: the
+    // booker is shown what already exists and must say explicitly that they
+    // mean to book another.
+    if (!validatedData.allowDuplicate) {
+      const already = await prisma.surgery.findFirst({
+        where: {
+          patientId: validatedData.patientId,
+          procedureName: validatedData.procedureName,
+          scheduledDate: new Date(validatedData.scheduledDate),
+          status: { notIn: ['CANCELLED'] },
+        },
+        select: {
+          id: true, scheduledTime: true, createdAt: true,
+          bookedByName: true, consumablePackCode: true, pharmacyDrugCode: true,
+          patient: { select: { name: true, folderNumber: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (already) {
+        return NextResponse.json(
+          {
+            error: 'This case is already booked.',
+            code: 'ALREADY_BOOKED',
+            existing: already,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const surgery = await prisma.surgery.create({
       data: {
         ...surgeryData,
@@ -797,7 +843,31 @@ export async function POST(request: NextRequest) {
         requestedByName: requesterName,
       };
     });
-    await prisma.surgeryConsumableRequest.createMany({ data: [...basePackRows, ...extraRows] });
+    // ── Nothing below this line may report a booked case as unbooked ────────
+    // The surgery row is committed. Everything that follows is a consequence of
+    // the booking, not the booking itself, and a consequence that fails must be
+    // REPORTED rather than allowed to masquerade as the booking failing. The
+    // route already understood this for the draft estimate and the procedure
+    // statistic — both explicitly voided so they "can never fail a booking" —
+    // but the pack lists, the audit log and the emergency alert were left able
+    // to do exactly that.
+    //
+    // Each failure is named and returned to the client, so the surgeon is told
+    // "booked, but the pharmacy list did not save" instead of "internal server
+    // error" — a sentence they can act on, about a case that genuinely exists.
+    const warnings: string[] = [];
+    const step = async (what: string, fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+      } catch (e) {
+        console.error(`[surgeries] post-booking step failed (${what}) for ${surgery.id}`, e);
+        warnings.push(what);
+      }
+    };
+
+    await step('the consumable pack list', () =>
+      prisma.surgeryConsumableRequest.createMany({ data: [...basePackRows, ...extraRows] })
+    );
 
     if (effectiveDrugs && effectiveDrugs.length) {
       // Same reasoning as the consumables above: the template names the drug.
@@ -816,7 +886,7 @@ export async function POST(request: NextRequest) {
         : [];
       const drugTemplateById = new Map(drugTemplates.map((t) => [t.id, t]));
 
-      await prisma.surgeryDrugDressingRequest.createMany({
+      await step('the pharmacy pack list', () => prisma.surgeryDrugDressingRequest.createMany({
         data: effectiveDrugs.map((d) => {
           const t = d.templateId ? drugTemplateById.get(d.templateId) : undefined;
           return {
@@ -831,7 +901,7 @@ export async function POST(request: NextRequest) {
             notes: d.notes ?? null,
           };
         }),
-      });
+      }));
 
       // Notify pharmacists so they can begin packing as soon as the booking lands
       try {
@@ -891,22 +961,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log the action
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'CREATE_SURGERY',
-        tableName: 'surgeries',
-        recordId: surgery.id,
-        changes: JSON.stringify(validatedData),
-      }
-    });
+    // Log the action.
+    //
+    // GUARDED, because the row above is already committed. This same call is
+    // wrapped in /api/patients with the note "continue anyway — patient was
+    // created successfully", so the lesson had already been learned once and
+    // not carried across. An audit log that cannot be written — most obviously
+    // when session.user.id names an account this node has not received yet,
+    // which two synchronising databases make entirely possible — used to throw,
+    // and the route answered 500 for a booking that had SUCCEEDED. The surgeon
+    // saw a failure, booked it again, and the list gained a phantom case.
+    await step('the audit record', () =>
+      prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'CREATE_SURGERY',
+          tableName: 'surgeries',
+          recordId: surgery.id,
+          changes: JSON.stringify(validatedData),
+        }
+      })
+    );
 
     // If EMERGENCY surgery, create an emergency alert automatically
     if (surgeryType === 'EMERGENCY') {
       const escalationDeadline = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
 
-      await prisma.emergencySurgeryAlert.create({
+      await step('the emergency alert', () => prisma.emergencySurgeryAlert.create({
         data: {
           surgeryId: surgery.id,
           patientName: patient.name,
@@ -941,15 +1022,19 @@ export async function POST(request: NextRequest) {
           }),
           additionalNotes: `Escalation deadline: ${escalationDeadline.toISOString()}`,
         }
-      });
+      }));
 
       // One shared path onto the emergency board — see lib/emergency/ensureBooking.
       // Awaited so the case is listed before the response returns, but its
-      // outcome can never fail the surgery.
-      await ensureEmergencyBooking(surgery.id, { fallbackUserId: session.user.id });
+      // outcome can never fail the surgery. It returns an outcome rather than
+      // throwing, which is why it was already safe; wrapped anyway so that a
+      // future change inside it cannot quietly become able to fail a booking.
+      await step('the emergency board listing', () =>
+        ensureEmergencyBooking(surgery.id, { fallbackUserId: session.user.id })
+      );
 
       // Log emergency alert creation
-      await prisma.auditLog.create({
+      await step('the emergency audit record', () => prisma.auditLog.create({
         data: {
           userId: session.user.id,
           action: 'CREATE_EMERGENCY_ALERT',
@@ -961,7 +1046,7 @@ export async function POST(request: NextRequest) {
             escalationDeadline: escalationDeadline.toISOString()
           }),
         }
-      });
+      }));
     }
 
     // Feeds the ordering of the procedure picker. Deliberately not awaited in
@@ -979,8 +1064,15 @@ export async function POST(request: NextRequest) {
       createdByName: (session?.user as { name?: string } | undefined)?.name ?? null,
     });
 
-    await rememberResult(idemKey, 201, surgery, 'POST /api/surgeries');
-    return NextResponse.json(surgery, { status: 201 });
+    // The case IS booked. Say so, and say plainly what did not complete
+    // alongside it, rather than choosing between a lie and a 500.
+    //
+    // Additive: every existing reader of this response takes fields off the
+    // surgery object and is unaffected by an extra one.
+    const responseBody = warnings.length ? { ...surgery, warnings } : surgery;
+
+    await rememberResult(idemKey, 201, responseBody, 'POST /api/surgeries');
+    return NextResponse.json(responseBody, { status: 201 });
 
   } catch (error) {
     if (error instanceof z.ZodError) {

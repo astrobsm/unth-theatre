@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone } from 'lucide-react';
 import Link from 'next/link';
@@ -158,7 +158,24 @@ export default function NewSurgeryPage() {
     patientName?: string | null;
     folderNumber?: string | null;
     surgeryId?: string | null;
+    /// Things that did not save alongside the booking. The case is booked
+    /// either way; these are named so somebody can put them right.
+    warnings?: string[];
   } | null>(null);
+
+  // The identical case the server found already on the list. Holding it here
+  // (rather than showing an error) is what turns "press it again" into a
+  // decision: the surgeon is shown what exists and chooses.
+  const [alreadyBooked, setAlreadyBooked] = useState<{
+    id: string;
+    scheduledTime?: string | null;
+    createdAt?: string | null;
+    bookedByName?: string | null;
+    consumablePackCode?: string | null;
+    pharmacyDrugCode?: string | null;
+    patient?: { name?: string | null; folderNumber?: string | null } | null;
+  } | null>(null);
+  const lastPayloadRef = useRef<Record<string, unknown> | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
@@ -683,6 +700,10 @@ export default function NewSurgeryPage() {
     };
 
     try {
+      // Kept so "book another anyway" can re-send exactly what was submitted,
+      // rather than asking the surgeon to fill a long form in twice.
+      lastPayloadRef.current = data;
+
       const response = await fetch('/api/surgeries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -708,11 +729,34 @@ export default function NewSurgeryPage() {
             patientName: created?.patient?.name ?? null,
             folderNumber: created?.patient?.folderNumber ?? null,
             surgeryId: created?.id ?? null,
+            // Booked, but something alongside it did not save. Shown on the
+            // confirmation rather than swallowed, because the person who can
+            // do something about a missing pharmacy list is standing here now.
+            warnings: Array.isArray(created?.warnings) ? created.warnings : [],
           });
           setLoading(false);
           return;
         } catch {
+          // The booking SUCCEEDED — a 2xx came back — and only the body could
+          // not be read. Sending the surgeon to the list with nothing said is
+          // exactly how a successful booking gets made twice. Confirm it.
+          notify.success('Surgery booked. The codes are on the case record.');
+          setLoading(false);
           router.push('/dashboard/surgeries');
+          return;
+        }
+      }
+
+      // ── Already booked ───────────────────────────────────────────────────
+      // Not an error to be reported in red. The case the surgeon wanted exists,
+      // which is what they were trying to achieve — so say that plainly, show
+      // them the one that is already there, and make booking a second a
+      // deliberate act rather than the accidental result of pressing again.
+      if (response.status === 409) {
+        const parsed = await response.json().catch(() => null);
+        if (parsed?.code === 'ALREADY_BOOKED' && parsed?.existing) {
+          setAlreadyBooked(parsed.existing);
+          setLoading(false);
           return;
         }
       }
@@ -785,6 +829,43 @@ export default function NewSurgeryPage() {
         <BookingCodesModal
           codes={bookedCodes}
           onClose={() => router.push('/dashboard/surgeries')}
+        />
+      )}
+      {alreadyBooked && (
+        <AlreadyBookedModal
+          existing={alreadyBooked}
+          onOpenExisting={() => router.push(`/dashboard/surgeries/${alreadyBooked.id}`)}
+          onCancel={() => setAlreadyBooked(null)}
+          onBookAnyway={async () => {
+            const payload = lastPayloadRef.current;
+            if (!payload) { setAlreadyBooked(null); return; }
+            setAlreadyBooked(null);
+            setLoading(true);
+            try {
+              const res = await fetch('/api/surgeries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, allowDuplicate: true }),
+              });
+              if (res.ok) {
+                const created = await res.json().catch(() => null);
+                setBookedCodes({
+                  consumablePackCode: created?.consumablePackCode ?? null,
+                  pharmacyDrugCode: created?.pharmacyDrugCode ?? null,
+                  patientName: created?.patient?.name ?? null,
+                  folderNumber: created?.patient?.folderNumber ?? null,
+                  surgeryId: created?.id ?? null,
+                  warnings: Array.isArray(created?.warnings) ? created.warnings : [],
+                });
+              } else {
+                setError('That second booking could not be created. The first one is still on the list.');
+              }
+            } catch {
+              setError('That second booking could not be created. The first one is still on the list.');
+            } finally {
+              setLoading(false);
+            }
+          }}
         />
       )}
       <div className="flex items-center gap-4">
@@ -2014,11 +2095,91 @@ export default function NewSurgeryPage() {
 
 // Shown after a successful booking. Displays the patient-facing codes the
 // surgeon copies and hands to the patient.
+/**
+ * Shown when the case the surgeon is booking is already on the list.
+ *
+ * Deliberately NOT an error. What they were trying to achieve has already
+ * happened, and telling somebody "409 conflict" about a case that exists is how
+ * you get a third attempt. It states the fact, shows the booking that is
+ * already there so they can recognise it, and puts the two sensible actions in
+ * front of them. Booking a second is possible and takes a deliberate press —
+ * a bilateral list or a return to theatre on the same day is a real thing.
+ */
+function AlreadyBookedModal({
+  existing,
+  onOpenExisting,
+  onBookAnyway,
+  onCancel,
+}: {
+  existing: {
+    id: string;
+    scheduledTime?: string | null;
+    createdAt?: string | null;
+    bookedByName?: string | null;
+    consumablePackCode?: string | null;
+    pharmacyDrugCode?: string | null;
+    patient?: { name?: string | null; folderNumber?: string | null } | null;
+  };
+  onOpenExisting: () => void;
+  onBookAnyway: () => void;
+  onCancel: () => void;
+}) {
+  const when = existing.createdAt ? new Date(existing.createdAt) : null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="flex items-center gap-2 border-b px-5 py-4">
+          <CheckCircle className="w-6 h-6 text-green-600" />
+          <h2 className="text-lg font-bold text-gray-900">This case is already booked</h2>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-sm text-gray-700">
+            <span className="font-semibold">{existing.patient?.name ?? 'This patient'}</span>
+            {existing.patient?.folderNumber ? ` (${existing.patient.folderNumber})` : ''} is already
+            on the list for this procedure on this date. Nothing further is needed.
+          </p>
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm space-y-1">
+            {existing.scheduledTime && (
+              <div><span className="text-gray-500">Scheduled:</span> <span className="font-medium">{existing.scheduledTime}</span></div>
+            )}
+            {existing.bookedByName && (
+              <div><span className="text-gray-500">Booked by:</span> <span className="font-medium">{existing.bookedByName}</span></div>
+            )}
+            {when && (
+              <div><span className="text-gray-500">Booked at:</span> <span className="font-medium">{when.toLocaleString()}</span></div>
+            )}
+            {existing.consumablePackCode && (
+              <div><span className="text-gray-500">Consumable code:</span> <span className="font-mono font-medium">{existing.consumablePackCode}</span></div>
+            )}
+            {existing.pharmacyDrugCode && (
+              <div><span className="text-gray-500">Pharmacy code:</span> <span className="font-mono font-medium">{existing.pharmacyDrugCode}</span></div>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 border-t px-5 py-4">
+          <button onClick={onOpenExisting} className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2.5 hover:bg-blue-700">
+            Open the booked case
+          </button>
+          <button onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm hover:bg-gray-50">
+            Back to form
+          </button>
+          <button
+            onClick={onBookAnyway}
+            className="w-full rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm py-2 hover:bg-amber-100"
+          >
+            This is a genuinely separate operation — book it as well
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BookingCodesModal({
   codes,
   onClose,
 }: {
-  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; folderNumber?: string | null; surgeryId?: string | null };
+  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; folderNumber?: string | null; surgeryId?: string | null; warnings?: string[] };
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -2057,6 +2218,22 @@ function BookingCodesModal({
           </button>
         </div>
         <div className="px-5 py-4 space-y-4">
+          {/* The case is booked whatever appears here. These are the things
+              that did not save alongside it, named while the person who can
+              fix them is still on this screen. */}
+          {codes.warnings && codes.warnings.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-900">
+                The case is booked, but this did not save:
+              </p>
+              <ul className="mt-1 list-disc list-inside text-sm text-amber-900">
+                {codes.warnings.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+              <p className="text-xs text-amber-800 mt-1.5">
+                Open the case and add it, or tell the theatre manager. Do not book the case again.
+              </p>
+            </div>
+          )}
           <p className="text-sm text-gray-600">
             Give these codes to{codes.patientName ? <> <span className="font-semibold">{codes.patientName}</span></> : ' the patient'}.
             Keying a code in reveals exactly what was requested so the patient can be costed and pay.
