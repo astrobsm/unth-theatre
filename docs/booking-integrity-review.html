@@ -1,0 +1,576 @@
+<title>ORM Booking Integrity Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground:   #FAFBFB;
+    --surface:  #FFFFFF;
+    --sunken:   #F1F5F5;
+    --ink:      #0F1C22;
+    --muted:    #55686E;
+    --faint:    #7C8D92;
+    --rule:     #DBE4E6;
+    --rule-firm:#C2D0D3;
+    --accent:   #0E6E7A;
+    --accent-soft: #E2F1F2;
+    --good:     #2C6E52;
+    --good-soft:#E3F0E9;
+    --warn:     #8A6410;
+    --warn-soft:#F6EEDB;
+    --bad:      #A5382C;
+    --bad-soft: #F7E7E4;
+    --shadow:   0 1px 2px rgba(15,28,34,.05), 0 8px 24px -12px rgba(15,28,34,.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0A1315;
+      --surface:  #0F1D20;
+      --sunken:   #142A2E;
+      --ink:      #E7EFF0;
+      --muted:    #9DB0B4;
+      --faint:    #7A8E93;
+      --rule:     #1E3438;
+      --rule-firm:#2B474C;
+      --accent:   #56C6D1;
+      --accent-soft: #10333A;
+      --good:     #77C79C;
+      --good-soft:#123027;
+      --warn:     #DCB25A;
+      --warn-soft:#33280F;
+      --bad:      #E89184;
+      --bad-soft: #381A16;
+      --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0A1315;
+    --surface:  #0F1D20;
+    --sunken:   #142A2E;
+    --ink:      #E7EFF0;
+    --muted:    #9DB0B4;
+    --faint:    #7A8E93;
+    --rule:     #1E3438;
+    --rule-firm:#2B474C;
+    --accent:   #56C6D1;
+    --accent-soft: #10333A;
+    --good:     #77C79C;
+    --good-soft:#123027;
+    --warn:     #DCB25A;
+    --warn-soft:#33280F;
+    --bad:      #E89184;
+    --bad-soft: #381A16;
+    --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; }
+  .prose { max-width: 40rem; }
+
+  h1, h2, h3 {
+    font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+    text-wrap: balance;
+    line-height: 1.2;
+    margin: 0;
+  }
+  h1 { font-size: clamp(1.9rem, 1.2rem + 2.4vw, 2.9rem); font-weight: 600; letter-spacing: -.015em; }
+  h2 { font-size: 1.45rem; font-weight: 600; letter-spacing: -.01em; }
+  h3 { font-size: 1.08rem; font-weight: 600; }
+  p { margin: 0; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .72rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 3.5rem 0 1.5rem;
+    display: flex; flex-direction: column; gap: .9rem;
+  }
+  .masthead .meta {
+    display: flex; flex-wrap: wrap; gap: .4rem 1.5rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .78rem; color: var(--muted);
+    padding-top: .4rem;
+  }
+  .lede { font-size: 1.12rem; color: var(--muted); max-width: 42rem; }
+
+  section { padding-top: 3.25rem; display: flex; flex-direction: column; gap: 1.1rem; }
+  section > .prose + .prose { margin-top: -.2rem; }
+
+  .sec-head { display: flex; flex-direction: column; gap: .35rem; border-top: 1px solid var(--rule); padding-top: 1.4rem; }
+
+  /* ---- verdict banner ---- */
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    border-radius: 3px;
+    padding: 1.4rem 1.5rem;
+    display: flex; flex-direction: column; gap: .7rem;
+    box-shadow: var(--shadow);
+  }
+  .verdict strong { color: var(--ink); }
+
+  /* ---- pills ---- */
+  .pill {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .69rem; letter-spacing: .07em; text-transform: uppercase;
+    padding: .22rem .5rem; border-radius: 2px; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .p-good { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+  .p-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+  .p-bad  { background: var(--bad-soft);  color: var(--bad);  border-color: var(--bad); }
+  .p-flat { background: var(--sunken); color: var(--muted); border-color: var(--rule-firm); }
+
+  /* ---- tables ---- */
+  .scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+  th, td { text-align: left; padding: .62rem .8rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .69rem; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; background: var(--sunken);
+    border-bottom: 1px solid var(--rule-firm); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  td.mono, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .84em; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .86em;
+    background: var(--sunken);
+    padding: .1rem .32rem;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    margin: 0; padding: .95rem 1.1rem; overflow-x: auto;
+    background: var(--sunken); border: 1px solid var(--rule); border-radius: 3px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .82rem; line-height: 1.65;
+  }
+  pre code { background: none; padding: 0; }
+
+  /* ---- finding cards ---- */
+  .finding {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 3px;
+    padding: 1.3rem 1.4rem; display: flex; flex-direction: column; gap: .85rem;
+    box-shadow: var(--shadow);
+  }
+  .finding > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem 1rem; }
+  .finding > header h3 { flex: 1 1 16rem; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1.1rem; font-size: .9rem; }
+  .kv dt { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding-top: .22rem; }
+  .kv dd { margin: 0; }
+
+  /* ---- sequence ---- */
+  ol.seq { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; counter-reset: s; }
+  ol.seq li {
+    counter-increment: s; position: relative;
+    padding: .62rem 0 .62rem 2.9rem;
+    border-bottom: 1px dashed var(--rule);
+    font-size: .93rem;
+  }
+  ol.seq li:last-child { border-bottom: none; }
+  ol.seq li::before {
+    content: counter(s); position: absolute; left: 0; top: .62rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .72rem;
+    color: var(--accent); border: 1px solid var(--rule-firm); background: var(--surface);
+    width: 1.55rem; height: 1.55rem; border-radius: 50%;
+    display: grid; place-items: center;
+  }
+  ol.seq li.hot { color: var(--bad); font-weight: 500; }
+  ol.seq li.hot::before { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+
+  ul.plain { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: .45rem; }
+  ul.plain li { padding-left: .2rem; }
+  ul.check { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; }
+  ul.check li { display: flex; gap: .7rem; align-items: baseline; padding: .45rem 0; border-bottom: 1px dashed var(--rule); font-size: .93rem; }
+  ul.check li:last-child { border-bottom: none; }
+  ul.check .box { font-family: "IBM Plex Mono", ui-monospace, monospace; color: var(--good); font-size: .95rem; }
+  ul.check .box.open { color: var(--faint); }
+
+  .note { font-size: .88rem; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; }
+  .stat { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; padding: .95rem 1.1rem; display: flex; flex-direction: column; gap: .2rem; }
+  .stat .n { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 1.5rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .stat .l { font-size: .82rem; color: var(--muted); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, li:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  hr.soft { border: none; border-top: 1px solid var(--rule); margin: 0; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Forensic review · Operative Resource Manager</span>
+  <h1>Missing packs and “Unknown” identities in surgical booking</h1>
+  <p class="lede">Four reported defects, traced through the full booking lifecycle against production data on both databases. Three were real. Two of those had already been fixed weeks earlier; one was systemic and is fixed now. The fourth does not exist as reported — but the search for it found a different real defect.</p>
+  <div class="meta">
+    <span>19 August 2026</span>
+    <span>UNTH Theatre ORM</span>
+    <span>Theatre server + cloud, live data</span>
+  </div>
+</header>
+
+<section>
+  <div class="verdict">
+    <span class="eyebrow">Executive summary</span>
+    <p><strong>There is no single root cause, because these are four separate faults that share one symptom: a record that reads as absent.</strong> Two of them — the missing consumable pack and the missing pharmacy pack — were genuine, were fixed on 22 July and 17 August respectively, and the production data shows each stopping dead on the day its fix went live. The reports describe the legacy population those fixes left behind, not ongoing loss.</p>
+    <p>The third — the booking user showing as “Unknown” — was systemic and affected <strong>45% of every case ever booked</strong>. Its cause was architectural: the booker’s name was never stored on the booking. It was read out of the case’s consumable pack lines, so any case without a pack had no identifiable booker. That is fixed and backfilled.</p>
+    <p>The fourth — the patient’s name becoming “Unknown” — <strong>could not be reproduced and does not exist in either database.</strong> Patient identity is protected by a required column, a foreign key, and a server-side existence check, and the booking form submits the patient id from the DOM rather than from React state, which rules out the state race that would otherwise explain it. What does exist, and is very likely what was seen, is pack <em>line items</em> stored with the name “Unknown”.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Correction</span>
+    <h2>The architecture is not the one described</h2>
+  </div>
+  <div class="prose">
+    <p>Several of the failure modes in the brief cannot occur here, and saying so narrows the search considerably. Verified in the dependency manifest and source:</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Assumed</th><th>Actual</th><th>Consequence for this investigation</th></tr></thead>
+      <tbody>
+        <tr><td>Supabase database &amp; auth, RLS policies</td><td>PostgreSQL via Prisma; NextAuth with JWT sessions. Supabase appears <em>only</em> as an optional blob store for scanned documents (<code>SupabaseDocumentStore</code>, plain REST) — there is no Supabase client anywhere near the booking path.</td><td>RLS, Supabase upsert semantics and PostgREST behaviour are all out of scope.</td></tr>
+        <tr><td>IndexedDB / Dexie local records with id remapping</td><td>Neither is a dependency. No local id space, no mapping table, no UUID→integer transformation.</td><td>Id collision and remapping cannot cause loss. Ids are UUIDs generated by the database and are stable across both nodes.</td></tr>
+        <tr><td>Offline queue replaying booking POSTs</td><td><code>public/sw.js</code> line 215: <code>if (request.method !== 'GET') return;</code> — the service worker never intercepts a mutation.</td><td><strong>There is no offline booking queue.</strong> A booking attempted offline fails outright; it is never queued, mutated, retried or replayed. This eliminates the entire serialization-and-retry class of cause.</td></tr>
+        <tr><td>Naïve last-write-wins sync</td><td>A custom journal with a hybrid logical clock and an explicit per-table policy — <code>APPEND_ONLY</code>, <code>LWW</code>, <code>QUARANTINE</code>, <code>CLOUD_AUTHORITATIVE</code> — plus a replay guard, a deferred-row park for ordering failures, and a human conflict queue.</td><td>Clinical content is already quarantined rather than overwritten. The sync engine is not the naïve design the brief warns about.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">The service worker <em>does</em> cache GET responses network-first, so a stale read is possible when the network is down — but it cannot destroy a stored record.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Findings</span>
+    <h2>Four reports, four different answers</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Report</th><th>Verdict</th><th class="num">Scale</th><th>Fixed</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>B · Consumable pack missing</strong></td>
+          <td><span class="pill p-good">Real · already fixed</span></td>
+          <td class="num">255 cases</td>
+          <td class="mono">ace50aa — 22 Jul</td>
+        </tr>
+        <tr>
+          <td><strong>A · Pharmacy pack missing</strong></td>
+          <td><span class="pill p-good">Real · already fixed</span></td>
+          <td class="num">241 cases</td>
+          <td class="mono">b25e8e2 — 17 Aug</td>
+        </tr>
+        <tr>
+          <td><strong>C · Booking user “Unknown”</strong></td>
+          <td><span class="pill p-bad">Real · systemic</span></td>
+          <td class="num">266 of 592</td>
+          <td class="mono">a0e9fdb — today</td>
+        </tr>
+        <tr>
+          <td><strong>D · Patient name “Unknown”</strong></td>
+          <td><span class="pill p-flat">Not reproducible</span></td>
+          <td class="num">0</td>
+          <td class="mono">—</td>
+        </tr>
+        <tr>
+          <td><strong>D′ · Pack <em>line</em> named “Unknown”</strong></td>
+          <td><span class="pill p-warn">Real · found while looking</span></td>
+          <td class="num">20 lines</td>
+          <td class="mono">e9f715b — today</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note"><strong>Severity, aggregate: HIGH.</strong> Clinical preparation was demonstrably degraded — pharmacy and stores could not see what a case needed, and theatre could not identify who to ask. No evidence of a patient-safety event: no prescription was altered, no patient record was misattributed, and nothing was deleted.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Report B</span>
+    <h2>The consumable pack</h2>
+  </div>
+  <div class="finding">
+    <header>
+      <h3>Fixed on 22 July; every affected case predates it</h3>
+      <span class="pill p-good">Closed</span>
+    </header>
+    <p>255 cases carry no consumable request rows at all. Grouped by the day the booking was created, the count is unambiguous:</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Day booked</th><th class="num">Booked</th><th class="num">With no consumables</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">2026-07-21</td><td class="num">19</td><td class="num">14</td></tr>
+          <tr><td class="mono">2026-07-22</td><td class="num">15</td><td class="num">10</td></tr>
+          <tr><td class="mono">2026-07-23</td><td class="num">14</td><td class="num"><strong>0</strong></td></tr>
+          <tr><td class="mono">2026-07-24</td><td class="num">11</td><td class="num">0</td></tr>
+          <tr><td class="mono">… every day since</td><td class="num">—</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <dl class="kv">
+      <dt>Cause</dt><dd>Consumables were optional at booking. A booker who did not open the pack picker created a case with nothing for stores to prepare, and nothing said so.</dd>
+      <dt>Fix</dt><dd><code>ace50aa</code> — “Auto-attach a mandatory base consumable pack to every booking”, committed 22 Jul 23:15. The server now attaches a magnitude-scaled base pack to every case regardless of what the form sent, so the row set can never be empty.</dd>
+      <dt>Evidence</dt><dd>The transition is on the first booking day after that commit and has held for 27 days across 400+ bookings.</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Report A</span>
+    <h2>The pharmacy pack</h2>
+  </div>
+  <div class="finding">
+    <header>
+      <h3>Fixed on 17 August — but four cases slipped through the next day</h3>
+      <span class="pill p-good">Closed</span>
+    </header>
+    <p>This one was near-total for months: on 12 August all 15 bookings had no pharmacy rows; on 16 August all 7 did. <code>b25e8e2</code> (17 Aug 22:23) made the pharmacy prescription compulsory in the booking form <em>and</em> on the server, where <code>checkPreopRequirements</code> receives <code>prescriptionItemCount</code> and returns a 400 when it is zero.</p>
+    <p>Four cases created after that commit still have no pharmacy rows, none of them carrying the named deferral that an emergency is allowed to use. Three are elective, which the server is supposed to refuse outright:</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Created (UTC)</th><th>Type</th><th>Booked by</th><th>Deferral reason</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">2026-08-18 11:24</td><td>EMERGENCY</td><td>Onyebulu Leonard Okechukwu</td><td>none</td></tr>
+          <tr><td class="mono">2026-08-18 13:30</td><td>ELECTIVE</td><td>OSAAT ISRAEL SUNDAY</td><td>none</td></tr>
+          <tr><td class="mono">2026-08-18 15:03</td><td>ELECTIVE</td><td>OYIBO JESSICA EBERECHI</td><td>none</td></tr>
+          <tr><td class="mono">2026-08-18 15:13</td><td>ELECTIVE</td><td>Okechukwu Chukwuemerie Barnabas</td><td>none</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>They were not a hole in the guard. They were the guard not running yet.</strong> The theatre server’s own git reflog and build stamp place all four inside a twelve-hour window in which the fix was in the working tree but not in the served bundle:</p>
+    <ol class="seq">
+      <li><span class="mono">17 Aug 21:23 UTC</span> — <code>b25e8e2</code> committed: pharmacy pack required.</li>
+      <li><span class="mono">18 Aug 09:14 UTC</span> — theatre server pulls <code>7805137</code>, the first commit containing the guard. Source is now correct.</li>
+      <li class="hot"><span class="mono">18 Aug 11:24 → 15:13</span> — the four bookings are taken. Next.js is still serving the previous build, which has no guard.</li>
+      <li><span class="mono">18 Aug 21:32 UTC</span> — <code>.next/BUILD_ID</code> written. The guard finally enters the running application.</li>
+      <li><span class="mono">18 Aug 21:32 onward</span> — not one further case is missing a pharmacy pack.</li>
+    </ol>
+    <dl class="kv">
+      <dt>Root cause</dt><dd>The application code was correct; the <em>deployment</em> was a pull without a rebuild. A compiled Next.js application does not pick up a changed route by having the file on disk.</dd>
+      <dt>Why intermittent</dt><dd>It was never intermittent. It was total before 18 August and zero after — the appearance of intermittency comes from mixing the two populations together in one list.</dd>
+    </dl>
+  </div>
+  <p class="note">This is the same trap <code>deploy.sh</code> was written for. It was hardened further today — see <em>Fixes applied</em>.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Report C</span>
+    <h2>The booking user</h2>
+  </div>
+  <div class="finding">
+    <header>
+      <h3>The booker’s name was never stored on the booking</h3>
+      <span class="pill p-bad">Systemic · fixed today</span>
+    </header>
+    <p>The <code>surgeries</code> table had no <code>bookedById</code> column. The case-readiness card obtained the name by looking at the case’s <strong>consumable request rows</strong> and reading <code>requestedBy</code> off whichever one carried it.</p>
+    <p>So the booker existed only if the case had a consumable pack — and the card names the booker precisely so that somebody can chase a pack that is <em>missing</em>. The single situation in which the name is needed was the situation in which it had been derived out of existence. The screenshot that opened this investigation shows both halves at once: <em>“Consumable: Not prescribed”</em> beside <em>“Booked by: Unknown”</em>, above a WhatsApp button with no number behind it.</p>
+    <div class="grid2">
+      <div class="stat"><span class="n">266 / 592</span><span class="l">cases that could never show a booker — 45% of everything ever booked</span></div>
+      <div class="stat"><span class="n">563 / 592</span><span class="l">attributed by the backfill</span></div>
+    </div>
+    <p>It also made the answer depend on which database was asked. Pack rows replicate separately from the surgery, so a case booked in theatre read correctly there and as booked-by-nobody on the cloud until they caught up — 7 such cases in the last fortnight on the cloud against 2 locally. An identity derived from a child row is not an identity; it is a coincidence of replication order.</p>
+    <dl class="kv">
+      <dt>Fix</dt><dd><code>surgeries.bookedById</code> and <code>bookedByName</code>, written at booking on both the elective and emergency paths. Both are stored: the id is the only route to a phone number, and the name is what still reads correctly on a node that has never seen that account. Soft reference, no foreign key — <code>users</code> is cloud-authoritative and a booking must never be refused on a node that has not yet received the booker.</dd>
+      <dt>Backfill</dt><dd><code>audit_logs</code> has recorded <code>CREATE_SURGERY</code> with the user id far longer than the pack rows carried a requester. It identified 491 cases, including <strong>237 that have no consumable rows and no other recoverable source</strong>. Pack rows filled a further 72.</dd>
+      <dt>Left alone</dt><dd>29 cases from June and July, 26 of them emergencies, predate both sources. They read <strong>“Not recorded”</strong> rather than “Unknown”, because nobody wrote it down and inventing a booker for a clinical record is not a rounding error.</dd>
+      <dt>Verified</dt><dd>All 13 of today’s cases name their booker. Both databases hash identically across all 592 rows.</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Report D</span>
+    <h2>The patient name</h2>
+  </div>
+  <div class="finding">
+    <header>
+      <h3>Not reproducible — and structurally prevented at four independent layers</h3>
+      <span class="pill p-flat">No defect found</span>
+    </header>
+    <p>The brief asks, correctly, not to assume that a name shown in the form means the right identifier was persisted. So the check was made against stored data on both databases rather than against the interface:</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Check</th><th>Theatre server</th><th>Cloud</th></tr></thead>
+        <tbody>
+          <tr><td>Patients with a blank or whitespace name</td><td class="num">0 of 533</td><td class="num">0 of 533</td></tr>
+          <tr><td>Patients literally named “Unknown”</td><td class="num">0</td><td class="num">0</td></tr>
+          <tr><td>Patients whose name contains no letter</td><td class="num">0</td><td class="num">0</td></tr>
+          <tr><td>Surgeries whose <code>patientId</code> does not resolve</td><td class="num">0 of 592</td><td class="num">0 of 592</td></tr>
+          <tr><td><code>surgeries_patientId_fkey</code> present</td><td>yes</td><td>yes</td></tr>
+          <tr><td><code>CREATE_PATIENT</code> audit payloads with an Unknown name</td><td class="num">0 of 460</td><td>—</td></tr>
+          <tr><td>Snapshot <code>patientName</code> columns blank (18 tables)</td><td class="num">1 row total</td><td class="num">1 row total</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>And the write path forecloses the race the brief describes:</p>
+    <ul class="plain">
+      <li><strong>The payload does not read React state.</strong> The patient is a controlled <code>&lt;select name="patientId"&gt;</code> and the submit handler builds its payload with <code>formData.get('patientId')</code> — it reads the DOM at the instant of submit. A stale <code>selectedPatient</code> could not reach the server even if one existed.</li>
+      <li><strong>The column is <code>NOT NULL</code></strong> and required by the request schema; a booking without a patient cannot be validated.</li>
+      <li><strong>The server verifies existence</strong> before creating anything, returning <em>404 Patient not found</em>.</li>
+      <li><strong>A foreign key enforces it</strong> in both databases, with zero orphans across 592 cases.</li>
+    </ul>
+    <p class="note">If a patient name is seen as “Unknown” again, note the folder number and the time: <code>audit_logs</code> stores the exact submitted payload for every registration, so the question can be answered from the record rather than from memory.</p>
+  </div>
+
+  <div class="finding">
+    <header>
+      <h3>What the search did find: pack lines stored as “Unknown”</h3>
+      <span class="pill p-warn">Real · fixed today</span>
+    </header>
+    <p>Searching the audit payloads for an Unknown name returned two bookings — and the match was not a patient. It was a pack line:</p>
+    <pre><code>{"templateId":"691314ce-9c7b-416d-92e5-55691e8b8c47",
+ "name":"Unknown","category":"OTHER","size":null,
+ "unit":"piece","quantity":2}</code></pre>
+    <p>The booking form resolves each item’s label from whichever slice of the template catalogue that screen had loaded. When the slice does not contain the template — a subspecialty filter changed after the item was picked, a search narrowed the list — it falls back to <code>'Unknown'</code>, and takes <code>category</code> down to <code>OTHER</code> and <code>size</code> and <code>unit</code> to defaults along with it.</p>
+    <p><strong>20 lines across 2 cases</strong>, every one carrying a <code>templateId</code> that resolves perfectly well. The pack provider was asked to find “Unknown ×2” when the case had requested a urine bag. The lost <code>size</code> mattered as much as the name: cannula gauges were being nulled out.</p>
+    <dl class="kv">
+      <dt>Fix</dt><dd>The label was never the fact — the <code>templateId</code> is, and the server holds the catalogue. The server now resolves name, category, size and unit from the template and keeps what the client sent only for free-text lines, which genuinely have no template.</dd>
+      <dt>Not overridden</dt><dd>Dosage and route on the drug side. The form offers the template’s defaults and lets the prescriber change them, so what arrives is a decision about this patient — replacing it with a catalogue default would be the same error pointed at something that matters more.</dd>
+      <dt>Repair</dt><dd>All 20 rows restored from the templates they already pointed at, verified in a rolled-back transaction first. Lines already packed were repaired too: somebody had to work out what “Unknown” meant in order to pack it, and leaving the record wrong so it still matches what they were shown preserves the confusion rather than the history.</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Eliminated</span>
+    <h2>What was ruled out, and on what evidence</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Hypothesis</th><th>Ruled out by</th></tr></thead>
+      <tbody>
+        <tr><td>Frontend state race on patient selection</td><td>Payload built from <code>formData.get()</code>, not state. The DOM is the source at submit.</td></tr>
+        <tr><td>Offline queue mutating or dropping payloads</td><td>Service worker returns early on every non-GET request. No mutation is ever intercepted.</td></tr>
+        <tr><td>Partial update writing NULL over good values</td><td>Booking creation is a single <code>create</code>; the pack rows are <code>createMany</code>. No upsert, no replace, no PUT-style overwrite in this path.</td></tr>
+        <tr><td>Sync overwriting a complete record with an incomplete one</td><td>Nothing parked in <code>sync_deferred</code> on either side; conflicts quarantine rather than overwrite; both databases hash identically on the booker columns.</td></tr>
+        <tr><td>Id remapping between local and cloud</td><td>UUIDs generated by the database, identical on both nodes. No mapping table exists because none is needed.</td></tr>
+        <tr><td>Authentication producing a null user</td><td>Zero users have a blank <code>fullName</code>; every <code>requestedById</code> on 9,100 pack rows resolves to a real user row.</td></tr>
+        <tr><td>Deleted or unsynced user profiles</td><td>Same check — no orphaned references in either direction.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Changes</span>
+    <h2>Fixes applied today</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Commit</th><th>Change</th><th>Deployed</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">a0e9fdb</td><td><code>bookedById</code> / <code>bookedByName</code> on <code>surgeries</code>, written on both booking paths; resolution order extracted as a tested pure function; backfill migration from <code>audit_logs</code> then pack rows.</td><td>Both nodes</td></tr>
+        <tr><td class="mono">e9f715b</td><td>Server resolves pack line name, category, size and unit from <code>templateId</code>; repair migration for the 20 affected lines.</td><td>Both nodes</td></tr>
+        <tr><td class="mono">665777d</td><td><code>clear-conflicts.sh --apply</code> had never worked — the note it writes contains apostrophes that closed the SQL literal, and the first attempt to bind them used <code>-c</code>, which psql never expands. 45 stale conflicts closed.</td><td>Theatre server</td></tr>
+        <tr><td class="mono">a6806de<br>eeea31e</td><td><code>deploy.sh</code>: silent <code>sudo</code> failure that reported a healthy deploy while the sync worker stayed on old code; “active” printed as though it meant “current”; every pull failure blamed on the wrong cause; and a guard against the script replacing itself mid-run.</td><td>Theatre server</td></tr>
+        <tr><td class="mono">e2fc4b9</td><td>Runbook corrected — it still instructed <code>npm run build</code> on the theatre server, the command that migrates the <em>cloud</em> database from that box.</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">1,092 tests pass, including 10 new ones covering the booker resolution order. TypeScript clean. Both migrations were dry-run inside rolled-back transactions against live data before being applied.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Outstanding</span>
+    <h2>What still needs doing</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Item</th><th>Why it matters</th><th>Owner</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Anaesthetic prescriptions: none exist</strong></td>
+          <td>Zero of 291 cases booked in the last 30 days have one, so the readiness card’s third line reads “Anaesthesia: Not prescribed” on every case in the hospital. Either that step happens outside ORM — in which case the card should not flag it — or the feature is unused and the flag is correct but useless. This needs a clinical answer, not a technical one.</td>
+          <td>Needs your call</td>
+        </tr>
+        <tr>
+          <td><strong>Pack rows still divergent</strong></td>
+          <td>230 consumable rows the cloud lacks; 58 drug rows the theatre server lacks. Nothing is parked, so neither side converges on its own. Wants an out-of-hours window — a bulk re-journal queues behind live theatre work.</td>
+          <td>This evening</td>
+        </tr>
+        <tr>
+          <td><strong>Sync worker restart</strong></td>
+          <td>Still running code from 18 August. Harmless — no worker code changed — but it needs a real terminal for <code>sudo</code>.</td>
+          <td>Needs your terminal</td>
+        </tr>
+        <tr>
+          <td><strong>No integrity monitoring</strong></td>
+          <td>Every number in this report was obtained by hand. None of it is watched.</td>
+          <td>Recommended below</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Recommendations</span>
+    <h2>Making the next one visible before it is reported</h2>
+  </div>
+  <div class="prose">
+    <p>Every fault in this report was found by querying production, weeks after it began. The single highest-value change is not another constraint — it is a daily integrity check that would have surfaced all four.</p>
+  </div>
+  <ul class="plain">
+    <li><strong>A booking integrity view, checked daily.</strong> Cases booked in the last 24 hours with no consumable rows, no drug rows, or no <code>bookedById</code>. Each of the three faults in this report would have appeared on day one instead of week six.</li>
+    <li><strong>Alert on the build/source gap.</strong> The four pharmacy cases existed because the code on disk was twelve hours ahead of the running build. Compare <code>git rev-parse HEAD</code> against the commit the build was made from and warn when they diverge — this is a deploy-discipline fault that no amount of application code prevents.</li>
+    <li><strong>Reconcile the two databases on a schedule.</strong> Row counts and column hashes for the booking tables, the way this review compared them by hand. Divergence with nothing parked in <code>sync_deferred</code> is invisible today and means rows that will never converge without intervention.</li>
+    <li><strong>Do not add <code>NOT NULL</code> to <code>bookedById</code>.</strong> 29 historical cases legitimately have no answer, and a constraint would either block the migration or force a fabricated value into a clinical record. The check belongs in monitoring, where “not recorded” can stay distinguishable from “wrong”.</li>
+    <li><strong>Keep the distinction the brief asks for.</strong> “Not recorded” now means the record is absent; it is deliberately different from “Unknown”, which implied the person could not be identified. Missing packs are already flagged rather than hidden — that behaviour was correct and is unchanged.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Verification</span>
+    <h2>Checklist</h2>
+  </div>
+  <ul class="check">
+    <li><span class="box">✓</span><span>Consumable pack loss stopped 23 July — 0 affected cases across 400+ bookings since.</span></li>
+    <li><span class="box">✓</span><span>Pharmacy pack loss stopped 18 August once the guard entered the running build — 0 since.</span></li>
+    <li><span class="box">✓</span><span>Booking user stored on the surgery, both paths; 563 of 592 backfilled; today’s 13 cases all named.</span></li>
+    <li><span class="box">✓</span><span>Patient identity verified intact on both databases — 0 blanks, 0 orphans, foreign key present.</span></li>
+    <li><span class="box">✓</span><span>20 pack lines repaired from their templates; 0 lines named “Unknown” remain.</span></li>
+    <li><span class="box">✓</span><span>Both databases hash identically on the booker columns across all 592 cases.</span></li>
+    <li><span class="box">✓</span><span>1,092 tests pass; TypeScript clean; both migrations dry-run before application.</span></li>
+    <li><span class="box">✓</span><span>45 stale sync conflicts closed; nothing parked in either direction.</span></li>
+    <li><span class="box open">☐</span><span>Anaesthetic prescription workflow — clinical decision pending.</span></li>
+    <li><span class="box open">☐</span><span>230 + 58 divergent pack rows reconciled.</span></li>
+    <li><span class="box open">☐</span><span>Sync worker restarted onto current code.</span></li>
+    <li><span class="box open">☐</span><span>Integrity monitoring in place.</span></li>
+  </ul>
+</section>
+
+</div>

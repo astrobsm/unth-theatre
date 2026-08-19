@@ -46,11 +46,24 @@ function PortalForm() {
   // on a blank page having just signed in, and the app they were sent here for
   // never appears.
   //
+  // And NOT /dashboard either, which is what it was until staff reported the
+  // app "flashing and then disappearing". That report was exactly right. The
+  // whole of this flow happens inside the operating system's captive-network
+  // assistant, and the OS closes that window the moment the phone's
+  // connectivity probe succeeds — which is the same moment the router grants
+  // access. The dashboard was loading correctly into a window already
+  // condemned. Its cookie jar dies with it too, so the session set below is not
+  // one Safari or Chrome can ever see.
+  //
+  // So the destination is a page whose only job is to get the app open
+  // somewhere that survives, carrying a one-time token that moves the session
+  // across. See lib/hotspot/handoff.ts.
+  //
   // Built from the current origin rather than hardcoded, so this keeps working
   // if the hospital moves to a different hostname or to https.
-  const [appDestination, setAppDestination] = useState('/dashboard');
+  const [origin, setOrigin] = useState('');
   useEffect(() => {
-    setAppDestination(`${window.location.origin}/dashboard`);
+    setOrigin(window.location.origin);
   }, []);
 
   const [identifier, setIdentifier] = useState('');
@@ -86,7 +99,30 @@ function PortalForm() {
       return;
     }
 
-    // 2. The network. Submitting a real form (not fetch) because the browser
+    // 2. A one-time link that can carry this session into the real browser.
+    //
+    // Minted HERE, in the two seconds between signing in and leaving for the
+    // router, because this is the only moment the session exists in the
+    // captive-portal browser. A failure is not fatal: the person still gets
+    // online and still reaches the app, they just have to sign in once more.
+    // Refusing to connect them to hospital Wi-Fi over it would be absurd.
+    const base = origin || window.location.origin;
+    let destination = `${base}/hotspot/connected`;
+    try {
+      const handoff = await fetch('/api/hotspot/handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mac }),
+      });
+      if (handoff.ok) {
+        const { token } = await handoff.json();
+        if (token) destination = `${base}/hotspot/connected?t=${encodeURIComponent(token)}`;
+      }
+    } catch {
+      /* offline or slow — carry on without the handoff */
+    }
+
+    // 3. The network. Submitting a real form (not fetch) because the browser
     // must follow the router's redirect for the session to be established
     // against this client.
     if (viaHotspot) {
@@ -96,10 +132,8 @@ function PortalForm() {
       for (const [name, value] of Object.entries({
         username: identifier.trim(),
         password,
-        // The router redirects here after it grants network access. The app
-        // session cookie was set moments ago, so the dashboard opens already
-        // signed in — which is the whole point of doing both in one form.
-        dst: appDestination,
+        // Where the router sends the browser once it grants access.
+        dst: destination,
       })) {
         const input = document.createElement('input');
         input.type = 'hidden';

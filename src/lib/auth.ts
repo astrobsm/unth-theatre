@@ -8,6 +8,7 @@ import {
   verifyStaffCredentials,
   type CredentialDeps,
 } from "@/lib/staffCredentials";
+import { handoffMessage, handoffState, hashHandoffToken } from "@/lib/hotspot/handoff";
 
 // The database side of credential checking, kept here so staffCredentials.ts
 // stays free of Prisma and can be tested without one.
@@ -61,7 +62,81 @@ export const authOptions: NextAuthOptions = {
           role: result.user.role,
         };
       }
-    })
+    }),
+
+    // ── Wi-Fi portal handoff ────────────────────────────────────────────────
+    // Redeems the one-time token minted by /api/hotspot/handoff, so a person
+    // who signed in inside the captive-portal browser arrives in Safari or
+    // Chrome already signed in rather than at a login screen. The reasoning,
+    // and why a cookie cannot do this job, is in lib/hotspot/handoff.ts.
+    //
+    // This is a SEPARATE provider rather than a special case inside the one
+    // above, because the two authenticate different things and must never share
+    // a code path: that one proves knowledge of a password, this one spends a
+    // credential the server itself issued minutes ago to an already-authenticated
+    // session. Merging them would eventually let a token be offered where a
+    // password is expected.
+    CredentialsProvider({
+      id: "handoff",
+      name: "Wi-Fi handoff",
+      credentials: {
+        token: { label: "Handoff token", type: "text" },
+      },
+      async authorize(credentials) {
+        const token = credentials?.token;
+        if (!token) throw new Error(handoffMessage('missing'));
+
+        const tokenHash = hashHandoffToken(token);
+
+        // Redeemed by a CONDITIONAL UPDATE, not by read-then-write. The
+        // conditions are the whole guarantee: only a row that is unspent and
+        // unexpired can be marked used, and only one caller can win that
+        // update. Two taps on a flaky connection therefore produce one session
+        // and one refusal, rather than two sessions.
+        const now = new Date();
+        const claimed = await prisma.hotspotHandoff.updateMany({
+          where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
+          data: { usedAt: now },
+        });
+
+        if (claimed.count !== 1) {
+          // Look at why, so the message can be accurate, but never leak whether
+          // the token existed — all three read the same to the person, and the
+          // distinction is for the log.
+          const existing = await prisma.hotspotHandoff.findUnique({
+            where: { tokenHash },
+            select: { expiresAt: true, usedAt: true },
+          });
+          const state = handoffState(existing, now);
+          console.warn(`[auth.handoff] refused: ${state}`);
+          throw new Error(handoffMessage(state === 'valid' ? 'missing' : state));
+        }
+
+        const record = await prisma.hotspotHandoff.findUnique({
+          where: { tokenHash },
+          select: { userId: true },
+        });
+
+        const user = record
+          ? await prisma.user.findUnique({ where: { id: record.userId } })
+          : null;
+
+        // The account may have been suspended between minting and redeeming.
+        // Ten minutes is short, but "short" is not "atomic", and a revoked
+        // account must not be able to walk back in through a link it was
+        // holding.
+        if (!user || user.status !== 'APPROVED') {
+          throw new Error('This account is not active. Please contact the administrator.');
+        }
+
+        return {
+          id: user.id,
+          name: user.fullName,
+          email: user.email,
+          role: user.role,
+        };
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user, trigger }) {

@@ -704,6 +704,33 @@ model OnboardingSubmission {
   @@map("onboarding_submissions")
 }
 
+/// One-time handoff of a signed-in session out of the captive-portal browser.
+///
+/// The Wi-Fi portal signs a person in inside the operating system's captive
+/// network assistant, which the OS then closes as soon as the network works —
+/// and whose cookies Safari and Chrome cannot see. This row is how the session
+/// crosses that gap: minted in the assistant, redeemed once in the real
+/// browser. See lib/hotspot/handoff.ts for the reasoning.
+///
+/// DELIBERATELY NOT CLASSIFIED FOR SYNC. It is per-device, valid for ten
+/// minutes, and meaningful only on the node that issued it; replicating it
+/// would move a live credential between buildings for no benefit whatsoever.
+model HotspotHandoff {
+  id        String    @id @default(uuid())
+  /// SHA-256 of the token. The token itself is never stored.
+  tokenHash String    @unique
+  userId    String
+  /// Kept only so an operator can tell one device's handoff from another's.
+  deviceMac String?
+  expiresAt DateTime
+  /// Set by the conditional UPDATE that redeems it; this is what makes it single-use.
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("hotspot_handoffs")
+}
+
 model Roster {
   id             String        @id @default(uuid())
   userId         String
