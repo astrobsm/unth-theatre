@@ -123,14 +123,20 @@ would move a finished announcement backwards. Both versions are retained on this
 # into the statement ends the SQL string literal early, which is a syntax error
 # rather than anything subtle. psql's :'var' form quotes and escapes the value
 # itself, so the note can say whatever it needs to say.
+#
+# Fed on STDIN rather than with -c, because -c hands the string to the server
+# unparsed and psql never expands :'var' in it — you get a syntax error on the
+# colon. Variable interpolation happens only for input psql itself reads, which
+# means a script, a file, or this heredoc.
 psql "$U" -X -v ON_ERROR_STOP=1 -q \
-  -v who="$WHO" -v note="$NOTE" -v tbl="$TABLE" -c "
-  update sync_conflicts
-     set status = 'RESOLVED_KEEP_LOCAL',
-         resolved_by = :'who',
-         resolved_at = now(),
-         resolution_note = :'note'
-   where status = 'OPEN' and table_name = :'tbl';"
+  -v who="$WHO" -v note="$NOTE" -v tbl="$TABLE" <<'SQL'
+update sync_conflicts
+   set status = 'RESOLVED_KEEP_LOCAL',
+       resolved_by = :'who',
+       resolved_at = now(),
+       resolution_note = :'note'
+ where status = 'OPEN' and table_name = :'tbl';
+SQL
 
 REMAIN="$(psql "$U" -tAXc "select count(*) from sync_conflicts where status='OPEN' and table_name='$TABLE'")"
 echo
