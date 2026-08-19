@@ -1,384 +1,373 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+// ============================================================
+// The anaesthetist's board for one day's list
+// ------------------------------------------------------------
+// A consultant anaesthetist arrives with one question, and it is always the
+// same: can today's list run, and what is waiting on me. Previously this board
+// answered neither — it listed the day's cases with their special requirements,
+// which meant opening every case to find out whether it had been reviewed and
+// whether its drugs had been approved.
+//
+// It now shows, per case: who is assigned, whether the review is done and what
+// it decided, and where the anaesthetic prescription has got to — with the
+// approval itself on the row, because a consultant who has to navigate away to
+// approve will do it later, and "later" is what the pharmacy is waiting on.
+//
+// Everything shown is assembled server-side by /api/anaesthesia/board. Three
+// fetches joined in the browser would show a different answer depending on
+// which arrived first, and the whole point of a board is that two people
+// reading it see the same thing.
+// ============================================================
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Stethoscope, RefreshCw, Calendar, Building2, MapPin, AlertTriangle,
-  Droplet, Eye, Filter, Users
+  Stethoscope, RefreshCw, Calendar, AlertTriangle, CheckCircle2, Clock,
+  UserX, FileText, ThumbsUp, ThumbsDown, Loader2, ChevronRight,
 } from 'lucide-react';
-import { formatDate } from '@/lib/utils';
 
-interface Surgery {
+type ReviewState = 'NONE' | 'IN_PROGRESS' | 'COMPLETED' | 'APPROVED';
+type RxState = 'NONE' | 'DRAFT' | 'AWAITING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'IN_PHARMACY' | 'CANCELLED';
+
+interface BoardCase {
   id: string;
-  patient?: {
-    name?: string;
-    folderNumber?: string;
-    age?: number;
-    gender?: string;
-    ward?: string;
-  };
-  surgeon?: { fullName?: string } | null;
-  surgeonName?: string | null;
+  patientName: string;
+  folderNumber: string | null;
+  age: number | null;
+  gender: string | null;
+  ward: string | null;
   procedureName: string;
-  indication?: string;
-  scheduledDate: string;
+  unit: string;
   scheduledTime: string;
   status: string;
-  surgeryType?: string;
-  subspecialty?: string;
-  unit?: string;
-  location?: string | null;
-  theatreId?: string | null;
-  theatreName?: string | null;
-  theatre?: { id: string; name: string; location: string } | null;
-  anaesthetist?: { id: string; fullName: string; phoneNumber?: string | null } | null;
-  theatreTechnician?: { id: string; fullName: string; phoneNumber?: string | null } | null;
-  needBloodTransfusion?: boolean;
-  needDiathermy?: boolean;
-  needStereo?: boolean;
-  needStirups?: boolean;
-  needMontrellMattress?: boolean;
-  otherSpecialNeeds?: string | null;
-  anesthesiaType?: string | null;
+  surgeryType: string | null;
+  theatre: string | null;
+  anaesthesiaType: string | null;
+  surgeonName: string | null;
+  anaesthetist: { id: string; name: string; phone: string | null } | null;
+  review: {
+    state: ReviewState; byName: string | null; consultantName: string | null;
+    reviewedAt: string | null; fitness: 'FIT' | 'NOT_FIT' | null; asaClass: string | null;
+  };
+  prescription: {
+    id: string | null; state: RxState; version: number | null; itemCount: number;
+    prescribedByName: string | null; approvedByName: string | null; amended: boolean;
+  };
+  readyForTheatre: boolean;
+  outstanding: string[];
 }
 
-type GroupMode = 'unit' | 'theatre';
+interface BoardResponse {
+  date: string;
+  canApprove: boolean;
+  cases: BoardCase[];
+  summary: {
+    total: number; unassigned: number; notReviewed: number; reviewInProgress: number;
+    notFit: number; rxAwaitingApproval: number; rxNone: number; readyToProceed: number;
+  };
+}
+
+const REVIEW_LABEL: Record<ReviewState, string> = {
+  NONE: 'Not reviewed',
+  IN_PROGRESS: 'Review started',
+  COMPLETED: 'Reviewed',
+  APPROVED: 'Reviewed & approved',
+};
+
+const RX_LABEL: Record<RxState, string> = {
+  NONE: 'No prescription',
+  DRAFT: 'Draft',
+  AWAITING_APPROVAL: 'Awaiting approval',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  IN_PHARMACY: 'With pharmacy',
+  CANCELLED: 'Cancelled',
+};
+
+// Colour carries the same meaning in both columns: grey nothing yet, amber
+// waiting on somebody, green settled, red a problem to look at.
+const tone = (kind: 'ok' | 'wait' | 'none' | 'bad') =>
+  kind === 'ok' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+  : kind === 'wait' ? 'bg-amber-50 text-amber-900 border-amber-200'
+  : kind === 'bad' ? 'bg-red-50 text-red-800 border-red-200'
+  : 'bg-gray-50 text-gray-600 border-gray-200';
+
+const reviewTone = (c: BoardCase) =>
+  c.review.fitness === 'NOT_FIT' ? 'bad'
+  : c.review.state === 'NONE' ? 'none'
+  : c.review.state === 'IN_PROGRESS' ? 'wait'
+  : 'ok';
+
+const rxTone = (s: RxState) =>
+  s === 'NONE' ? 'none'
+  : s === 'REJECTED' || s === 'CANCELLED' ? 'bad'
+  : s === 'APPROVED' || s === 'IN_PHARMACY' ? 'ok'
+  : 'wait';
 
 export default function AnaesthetistBoardPage() {
-  const [surgeries, setSurgeries] = useState<Surgery[]>([]);
+  const [data, setData] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [dateFilter, setDateFilter] = useState<string>(() => {
-    // Default = today
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  });
-  const [statusFilter, setStatusFilter] = useState<string>('SCHEDULED');
-  const [groupMode, setGroupMode] = useState<GroupMode>('unit');
+  const [error, setError] = useState<string | null>(null);
+  const [onlyOutstanding, setOnlyOutstanding] = useState(false);
+  const [acting, setActing] = useState<string | null>(null);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setRefreshing(true);
+    setError(null);
     try {
-      const url = statusFilter === 'ALL'
-        ? '/api/surgeries'
-        : `/api/surgeries?status=${encodeURIComponent(statusFilter)}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        setSurgeries(Array.isArray(data) ? data : []);
+      const res = await fetch(`/api/anaesthesia/board?date=${encodeURIComponent(date)}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'Could not load the board.');
+        setData(null);
+        return;
       }
+      setData(await res.json());
+    } catch {
+      setError('Could not reach the server. The list below may be out of date.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  }, [date]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const decide = async (rxId: string, approved: boolean) => {
+    // A rejection must say why — it goes back to the prescriber as the reason
+    // to rewrite, and "rejected" with no reason is an instruction to guess.
+    let rejectionReason = '';
+    if (!approved) {
+      rejectionReason = (window.prompt('Why is this prescription being rejected?') || '').trim();
+      if (!rejectionReason) return;
+    }
+    setActing(rxId);
+    try {
+      const res = await fetch(`/api/prescriptions/${rxId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(approved ? { approved: true } : { approved: false, rejectionReason }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'That decision could not be saved.');
+        return;
+      }
+      await load();
+    } catch {
+      setError('That decision could not be saved — check the connection and try again.');
+    } finally {
+      setActing(null);
+    }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [statusFilter]);
-  useEffect(() => {
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  const cases = useMemo(() => {
+    const all = data?.cases ?? [];
+    return onlyOutstanding ? all.filter((c) => c.outstanding.length > 0) : all;
+  }, [data, onlyOutstanding]);
 
-  const filtered = useMemo(() => {
-    return surgeries.filter((s) => {
-      if (!dateFilter) return true;
-      const d = new Date(s.scheduledDate);
-      return d.toISOString().slice(0, 10) === dateFilter;
-    });
-  }, [surgeries, dateFilter]);
-
-  const groups = useMemo(() => {
-    const m = new Map<string, Surgery[]>();
-    for (const s of filtered) {
-      const key = groupMode === 'unit'
-        ? (s.unit || s.subspecialty || 'Unassigned')
-        : (s.theatreName || s.theatre?.name || s.location || 'Theatre TBD');
-      if (!m.has(key)) m.set(key, []);
-      m.get(key)!.push(s);
-    }
-    // Sort cases inside each group by scheduled time
-    Array.from(m.values()).forEach(arr =>
-      arr.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''))
-    );
-    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered, groupMode]);
-
-  const totals = useMemo(() => {
-    const t = { total: filtered.length, emergency: 0, blood: 0, untyped: 0 };
-    for (const s of filtered) {
-      if (s.surgeryType === 'EMERGENCY') t.emergency++;
-      if (s.needBloodTransfusion) t.blood++;
-      if (!s.anesthesiaType) t.untyped++;
-    }
-    return t;
-  }, [filtered]);
-
-  const summariseSpecialNeeds = (s: Surgery): string[] => {
-    const tags: string[] = [];
-    if (s.needBloodTransfusion) tags.push('Blood');
-    if (s.needDiathermy) tags.push('Diathermy');
-    if (s.needStereo) tags.push('Stereo');
-    if (s.needStirups) tags.push('Stirrups');
-    if (s.needMontrellMattress) tags.push('Montrell');
-    if (s.otherSpecialNeeds) tags.push('Other');
-    return tags;
-  };
+  const s = data?.summary;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <Stethoscope className="w-7 h-7 text-indigo-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Anaesthetist Review Board</h1>
-            <p className="text-sm text-gray-500">All booked cases grouped by surgical unit and theatre, for pre-op review.</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={load}
-          className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="card flex items-center gap-3">
-          <Calendar className="w-6 h-6 text-indigo-600" />
-          <div>
-            <div className="text-2xl font-bold">{totals.total}</div>
-            <div className="text-xs text-gray-500">Cases on board</div>
-          </div>
-        </div>
-        <div className="card flex items-center gap-3">
-          <AlertTriangle className="w-6 h-6 text-red-600" />
-          <div>
-            <div className="text-2xl font-bold">{totals.emergency}</div>
-            <div className="text-xs text-gray-500">Emergencies</div>
-          </div>
-        </div>
-        <div className="card flex items-center gap-3">
-          <Droplet className="w-6 h-6 text-rose-600" />
-          <div>
-            <div className="text-2xl font-bold">{totals.blood}</div>
-            <div className="text-xs text-gray-500">Need transfusion</div>
-          </div>
-        </div>
-        <div className="card flex items-center gap-3">
-          <Users className="w-6 h-6 text-amber-600" />
-          <div>
-            <div className="text-2xl font-bold">{totals.untyped}</div>
-            <div className="text-xs text-gray-500">Anaesthesia type pending</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="card flex flex-wrap items-end gap-3">
-        <div>
-          <label className="label">Date</label>
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <Stethoscope className="w-6 h-6 text-blue-600" />
+        <h1 className="text-2xl font-bold text-gray-900 flex-1">Anaesthetist Board</h1>
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-gray-500" />
           <input
             type="date"
-            className="input-field"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            title="Filter by scheduled date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            aria-label="List date"
           />
-        </div>
-        <div>
-          <label className="label">Status</label>
-          <select
-            className="input-field"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            title="Status filter"
+          <button
+            onClick={() => void load()}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
           >
-            <option value="ALL">All</option>
-            <option value="SCHEDULED">Scheduled</option>
-            <option value="IN_HOLDING_AREA">In Holding</option>
-            <option value="READY_FOR_THEATRE">Ready</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="COMPLETED">Completed</option>
-          </select>
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
-        <div>
-          <label className="label">Group by</label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setGroupMode('unit')}
-              className={`px-3 py-2 rounded-lg text-sm border ${groupMode === 'unit' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'}`}
-            >
-              <Building2 className="w-4 h-4 inline mr-1" />
-              Surgical Unit
-            </button>
-            <button
-              type="button"
-              onClick={() => setGroupMode('theatre')}
-              className={`px-3 py-2 rounded-lg text-sm border ${groupMode === 'theatre' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'}`}
-            >
-              <MapPin className="w-4 h-4 inline mr-1" />
-              Theatre
-            </button>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => { setDateFilter(''); setStatusFilter('SCHEDULED'); setGroupMode('unit'); }}
-          className="ml-auto text-xs text-gray-600 hover:text-gray-800 underline"
-        >
-          <Filter className="w-3 h-3 inline mr-1" />
-          Reset filters
-        </button>
       </div>
 
-      {/* Groups */}
-      {loading ? (
-        <div className="card text-center py-10 text-gray-500">Loading cases…</div>
-      ) : filtered.length === 0 ? (
-        <div className="card text-center py-10 text-gray-500">
-          <Calendar className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-          No cases match the current filters.
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 flex gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-800">{error}</p>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {groups.map(([groupName, items], gi) => (
-            <div key={groupName} className="card">
-              <div className="flex items-center justify-between mb-3 border-b pb-2">
-                <h2 className="text-lg font-semibold text-gray-800">
-                  {gi + 1}. {groupName}
-                  <span className="text-sm text-gray-500 font-normal ml-2">
-                    ({items.length} case{items.length === 1 ? '' : 's'})
-                  </span>
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Age / Sex</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ward</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Procedure</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Diagnosis / Indication</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Surgeon</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                        {groupMode === 'unit' ? 'Theatre' : 'Surgical Unit'}
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date / Time</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Anaesthesia</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Special</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {items.map((s, i) => {
-                      const tags = summariseSpecialNeeds(s);
-                      return (
-                        <tr key={s.id} className="hover:bg-indigo-50/40">
-                          <td className="px-3 py-2 text-gray-500">{i + 1}</td>
-                          <td className="px-3 py-2">
-                            <div className="font-medium text-gray-900">{s.patient?.name || 'Unknown'}</div>
-                            <div className="text-xs text-gray-500">{s.patient?.folderNumber || 'N/A'}</div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {s.patient?.age ?? '?'}{s.patient?.gender ? ' / ' + s.patient.gender : ''}
-                          </td>
-                          <td className="px-3 py-2 text-gray-700">{s.patient?.ward || '—'}</td>
-                          <td className="px-3 py-2 text-gray-900">{s.procedureName}</td>
-                          <td className="px-3 py-2 text-gray-700">{s.indication || '—'}</td>
-                          <td className="px-3 py-2 text-gray-700">
-                            {s.surgeon?.fullName || s.surgeonName || <span className="text-gray-400 italic">Not assigned</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-700">
-                            {groupMode === 'unit'
-                              ? (s.theatreName || s.theatre?.name || s.location || '—')
-                              : (s.unit || s.subspecialty || '—')
-                            }
-                            {s.anaesthetist?.fullName && (
-                              <div className="text-xs text-gray-500 mt-0.5">Anaesth: {s.anaesthetist.fullName}</div>
-                            )}
-                            {s.theatreTechnician?.fullName && (
-                              <div className="text-xs text-gray-500 mt-0.5">Tech: {s.theatreTechnician.fullName}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <div>{formatDate(s.scheduledDate)}</div>
-                            <div className="text-xs text-gray-500">{s.scheduledTime}</div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              s.surgeryType === 'EMERGENCY' ? 'bg-red-100 text-red-700' :
-                              s.surgeryType === 'URGENT' ? 'bg-amber-100 text-amber-700' :
-                              'bg-blue-100 text-blue-700'
-                            }`}>
-                              {s.surgeryType || 'ELECTIVE'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            {s.anesthesiaType ? (
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                ['LOCAL','NONE'].includes(String(s.anesthesiaType).toUpperCase())
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-purple-100 text-purple-700'
-                              }`}>
-                                {s.anesthesiaType}
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-1">
-                              {tags.length === 0 ? <span className="text-xs text-gray-400 italic">None</span> :
-                                tags.map(t => (
-                                  <span key={t} className="inline-block px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs border border-amber-200">{t}</span>
-                                ))
-                              }
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <Link
-                              href={`/dashboard/surgeries/${s.id}`}
-                              className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900 text-sm"
-                              title="View case"
-                            >
-                              <Eye className="w-4 h-4" /> View
-                            </Link>
-                            <Link
-                              href={`/dashboard/surgeries/${s.id}/edit`}
-                              className="inline-flex items-center gap-1 ml-3 text-amber-600 hover:text-amber-800 text-sm"
-                              title="Edit case (date/time/location tracked)"
-                            >
-                              ✏ Edit
-                            </Link>
-                            <Link
-                              href={`/dashboard/preop-reviews?surgeryId=${s.id}`}
-                              className="inline-flex items-center gap-1 ml-3 text-emerald-600 hover:text-emerald-800 text-sm"
-                              title="Pre-op review"
-                            >
-                              <Stethoscope className="w-4 h-4" /> Review
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+      )}
+
+      {/* The counts a consultant acts on, not a count of everything. */}
+      {s && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+          {[
+            { n: s.total, l: 'Cases booked', t: 'none' as const },
+            { n: s.rxAwaitingApproval, l: 'Awaiting your approval', t: s.rxAwaitingApproval ? 'wait' as const : 'ok' as const },
+            { n: s.notReviewed + s.reviewInProgress, l: 'Not yet reviewed', t: (s.notReviewed + s.reviewInProgress) ? 'wait' as const : 'ok' as const },
+            { n: s.notFit, l: 'Assessed NOT FIT', t: s.notFit ? 'bad' as const : 'ok' as const },
+            { n: s.readyToProceed, l: 'Ready to proceed', t: 'ok' as const },
+          ].map((k) => (
+            <div key={k.l} className={`rounded-xl border p-3 ${tone(k.t)}`}>
+              <div className="text-2xl font-bold tabular-nums">{k.n}</div>
+              <div className="text-xs mt-0.5">{k.l}</div>
             </div>
           ))}
         </div>
       )}
+
+      <label className="inline-flex items-center gap-2 mb-4 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={onlyOutstanding}
+          onChange={(e) => setOnlyOutstanding(e.target.checked)}
+          className="rounded border-gray-300"
+        />
+        Show only cases with something outstanding
+      </label>
+
+      {loading ? (
+        <div className="py-16 text-center text-gray-500">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+          Loading the list…
+        </div>
+      ) : cases.length === 0 ? (
+        <div className="py-16 text-center text-gray-500 border border-dashed rounded-xl">
+          {data?.cases.length
+            ? 'Nothing outstanding on this list.'
+            : 'No cases booked for this date.'}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {cases.map((c) => (
+            <div
+              key={c.id}
+              className={`rounded-xl border bg-white p-4 ${c.review.fitness === 'NOT_FIT' ? 'border-red-300' : 'border-gray-200'}`}
+            >
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+                <div className="min-w-[14rem] flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-gray-900">{c.patientName}</span>
+                    {c.folderNumber && <span className="text-xs text-gray-500">{c.folderNumber}</span>}
+                    {c.surgeryType === 'EMERGENCY' && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                        Emergency
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-700 mt-0.5">{c.procedureName}</div>
+                  <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" />{c.scheduledTime}</span>
+                    <span>{c.unit}</span>
+                    {c.theatre && <span>{c.theatre}</span>}
+                    {c.anaesthesiaType && <span>{c.anaesthesiaType}</span>}
+                    {c.surgeonName && <span>Surgeon: {c.surgeonName}</span>}
+                  </div>
+                </div>
+
+                {/* Who is doing the anaesthetic. Unassigned is a real state and
+                    is shown as one rather than left blank. */}
+                <div className="min-w-[11rem]">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">Anaesthetist</div>
+                  {c.anaesthetist ? (
+                    <div className="text-sm text-gray-900">{c.anaesthetist.name}</div>
+                  ) : (
+                    <div className="text-sm text-amber-800 inline-flex items-center gap-1">
+                      <UserX className="w-3.5 h-3.5" /> Not assigned
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-[12rem]">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">Review</div>
+                  <span className={`inline-block text-xs px-2 py-0.5 rounded border ${tone(reviewTone(c))}`}>
+                    {REVIEW_LABEL[c.review.state]}
+                    {c.review.fitness === 'NOT_FIT' && ' — NOT FIT'}
+                    {c.review.fitness === 'FIT' && ' — fit'}
+                  </span>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {c.review.byName ? `by ${c.review.byName}` : 'no reviewer yet'}
+                    {c.review.asaClass && ` · ASA ${c.review.asaClass}`}
+                  </div>
+                </div>
+
+                <div className="min-w-[13rem]">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">Anaesthetic drugs</div>
+                  <span className={`inline-block text-xs px-2 py-0.5 rounded border ${tone(rxTone(c.prescription.state))}`}>
+                    {RX_LABEL[c.prescription.state]}
+                    {c.prescription.itemCount > 0 && ` · ${c.prescription.itemCount} item${c.prescription.itemCount === 1 ? '' : 's'}`}
+                  </span>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {c.prescription.prescribedByName ? `by ${c.prescription.prescribedByName}` : 'not prescribed'}
+                    {c.prescription.amended && ` · amended (v${c.prescription.version})`}
+                  </div>
+                </div>
+
+                {/* The decision, on the row. A consultant who has to navigate
+                    away to approve will do it later, and later is what the
+                    pharmacy is waiting on. */}
+                <div className="flex items-center gap-2">
+                  {data?.canApprove && c.prescription.state === 'AWAITING_APPROVAL' && c.prescription.id && (
+                    <>
+                      <button
+                        onClick={() => void decide(c.prescription.id!, true)}
+                        disabled={acting === c.prescription.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 text-white text-sm font-medium px-3 py-2 hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        {acting === c.prescription.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <ThumbsUp className="w-4 h-4" />}
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => void decide(c.prescription.id!, false)}
+                        disabled={acting === c.prescription.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 text-red-700 text-sm px-3 py-2 hover:bg-red-50 disabled:opacity-60"
+                      >
+                        <ThumbsDown className="w-4 h-4" />
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  <Link
+                    href={`/dashboard/surgeries/${c.id}`}
+                    className="inline-flex items-center gap-1 text-sm text-blue-700 hover:underline"
+                  >
+                    Open case <ChevronRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+
+              {c.outstanding.length > 0 ? (
+                <div className="mt-3 pt-3 border-t border-dashed border-gray-200 flex flex-wrap gap-x-4 gap-y-1">
+                  {c.outstanding.map((o) => (
+                    <span key={o} className="text-xs text-amber-900 inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-600" />{o}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+                  <span className="text-xs text-emerald-800 inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Reviewed, fit, and drugs approved
+                  </span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-gray-400 mt-6 inline-flex items-center gap-1">
+        <FileText className="w-3 h-3" />
+        Review status comes from the pre-operative anaesthetic review; drug status from the
+        anaesthetic prescription in force for the case.
+      </p>
     </div>
   );
 }
