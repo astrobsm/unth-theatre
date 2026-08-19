@@ -3,35 +3,43 @@
 /**
  * Cross-tab "primary window" (leader) election.
  *
- * When the app is open in several tabs/windows on the SAME computer, exactly
- * one of them is elected the leader. Audio sources (background music + radio
- * service) only play in the leader tab, so the user never hears overlapping
- * playback from multiple windows.
+ * When ORM is open in several tabs or windows on one device, exactly one is
+ * elected leader, and only the leader produces audio — otherwise an emergency
+ * arrives as a chorus.
  *
- * Mechanism: a heartbeat record `{ id, ts }` is kept in localStorage. The
- * current leader rewrites it every HEARTBEAT_MS. Any tab that finds the record
- * missing or stale (older than STALE_MS) claims leadership. `storage` events
- * let other tabs react immediately when the record changes or is cleared on
- * unload. The first window opened therefore becomes — and stays — the leader
- * until it is closed, at which point another open tab takes over within a
- * couple of seconds.
+ * WHAT CHANGED, AND WHY IT MATTERED
+ *
+ * This used to elect on liveness alone: whichever window claimed the heartbeat
+ * first held it until it was closed. A background tab is perfectly alive and
+ * rewrites a timestamp quite happily while being unable to make any sound at
+ * all — no user gesture has ever reached it, so the browser refuses it audio.
+ * It held the lock; the window a nurse was actually looking at displayed
+ * "being announced in your other open window" and said nothing. The
+ * announcement was shown and heard by nobody, which is the one outcome this
+ * component exists to prevent.
+ *
+ * A VISIBLE window now takes the lock from a hidden one immediately. Waiting
+ * for the hidden window to go stale would never have worked: it was refreshing
+ * on time. The rules are in lib/audioLeader.ts, kept pure and tested, because
+ * this is the code that decides whether an emergency is audible.
  */
 
 import { useEffect, useRef, useState } from 'react';
+import {
+  evaluateClaim,
+  isLeaderRecord,
+  HEARTBEAT_MS,
+  type LeaderRecord,
+} from '@/lib/audioLeader';
 
 const LEADER_KEY = 'theatreAudio.leader';
-const HEARTBEAT_MS = 2000;
-const STALE_MS = 5000;
-
-type LeaderRecord = { id: string; ts: number };
 
 function readRecord(): LeaderRecord | null {
   try {
     const raw = window.localStorage.getItem(LEADER_KEY);
     if (!raw) return null;
-    const rec = JSON.parse(raw) as LeaderRecord;
-    if (rec && typeof rec.id === 'string' && typeof rec.ts === 'number') return rec;
-    return null;
+    const rec = JSON.parse(raw) as unknown;
+    return isLeaderRecord(rec) ? rec : null;
   } catch {
     return null;
   }
@@ -52,7 +60,6 @@ export function useTabLeader(): boolean {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Unique id for this tab/window for the lifetime of the page.
     tabIdRef.current =
       (typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
@@ -62,39 +69,46 @@ export function useTabLeader(): boolean {
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const evaluate = () => {
-      const rec = readRecord();
-      const now = Date.now();
-      const stale = !rec || now - rec.ts > STALE_MS;
+      const iAmVisible = typeof document === 'undefined' || !document.hidden;
+      const { claim } = evaluateClaim({
+        record: readRecord(),
+        myId,
+        iAmVisible,
+        now: Date.now(),
+      });
 
-      if (!rec || stale || rec.id === myId) {
-        // Claim or refresh leadership.
-        writeRecord({ id: myId, ts: now });
-        setIsLeader(true);
-      } else {
-        setIsLeader(false);
+      if (claim) {
+        // The visibility of the holder travels WITH the record, so another
+        // window can see that the current leader cannot be heard. Without it
+        // there is no way to distinguish "alive" from "audible".
+        writeRecord({ id: myId, ts: Date.now(), visible: iAmVisible });
       }
+      setIsLeader(claim);
     };
 
-    // Initial claim attempt + periodic heartbeat.
     evaluate();
     timer = setInterval(evaluate, HEARTBEAT_MS);
 
-    // React instantly when another tab rewrites or clears the record.
     const onStorage = (e: StorageEvent) => {
       if (e.key === LEADER_KEY) evaluate();
     };
     window.addEventListener('storage', onStorage);
 
-    // Allow this tab to forcibly become the leader on an explicit user action
-    // (e.g. pressing Play). This guarantees the playback controls are always
-    // responsive in the window the user is actually interacting with.
+    // Coming to the foreground is the moment this window becomes able to speak,
+    // so it is also the moment to take the lock — not two seconds later on the
+    // next heartbeat, by which time the announcement may have been and gone.
+    const onVisibility = () => evaluate();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onVisibility);
+
+    // An explicit user action (pressing Play) always wins: the controls must be
+    // responsive in the window the person is actually touching.
     const onClaim = () => {
-      writeRecord({ id: myId, ts: Date.now() });
+      writeRecord({ id: myId, ts: Date.now(), visible: true });
       setIsLeader(true);
     };
     window.addEventListener('audio:claim-leadership', onClaim as EventListener);
 
-    // Release leadership on close so another tab can take over immediately.
     const onUnload = () => {
       const rec = readRecord();
       if (rec && rec.id === myId) {
@@ -111,6 +125,8 @@ export function useTabLeader(): boolean {
     return () => {
       if (timer) clearInterval(timer);
       window.removeEventListener('storage', onStorage);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onVisibility);
       window.removeEventListener('audio:claim-leadership', onClaim as EventListener);
       window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('beforeunload', onUnload);

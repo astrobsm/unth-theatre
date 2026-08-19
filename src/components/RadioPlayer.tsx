@@ -316,17 +316,30 @@ export default function RadioPlayer() {
   // Browser Web-Speech fallback, used only when both neural engines are out.
   // The voice and prosody come from lib/humanVoice so this still sounds like a
   // person rather than whichever legacy synth the device lists first.
+  // `onUnheard` is not `onDone` and the difference is the whole point. onDone
+  // means the announcement was spoken and may now be retired; onUnheard means
+  // nothing came out of the speaker. Calling onDone for a failure — which every
+  // branch below used to do — retires an announcement nobody heard and leaves
+  // an alert on screen in permanent silence.
   const speakBrowser = useCallback(
-    (text: string, onDone?: () => void) => {
+    (text: string, onDone?: () => void, onUnheard?: () => void) => {
       try {
         const synth = window.speechSynthesis;
-        if (!synth) { emitRadioIdle(); onDone?.(); return; }
+        if (!synth) { emitRadioIdle(); onUnheard?.(); return; }
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         applyHumanVoice(u);
-        u.onstart = () => { setSpeaking(true); emitRadioActive(); };
-        u.onend = () => { setSpeaking(false); emitRadioIdle(); onDone?.(); };
-        u.onerror = () => { setSpeaking(false); emitRadioIdle(); onDone?.(); };
+        let started = false;
+        u.onstart = () => { started = true; setSpeaking(true); emitRadioActive(); };
+        u.onend = () => {
+          setSpeaking(false);
+          emitRadioIdle();
+          // Some engines fire `end` without ever firing `start` when the
+          // utterance was dropped — silently, and indistinguishably from a
+          // successful short announcement unless `started` is tracked.
+          if (started) onDone?.(); else onUnheard?.();
+        };
+        u.onerror = () => { setSpeaking(false); emitRadioIdle(); onUnheard?.(); };
         // Pre-emptively duck before the synth actually starts (some browsers
         // never fire onstart for very short utterances).
         emitRadioActive();
@@ -334,7 +347,7 @@ export default function RadioPlayer() {
       } catch {
         setSpeaking(false);
         emitRadioIdle();
-        onDone?.();
+        onUnheard?.();
       }
     },
     [emitRadioActive, emitRadioIdle]
@@ -347,8 +360,26 @@ export default function RadioPlayer() {
   // engine rather than settle for the fallback voice. Emergencies pass 0: being
   // heard immediately beats being heard beautifully.
   const speak = useCallback(
-    (text: string, onDone?: () => void, warmupWaitMs = 2500, urgent = false) => {
-      if (typeof window === 'undefined' || muted) { onDone?.(); return; }
+    (
+      text: string,
+      onDone?: () => void,
+      warmupWaitMs = 2500,
+      urgent = false,
+      onUnheard?: () => void
+    ) => {
+      if (typeof window === 'undefined') { onUnheard?.(); return; }
+      // MUTE DOES NOT APPLY TO AN EMERGENCY. Mute is for routine radio traffic
+      // — a nurse silencing chatter while concentrating — and it is reasonable
+      // that it should stop that. It is not reasonable that a switch flipped
+      // hours ago, possibly by somebody else on a shared handset, should
+      // silently swallow a theatre emergency. This is the same principle the
+      // alert itself already follows: an emergency can be shrunk, never
+      // dismissed.
+      //
+      // It also used to call onDone(), which retired the announcement as
+      // though it had been heard. A muted emergency was therefore not merely
+      // silent, it was consumed.
+      if (muted && !urgent) { onUnheard?.(); return; }
       if (!audioRef.current) audioRef.current = new Audio();
       void speakAnnouncement(text, {
         getAudio: () => audioRef.current as HTMLAudioElement,
@@ -361,8 +392,14 @@ export default function RadioPlayer() {
         onEnd: () => { setSpeaking(false); emitRadioIdle(); },
       }).then((ok) => {
         if (ok) { onDone?.(); return; }
-        // ElevenLabs failed — fall back to the offline browser voice.
-        speakBrowser(text, onDone);
+        // The neural voice failed — fall back to the offline browser voice, and
+        // pass the unheard path through it so a failure at BOTH ends is
+        // reported as unheard rather than quietly retired.
+        speakBrowser(text, onDone, onUnheard);
+      }).catch(() => {
+        // A rejected promise used to disappear entirely, taking the
+        // announcement with it.
+        speakBrowser(text, onDone, onUnheard);
       });
     },
     [muted, emitRadioActive, emitRadioIdle, speakBrowser]
@@ -443,15 +480,18 @@ export default function RadioPlayer() {
   useEffect(() => { unlockAudioRef.current = unlockAudio; }, [unlockAudio]);
 
   const playAudio = useCallback(
-    (url: string, onDone?: () => void) => {
-      if (muted) { onDone?.(); return; }
+    (url: string, onDone?: () => void, urgent = false, onUnheard?: () => void) => {
+      // Same rule as speak(): mute silences routine traffic, never an
+      // emergency, and a silenced announcement is never reported as done.
+      if (muted && !urgent) { onUnheard?.(); return; }
       try {
         if (!audioRef.current) audioRef.current = new Audio();
         const a = audioRef.current;
         a.src = url;
         a.volume = 1;
         a.onended = () => { emitRadioIdle(); onDone?.(); };
-        a.onerror = () => { emitRadioIdle(); onDone?.(); };
+        // A file that will not decode was being reported as played.
+        a.onerror = () => { emitRadioIdle(); onUnheard?.(); };
         emitRadioActive();
         a.play().catch((err: unknown) => {
           emitRadioIdle();
@@ -475,11 +515,11 @@ export default function RadioPlayer() {
           }
 
           console.warn('[radio] audio failed to play', err);
-          onDone?.();
+          onUnheard?.();
         });
       } catch {
         emitRadioIdle();
-        onDone?.();
+        onUnheard?.();
       }
     },
     [muted, emitRadioActive, emitRadioIdle]
@@ -545,11 +585,29 @@ export default function RadioPlayer() {
   // Audio is produced ONLY in the primary (leader) window so multiple open
   // tabs on the same computer never speak over each other.
   useEffect(() => {
-    if (!enabled || queue.length === 0 || !isLeader) return;
+    if (!enabled || queue.length === 0) return;
     // Skip any items the user has already acknowledged locally, even if the
     // server hasn't dropped them from the queue yet.
     const top = queue.find((q) => !suppressedRef.current.has(q.id));
     if (!top) return;
+
+    // THE LEADER GATE DOES NOT APPLY TO AN EMERGENCY.
+    //
+    // Deduplication exists so that three tabs on one desk do not announce a
+    // routine message three times over. That is a real annoyance and worth
+    // preventing. It is not worth an unheard emergency, and it produced
+    // exactly that: whichever window held the lock might be a background tab
+    // the browser will not let make a sound, so the emergency was displayed in
+    // the foreground window, which dutifully stayed silent and explained that
+    // it was "being announced in your other open window". It was not being
+    // announced anywhere.
+    //
+    // For an emergency every VISIBLE window speaks. Two windows overlapping on
+    // one desk is a nuisance somebody notices and resolves in a second. Silence
+    // is a nuisance nobody notices at all, which is what makes it dangerous.
+    const urgent = top.category === 'EMERGENCY' || top.priority >= 90;
+    const canBeHeardHere = typeof document === 'undefined' || !document.hidden;
+    if (!isLeader && !(urgent && canBeHeardHere)) return;
     setCurrent(top);
     const lastPlayedKey = `${top.id}`;
     const now = Date.now();
@@ -563,11 +621,17 @@ export default function RadioPlayer() {
       // for the server to remove it from the queue.
       if (last > 0) return;
     }
+    // Stamped BEFORE the attempt, so a re-render cannot fire the same
+    // announcement twice while it is still speaking — and cleared again by
+    // onUnheard below if nothing actually came out. Previously it was stamped
+    // and never cleared, so a single failure (audio not yet unlocked, no voices
+    // installed, a muted handset) suppressed that announcement for the rest of
+    // the session: the alert stayed on screen and could never be spoken again.
     playedRecentlyRef.current.set(lastPlayedKey, now);
     setLastSpokenAt(now);
     setNextDueAt(top.repeatUntilAck ? now + (top.repeatEverySec || 30) * 1000 : null);
 
-    const isEmergency = top.category === 'EMERGENCY' || top.priority >= 90;
+    const isEmergency = urgent;
     const prefix = isEmergency
       ? `Attention. Emergency. ${top.urgency ? top.urgency + ' priority. ' : ''}`
       : '';
@@ -579,8 +643,29 @@ export default function RadioPlayer() {
       if (!top.repeatUntilAck) markPlayed(top.id);
     };
 
-    if (top.audioUrl) playAudio(top.audioUrl, onDone);
-    else speak(text, onDone, isEmergency ? 0 : 2500, isEmergency);
+    // Nothing was heard. Drop the stamp so the very next poll tries again, and
+    // do NOT tell the server it was played — an announcement the room did not
+    // hear has not been delivered, whatever the queue would prefer to believe.
+    const onUnheard = () => {
+      playedRecentlyRef.current.delete(lastPlayedKey);
+      setLastSpokenAt(null);
+      // Arm the unlock prompt and the any-gesture listener.
+      //
+      // Only playAudio() used to do this, and most announcements never reach
+      // playAudio — they are spoken, and have no audioUrl at all. So the one
+      // path that actually needed a user gesture was the one path that never
+      // asked for one: the alert appeared, the speech was refused, and nothing
+      // on screen suggested that touching it would help.
+      //
+      // Set for any unheard outcome, not only a NotAllowedError. A tap cannot
+      // fix a corrupt audio file, but it costs the user nothing, and the
+      // alternative is a silent alert that offers no way forward.
+      setAudioBlocked(true);
+      console.warn('[radio] announcement produced no audio, will retry', top.id);
+    };
+
+    if (top.audioUrl) playAudio(top.audioUrl, onDone, isEmergency, onUnheard);
+    else speak(text, onDone, isEmergency ? 0 : 2500, isEmergency, onUnheard);
   }, [queue, enabled, isLeader, speak, playAudio, markPlayed]);
 
   // Acknowledge in a single tap — no code prompt. In a theatre, silencing the
@@ -657,8 +742,19 @@ export default function RadioPlayer() {
   const audioStatus = (() => {
     if (!top) return null;
     if (!enabled) return { text: 'Radio off — tap the radio icon to hear announcements', tone: 'warn' as const };
-    if (muted) return { text: 'Muted — announcement not being spoken', tone: 'warn' as const };
-    if (!isLeader) return { text: 'Being announced in your other open window', tone: 'info' as const };
+    // Both of these used to be stated flatly, and both were capable of being
+    // untrue in the one case that matters. An emergency is spoken here whether
+    // this window is muted or holding the lock, so the status must say so
+    // rather than tell a nurse her alert is being handled somewhere else.
+    const urgentNow = !!current && (current.category === 'EMERGENCY' || current.priority >= 90);
+    if (muted) {
+      return urgentNow
+        ? { text: 'Muted — emergencies are still announced', tone: 'warn' as const }
+        : { text: 'Muted — announcement not being spoken', tone: 'warn' as const };
+    }
+    if (!isLeader && !urgentNow) {
+      return { text: 'Being announced in your other open window', tone: 'info' as const };
+    }
     if (speaking) return { text: 'Announcing now', tone: 'live' as const };
     if (nextDueAt) {
       const secs = Math.max(0, Math.round((nextDueAt - Date.now()) / 1000));
