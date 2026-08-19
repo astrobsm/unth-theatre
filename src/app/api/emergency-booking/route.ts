@@ -586,6 +586,15 @@ export async function POST(request: NextRequest) {
         surgeryType: 'EMERGENCY',
         magnitude: validatedData.magnitude ?? null,
         status: 'SCHEDULED',
+        // Who booked it — see the bookedById comment in schema.prisma. It
+        // matters more on this path than on the elective one: an emergency is
+        // booked fastest, is least likely to carry a full consumable pack, and
+        // is therefore the case most likely to have read as booked by nobody.
+        bookedById: (session?.user as { id?: string } | undefined)?.id ?? null,
+        bookedByName:
+          (session?.user as { fullName?: string; name?: string } | undefined)?.fullName ||
+          (session?.user as { name?: string } | undefined)?.name ||
+          null,
         needBloodTransfusion: validatedData.bloodRequired || false,
         otherSpecialNeeds: validatedData.specialEquipment || null,
         remarks: validatedData.specialRequirements || null,

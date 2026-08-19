@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { resolveBooker } from '@/lib/surgery/booker';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +109,26 @@ export async function GET(request: NextRequest) {
       for (const r of rooms) theatreNames.set(r.id, r.name);
     }
 
+    // Bookers for the day's cases.
+    //
+    // Looked up rather than joined, for the same reason as the theatre above:
+    // surgeries.bookedById is a soft reference with no foreign key, because
+    // users is CLOUD_AUTHORITATIVE and a booking must not be refused on a node
+    // that has not yet received the booker's account. The row carries
+    // bookedByName as well, so a case still names its booker on a node where
+    // this lookup finds nothing — it just cannot offer a phone number.
+    const bookerIds = Array.from(
+      new Set(surgeries.map((s) => s.bookedById).filter((x): x is string => !!x)),
+    );
+    const bookerUsers = new Map<string, { fullName: string | null; phoneNumber: string | null }>();
+    if (bookerIds.length) {
+      const rows = await prisma.user.findMany({
+        where: { id: { in: bookerIds } },
+        select: { id: true, fullName: true, phoneNumber: true },
+      });
+      for (const u of rows) bookerUsers.set(u.id, { fullName: u.fullName, phoneNumber: u.phoneNumber });
+    }
+
     const [consumables, drugs, prescriptions, providers, pharmacists] = await Promise.all([
       surgeryIds.length
         ? prisma.surgeryConsumableRequest.findMany({
@@ -192,11 +213,14 @@ export async function GET(request: NextRequest) {
         ? { name: s.surgeon.fullName, phone: s.surgeon.phoneNumber }
         : { name: s.surgeonName || 'Not assigned', phone: null };
 
-      // Who booked the case — recorded on the base consumable rows.
-      const bookerRow = cRows.find((r) => r.requestedBy) || cRows.find((r) => r.requestedByName);
-      const bookedBy: Contact = bookerRow?.requestedBy
-        ? { name: bookerRow.requestedBy.fullName, phone: bookerRow.requestedBy.phoneNumber }
-        : { name: bookerRow?.requestedByName || 'Unknown', phone: null };
+      // Who booked the case. The fallback order, and why it is that order,
+      // lives in lib/surgery/booker.ts with its tests.
+      const bookedBy: Contact = resolveBooker({
+        bookedById: s.bookedById,
+        bookedByName: s.bookedByName,
+        user: s.bookedById ? bookerUsers.get(s.bookedById) : null,
+        packRow: cRows.find((r) => r.requestedBy) || cRows.find((r) => r.requestedByName) || null,
+      });
 
       const anaesthetist: Contact = s.anesthetist
         ? { name: s.anesthetist.fullName, phone: s.anesthetist.phoneNumber }

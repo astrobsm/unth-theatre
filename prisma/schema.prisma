@@ -1183,6 +1183,27 @@ model Surgery {
   /// Comma-separated MissingItem values, e.g. "CONSENT,HAEMOGLOBIN".
   preopOutstanding    String?
 
+  // ── Who booked this case ──────────────────────────────────────────────────
+  // Recorded ON THE SURGERY, because it is a fact about the booking and not
+  // about anything the booking happens to contain. It used to be read from the
+  // consumable request rows, which meant the case-readiness card said
+  // "Booked by: Unknown" for 43% of cases — every case with no consumable pack,
+  // and every case whose pack rows had not yet replicated. That is precisely
+  // backwards: the card names the booker so somebody can chase a MISSING pack,
+  // so the one situation where the name is needed was the one situation where
+  // it had been derived out of existence.
+  //
+  // The NAME is snapshotted alongside the id for the same reason. An id is only
+  // a name if the row it points at is present, and this system runs on two
+  // databases that are not always in step. A stored name still reads correctly
+  // on a node that has never seen that user.
+  //
+  // Soft reference, no FK — as with theatreId and preopOverrideById above.
+  // users is CLOUD_AUTHORITATIVE and a booking must never be rejected on a node
+  // that has not yet received the booker's account.
+  bookedById          String?
+  bookedByName        String?
+
   // Patient-facing codes generated at booking. The surgeon (or anaesthetist)
   // copies these and gives them to the patient, who presents the relevant code
   // to the provider — keying it in reveals exactly what was requested.

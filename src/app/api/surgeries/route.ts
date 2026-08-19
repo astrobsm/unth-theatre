@@ -627,6 +627,12 @@ export async function POST(request: NextRequest) {
         // theatre/date. The Pharmacist sees this name as "To be collected by".
         anesthetistId: resolvedAnaesthetistId,
         surgeryType: surgeryType,
+        // Who booked it, recorded on the case itself. This used to be readable
+        // only from the consumable request rows created further down, so a
+        // booking with no consumable pack had no identifiable booker at all —
+        // see the bookedById comment in schema.prisma.
+        bookedById: (session.user as any).id ?? null,
+        bookedByName: (session.user as any).fullName || (session.user as any).name || null,
         // Normalised through the same parser the merge logic uses, so a repeated
         // or blank entry cannot reach the record.
         additionalProcedures: serialiseAdditional(
