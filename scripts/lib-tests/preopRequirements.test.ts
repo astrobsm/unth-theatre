@@ -323,3 +323,83 @@ describe('the pharmacy prescription and the consumables pack', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+// ── Booking from the third section ──────────────────────────────────────────
+//
+// The case this exists for is on the record. A CTU Unit III list of three cases
+// for 21 August 2026 existed in neither the local nor the cloud database at
+// midnight. The surgeon had registered two of the patients at 10:12 and 10:44
+// that morning and one booking died in the safety section — a single draft,
+// stuck at step "preop", and a theatre that knew nothing about any of it.
+//
+// The rule these tests hold: booking early must never mean requiring less. It
+// means theatre finds out sooner and the debt is recorded.
+describe('deferOutstanding — booked from section 3, rest owed before the morning', () => {
+  const nothingDone = {
+    labs: {},
+    consent: {},
+    prescriptionItemCount: 0,
+    consumableRequestCount: 0,
+    deferOutstanding: true,
+  };
+
+  it('lets an ELECTIVE case onto the list — the branch that used to refuse it', () => {
+    const r = checkPreopRequirements({ urgency: 'ELECTIVE', ...nothingDone });
+    expect(r.ok).toBe(true);
+    expect(r.deferred).toBe(true);
+  });
+
+  it('waives NOTHING — every missing item comes back as an outstanding debt', () => {
+    const r = checkPreopRequirements({ urgency: 'ELECTIVE', ...nothingDone });
+    expect(r.outstanding).toEqual(r.missing);
+    for (const item of ['CONSENT', 'HAEMOGLOBIN', 'VIRAL_SCREEN', 'PRESCRIPTION', 'CONSUMABLES']) {
+      expect(r.outstanding, `${item} must survive as a debt`).toContain(item);
+    }
+  });
+
+  it('is not an override, and must not be recorded as one', () => {
+    // A clinician waiving a requirement for this patient and a booking with
+    // work still to do are different acts. Conflating them in the audit would
+    // make every early booking look like a deliberate clinical deferral.
+    const r = checkPreopRequirements({ urgency: 'ELECTIVE', ...nothingDone });
+    expect(r.overrideAccepted).toBe(false);
+    expect(r.overrideRequired).toBe(false);
+  });
+
+  it('needs no reason typed, unlike the emergency override', () => {
+    const r = checkPreopRequirements({ urgency: 'ELECTIVE', ...nothingDone, override: null });
+    expect(r.ok).toBe(true);
+  });
+
+  it('applies to urgent and emergency too', () => {
+    for (const urgency of ['URGENT', 'EMERGENCY']) {
+      const r = checkPreopRequirements({ urgency, ...nothingDone });
+      expect(r.ok, urgency).toBe(true);
+      expect(r.deferred, urgency).toBe(true);
+    }
+  });
+
+  it('reports a complete case as carrying no debt at all', () => {
+    const r = checkPreopRequirements({
+      urgency: 'ELECTIVE', labs: fullLabs, consent: consented,
+      prescriptionItemCount: 2, consumableRequestCount: 4, deferOutstanding: true,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.deferred).toBe(false);
+    expect(r.outstanding).toEqual([]);
+  });
+
+  it('still blocks an elective case when the flag is NOT set', () => {
+    // The guard that keeps this from becoming the default. If the form stops
+    // sending the flag, the old hard block must come back rather than silently
+    // letting unprepared cases through.
+    const r = checkPreopRequirements({ ...nothingDone, urgency: 'ELECTIVE', deferOutstanding: false });
+    expect(r.ok).toBe(false);
+    expect(r.deferred).toBe(false);
+  });
+
+  it('gives the outstanding items a label the boards can show', () => {
+    const r = checkPreopRequirements({ urgency: 'ELECTIVE', ...nothingDone });
+    expect(outstandingLabel(r.outstanding)).toContain('OUTSTANDING');
+  });
+});

@@ -156,6 +156,11 @@ const surgerySchema = z.object({
   // The reason comes from the client; WHO is taken from the session below, never
   // from the body — a client-supplied name is not an attribution.
   preopOverrideReason: z.string().trim().nullish(),
+  /**
+   * Booked from the third section, with the remaining sections to follow before
+   * the morning of surgery. See deferOutstanding in preopRequirements.ts.
+   */
+  deferOutstanding: z.boolean().optional(),
   /// Set only when the booker has been shown an existing identical case and has
   /// said they mean to book a second one. Absent on every ordinary booking, so
   /// the duplicate check is on by default and has to be opted out of
@@ -648,6 +653,7 @@ export async function POST(request: NextRequest) {
         hasUploadedFile: Boolean(consentFile?.base64),
         signedElectronically: Boolean(consentForm),
       },
+      deferOutstanding: validatedData.deferOutstanding === true,
       override: {
         reason: validatedData.preopOverrideReason ?? null,
         byId: (session?.user as { id?: string } | undefined)?.id ?? null,
@@ -737,9 +743,17 @@ export async function POST(request: NextRequest) {
         ),
         // A deferral is a debt, not a discharge: what is still missing stays on
         // the record and drives the outstanding flag on the boards.
-        ...(preop.overrideAccepted
+        ...(preop.overrideAccepted || preop.deferred
           ? {
-              preopOverrideReason: validatedData.preopOverrideReason ?? null,
+              // A deferral records itself. The reason differs by route: a
+              // clinician waiving a requirement writes one, while a case booked
+              // from the third section gets a standard one — but both name who
+              // did it and when, because an outstanding item nobody is
+              // attached to is an outstanding item nobody clears.
+              preopOverrideReason: preop.deferred
+                ? (validatedData.preopOverrideReason?.trim() ||
+                   'Booked from the third section. Remaining pre-operative sections due before the patient is called on the morning of surgery.')
+                : (validatedData.preopOverrideReason ?? null),
               preopOverrideById: (session?.user as { id?: string } | undefined)?.id ?? null,
               preopOverrideByName: (session?.user as { name?: string } | undefined)?.name ?? null,
               preopOverrideAt: new Date(),
@@ -1115,7 +1129,20 @@ export async function POST(request: NextRequest) {
     //
     // Additive: every existing reader of this response takes fields off the
     // surgery object and is unaffected by an extra one.
-    const responseBody = warnings.length ? { ...surgery, warnings } : surgery;
+    // What is still owed on this case, so the form can say it plainly at the
+    // moment of booking rather than leaving the person to discover it on a
+    // board later — or, worse, at the theatre door tomorrow morning.
+    const outstandingBody = preop.deferred
+      ? {
+          outstanding: preop.outstanding,
+          outstandingMessages: preop.messages,
+          outstandingDueBy: 'before the patient is called on the morning of surgery',
+        }
+      : {};
+
+    const responseBody = warnings.length
+      ? { ...surgery, ...outstandingBody, warnings }
+      : { ...surgery, ...outstandingBody };
 
     await rememberResult(idemKey, 201, responseBody, 'POST /api/surgeries');
     return NextResponse.json(responseBody, { status: 201 });

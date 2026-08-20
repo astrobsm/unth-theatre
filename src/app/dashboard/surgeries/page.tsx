@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
+import { AlertTriangle } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { outstandingLabel } from '@/lib/preopRequirements';
 import { SYNC_INTERVALS } from '@/lib/sync';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { TableSkeleton } from '@/components/Skeleton';
@@ -27,6 +29,13 @@ interface Surgery {
     fullName: string;
   } | null;
   surgeonName?: string | null;
+  /**
+   * Comma-separated MissingItem values on a case booked before its preparation
+   * was complete. Present on the API response already; it was simply never
+   * shown here, which meant the one screen the whole theatre looks at was the
+   * one screen that did not say a case was unprepared.
+   */
+  preopOutstanding?: string | null;
   procedureName: string;
   indication?: string;
   scheduledDate: string;
@@ -1198,6 +1207,12 @@ export default function SurgeriesPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">{surgery.procedureName}</div>
+                      {outstandingLabel(surgery.preopOutstanding?.split(',') ?? null) && (
+                        <div className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 ring-1 ring-amber-300">
+                          <AlertTriangle className="h-3 w-3" />
+                          {outstandingLabel(surgery.preopOutstanding?.split(',') ?? null)}
+                        </div>
+                      )}
                       <div className="text-xs text-gray-500">{surgery.subspecialty}</div>
                       {surgery.indication && (
                         <div className="text-xs text-gray-500">

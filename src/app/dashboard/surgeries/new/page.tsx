@@ -162,6 +162,9 @@ export default function NewSurgeryPage() {
     /// Things that did not save alongside the booking. The case is booked
     /// either way; these are named so somebody can put them right.
     warnings?: string[];
+    /// Sections not yet completed, when the case was booked from section 3.
+    /// The case IS on the theatre list; these are due before the morning.
+    outstanding?: string[];
   } | null>(null);
 
   // The identical case the server found already on the list. Holding it here
@@ -187,6 +190,28 @@ export default function NewSurgeryPage() {
   // whose answers quietly vanish from the booking.
   const STEP_NAMES = ['Patient', 'Surgery', 'Team', 'Consent & history', 'Safety results', 'Packs & sign-off'];
   const LAST_STEP = STEP_NAMES.length - 1;
+  /**
+   * From here the case can be put on the theatre list, with the rest to follow.
+   *
+   * Index 2 is Team — by then there is a patient, a procedure, a date, a
+   * theatre and a surgeon, which is everything theatre needs in order to know
+   * a patient is coming. What follows is preparation, and preparation has its
+   * own deadline: before the patient is called in the morning.
+   *
+   * The case for this is in the record. A CTU list of three cases for 21
+   * August existed nowhere in either database at midnight, because the surgeon
+   * had registered the patients at 10:12 and 10:44 and then died in the safety
+   * section — one draft, stuck at step "preop", and a theatre that knew
+   * nothing about any of it. Under this flow all three would have been visible
+   * from mid-morning, flagged for exactly what they were missing.
+   */
+  const EARLY_SUBMIT_STEP = 2;
+  /**
+   * Set by the "Book now" button immediately before the form submits. A ref
+   * rather than state because handleSubmit must see it in the same tick — a
+   * state update would not have landed by the time the submit handler runs.
+   */
+  const bookEarlyRef = useRef(false);
   const [step, setStep] = useState(0);
   const stepClass = (n: number) => (n === step ? '' : 'hidden');
 
@@ -650,6 +675,39 @@ export default function NewSurgeryPage() {
     setLoading(true);
     setError('');
 
+    // Read and CLEAR immediately: if this submission fails and the surgeon
+    // presses the full "Schedule Surgery" button next, that press must not
+    // inherit an early booking it never asked for.
+    const bookingEarly = bookEarlyRef.current;
+    bookEarlyRef.current = false;
+
+    // The early button carries formNoValidate, because the later sections hold
+    // required fields that are still empty and the browser would otherwise
+    // refuse the submit with "an invalid form control is not focusable" — in
+    // the console, where no surgeon will ever see it. So the essentials are
+    // checked here instead. These five are what theatre needs to know a
+    // patient is coming; everything after them is preparation.
+    if (bookingEarly) {
+      const fd = new FormData(e.currentTarget);
+      const essentials: string[] = [];
+      if (!selectedPatientId) essentials.push('the patient');
+      if (!String(fd.get('procedureName') ?? '').trim()) essentials.push('the procedure');
+      if (!String(fd.get('scheduledDate') ?? '').trim()) essentials.push('the date');
+      if (!selectedTheatreId) essentials.push('the theatre');
+      if (!unit) essentials.push('the unit');
+      if (essentials.length) {
+        setLoading(false);
+        setError(
+          `Before this case can go on the theatre list it still needs ${
+            essentials.length === 1
+              ? essentials[0]
+              : `${essentials.slice(0, -1).join(', ')} and ${essentials[essentials.length - 1]}`
+          }.`,
+        );
+        return;
+      }
+    }
+
     // ── Compulsory pre-operative safety validation ──
     const selPatient = patients.find((p) => p.id === selectedPatientId);
     const patientAgeYears =
@@ -699,7 +757,10 @@ export default function NewSurgeryPage() {
     // patient since 2pm and up until now i can't... i discovered i can't book
     // the patient unless the patient signs the online forms. Funny thing
     // patient is not in the ward currently and folder still being processed."
-    if (missing.length) {
+    // Booking from section 3: nothing is waived, but nothing blocks either.
+    // The server records every missing item against the case and the
+    // confirmation names them with their deadline.
+    if (missing.length && !bookingEarly) {
       if (surgeryType === 'ELECTIVE') {
         setLoading(false);
         setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
@@ -808,6 +869,8 @@ ${pretty} — ${days} days from today.
       // could not happen. An empty field must fail validation, not guess.
       estimatedDuration: parseInt(formData.get('estimatedDuration') as string),
       surgeryType: surgeryType,
+      // Put it on the theatre list now; the rest is owed before the morning.
+      deferOutstanding: bookingEarly,
       // Only ever sent for urgent/emergency — the server refuses to honour it
       // for an elective case, and sending it there would be a lie in the audit.
       preopOverrideReason:
@@ -952,6 +1015,9 @@ ${pretty} — ${days} days from today.
             // confirmation rather than swallowed, because the person who can
             // do something about a missing pharmacy list is standing here now.
             warnings: Array.isArray(created?.warnings) ? created.warnings : [],
+            outstanding: Array.isArray(created?.outstandingMessages)
+              ? created.outstandingMessages
+              : [],
           });
           setLoading(false);
           return;
@@ -2462,6 +2528,22 @@ ${pretty} — ${days} days from today.
               </button>
             )}
 
+            {/* Put it on the list now. formNoValidate is essential: the later
+                sections hold required fields that are still empty, and without
+                it the browser refuses the submit and says so only in the
+                console. */}
+            {step >= EARLY_SUBMIT_STEP && step < LAST_STEP && (
+              <button
+                type="submit"
+                formNoValidate
+                onClick={() => { bookEarlyRef.current = true; }}
+                disabled={loading}
+                className="rounded-lg border-2 border-green-600 bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+              >
+                {loading ? 'Booking…' : 'Book now — put it on the theatre list'}
+              </button>
+            )}
+
             {step < LAST_STEP ? (
               <button
                 type="button"
@@ -2479,10 +2561,27 @@ ${pretty} — ${days} days from today.
           </div>
         </div>
 
-        {step < LAST_STEP && (
+        {step >= EARLY_SUBMIT_STEP && step < LAST_STEP && (
+          <div className="rounded-lg border-l-4 border-green-500 bg-green-50 p-3">
+            <p className="text-sm font-semibold text-green-900">
+              You can book this case now.
+            </p>
+            <p className="mt-1 text-xs text-green-800">
+              Theatre will see the patient on the list straight away. The remaining
+              sections — consent, safety results, prescription and pack — stay recorded
+              against the case as outstanding, and{' '}
+              <span className="font-semibold">
+                must be completed before the patient is called on the morning of surgery
+              </span>
+              . Until they are, the holding area will hold the patient at the door.
+            </p>
+          </div>
+        )}
+
+        {step < EARLY_SUBMIT_STEP && (
           <p className="text-xs text-gray-500 text-right">
-            Nothing is booked until the last step. Your answers are saved as you go —
-            if you are interrupted, reopen this page and continue where you stopped.
+            Nothing is booked yet. Your answers are saved as you go — if you are
+            interrupted, reopen this page and continue where you stopped.
           </p>
         )}
       </form>
@@ -2576,7 +2675,7 @@ function BookingCodesModal({
   codes,
   onClose,
 }: {
-  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; folderNumber?: string | null; surgeryId?: string | null; warnings?: string[] };
+  codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; folderNumber?: string | null; surgeryId?: string | null; warnings?: string[]; outstanding?: string[] };
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -2604,9 +2703,46 @@ function BookingCodesModal({
     },
   ];
 
+  // Deliberately loud, and deliberately at the TOP of the confirmation rather
+  // than below the codes. The whole point of booking from section 3 is that the
+  // remaining work is still owed; a quiet note under a green tick is how it
+  // gets forgotten until the patient is at the theatre door.
+  const outstanding = codes.outstanding ?? [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        {outstanding.length > 0 && (
+          <div className="rounded-t-xl border-b-4 border-amber-500 bg-amber-50 px-5 py-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <p className="text-sm font-bold text-amber-900">
+                  Booked — but this case is not yet ready for theatre
+                </p>
+                <p className="mt-1 text-xs text-amber-800">
+                  These must be completed{' '}
+                  <span className="font-bold underline">
+                    before the patient is called on the morning of surgery
+                  </span>
+                  . Until then the holding area will hold this patient at the door.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {outstanding.map((m) => (
+                    <li key={m} className="flex items-start gap-1.5 text-xs text-amber-900">
+                      <span aria-hidden className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
+                      <span>{m}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-amber-800">
+                  They are recorded against this case in your name and shown on the
+                  theatre list until they are cleared.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2 border-b px-5 py-4">
           <CheckCircle className="w-6 h-6 text-green-600" />
           <h2 className="text-lg font-bold text-gray-900">Surgery booked</h2>

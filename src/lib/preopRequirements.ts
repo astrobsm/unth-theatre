@@ -83,6 +83,26 @@ export interface PreopCheckInput {
    */
   prescriptionItemCount?: number | null;
   consumableRequestCount?: number | null;
+  /**
+   * The case is being booked from the third section, with the rest to follow
+   * before the morning of surgery.
+   *
+   * This is the ordinary route now, not an exception, and it applies to every
+   * urgency including elective. The reasoning is in the record: under a hard
+   * block, 69% of cases over two months carried no retrievable consent and,
+   * before the safety fields were enforced, essentially none carried a
+   * haemoglobin or a viral screen. A requirement that stops a case being
+   * booked does not get the requirement met — it gets the booking delayed, done
+   * elsewhere, or abandoned, and theatre finds out at 8am.
+   *
+   * So the theatre sees the case as soon as there is a patient, a procedure and
+   * a team, and what is missing becomes a DEBT: recorded against the case, in
+   * the booker's name, shown on every board that case appears on, and due
+   * before the patient is called in the morning. The holding area still stops
+   * the patient at the door until it is cleared, so nothing reaches theatre
+   * undocumented — it simply stops being invisible in the meantime.
+   */
+  deferOutstanding?: boolean;
 }
 
 export type MissingItem =
@@ -105,6 +125,12 @@ export interface PreopCheckResult {
   overrideRequired: boolean;
   /** True when an override was given and accepted. */
   overrideAccepted: boolean;
+  /**
+   * True when the case was booked early with the rest to follow. Distinct from
+   * overrideAccepted, which is a clinician deliberately waiving a requirement
+   * for this patient — this is the normal workflow with work still to do.
+   */
+  deferred: boolean;
   /** Stored on the case so the outstanding items stay visible until resolved. */
   outstanding: MissingItem[];
 }
@@ -172,11 +198,29 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   if (missing.length === 0) {
     return {
       ok: true, missing: [], messages: [],
-      overrideRequired: false, overrideAccepted: false, outstanding: [],
+      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding: [],
     };
   }
 
   const messages = missing.map((m) => LABEL[m]);
+
+  // Booked from the third section, with the rest to follow before the morning.
+  //
+  // Checked BEFORE the elective branch, because this is the case that branch
+  // was refusing. It applies to every urgency: the theatre needs to know a
+  // patient is coming as soon as there is a patient, a procedure and a team,
+  // and everything after that is preparation which has its own deadline.
+  //
+  // Nothing is waived. Every missing item is returned as outstanding, stored on
+  // the case, and shown until it is cleared — and the holding area still stops
+  // the patient at the door. The change is when theatre finds out, not what is
+  // required.
+  if (input.deferOutstanding) {
+    return {
+      ok: true, missing, messages,
+      overrideRequired: false, overrideAccepted: false, deferred: true, outstanding: missing,
+    };
+  }
 
   // Elective: no override exists. Offering one would make the requirement
   // advisory, and every requirement that can be waived by typing a sentence
@@ -184,7 +228,7 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   if (isElective) {
     return {
       ok: false, missing, messages,
-      overrideRequired: false, overrideAccepted: false, outstanding: missing,
+      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding: missing,
     };
   }
 
@@ -199,6 +243,7 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
     messages,
     overrideRequired: !accepted,
     overrideAccepted: accepted,
+    deferred: false,
     // Recorded either way. A deferral is a debt, not a discharge — the case
     // carries these until somebody clears them.
     outstanding: missing,
