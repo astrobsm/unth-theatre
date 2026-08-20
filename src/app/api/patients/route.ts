@@ -1,3 +1,5 @@
+import { normaliseIdentifier } from '@/lib/patients/identity';
+import { findPeerPatient } from '@/lib/patients/peerLookup';
 import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -237,25 +239,53 @@ export async function POST(request: NextRequest) {
     
     const validatedData = patientSchema.parse(body);
 
-    // Duplicate guard: a patient with this folder (or PT) number already exists.
-    // Return the existing record so the UI can offer to continue to booking.
-    const existing = await prisma.patient.findFirst({
-      where: {
-        OR: [
-          { folderNumber: validatedData.folderNumber },
-          ...(validatedData.ptNumber ? [{ ptNumber: validatedData.ptNumber }] : []),
-        ],
-      },
-    });
-    if (existing) {
+    // ── Duplicate guard, on the NORMALISED identifier ───────────────────────
+    // This compared the folder number exactly, so "914 954" and "914954"
+    // registered as two different people — and 34 folder numbers in production
+    // contain an inner space. Matching is done on the normalised form; what the
+    // clerk typed is still what gets stored and printed.
+    const folderNorm = normaliseIdentifier(validatedData.folderNumber);
+    const ptNorm = normaliseIdentifier(validatedData.ptNumber);
+
+    const existing = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `select id from patients
+        where ($1 <> '' and regexp_replace(upper("folderNumber"), '\\s', '', 'g') = $1)
+           or ($2 <> '' and "ptNumber" is not null
+               and regexp_replace(upper("ptNumber"), '\\s', '', 'g') = $2)
+        limit 1`,
+      folderNorm,
+      ptNorm,
+    );
+
+    if (existing.length) {
+      const full = await prisma.patient.findUnique({ where: { id: existing[0].id } });
       return NextResponse.json(
-        { error: 'This patient is already registered.', code: 'DUPLICATE', patient: existing },
+        { error: 'This patient is already registered.', code: 'DUPLICATE', patient: full },
         { status: 409 },
       );
     }
 
+    // ── Ask the other database before minting an identity ───────────────────
+    // The duplicate that took a case out of theatre on 20 August existed
+    // because this check was local-only: two nodes, six minutes apart, both
+    // concluded the patient was new and each minted its own UUID. Neither row
+    // could ever cross, because folderNumber is unique on both.
+    //
+    // If the peer already knows this folder number, the patient is created here
+    // UNDER THE PEER'S ID. The two databases then agree from the first moment
+    // and the row replicates as an ordinary update.
+    //
+    // Best-effort and never blocking: findPeerPatient returns null both when
+    // there is no match and when the peer could not be reached, because both
+    // mean "carry on and register". A patient at a desk is not made to wait on
+    // the uplink, and is never turned away because of it.
+    const peer = await findPeerPatient(validatedData.folderNumber, validatedData.ptNumber);
+    if (peer) {
+      console.log(`[patients] adopting peer id ${peer.id} for folder ${validatedData.folderNumber}`);
+    }
+
     const patient = await prisma.patient.create({
-      data: validatedData
+      data: peer ? { ...validatedData, id: peer.id } : validatedData,
     });
 
     // Create audit log only if user exists in database
