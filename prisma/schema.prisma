@@ -704,6 +704,51 @@ model OnboardingSubmission {
   @@map("onboarding_submissions")
 }
 
+/// A booking that has been started but not yet made.
+///
+/// The booking form asks for a great deal — patient, procedure, theatre, a full
+/// set of pre-operative safety results, consent, and two pack lists — and it
+/// was all or nothing. A phone that slept, a battery that died, a nurse who had
+/// to answer a call: the lot was gone, and the surgeon started again from the
+/// patient search. That is why long forms get abandoned and why cases end up
+/// booked on paper.
+///
+/// Each section is saved here as it is completed, so the answer to "what
+/// happens if something interrupts me" is "you carry on where you stopped".
+///
+/// ONE DRAFT PER PERSON, deliberately. A queue of half-finished bookings is
+/// worse than none: it invites somebody to resume the wrong one and book a
+/// procedure for the wrong patient. Starting a new booking while a draft exists
+/// offers to resume or discard, explicitly.
+///
+/// NOT CLASSIFIED FOR SYNC. It is work in progress, not a clinical record, and
+/// it is finished within minutes on the device it was started on. Replicating a
+/// half-completed booking between two databases would create a second copy that
+/// could be resumed independently — which is the duplicate-case problem again,
+/// arriving by a new route.
+model SurgeryDraft {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  /// The form state so far, exactly as the sections submitted it.
+  data Json
+
+  /// Which section the person had reached, so resuming lands them there rather
+  /// than at the beginning of a form they have mostly filled in.
+  step String @default("patient")
+
+  /// Denormalised for the resume prompt — "continue booking Eneh Abigail?" is a
+  /// question somebody can answer; "continue draft 3f9a…" is not.
+  patientId   String?
+  patientName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@map("surgery_drafts")
+}
+
 /// One-time handoff of a signed-in session out of the captive-portal browser.
 ///
 /// The Wi-Fi portal signs a person in inside the operating system's captive

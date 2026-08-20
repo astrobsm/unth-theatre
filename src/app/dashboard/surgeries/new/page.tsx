@@ -175,6 +175,24 @@ export default function NewSurgeryPage() {
     pharmacyDrugCode?: string | null;
     patient?: { name?: string | null; folderNumber?: string | null } | null;
   } | null>(null);
+  // ── One section at a time, and it survives an interruption ───────────────
+  // The form asks for a great deal, and it used to be all or nothing: a phone
+  // that slept or a nurse called away meant starting again at the patient
+  // search. Now each section is completed, saved, and the next one opens.
+  //
+  // Sections are HIDDEN, not unmounted. The submit handler reads its answers
+  // out of the DOM with FormData — deliberately, because that is what makes it
+  // immune to stale React state — so a section that is not mounted is a section
+  // whose answers quietly vanish from the booking.
+  const STEP_NAMES = ['Patient', 'Surgery', 'Team', 'Consent & history', 'Safety results', 'Packs & sign-off'];
+  const LAST_STEP = STEP_NAMES.length - 1;
+  const [step, setStep] = useState(0);
+  const stepClass = (n: number) => (n === step ? '' : 'hidden');
+
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [resumable, setResumable] = useState<{ step: string; patientName: string | null; updatedAt: string } | null>(null);
+
   const lastPayloadRef = useRef<Record<string, unknown> | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   // Patients the SERVER matched for the current search text. Kept apart from
@@ -417,6 +435,68 @@ export default function NewSurgeryPage() {
     } catch (error) {
       console.error('Failed to fetch patients:', error);
     }
+  };
+
+  // Offer to resume anything left unfinished. Asked once, on arrival, and
+  // phrased around the PATIENT — "continue booking Eneh Abigail?" is a question
+  // somebody can answer; "you have a saved draft" is not.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/surgeries/draft');
+        if (!res.ok) return;
+        const { draft } = await res.json();
+        if (!cancelled && draft) {
+          setResumable({
+            step: draft.step,
+            patientName: draft.patientName ?? null,
+            updatedAt: draft.updatedAt,
+          });
+        }
+      } catch {
+        // No draft service, no resume offer. The form still works.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Save the section just completed, then open the next one.
+  //
+  // The save is awaited but never blocks progress: if it fails the person
+  // carries on with a warning rather than being stopped from booking a case
+  // because the convenience that protects their typing is unavailable.
+  const goToStep = async (next: number) => {
+    if (next > step) {
+      setDraftSaving(true);
+      try {
+        const form = document.querySelector('form');
+        const fd = form ? new FormData(form as HTMLFormElement) : null;
+        // forEach rather than for..of: this project's TS target does not allow
+        // iterating a FormData directly, and a build flag is a heavy price for
+        // one loop.
+        const snapshot: Record<string, unknown> = {};
+        fd?.forEach((v, k) => { if (typeof v === 'string') snapshot[k] = v; });
+
+        const res = await fetch('/api/surgeries/draft', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            step: ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'][next] ?? 'patient',
+            patientId: selectedPatientId || null,
+            patientName: patients.find((p) => p.id === selectedPatientId)?.name ?? null,
+            data: snapshot,
+          }),
+        });
+        if (res.ok) setDraftSavedAt(new Date());
+      } catch {
+        /* saved nothing — the warning below says so */
+      } finally {
+        setDraftSaving(false);
+      }
+    }
+    setStep(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ── Search the server as they type ──────────────────────────────────────
@@ -761,6 +841,13 @@ export default function NewSurgeryPage() {
       if (response.ok) {
         // Offline: the write was queued (no server-generated codes/id yet).
         // Confirm and return to the list instead of showing an empty codes modal.
+        // The case is made — the draft has served its purpose and must go, or
+        // reopening this page offers to resume a booking that already exists.
+        // Never awaited and never able to fail the booking: tidying up is not
+        // allowed to turn a successful case into an error, which is the exact
+        // fault fixed in the audit log two days ago.
+        void fetch('/api/surgeries/draft', { method: 'DELETE' }).catch(() => {});
+
         if (isOfflineQueued(response)) {
           // Two different situations wearing one status code. A timed-out write
           // has usually ALREADY reached the server, so the message has to say
@@ -911,6 +998,71 @@ export default function NewSurgeryPage() {
           onClose={() => router.push('/dashboard/surgeries')}
         />
       )}
+      {/* ── Resume what was interrupted ─────────────────────────────────── */}
+      {resumable && (
+        <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-indigo-900">
+              You have a booking in progress
+              {resumable.patientName ? <> for <span className="underline">{resumable.patientName}</span></> : ''}.
+            </p>
+            <p className="text-sm text-indigo-800 mt-0.5">
+              Last saved {new Date(resumable.updatedAt).toLocaleString()}. Nothing has been booked yet.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const i = ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'].indexOf(resumable.step);
+                setStep(i >= 0 ? i : 0);
+                setResumable(null);
+              }}
+              className="rounded-lg bg-indigo-600 text-white font-medium px-4 py-2 hover:bg-indigo-700"
+            >
+              Continue where I stopped
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await fetch('/api/surgeries/draft', { method: 'DELETE' }).catch(() => {});
+                setResumable(null);
+              }}
+              className="rounded-lg border border-indigo-300 text-indigo-800 px-4 py-2 hover:bg-indigo-100"
+            >
+              Start fresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Where they are, and what is left ─────────────────────────────── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-sm font-semibold text-gray-900">
+            Step {step + 1} of {STEP_NAMES.length} — {STEP_NAMES[step]}
+          </p>
+          <p className="text-xs text-gray-500">
+            {draftSaving
+              ? 'Saving…'
+              : draftSavedAt
+                ? `Saved ${draftSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : 'Nothing typed yet'}
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          {STEP_NAMES.map((name, i) => (
+            <div
+              key={name}
+              title={name}
+              className={`h-1.5 flex-1 rounded-full ${
+                i < step ? 'bg-emerald-500' : i === step ? 'bg-primary-600' : 'bg-gray-200'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
       {alreadyBooked && (
         <AlreadyBookedModal
           existing={alreadyBooked}
@@ -972,7 +1124,7 @@ export default function NewSurgeryPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Patient Selection */}
-        <div className="card">
+        <div className={`${stepClass(0)} card`}>
           <div className="flex items-center gap-3 mb-4">
             <User className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Patient Information</h2>
@@ -1043,7 +1195,7 @@ export default function NewSurgeryPage() {
         </div>
 
         {/* Surgery Details */}
-        <div className="card">
+        <div className={`${stepClass(1)} card`}>
           <div className="flex items-center gap-3 mb-4">
             <Stethoscope className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Surgery Details</h2>
@@ -1438,7 +1590,7 @@ export default function NewSurgeryPage() {
         </div>
 
         {/* Scheduling */}
-        <div className="card">
+        <div className={`${stepClass(1)} card`}>
           <div className="flex items-center gap-3 mb-4">
             <Calendar className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Schedule</h2>
@@ -1552,7 +1704,7 @@ export default function NewSurgeryPage() {
 
         {/* On-Duty Team — auto-fetched from roster when date + time are picked */}
         {scheduledDate && scheduledTime && (
-          <div className="card">
+          <div className={`${stepClass(2)} card`}>
             <div className="flex items-center gap-3 mb-1">
               <Users className="w-6 h-6 text-primary-600" />
               <h2 className="text-xl font-semibold">On-Duty Team</h2>
@@ -1754,7 +1906,7 @@ export default function NewSurgeryPage() {
         </div>
 
         {/* Informed / Electronic Consent — UNTH consent form captured at booking */}
-        <div className="card">
+        <div className={`${stepClass(3)} card`}>
           <div className="flex items-center gap-3 mb-2">
             <FileSignature className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Consent Form</h2>
@@ -1772,7 +1924,7 @@ export default function NewSurgeryPage() {
         </div>
 
         {/* Clinical Summary — Comorbidities & Current Medications */}
-        <div className="card">
+        <div className={`${stepClass(3)} card`}>
           <div className="flex items-center gap-3 mb-2">
             <Stethoscope className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Clinical Summary</h2>
@@ -1888,7 +2040,7 @@ export default function NewSurgeryPage() {
             </select>
           );
           return (
-            <div className="card border-2 border-amber-200">
+            <div className={`${stepClass(4)} card border-2 border-amber-200`}>
               <div className="flex items-center gap-3 mb-1">
                 <FileText className="w-6 h-6 text-amber-600" />
                 <h2 className="text-xl font-semibold">Pre-operative Safety Labs &amp; Assessments</h2>
@@ -1950,7 +2102,7 @@ export default function NewSurgeryPage() {
         })()}
 
         {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
-        <div className="card">
+        <div className={`${stepClass(5)} card`}>
           <div className="flex items-center gap-3 mb-3">
             <Package className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Apply a pack</h2>
@@ -1970,7 +2122,7 @@ export default function NewSurgeryPage() {
             for this case from the catalog dropdown inside "View pack content". */}
 
         {/* Informed Consent Upload — visible to Holding Area for clearance */}
-        <div className="card">
+        <div className={`${stepClass(5)} card`}>
           <div className="flex items-center gap-3 mb-2">
             <FileText className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Surgical Consent Form</h2>
@@ -2030,7 +2182,7 @@ export default function NewSurgeryPage() {
         </div>
 
         {/* Surgical Team Members */}
-        <div className="card">
+        <div className={`${stepClass(5)} card`}>
           <div className="flex items-center gap-3 mb-4">
             <Users className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Surgical Team</h2>
@@ -2178,14 +2330,50 @@ export default function NewSurgeryPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-4">
+        {/* ── Move between sections ─────────────────────────────────────────
+            The submit button exists ONLY on the last step. Every one of these
+            is type="button": a stray submit inside a multi-step form is how a
+            half-filled booking gets sent, and the browser will treat Enter in
+            any text field as a click on the first submit button it can find. */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/dashboard/surgeries" className="btn-secondary">
             Cancel
           </Link>
-          <button type="submit" disabled={loading} className="btn-primary">
-            {loading ? 'Scheduling...' : 'Schedule Surgery'}
-          </button>
+
+          <div className="flex items-center gap-3">
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={() => void goToStep(step - 1)}
+                className="btn-secondary"
+              >
+                ← Back
+              </button>
+            )}
+
+            {step < LAST_STEP ? (
+              <button
+                type="button"
+                onClick={() => void goToStep(step + 1)}
+                disabled={draftSaving}
+                className="btn-primary disabled:opacity-60"
+              >
+                {draftSaving ? 'Saving…' : `Save & continue to ${STEP_NAMES[step + 1]}`}
+              </button>
+            ) : (
+              <button type="submit" disabled={loading} className="btn-primary">
+                {loading ? 'Scheduling...' : 'Schedule Surgery'}
+              </button>
+            )}
+          </div>
         </div>
+
+        {step < LAST_STEP && (
+          <p className="text-xs text-gray-500 text-right">
+            Nothing is booked until the last step. Your answers are saved as you go —
+            if you are interrupted, reopen this page and continue where you stopped.
+          </p>
+        )}
       </form>
     </div>
   );
