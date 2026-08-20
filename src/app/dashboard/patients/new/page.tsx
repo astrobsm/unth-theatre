@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator, ArrowRight } from 'lucide-react';
+import { ArrowLeft, User, AlertCircle, Activity, Heart, Shield, Scale, Calculator, ArrowRight, CheckCircle, RotateCcw, X } from 'lucide-react';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 import Link from 'next/link';
@@ -52,6 +52,44 @@ interface NutritionalData {
   lymphocytes: number; // count
   weightLoss: boolean;
   poorIntake: boolean;
+}
+
+/**
+ * Where an unfinished registration is kept.
+ *
+ * Deliberately the browser rather than the server, unlike the booking draft.
+ * A registration is one person, at one bedside, in one sitting — there is no
+ * second device to resume on — and localStorage costs no round trip, works
+ * with no signal at all, and needs no schema change to a live hospital
+ * database. Versioned in the key so a future change to the shape cannot
+ * restore a draft it no longer understands.
+ */
+const PATIENT_DRAFT_KEY = 'orm.patientRegistration.draft.v1';
+
+interface PatientDraft {
+  step: number;
+  savedAt: string;
+  /** The plain inputs, by name attribute. */
+  fields: Record<string, string>;
+  /** The scores and dictated text, which live in React state. */
+  state: {
+    age?: number;
+    ageUnit?: AgeUnit;
+    gender?: string;
+    comorbidities?: string;
+    metabolicStatus?: string;
+    otherMedications?: string;
+    assessmentNotes?: string;
+    dvtFactors?: DVTRiskFactors;
+    bleedingFactors?: BleedingRiskFactors;
+    bradenFactors?: BradenScoreFactors;
+    nutritionalData?: NutritionalData;
+    dDimerDone?: boolean;
+    dDimerResult?: string;
+    dDimerValue?: number;
+    whoRiskClass?: string;
+    asaScore?: number;
+  };
 }
 
 export default function NewPatientPage() {
@@ -141,6 +179,160 @@ export default function NewPatientPage() {
   // WHO/ASA
   const [whoRiskClass, setWhoRiskClass] = useState('');
   const [asaScore, setAsaScore] = useState(1);
+
+  // ── One section at a time ───────────────────────────────────────────────
+  //
+  // This page asked for a full Caprini score, a HAS-BLED, a six-domain Braden,
+  // a nutritional assessment with BMI, a WHO/ASA classification and a fitness
+  // opinion — roughly seventy fields — on a single scroll, and gave nothing
+  // back until the last one was answered. On a phone, on hospital Wi-Fi, that
+  // is a wall. It is also the same shape as the booking form before it was
+  // split: work that cannot be put down and picked up gets abandoned, and an
+  // abandoned registration is a patient who does not exist when theatre looks.
+  //
+  // So: the same six-step treatment the booking form got, and the same promise
+  // — your answers are kept, you can stop and come back.
+  const STEP_NAMES = [
+    'Basic information',
+    'DVT risk (Caprini)',
+    'Bleeding risk (HAS-BLED)',
+    'Pressure sore (Braden)',
+    'Nutrition & BMI',
+    'WHO/ASA & history',
+    'Fitness & sign-off',
+  ];
+  const LAST_STEP = STEP_NAMES.length - 1;
+  const [step, setStep] = useState(0);
+  const stepClass = (n: number) => (n === step ? '' : 'hidden');
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
+  const [resumable, setResumable] = useState<PatientDraft | null>(null);
+
+  /**
+   * Snapshot everything the person has typed.
+   *
+   * Two halves, because this page keeps its answers in two places: the plain
+   * inputs (name, folder number, ward, phone numbers) live in the DOM and come
+   * back through FormData, while the scores and the dictated text are React
+   * state. Capturing only one half would restore a draft that looked complete
+   * and had lost the Braden score.
+   */
+  const snapshot = useCallback((atStep: number): PatientDraft => {
+    const fields: Record<string, string> = {};
+    if (formRef.current) {
+      // forEach rather than for..of — this project's TS target does not allow
+      // iterating FormData directly, and a build flag is a heavy price for one
+      // loop. Same reasoning as the booking form.
+      new FormData(formRef.current).forEach((v, k) => {
+        if (typeof v === 'string') fields[k] = v;
+      });
+    }
+    return {
+      step: atStep,
+      savedAt: new Date().toISOString(),
+      fields,
+      state: {
+        age, ageUnit, gender,
+        comorbidities, metabolicStatus, otherMedications, assessmentNotes,
+        dvtFactors, bleedingFactors, bradenFactors, nutritionalData,
+        dDimerDone, dDimerResult, dDimerValue,
+        whoRiskClass, asaScore,
+      },
+    };
+  }, [age, ageUnit, gender, comorbidities, metabolicStatus, otherMedications,
+      assessmentNotes, dvtFactors, bleedingFactors, bradenFactors,
+      nutritionalData, dDimerDone, dDimerResult, dDimerValue, whoRiskClass, asaScore]);
+
+  /**
+   * Is the section on screen complete enough to leave?
+   *
+   * Checked HERE rather than at submit, because every section but the current
+   * one is hidden — and the browser refuses to submit a form with an empty
+   * required field it cannot focus, reporting it only to the console. A person
+   * who skipped the ward on section 1 would reach the end, press Register, and
+   * watch nothing happen at all. Catching it while the field is still visible
+   * is the difference between a prompt and a mystery.
+   */
+  const stepIsValid = (n: number) => {
+    const el = sectionRefs.current[n];
+    if (!el) return true;
+    const invalid = el.querySelector<HTMLInputElement>(
+      'input:invalid, select:invalid, textarea:invalid',
+    );
+    if (invalid) {
+      invalid.reportValidity();
+      return false;
+    }
+    return true;
+  };
+
+  const goToStep = (next: number) => {
+    if (next > step && !stepIsValid(step)) return;
+    if (next > step) {
+      try {
+        window.localStorage.setItem(PATIENT_DRAFT_KEY, JSON.stringify(snapshot(next)));
+        setDraftSavedAt(new Date());
+      } catch {
+        // Storage full or blocked. Never allowed to stop someone progressing:
+        // the convenience that protects typing must not become a reason the
+        // patient cannot be registered.
+      }
+    }
+    setStep(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Offer to resume rather than restoring silently. A draft left from another
+  // patient, restored without asking, is how one patient's Braden score ends up
+  // on another patient's record.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(PATIENT_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as PatientDraft;
+      if (d && typeof d.step === 'number') setResumable(d);
+    } catch {
+      window.localStorage.removeItem(PATIENT_DRAFT_KEY);
+    }
+  }, []);
+
+  const applyDraft = (d: PatientDraft) => {
+    const s = d.state ?? ({} as PatientDraft['state']);
+    if (s.age !== undefined) setAge(s.age);
+    if (s.ageUnit) setAgeUnit(s.ageUnit);
+    if (s.gender !== undefined) setGender(s.gender);
+    if (s.comorbidities !== undefined) setComorbidities(s.comorbidities);
+    if (s.metabolicStatus !== undefined) setMetabolicStatus(s.metabolicStatus);
+    if (s.otherMedications !== undefined) setOtherMedications(s.otherMedications);
+    if (s.assessmentNotes !== undefined) setAssessmentNotes(s.assessmentNotes);
+    if (s.dvtFactors) setDvtFactors(s.dvtFactors);
+    if (s.bleedingFactors) setBleedingFactors(s.bleedingFactors);
+    if (s.bradenFactors) setBradenFactors(s.bradenFactors);
+    if (s.nutritionalData) setNutritionalData(s.nutritionalData);
+    if (s.dDimerDone !== undefined) setDDimerDone(s.dDimerDone);
+    if (s.dDimerResult !== undefined) setDDimerResult(s.dDimerResult);
+    if (s.dDimerValue !== undefined) setDDimerValue(s.dDimerValue);
+    if (s.whoRiskClass !== undefined) setWhoRiskClass(s.whoRiskClass);
+    if (s.asaScore !== undefined) setAsaScore(s.asaScore);
+    // The plain inputs are uncontrolled, so they are written straight back into
+    // the DOM once React has rendered the sections.
+    window.setTimeout(() => {
+      const form = formRef.current;
+      if (!form) return;
+      for (const [k, v] of Object.entries(d.fields ?? {})) {
+        const el = form.elements.namedItem(k) as HTMLInputElement | null;
+        if (el && 'value' in el) el.value = v;
+      }
+    }, 0);
+    setStep(Math.min(d.step ?? 0, LAST_STEP));
+    setResumable(null);
+  };
+
+  const discardDraft = () => {
+    try { window.localStorage.removeItem(PATIENT_DRAFT_KEY); } catch { /* nothing to clear */ }
+    setResumable(null);
+  };
 
   // Calculate DVT Risk Score (Caprini Score)
   useEffect(() => {
@@ -262,6 +454,15 @@ export default function NewPatientPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // Enter pressed in a text field on section 2 must not register the patient.
+    // The guard is here rather than only on the button because the browser
+    // fires submit from the keyboard without any button being pressed at all.
+    if (step < LAST_STEP) {
+      goToStep(step + 1);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -342,6 +543,11 @@ export default function NewPatientPage() {
       });
 
       if (response.ok) {
+        // The registration is made — the draft has served its purpose and must
+        // go, or reopening this page offers to resume a patient who already
+        // exists and invites a duplicate record.
+        try { window.localStorage.removeItem(PATIENT_DRAFT_KEY); } catch { /* nothing to clear */ }
+
         // Offline: the patient is queued but has no server id yet, so we can't
         // pre-select them in a booking form. Confirm and go to the patients list;
         // resume booking after reconnect/sync.
@@ -444,9 +650,73 @@ export default function NewPatientPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* ── Resume what was interrupted ───────────────────────────────────── */}
+      {resumable && (
+        <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <RotateCcw className="w-5 h-5 shrink-0 text-indigo-600" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-indigo-900">
+              You have an unfinished registration
+            </p>
+            <p className="text-xs text-indigo-700">
+              Stopped at &ldquo;{STEP_NAMES[Math.min(resumable.step, LAST_STEP)]}&rdquo;
+              {resumable.savedAt ? ` — ${new Date(resumable.savedAt).toLocaleString()}` : ''}.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => applyDraft(resumable)} className="btn-primary">
+              Continue
+            </button>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-3 py-2 text-sm text-indigo-800 hover:bg-indigo-100"
+            >
+              <X className="w-4 h-4" /> Start fresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Where am I, and how much is left ──────────────────────────────── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-gray-900">
+            Step {step + 1} of {STEP_NAMES.length} — {STEP_NAMES[step]}
+          </p>
+          {draftSavedAt && (
+            <span className="inline-flex items-center gap-1 text-xs text-green-700">
+              <CheckCircle className="w-3.5 h-3.5" /> Saved
+            </span>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {STEP_NAMES.map((name, i) => (
+            <button
+              key={name}
+              type="button"
+              // Backwards only. Jumping ahead would skip the validation that
+              // keeps a required field from being left empty in a section
+              // nobody can see.
+              onClick={() => { if (i < step) goToStep(i); }}
+              disabled={i > step}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                i === step
+                  ? 'bg-primary-600 text-white'
+                  : i < step
+                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                    : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              {i + 1}. {name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Patient Information */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[0] = el; }} className={`card ${stepClass(0)}`}>
           <div className="flex items-center gap-3 mb-6">
             <User className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Basic Information</h2>
@@ -577,7 +847,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* DVT Risk Assessment (Caprini Score) */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[1] = el; }} className={`card ${stepClass(1)}`}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Activity className="w-6 h-6 text-blue-600" />
@@ -745,7 +1015,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* Bleeding Risk Assessment (HAS-BLED) */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[2] = el; }} className={`card ${stepClass(2)}`}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Heart className="w-6 h-6 text-red-600" />
@@ -890,7 +1160,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* Pressure Sore Risk (Braden Scale) - optional for patients < 15 years */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[3] = el; }} className={`card ${stepClass(3)}`}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Shield className="w-6 h-6 text-purple-600" />
@@ -1099,7 +1369,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* Nutritional Assessment with BMI */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[4] = el; }} className={`card ${stepClass(4)}`}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Scale className="w-6 h-6 text-green-600" />
@@ -1203,7 +1473,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* WHO/ASA Classification */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[5] = el; }} className={`card ${stepClass(5)}`}>
           <div className="flex items-center gap-3 mb-6">
             <Calculator className="w-6 h-6 text-indigo-600" />
             <h2 className="text-xl font-semibold">WHO/ASA Physical Status Classification</h2>
@@ -1292,7 +1562,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* Other Medications */}
-        <div className="card">
+        <div ref={(el) => { sectionRefs.current[5] = el; }} className={`card ${stepClass(5)}`}>
           <h3 className="font-semibold mb-4">Other Medications</h3>
           <SmartTextInput
             value={otherMedications}
@@ -1306,7 +1576,7 @@ export default function NewPatientPage() {
         </div>
 
         {/* Final Assessment */}
-        <div className="card bg-gradient-to-br from-primary-50 to-secondary-50">
+        <div ref={(el) => { sectionRefs.current[6] = el; }} className={`card bg-gradient-to-br from-primary-50 to-secondary-50 ${stepClass(6)}`}>
           <h2 className="text-xl font-semibold mb-6">Final Pre-operative Assessment</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1368,19 +1638,50 @@ export default function NewPatientPage() {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4 justify-end">
+        {/* ── Move between sections ─────────────────────────────────────────
+            Everything except the final button is type="button". A stray submit
+            inside a multi-step form is how a half-filled registration gets
+            sent, and the browser treats Enter in any text field as a click on
+            the first submit button it can find. */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/dashboard/patients" className="btn-secondary">
             Cancel
           </Link>
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Registering...' : 'Register Patient'}
-          </button>
+
+          <div className="flex items-center gap-3">
+            {step > 0 && (
+              <button type="button" onClick={() => goToStep(step - 1)} className="btn-secondary">
+                ← Back
+              </button>
+            )}
+
+            {step < LAST_STEP ? (
+              <button
+                type="button"
+                onClick={() => goToStep(step + 1)}
+                className="btn-primary"
+              >
+                Save &amp; continue to {STEP_NAMES[step + 1]}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Registering...' : 'Register Patient'}
+              </button>
+            )}
+          </div>
         </div>
+
+        {step < LAST_STEP && (
+          <p className="text-right text-xs text-gray-500">
+            The patient is not registered until the last section. Your answers are kept
+            on this device as you go — if you are interrupted, reopen this page and
+            continue where you stopped.
+          </p>
+        )}
       </form>
     </div>
   );

@@ -2544,7 +2544,21 @@ ${pretty} — ${days} days from today.
               </button>
             )}
 
-            {step < LAST_STEP ? (
+            {step === EARLY_SUBMIT_STEP ? (
+              /* Completing section 3 IS the booking. Everything theatre needs
+                 in order to prepare is now answered, so this is the moment the
+                 case goes on the list — not a step later, and not only if the
+                 surgeon happens to notice a second button. */
+              <button
+                type="submit"
+                formNoValidate
+                onClick={() => { bookEarlyRef.current = true; }}
+                disabled={loading}
+                className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+              >
+                {loading ? 'Sending to theatre…' : 'Save & send to theatre'}
+              </button>
+            ) : step < LAST_STEP ? (
               <button
                 type="button"
                 onClick={() => void goToStep(step + 1)}
@@ -2564,14 +2578,17 @@ ${pretty} — ${days} days from today.
         {step >= EARLY_SUBMIT_STEP && step < LAST_STEP && (
           <div className="rounded-lg border-l-4 border-green-500 bg-green-50 p-3">
             <p className="text-sm font-semibold text-green-900">
-              You can book this case now.
+              {step === EARLY_SUBMIT_STEP
+                ? 'Saving this section sends the case to theatre.'
+                : 'You can send this case to theatre now.'}
             </p>
             <p className="mt-1 text-xs text-green-800">
-              Theatre will see the patient on the list straight away. The remaining
-              sections — consent, safety results, prescription and pack — stay recorded
-              against the case as outstanding, and{' '}
+              Theatre will have the patient on the list straight away and can begin
+              preparing. The remaining sections — consent, safety results, prescription
+              and pack — are recorded against the case as outstanding, and{' '}
               <span className="font-semibold">
-                must be completed before the patient is called on the morning of surgery
+                must be completed to validate the booking, before the patient is called
+                on the morning of surgery
               </span>
               . Until they are, the holding area will hold the patient at the door.
             </p>
@@ -2718,10 +2735,14 @@ function BookingCodesModal({
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
               <div>
                 <p className="text-sm font-bold text-amber-900">
-                  Booked — but this case is not yet ready for theatre
+                  The theatre has received this booking and will begin preparing for
+                  the surgery.
+                </p>
+                <p className="mt-1 text-xs font-semibold text-amber-900">
+                  You must still complete the remaining steps to validate the booking.
                 </p>
                 <p className="mt-1 text-xs text-amber-800">
-                  These must be completed{' '}
+                  These are outstanding and must be completed{' '}
                   <span className="font-bold underline">
                     before the patient is called on the morning of surgery
                   </span>
@@ -2835,9 +2856,25 @@ function BookingCodesModal({
             </Link>
           )}
         </div>
-        <div className="flex justify-end gap-3 border-t px-5 py-4">
-          <button onClick={onClose} className="btn-primary">
-            Done
+        <div className="flex flex-wrap justify-end gap-3 border-t px-5 py-4">
+          {/* The outstanding items are the point of this screen when there are
+              any, so the way to clear them is the primary action and "Done" is
+              demoted. A confirmation whose only button is Done is a
+              confirmation that ends the job in the surgeon's mind. */}
+          {outstanding.length > 0 && codes.surgeryId && (
+            <Link
+              href={`/dashboard/surgeries/${codes.surgeryId}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700"
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Complete the outstanding items
+            </Link>
+          )}
+          <button
+            onClick={onClose}
+            className={outstanding.length > 0 ? 'btn-secondary' : 'btn-primary'}
+          >
+            {outstanding.length > 0 ? 'Later' : 'Done'}
           </button>
         </div>
       </div>
