@@ -31,4 +31,25 @@ jobs:
           # ...and the dashboard page so the page renderer stays warm too.
           echo "Warming $BASE/dashboard"
           curl -fsS --max-time 30 -o /dev/null "$BASE/dashboard" || echo "dashboard warm skipped"
+
+          # ...and the SYNC ROUTES, which matter most and were missed.
+          #
+          # Every route is its own serverless function with its own warm state,
+          # so warming /api/ping does nothing whatsoever for /api/sync/push. The
+          # theatre server touches these once a minute — long enough to go cold
+          # between cycles — and on 20 August a cold start alone measured 41.5
+          # seconds against a 60-second client timeout. Push aborted every cycle
+          # for fifty minutes while pull succeeded, because the failed push had
+          # just warmed the function for it.
+          #
+          # No credentials needed and none used: an unauthenticated POST is
+          # rejected with a 401, and a 401 warms the function exactly as well as
+          # a 200. -f is deliberately omitted so that expected 401 is not
+          # treated as a failure.
+          for route in /api/sync/push /api/sync/pull; do
+            echo "Warming $BASE$route"
+            curl -sS --max-time 30 -o /dev/null -X POST "$BASE$route" \
+              -H 'Content-Type: application/json' -d '{}' \
+              || echo "warm skipped for $route"
+          done
           echo "Done."

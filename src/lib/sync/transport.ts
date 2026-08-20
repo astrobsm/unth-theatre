@@ -82,7 +82,34 @@ export interface PullResponse {
 export const BATCH_SIZE = 200;
 
 /** Give up on a single attempt after this. The link here is a domestic uplink. */
-export const REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * How long one sync request may take before it is abandoned.
+ *
+ * Was 60 seconds, which sounds generous and is not. The peer is a serverless
+ * platform: each route is its own function with its own warm state, and the
+ * worker touches it once a minute — comfortably long enough to go cold between
+ * cycles. Measured on 20 August against the live cloud:
+ *
+ *   cold request, doing no work at all      41.5 s
+ *   warm request, empty batch                1.8 s
+ *   warm request, one entry applied          6.8 s
+ *
+ * So a cold start alone consumed two thirds of the budget, and seven entries —
+ * seven, of 363 bytes each — could not finish inside it. The push aborted every
+ * cycle for fifty minutes while the PULL in the same cycle succeeded, because
+ * the failed push had just warmed the function for it. Shrinking the batch,
+ * which the worker dutifully did from 200 down to 12, changed nothing: there
+ * were only seven entries to send.
+ *
+ * Two minutes covers a cold start plus a full batch with room to spare. The
+ * cost of it being too long is a cycle that takes longer to give up; the cost
+ * of it being too short is theatre data that never leaves the building.
+ *
+ * The other half of this fix is keeping the sync routes warm — see
+ * .github/workflows/keep-warm.yml, which pinged the dashboard and the health
+ * endpoint but never these.
+ */
+export const REQUEST_TIMEOUT_MS = 120_000;
 
 /**
  * Never go below this. One entry per cycle is slow but it is progress, and
