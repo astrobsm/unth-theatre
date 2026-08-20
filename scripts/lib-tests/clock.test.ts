@@ -23,7 +23,7 @@ import {
   isClockTime,
   queryElectiveTime,
   scheduledInstant,
-} from './theatreOps/clock';
+} from '../../src/lib/theatreOps/clock';
 
 describe('the clinic runs on West Africa Time', () => {
   it('is UTC+1', () => {

@@ -22,7 +22,7 @@ import {
   PHASE_ORDER,
   recordCompleteness,
   type Phase,
-} from './theatreOps/milestones';
+} from '../../src/lib/theatreOps/milestones';
 
 const NOW = new Date('2026-08-04T10:00:00.000Z');
 const at = (m: number) => new Date(NOW.getTime() + m * 60_000);

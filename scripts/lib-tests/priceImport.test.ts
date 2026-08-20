@@ -11,14 +11,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { CHARGE_KINDS } from './estimates/chargeKinds';
+import { CHARGE_KINDS } from '../../src/lib/estimates/chargeKinds';
 import {
   mapHeaders,
   nairaToKobo,
   parseDate,
   parsePriceRows,
   splitDelimited,
-} from './estimates/priceImport';
+} from '../../src/lib/estimates/priceImport';
 
 const OPTS = { validKinds: CHARGE_KINDS, defaultEffectiveFrom: '2026-08-11' };
 

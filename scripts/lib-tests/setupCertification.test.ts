@@ -19,7 +19,7 @@ import {
   outstandingChecks,
   setupProgress,
   type SetupChecks,
-} from './theatreOps/setupCertification';
+} from '../../src/lib/theatreOps/setupCertification';
 
 const allChecked = (): SetupChecks =>
   Object.fromEntries(SETUP_CHECKS.map((c) => [c.key, true])) as SetupChecks;

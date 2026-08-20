@@ -18,7 +18,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { sessionCookieConfig } from './authCookies';
+import { sessionCookieConfig } from '../../src/lib/authCookies';
 
 describe('https origins', () => {
   it('uses the hardened __Secure- cookie on the cloud', () => {

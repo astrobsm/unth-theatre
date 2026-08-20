@@ -18,7 +18,7 @@ import {
   MIN_BATCH_SIZE,
   nextBatchSize,
   isTimeout,
-} from './sync/transport';
+} from '../../src/lib/sync/transport';
 
 describe('backoff', () => {
   const fixed = (r: number) => () => r;

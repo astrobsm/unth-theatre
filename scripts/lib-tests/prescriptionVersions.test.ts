@@ -15,7 +15,7 @@ import {
   currentVersion,
   statusForAmendedVersion,
   versionLabel,
-} from './anaesthesia/prescriptionVersions';
+} from '../../src/lib/anaesthesia/prescriptionVersions';
 
 const REASON = 'Rocuronium reduced to 30mg after the weight was corrected.';
 const BY = { byId: 'anaes-1', byRole: 'ANAESTHETIST' };

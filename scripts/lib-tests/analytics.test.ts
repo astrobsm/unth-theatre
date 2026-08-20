@@ -16,7 +16,7 @@ import {
   MIN_SAMPLE_FOR_RANKING,
   overall,
   utilisation,
-} from './theatreOps/analytics';
+} from '../../src/lib/theatreOps/analytics';
 
 const timings = (o: Record<string, unknown> = {}) => ({
   delayMinutes: null,

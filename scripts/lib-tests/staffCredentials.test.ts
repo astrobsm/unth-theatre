@@ -18,7 +18,7 @@ import {
   normalisePhone,
   verifyStaffCredentials,
   type CredentialDeps,
-} from './staffCredentials';
+} from '../../src/lib/staffCredentials';
 
 const row = (over: Partial<Record<string, unknown>> = {}) => ({
   id: 'u1',

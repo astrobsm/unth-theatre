@@ -317,17 +317,42 @@ export default function SurgeryConsentPage() {
     doc.save(`UNTH-Consent-${fileSafe(form.patientName)}.pdf`);
   };
 
-  const validElectronic = () =>
-    !!form.procedureText.trim() &&
-    !!form.patientName.trim() &&
-    !!form.surgeonName.trim() &&
-    (form.useRepresentative ? !!form.representativeSignature : !!form.patientSignature);
+  /**
+   * What is still missing, named individually.
+   *
+   * This used to be a single boolean behind one sentence listing all four
+   * requirements, so a surgeon who had signed perfectly well but had not picked
+   * a surgeon from the list was told to capture the signature — and went back
+   * to the pad again and again. Say which field, and only that field.
+   */
+  const missingForElectronic = (): string[] => {
+    const missing: string[] = [];
+    if (!form.procedureText.trim()) missing.push('the procedure');
+    if (!form.patientName.trim()) missing.push('the patient name');
+    if (!form.surgeonName.trim()) missing.push('the surgeon');
+    if (form.useRepresentative ? !form.representativeSignature : !form.patientSignature) {
+      missing.push(form.useRepresentative ? 'the representative signature' : 'the patient signature');
+    }
+    return missing;
+  };
 
   const save = async () => {
     setError('');
-    if (mode === 'ELECTRONIC' && !validElectronic()) {
-      setError('Please fill the procedure, patient name and surgeon, and capture the patient (or representative) signature.');
-      return;
+    if (mode === 'ELECTRONIC') {
+      const missing = missingForElectronic();
+      if (missing.length) {
+        const list =
+          missing.length === 1
+            ? missing[0]
+            : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
+        setError(
+          `Still needed before this consent can be saved: ${list}.` +
+            (missing.some((m) => m.includes('signature'))
+              ? ' A signature counts once it appears in the box — if yours is there but this message persists, lift and sign again.'
+              : ''),
+        );
+        return;
+      }
     }
     if (mode === 'UPLOAD' && !uploadFile) {
       setError('Please choose the signed consent file to upload.');

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { MIN_TOKEN_LENGTH, authenticateSync, bearerFrom, tokensMatch } from './sync/serviceAuth';
+import { MIN_TOKEN_LENGTH, authenticateSync, bearerFrom, tokensMatch } from '../../src/lib/sync/serviceAuth';
 
 const GOOD = 'a'.repeat(48);
 

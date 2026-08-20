@@ -14,15 +14,15 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { analyzePreopSafety } from './medicalScribe';
-import { CODE_TO_FIELD, PREOP_FIELDS } from './preopData';
+import { analyzePreopSafety } from '../../src/lib/medicalScribe';
+import { CODE_TO_FIELD, PREOP_FIELDS } from '../../src/lib/preopData';
 import {
   RESOLUTIONS,
   isBlocking,
   resolutionFor,
   resolutionHref,
   safeReturnTo,
-} from './scribeResolutions';
+} from '../../src/lib/scribeResolutions';
 
 const SCRIBE = '/dashboard/surgeries/abc/scribe';
 

@@ -18,7 +18,7 @@ import {
   trackCase,
   trackerSummary,
   type TrackerCase,
-} from './dashboard/perioperativeTracker';
+} from '../../src/lib/dashboard/perioperativeTracker';
 
 const NOW = new Date('2026-08-18T09:00:00.000Z');
 

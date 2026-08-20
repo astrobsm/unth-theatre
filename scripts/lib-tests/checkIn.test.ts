@@ -16,14 +16,14 @@ import {
   requiresReason,
   requiresReplacement,
   summarise,
-} from './theatreOps/checkIn';
+} from '../../src/lib/theatreOps/checkIn';
 import {
   assessFix,
   corroboratesPresence,
   HOSPITAL_CENTRE,
   MAX_USABLE_ACCURACY_METRES,
   SITE_RADIUS_METRES,
-} from './theatreOps/geofence';
+} from '../../src/lib/theatreOps/geofence';
 
 describe('the statuses the specification asks for', () => {
   it('offers all five', () => {

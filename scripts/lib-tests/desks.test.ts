@@ -17,7 +17,7 @@ import {
   isDesk,
   percentOf,
   roleOpensDesk,
-} from './dashboards/desks';
+} from '../../src/lib/dashboards/desks';
 
 describe('the four desks', () => {
   it('are the ones asked for', () => {

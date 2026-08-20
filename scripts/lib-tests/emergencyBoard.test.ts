@@ -14,7 +14,7 @@ import {
   RECONCILE_EVERY_MS,
   shouldAnnounceOnAdoption,
   shouldRunReconcile,
-} from './emergency/ensureBooking';
+} from '../../src/lib/emergency/ensureBooking';
 
 const NOW = new Date('2026-08-03T21:00:00.000Z');
 const agoMs = (ms: number) => new Date(NOW.getTime() - ms);

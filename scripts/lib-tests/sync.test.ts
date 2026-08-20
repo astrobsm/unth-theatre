@@ -13,7 +13,7 @@ import {
   compareHlc,
   formatHlc,
   parseHlc,
-} from './sync/hlc';
+} from '../../src/lib/sync/hlc';
 import {
   SURGERY_CLINICAL_COLUMNS,
   TABLE_POLICIES,
@@ -21,7 +21,7 @@ import {
   isSynced,
   policyFor,
   type IncomingChange,
-} from './sync/syncPolicy';
+} from '../../src/lib/sync/syncPolicy';
 
 const NODES = { thisNode: 'local-unth', cloudNode: 'cloud' };
 

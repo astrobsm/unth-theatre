@@ -18,7 +18,7 @@ import {
   outstandingRequirements,
   predatesFitnessRequirement,
   type OptimisationRequirement,
-} from './anaesthesia/fitness';
+} from '../../src/lib/anaesthesia/fitness';
 
 const REVIEWER = 'anaes-1';
 

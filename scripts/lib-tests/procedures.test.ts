@@ -13,7 +13,7 @@ import {
   CATALOGUE,
   catalogueSize,
   SUBSPECIALTIES,
-} from './procedures/catalogue';
+} from '../../src/lib/procedures/catalogue';
 import {
   checkProcedureName,
   isSameProcedure,
@@ -22,7 +22,7 @@ import {
   pickerOrder,
   procedureSlug,
   tidyProcedureName,
-} from './procedures/normalise';
+} from '../../src/lib/procedures/normalise';
 
 describe('the seeded catalogue', () => {
   it('covers every subspecialty the hospital runs', () => {

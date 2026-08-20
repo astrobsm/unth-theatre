@@ -27,8 +27,8 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { criticalCount, DUTY_SHEETS, sheetById, sheetsForRole } from './workflowDuties';
-import { MODULES, FULL_ACCESS_ROLES } from './modules';
+import { criticalCount, DUTY_SHEETS, sheetById, sheetsForRole } from '../../src/lib/workflowDuties';
+import { MODULES, FULL_ACCESS_ROLES } from '../../src/lib/modules';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 

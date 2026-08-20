@@ -22,7 +22,7 @@ import {
   STAGE_ONE_MINUTES,
   STAGE_TWO_MINUTES,
   summariseDelays,
-} from './theatreOps/delays';
+} from '../../src/lib/theatreOps/delays';
 
 const SCHEDULED = new Date('2026-08-04T09:00:00Z');
 const at = (minutesAfter: number) => new Date(SCHEDULED.getTime() + minutesAfter * 60_000);

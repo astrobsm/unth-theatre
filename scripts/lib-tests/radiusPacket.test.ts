@@ -32,7 +32,7 @@ import {
   getAttribute,
   getString,
   verifyMessageAuthenticator,
-} from './radius/packet';
+} from '../../src/lib/radius/packet';
 
 const SECRET = 'theatre-shared-secret';
 const AUTH = Buffer.from('0123456789abcdef', 'utf8'); // 16 octets

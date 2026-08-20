@@ -20,7 +20,7 @@ import {
   PREOP_FIELDS,
   bloodPressureIncomplete,
   parsePreopData,
-} from './preopData';
+} from '../../src/lib/preopData';
 
 describe('numbers', () => {
   it('accepts ordinary results', () => {

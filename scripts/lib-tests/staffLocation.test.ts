@@ -19,7 +19,7 @@ import {
   nearest,
   positionOf,
   timeAgo,
-} from './staffLocation';
+} from '../../src/lib/staffLocation';
 
 const NOW = new Date('2026-08-03T10:00:00Z');
 // UNTH Ituku-Ozalla, near enough for a distance fixture.
@@ -212,7 +212,7 @@ describe('describing a position in one sentence', () => {
 
 // ---------------------------------------------------------------------------
 
-import { capturesLocation, LOCATABLE_STATUSES, AVAILABILITY_STATUSES } from './staffAvailability';
+import { capturesLocation, LOCATABLE_STATUSES, AVAILABILITY_STATUSES } from '../../src/lib/staffAvailability';
 
 describe('which statuses may carry a position at all', () => {
   it('records a position for someone who is at work and findable', () => {

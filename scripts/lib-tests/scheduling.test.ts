@@ -17,7 +17,7 @@ import {
   toClock,
   toMinutes,
   TURNOVER_MINUTES,
-} from './theatreOps/scheduling';
+} from '../../src/lib/theatreOps/scheduling';
 
 const c = (scheduledTime: string, estimatedDuration: number, id?: string) => ({ scheduledTime, estimatedDuration, id });
 

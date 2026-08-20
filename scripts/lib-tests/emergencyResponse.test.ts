@@ -20,7 +20,7 @@ import {
   roleState,
   summarise,
   urgencyOrder,
-} from './theatreOps/emergencyResponse';
+} from '../../src/lib/theatreOps/emergencyResponse';
 
 const BOOKED = new Date('2026-08-05T09:00:00.000Z');
 const at = (m: number) => new Date(BOOKED.getTime() + m * 60_000);

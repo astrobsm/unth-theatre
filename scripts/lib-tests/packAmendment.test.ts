@@ -14,7 +14,7 @@ import {
   changeSummary,
   checkAddition,
   checkRemoval,
-} from './theatreOps/packAmendment';
+} from '../../src/lib/theatreOps/packAmendment';
 
 const REASON = 'Switching to a lightweight mesh for this repair.';
 const BY = { byId: 'u1', byRole: 'SURGEON' };

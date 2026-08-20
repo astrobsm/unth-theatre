@@ -18,7 +18,7 @@ import {
   timingsFor,
   turnoverMinutes,
   utilisationPercent,
-} from './theatreOps/durations';
+} from '../../src/lib/theatreOps/durations';
 
 const T = (hhmm: string) => new Date(`2026-08-04T${hhmm}:00Z`);
 const mv = (phase: string, hhmm: string) => ({ phase, timestamp: T(hhmm) });

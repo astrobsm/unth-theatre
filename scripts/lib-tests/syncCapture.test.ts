@@ -27,7 +27,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-import { TABLE_POLICIES } from './sync/syncPolicy';
+import { TABLE_POLICIES } from '../../src/lib/sync/syncPolicy';
 
 const MIGRATIONS = path.join(__dirname, '../../prisma/migrations');
 

@@ -23,7 +23,7 @@ import {
   recipientsOf,
   theatrePhrase,
   wardReminder,
-} from './theatreOps/preopAlert';
+} from '../../src/lib/theatreOps/preopAlert';
 
 const NOW = new Date('2026-08-03T08:00:00.000Z');
 /** A time `m` minutes after NOW. */
