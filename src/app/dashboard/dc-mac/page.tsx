@@ -12,7 +12,8 @@ export default function DCMACDashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [emergencyAlerts, setEmergencyAlerts] = useState<any[]>([]);
 
   useEffect(() => {
@@ -20,10 +21,17 @@ export default function DCMACDashboardPage() {
       router.push('/dashboard');
       return;
     }
-    fetchData();
+    /* figures load when asked for — see the button */
   }, [session, router]);
 
+
+  // ── Figures load on request, not on arrival ───────────────────────────────
+  // This page opened by counting the hospital and then blocked on the result
+  // behind a spinner. An executive dashboard is read occasionally and
+  // deliberately; it does not need to count every surgery before it will draw a
+  // heading.
   const fetchData = async () => {
+    setLoading(true);
     try {
       const [statsRes, alertsRes] = await Promise.all([
         fetch('/api/dashboard/stats'),
@@ -37,17 +45,14 @@ export default function DCMACDashboardPage() {
     } catch (error) {
       console.error('Error fetching DC-MAC stats:', error);
     } finally {
+      setLoadedAt(new Date());
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  // An uncounted figure is not zero — a dash says "not counted yet" instead of
+  // making a false claim about the hospital.
+  const fig = (v?: number) => (stats === null ? '—' : (v ?? 0));
 
   return (
     <div className="space-y-6">
@@ -56,22 +61,29 @@ export default function DCMACDashboardPage() {
           <h1 className="text-2xl font-bold text-gray-900">DC-MAC Dashboard</h1>
           <p className="text-gray-600">Deputy Chairman, Medical Advisory Committee</p>
         </div>
-        <button onClick={fetchData} className="btn-secondary text-sm">Refresh</button>
+        {loadedAt && (
+          <span className="self-center text-xs text-gray-500">
+            as at {loadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        <button onClick={fetchData} disabled={loading} className="btn-primary text-sm disabled:opacity-60">
+          {loading ? 'Counting…' : stats ? 'Refresh figures' : 'Show figures'}
+        </button>
       </div>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-5 shadow border-l-4 border-blue-500">
           <p className="text-sm text-gray-500">Total Surgeries</p>
-          <p className="text-2xl font-bold">{stats?.totalSurgeries ?? 0}</p>
+          <p className="text-2xl font-bold">{fig(stats?.totalSurgeries)}</p>
         </div>
         <div className="bg-white rounded-lg p-5 shadow border-l-4 border-green-500">
           <p className="text-sm text-gray-500">Completed</p>
-          <p className="text-2xl font-bold">{stats?.completedSurgeries ?? 0}</p>
+          <p className="text-2xl font-bold">{fig(stats?.completedSurgeries)}</p>
         </div>
         <div className="bg-white rounded-lg p-5 shadow border-l-4 border-red-500">
           <p className="text-sm text-gray-500">Emergencies</p>
-          <p className="text-2xl font-bold">{stats?.emergencySurgeries ?? 0}</p>
+          <p className="text-2xl font-bold">{fig(stats?.emergencySurgeries)}</p>
         </div>
         <div className="bg-white rounded-lg p-5 shadow border-l-4 border-orange-500">
           <p className="text-sm text-gray-500">Active Alerts</p>

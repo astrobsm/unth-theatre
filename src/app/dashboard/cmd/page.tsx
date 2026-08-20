@@ -25,7 +25,8 @@ export default function CMDDashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [stats, setStats] = useState<CMDStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [recentSurgeries, setRecentSurgeries] = useState<any[]>([]);
   const [recentIncidents, setRecentIncidents] = useState<any[]>([]);
 
@@ -34,10 +35,17 @@ export default function CMDDashboardPage() {
       router.push('/dashboard');
       return;
     }
-    fetchStats();
+    /* figures load when asked for — see the button */
   }, [session, router]);
 
+
+  // ── Figures load on request, not on arrival ───────────────────────────────
+  // This page opened by fetching hospital-wide counts, the recent surgery list
+  // and the incident list, and then blocked on all three behind a spinner. An
+  // executive dashboard is read occasionally and deliberately; it does not need
+  // to count every surgery in the hospital before it will draw a heading.
   const fetchStats = async () => {
+    setLoading(true);
     try {
       const [statsRes, surgeriesRes, incidentsRes] = await Promise.all([
         fetch('/api/dashboard/stats'),
@@ -73,17 +81,15 @@ export default function CMDDashboardPage() {
     } catch (error) {
       console.error('Error fetching CMD stats:', error);
     } finally {
+      setLoadedAt(new Date());
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  // An uncounted figure is not zero. Until somebody asks for the numbers this
+  // shows a dash, because "0 surgeries" is a statement about the hospital and
+  // "not counted yet" is a statement about this screen.
+  const fig = (v?: number) => (stats === null ? '—' : (v ?? 0));
 
   return (
     <div className="space-y-6">
@@ -93,7 +99,18 @@ export default function CMDDashboardPage() {
           <p className="text-gray-600">Executive overview of all theatre operations</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={fetchStats} className="btn-secondary text-sm">Refresh</button>
+          {loadedAt && (
+            <span className="self-center text-xs text-gray-500">
+              as at {loadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={fetchStats}
+            disabled={loading}
+            className="btn-primary text-sm disabled:opacity-60"
+          >
+            {loading ? 'Counting…' : stats ? 'Refresh figures' : 'Show figures'}
+          </button>
         </div>
       </div>
 
@@ -103,7 +120,7 @@ export default function CMDDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Total Surgeries</p>
-              <p className="text-2xl font-bold">{stats?.totalSurgeries ?? 0}</p>
+              <p className="text-2xl font-bold">{fig(stats?.totalSurgeries)}</p>
             </div>
             <Calendar className="h-8 w-8 text-blue-500" />
           </div>
@@ -113,7 +130,7 @@ export default function CMDDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Completed</p>
-              <p className="text-2xl font-bold">{stats?.completedSurgeries ?? 0}</p>
+              <p className="text-2xl font-bold">{fig(stats?.completedSurgeries)}</p>
             </div>
             <Activity className="h-8 w-8 text-green-500" />
           </div>
@@ -123,7 +140,7 @@ export default function CMDDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Emergency</p>
-              <p className="text-2xl font-bold">{stats?.emergencySurgeries ?? 0}</p>
+              <p className="text-2xl font-bold">{fig(stats?.emergencySurgeries)}</p>
             </div>
             <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
@@ -133,7 +150,7 @@ export default function CMDDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Mortality</p>
-              <p className="text-2xl font-bold">{stats?.mortalityCount ?? 0}</p>
+              <p className="text-2xl font-bold">{fig(stats?.mortalityCount)}</p>
             </div>
             <Heart className="h-8 w-8 text-purple-500" />
           </div>
@@ -143,7 +160,7 @@ export default function CMDDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Active Alerts</p>
-              <p className="text-2xl font-bold">{stats?.activeEmergencyAlerts ?? 0}</p>
+              <p className="text-2xl font-bold">{fig(stats?.activeEmergencyAlerts)}</p>
             </div>
             <AlertTriangle className="h-8 w-8 text-orange-500" />
           </div>
@@ -157,8 +174,8 @@ export default function CMDDashboardPage() {
             <Users className="h-5 w-5 text-blue-600" />
             <h3 className="font-semibold">Total Staff</h3>
           </div>
-          <p className="text-3xl font-bold">{stats?.totalStaff ?? 0}</p>
-          <p className="text-sm text-gray-500 mt-1">{stats?.pendingApprovals ?? 0} pending approvals</p>
+          <p className="text-3xl font-bold">{fig(stats?.totalStaff)}</p>
+          <p className="text-sm text-gray-500 mt-1">{fig(stats?.pendingApprovals)} pending approvals</p>
         </div>
 
         <div className="bg-white rounded-lg p-5 shadow">
@@ -166,9 +183,9 @@ export default function CMDDashboardPage() {
             <Building2 className="h-5 w-5 text-green-600" />
             <h3 className="font-semibold">Theatre Utilization</h3>
           </div>
-          <p className="text-3xl font-bold">{stats?.theatreUtilization ?? 0}%</p>
+          <p className="text-3xl font-bold">{fig(stats?.theatreUtilization)}%</p>
           <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-            <div className="bg-green-600 h-2 rounded-full" style={{ width: `${stats?.theatreUtilization ?? 0}%` }}></div>
+            <div className="bg-green-600 h-2 rounded-full" style={{ width: `${fig(stats?.theatreUtilization)}%` }}></div>
           </div>
         </div>
 
@@ -177,8 +194,8 @@ export default function CMDDashboardPage() {
             <Shield className="h-5 w-5 text-red-600" />
             <h3 className="font-semibold">Active Equipment Faults</h3>
           </div>
-          <p className="text-3xl font-bold">{stats?.activeFaults ?? 0}</p>
-          <p className="text-sm text-gray-500 mt-1">{stats?.cancelledSurgeries ?? 0} cancelled surgeries</p>
+          <p className="text-3xl font-bold">{fig(stats?.activeFaults)}</p>
+          <p className="text-sm text-gray-500 mt-1">{fig(stats?.cancelledSurgeries)} cancelled surgeries</p>
         </div>
       </div>
 
