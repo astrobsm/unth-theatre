@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, Fragment } from 'react';
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
@@ -124,13 +124,53 @@ export default function SurgeriesPage() {
     };
   }, []);
 
+  // ── Units first, cases on request ────────────────────────────────────────
+  // The page used to fetch every case for the date and group them in the
+  // browser. That is the wrong shape twice over: it downloads a whole theatre
+  // list to answer "who is operating today", and it puts eleven units of
+  // detail on screen when somebody wanted one.
+  //
+  // /api/surgeries/summary answers the card question with a GROUP BY in a few
+  // hundred bytes. The cases for a unit are fetched when that unit is opened,
+  // and only that unit.
+  const [unitSummary, setUnitSummary] = useState<
+    { unit: string; cases: number; scheduled: number; emergencies: number }[] | null
+  >(null);
+  const [openUnit, setOpenUnit] = useState<string | null>(null);
+  // Read inside fetchSurgeries without making it depend on the open unit: the
+  // action handlers capture that callback and must not be rebuilt mid-action.
+  const openUnitRef = useRef<string | null>(null);
+  const [unitLoading, setUnitLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const fetchUnitSummary = useCallback(async () => {
+    setSummaryError(null);
+    try {
+      const url = dateFilter
+        ? `/api/surgeries/summary?date=${encodeURIComponent(dateFilter)}`
+        : '/api/surgeries/summary';
+      const res = await fetch(url);
+      if (!res.ok) { setSummaryError('Could not load the unit list.'); return; }
+      const data = await res.json();
+      setUnitSummary(Array.isArray(data?.units) ? data.units : []);
+    } catch {
+      setSummaryError('Could not reach the server to list the units.');
+    }
+  }, [dateFilter]);
+
+  // Refreshes WHAT IS ON SCREEN after an action (complete, reschedule,
+  // reassign, reorder). It is unit-aware on purpose: the older version always
+  // refetched the whole day, so completing one case in Neurosurgery would
+  // quietly replace the open unit's list with every case in the hospital.
   const fetchSurgeries = useCallback(async () => {
     setIsSyncing(true);
     try {
-      // Only fetch the selected day's cases when a date is chosen so we transfer
-      // a small payload. An empty dateFilter loads every scheduled date.
-      const url = dateFilter ? `/api/surgeries?date=${dateFilter}` : '/api/surgeries';
-      const cacheKey = `surgeries-day-${dateFilter || 'all'}`;
+      const params = new URLSearchParams();
+      if (dateFilter) params.set('date', dateFilter);
+      if (openUnitRef.current) params.set('unit', openUnitRef.current);
+      const qs = params.toString();
+      const url = qs ? `/api/surgeries?${qs}` : '/api/surgeries';
+      const cacheKey = `surgeries-day-${dateFilter || 'all'}-${openUnitRef.current || 'all'}`;
       // Cache-first: paint last-known cases instantly, then revalidate from network.
       const result = await cacheFirstFetch<Surgery[]>(url, cacheKey, {
         onCachedData: (cached) => {
@@ -154,22 +194,62 @@ export default function SurgeriesPage() {
     }
   }, [dateFilter]);
 
+  // Open a unit: fetch just its cases, then hand them to the existing table.
+  const openUnitCases = useCallback(async (unit: string) => {
+    setUnitLoading(true);
+    setOpenUnit(unit);
+    openUnitRef.current = unit;
+    try {
+      const params = new URLSearchParams({ unit });
+      if (dateFilter) params.set('date', dateFilter);
+      const res = await fetch(`/api/surgeries?${params.toString()}`);
+      setSurgeries(res.ok ? await res.json() : []);
+    } catch {
+      setSurgeries([]);
+    } finally {
+      setUnitLoading(false);
+      setLoading(false);
+    }
+  }, [dateFilter]);
+
+  const closeUnit = useCallback(() => {
+    setOpenUnit(null);
+    openUnitRef.current = null;
+    // Dropped rather than kept: holding one unit's cases while showing the card
+    // grid is how a stale list gets rendered under the wrong heading.
+    setSurgeries([]);
+  }, []);
+
+  // On arrival, and whenever the date changes, load ONLY the unit counts.
+  // Opening a unit is what fetches cases.
   useEffect(() => {
-    fetchSurgeries();
-    // Auto-refresh on a relaxed cadence for cross-device sync (manual Refresh available)
-    const interval = setInterval(fetchSurgeries, SYNC_INTERVALS.SURGERIES);
+    setOpenUnit(null);
+    openUnitRef.current = null;
+    setSurgeries([]);
+    setLoading(false);
+    void fetchUnitSummary();
+  }, [fetchUnitSummary]);
+
+  // Keep the open unit fresh for cross-device sync — but only the unit that is
+  // actually on screen. The old timer refetched every case in the hospital
+  // every cycle, whether anybody was looking at them or not.
+  useEffect(() => {
+    if (!openUnit) return;
+    const interval = setInterval(() => { void openUnitCases(openUnit); }, SYNC_INTERVALS.SURGERIES);
     return () => clearInterval(interval);
-  }, [fetchSurgeries]);
+  }, [openUnit, openUnitCases]);
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchSurgeries();
-      }
+      if (document.visibilityState !== 'visible') return;
+      // Refresh what is on screen, not everything that exists. Coming back to
+      // the card grid re-counts; coming back to an open unit reloads that unit.
+      if (openUnit) void openUnitCases(openUnit);
+      else void fetchUnitSummary();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchSurgeries]);
+  }, [openUnit, openUnitCases, fetchUnitSummary]);
 
   const handleMarkCompleted = async (surgeryId: string) => {
     if (!window.confirm('Mark this surgery as completed? This lets PACU admit the patient and lets the surgeon write the post-operative note. Date, time and team records are preserved.')) {
@@ -521,8 +601,39 @@ export default function SurgeriesPage() {
 
   // Export the currently filtered list as a landscape PDF (via browser print).
   // Grouped by surgical UNIT (e.g. "PS Unit I", "GS Unit III"), then by scheduled time.
-  const handleExportPdf = () => {
-    const rows = [...filteredSurgeries].sort((a, b) => {
+  // ── The export still covers EVERY case, not just the unit on screen ───────
+  // The page now holds one unit's cases at a time, so exporting from what is
+  // loaded would silently produce a theatre list with ten units missing — and
+  // it would look completely normal. The list is fetched in full at the moment
+  // of export instead: the one place where downloading everything is exactly
+  // what was asked for.
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPdf = async () => {
+    setExporting(true);
+    let all: Surgery[] = [];
+    try {
+      const url = dateFilter
+        ? `/api/surgeries?date=${encodeURIComponent(dateFilter)}`
+        : '/api/surgeries';
+      const res = await fetch(url);
+      all = res.ok ? await res.json() : [];
+    } catch {
+      alert('The full list could not be fetched for export. Check the connection and try again.');
+      setExporting(false);
+      return;
+    }
+    if (!Array.isArray(all) || all.length === 0) {
+      alert('There are no cases to export for this date.');
+      setExporting(false);
+      return;
+    }
+    setExporting(false);
+    exportRowsToPdf(all);
+  };
+
+  const exportRowsToPdf = (source: Surgery[]) => {
+    const rows = [...source].sort((a, b) => {
       const teamA = (a.unit || a.subspecialty || '').toLowerCase();
       const teamB = (b.unit || b.subspecialty || '').toLowerCase();
       if (teamA !== teamB) return teamA.localeCompare(teamB);
@@ -806,9 +917,89 @@ export default function SurgeriesPage() {
         </div>
       </div>
 
-      {/* Surgeries Table */}
+      {/* ── Unit cards: what exists, without loading any of it ───────────────
+          A card per surgical unit with its counts, drawn from a GROUP BY. No
+          case data is fetched until somebody opens a unit, and then only that
+          unit's. */}
+      {!openUnit && (
+        <div className="card">
+          {summaryError ? (
+            <div className="text-center py-8">
+              <p className="text-amber-800">{summaryError}</p>
+              <button onClick={() => void fetchUnitSummary()} className="btn-secondary text-sm mt-3">
+                Try again
+              </button>
+            </div>
+          ) : unitSummary === null ? (
+            <div className="text-center py-8 text-gray-500">Loading units…</div>
+          ) : unitSummary.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+              <p>No cases booked{dateFilter ? ' for this date' : ''}.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Units with cases{dateFilter ? ' today' : ''}
+                </h2>
+                <span className="text-sm text-gray-500">
+                  {unitSummary.reduce((n, u) => n + u.cases, 0)} case
+                  {unitSummary.reduce((n, u) => n + u.cases, 0) === 1 ? '' : 's'} across{' '}
+                  {unitSummary.length} unit{unitSummary.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {unitSummary.map((u) => (
+                  <button
+                    key={u.unit}
+                    onClick={() => void openUnitCases(u.unit)}
+                    className="text-left rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:shadow-md transition p-4 bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{u.unit || 'Unassigned unit'}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {u.scheduled} scheduled
+                          {u.emergencies > 0 && (
+                            <span className="text-red-700 font-medium"> · {u.emergencies} emergency</span>
+                          )}
+                        </p>
+                      </div>
+                      <span className="text-2xl font-bold text-primary-600 tabular-nums flex-shrink-0">
+                        {u.cases}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3">Tap to load this unit&rsquo;s cases</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Surgeries Table — only once a unit has been opened */}
+      {openUnit && (
       <div className="card">
-        {loading ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <button onClick={closeUnit} className="btn-secondary text-sm">
+              ← All units
+            </button>
+            <h2 className="text-lg font-semibold text-gray-900">{openUnit}</h2>
+          </div>
+          <button
+            onClick={() => void openUnitCases(openUnit)}
+            disabled={unitLoading}
+            className="btn-secondary text-sm disabled:opacity-60"
+          >
+            {unitLoading ? 'Loading…' : 'Refresh unit'}
+          </button>
+        </div>
+        {unitLoading && surgeries.length === 0 ? (
+          <TableSkeleton rows={6} columns={9} />
+        ) : loading ? (
           <TableSkeleton rows={6} columns={9} />
         ) : filteredSurgeries.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -1282,6 +1473,7 @@ export default function SurgeriesPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Change-theatre modal (periop nurse / admin) */}
       {reassignSurgery && (
