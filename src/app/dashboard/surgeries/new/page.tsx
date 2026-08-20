@@ -177,6 +177,11 @@ export default function NewSurgeryPage() {
   } | null>(null);
   const lastPayloadRef = useRef<Record<string, unknown> | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
+  // Patients the SERVER matched for the current search text. Kept apart from
+  // `patients` (the locally held recent list) so that going offline degrades to
+  // "the recent ones, instantly" rather than to an empty picker.
+  const [remoteMatches, setRemoteMatches] = useState<Patient[]>([]);
+  const [searchState, setSearchState] = useState<'idle' | 'searching' | 'done' | 'unavailable'>('idle');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
   // Compulsory pre-operative safety labs & risk assessments (Part of booking).
@@ -398,17 +403,60 @@ export default function NewSurgeryPage() {
     }
   }, [surgeryType]);
 
+  // The 200 most recently registered patients: enough that the overwhelming
+  // majority of bookings are matched instantly and offline, small enough that
+  // the list cannot quietly grow into a megabyte the way the unbounded one was
+  // going to. Anyone older is found by typing — see the search effect below.
   const fetchPatients = async () => {
     try {
-      const response = await fetch('/api/patients');
+      const response = await fetch('/api/patients?limit=200');
       if (response.ok) {
         const data = await response.json();
-        setPatients(data);
+        setPatients(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error('Failed to fetch patients:', error);
     }
   };
+
+  // ── Search the server as they type ──────────────────────────────────────
+  // The local list holds recent patients only, so a patient registered months
+  // ago would otherwise be invisible — and a surgeon who cannot find a patient
+  // registers them again, which is how a folder number ends up on two records.
+  //
+  // Debounced, because this fires on a keystroke and the link is often poor.
+  // Two characters minimum: one letter matches most of the hospital and costs a
+  // round trip to say so.
+  useEffect(() => {
+    const term = searchPatient.trim();
+    if (term.length < 2) {
+      setRemoteMatches([]);
+      setSearchState('idle');
+      return;
+    }
+
+    const controller = new AbortController();
+    setSearchState('searching');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/patients?q=${encodeURIComponent(term)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) { setSearchState('unavailable'); return; }
+        const data = await res.json();
+        setRemoteMatches(Array.isArray(data) ? data : []);
+        setSearchState('done');
+      } catch (e) {
+        // An aborted request is this effect superseding itself, not a failure.
+        if ((e as Error)?.name === 'AbortError') return;
+        // Offline, or the server did not answer. The local list still works,
+        // and saying so is better than an empty dropdown with no explanation.
+        setSearchState('unavailable');
+      }
+    }, 300);
+
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [searchPatient]);
 
   const fetchSurgeons = async () => {
     try {
@@ -821,11 +869,39 @@ export default function NewSurgeryPage() {
     setTeamMembers(updated);
   };
 
-  const filteredPatients = patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchPatient.toLowerCase()) ||
-      p.folderNumber.toLowerCase().includes(searchPatient.toLowerCase())
-  );
+  // ── What the picker offers ──────────────────────────────────────────────
+  // Three sources, merged, in this order of trust:
+  //
+  //   the locally held recent patients, filtered as you type — instant, and
+  //   the only source that works with no network at all;
+  //   whatever the server matched for the same text — this is what finds a
+  //   patient registered last year, who is not in the local list at all;
+  //   the patient already SELECTED, pinned regardless of either.
+  //
+  // That last one is not a nicety. The <select> shows the option matching its
+  // value; if the chosen patient drops out of the list because the search text
+  // moved on, the control silently displays nothing while still holding a
+  // patientId — and the surgeon, seeing an empty box, picks again or gives up.
+  const filteredPatients = (() => {
+    const term = searchPatient.trim().toLowerCase();
+    const local = patients.filter(
+      (p) =>
+        !term ||
+        p.name.toLowerCase().includes(term) ||
+        p.folderNumber.toLowerCase().includes(term)
+    );
+
+    const byId = new Map<string, Patient>();
+    for (const p of local) byId.set(p.id, p);
+    for (const p of remoteMatches) if (!byId.has(p.id)) byId.set(p.id, p);
+
+    const chosen =
+      patients.find((p) => p.id === selectedPatientId) ??
+      remoteMatches.find((p) => p.id === selectedPatientId);
+    if (chosen) byId.set(chosen.id, chosen);
+
+    return Array.from(byId.values());
+  })();
 
   return (
     <div className="space-y-6">
@@ -927,8 +1003,26 @@ export default function NewSurgeryPage() {
                 placeholder="Search by name or folder number..."
                 value={searchPatient}
                 onChange={(e) => setSearchPatient(e.target.value)}
-                className="input-field mb-2"
+                className="input-field mb-1"
               />
+              {/*
+                Says which patients are on offer and why. Without it, a picker
+                that holds only recent patients looks like a picker that has
+                lost half the hospital — and somebody re-registers a patient
+                who is already on file.
+              */}
+              <p className="text-xs text-gray-500 mb-2 min-h-[1rem]">
+                {searchState === 'searching' && 'Searching all patients…'}
+                {searchState === 'done' && (
+                  remoteMatches.length > 0
+                    ? `${filteredPatients.length} match${filteredPatients.length === 1 ? '' : 'es'}, including older records.`
+                    : 'No older record matched. Showing recent patients only.'
+                )}
+                {searchState === 'unavailable' &&
+                  'Could not search older records — showing the recent patients held on this device.'}
+                {searchState === 'idle' &&
+                  'Showing recent patients. Type two letters to search every patient on file.'}
+              </p>
               <select
                 name="patientId"
                 required

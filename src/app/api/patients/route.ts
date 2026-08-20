@@ -47,6 +47,23 @@ const optionalDateTime = z
     return d;
   });
 
+/**
+ * What a patient picker needs, and nothing else.
+ *
+ * The list used to return every column — 736 kB for 546 patients, including DVT
+ * scores, D-dimer results and anticoagulant histories, sent so that somebody
+ * could choose a name. The three callers (the register, the booking form, the
+ * transfer form) render exactly these eight fields between them.
+ *
+ * It is the safer default as well as the smaller one: a clinical history should
+ * not travel to a browser that only needed a name. The full record is fetched
+ * by id, by the screens that are actually showing it.
+ */
+const PICKER_FIELDS = {
+  id: true, name: true, folderNumber: true, ptNumber: true,
+  age: true, ageUnit: true, gender: true, ward: true,
+} as const;
+
 const patientSchema = z.object({
   // Basic Information
   name: z.string().min(1),
@@ -140,7 +157,16 @@ export async function GET(request: NextRequest) {
           { name: { contains: q, mode: 'insensitive' } },
         );
       }
-      const matches = await prisma.patient.findMany({ where: { OR: or }, take: 10, orderBy: { createdAt: 'desc' } });
+      // 25 rather than 10. A picker that searches the server has to be able to
+      // show "Okafor" and mean it; ten silently truncates a common surname and
+      // the person on screen concludes the patient is not registered and
+      // registers them a second time.
+      const matches = await prisma.patient.findMany({
+        where: { OR: or },
+        select: PICKER_FIELDS,
+        take: 25,
+        orderBy: { createdAt: 'desc' },
+      });
       return NextResponse.json(matches);
     }
 
@@ -161,12 +187,29 @@ export async function GET(request: NextRequest) {
     // It is also the safer default in its own right: a clinical history should
     // not travel to a browser that only needed a name. Anything wanting the
     // full record fetches the patient by id.
+    // ── ?limit= bounds the list, and it is OPT-IN ───────────────────────────
+    // Newest first, so a caller asking for 200 gets the 200 that matter: the
+    // patients being booked are overwhelmingly the ones recently registered,
+    // and anyone older is found by typing, which searches the server (?q=).
+    //
+    // Deliberately NOT a default. The patient register renders this same
+    // endpoint and its entire job is showing every patient — quietly capping it
+    // at 200 would hide 346 people from the one screen that exists to list
+    // them, and nothing on that screen would say so. A picker that wants a
+    // bound asks for one.
+    //
+    // The unbounded response is 108 kB at 546 patients and will keep growing.
+    // That is survivable and it is not solved here: the register needs
+    // pagination, which is a change to that page rather than to this line.
+    const limitParam = parseInt(request.nextUrl?.searchParams?.get('limit') ?? '', 10);
+    const take = Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, 5000)
+      : undefined;
+
     const patients = await prisma.patient.findMany({
-      select: {
-        id: true, name: true, folderNumber: true, ptNumber: true,
-        age: true, ageUnit: true, gender: true, ward: true,
-      },
-      orderBy: { createdAt: 'desc' }
+      select: PICKER_FIELDS,
+      orderBy: { createdAt: 'desc' },
+      take,
     });
 
     return NextResponse.json(patients);
