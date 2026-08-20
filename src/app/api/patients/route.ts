@@ -144,7 +144,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(matches);
     }
 
+    // ── The list is a PICKER, and pickers do not need clinical records ──────
+    //
+    // This returned every column of every patient. Measured on the theatre
+    // server: 546 patients, 736 kB of JSON, for a dropdown that needs 85 kB.
+    // The booking page fetches it before the form is usable, and on a poor
+    // theatre link most of a minute goes on downloading DVT scores, D-dimer
+    // results, anticoagulant histories and pressure-sore assessments so that
+    // somebody can pick a name from a list.
+    //
+    // The three callers — the patient register, the booking form and the
+    // transfer form — between them render exactly these eight fields, and the
+    // booking page's own Patient interface declares precisely this shape. So
+    // this is what is sent.
+    //
+    // It is also the safer default in its own right: a clinical history should
+    // not travel to a browser that only needed a name. Anything wanting the
+    // full record fetches the patient by id.
     const patients = await prisma.patient.findMany({
+      select: {
+        id: true, name: true, folderNumber: true, ptNumber: true,
+        age: true, ageUnit: true, gender: true, ward: true,
+      },
       orderBy: { createdAt: 'desc' }
     });
 

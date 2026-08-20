@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const role  = searchParams.get('role');
     const roles = searchParams.get('roles'); // comma-separated, e.g. "SURGEON,HOUSE_OFFICER"
     const status = searchParams.get('status');
+    const slim = searchParams.get('slim') === '1';
     const q = (searchParams.get('q') || '').trim();
     const limitParam = parseInt(searchParams.get('limit') || '', 10);
     const limit = Number.isFinite(limitParam) && limitParam > 0
@@ -78,21 +79,33 @@ export async function GET(request: NextRequest) {
 
     const users = await prisma.user.findMany({
       where,
-      select: {
-        id: true,
-        username: true,
-        fullName: true,
-        email: true,
-        role: true,
-        status: true,
-        staffCode: true,
-        phoneNumber: true,
-        department: true,
-        rotationSpecialty: true,
-        createdAt: true,
-        approvedBy: true,
-        approvedAt: true,
-      },
+      // ?slim=1 — enough to put a person in a dropdown, and nothing else.
+      //
+      // The full shape is 13 fields and is what the administration screens
+      // need. A picker needs four, and the surgeon list on the booking page
+      // was pulling 188 kB of e-mail addresses, staff numbers, departments and
+      // approval history so that somebody could choose a name.
+      //
+      // Opt-in rather than a new default: this endpoint has many callers, and
+      // quietly removing fields from all of them to speed up one page is how a
+      // screen somewhere else starts rendering blanks.
+      select: slim
+        ? { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true }
+        : {
+            id: true,
+            username: true,
+            fullName: true,
+            email: true,
+            role: true,
+            status: true,
+            staffCode: true,
+            phoneNumber: true,
+            department: true,
+            rotationSpecialty: true,
+            createdAt: true,
+            approvedBy: true,
+            approvedAt: true,
+          },
       orderBy: { fullName: 'asc' },
       ...(limit ? { take: limit } : {}),
     });
