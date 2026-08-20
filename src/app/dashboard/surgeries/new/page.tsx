@@ -685,6 +685,46 @@ export default function NewSurgeryPage() {
       setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
       return;
     }
+    // ── Is that date what they meant? ────────────────────────────────────
+    // A case was booked for 8 October when the unit meant tomorrow, and two
+    // more sit on dates a fortnight in the PAST. None of them is missing and
+    // none is a sync fault — they are simply on a date nobody looks at, which
+    // is indistinguishable from lost until somebody asks.
+    //
+    // Across 280 bookings the lead time is 1 day for 182 of them and 0 for 55.
+    // A date far out or already gone is therefore rare enough to be worth one
+    // question, and never worth a refusal: a genuine October list exists and a
+    // form that argued with it would be wrong.
+    {
+      const chosen = (e.currentTarget.elements.namedItem('scheduledDate') as HTMLInputElement)?.value;
+      if (chosen) {
+        const when = new Date(`${chosen}T00:00:00`);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const days = Math.round((when.getTime() - today.getTime()) / 86_400_000);
+        const pretty = when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+        if (days < 0) {
+          if (!window.confirm(
+            `That date has already passed.
+
+${pretty} — ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago.
+
+`
+            + 'A case booked in the past will not appear on any upcoming list. Book it anyway?'
+          )) { setLoading(false); return; }
+        } else if (days > 30) {
+          if (!window.confirm(
+            `That is a long way ahead.
+
+${pretty} — ${days} days from today.
+
+`
+            + 'Most cases are booked for the next day. Is that the date you meant?'
+          )) { setLoading(false); return; }
+        }
+      }
+    }
+
     // Haemoglobin must be sampled within 48 h of the scheduled surgery.
     if (preop.hbSampleAt) {
       const dateStr = (e.currentTarget.elements.namedItem('scheduledDate') as HTMLInputElement)?.value;

@@ -195,14 +195,25 @@ export default function SurgeriesPage() {
   }, [dateFilter]);
 
   // Open a unit: fetch just its cases, then hand them to the existing table.
+  //
+  // ALL_UNITS is a real option, not a fallback. Splitting the list into cards
+  // was reported within hours as "I can't see the cases" — which was fair: a
+  // grid of cards where a list used to be reads as the list having gone, and
+  // the person is left guessing that a card is a button. One date's cases now
+  // cost 27 kB rather than the 80 MB that made the split necessary, so showing
+  // them all is a perfectly reasonable thing to want and is one press away.
+  const ALL_UNITS = '— all units —';
+
   const openUnitCases = useCallback(async (unit: string) => {
     setUnitLoading(true);
     setOpenUnit(unit);
-    openUnitRef.current = unit;
+    openUnitRef.current = unit === ALL_UNITS ? null : unit;
     try {
-      const params = new URLSearchParams({ unit });
+      const params = new URLSearchParams();
+      if (unit !== ALL_UNITS) params.set('unit', unit);
       if (dateFilter) params.set('date', dateFilter);
-      const res = await fetch(`/api/surgeries?${params.toString()}`);
+      const qs = params.toString();
+      const res = await fetch(qs ? `/api/surgeries?${qs}` : '/api/surgeries');
       setSurgeries(res.ok ? await res.json() : []);
     } catch {
       setSurgeries([]);
@@ -939,15 +950,27 @@ export default function SurgeriesPage() {
             </div>
           ) : (
             <>
-              <div className="flex items-baseline justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Units with cases{dateFilter ? ' today' : ''}
-                </h2>
-                <span className="text-sm text-gray-500">
-                  {unitSummary.reduce((n, u) => n + u.cases, 0)} case
-                  {unitSummary.reduce((n, u) => n + u.cases, 0) === 1 ? '' : 's'} across{' '}
-                  {unitSummary.length} unit{unitSummary.length === 1 ? '' : 's'}
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Units with cases{dateFilter ? ' on this date' : ''}
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {unitSummary.reduce((n, u) => n + u.cases, 0)} case
+                    {unitSummary.reduce((n, u) => n + u.cases, 0) === 1 ? '' : 's'} across{' '}
+                    {unitSummary.length} unit{unitSummary.length === 1 ? '' : 's'} &mdash; open a
+                    unit, or show them all.
+                  </p>
+                </div>
+                {/* The escape hatch. Without it a grid of cards reads as the
+                    list having disappeared, which is exactly how it was
+                    reported. */}
+                <button
+                  onClick={() => void openUnitCases(ALL_UNITS)}
+                  className="btn-secondary text-sm whitespace-nowrap"
+                >
+                  Show all {unitSummary.reduce((n, u) => n + u.cases, 0)} cases
+                </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {unitSummary.map((u) => (
