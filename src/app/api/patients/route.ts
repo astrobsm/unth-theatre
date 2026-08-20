@@ -1,3 +1,4 @@
+import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -265,7 +266,7 @@ export async function POST(request: NextRequest) {
           action: 'CREATE_PATIENT',
           tableName: 'patients',
           recordId: patient.id,
-          changes: JSON.stringify(validatedData),
+          changes: auditChangesJson(validatedData),
         }
       });
     } catch (auditError) {

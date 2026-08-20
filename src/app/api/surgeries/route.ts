@@ -1,3 +1,4 @@
+import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from "@/lib/idempotency";
@@ -978,7 +979,7 @@ export async function POST(request: NextRequest) {
           action: 'CREATE_SURGERY',
           tableName: 'surgeries',
           recordId: surgery.id,
-          changes: JSON.stringify(validatedData),
+          changes: auditChangesJson(validatedData),
         }
       })
     );

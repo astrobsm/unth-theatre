@@ -1,3 +1,4 @@
+import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
@@ -81,7 +82,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           action: 'PREOP_DATA_UPDATE',
           tableName: 'surgeries',
           recordId: params.id,
-          changes: JSON.stringify(data),
+          changes: auditChangesJson(data),
         },
       });
     }

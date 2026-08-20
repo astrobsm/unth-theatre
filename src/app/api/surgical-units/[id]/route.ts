@@ -1,3 +1,4 @@
+import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -73,7 +74,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         action: 'UPDATE',
         tableName: 'surgical_units',
         recordId: params.id,
-        changes: JSON.stringify(body),
+        changes: auditChangesJson(body),
       },
     });
 

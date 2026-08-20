@@ -1,3 +1,4 @@
+import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
         action: 'CREATE_INVENTORY_ITEM',
         tableName: 'inventory_items',
         recordId: item.id,
-        changes: JSON.stringify(validatedData),
+        changes: auditChangesJson(validatedData),
       }
     });
 
