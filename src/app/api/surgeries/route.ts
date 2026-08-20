@@ -193,6 +193,21 @@ export async function GET(request: NextRequest) {
     if (status) {
       where.status = status;
     }
+    // One unit's cases. This is what lets the surgery page show a card per unit
+    // and fetch only the one somebody opens, instead of every case in the
+    // hospital so the browser can filter them again.
+    const unit = searchParams.get('unit');
+    if (unit) {
+      where.unit = unit;
+    }
+    // ?id= was already being SENT — the checklist page asks for
+    // /api/surgeries?id=<id> — and was silently ignored, so that page received
+    // every surgery in the hospital and picked one out in the browser. Honoured
+    // now, which turns a whole-table read into a primary-key lookup.
+    const id = searchParams.get('id');
+    if (id) {
+      where.id = id;
+    }
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -206,7 +221,37 @@ export async function GET(request: NextRequest) {
 
     const surgeries = await prisma.surgery.findMany({
       where,
-      include: {
+      // ── An explicit projection, because `include` was returning the consent
+      //    scans ──────────────────────────────────────────────────────────────
+      //
+      // `include` adds relations to ALL scalar fields, and surgeries carries the
+      // informed-consent scan as base64 in consentFileData. Measured on the
+      // theatre server:
+      //
+      //     GET /api/surgeries (no filter)   606 cases    80 MB
+      //     of which consent scans                        71 MB
+      //     the same list without them                   1.5 MB
+      //
+      // Three "new case" pickers — cancellations, checklists and mortality —
+      // call this endpoint unfiltered to populate a dropdown, so each of them
+      // downloads eighty megabytes to list some procedure names. Nothing in the
+      // application reads consent data from a list; it is viewed on the case
+      // itself, fetched by id.
+      //
+      // Listed explicitly rather than excluded, so a blob column added to this
+      // table next year does not silently join the payload.
+      select: {
+        id: true, patientId: true, procedureName: true, indication: true,
+        scheduledDate: true, scheduledTime: true, createdAt: true,
+        surgeryType: true, status: true, listOrder: true, magnitude: true,
+        subspecialty: true, unit: true, location: true, theatreId: true,
+        surgeonName: true, supervisingConsultantName: true,
+        anesthesiaType: true, anesthetistId: true, theatreTechnicianId: true,
+        needBloodTransfusion: true, needDiathermy: true, needStereo: true,
+        needStirups: true, needMontrellMattress: true, otherSpecialNeeds: true,
+        readinessStatus: true, preopOutstanding: true,
+        bookedById: true, bookedByName: true,
+        consumablePackCode: true, pharmacyDrugCode: true,
         patient: {
           select: {
             id: true,
