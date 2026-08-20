@@ -406,3 +406,71 @@ describe('a table the receiving node has never heard of', () => {
     expect(d.action).toBe('IGNORE');
   });
 });
+
+describe('LOCAL_AUTHORITATIVE — the theatre server owns operational state', () => {
+  // The mirror of CLOUD_AUTHORITATIVE. Added on 20 August after a neurosurgical
+  // case was lost behind a duplicate identity and the local/cloud relationship
+  // was reviewed. NO TABLE USES IT YET, deliberately: 641 edits to existing
+  // surgeries originated on the cloud in ten days, so enforcing authority today
+  // would either bury a conflict queue or discard real clinical work. The
+  // mechanism is built and tested so that it is ready — and correct — when
+  // remote writes become requests.
+  const local = { exists: true, version: 1, hlc: 'a' };
+  const owned = (over = {}) => ({
+    // A hypothetical table carrying the class, so these tests describe the
+    // RULE rather than whichever tables happen to be classified today.
+    table: 'surgeries', op: 'UPDATE' as const, baseVersion: 1, hlc: 'z',
+    originNode: 'cloud', ...over,
+  });
+
+  const decideAs = (cls: string, change: any, localRow: any) => {
+    // decide() reads the class from TABLE_POLICIES, so the rule is exercised
+    // through a stub policy rather than by reclassifying a live table in a test.
+    const original = TABLE_POLICIES.find((p) => p.table === 'surgeries')!;
+    const prev = original.cls;
+    (original as { cls: string }).cls = cls;
+    try {
+      return decide(change, localRow, NODES);
+    } finally {
+      (original as { cls: string }).cls = prev;
+    }
+  };
+
+  it('refuses a cloud edit to an existing row, and keeps both versions', () => {
+    const d = decideAs('LOCAL_AUTHORITATIVE', owned(), local);
+    // QUARANTINE, not IGNORE. IGNORE tells the sender the matter is settled and
+    // the change is dropped — and a clinician on the other side wrote that.
+    expect(d.action).toBe('QUARANTINE');
+    expect(d.reason).toContain('theatre server owns');
+  });
+
+  it('applies a change that originated locally', () => {
+    const d = decideAs('LOCAL_AUTHORITATIVE', owned({ originNode: 'local-unth' }), local);
+    expect(d.action).toBe('APPLY');
+  });
+
+  it('STILL APPLIES A NEW ROW FROM THE CLOUD', () => {
+    // The property that makes this safe to switch on: a remote booking creates
+    // a row that does not exist here, which is decided before any class is
+    // consulted. Authority governs disagreement about a row that exists — if it
+    // blocked new rows it would stop remote booking altogether.
+    const d = decideAs('LOCAL_AUTHORITATIVE', owned({ op: 'INSERT' }), null);
+    expect(d.action).toBe('APPLY');
+  });
+
+  it('refuses even when the two sides had agreed a moment earlier', () => {
+    // baseVersion matches, so the in-sequence shortcut would apply it. Authority
+    // is decided BEFORE that shortcut, or it would be bypassed by exactly the
+    // ordinary case rather than the exceptional one — the same hole that was
+    // found and closed in CLOUD_AUTHORITATIVE.
+    const d = decideAs('LOCAL_AUTHORITATIVE', owned({ baseVersion: 1 }), local);
+    expect(d.action).toBe('QUARANTINE');
+  });
+
+  it('is not yet assigned to any table', () => {
+    // Guards the deliberate decision. If somebody classifies a table this way,
+    // this test fails and sends them to read why it was left unassigned.
+    const assigned = TABLE_POLICIES.filter((p) => p.cls === 'LOCAL_AUTHORITATIVE');
+    expect(assigned.map((p) => p.table)).toEqual([]);
+  });
+});

@@ -21,7 +21,33 @@ export type SyncClass =
   /** Clinical content. Nothing is overwritten; a person resolves it. */
   | 'QUARANTINE'
   /** Identity and access. The cloud is authoritative, unconditionally. */
-  | 'CLOUD_AUTHORITATIVE';
+  | 'CLOUD_AUTHORITATIVE'
+  /**
+   * Operational state that the theatre server owns. The mirror image of
+   * CLOUD_AUTHORITATIVE: an edit arriving from the cloud for an EXISTING row is
+   * refused and quarantined, so the local version stands and the cloud's
+   * version is kept for a person to look at rather than discarded.
+   *
+   * NO TABLE USES THIS YET, and that is a deliberate decision rather than an
+   * oversight.
+   *
+   * It exists for `surgeries` — who is operating in which room is an
+   * operational fact and theatre owns it. But measured on 20 August, 641 edits
+   * to existing surgeries ORIGINATED ON THE CLOUD in ten days, about
+   * sixty-four a day, because remote users genuinely book and amend through it.
+   *
+   * Turning this on while that is true picks a way to lose: quarantine buries a
+   * queue nobody can then read at sixty-four conflicts a day, and ignoring
+   * throws away real clinical work. The cloud has to stop being a WRITER first
+   * — remote changes submitted as requests for local confirmation — and then
+   * this becomes correct rather than merely strict.
+   *
+   * A NEW row from the cloud is still applied, here as everywhere: that is
+   * decided above, before any class is consulted, so a remote booking still
+   * reaches theatre. Authority governs disagreement about a row that exists,
+   * which is the only thing it can sensibly govern.
+   */
+  | 'LOCAL_AUTHORITATIVE';
 
 export interface TablePolicy {
   table: string;
@@ -302,6 +328,23 @@ export function decide(
     return change.originNode === opts.cloudNode
       ? { action: 'APPLY', reason: 'Cloud is authoritative for this table.' }
       : { action: 'IGNORE', reason: 'Local change to a cloud-authoritative table; cloud state stands.' };
+  }
+
+  // The mirror image, decided in the same place and for the same reason: before
+  // the in-sequence shortcut, so authority is not quietly bypassed whenever the
+  // two sides happened to agree a moment ago.
+  //
+  // QUARANTINE rather than IGNORE for a refused cloud edit. IGNORE tells the
+  // sender the matter is settled and the change is dropped — which is right
+  // when the local version genuinely supersedes it, and wrong here, where a
+  // clinician on the other side wrote something real. The local row is
+  // untouched, so the operational state IS local; the cloud's version is kept
+  // beside it for a person. That satisfies "local wins" without also meaning
+  // "the other version never existed".
+  if (policy.cls === 'LOCAL_AUTHORITATIVE') {
+    return change.originNode === opts.cloudNode
+      ? { action: 'QUARANTINE', reason: `Cloud edit to "${change.table}", which the theatre server owns; local state stands and both versions are kept.` }
+      : { action: 'APPLY', reason: 'Local node is authoritative for this table.' };
   }
 
   // Not a conflict: the sender was working from what we currently hold.
