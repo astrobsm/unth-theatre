@@ -1,0 +1,256 @@
+<title>Local Authority Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground:#FAFBFB; --surface:#FFFFFF; --sunken:#F1F5F5;
+    --ink:#0F1C22; --muted:#55686E; --faint:#7C8D92;
+    --rule:#DBE4E6; --rule-firm:#C2D0D3;
+    --accent:#0E6E7A; --accent-soft:#E2F1F2;
+    --good:#2C6E52; --good-soft:#E3F0E9;
+    --warn:#8A6410; --warn-soft:#F6EEDB;
+    --bad:#A5382C; --bad-soft:#F7E7E4;
+    --shadow:0 1px 2px rgba(15,28,34,.05), 0 8px 24px -12px rgba(15,28,34,.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0A1315; --surface:#0F1D20; --sunken:#142A2E;
+      --ink:#E7EFF0; --muted:#9DB0B4; --faint:#7A8E93;
+      --rule:#1E3438; --rule-firm:#2B474C;
+      --accent:#56C6D1; --accent-soft:#10333A;
+      --good:#77C79C; --good-soft:#123027;
+      --warn:#DCB25A; --warn-soft:#33280F;
+      --bad:#E89184; --bad-soft:#381A16;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0A1315; --surface:#0F1D20; --sunken:#142A2E;
+    --ink:#E7EFF0; --muted:#9DB0B4; --faint:#7A8E93;
+    --rule:#1E3438; --rule-firm:#2B474C;
+    --accent:#56C6D1; --accent-soft:#10333A;
+    --good:#77C79C; --good-soft:#123027;
+    --warn:#DCB25A; --warn-soft:#33280F;
+    --bad:#E89184; --bad-soft:#381A16;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+       font-size:16px;line-height:1.6;margin:0;padding:0 1.25rem 6rem;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:62rem;margin:0 auto}
+  .prose{max-width:40rem}
+  h1,h2,h3{font-family:"IBM Plex Serif",ui-serif,Georgia,serif;text-wrap:balance;line-height:1.2;margin:0}
+  h1{font-size:clamp(1.9rem,1.2rem + 2.4vw,2.9rem);font-weight:600;letter-spacing:-.015em}
+  h2{font-size:1.45rem;font-weight:600;letter-spacing:-.01em}
+  h3{font-size:1.05rem;font-weight:600}
+  p{margin:0}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.13em;
+           text-transform:uppercase;color:var(--faint)}
+  header.masthead{border-bottom:2px solid var(--ink);padding:3.5rem 0 1.5rem;display:flex;flex-direction:column;gap:.9rem}
+  .meta{display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+        font-size:.78rem;color:var(--muted);padding-top:.4rem}
+  .lede{font-size:1.12rem;color:var(--muted);max-width:42rem}
+  section{padding-top:3rem;display:flex;flex-direction:column;gap:1.05rem}
+  .sec-head{display:flex;flex-direction:column;gap:.35rem;border-top:1px solid var(--rule);padding-top:1.4rem}
+  .panel{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:1.3rem 1.4rem;
+         display:flex;flex-direction:column;gap:.85rem;box-shadow:var(--shadow)}
+  .panel.accent{border-left:4px solid var(--accent)}
+  .panel.bad{border-left:4px solid var(--bad)}
+  .panel.good{border-left:4px solid var(--good)}
+  .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.875rem}
+  th,td{text-align:left;padding:.62rem .8rem;border-bottom:1px solid var(--rule);vertical-align:top}
+  thead th{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.69rem;letter-spacing:.09em;
+           text-transform:uppercase;color:var(--faint);font-weight:500;background:var(--sunken);
+           border-bottom:1px solid var(--rule-firm);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",ui-monospace,monospace}
+  code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86em;background:var(--sunken);
+       padding:.1rem .32rem;border-radius:2px}
+  pre{margin:0;padding:.95rem 1.1rem;overflow-x:auto;background:var(--sunken);border:1px solid var(--rule);
+      border-radius:3px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.8rem;line-height:1.6}
+  pre code{background:none;padding:0}
+  .pill{display:inline-flex;align-items:center;gap:.4rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+        font-size:.69rem;letter-spacing:.07em;text-transform:uppercase;padding:.22rem .5rem;border-radius:2px;
+        white-space:nowrap;border:1px solid transparent}
+  .p-good{background:var(--good-soft);color:var(--good);border-color:var(--good)}
+  .p-warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+  .p-bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+  .p-flat{background:var(--sunken);color:var(--muted);border-color:var(--rule-firm)}
+  ul.plain{margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:.45rem}
+  ol.seq{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;counter-reset:s}
+  ol.seq li{counter-increment:s;position:relative;padding:.6rem 0 .6rem 2.9rem;border-bottom:1px dashed var(--rule);font-size:.93rem}
+  ol.seq li:last-child{border-bottom:none}
+  ol.seq li::before{content:counter(s);position:absolute;left:0;top:.6rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.72rem;color:var(--accent);border:1px solid var(--rule-firm);background:var(--surface);
+    width:1.55rem;height:1.55rem;border-radius:50%;display:grid;place-items:center}
+  ol.seq li.hot{color:var(--bad);font-weight:500}
+  ol.seq li.hot::before{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
+  .note{font-size:.88rem;color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:.3rem 1.1rem;font-size:.9rem}
+  .kv dt{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.08em;
+         text-transform:uppercase;color:var(--faint);padding-top:.22rem}
+  .kv dd{margin:0}
+  a{color:var(--accent);text-underline-offset:2px}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Architecture assessment · Operative Resource Manager</span>
+  <h1>Making the theatre server the authority</h1>
+  <p class="lede">An assessment before any change, as the brief requires — grounded in a failure that occurred in production today and was diagnosed line by line, rather than in what the architecture might do in theory.</p>
+  <div class="meta"><span>20 August 2026</span><span>UNTH Theatre ORM</span><span>Assessment only — no architectural change made</span></div>
+</header>
+
+<section>
+  <div class="panel accent">
+    <span class="eyebrow">Executive summary</span>
+    <p><strong>The outbox you asked for already exists. The equal-master problem you asked to remove also exists, and it caused an outage today.</strong></p>
+    <p>ORM already has a durable local outbox (<code>sync_journal</code>), replay protection, a deferred-row park, a conflict quarantine and a hybrid logical clock. Much of sections 5, 7, 8 and 9 of your brief is built and working. What is missing is not machinery — it is <em>authority</em>.</p>
+    <p>Thirteen of the synced tables, including <code>surgeries</code>, are classified <strong>last-writer-wins</strong>. Two databases therefore compete on a clock to decide the state of a theatre booking. That is the equal-master arrangement your section 1 forbids, and it is live today.</p>
+    <p>The concrete harm is not hypothetical. This morning a neurosurgical case booked on the cloud could not reach theatre, and the outbound queue had an entry that had failed <strong>785 times since yesterday</strong>. One root cause, described in full below: <strong>two masters minting identity independently.</strong></p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">A · Current architecture</span><h2>What is actually deployed</h2></div>
+  <p class="prose">Verified from the repository and both live databases, not assumed. Two premises in the brief do not hold and are worth correcting, because they change what needs building.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Layer</th><th>Actually</th></tr></thead>
+      <tbody>
+        <tr><td>Frontend</td><td>Next.js App Router (14.2), React 18, PWA with a service worker. A <code>window.fetch</code> interceptor queues offline mutations with idempotency keys.</td></tr>
+        <tr><td>Backend</td><td>Next.js route handlers, Prisma, NextAuth (JWT). The same codebase is deployed to both nodes.</td></tr>
+        <tr><td>Local</td><td>PostgreSQL on the theatre server; app under pm2; sync worker under systemd (<code>orm-sync</code>), 60-second cycle.</td></tr>
+        <tr><td>Cloud</td><td>PostgreSQL behind Vercel. <strong>Not Supabase</strong> — Supabase appears only as an optional blob store for scanned documents. There is no Supabase client, no RLS, no PostgREST in the booking path.</td></tr>
+        <tr><td>Offline store</td><td>An IndexedDB-backed mutation queue inside the fetch interceptor. <strong>Not Dexie</strong>, and the service worker deliberately ignores every non-GET request.</td></tr>
+        <tr><td>Sync engine</td><td>Custom. <code>sync_journal</code> (outbox, written by per-table capture triggers), <code>sync_applied</code> (replay guard), <code>sync_deferred</code> (park), <code>sync_conflicts</code> (quarantine), <code>sync_state</code> (cursors), hybrid logical clock.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">B · Current flow</span><h2>Every direction is driven from the theatre server</h2></div>
+  <div class="panel">
+    <pre><code>LOCAL → CLOUD   worker reads sync_journal, POSTs to the cloud, marks ack_at
+CLOUD → LOCAL   the SAME worker pulls from a cursor and applies locally
+CLIENT → LOCAL  ordinary HTTPS on the hospital LAN
+CLIENT → CLOUD  ordinary HTTPS from outside — and it writes DIRECTLY</code></pre>
+    <p>The theatre server sits behind carrier-grade NAT, so the cloud has no route in. Both directions are therefore initiated locally, which is already most of the way to the topology you want.</p>
+    <p><strong>The fourth line is the problem.</strong> A remote user booking through the cloud writes an authoritative <code>surgeries</code> row directly into the cloud database. There is no request state, no local validation, and no local confirmation. The cloud is not a gateway; it is a second master.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">C · Failure points</span><h2>Why records go missing, with today's evidence</h2></div>
+
+  <div class="panel bad">
+    <h3>1 · Identity is minted independently on two masters <span class="pill p-bad">caused today's outage</span></h3>
+    <p>Nwafor Chinedu Solomon, folder number 914954, was registered twice on 19 August: on the theatre server at <strong>17:03:48</strong>, and on the cloud at <strong>17:09:40</strong>. Six minutes apart — inside the sync interval, so neither node could see the other's registration. Each minted its own UUID.</p>
+    <p><code>folderNumber</code> and <code>ptNumber</code> both carry unique indexes. Two rows describing one human, each holding the identifiers the other needs. <strong>Neither can ever cross.</strong></p>
+    <ol class="seq">
+      <li><span class="mono">19 Aug 17:03</span> — patient registered locally. Push to cloud fails: folder number taken.</li>
+      <li><span class="mono">19 Aug 17:09</span> — same patient registered on the cloud. Pull to local fails: folder number taken.</li>
+      <li><span class="mono">19 Aug 23:25</span> — neurosurgical case booked on the cloud against the cloud's patient id.</li>
+      <li class="hot"><span class="mono">20 Aug 12:55</span> — the case has failed <code>surgeries_patientId_fkey</code> on arrival for thirteen hours. 64 pack rows are stacked behind it. The outbound entry has been retried <strong>785 times</strong>; the inbound one <strong>855</strong>.</li>
+      <li>Resolved by merging the two records onto the earlier id, in one transaction, on the cloud.</li>
+    </ol>
+    <p class="note">Nothing about the link was broken. It was pulling every sixty seconds with zero errors, faithfully carrying a row that could not land. A dashboard reporting "sync healthy" would have been correct and useless.</p>
+  </div>
+
+  <div class="panel">
+    <h3>2 · Last-writer-wins on clinical tables <span class="pill p-warn">equal-master</span></h3>
+    <p>Of the synced tables: <strong>13 LWW</strong>, 20 append-only, 13 quarantine, 11 cloud-authoritative. <code>surgeries</code> is LWW, so a cloud edit with a later clock overwrites a theatre edit. Section 13 of your brief forbids exactly this.</p>
+  </div>
+
+  <div class="panel">
+    <h3>3 · The recovery tool never worked</h3>
+    <p><code>rejournal.sh</code> re-queues a stranded row with <code>UPDATE … SET "updatedAt" = "updatedAt"</code> — a no-op, so the capture trigger supplies the clock and version for free. But <code>sync_capture()</code> opens with <em>"an update that changed nothing of substance is not worth shipping"</em> and discards it. The instrument written to recover stranded rows has never recovered one, and it exits 0 either way.</p>
+  </div>
+
+  <div class="panel">
+    <h3>4 · What is <em>not</em> wrong</h3>
+    <ul class="plain">
+      <li><strong>Push is not head-of-line blocked.</strong> The failing entry sat unsent for 785 attempts while newer entries acknowledged normally — so a stuck row delays itself, not the queue.</li>
+      <li><strong>Nothing is silently discarded any more.</strong> Until 18 August an unknown table was answered <code>IGNORE</code>, which the sender treated as settled and deleted. That is fixed: <code>UNKNOWN_TABLE</code> is now its own outcome and the entry is kept.</li>
+      <li><strong>Clinical content is already quarantined</strong> rather than overwritten — prescriptions, assessments, patient identity.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">D · Proposed architecture</span><h2>Three changes, not a rewrite</h2></div>
+  <p class="prose">The brief asks for local authority, an outbox, idempotency, retries and request-state for remote bookings. Four of those five exist. What follows is what is genuinely missing.</p>
+
+  <div class="grid2">
+    <div class="panel good">
+      <h3>D1 · One authority per table</h3>
+      <p>Add <code>LOCAL_AUTHORITATIVE</code> to the policy and move <code>surgeries</code>, <code>theatre_allocations</code> and the pack tables onto it. An incoming cloud change to such a table is <strong>never applied</strong>; it is recorded as a request and answered by the local server.</p>
+      <p class="note">The mechanism already exists — <code>CLOUD_AUTHORITATIVE</code> is its mirror image and is in use for identity and access. This is the same code path pointed the other way.</p>
+    </div>
+    <div class="panel good">
+      <h3>D2 · Remote bookings become requests</h3>
+      <p>A cloud booking writes <code>booking_requests</code>, not <code>surgeries</code>, with status <code>PENDING_LOCAL_CONFIRMATION</code>. The worker pulls it, the local server validates and commits, and the outcome replicates back. The remote user is told "submitted", never "confirmed", until theatre has said so.</p>
+    </div>
+    <div class="panel good">
+      <h3>D3 · Identity that cannot collide</h3>
+      <p>The real fix for today's outage. Registration must reconcile against the peer by <code>folderNumber</code> before minting a UUID, and the sync must match patients on folder number rather than on id alone. Without this, D1 and D2 leave the same trap open.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">E · Migration</span><h2>Phases, smallest risk first</h2></div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Phase</th><th>Change</th><th>Risk</th></tr></thead>
+      <tbody>
+        <tr><td><strong>0</strong></td><td>Verified backup and restore of both databases. Nothing else begins until a restore has actually been performed.</td><td><span class="pill p-flat">none</span></td></tr>
+        <tr><td><strong>1</strong></td><td>Find and merge existing duplicate identities across both nodes. Today's was found by an outage; there may be others sitting quietly.</td><td><span class="pill p-warn">clinical review</span></td></tr>
+        <tr><td><strong>2</strong></td><td>Reconcile-on-register: check the peer by folder number before creating a patient. Closes the trap for new records.</td><td><span class="pill p-good">low</span></td></tr>
+        <tr><td><strong>3</strong></td><td>Introduce <code>LOCAL_AUTHORITATIVE</code>; move <code>surgeries</code> onto it behind a flag. Reversible by changing one line of policy.</td><td><span class="pill p-good">low</span></td></tr>
+        <tr><td><strong>4</strong></td><td><code>booking_requests</code> and the remote-booking state machine. New table, new route; nothing existing changes shape.</td><td><span class="pill p-warn">medium</span></td></tr>
+        <tr><td><strong>5</strong></td><td>Replace <code>rejournal.sh</code> with a direct upward copy that works, mirroring <code>backfill-from-cloud.sh</code>.</td><td><span class="pill p-good">low</span></td></tr>
+        <tr><td><strong>6</strong></td><td>Sync dashboard: pending, failed, oldest, latency, conflicts — with a "carrying a row that cannot land" state, which is the one today's outage needed and no dashboard would have shown.</td><td><span class="pill p-good">low</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">Judgement</span><h2>Two things in the brief I would argue against</h2></div>
+  <div class="panel">
+    <h3>Double-booking exclusion constraints (§14)</h3>
+    <p>A database-level bar on two confirmed bookings sharing a theatre and interval is correct in principle. In this hospital, cases run over, lists are rearranged mid-morning, and a room is legitimately double-booked on paper while a decision is made. A hard exclusion constraint would refuse writes during exactly those moments — and staff who cannot record reality in the system record it on paper instead, which is how ORM stops being the source of truth at all.</p>
+    <p><strong>Recommendation:</strong> detect and flag the overlap loudly; refuse only where clinical policy genuinely says never.</p>
+  </div>
+  <div class="panel">
+    <h3>"Local always wins" applied to clinical content (§13)</h3>
+    <p>Right for scheduling: who booked which room is an operational fact and theatre owns it. Wrong for a prescription or an anaesthetic assessment, where two differing versions both represent something a clinician actually wrote. Silently discarding the cloud's copy because it lost a race is a patient-safety decision made by a timestamp.</p>
+    <p><strong>Recommendation:</strong> local authority for operational state; keep quarantine for clinical content, as now. Authority per table, not one rule for the whole database.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="eyebrow">Today</span><h2>State at the time of writing</h2></div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Measure</th><th class="num">Value</th></tr></thead>
+      <tbody>
+        <tr><td>Cases on today's list — theatre server</td><td class="num">13</td></tr>
+        <tr><td>Cases on today's list — cloud</td><td class="num">13</td></tr>
+        <tr><td>Outbound queue</td><td class="num">0</td></tr>
+        <tr><td>Rows parked</td><td class="num">0</td></tr>
+        <tr><td>Consecutive sync errors</td><td class="num">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">The neurosurgical case is in theatre and its 64 pack rows landed with it. No architectural change has been made — this document is the deliverable your section 31 asks for before any is.</p>
+</section>
+
+</div>
