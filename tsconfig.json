@@ -31,5 +31,12 @@
   // scripts/stock-tests is the same arrangement for the theatre supply chain:
   // its runner resolves `./quantities` and friends against src/lib/stock. The
   // modules they exercise ARE typechecked; only the suites are excluded.
-  "exclude": ["node_modules", "scripts/imprest-tests", "scripts/stock-tests", "scripts/billing-tests", "scripts/lib-tests"]
+  "exclude": [
+    "node_modules",
+    "scripts/imprest-tests",
+    "scripts/stock-tests",
+    "scripts/billing-tests",
+    "scripts/lib-tests",
+    "vitest.config.ts"
+  ]
 }
