@@ -1,0 +1,31 @@
+-- ============================================================
+-- The one query every board runs had no index
+-- ------------------------------------------------------------
+-- Every board in the application asks the same question — "what is on the list
+-- for this date" — and every one of them was answered by a sequential scan:
+--
+--   explain analyze
+--   select id from surgeries
+--    where "scheduledDate" >= current_date and "scheduledDate" < current_date + 1;
+--
+--   Seq Scan on surgeries (actual rows=11)
+--     Rows Removed by Filter: 595
+--
+-- Case readiness, the anaesthetist board, the theatre lists and the dashboards
+-- all read through all 606 rows to find eleven.
+--
+-- HONESTLY: this is not slow today. It measured 0.428 ms, because the consent
+-- blobs that make this table 122 MB live out of line in TOAST storage and the
+-- scan never touches them. The reason to add the index is that the cost is
+-- linear in a table that only grows — 606 cases is about ten weeks of theatre,
+-- so at this rate the same scan reads ten times as much by next summer, on the
+-- one query the whole hospital's screens depend on.
+--
+-- Not added: an index on notifications. It has 39,460 rows and no index beyond
+-- its primary key, which looks like the same finding — but nothing in the
+-- codebase reads that table at all. An index on a write-only table is pure
+-- cost, slowing every insert to speed up a query nobody makes.
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS "surgeries_scheduledDate_idx"
+    ON "surgeries" ("scheduledDate");

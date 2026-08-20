@@ -1261,6 +1261,11 @@ model Surgery {
   syncHlc      String?       @map("sync_hlc")
   ocrDocuments OcrDocument[]
 
+  /// "What is on the list for this date" — asked by case readiness, the
+  /// anaesthetist board, the theatre lists and every dashboard. It was a
+  /// sequential scan reading all 606 rows to find eleven; cheap today, linear
+  /// in a table that only grows.
+  @@index([scheduledDate])
   @@map("surgeries")
 }
 
