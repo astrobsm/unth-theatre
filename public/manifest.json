@@ -33,8 +33,21 @@
       "purpose": "any"
     }
   ],
-  "categories": ["medical", "health", "productivity"],
+  "categories": [
+    "medical",
+    "health",
+    "productivity"
+  ],
   "scope": "/",
   "lang": "en",
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "id": "/dashboard",
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
 }

@@ -17,7 +17,6 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useOfflineData } from '@/lib/useOfflineData';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import MyTheatreTeam from '@/components/MyTheatreTeam';
 import PersonalBoard from '@/components/PersonalBoard';
@@ -45,101 +44,82 @@ export default function DashboardPage() {
     setTimeout(() => setDownloadDone(false), 6000);
   };
 
-  // Offline-aware stats fetch. The heavy analytics/charts were removed so the
-  // dashboard renders instantly from a single lightweight stats call.
-  const {
-    data: stats,
-    loading,
-    isCached: statsCached,
-    isOffline: statsOffline,
-  } = useOfflineData<DashboardStats>('/api/dashboard/stats', {
-    cacheKey: 'dashboard-stats',
-    cacheTtl: 60 * 60 * 1000, // 1 hour
-    fallback: {
-      totalSurgeries: 0,
-      scheduledSurgeries: 0,
-      totalPatients: 0,
-      lowStockItems: 0,
-      pendingTransfers: 0,
-      todaySurgeries: 0,
-    },
-    transform: (data: unknown) => {
-      const d = data as Record<string, unknown>;
-      if (d && typeof d === 'object' && !d.error && typeof d.totalSurgeries === 'number') {
-        return d as unknown as DashboardStats;
+  // ── The figures are fetched ONLY when somebody asks for them ─────────────
+  //
+  // This page used to open with `useOfflineData('/api/dashboard/stats')` and
+  // then `if (loading) return <spinner>`. So the whole dashboard — the personal
+  // board, the patient tracker, the emergency links — was held behind five
+  // COUNT queries over every surgery, patient and transfer in the hospital. On
+  // a poor link that is the difference between a usable screen and a spinner,
+  // and it was re-polled every two minutes for the rest of the session.
+  //
+  // Nobody opens the dashboard to read "Total Surgeries: 606". They open it to
+  // find their list, book a case, or answer an emergency. The figures are
+  // genuinely useful and genuinely occasional, which is exactly what a button
+  // is for.
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsState, setStatsState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [statsAt, setStatsAt] = useState<Date | null>(null);
+
+  const loadStats = async () => {
+    setStatsState('loading');
+    try {
+      const res = await fetch('/api/dashboard/stats');
+      if (!res.ok) { setStatsState('error'); return; }
+      const data = await res.json();
+      if (data && typeof data.totalSurgeries === 'number') {
+        setStats(data as DashboardStats);
+        setStatsAt(new Date());
+        setStatsState('idle');
+      } else {
+        setStatsState('error');
       }
-      return {
-        totalSurgeries: 0,
-        scheduledSurgeries: 0,
-        totalPatients: 0,
-        lowStockItems: 0,
-        pendingTransfers: 0,
-        todaySurgeries: 0,
-      };
-    },
-    refetchInterval: 120000,
-  });
+    } catch {
+      setStatsState('error');
+    }
+  };
 
   const statCards = [
     {
       title: 'Total Surgeries',
-      value: stats?.totalSurgeries ?? 0,
+      value: stats?.totalSurgeries,
       icon: Calendar,
       color: 'bg-gradient-to-br from-primary-500 to-primary-600',
       link: '/dashboard/surgeries',
     },
     {
       title: 'Scheduled Today',
-      value: stats?.todaySurgeries ?? 0,
+      value: stats?.todaySurgeries,
       icon: Activity,
       color: 'bg-gradient-to-br from-secondary-500 to-secondary-600',
       link: '/dashboard/surgeries',
     },
     {
       title: 'Total Patients',
-      value: stats?.totalPatients ?? 0,
+      value: stats?.totalPatients,
       icon: Users,
       color: 'bg-gradient-to-br from-accent-500 to-accent-600',
       link: '/dashboard/patients',
     },
     {
       title: 'Low Stock Items',
-      value: stats?.lowStockItems ?? 0,
+      value: stats?.lowStockItems,
       icon: AlertCircle,
       color: 'bg-gradient-to-br from-red-500 to-red-600',
       link: '/dashboard/inventory',
     },
   ];
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Offline Banner */}
-      {(statsOffline || !isOnline) && (
+      {!isOnline && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-center gap-3">
           <WifiOff className="w-5 h-5 text-amber-600 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-800">You are viewing offline data</p>
             <p className="text-xs text-amber-600">Data shown below is from your last successful sync. Changes will sync when you reconnect.</p>
           </div>
-        </div>
-      )}
-
-      {/* Cached data indicator */}
-      {statsCached && isOnline && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center gap-2 text-xs text-blue-700">
-          <RefreshCw className="w-3 h-3" />
-          <span>Showing cached data — refreshing in background</span>
         </div>
       )}
 
@@ -231,7 +211,49 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stats Grid */}
+      {/* ── Figures, on request ──────────────────────────────────────────────
+          The cards are always here and always navigate — they are how people
+          reach the surgery list and the patient register, and that must not
+          depend on a network call. Only the NUMBERS wait to be asked for.
+
+          Counting every surgery, patient and transfer in the hospital is a real
+          query, and it was being run on every dashboard open, blocking the
+          page, and repeated every two minutes thereafter — to render four
+          figures that change slowly and that nobody opened the dashboard to
+          read. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-gray-900">Hospital figures</h2>
+        <div className="flex items-center gap-3">
+          {statsAt && (
+            <span className="text-xs text-gray-500">
+              as at {statsAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={() => void loadStats()}
+            disabled={statsState === 'loading' || !isOnline}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary-600 text-white font-semibold px-4 py-2.5 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            title={!isOnline ? 'These figures are counted on the server, so they need a connection' : undefined}
+          >
+            {statsState === 'loading' ? (
+              <><RefreshCw className="w-4 h-4 animate-spin" /> Counting…</>
+            ) : !isOnline ? (
+              <><CloudOff className="w-4 h-4" /> Offline</>
+            ) : stats ? (
+              <><RefreshCw className="w-4 h-4" /> Refresh figures</>
+            ) : (
+              <><Activity className="w-4 h-4" /> Show figures</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {statsState === 'error' && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          The figures could not be counted just now. Everything else on this page is unaffected — try again in a moment.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat) => (
           <div
@@ -242,7 +264,12 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
+                {/* An em dash rather than 0. A zero is a claim — "there are no
+                    patients" — and it is a false one; this simply has not been
+                    counted yet. */}
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {stat.value === undefined ? <span className="text-gray-300">—</span> : stat.value}
+                </p>
               </div>
               <div className={`${stat.color} p-4 rounded-xl`}>
                 <stat.icon className="w-8 h-8 text-white" />
