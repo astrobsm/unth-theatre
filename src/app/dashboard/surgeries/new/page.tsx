@@ -16,6 +16,7 @@ import SurgicalPackPicker, { type PackPickerPayload } from '@/components/Surgica
 import ProcedurePicker from '@/components/ProcedurePicker';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
 import { isOfflineQueued, queuedMessage } from '@/lib/offlineResponse';
+import { MIN_OVERRIDE_REASON } from '@/lib/preopRequirements';
 import { notify } from '@/lib/notifications';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
@@ -213,6 +214,10 @@ export default function NewSurgeryPage() {
   const [postOpDestination, setPostOpDestination] = useState('');
   const [isDayCase, setIsDayCase] = useState(false);
   const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
+  // Why an urgent/emergency case is being booked without its full documentation.
+  // Recorded against the case in the booker's name; never offered for ELECTIVE.
+  const [preopOverrideReason, setPreopOverrideReason] = useState('');
+  const [needsOverride, setNeedsOverride] = useState(false);
   const [anesthesiaType, setAnesthesiaType] = useState<string>('');
   const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
@@ -680,10 +685,39 @@ export default function NewSurgeryPage() {
     if (Object.keys(selectedConsumables).length + packPick.consumableRequests.length === 0) {
       missing.push('consumables request (the pack the theatre will be opened with)');
     }
+    // ── Elective blocks. Emergency and urgent defer, with a reason. ─────────
+    //
+    // The server has always worked this way — checkPreopRequirements() gives
+    // ELECTIVE a hard block and lets a named clinician defer on URGENT and
+    // EMERGENCY, because a hard block on an emergency means theatre never hears
+    // about the case at all. This form did not. It refused every urgency alike,
+    // before sending anything, and never collected the reason the server asks
+    // for, so the emergency path existed in the API and was unreachable from
+    // the only screen that books a case.
+    //
+    // What that cost, in a surgeon's own words: "I have been trying to book a
+    // patient since 2pm and up until now i can't... i discovered i can't book
+    // the patient unless the patient signs the online forms. Funny thing
+    // patient is not in the ward currently and folder still being processed."
     if (missing.length) {
-      setLoading(false);
-      setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
-      return;
+      if (surgeryType === 'ELECTIVE') {
+        setLoading(false);
+        setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
+        return;
+      }
+      // Urgent or emergency: proceed on a recorded clinical reason. The case is
+      // booked and CARRIES these as outstanding — a deferral is a debt, not a
+      // discharge, and the holding area still stops the patient at the door.
+      if (preopOverrideReason.trim().length < MIN_OVERRIDE_REASON) {
+        setLoading(false);
+        setNeedsOverride(true);
+        setError(
+          `This ${surgeryType.toLowerCase()} case is missing: ${missing.join(', ')}. ` +
+            `You can still book it now — give the clinical reason below (at least ${MIN_OVERRIDE_REASON} characters) ` +
+            'and it will be recorded against the case in your name, with these items flagged as outstanding.',
+        );
+        return;
+      }
     }
     // ── Is that date what they meant? ────────────────────────────────────
     // A case was booked for 8 October when the unit meant tomorrow, and two
@@ -774,6 +808,12 @@ ${pretty} — ${days} days from today.
       // could not happen. An empty field must fail validation, not guess.
       estimatedDuration: parseInt(formData.get('estimatedDuration') as string),
       surgeryType: surgeryType,
+      // Only ever sent for urgent/emergency — the server refuses to honour it
+      // for an elective case, and sending it there would be a lie in the audit.
+      preopOverrideReason:
+        surgeryType !== 'ELECTIVE' && preopOverrideReason.trim()
+          ? preopOverrideReason.trim()
+          : null,
       magnitude: (formData.get('magnitude') as string) || null,
       anesthesiaType: anesthesiaType || null,
       needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
@@ -1159,6 +1199,37 @@ ${pretty} — ${days} days from today.
             <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
             <p className="text-sm text-red-800">{error}</p>
           </div>
+        </div>
+      )}
+
+      {/*
+        The deferral box for an urgent or emergency case. Deliberately appears
+        only after the form has found something missing, and never for an
+        elective case: an override that is always on screen is an override that
+        gets used by default, and the requirement stops meaning anything.
+      */}
+      {needsOverride && surgeryType !== 'ELECTIVE' && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
+          <label htmlFor="preopOverrideReason" className="block text-sm font-semibold text-amber-900">
+            Clinical reason for booking this {surgeryType.toLowerCase()} case now
+          </label>
+          <p className="mt-1 text-xs text-amber-800">
+            The case will be booked and the missing items recorded against it as outstanding, in your
+            name. They still have to be completed before the patient enters theatre.
+          </p>
+          <textarea
+            id="preopOverrideReason"
+            name="preopOverrideReason"
+            value={preopOverrideReason}
+            onChange={(e) => setPreopOverrideReason(e.target.value)}
+            rows={3}
+            className="mt-2 w-full rounded-lg border border-amber-300 p-2 text-sm focus:border-amber-500 focus:outline-none"
+            placeholder="e.g. Ruptured ectopic, patient being resuscitated in A&amp;E; consent and folder to follow."
+          />
+          <p className="mt-1 text-xs text-amber-700">
+            {preopOverrideReason.trim().length}/{MIN_OVERRIDE_REASON} characters minimum. Press
+            &ldquo;Book&rdquo; again once written.
+          </p>
         </div>
       )}
 
