@@ -183,6 +183,7 @@ export default function DashboardLayout({
       '/dashboard/pacu',
       '/dashboard/theatre-meals',
       '/dashboard/feedback',
+      '/dashboard/feedback/suggestions',
       '/dashboard/laundry',
       '/dashboard/settings',
     ];
@@ -353,7 +354,12 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/anonymous-tips/view', icon: Eye, label: 'Review Tips', badge: 'ADMIN' });
-    menuItems.push({ href: '/dashboard/feedback/review', icon: Star, label: 'Review Feedback', badge: 'ADMIN' });
+    // Two entries, not one screen with tabs. They are read by different people
+    // for different reasons, and the combined screen opened on the patient tab
+    // — so anyone looking for what the theatre users had asked for found survey
+    // responses and concluded their suggestions had never arrived.
+    menuItems.push({ href: '/dashboard/feedback/review', icon: Star, label: 'Patient Feedback', badge: 'ADMIN' });
+    menuItems.push({ href: '/dashboard/feedback/suggestions', icon: MessageCircle, label: 'Theatre User Suggestions', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/security-reports/view', icon: Eye, label: 'Review Security', badge: 'ADMIN' });
   }
 
@@ -515,6 +521,7 @@ export default function DashboardLayout({
       '/dashboard/reports',
       '/dashboard/research',
       '/dashboard/feedback/review',
+      '/dashboard/feedback/suggestions',
       '/dashboard/security-reports/view',
       '/dashboard/anonymous-tips/view',
       '/dashboard/reports/staff-effectiveness',
