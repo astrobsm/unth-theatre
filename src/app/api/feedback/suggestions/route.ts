@@ -34,8 +34,13 @@ const schema = z.object({
   /**
    * Honeypot. A real person never sees this field, so anything in it came from
    * something automated filling every input on the page.
+   *
+   * Accepts any short string ON PURPOSE. It was `.max(0)`, which made zod
+   * reject it with "String must contain at most 0 character(s)" — a 400 that
+   * announces exactly which field is the trap and teaches whoever wrote the bot
+   * to skip it. The rejection has to happen quietly, below, with a 201.
    */
-  website: z.string().max(0).optional(),
+  website: z.string().max(200).optional(),
 });
 
 const IMPACT_LABEL: Record<string, string> = {
