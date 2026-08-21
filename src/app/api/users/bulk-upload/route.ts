@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
           'THEATRE_CAFETERIA_MANAGER',
           'EMERGENCY_LAB_SCIENTIST', 'LABORATORY_STAFF',
           'CONSUMABLE_PACK_PROVIDER',
+          // Departmental clerical staff. Bulk upload matters most for this
+          // role: they are onboarded a department at a time, not one at a time.
+          'BOOKING_OFFICER',
         ];
 
         if (!validRoles.includes(user.role)) {

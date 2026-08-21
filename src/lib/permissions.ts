@@ -37,7 +37,15 @@ export type UserRole =
   | 'SCRUB_CARE_PROVIDER'
   | 'PLUMBER'
   | 'LABORATORY_STAFF'
-  | 'CONSUMABLE_PACK_PROVIDER';
+  | 'CONSUMABLE_PACK_PROVIDER'
+  /**
+   * Departmental clerical staff who enter bookings for a surgeon.
+   *
+   * Note this union is hand-maintained and separate from Prisma's UserRole.
+   * Adding a role to the schema alone will compile everywhere except here,
+   * which is the only reason this one was noticed.
+   */
+  | 'BOOKING_OFFICER';
 
 export interface Permission {
   create: UserRole[];
@@ -356,6 +364,7 @@ export function getRoleName(role: UserRole): string {
     CONSULTANT_ANAESTHETIST: 'Consultant Anaesthetist',
     SCRUB_NURSE: 'Perioperative Nurse',
     RECOVERY_ROOM_NURSE: 'Nurse Anaesthetist',
+    BOOKING_OFFICER: 'Booking Officer',
     THEATRE_STORE_KEEPER: 'Theatre Store Keeper',
     PORTER: 'Porter',
     ANAESTHETIC_TECHNICIAN: 'Anaesthetic Technician',
@@ -399,6 +408,9 @@ export function getRoleDashboard(role: UserRole): string {
     CONSULTANT_ANAESTHETIST: '/dashboard/preop-reviews',
     SCRUB_NURSE: '/dashboard/surgeries',
     RECOVERY_ROOM_NURSE: '/dashboard/pacu',
+    // Straight to the list they work from. A clerical account landing on a
+    // dashboard of tiles it cannot open is a support call waiting to happen.
+    BOOKING_OFFICER: '/dashboard/surgeries',
     THEATRE_STORE_KEEPER: '/dashboard/inventory',
     PORTER: '/dashboard/transfers',
     ANAESTHETIC_TECHNICIAN: '/dashboard/surgeries',

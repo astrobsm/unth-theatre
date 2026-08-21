@@ -31,6 +31,7 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   { value: 'PORTER',                   label: 'Porter',                           prefix: 'PRT' },
   { value: 'CLEANER',                  label: 'Cleaner',                          prefix: 'CLN' },
   { value: 'SCRUB_CARE_PROVIDER',      label: 'Scrub Care Provider',              prefix: 'SCP' },
+  { value: 'BOOKING_OFFICER',          label: 'Booking Officer (Clerical)',       prefix: 'BKO' },
 
   // Heads of Department / Supervisors
   { value: 'OXYGEN_UNIT_SUPERVISOR',   label: 'Oxygen Tech HOD',                  prefix: 'OXH' },

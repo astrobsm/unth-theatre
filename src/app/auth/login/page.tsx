@@ -144,6 +144,7 @@ export default function LoginPage() {
       switch (role) {
         case 'ANAESTHETIST':
         case 'CONSULTANT_ANAESTHETIST':
+        case 'BOOKING_OFFICER':
         case 'SCRUB_NURSE':
         case 'SURGEON':
         case 'CONSULTANT_SURGEON':
@@ -223,7 +224,8 @@ export default function LoginPage() {
           case 'CONSULTANT_ANAESTHETIST':
             router.push('/dashboard/surgeries');
             break;
-          case 'SCRUB_NURSE':
+          case 'BOOKING_OFFICER':
+        case 'SCRUB_NURSE':
             router.push('/dashboard/surgeries');
             break;
           case 'SURGEON':

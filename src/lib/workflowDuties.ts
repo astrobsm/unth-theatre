@@ -281,6 +281,62 @@ export const DUTY_SHEETS: DutySheet[] = [
 
   // ---------------------------------------------------------------------
   {
+    id: 'booking-office',
+    title: 'Booking Officer (Departmental Clerical Staff)',
+    roles: ['BOOKING_OFFICER'],
+    headline:
+      'Booking is your work again. A surgeon who has to type is a surgeon not operating.',
+    duties: [
+      {
+        task: 'Register the patient from the surgeon’s written form',
+        when: 'On receiving the booking form',
+        why:
+          'Five fields only — name, folder number, age, sex and ward. Copy the folder number EXACTLY as written, spaces and all: 34 folder numbers in the register contain an inner space, and a number typed two ways becomes two patients, which is how a neurosurgical case sat outside theatre for thirteen hours.',
+        where: 'Patients → Register patient',
+        critical: true,
+      },
+      {
+        task: 'Enter the booking — three sections',
+        when: 'Immediately after registering',
+        why:
+          'Patient, surgery, team. Nothing else is required and nothing blocks you. When you save the third section the case is on the theatre list and preparation begins.',
+        where: 'Surgeries → Book a case',
+        critical: true,
+      },
+      {
+        task: 'Check the confirmation before you put the form down',
+        when: 'At the moment of booking',
+        why:
+          'A case is booked only when the confirmation appears. If it does not, do NOT enter it again — repeated attempts after a silent failure produced 28 duplicate cases in one month. Report it instead.',
+        critical: true,
+      },
+      {
+        task: 'Return the form to the surgeon with the two patient codes',
+        when: 'After booking',
+        why:
+          'The consumable pack code and the pharmacy code are what the patient presents to collect their items. They are generated at booking and are of no use sitting on your screen.',
+      },
+      {
+        task: 'Tell the unit which cases still have no consent on record',
+        when: 'The afternoon before the list',
+        why:
+          'Consent no longer blocks a booking, but the holding area will not receive a patient without it in the morning. A case flagged the day before is a consent obtained on the ward; the same case flagged at 8am is a list that does not start.',
+        where: 'Surgeries → the outstanding marker on the case',
+        critical: true,
+      },
+      {
+        task: 'Report anything that will not work, once',
+        when: 'As it happens',
+        why:
+          'With a screenshot, to 0803 332 8385. Every fault fixed this month was found because somebody described it. Reporting it once is enough — re-submitting the case is what creates duplicates.',
+      },
+    ],
+    remember:
+      'Copy the folder number exactly. Wait for the confirmation. Never enter the same case twice.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
     id: 'theatre-store',
     title: 'Theatre Store & Consumable Pack Provider',
     roles: ['THEATRE_STORE_KEEPER', 'CONSUMABLE_PACK_PROVIDER'],

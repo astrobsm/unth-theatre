@@ -49,6 +49,14 @@ enum UserRole {
   HOUSE_OFFICER
   CONSUMABLE_PACK_PROVIDER
   SCRUB_CARE_PROVIDER
+  /// Departmental clerical staff who enter bookings on a surgeon's behalf.
+  ///
+  /// Added 21 August. Booking had always been departmental clerical work, and
+  /// the system had no role for it — 194 surgeon accounts, 55 house officers,
+  /// and no ward clerk, secretary or booking officer anywhere in the enum. The
+  /// work therefore fell to the surgical residents by default, which is what
+  /// they spent a fortnight telling us. This is the way back in.
+  BOOKING_OFFICER
 }
 
 enum UserStatus {

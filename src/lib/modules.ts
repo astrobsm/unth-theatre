@@ -60,8 +60,12 @@ export const MODULES: AppModule[] = [
   { id: 'emergency-booking', label: '🚨 Emergency Booking', paths: ['/dashboard/emergency-booking'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'PORTER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'PHARMACIST'], category: 'Overview' },
 
   // Patient Registration & Scheduling
-  { id: 'patients', label: 'Patients', paths: ['/dashboard/patients'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER'], category: 'Patient' },
-  { id: 'surgeries', label: 'Surgeries', paths: ['/dashboard/surgeries'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER'], category: 'Patient' },
+  // BOOKING_OFFICER gets these two and only these two. The clerical role exists
+  // to register a patient and enter a booking; giving it the run of the
+  // dashboard would make it a general account by another name, and the point of
+  // a narrow role is that it can be handed out freely.
+  { id: 'patients', label: 'Patients', paths: ['/dashboard/patients'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER'], category: 'Patient' },
+  { id: 'surgeries', label: 'Surgeries', paths: ['/dashboard/surgeries'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER'], category: 'Patient' },
   { id: 'cancellations', label: 'Cancellations', paths: ['/dashboard/cancellations'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
 
   // Pre-operative
