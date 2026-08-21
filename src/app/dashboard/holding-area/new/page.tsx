@@ -78,6 +78,11 @@ export default function NewHoldingAreaAssessment() {
       .some((f) => f.toLowerCase().includes(q));
   });
 
+  // The consent gate. Booking no longer asks for consent; this is the morning,
+  // and this is where it is asked for instead.
+  const [consentDeferralNeeded, setConsentDeferralNeeded] = useState(false);
+  const [consentDeferralReason, setConsentDeferralReason] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -97,7 +102,10 @@ export default function NewHoldingAreaAssessment() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           surgeryId: selectedSurgeryId,
-          patientId: selectedSurgery?.patient.id
+          patientId: selectedSurgery?.patient.id,
+          // Only ever sent once the nurse has been shown the refusal and has
+          // written a reason. Empty on the first attempt, by design.
+          consentDeferralReason: consentDeferralReason.trim() || undefined,
         })
       });
 
@@ -111,6 +119,10 @@ export default function NewHoldingAreaAssessment() {
         router.push(`/dashboard/holding-area/${assessment.id}`);
       } else {
         const data = await response.json();
+        // No consent on record. Not a dead end — the nurse has a patient in
+        // front of her and must be able to act — but she cannot pass it
+        // without noticing, and her reason goes on the case.
+        if (data.code === 'CONSENT_REQUIRED') setConsentDeferralNeeded(true);
         setError(data.error || 'Failed to create assessment');
       }
     } catch (error) {
@@ -140,6 +152,36 @@ export default function NewHoldingAreaAssessment() {
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
           {error}
+        </div>
+      )}
+
+      {/* The consent deferral. Shown only after the gate has refused once, so
+          it is never the path of least resistance — a nurse has to be told
+          what is missing before she can decide to proceed without it. */}
+      {consentDeferralNeeded && (
+        <div className="mb-6 rounded-lg border-l-4 border-amber-500 bg-amber-50 p-4">
+          <label
+            htmlFor="consentDeferralReason"
+            className="block text-sm font-semibold text-amber-900"
+          >
+            Receiving this patient without a consent on record
+          </label>
+          <p className="mt-1 text-xs text-amber-800">
+            If the consent has just been signed, upload the photograph on the case instead
+            and try again — that is the better outcome. If the patient must be received
+            now, say why. It is recorded against the case in your name.
+          </p>
+          <textarea
+            id="consentDeferralReason"
+            value={consentDeferralReason}
+            onChange={(e) => setConsentDeferralReason(e.target.value)}
+            rows={3}
+            className="mt-2 w-full rounded-lg border border-amber-300 p-2 text-sm focus:border-amber-500 focus:outline-none"
+            placeholder="e.g. Consent signed on the ward, folder on its way; surgeon informed."
+          />
+          <p className="mt-1 text-xs text-amber-700">
+            {consentDeferralReason.trim().length}/10 characters minimum.
+          </p>
         </div>
       )}
 

@@ -729,10 +729,12 @@ export default function NewSurgeryPage() {
     // disagree the person filling the form is the one who suffers for it, so
     // they are deliberately the same short rule stated twice.
     void patientAgeYears;
+    // NOTHING here blocks a booking any more, consent included. The consent
+    // requirement did not disappear — it moved to the morning of surgery,
+    // where the patient is actually present and where a nurse at the holding
+    // area door now refuses to receive them without it. See the consent gate
+    // in src/app/api/holding-area/route.ts.
     const missing: string[] = [];
-    if (!consentFile && !isConsentSigned(consentForm)) {
-      missing.push('the signed consent (attach a photograph of the paper form, or complete it on the app)');
-    }
     // ── Elective blocks. Emergency and urgent defer, with a reason. ─────────
     //
     // The server has always worked this way — checkPreopRequirements() gives
@@ -2624,13 +2626,12 @@ ${pretty} — ${days} days from today.
             </p>
             <p className="mt-1 text-xs text-green-800">
               Theatre will have the patient on the list straight away and can begin
-              preparing. The remaining sections — consent, safety results, prescription
-              and pack — are recorded against the case as outstanding, and{' '}
-              <span className="font-semibold">
-                must be completed to validate the booking, before the patient is called
-                on the morning of surgery
-              </span>
-              . Until they are, the holding area will hold the patient at the door.
+              preparing. Nothing below stops you booking. The{' '}
+              <span className="font-semibold">signed consent must be on the case by the
+              morning of surgery</span> — a photograph of the paper form is enough — and
+              the holding area will not receive the patient without it. The safety
+              results, prescription and pack are recorded as outstanding and can be
+              completed by whoever holds them.
             </p>
           </div>
         )}
@@ -2782,11 +2783,11 @@ function BookingCodesModal({
                   You must still complete the remaining steps to validate the booking.
                 </p>
                 <p className="mt-1 text-xs text-amber-800">
-                  These are outstanding and must be completed{' '}
+                  These are outstanding. The{' '}
                   <span className="font-bold underline">
-                    before the patient is called on the morning of surgery
+                    signed consent must be uploaded on the morning of surgery
                   </span>
-                  . Until then the holding area will hold this patient at the door.
+                  {' '}— the holding area will not receive this patient without it.
                 </p>
                 <ul className="mt-2 space-y-1">
                   {outstanding.map((m) => (

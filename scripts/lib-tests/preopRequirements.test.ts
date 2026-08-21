@@ -40,9 +40,15 @@ describe('complete booking', () => {
   });
 });
 
-describe('elective — hard block, no override', () => {
+// The policy list is empty in production: nothing refuses a booking. These
+// describes pass `blocks` explicitly so the refusal and override machinery
+// stays under test — it is the mechanism that runs if anything is ever added
+// back, and untested mechanism is how a safety rule comes back broken.
+const BLOCK_CONSENT = { blocks: ['CONSENT'] as const };
+
+describe('when an item DOES block — the mechanism, exercised through the seam', () => {
   it('blocks a missing consent', () => {
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4, urgency: 'ELECTIVE', labs: fullLabs, consent: {} });
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4, urgency: 'ELECTIVE', labs: fullLabs, consent: {} });
     expect(r.ok).toBe(false);
     expect(r.missing).toContain('CONSENT');
   });
@@ -51,7 +57,7 @@ describe('elective — hard block, no override', () => {
     // Changed on 21 August. The labs were being typed in by the surgery
     // resident, which is not their work, and a requirement enforced against
     // the wrong person does not get met — it gets the booking abandoned.
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: { ...fullLabs, recentHb: null }, consent: consented,
     });
     expect(r.ok).toBe(true);
@@ -61,30 +67,30 @@ describe('elective — hard block, no override', () => {
   it('treats a haemoglobin with no sample time as missing', () => {
     // A figure with no date cannot be checked against the 48-hour rule, so it is
     // not usable evidence.
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: { ...fullLabs, hbSampleAt: null }, consent: consented,
     });
-    expect(r.missing).toContain('HAEMOGLOBIN');
+    expect(r.outstanding).toContain('HAEMOGLOBIN');
   });
 
-  it('blocks partial electrolytes', () => {
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+  it('detects partial electrolytes', () => {
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: { ...fullLabs, creatinine: null }, consent: consented,
     });
-    expect(r.missing).toContain('ELECTROLYTES');
+    expect(r.outstanding).toContain('ELECTROLYTES');
   });
 
-  it('blocks an incomplete viral screen', () => {
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+  it('detects an incomplete viral screen', () => {
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: { ...fullLabs, hcvStatus: null }, consent: consented,
     });
-    expect(r.missing).toContain('VIRAL_SCREEN');
+    expect(r.outstanding).toContain('VIRAL_SCREEN');
   });
 
   it('accepts PENDING and NOT_DONE as recorded answers', () => {
     // The requirement is that somebody looked and recorded what they found —
     // "PENDING" is information, an empty field is not.
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE',
       labs: { ...fullLabs, hivStatus: 'PENDING', hcvStatus: 'NOT_DONE' },
       consent: consented,
@@ -95,7 +101,7 @@ describe('elective — hard block, no override', () => {
   it('IGNORES an override on an elective case', () => {
     // The one rule that must not bend. A requirement waivable by typing a
     // sentence eventually is waived every time.
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: fullLabs, consent: {},
       override: { reason: 'Patient in a hurry and clinic is closing', byName: 'Dr X', byId: 'u1' },
     });
@@ -107,13 +113,13 @@ describe('elective — hard block, no override', () => {
   it('defaults an unknown urgency to elective', () => {
     // Most cases are elective; treating unknown as emergency would open the
     // override to everything.
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4, urgency: null, labs: fullLabs, consent: {} });
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4, urgency: null, labs: fullLabs, consent: {} });
     expect(r.ok).toBe(false);
   });
 });
 
 describe('emergency — deferrable, with a recorded reason', () => {
-  const base = { urgency: 'EMERGENCY' as const, labs: { ...fullLabs, recentHb: null }, consent: {} };
+  const base = { ...BLOCK_CONSENT, urgency: 'EMERGENCY' as const, labs: { ...fullLabs, recentHb: null }, consent: {} };
 
   it('asks for an override rather than refusing outright', () => {
     const r = checkPreopRequirements(base);
@@ -203,14 +209,14 @@ describe('labsHandledElsewhere — the emergency booking path', () => {
   });
 
   it('still blocks a missing consent, and still allows a deferral', () => {
-    const blocked = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const blocked = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'EMERGENCY', labs: {}, consent: {}, labsHandledElsewhere: true,
     });
     expect(blocked.ok).toBe(false);
     expect(blocked.missing).toEqual(['CONSENT']);
     expect(blocked.overrideRequired).toBe(true);
 
-    const deferred = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const deferred = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'EMERGENCY', labs: {}, consent: {}, labsHandledElsewhere: true,
       override: { reason: 'Unconscious, no next of kin present', byId: 'u1' },
     });
@@ -221,7 +227,7 @@ describe('labsHandledElsewhere — the emergency booking path', () => {
   it('does NOT weaken the elective path', () => {
     // The flag is set by the emergency route only. If an elective caller ever set
     // it, consent would still be enforced and no override would be honoured.
-    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+    const r = checkPreopRequirements({ ...BLOCK_CONSENT, prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: {}, consent: {}, labsHandledElsewhere: true,
       override: { reason: 'Trying to get around the rule', byId: 'u1' },
     });
@@ -314,13 +320,35 @@ describe('the pharmacy prescription and the consumables pack', () => {
     }
   });
 
-  it('keeps consent as the one item that can refuse a booking', () => {
+  it('no longer lets even a missing consent refuse a booking', () => {
+    // Consent was the last blocking item and it came out on 21 August. A
+    // patient not yet on the ward, folder still being processed, cannot be
+    // consented on the day the slot is requested — and refusing the booking
+    // until they can be produced no consents at all. Over two months it
+    // produced 390 cases with none on record, 66 of them completed operations.
+    //
+    // The requirement moved rather than disappeared. See the consent gate in
+    // src/app/api/holding-area/route.ts, which refuses to RECEIVE a patient
+    // without one on the morning of surgery.
     const r = checkPreopRequirements({
       urgency: 'ELECTIVE', labs: fullLabs, consent: {},
       prescriptionItemCount: 2, consumableRequestCount: 4,
     });
-    expect(r.ok).toBe(false);
-    expect(r.missing).toEqual(['CONSENT']);
+    expect(r.ok).toBe(true);
+    expect(r.outstanding).toEqual(['CONSENT']);
+  });
+
+  it('books a case with absolutely nothing supplied, and records all of it', () => {
+    // The whole policy in one assertion.
+    const r = checkPreopRequirements({
+      urgency: 'ELECTIVE', labs: {}, consent: {},
+      prescriptionItemCount: 0, consumableRequestCount: 0,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.missing).toEqual([]);
+    expect(r.outstanding).toContain('CONSENT');
+    expect(r.outstanding).toContain('HAEMOGLOBIN');
+    expect(r.outstanding).toContain('PRESCRIPTION');
   });
 });
 
@@ -354,8 +382,8 @@ describe('deferOutstanding — booked from section 3, rest owed before the morni
     for (const item of ['CONSENT', 'HAEMOGLOBIN', 'VIRAL_SCREEN', 'PRESCRIPTION', 'CONSUMABLES']) {
       expect(r.outstanding, `${item} must survive as a debt`).toContain(item);
     }
-    // `missing` is now the blocking subset, which is consent alone.
-    expect(r.missing).toEqual(['CONSENT']);
+    // `missing` is the blocking subset, and nothing blocks any more.
+    expect(r.missing).toEqual([]);
   });
 
   it('is not an override, and must not be recorded as one', () => {
@@ -390,11 +418,10 @@ describe('deferOutstanding — booked from section 3, rest owed before the morni
     expect(r.outstanding).toEqual([]);
   });
 
-  it('still blocks an elective case when the flag is NOT set', () => {
-    // The guard that keeps this from becoming the default. If the form stops
-    // sending the flag, the old hard block must come back rather than silently
-    // letting unprepared cases through.
-    const r = checkPreopRequirements({ ...nothingDone, urgency: 'ELECTIVE', deferOutstanding: false });
+  it('still blocks when the flag is NOT set AND something is set to block', () => {
+    // The guard on the seam. With a blocking item configured, an elective case
+    // without the flag must still be refused rather than waved through.
+    const r = checkPreopRequirements({ ...nothingDone, ...BLOCK_CONSENT, urgency: 'ELECTIVE', deferOutstanding: false });
     expect(r.ok).toBe(false);
     expect(r.deferred).toBe(false);
   });

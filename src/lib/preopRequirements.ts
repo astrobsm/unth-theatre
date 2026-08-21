@@ -1,19 +1,39 @@
 // ============================================================
-// What must be in place before a case can be booked
+// What is owed on a case, and when
 // ------------------------------------------------------------
-// Consent and pre-operative labs are mandatory. The rule differs by urgency, and
-// the difference is deliberate rather than a loophole:
+// NOTHING here stops a booking any more. That is the whole policy, and it is
+// not a relaxation — every requirement still exists, and every one of them is
+// still recorded against the case and shown on the boards. What changed on 21
+// August is WHEN and of WHOM they are asked.
 //
-//   ELECTIVE   hard block. There is time to get consent and a haemoglobin, and a
-//              case booked without them is a case that reaches the table without
-//              them.
+// They used to be asked at booking, of the person doing the booking, which for
+// two months meant a surgical resident. The residents said so, and the figures
+// agreed with them: against 563 cases the anaesthetists recorded 3 reviews,
+// while ASA was entered 448 times by whoever registered the patient. Consent,
+// the labs, the risk assessments, the pharmacy prescription and the
+// consumables pack had all quietly become one person's job.
 //
-//   EMERGENCY  the same requirements, but a named clinician may DEFER them with a
-//              recorded reason. A hard block here would mean theatre never hears
-//              about the case at all — and the safest place for an unconsented
-//              emergency patient is a booked theatre with a team on the way. The
-//              deferral is not a skip: it is stamped with a person and a reason,
-//              and the case carries the outstanding item until it is resolved.
+// A requirement enforced against the wrong person does not get the requirement
+// met. It gets the booking delayed, done elsewhere, or abandoned in a draft —
+// and over the same two months it produced 390 cases with no retrievable
+// consent, 66 of them completed operations. The rule was strict and the record
+// was empty; those are not a contradiction, they are cause and effect.
+//
+// So the checks moved to where each one can actually be done:
+//
+//   CONSENT      on the morning of surgery, at the holding area door, by the
+//                nurse receiving the patient — the one moment the patient is
+//                present. Enforced in src/app/api/holding-area/route.ts, which
+//                refuses to receive a patient without one and takes a named
+//                reason if she must proceed anyway.
+//
+//   EVERYTHING   recorded as outstanding, visible on every board the case
+//   ELSE         appears on, and completed by whoever holds the information.
+//
+// BLOCKS_BOOKING below is the single switch. It is empty. If anything is ever
+// put back into it, the refusal and override machinery underneath is what will
+// run — it is kept, and kept under test through the `blocks` seam, for exactly
+// that reason.
 //
 // Pure, so the rule is identical on the form and in the API, and so it can be
 // argued about against tests rather than against a running server.
@@ -65,8 +85,6 @@ export interface PreopCheckInput {
    * booking would make an override necessary for every single emergency, and an
    * override that is always needed stops being a deliberate act and becomes a
    * box to tick.
-   *
-   * Consent is still required, and still deferrable with a reason.
    */
   labsHandledElsewhere?: boolean;
   /**
@@ -74,9 +92,9 @@ export interface PreopCheckInput {
    *
    * Both were optional, and the result was cases arriving with nothing
    * prepared and nothing picked — discovered at the theatre door, which is the
-   * most expensive possible moment to discover it. Required now, on the same
-   * terms as consent: hard for an elective case, deferrable with a named
-   * reason for an emergency.
+   * most expensive possible moment to discover it. Still recorded and still
+   * shown as outstanding, but no longer a barrier: choosing savlon, caps and
+   * suction tubing was never the surgeon's work.
    *
    * Counted rather than passed as booleans because "sent a prescription with
    * no drugs on it" and "sent no prescription" are the same event to Pharmacy.
@@ -103,6 +121,16 @@ export interface PreopCheckInput {
    * undocumented — it simply stops being invisible in the meantime.
    */
   deferOutstanding?: boolean;
+  /**
+   * Which absent items may refuse a booking. Defaults to policy, which is
+   * currently NONE.
+   *
+   * Exposed so the deferral and override machinery below stays genuinely under
+   * test. With the policy list empty those branches are unreachable in
+   * production, and a test suite that cannot reach them would quietly stop
+   * covering the code that runs the moment anything is added back.
+   */
+  blocks?: MissingItem[];
 }
 
 export type MissingItem =
@@ -133,6 +161,14 @@ export interface PreopCheckResult {
   deferred: boolean;
   /** Stored on the case so the outstanding items stay visible until resolved. */
   outstanding: MissingItem[];
+  /**
+   * `outstanding`, in words a person can read.
+   *
+   * Separate from `messages`, which describes only what REFUSED the booking.
+   * Under the current policy nothing refuses one, so a caller that wanted to
+   * tell somebody what was still owed had nothing to print.
+   */
+  outstandingMessages: string[];
 }
 
 /** The shortest reason worth recording. Anything less is a keystroke, not a reason. */
@@ -174,12 +210,25 @@ const present = (v: unknown): boolean =>
  * which is exactly what happened to a CTU list of three cases that existed in
  * neither database at midnight.
  *
- * Consent stays. It is the one item that is genuinely the surgeon's, that the
- * patient must be present for, and that cannot be reconstructed afterwards: a
- * consent that cannot be produced is, in law, indistinguishable from a consent
- * that was never taken. A photograph of the signed paper form satisfies it.
+ * Consent was the last item here, and on 21 August it came out too. The
+ * reasoning that removed the others removes it as well: a patient who is not
+ * yet on the ward, whose folder is still being processed, cannot be consented
+ * at the moment a theatre slot is requested, and refusing the booking until
+ * they can be does not produce a consent — it produces a case theatre never
+ * hears about.
+ *
+ * NOTHING now stops a booking. That is deliberate and it is not a relaxation
+ * of the requirement, because the requirement moved rather than disappeared:
+ * consent must be on the record on the MORNING OF SURGERY, and that is now
+ * enforced where it belongs — at the holding area door, by a nurse who has the
+ * patient in front of her, rather than by a form a resident is filling in the
+ * day before.
+ *
+ * See the consent gate in src/app/api/holding-area/route.ts. If that gate is
+ * ever weakened, this list must be reconsidered: an empty list here is only
+ * safe while the morning gate is real.
  */
-const BLOCKS_BOOKING: MissingItem[] = ['CONSENT'];
+const BLOCKS_BOOKING: MissingItem[] = [];
 
 export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult {
   const urgency = String(input.urgency ?? 'ELECTIVE').toUpperCase();
@@ -233,12 +282,24 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   // relaxing what stops a booking must not also blind the theatre to what is
   // not ready.
   const outstanding = [...missing];
-  const blocking = missing.filter((m) => BLOCKS_BOOKING.includes(m));
+  const blocksList = input.blocks ?? BLOCKS_BOOKING;
+  const blocking = missing.filter((m) => blocksList.includes(m));
 
   if (blocking.length === 0) {
     return {
-      ok: true, missing: outstanding, messages: outstanding.map((m) => LABEL[m]),
-      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding,
+      ok: true,
+      // `missing` means "what refused this booking", and nothing did.
+      missing: [],
+      messages: [],
+      overrideRequired: false,
+      overrideAccepted: false,
+      // Still a deferral: the case is going onto the list with work
+      // outstanding, and the caller relies on this to persist that debt
+      // against the case. Without it a booking would look complete when it
+      // is not, which is the failure this whole change exists to avoid.
+      deferred: outstanding.length > 0,
+      outstanding,
+      outstandingMessages: outstanding.map((m) => LABEL[m]),
     };
   }
 
@@ -258,7 +319,8 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   if (input.deferOutstanding) {
     return {
       ok: true, missing: blocking, messages,
-      overrideRequired: false, overrideAccepted: false, deferred: true, outstanding,
+      overrideRequired: false, overrideAccepted: false, deferred: true,
+      outstanding, outstandingMessages: outstanding.map((m) => LABEL[m]),
     };
   }
 
@@ -268,7 +330,8 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   if (isElective) {
     return {
       ok: false, missing: blocking, messages,
-      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding,
+      overrideRequired: false, overrideAccepted: false, deferred: false,
+      outstanding, outstandingMessages: outstanding.map((m) => LABEL[m]),
     };
   }
 
@@ -287,6 +350,7 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
     // Recorded either way. A deferral is a debt, not a discharge — the case
     // carries these until somebody clears them.
     outstanding,
+    outstandingMessages: outstanding.map((m) => LABEL[m]),
   };
 }
 

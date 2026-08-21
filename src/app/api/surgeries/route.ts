@@ -22,6 +22,20 @@ import { apiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * An optional field that an untouched form control fills with "".
+ *
+ * z.coerce.number()("") is 0 and z.enum() rejects "", so neither an empty
+ * string nor undefined can be passed straight through. This maps every
+ * "nothing was entered" shape to null before the inner schema sees it, and
+ * leaves a real value to be validated normally.
+ */
+const emptyToNull = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    inner.nullish(),
+  );
+
 const surgerySchema = z.object({
   patientId: z.string(),
   surgeonId: z.string().nullish(),
@@ -69,21 +83,33 @@ const surgerySchema = z.object({
   // Unit supervising consultant (chosen from the surgeon list).
   supervisingConsultantId: z.string().nullish(),
   supervisingConsultantName: z.string().nullish(),
-  // ── Compulsory pre-operative safety labs & risk assessments (booking form) ──
-  // Required for every booking so the theatre/anaesthetic team has a current
-  // safety picture. hbSampleAt drives the "Hb within 48 h" rule (checked below).
-  recentHb: z.coerce.number().positive('Recent haemoglobin (g/dL) is required'),
-  hbSampleAt: z.string().min(1, 'Haemoglobin sample date/time is required'),
-  potassium: z.coerce.number().positive('Serum potassium (mmol/L) is required'),
-  sodium: z.coerce.number().positive('Serum sodium (mmol/L) is required'),
-  creatinine: z.coerce.number().positive('Serum creatinine (µmol/L) is required'),
-  hbsAgStatus: z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'], { required_error: 'HBsAg status is required' }),
-  hcvStatus: z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'], { required_error: 'HCV status is required' }),
-  hivStatus: z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'], { required_error: 'HIV status is required' }),
-  bloodPressureSystolic: z.coerce.number().int().positive('Systolic BP is required'),
-  bloodPressureDiastolic: z.coerce.number().int().positive('Diastolic BP is required'),
-  bleedingRiskLevel: z.enum(['LOW', 'MODERATE', 'HIGH'], { required_error: 'Bleeding risk assessment is required' }),
-  nutritionalStatusAtBooking: z.enum(['GOOD', 'FAIR', 'POOR'], { required_error: 'Nutritional assessment is required' }),
+  // ── Pre-operative safety labs & risk assessments ────────────────────────
+  //
+  // OPTIONAL at the schema, and that is the whole point of the 21 August
+  // change. They were required here as well as in checkPreopRequirements, and
+  // a validator is a harder refusal than a policy: relaxing the policy alone
+  // would have left every lab-less booking failing with a 400 and a message
+  // about a haemoglobin, which is precisely the wall the residents described.
+  //
+  // Still recorded, still returned as outstanding, still shown on the boards —
+  // and now enterable by whoever actually holds the result rather than by the
+  // resident booking the case.
+  //
+  // Empty strings arrive from an untouched form field, so they are mapped to
+  // null rather than coerced: z.coerce.number()('') is 0, and a haemoglobin of
+  // zero recorded as fact is worse than no haemoglobin at all.
+  recentHb: emptyToNull(z.coerce.number().positive()),
+  hbSampleAt: z.string().nullish(),
+  potassium: emptyToNull(z.coerce.number().positive()),
+  sodium: emptyToNull(z.coerce.number().positive()),
+  creatinine: emptyToNull(z.coerce.number().positive()),
+  hbsAgStatus: emptyToNull(z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'])),
+  hcvStatus: emptyToNull(z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'])),
+  hivStatus: emptyToNull(z.enum(['NEGATIVE', 'POSITIVE', 'PENDING', 'NOT_DONE'])),
+  bloodPressureSystolic: emptyToNull(z.coerce.number().int().positive()),
+  bloodPressureDiastolic: emptyToNull(z.coerce.number().int().positive()),
+  bleedingRiskLevel: emptyToNull(z.enum(['LOW', 'MODERATE', 'HIGH'])),
+  nutritionalStatusAtBooking: emptyToNull(z.enum(['GOOD', 'FAIR', 'POOR'])),
   // Pressure-sore risk is compulsory only for patients > 45 (enforced on the form).
   pressureSoreRiskAtBooking: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullish(),
   // Clinical Summary collected on the booking form. Persisted on the Patient record
@@ -743,7 +769,7 @@ export async function POST(request: NextRequest) {
         ),
         // A deferral is a debt, not a discharge: what is still missing stays on
         // the record and drives the outstanding flag on the boards.
-        ...(preop.overrideAccepted || preop.deferred
+        ...(preop.outstanding.length > 0
           ? {
               // A deferral records itself. The reason differs by route: a
               // clinician waiving a requirement writes one, while a case booked
@@ -1132,10 +1158,10 @@ export async function POST(request: NextRequest) {
     // What is still owed on this case, so the form can say it plainly at the
     // moment of booking rather than leaving the person to discover it on a
     // board later — or, worse, at the theatre door tomorrow morning.
-    const outstandingBody = preop.deferred
+    const outstandingBody = preop.outstanding.length
       ? {
           outstanding: preop.outstanding,
-          outstandingMessages: preop.messages,
+          outstandingMessages: preop.outstandingMessages,
           outstandingDueBy: 'before the patient is called on the morning of surgery',
         }
       : {};
