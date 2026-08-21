@@ -1,8 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   assessQuality, sharpness, exposure, contrast, glare, toLuma, qualitySummary,
   THRESHOLDS, RasterImage,
 } from '../../src/lib/ocr/imageQuality';
+
+// These tests do real image processing on real rasters — a Laplacian and a box
+// blur over pages up to 1200x1200 — and that is the point of them: the fixtures
+// have to be genuinely blurred, because an earlier version faked defocus with a
+// sinusoid and the measure read it as SHARP.
+//
+// The cost is that the first test to need a blurred page pays for building it,
+// and under a full parallel suite that crossed vitest's five-second default and
+// failed. Nothing was wrong with the code or the assertions; the budget was
+// simply smaller than the work. Given explicitly here rather than raised for
+// every suite, so a genuine hang somewhere else still trips the default.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 /** An RGBA canvas built from a per-pixel function, as the browser would supply. */
 function make(width: number, height: number, fn: (x: number, y: number) => number): RasterImage {
@@ -20,7 +32,7 @@ function make(width: number, height: number, fn: (x: number, y: number) => numbe
 
 /** A page: white paper with dark horizontal lines of text. */
 const sharpPage = (w = 800, h = 800) =>
-  make(w, h, (_x, y) => (y % 20 < 6 ? 20 : 240));
+  cached(`sharp:${w}x${h}`, () => make(w, h, (_x, y) => (y % 20 < 6 ? 20 : 240)));
 
 /**
  * A real box blur, applied to a real page.
@@ -56,7 +68,31 @@ function boxBlur(img: RasterImage, radius: number): RasterImage {
 }
 
 /** The same page, out of focus. */
-const blurredPage = (w = 800, h = 800) => boxBlur(sharpPage(w, h), 6);
+/**
+ * The fixtures are built once per size and shared.
+ *
+ * boxBlur over an 800x800 page with radius 6 is roughly a hundred million
+ * operations, and it was being recomputed for every assertion that needed a
+ * blurred page. Alone the file passed; run alongside the rest of the suite,
+ * with the machine loaded, four of these tests crossed vitest's five-second
+ * default and failed — a red suite caused entirely by fixture cost, which is
+ * the kind of failure that teaches people to ignore red suites.
+ *
+ * Safe to share because nothing mutates them: every use passes an image to
+ * sharpness, contrast, glare, assessQuality or boxBlur, all of which read the
+ * input and return something new.
+ */
+const fixtureCache = new Map<string, RasterImage>();
+const cached = (key: string, build: () => RasterImage): RasterImage => {
+  const hit = fixtureCache.get(key);
+  if (hit) return hit;
+  const made = build();
+  fixtureCache.set(key, made);
+  return made;
+};
+
+const blurredPage = (w = 800, h = 800) =>
+  cached(`blur:${w}x${h}`, () => boxBlur(sharpPage(w, h), 6));
 
 const flatGrey = (w = 800, h = 800, v = 128) => make(w, h, () => v);
 
