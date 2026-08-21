@@ -16,8 +16,30 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
-    // Get all theatres
+    /**
+     * Three modes, because the board asked for everything and displayed almost
+     * none of it.
+     *
+     * The page shows fifteen theatres. For each one it was loading the
+     * allocation with EIGHT nested user relations — scrub nurse, circulating
+     * nurse, technician, three grades of anaesthetist, cleaner, porter — plus
+     * the day's surgeries with three more, plus team assignments, plus a phone
+     * lookup for everybody named. All of it, for all fifteen, before the first
+     * card could be painted. And a collapsed card shows a status dot and a name.
+     *
+     *   summary   the list: name, status, who logged the setup, whether there
+     *             is a team worth opening. What a closed card can display.
+     *   detail    one theatre, everything. Fetched when somebody opens it.
+     *   (neither) the original whole-board response, kept so nothing that
+     *             depended on it breaks.
+     */
+    const view = searchParams.get('view');
+    const onlyTheatreId = searchParams.get('theatreId');
+    const isSummary = view === 'summary';
+
+    // Get all theatres — or the single one being opened.
     const theatres = await prisma.theatreSuite.findMany({
+      where: onlyTheatreId ? { id: onlyTheatreId } : undefined,
       select: {
         id: true,
         name: true,
@@ -59,12 +81,15 @@ export async function GET(request: NextRequest) {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const allocations = await prisma.theatreAllocation.findMany({
+    // The expensive one: eight user relations per allocation. A closed card
+    // shows none of it, so a summary never pays for it.
+    const allocations = isSummary ? [] : await prisma.theatreAllocation.findMany({
       where: {
         date: {
           gte: startOfDay,
           lte: endOfDay,
         },
+        ...(onlyTheatreId ? { theatreId: onlyTheatreId } : {}),
       },
       include: {
         scrubNurse: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
@@ -80,8 +105,11 @@ export async function GET(request: NextRequest) {
 
     // Explicitly assigned theatre team for the day's cases. Read once rather than
     // per theatre: one query for the whole board instead of one per room.
-    const dayCaseIds = (await prisma.surgery.findMany({
-      where: { scheduledDate: { gte: startOfDay, lte: endOfDay } },
+    const dayCaseIds = isSummary ? [] : (await prisma.surgery.findMany({
+      where: {
+        scheduledDate: { gte: startOfDay, lte: endOfDay },
+        ...(onlyTheatreId ? { theatreId: onlyTheatreId } : {}),
+      },
       select: { id: true },
     })).map((s) => s.id);
 
@@ -104,13 +132,14 @@ export async function GET(request: NextRequest) {
     const phoneById = new Map(teamPhones.map((u) => [u.id, u.phoneNumber ?? null]));
 
     // Get the day's surgeries (for surgeon + anaesthetist contacts per theatre)
-    const surgeries = await prisma.surgery.findMany({
+    const surgeries = isSummary ? [] : await prisma.surgery.findMany({
       where: {
         scheduledDate: {
           gte: startOfDay,
           lte: endOfDay,
         },
         status: { not: 'CANCELLED' },
+        ...(onlyTheatreId ? { theatreId: onlyTheatreId } : {}),
       },
       select: {
         id: true,
@@ -131,6 +160,33 @@ export async function GET(request: NextRequest) {
       ? await prisma.user.findMany({ where: { id: { in: techIds } }, select: { id: true, fullName: true, phoneNumber: true } })
       : [];
     const techById = new Map(techUsers.map((u) => [u.id, u]));
+
+    /**
+     * For a summary, two counts instead of two joins.
+     *
+     * A closed card still has to say whether there is anything behind it —
+     * "3 cases, team assigned" is what makes somebody tap. groupBy answers that
+     * in one aggregate each, without loading a single user record.
+     */
+    const caseCounts = isSummary
+      ? await prisma.surgery.groupBy({
+          by: ['theatreId'],
+          where: {
+            scheduledDate: { gte: startOfDay, lte: endOfDay },
+            status: { not: 'CANCELLED' },
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const allocCounts = isSummary
+      ? await prisma.theatreAllocation.groupBy({
+          by: ['theatreId'],
+          where: { date: { gte: startOfDay, lte: endOfDay } },
+          _count: { _all: true },
+        })
+      : [];
+    const caseCountBy = new Map(caseCounts.map((c) => [c.theatreId, c._count._all]));
+    const allocCountBy = new Map(allocCounts.map((c) => [c.theatreId, c._count._all]));
 
     // Helper: shape a User relation into a { name, phone } contact (or null)
     const contact = (u: { fullName: string; phoneNumber: string | null } | null | undefined) =>
@@ -231,7 +287,11 @@ export async function GET(request: NextRequest) {
         // board never silently loses somebody who was assigned the other way.
         teamScrubNurses: scrubFromTeam,
         teamCirculatingNurses: circFromTeam,
-        totalAllocations: theatreAllocations.length,
+        totalAllocations: isSummary
+          ? (allocCountBy.get(theatre.id) ?? 0)
+          : theatreAllocations.length,
+        // Summary only: what a closed card needs in order to be worth opening.
+        caseCount: isSummary ? (caseCountBy.get(theatre.id) ?? 0) : surgeries.filter((x) => x.theatreId === theatre.id).length,
       };
     });
 

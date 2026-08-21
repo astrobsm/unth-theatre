@@ -109,6 +109,46 @@ export default function TheatreReadinessDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
+  /**
+   * One theatre's detail is fetched when somebody opens it, and not before.
+   *
+   * The board carries fifteen theatres. Loading every one of them meant, per
+   * theatre, an allocation with eight nested user relations, the day's
+   * surgeries with three more, the assigned team and a phone lookup for
+   * everybody named — before a single card could be painted. A closed card
+   * shows a status dot, a name and a count.
+   *
+   * Cached by id, so opening a theatre a second time is instant and closing one
+   * costs nothing. Cleared when the date changes, because the detail belongs to
+   * the date it was fetched for — and a stale team under a new date is worse
+   * than a spinner.
+   */
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detailById, setDetailById] = useState<Record<string, TheatreStatus>>({});
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  const toggleTheatre = async (theatreId: string) => {
+    if (openId === theatreId) { setOpenId(null); return; }
+    setOpenId(theatreId);
+    if (detailById[theatreId]) return; // already fetched for this date
+    setLoadingId(theatreId);
+    try {
+      const res = await fetch(
+        `/api/anesthesia-setup/theatre-status?date=${selectedDate}&theatreId=${theatreId}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const row = (data.theatreStatus || [])[0];
+        if (row) setDetailById((prev) => ({ ...prev, [theatreId]: row }));
+      }
+    } catch {
+      // Leave it unopened rather than showing an empty team as though it were
+      // the truth. The card stays tappable and a second tap retries.
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
   useEffect(() => {
     fetchTheatreStatus();
     // Refresh every 30 seconds
@@ -120,8 +160,11 @@ export default function TheatreReadinessDashboard() {
 
   const fetchTheatreStatus = async () => {
     try {
+      // Detail belongs to the date it was fetched for.
+      setDetailById({});
+      setOpenId(null);
       const [statusRes, setupRes] = await Promise.all([
-        fetch(`/api/anesthesia-setup/theatre-status?date=${selectedDate}`),
+        fetch(`/api/anesthesia-setup/theatre-status?date=${selectedDate}&view=summary`),
         fetch(`/api/theatre-setup?date=${selectedDate}`),
       ]);
       if (statusRes.ok) {
@@ -293,25 +336,55 @@ export default function TheatreReadinessDashboard() {
 
       {/* Theatre Status Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {theatreStatus.map((theatre) => (
+        {theatreStatus.map((summaryRow) => {
+          const isOpen = openId === summaryRow.theatreId;
+          const isLoading = loadingId === summaryRow.theatreId;
+          // The fetched detail once it exists; the summary row until then. Every
+          // field below reads from `theatre` exactly as it always did.
+          const theatre = detailById[summaryRow.theatreId] ?? summaryRow;
+          const caseCount = (summaryRow as TheatreStatus & { caseCount?: number }).caseCount ?? 0;
+          return (
           <div
-            key={theatre.theatreId}
-            className={`card border-2 ${getStatusColor(theatre.setupStatus)}`}
+            key={summaryRow.theatreId}
+            className={`card border-2 ${getStatusColor(summaryRow.setupStatus)}`}
           >
-            <div className="flex justify-between items-start mb-3">
+            <button
+              type="button"
+              onClick={() => void toggleTheatre(summaryRow.theatreId)}
+              aria-expanded={isOpen}
+              className="flex w-full justify-between items-start mb-3 text-left"
+            >
               <div>
-                <h3 className="font-bold text-lg">{theatre.theatreName}</h3>
+                <h3 className="font-bold text-lg">{summaryRow.theatreName}</h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-2xl">{getStatusIcon(theatre.setupStatus)}</span>
-                  <span className="text-sm font-semibold">{theatre.setupStatus.replace('_', ' ')}</span>
+                  <span className="text-2xl">{getStatusIcon(summaryRow.setupStatus)}</span>
+                  <span className="text-sm font-semibold">{summaryRow.setupStatus.replace('_', ' ')}</span>
                 </div>
+                {/* What makes a closed card worth opening. */}
+                <p className="mt-1 text-xs text-gray-500">
+                  {isLoading
+                    ? 'Loading…'
+                    : [
+                        caseCount ? `${caseCount} case${caseCount === 1 ? '' : 's'}` : null,
+                        summaryRow.totalAllocations ? 'team allocated' : null,
+                        summaryRow.hasSetupLog ? 'setup logged' : null,
+                      ].filter(Boolean).join(' · ') || 'Nothing recorded for this date'}
+                </p>
               </div>
-              {theatre.isReady && (
-                <div className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold">
-                  READY
-                </div>
-              )}
-            </div>
+              <div className="flex items-center gap-2">
+                {summaryRow.isReady && (
+                  <div className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    READY
+                  </div>
+                )}
+                <span aria-hidden className="text-gray-400 text-lg">{isOpen ? '−' : '+'}</span>
+              </div>
+            </button>
+
+            {!isOpen ? null : isLoading ? (
+              <div className="py-4 text-center text-sm text-gray-400">Loading theatre detail…</div>
+            ) : (
+            <>
 
             {theatre.hasSetupLog ? (
               <div className="space-y-2 text-sm">
@@ -475,8 +548,11 @@ export default function TheatreReadinessDashboard() {
                 No allocation for this date
               </div>
             )}
+            </>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {theatreStatus.length === 0 && (
