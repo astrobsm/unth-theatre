@@ -69,6 +69,21 @@ export default function TheatreReceptionPage() {
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [porters, setPorters] = useState<StaffOption[]>([]);
   const [cleaners, setCleaners] = useState<StaffOption[]>([]);
+
+  /**
+   * One case open at a time.
+   *
+   * Every case drew its whole workflow up front — receive-patient with the
+   * porter picker, surgery-complete, call-cleaning with the cleaner picker,
+   * cleaners-started, cleaning-complete — for every patient on the board.
+   * Reception works one patient at a time; the rest is a list to scan.
+   *
+   * Note what is NOT deferred: the porter and cleaner lists. They are rendered
+   * inline inside the open case, not behind a dialog, so fetching them on
+   * demand would show "No porters available" until a second request landed.
+   * That is a worse page, not a faster one.
+   */
+  const [openCaseId, setOpenCaseId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('');
   const [theatreFilter, setTheatreFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -410,7 +425,19 @@ export default function TheatreReceptionPage() {
                 className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
               >
                 {/* Header / patient cross-check */}
-                <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenCaseId((cur) => (cur === c.surgeryId ? null : c.surgeryId))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setOpenCaseId((cur) => (cur === c.surgeryId ? null : c.surgeryId));
+                    }
+                  }}
+                  aria-expanded={openCaseId === c.surgeryId}
+                  className="p-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white cursor-pointer"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -461,9 +488,28 @@ export default function TheatreReceptionPage() {
                     >
                       {c.status.replace(/_/g, ' ')}
                     </span>
+                    {/* Says which step the case is waiting at, so a closed card
+                        still tells reception what it needs to know. */}
+                    <span className="ml-2 text-xs text-gray-500">
+                      {!received
+                        ? 'Awaiting receipt'
+                        : !surgeryDone
+                          ? 'In theatre'
+                          : !cleaningCalled
+                            ? 'Cleaning not called'
+                            : !cleanersStarted
+                              ? 'Cleaners called'
+                              : !cleaningDone
+                                ? 'Cleaning in progress'
+                                : 'Complete'}
+                    </span>
+                    <span aria-hidden className="ml-2 text-lg text-gray-400">
+                      {openCaseId === c.surgeryId ? '−' : '+'}
+                    </span>
                   </div>
                 </div>
 
+                {openCaseId === c.surgeryId && (
                 <div className="p-4 space-y-4">
                   {/* Step 1: Receive patient */}
                   {!received && canRunWorkflow ? (
@@ -707,6 +753,7 @@ export default function TheatreReceptionPage() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
             );
           })}
