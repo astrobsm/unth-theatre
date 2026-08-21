@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill, Stethoscope } from 'lucide-react';
@@ -243,6 +243,25 @@ interface Surgery {
   };
 }
 
+/**
+ * Where an unfinished anaesthetic review is kept.
+ *
+ * Browser storage, like the registration draft and unlike the booking draft: a
+ * review is one anaesthetist at one bedside, and it must survive a corridor
+ * with no signal rather than a change of device. Versioned in the key so a
+ * later change to the shape cannot restore a draft it no longer understands.
+ */
+const PREOP_REVIEW_DRAFT_KEY = 'orm.preopReview.draft.v1';
+
+interface PreopReviewDraft {
+  step: number;
+  savedAt: string;
+  /** The plain inputs (ASA, Mallampati, risk level, neck, dentition). */
+  fields: Record<string, string>;
+  /** Everything the page holds in React state. */
+  state: Record<string, unknown>;
+}
+
 export default function NewPreOpReviewPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -300,6 +319,150 @@ export default function NewPreOpReviewPage() {
   const [medicationNotes, setMedicationNotes] = useState('');
   const [prescriptionUrgency, setPrescriptionUrgency] = useState<'ROUTINE' | 'URGENT' | 'EMERGENCY'>('ROUTINE');
   const [prescriptionSpecialInstructions, setPrescriptionSpecialInstructions] = useState('');
+
+  // -- One section at a time ----------------------------------------------
+  //
+  // Seven sections, ending in a prescription that Pharmacy and the pack
+  // provider work from. Presented as one scroll it was the longest form in the
+  // application, and the anaesthetist filling it is standing at a bedside on a
+  // phone. Each section is saved as it is left, so the walk back to the ward
+  // costs nothing, and the review is only created at the end - which is the
+  // point at which the prescription becomes real and goes to Pharmacy.
+  const STEP_NAMES = [
+    'Select surgery',
+    'Fitness',
+    'Anaesthesia consent',
+    'Risk assessment',
+    'ASA & Mallampati',
+    'Anaesthetic plan',
+    'Prescription',
+  ];
+  const LAST_STEP = STEP_NAMES.length - 1;
+  const [step, setStep] = useState(0);
+  const stepClass = (n: number) => (n === step ? '' : 'hidden');
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
+  const [resumable, setResumable] = useState<PreopReviewDraft | null>(null);
+
+  // Captured in two halves for the same reason as the registration draft: the
+  // ASA class, Mallampati, risk level, neck movement and dentition live in the
+  // DOM, while the fitness decision, requirements, consent, packs and every
+  // prescribed medication live in React state. Saving one half would restore a
+  // review that looked complete and had lost the entire prescription.
+  const snapshot = useCallback((atStep: number): PreopReviewDraft => {
+    const fields: Record<string, string> = {};
+    if (formRef.current) {
+      new FormData(formRef.current).forEach((v, k) => {
+        if (typeof v === 'string') fields[k] = v;
+      });
+    }
+    return {
+      step: atStep,
+      savedAt: new Date().toISOString(),
+      fields,
+      state: {
+        selectedSurgeryId,
+        fitnessDecision, requirements, riskFactors,
+        consentMethod, consentSignature, consentSignedBy, consentRelation,
+        patientInWard, patientAbsenceNote,
+        prescribedMedications, anaesTechnique, packContribution,
+        prescriptionUrgency, prescriptionSpecialInstructions,
+      },
+    };
+  }, [selectedSurgeryId, fitnessDecision, requirements, riskFactors,
+      consentMethod, consentSignature, consentSignedBy, consentRelation,
+      patientInWard, patientAbsenceNote, prescribedMedications, anaesTechnique,
+      packContribution, prescriptionUrgency, prescriptionSpecialInstructions]);
+
+  /**
+   * Is the section on screen complete enough to leave?
+   *
+   * Every other section is hidden, and the browser silently refuses to submit a
+   * form holding an empty required field it cannot focus - it reports that only
+   * to the console. Catching it while the field is still on screen is the
+   * difference between a prompt and a button that appears to do nothing.
+   */
+  const stepIsValid = (n: number) => {
+    if (n === 0 && !selectedSurgeryId) {
+      setError('Choose the booked surgery this review belongs to.');
+      return false;
+    }
+    const el = sectionRefs.current[n];
+    const invalid = el?.querySelector<HTMLInputElement>('input:invalid, select:invalid, textarea:invalid');
+    if (invalid) {
+      invalid.reportValidity();
+      return false;
+    }
+    return true;
+  };
+
+  const goToStep = (next: number) => {
+    if (next > step && !stepIsValid(step)) return;
+    setError('');
+    if (next > step) {
+      try {
+        window.localStorage.setItem(PREOP_REVIEW_DRAFT_KEY, JSON.stringify(snapshot(next)));
+        setDraftSavedAt(new Date());
+      } catch {
+        // Storage blocked or full. Never allowed to stop the review being done.
+      }
+    }
+    setStep(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Offered, never applied silently: a draft left over from another patient and
+  // restored without asking is how one patient's ASA class lands on another's
+  // record.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(PREOP_REVIEW_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as PreopReviewDraft;
+      if (d && typeof d.step === 'number') setResumable(d);
+    } catch {
+      window.localStorage.removeItem(PREOP_REVIEW_DRAFT_KEY);
+    }
+  }, []);
+
+  const applyDraft = (d: PreopReviewDraft) => {
+    const st = (d.state ?? {}) as Record<string, any>;
+    if (st.selectedSurgeryId) setSelectedSurgeryId(st.selectedSurgeryId);
+    if (st.fitnessDecision !== undefined) setFitnessDecision(st.fitnessDecision);
+    if (Array.isArray(st.requirements)) setRequirements(st.requirements);
+    if (st.riskFactors !== undefined) setRiskFactors(st.riskFactors);
+    if (st.consentMethod) setConsentMethod(st.consentMethod);
+    if (st.consentSignature !== undefined) setConsentSignature(st.consentSignature);
+    if (st.consentSignedBy !== undefined) setConsentSignedBy(st.consentSignedBy);
+    if (st.consentRelation !== undefined) setConsentRelation(st.consentRelation);
+    if (st.patientInWard !== undefined) setPatientInWard(st.patientInWard);
+    if (st.patientAbsenceNote !== undefined) setPatientAbsenceNote(st.patientAbsenceNote);
+    if (Array.isArray(st.prescribedMedications)) setPrescribedMedications(st.prescribedMedications);
+    if (st.anaesTechnique !== undefined) setAnaesTechnique(st.anaesTechnique);
+    if (st.packContribution) setPackContribution(st.packContribution);
+    if (st.prescriptionUrgency) setPrescriptionUrgency(st.prescriptionUrgency);
+    if (st.prescriptionSpecialInstructions !== undefined) {
+      setPrescriptionSpecialInstructions(st.prescriptionSpecialInstructions);
+    }
+    // The plain inputs are uncontrolled, so they go back into the DOM once the
+    // sections have rendered.
+    window.setTimeout(() => {
+      const form = formRef.current;
+      if (!form) return;
+      for (const [k, v] of Object.entries(d.fields ?? {})) {
+        const el = form.elements.namedItem(k) as HTMLInputElement | null;
+        if (el && 'value' in el) el.value = v;
+      }
+    }, 0);
+    setStep(Math.min(d.step ?? 0, LAST_STEP));
+    setResumable(null);
+  };
+
+  const discardDraft = () => {
+    try { window.localStorage.removeItem(PREOP_REVIEW_DRAFT_KEY); } catch { /* nothing to clear */ }
+    setResumable(null);
+  };
 
 
   // Get medication details from selected category and name
@@ -385,7 +548,15 @@ export default function NewPreOpReviewPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
+    // Enter pressed in a text field partway through must advance the section,
+    // not create the review and send a half-built prescription to Pharmacy.
+    // The browser fires submit from the keyboard with no button involved.
+    if (step < LAST_STEP) {
+      goToStep(step + 1);
+      return;
+    }
+
     if (!selectedSurgeryId || !selectedSurgery) {
       setError('Please select a surgery');
       return;
@@ -472,6 +643,12 @@ export default function NewPreOpReviewPage() {
       });
 
       if (response.ok) {
+        // The review exists and the prescription has gone to Pharmacy. The
+        // draft has done its job and must go, or reopening this page offers to
+        // resume a review that has already been created — and a second
+        // prescription for the same patient is a real hazard, not an untidiness.
+        try { window.localStorage.removeItem(PREOP_REVIEW_DRAFT_KEY); } catch { /* nothing to clear */ }
+
         // Offline: queued (pharmacy/pack providers only see it after sync), so
         // skip the "go and pay now" modal to avoid a misleading instruction.
         if (isOfflineQueued(response)) {
@@ -573,9 +750,71 @@ export default function NewPreOpReviewPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* -- Resume what was interrupted ---------------------------------- */}
+      {resumable && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-indigo-900">
+              You have an unfinished anaesthetic review
+            </p>
+            <p className="text-xs text-indigo-700">
+              Stopped at &ldquo;{STEP_NAMES[Math.min(resumable.step, LAST_STEP)]}&rdquo;
+              {resumable.savedAt ? ` — ${new Date(resumable.savedAt).toLocaleString()}` : ''}.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => applyDraft(resumable)}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Continue
+            </button>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="rounded-lg border border-indigo-300 px-3 py-2 text-sm text-indigo-800 hover:bg-indigo-100"
+            >
+              Start fresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* -- Where am I, and how much is left ------------------------------ */}
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-gray-900">
+            Step {step + 1} of {STEP_NAMES.length} — {STEP_NAMES[step]}
+          </p>
+          {draftSavedAt && <span className="text-xs text-green-700">Saved</span>}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {STEP_NAMES.map((name, i) => (
+            <button
+              key={name}
+              type="button"
+              // Backwards only. Jumping ahead would skip the check that keeps a
+              // required field from being left empty in a section nobody sees.
+              onClick={() => { if (i < step) goToStep(i); }}
+              disabled={i > step}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                i === step
+                  ? 'bg-indigo-600 text-white'
+                  : i < step
+                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                    : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              {i + 1}. {name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* Surgery Selection */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div ref={(el) => { sectionRefs.current[0] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(0)}`}>
           <div className="flex items-center gap-3 mb-4">
             <Activity className="w-6 h-6 text-indigo-600" />
             <h2 className="text-xl font-semibold">Select Surgery</h2>
@@ -687,7 +926,7 @@ export default function NewPreOpReviewPage() {
                 boxes that never answered the question the rest of the theatre
                 needs answered, and which everybody downstream had to interpret
                 for themselves. */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div ref={(el) => { sectionRefs.current[1] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(1)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Stethoscope className="w-6 h-6 text-indigo-600" />
                 <h2 className="text-xl font-semibold">Fitness for Proposed Anaesthesia</h2>
@@ -794,7 +1033,7 @@ export default function NewPreOpReviewPage() {
             </div>
 
             {/* Anaesthesia Consent (WHO-aligned) */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div ref={(el) => { sectionRefs.current[2] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(2)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Syringe className="w-6 h-6 text-indigo-600" />
                 <h2 className="text-xl font-semibold">{ANAESTHESIA_CONSENT_TITLE}</h2>
@@ -884,7 +1123,7 @@ export default function NewPreOpReviewPage() {
             </div>
 
             {/* Risk Assessment */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div ref={(el) => { sectionRefs.current[3] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(3)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <AlertCircle className="w-6 h-6 text-red-600" />
                 <h2 className="text-xl font-semibold">Risk Assessment</h2>
@@ -917,7 +1156,7 @@ export default function NewPreOpReviewPage() {
             </div>
 
             {/* ASA Classification & Mallampati */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div ref={(el) => { sectionRefs.current[4] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(4)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Activity className="w-6 h-6 text-blue-600" />
                 <h2 className="text-xl font-semibold">ASA Classification & Mallampati</h2>
@@ -986,7 +1225,7 @@ export default function NewPreOpReviewPage() {
             </div>
 
             {/* Anesthetic Plan */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div ref={(el) => { sectionRefs.current[5] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(5)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Syringe className="w-6 h-6 text-indigo-600" />
                 <h2 className="text-xl font-semibold">Anesthetic Plan</h2>
@@ -1026,7 +1265,7 @@ export default function NewPreOpReviewPage() {
             </div>
 
             {/* Anesthetic Prescription Section */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div ref={(el) => { sectionRefs.current[6] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(6)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Pill className="w-6 h-6 text-purple-600" />
                 <div>
@@ -1281,22 +1520,55 @@ export default function NewPreOpReviewPage() {
               )}
             </div>
 
-            {/* Submit Button */}
-            <div className="flex gap-4">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex-1 bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
-              >
-                {submitting ? 'Creating Review...' : 'Create Pre-Operative Review'}
-              </button>
+            {/* -- Move between sections -------------------------------------
+                Everything except the final action is type="button". A stray
+                submit in a multi-step form is how a half-finished review gets
+                created, and the browser treats Enter in any text field as a
+                click on the first submit button it can find. */}
+            <div className="flex flex-wrap items-center gap-4">
+              {step > 0 && (
+                <button
+                  type="button"
+                  onClick={() => goToStep(step - 1)}
+                  className="rounded-lg border border-gray-300 px-6 py-3 font-medium hover:bg-gray-50"
+                >
+                  ← Back
+                </button>
+              )}
+
+              {step < LAST_STEP ? (
+                <button
+                  type="button"
+                  onClick={() => goToStep(step + 1)}
+                  className="flex-1 rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white hover:bg-indigo-700"
+                >
+                  Save &amp; continue to {STEP_NAMES[step + 1]}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                >
+                  {submitting ? 'Creating Review...' : 'Create Pre-Operative Review'}
+                </button>
+              )}
+
               <Link
                 href="/dashboard/preop-reviews"
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                className="rounded-lg border border-gray-300 px-6 py-3 font-medium hover:bg-gray-50"
               >
                 Cancel
               </Link>
             </div>
+
+            {step < LAST_STEP && (
+              <p className="text-xs text-gray-500">
+                No review or prescription is created until the last section. Each section
+                is saved on this device as you leave it — if you are called away, reopen
+                this page and continue where you stopped.
+              </p>
+            )}
           </>
         )}
       </form>
