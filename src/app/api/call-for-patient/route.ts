@@ -23,7 +23,20 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get('date');
-    const viewMode = searchParams.get('view') || 'cases'; // 'cases' or 'history'
+    const viewMode = searchParams.get('view') || 'cases'; // 'cases' | 'history' | 'staff'
+
+    /**
+     * The staff pick-lists are for dialogs, not for the board.
+     *
+     * Every load of this page fetched the on-duty porters (a helper that reads
+     * the roster and may fall back to every approved porter) and every
+     * perioperative and recovery nurse on the system — around ninety user
+     * records — so that two dropdowns would be ready in case somebody opened
+     * them. Most visits to this page never open either.
+     *
+     * They now have their own view, fetched the first time a dialog needs them.
+     */
+    const wantsStaffOnly = viewMode === 'staff';
 
     // Target date (default: today)
     const targetDate = dateParam ? new Date(dateParam) : new Date();
@@ -152,12 +165,12 @@ export async function GET(request: NextRequest) {
     // Porters available to be selected as patient transporters at invite time.
     // Prefer the porters ON DUTY for the day; fall back to the full approved
     // list only when no roster has been uploaded for the shift.
-    const onDuty = await getOnDutyPortersCleanersWithIds(new Date());
-    let porters: { id: string; fullName: string }[] = onDuty.porters.map((p) => ({
-      id: p.id,
-      fullName: p.fullName,
-    }));
-    if (porters.length === 0) {
+    let porters: { id: string; fullName: string }[] = [];
+    if (wantsStaffOnly) {
+      const onDuty = await getOnDutyPortersCleanersWithIds(new Date());
+      porters = onDuty.porters.map((p) => ({ id: p.id, fullName: p.fullName }));
+    }
+    if (wantsStaffOnly && porters.length === 0) {
       porters = await prisma.user.findMany({
         where: { role: 'PORTER', status: 'APPROVED' },
         select: { id: true, fullName: true },
@@ -167,14 +180,16 @@ export async function GET(request: NextRequest) {
 
     // Nurses that may be recorded as the holding-area / first-case sending
     // nurse(s) for the day.
-    const nurseOptions = await prisma.user.findMany({
-      where: {
-        role: { in: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'] },
-        status: 'APPROVED',
-      },
-      select: { id: true, fullName: true, phoneNumber: true },
-      orderBy: { fullName: 'asc' },
-    });
+    const nurseOptions = wantsStaffOnly
+      ? await prisma.user.findMany({
+          where: {
+            role: { in: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'] },
+            status: 'APPROVED',
+          },
+          select: { id: true, fullName: true, phoneNumber: true },
+          orderBy: { fullName: 'asc' },
+        })
+      : [];
 
     // Today's recorded holding-area / first-case sending nurse(s).
     const dateKey = watDateKey(targetDate);
@@ -283,6 +298,11 @@ export async function GET(request: NextRequest) {
         }
         theatreGroups[theatreName].cases.push(caseData);
       }
+    }
+
+    // The dialogs asked for pick-lists; give them exactly that.
+    if (wantsStaffOnly) {
+      return NextResponse.json({ porters, nurseOptions });
     }
 
     return NextResponse.json({

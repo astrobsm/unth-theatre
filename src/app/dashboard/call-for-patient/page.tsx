@@ -97,7 +97,42 @@ export default function CallForPatientPage() {
   // Holding-area / first-case sending nurse editor.
   const [editingSendingNurses, setEditingSendingNurses] = useState(false);
   const [sendingNurseRows, setSendingNurseRows] = useState<SendingNurse[]>([]);
-  const [sendingNotes, setSendingNotes] = useState('');
+
+
+  /**
+   * Theatre groups start closed, and the staff pick-lists are fetched the first
+   * time a dialog asks for them.
+   *
+   * Two separate costs. The lists were around ninety user records loaded on
+   * every visit for dropdowns most visits never open — that is now a second
+   * request, made on demand. The groups are a rendering cost: a full table per
+   * theatre, every row with its actions, laid out before anything appears. On a
+   * phone that is the part you feel.
+   */
+  const [openTheatres, setOpenTheatres] = useState<Record<string, boolean>>({});
+  const [staffLoaded, setStaffLoaded] = useState(false);
+  const staffLoadingRef = useRef(false);
+
+  const ensureStaffLists = useCallback(async () => {
+    if (staffLoaded || staffLoadingRef.current) return;
+    staffLoadingRef.current = true;
+    try {
+      const res = await fetch('/api/call-for-patient?view=staff');
+      if (res.ok) {
+        const staff = await res.json();
+        setData((prev) =>
+          prev
+            ? { ...prev, porters: staff.porters ?? [], nurseOptions: staff.nurseOptions ?? [] }
+            : prev,
+        );
+        setStaffLoaded(true);
+      }
+    } catch {
+      // The dialog still opens; the list is simply empty and a reopen retries.
+    } finally {
+      staffLoadingRef.current = false;
+    }
+  }, [staffLoaded]);  const [sendingNotes, setSendingNotes] = useState('');
   const [savingSending, setSavingSending] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -182,6 +217,9 @@ export default function CallForPatientPage() {
   // Open the porter-selection dialog before inviting. Cleared patients invite
   // directly; uncleared patients require a force-reason inside the dialog.
   const openInvite = (caseItem: CaseData) => {
+    // The porter list lives behind a second request now; ask for it as the
+    // dialog opens so it is there by the time somebody reaches the dropdown.
+    void ensureStaffLists();
     setInvitingCase(caseItem);
     setLateReason('');
     setForceReason('');
@@ -223,6 +261,7 @@ export default function CallForPatientPage() {
 
   // Open the holding-area / first-case sending nurse editor.
   const openSendingEditor = () => {
+    void ensureStaffLists();
     const existing = data?.sendingNurses?.nurses || [];
     setSendingNurseRows(existing.length > 0 ? existing.map((n) => ({ ...n })) : [{ name: '', phone: '' }]);
     setSendingNotes(data?.sendingNurses?.notes || '');
@@ -621,12 +660,23 @@ export default function CallForPatientPage() {
         if (filtered.length === 0 && searchTerm) return null;
         return (
           <div key={group.theatreName} className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() =>
+                setOpenTheatres((prev) => ({ ...prev, [group.theatreName]: !prev[group.theatreName] }))
+              }
+              aria-expanded={!!openTheatres[group.theatreName]}
+              className="flex w-full items-center gap-2 mb-3 text-left"
+            >
               <Building2 className="w-5 h-5 text-indigo-600" />
               <h2 className="text-xl font-bold text-gray-800">{group.theatreName}</h2>
               <span className="text-sm text-gray-500">({filtered.length} cases)</span>
-            </div>
+              <span aria-hidden className="ml-auto text-lg text-gray-400">
+                {openTheatres[group.theatreName] ? '−' : '+'}
+              </span>
+            </button>
 
+            {openTheatres[group.theatreName] && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -798,6 +848,7 @@ export default function CallForPatientPage() {
                 </table>
               </div>
             </div>
+            )}
           </div>
         );
       })}
