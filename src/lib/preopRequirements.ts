@@ -151,10 +151,43 @@ const LABEL: Record<MissingItem, string> = {
 const present = (v: unknown): boolean =>
   v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && Number.isNaN(v));
 
+/**
+ * The only thing that stops a case being booked.
+ *
+ * Everything else on this list is still ASKED FOR, still recorded, and still
+ * shown as outstanding on every board the case appears on — it simply no
+ * longer blocks the booking, because requiring it at booking put the work on
+ * the wrong person.
+ *
+ * The change was directed on 21 August, after surgical residents set out what
+ * the form had quietly transferred to them. Prof Ezemba put it plainly: the
+ * booking had previously been done by departmental staff; specifying savlon,
+ * caps, spirit, masks and suction tubing is not a surgeon's encumbrance; the
+ * anaesthetic assessment — respiratory system, ASA — is the anaesthetist's
+ * work; and height, weight and laboratory results were being typed in by the
+ * surgery resident. He was right on every count, and the figures agreed:
+ * against 563 cases in two months the anaesthetists recorded 3 reviews, while
+ * ASA was entered 448 times on the patient record by whoever registered them.
+ *
+ * A requirement enforced against the wrong person does not get the requirement
+ * met. It gets the booking delayed, done elsewhere, or abandoned in a draft —
+ * which is exactly what happened to a CTU list of three cases that existed in
+ * neither database at midnight.
+ *
+ * Consent stays. It is the one item that is genuinely the surgeon's, that the
+ * patient must be present for, and that cannot be reconstructed afterwards: a
+ * consent that cannot be produced is, in law, indistinguishable from a consent
+ * that was never taken. A photograph of the signed paper form satisfies it.
+ */
+const BLOCKS_BOOKING: MissingItem[] = ['CONSENT'];
+
 export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult {
   const urgency = String(input.urgency ?? 'ELECTIVE').toUpperCase();
   const isElective = urgency === 'ELECTIVE';
 
+  // Everything not yet supplied. Distinct from what BLOCKS: the case carries
+  // all of it as an outstanding debt so theatre can see what is not ready,
+  // while only the blocking subset can refuse the booking.
   const missing: MissingItem[] = [];
 
   // Consent: either route satisfies it. A signed paper form scanned on a phone is
@@ -195,14 +228,21 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   if (!((input.prescriptionItemCount ?? 0) > 0)) missing.push('PRESCRIPTION');
   if (!((input.consumableRequestCount ?? 0) > 0)) missing.push('CONSUMABLES');
 
-  if (missing.length === 0) {
+  // Everything absent stays on the case as a debt; only the blocking subset can
+  // refuse it. `outstanding` is therefore the full list in every branch below —
+  // relaxing what stops a booking must not also blind the theatre to what is
+  // not ready.
+  const outstanding = [...missing];
+  const blocking = missing.filter((m) => BLOCKS_BOOKING.includes(m));
+
+  if (blocking.length === 0) {
     return {
-      ok: true, missing: [], messages: [],
-      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding: [],
+      ok: true, missing: outstanding, messages: outstanding.map((m) => LABEL[m]),
+      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding,
     };
   }
 
-  const messages = missing.map((m) => LABEL[m]);
+  const messages = blocking.map((m) => LABEL[m]);
 
   // Booked from the third section, with the rest to follow before the morning.
   //
@@ -217,8 +257,8 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   // required.
   if (input.deferOutstanding) {
     return {
-      ok: true, missing, messages,
-      overrideRequired: false, overrideAccepted: false, deferred: true, outstanding: missing,
+      ok: true, missing: blocking, messages,
+      overrideRequired: false, overrideAccepted: false, deferred: true, outstanding,
     };
   }
 
@@ -227,8 +267,8 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   // eventually is.
   if (isElective) {
     return {
-      ok: false, missing, messages,
-      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding: missing,
+      ok: false, missing: blocking, messages,
+      overrideRequired: false, overrideAccepted: false, deferred: false, outstanding,
     };
   }
 
@@ -239,14 +279,14 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
 
   return {
     ok: accepted,
-    missing,
+    missing: blocking,
     messages,
     overrideRequired: !accepted,
     overrideAccepted: accepted,
     deferred: false,
     // Recorded either way. A deferral is a debt, not a discharge — the case
     // carries these until somebody clears them.
-    outstanding: missing,
+    outstanding,
   };
 }
 

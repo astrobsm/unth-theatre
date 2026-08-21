@@ -47,12 +47,15 @@ describe('elective — hard block, no override', () => {
     expect(r.missing).toContain('CONSENT');
   });
 
-  it('blocks a missing haemoglobin', () => {
+  it('RECORDS a missing haemoglobin rather than refusing the booking', () => {
+    // Changed on 21 August. The labs were being typed in by the surgery
+    // resident, which is not their work, and a requirement enforced against
+    // the wrong person does not get met — it gets the booking abandoned.
     const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
       urgency: 'ELECTIVE', labs: { ...fullLabs, recentHb: null }, consent: consented,
     });
-    expect(r.ok).toBe(false);
-    expect(r.missing).toContain('HAEMOGLOBIN');
+    expect(r.ok).toBe(true);
+    expect(r.outstanding).toContain('HAEMOGLOBIN');
   });
 
   it('treats a haemoglobin with no sample time as missing', () => {
@@ -116,8 +119,10 @@ describe('emergency — deferrable, with a recorded reason', () => {
     const r = checkPreopRequirements(base);
     expect(r.ok).toBe(false);
     expect(r.overrideRequired).toBe(true);
+    // Consent is the only item that can refuse a booking; the absent
+    // haemoglobin is carried on the case instead of standing in the way.
     expect(r.missing).toContain('CONSENT');
-    expect(r.missing).toContain('HAEMOGLOBIN');
+    expect(r.outstanding).toContain('HAEMOGLOBIN');
   });
 
   it('permits submission with a reason and a named clinician', () => {
@@ -248,79 +253,74 @@ describe('outstandingLabel', () => {
 });
 
 describe('the pharmacy prescription and the consumables pack', () => {
-  // Both were optional. Cases arrived with nothing prepared and nothing
-  // picked, discovered at the theatre door — the most expensive possible
-  // moment to discover it.
+  // These were required, and requiring them was wrong. Specifying savlon,
+  // caps, spirit, masks and suction tubing is not a surgeon's encumbrance —
+  // Prof Ezemba said so on 21 August and the instruction followed the same
+  // morning. They are still asked for, still recorded, and still shown as
+  // outstanding; they simply no longer stand between a patient and a theatre
+  // list.
   const base = { urgency: 'ELECTIVE' as const, labs: fullLabs, consent: consented };
 
-  it('refuses an elective booking that sends Pharmacy nothing', () => {
+  it('books an elective case that sends Pharmacy nothing', () => {
     const r = checkPreopRequirements({ ...base, prescriptionItemCount: 0, consumableRequestCount: 4 });
-    expect(r.ok).toBe(false);
-    expect(r.missing).toContain('PRESCRIPTION');
-  });
-
-  it('refuses an elective booking with no consumables requested', () => {
-    const r = checkPreopRequirements({ ...base, prescriptionItemCount: 2, consumableRequestCount: 0 });
-    expect(r.ok).toBe(false);
-    expect(r.missing).toContain('CONSUMABLES');
-  });
-
-  it('treats an empty prescription as no prescription', () => {
-    // Sending a prescription with no drugs on it and sending none at all are
-    // the same event to Pharmacy.
-    const r = checkPreopRequirements({ ...base, prescriptionItemCount: 0, consumableRequestCount: 0 });
-    expect(r.missing).toContain('PRESCRIPTION');
-    expect(r.missing).toContain('CONSUMABLES');
-  });
-
-  it('treats an absent count as nothing sent, never as satisfied', () => {
-    // A caller that has not been taught about these must fail closed. The
-    // opposite default would make the requirement disappear silently the first
-    // time somebody adds a new booking route.
-    const r = checkPreopRequirements(base);
-    expect(r.ok).toBe(false);
-    expect(r.missing).toContain('PRESCRIPTION');
-    expect(r.missing).toContain('CONSUMABLES');
-  });
-
-  it('requires them on an emergency too, where the labs are excused', () => {
-    // labsHandledElsewhere exists because the emergency lab workup collects
-    // labs afterwards. Nothing collects the drugs and the pack afterwards, and
-    // an emergency needs them picked more urgently, not less.
-    const r = checkPreopRequirements({
-      urgency: 'EMERGENCY', labsHandledElsewhere: true, labs: {}, consent: consented,
-      prescriptionItemCount: 0, consumableRequestCount: 0,
-    });
-    expect(r.missing).toContain('PRESCRIPTION');
-    expect(r.missing).toContain('CONSUMABLES');
-    expect(r.overrideRequired).toBe(true);
-  });
-
-  it('lets an emergency defer them with a named reason', () => {
-    const r = checkPreopRequirements({
-      urgency: 'EMERGENCY', labsHandledElsewhere: true, labs: {}, consent: consented,
-      prescriptionItemCount: 0, consumableRequestCount: 0,
-      override: {
-        reason: 'Theatre already open for a ruptured ectopic; pack and drugs drawn from the emergency trolley.',
-        byId: 'u1', byName: 'Dr Okafor',
-      },
-    });
     expect(r.ok).toBe(true);
-    expect(r.overrideAccepted).toBe(true);
-    // A deferral is a debt, not a discharge.
+    expect(r.outstanding).toContain('PRESCRIPTION');
+  });
+
+  it('books an elective case with no consumables requested', () => {
+    const r = checkPreopRequirements({ ...base, prescriptionItemCount: 2, consumableRequestCount: 0 });
+    expect(r.ok).toBe(true);
+    expect(r.outstanding).toContain('CONSUMABLES');
+  });
+
+  it('still counts an empty prescription as no prescription', () => {
+    // Sending a prescription with no drugs on it and sending none at all are
+    // the same event to Pharmacy. Relaxing what BLOCKS must not blur what is
+    // actually absent.
+    const r = checkPreopRequirements({ ...base, prescriptionItemCount: 0, consumableRequestCount: 0 });
     expect(r.outstanding).toContain('PRESCRIPTION');
     expect(r.outstanding).toContain('CONSUMABLES');
   });
 
-  it('still refuses an emergency deferral that names no one', () => {
-    // WHO is taken from the session, never from the body. Without it there is
-    // nobody to ask about the decision afterwards.
+  it('treats an absent count as nothing sent, never as satisfied', () => {
+    // A caller that has not been taught about these must still report them as
+    // outstanding rather than silently as done.
+    const r = checkPreopRequirements(base);
+    expect(r.outstanding).toContain('PRESCRIPTION');
+    expect(r.outstanding).toContain('CONSUMABLES');
+  });
+
+  it('records them on an emergency too, without demanding an override', () => {
     const r = checkPreopRequirements({
       urgency: 'EMERGENCY', labsHandledElsewhere: true, labs: {}, consent: consented,
       prescriptionItemCount: 0, consumableRequestCount: 0,
-      override: { reason: 'No time, patient exsanguinating in reception.', byId: null, byName: null },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.overrideRequired).toBe(false);
+    expect(r.outstanding).toContain('PRESCRIPTION');
+    expect(r.outstanding).toContain('CONSUMABLES');
+  });
+
+  it('never lets the theatre lose sight of what is not ready', () => {
+    // The guard on this whole change. Removing the block must not remove the
+    // visibility: a case with nothing prepared has to still say so.
+    const r = checkPreopRequirements({
+      urgency: 'ELECTIVE', labs: {}, consent: consented,
+      prescriptionItemCount: 0, consumableRequestCount: 0,
+    });
+    expect(r.ok).toBe(true);
+    for (const item of ['HAEMOGLOBIN', 'ELECTROLYTES', 'VIRAL_SCREEN', 'BLOOD_PRESSURE', 'PRESCRIPTION', 'CONSUMABLES']) {
+      expect(r.outstanding, item).toContain(item);
+    }
+  });
+
+  it('keeps consent as the one item that can refuse a booking', () => {
+    const r = checkPreopRequirements({
+      urgency: 'ELECTIVE', labs: fullLabs, consent: {},
+      prescriptionItemCount: 2, consumableRequestCount: 4,
     });
     expect(r.ok).toBe(false);
+    expect(r.missing).toEqual(['CONSENT']);
   });
 });
 
@@ -349,12 +349,13 @@ describe('deferOutstanding — booked from section 3, rest owed before the morni
     expect(r.deferred).toBe(true);
   });
 
-  it('waives NOTHING — every missing item comes back as an outstanding debt', () => {
+  it('waives NOTHING — every absent item comes back as an outstanding debt', () => {
     const r = checkPreopRequirements({ urgency: 'ELECTIVE', ...nothingDone });
-    expect(r.outstanding).toEqual(r.missing);
     for (const item of ['CONSENT', 'HAEMOGLOBIN', 'VIRAL_SCREEN', 'PRESCRIPTION', 'CONSUMABLES']) {
       expect(r.outstanding, `${item} must survive as a debt`).toContain(item);
     }
+    // `missing` is now the blocking subset, which is consent alone.
+    expect(r.missing).toEqual(['CONSENT']);
   });
 
   it('is not an override, and must not be recorded as one', () => {

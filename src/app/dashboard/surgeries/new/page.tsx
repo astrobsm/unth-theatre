@@ -712,36 +712,26 @@ export default function NewSurgeryPage() {
     const selPatient = patients.find((p) => p.id === selectedPatientId);
     const patientAgeYears =
       selPatient && (selPatient.ageUnit ?? 'YEARS') === 'YEARS' ? Number(selPatient.age) : 0;
+    // Only consent can refuse a booking. Everything else this form collects —
+    // the labs, the risk assessments, the pharmacy prescription and the
+    // consumables pack — is recorded and shown as outstanding, but does not
+    // stand between a patient and a theatre list.
+    //
+    // Directed on 21 August. The surgical residents set out what the form had
+    // quietly transferred to them: booking that departmental staff used to do,
+    // specifying savlon and caps and suction tubing, the anaesthetic
+    // assessment, ward height and weight, and typing in laboratory results.
+    // They were right, and the figures agreed — against 563 cases in two
+    // months the anaesthetists recorded 3 reviews, while ASA was entered 448
+    // times by whoever registered the patient.
+    //
+    // This mirrors BLOCKS_BOOKING in preopRequirements.ts. If the two ever
+    // disagree the person filling the form is the one who suffers for it, so
+    // they are deliberately the same short rule stated twice.
+    void patientAgeYears;
     const missing: string[] = [];
-    if (preop.recentHb === '') missing.push('recent haemoglobin');
-    if (!preop.hbSampleAt) missing.push('haemoglobin sample date/time');
-    if (preop.potassium === '') missing.push('potassium');
-    if (preop.sodium === '') missing.push('sodium');
-    if (preop.creatinine === '') missing.push('creatinine');
-    if (!preop.hbsAgStatus) missing.push('HBsAg status');
-    if (!preop.hcvStatus) missing.push('HCV status');
-    if (!preop.hivStatus) missing.push('HIV status');
-    if (preop.bpSystolic === '' || preop.bpDiastolic === '') missing.push('blood pressure');
-    if (!preop.bleedingRiskLevel) missing.push('bleeding-risk assessment');
-    if (!preop.nutritionalStatusAtBooking) missing.push('nutritional assessment');
-    if (patientAgeYears > 45 && !preop.pressureSoreRiskAtBooking) {
-      missing.push('pressure-sore risk assessment (required for patients over 45)');
-    }
-    // Consent, the pharmacy prescription and the consumables pack are required
-    // by the server too — checked here so the answer arrives before the form is
-    // submitted rather than after it is filled in.
     if (!consentFile && !isConsentSigned(consentForm)) {
-      missing.push('informed consent (upload the signed form, or complete it on the app)');
-    }
-    // Counted from BOTH sources, exactly as the payload below is built: items
-    // picked from the catalogue and items brought in by an applied pack. Either
-    // satisfies the requirement, and checking only one would refuse a booking
-    // the server would have accepted.
-    if (Object.keys(selectedDrugs).length + packPick.drugDressingRequests.length === 0) {
-      missing.push('pharmacy prescription (the drugs and fluids Pharmacy must prepare)');
-    }
-    if (Object.keys(selectedConsumables).length + packPick.consumableRequests.length === 0) {
-      missing.push('consumables request (the pack the theatre will be opened with)');
+      missing.push('the signed consent (attach a photograph of the paper form, or complete it on the app)');
     }
     // ── Elective blocks. Emergency and urgent defer, with a reason. ─────────
     //
@@ -2080,6 +2070,56 @@ ${pretty} — ${days} days from today.
               </label>
             </div>
           </div>
+        </div>
+
+        {/*
+          Signed consent, attachable HERE — in the third section, before the
+          case is sent to theatre.
+
+          The booking is three sections plus a consent, and consent is the one
+          item that still blocks: it is genuinely the surgeon's, the patient
+          must be present for it, and it cannot be reconstructed afterwards. A
+          photograph of the signed paper form satisfies it in full — nobody has
+          to sign on a screen, and the paper form remains the paper form.
+
+          The complete electronic consent form is still available in the next
+          section for anyone who wants it. This is the fifteen-second route.
+        */}
+        <div className={`${stepClass(2)} card border-2 border-emerald-200`}>
+          <div className="mb-2 flex items-center gap-3">
+            <FileSignature className="h-6 w-6 text-emerald-600" />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Signed consent</h2>
+              <p className="text-sm text-gray-500">
+                Photograph the signed paper form and attach it — PDF or image, up to 10 MB.
+              </p>
+            </div>
+          </div>
+          <input
+            aria-label="Upload signed informed consent file"
+            title="Upload signed informed consent file"
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
+            onChange={handleConsentFileChange}
+            className="block text-sm"
+          />
+          {consentError && <div className="mt-2 text-sm text-red-600">{consentError}</div>}
+          {consentFile && (
+            <div className="mt-3 flex items-center gap-3 text-sm">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <span className="font-medium">{consentFile.name}</span>
+              <span className="text-gray-500">
+                {(consentFile.size / 1024).toFixed(0)} KB
+              </span>
+              <button
+                type="button"
+                className="text-xs text-red-600 underline"
+                onClick={() => setConsentFile(null)}
+              >
+                Remove
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Informed / Electronic Consent — UNTH consent form captured at booking */}

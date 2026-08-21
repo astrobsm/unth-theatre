@@ -210,6 +210,14 @@ export default function NewPatientPage() {
   const [resumable, setResumable] = useState<PatientDraft | null>(null);
 
   /**
+   * Set by "Register patient now" immediately before the form submits.
+   *
+   * A ref, not state: handleSubmit has to see it in the same tick, and a state
+   * update would not have landed by the time the submit handler runs.
+   */
+  const registerNowRef = useRef(false);
+
+  /**
    * Snapshot everything the person has typed.
    *
    * Two halves, because this page keeps its answers in two places: the plain
@@ -455,12 +463,42 @@ export default function NewPatientPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    // Read and CLEAR at once, so a later press cannot inherit a short-path
+    // registration it never asked for.
+    const registerNow = registerNowRef.current;
+    registerNowRef.current = false;
+
     // Enter pressed in a text field on section 2 must not register the patient.
     // The guard is here rather than only on the button because the browser
     // fires submit from the keyboard without any button being pressed at all.
-    if (step < LAST_STEP) {
+    if (step < LAST_STEP && !registerNow) {
       goToStep(step + 1);
       return;
+    }
+
+    // The short path carries formNoValidate — the later sections hold fields
+    // the browser would otherwise refuse to skip past, silently, in the
+    // console. So the five the database actually requires are checked here.
+    // These are the whole of a registration now: everything after them is an
+    // assessment, and an assessment is not the registering doctor's work.
+    if (registerNow) {
+      const fd = new FormData(e.currentTarget);
+      const need: string[] = [];
+      if (!String(fd.get('name') ?? '').trim()) need.push('the patient name');
+      if (!String(fd.get('folderNumber') ?? '').trim()) need.push('the folder number');
+      if (!age) need.push('the age');
+      if (!gender) need.push('the sex');
+      if (!String(fd.get('ward') ?? '').trim()) need.push('the ward');
+      if (need.length) {
+        setError(
+          `Still needed to register this patient: ${
+            need.length === 1
+              ? need[0]
+              : `${need.slice(0, -1).join(', ')} and ${need[need.length - 1]}`
+          }.`,
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -1389,7 +1427,7 @@ export default function NewPatientPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="label">Height (cm) *</label>
+              <label className="label">Height (cm)</label>
               <input
                 type="number"
                 step="0.1"
@@ -1401,7 +1439,7 @@ export default function NewPatientPage() {
             </div>
 
             <div>
-              <label className="label">Weight (kg) *</label>
+              <label className="label">Weight (kg)</label>
               <input
                 type="number"
                 step="0.1"
@@ -1581,8 +1619,8 @@ export default function NewPatientPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="label">Fitness for Surgery *</label>
-              <select name="fitnessForSurgery" required className="input-field">
+              <label className="label">Fitness for Surgery</label>
+              <select name="fitnessForSurgery" className="input-field">
                 <option value="">Select Fitness</option>
                 <option value="FIT">Fit for Surgery</option>
                 <option value="FIT_WITH_PRECAUTIONS">Fit with Precautions</option>
@@ -1615,22 +1653,20 @@ export default function NewPatientPage() {
             </div>
 
             <div>
-              <label className="label">Assessed By *</label>
+              <label className="label">Assessed By</label>
               <input
                 type="text"
                 name="assessedBy"
-                required
                 className="input-field"
                 placeholder="Name of assessing physician"
               />
             </div>
 
             <div>
-              <label className="label">Assessment Date *</label>
+              <label className="label">Assessment Date</label>
               <input
                 type="datetime-local"
                 name="assessmentDate"
-                required
                 className="input-field"
                 defaultValue={new Date().toISOString().slice(0, 16)}
               />
@@ -1655,13 +1691,32 @@ export default function NewPatientPage() {
               </button>
             )}
 
+            {step < LAST_STEP && (
+              /* The whole registration, in one press. Name, folder number,
+                 age, sex and ward are all the database asks for; the risk
+                 scores, the labs and the fitness opinion that follow are an
+                 assessment, and an assessment belongs to whoever does the
+                 assessing. formNoValidate is essential — without it the
+                 browser refuses the submit over empty fields in sections
+                 nobody can see, and says so only in the console. */
+              <button
+                type="submit"
+                formNoValidate
+                onClick={() => { registerNowRef.current = true; }}
+                disabled={loading}
+                className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+              >
+                {loading ? 'Registering…' : 'Register patient now'}
+              </button>
+            )}
+
             {step < LAST_STEP ? (
               <button
                 type="button"
                 onClick={() => goToStep(step + 1)}
-                className="btn-primary"
+                className="btn-secondary"
               >
-                Save &amp; continue to {STEP_NAMES[step + 1]}
+                Add assessment &rarr;
               </button>
             ) : (
               <button
@@ -1676,11 +1731,18 @@ export default function NewPatientPage() {
         </div>
 
         {step < LAST_STEP && (
-          <p className="text-right text-xs text-gray-500">
-            The patient is not registered until the last section. Your answers are kept
-            on this device as you go — if you are interrupted, reopen this page and
-            continue where you stopped.
-          </p>
+          <div className="rounded-lg border-l-4 border-green-500 bg-green-50 p-3">
+            <p className="text-sm font-semibold text-green-900">
+              Name, folder number, age, sex and ward are all that is needed.
+            </p>
+            <p className="mt-1 text-xs text-green-800">
+              Press <span className="font-semibold">Register patient now</span> and the
+              patient exists and can be booked. The risk scores, measurements and
+              laboratory results in the sections that follow are optional here and can
+              be completed by whoever carries out the assessment. Your answers are kept
+              on this device as you go.
+            </p>
+          </div>
         )}
       </form>
     </div>
