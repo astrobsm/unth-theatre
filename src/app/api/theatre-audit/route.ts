@@ -25,7 +25,8 @@ type AuditSourceType =
   | 'faults'
   | 'anonymous_tips'
   | 'security_reports'
-  | 'late_first_case';
+  | 'late_first_case'
+  | 'unattended_deadlines';
 
 type AuditSectionItem = {
   id: string;
@@ -209,6 +210,34 @@ export async function GET(request: NextRequest) {
         anesthetist: { select: { fullName: true } },
       },
     });
+
+    /**
+     * Missed deadlines nobody attended to in twelve hours.
+     *
+     * These arrive here having already been on the person's own dashboard,
+     * where marking the case started or simply saying what delayed it would
+     * have kept them out. What reaches audit is silence, not lateness — which
+     * is the distinction the disciplinary-query version could not make.
+     */
+    const unattendedDeadlines = await prisma.deadlineAttention.findMany({
+      where: { status: 'IN_AUDIT' },
+      orderBy: { movedToAuditAt: 'desc' },
+      take: 200,
+    });
+
+    const unattendedDeadlineItems: AuditSectionItem[] = unattendedDeadlines.map((d) => ({
+      id: d.id,
+      sourceType: 'unattended_deadlines' as const,
+      title: `${d.userName} — ${d.subjectLabel}`,
+      summary:
+        `${d.subjectType.replace(/_/g, ' ')} deadline of ` +
+        `${new Date(d.deadlineAt).toLocaleString('en-GB')} passed with no response for twelve hours.`,
+      status: d.status,
+      occurredAt: (d.movedToAuditAt ?? d.notifiedAt).toISOString(),
+      staffInvolved: uniqueNonEmpty([d.userName]),
+      audited: false,
+      lastRecommendationAt: null,
+    }));
 
     const delayedTaskQueries = disciplinaryQueries.filter((q) =>
       ['READINESS_LATE', 'THEATRE_SETUP_LATE'].includes(q.queryType)
@@ -441,6 +470,7 @@ export async function GET(request: NextRequest) {
       anonymous_tips: withReviewState(anonymousTipItems),
       security_reports: withReviewState(securityReportItems),
       late_first_case: withReviewState(lateFirstCaseItems),
+      unattended_deadlines: withReviewState(unattendedDeadlineItems),
     };
 
     if (section && section in sections) {

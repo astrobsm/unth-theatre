@@ -14,7 +14,8 @@ type AuditSourceType =
   | 'faults'
   | 'anonymous_tips'
   | 'security_reports'
-  | 'late_first_case';
+  | 'late_first_case'
+  | 'unattended_deadlines';
 
 type AuditSectionItem = {
   id: string;
@@ -40,6 +41,7 @@ type AuditResponse = {
 };
 
 const SECTION_META: Record<AuditSourceType, { label: string; short: string }> = {
+  unattended_deadlines: { label: 'Unattended Deadlines', short: 'Unattended' },
   cancellations: { label: 'Case Cancellations', short: 'Cancellations' },
   incidents: { label: 'Incident Reports', short: 'Incidents' },
   delayed_tasks: { label: 'Delayed Tasks', short: 'Delayed Tasks' },

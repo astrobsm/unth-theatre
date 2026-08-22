@@ -20,6 +20,10 @@ import { useState } from 'react';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import MyTheatreTeam from '@/components/MyTheatreTeam';
 import PersonalBoard from '@/components/PersonalBoard';
+// Missed theatre deadlines, addressed to this person. Renders nothing when
+// there are none — a permanent empty panel is a daily reminder of being
+// watched, and this must not feel like that.
+import DeadlineAttentions from '@/components/DeadlineAttentions';
 import PerioperativeTracker from '@/components/PerioperativeTracker';
 
 interface DashboardStats {
@@ -178,6 +182,7 @@ export default function DashboardPage() {
       {/* What this person must do today, above everything else. A query with a
           deadline and a compulsory duty are worth more of the fold than a
           navigation card. */}
+      <DeadlineAttentions />
       <PersonalBoard />
 
       {/* Where this surgeon's patients actually are. Renders nothing for

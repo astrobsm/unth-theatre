@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { AUDIT_AFTER_MS } from '@/lib/deadlineAttention';
 
 export const dynamic = 'force-dynamic';
 
@@ -630,40 +631,27 @@ export async function GET(request: NextRequest) {
     // confirmed hearing an announcement — not from a guess. Anyone who
     // acknowledged is not queried, whatever else happened.
     // =====================================================================
-    /**
-     * PAUSED 22 August 2026, deliberately, and not because it is broken.
-     *
-     * This check issues a formal disciplinary query to a named clinician and
-     * escalates it to the Chief Medical Director after six hours. It works.
-     * But nobody in the department has been told the mechanism exists, so the
-     * first any of them would learn of it is by receiving a letter — and after
-     * a fortnight in which the residents told us, at length and correctly,
-     * that the system had been quietly moving work onto them, that is the
-     * worst possible way to introduce it.
-     *
-     * It is being replaced by a gentler sequence, already specified: a
-     * notification on the individual's dashboard, "attended to" meaning the
-     * case is marked started OR a delay reason is logged AND later closed out
-     * with how it was resolved, and only after twelve hours unattended does it
-     * move to Theatre Audit, where staff are invited to a discussion rather
-     * than sent a query.
-     *
-     * Flip this to true only when that flow is live and people have been told.
-     */
-    const EMERGENCY_QUERIES_ENABLED = false;
-
-    if (EMERGENCY_QUERIES_ENABLED && (action === 'check-emergency-alerts' || action === 'check-all')) {
-      /** The alert is still running until an hour past the required time. */
+    // =====================================================================
+    // 4. EMERGENCY ALERTS THAT NOBODY ANSWERED
+    // ---------------------------------------------------------------------
+    // This used to issue a disciplinary query immediately — a letter from the
+    // CMD's office to a named clinician, escalated after six hours. It ended a
+    // conversation before one had been had, and it landed on people who may
+    // well have been in theatre at the time.
+    //
+    // Now it raises a DeadlineAttention: a notification on that person's own
+    // dashboard, which they clear by marking the case started, or by saying
+    // what delayed it — and a reason keeps it out of audit while still owing an
+    // outcome. Twelve hours untouched and it becomes an audit matter.
+    //
+    // The rule is in lib/deadlineAttention.ts, applied and not reimplemented.
+    // =====================================================================
+    if (action === 'check-emergency-alerts' || action === 'check-all') {
       const ALERT_GRACE_MS = 60 * 60 * 1000;
-      /** Unanswered this long and it goes to the CMD. */
-      const ESCALATE_AFTER_MS = 6 * 60 * 60 * 1000;
 
       const candidates = await prisma.emergencySurgeryBooking.findMany({
         where: {
           status: { in: ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED'] as any },
-          // A day is as far back as this looks. Older than that and the
-          // question is not "who ignored the alert" but "why is this booking
-          // still open", which is a different conversation.
           createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
         },
         include: { surgery: { select: { scrubNurseId: true } } },
@@ -672,26 +660,19 @@ export async function GET(request: NextRequest) {
       });
 
       for (const booking of candidates) {
-        // Taken. Nothing to answer for.
+        // Taken: a theatre AND a scrub nurse. Nothing to raise.
         if (booking.theatreId && booking.surgery?.scrubNurseId) continue;
 
         const deadline = booking.requiredByTime ?? booking.createdAt;
-        const sinceDeadline = now.getTime() - deadline.getTime();
-        // The alert may still be sounding; give it its full life first.
-        if (sinceDeadline < ALERT_GRACE_MS) continue;
+        if (now.getTime() - deadline.getTime() < ALERT_GRACE_MS) continue;
 
-        const shouldEscalate = sinceDeadline >= ESCALATE_AFTER_MS;
-
-        // Who confirmed hearing it.
+        // Anyone who confirmed hearing the alert is not asked about it.
         const acks = await prisma.radioAcknowledgment.findMany({
           where: { announcement: { dedupeKey: `emergencyBookingId:${booking.id}` } },
           select: { userId: true },
         });
         const acknowledged = new Set(acks.map((a) => a.userId));
 
-        // Who was expected to. The surgeon who raised it, plus everybody
-        // rostered on duty that day — which is where the anaesthetists and
-        // technicians are recorded.
         const dayStart = new Date(deadline); dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(deadline); dayEnd.setHours(23, 59, 59, 999);
         const rostered = await prisma.roster.findMany({
@@ -715,102 +696,96 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        const when = deadline.toLocaleString('en-GB', {
-          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-        });
-        // One query per person per booking, keyed so re-runs update rather
-        // than duplicate. This checker may run every few minutes.
-        const deadlineType = `EMERGENCY_ALERT:${booking.id}`;
+        const label = `${booking.patientName ?? 'Emergency case'} — ${booking.procedureName ?? 'procedure not stated'}`;
 
         for (const [userId, person] of Array.from(expected.entries())) {
           if (acknowledged.has(userId)) continue;
 
-          const existing = await prisma.disciplinaryQuery.findFirst({
-            where: { recipientId: userId, deadlineType },
-          });
-
-          if (existing) {
-            // Already queried. The only thing left is the six-hour escalation.
-            if (shouldEscalate && existing.status !== 'ESCALATED' && !existing.escalatedAt) {
-              await prisma.disciplinaryQuery.update({
-                where: { id: existing.id },
-                data: {
-                  status: 'ESCALATED',
-                  escalatedTo: 'CHIEF_MEDICAL_DIRECTOR',
-                  escalatedAt: now,
-                  escalationReason:
-                    'Auto-escalated: emergency alert unanswered for six hours',
-                },
-              });
-              results.queries.push({
-                unit: 'EMERGENCY',
-                category: 'ALERT_UNANSWERED_ESCALATED',
+          // The unique index makes this idempotent: a checker running every
+          // fifteen minutes raises each deadline once, not ninety-six times.
+          const created = await prisma.deadlineAttention.upsert({
+            where: {
+              userId_subjectType_subjectId: {
                 userId,
-                name: person.name,
-                queryRef: existing.referenceNumber,
-                type: 'DUTY_ABANDONMENT',
-              });
-            }
-            continue;
-          }
-
-          const query = await prisma.disciplinaryQuery.create({
-            data: {
-              referenceNumber: generateRefNumber(),
-              recipientId: userId,
-              recipientName: person.name,
-              recipientRole: person.role,
-              recipientUnit: 'THEATRE',
-              queryType: 'DUTY_ABANDONMENT',
-              subject: `No response to emergency surgery alert — ${booking.patientName ?? 'emergency case'}`,
-              description:
-                `Dear ${person.name},\n\n` +
-                `An emergency surgery alert was broadcast for ${booking.patientName ?? 'an emergency case'} ` +
-                `(${booking.procedureName ?? 'procedure not stated'}), required by ${when}.\n\n` +
-                `The alert repeated every ten minutes until one hour past that time. ` +
-                `The record shows no acknowledgement from you, and the case had neither a theatre ` +
-                `nor a scrub nurse assigned when the alert stopped.\n\n` +
-                `An emergency alert that nobody answers is a patient waiting. ` +
-                `You are required to provide a written explanation within 24 hours of receipt.\n\n` +
-                `If you did respond and this is in error, say so in your reply and it will be ` +
-                `withdrawn — the acknowledgement record is what this query was raised from.\n\n` +
-                `Signed,\nOffice of the Chief Medical Director\n` +
-                `University of Nigeria Teaching Hospital, Ituku Ozalla`,
-              deadlineTime: deadline,
-              deadlineType,
-              status: shouldEscalate ? 'ESCALATED' : 'ISSUED',
-              ...(shouldEscalate
-                ? {
-                    escalatedTo: 'CHIEF_MEDICAL_DIRECTOR',
-                    escalatedAt: now,
-                    escalationReason:
-                      'Auto-escalated: emergency alert unanswered for six hours',
-                  }
-                : {}),
-              evidence: JSON.stringify({
-                emergencyBookingId: booking.id,
-                patient: booking.patientName ?? null,
-                requiredByTime: booking.requiredByTime?.toISOString() ?? null,
-                theatreAssigned: Boolean(booking.theatreId),
-                scrubNurseAssigned: Boolean(booking.surgery?.scrubNurseId),
-                hoursUnanswered: Math.round(sinceDeadline / 3600000),
-                acknowledgedBy: acks.length,
-              }),
-              issuedByName: 'Office of the Chief Medical Director',
-              issuedByTitle: 'University of Nigeria Teaching Hospital, Ituku Ozalla',
+                subjectType: 'EMERGENCY_ALERT',
+                subjectId: booking.id,
+              },
+            },
+            update: {},
+            create: {
+              userId,
+              userName: person.name,
+              userRole: person.role,
+              subjectType: 'EMERGENCY_ALERT',
+              subjectId: booking.id,
+              subjectLabel: label,
+              deadlineAt: deadline,
             },
           });
 
-          results.queries.push({
-            unit: 'EMERGENCY',
-            category: shouldEscalate ? 'ALERT_UNANSWERED_ESCALATED' : 'ALERT_UNANSWERED',
-            userId,
-            name: person.name,
-            queryRef: query.referenceNumber,
-            type: 'DUTY_ABANDONMENT',
-          });
+          // Only notify the first time. An upsert that changed nothing must not
+          // put the same card on somebody's dashboard four times an hour.
+          if (created.createdAt.getTime() === created.updatedAt.getTime()) {
+            try {
+              await prisma.systemNotification.create({
+                data: {
+                  userId,
+                  type: 'GENERAL' as any,
+                  title: 'Emergency alert needs your attention',
+                  message:
+                    `An emergency alert for ${label} was broadcast and the case still has ` +
+                    `no theatre and scrub nurse assigned. If it has started, say so. If ` +
+                    `something delayed it, tell us what — that is enough to keep it out of ` +
+                    `Theatre Audit while it is being sorted out.`,
+                  priority: 'HIGH',
+                  actionUrl: '/dashboard',
+                  relatedEntityType: 'DeadlineAttention',
+                  relatedEntityId: created.id,
+                  deadlineAt: deadline,
+                },
+              });
+            } catch {
+              // The attention record is the thing that matters; a failed bell
+              // must not stop it existing.
+            }
+            results.queries.push({
+              unit: 'EMERGENCY',
+              category: 'ATTENTION_RAISED',
+              userId,
+              name: person.name,
+              queryRef: created.id,
+              type: 'EMERGENCY_ALERT',
+            });
+          }
         }
+      }
+
+      // ---- Twelve hours untouched: refer it to Theatre Audit -------------
+      // OPEN only. A logged delay reason keeps a case out of audit even while
+      // it still owes an outcome, because somebody IS dealing with it — and
+      // hauling that person into a discussion teaches everybody else to say
+      // nothing at all.
+      const overdue = await prisma.deadlineAttention.findMany({
+        where: {
+          status: 'OPEN',
+          movedToAuditAt: null,
+          notifiedAt: { lte: new Date(now.getTime() - AUDIT_AFTER_MS) },
+        },
+        take: 100,
+      });
+      for (const item of overdue) {
+        await prisma.deadlineAttention.update({
+          where: { id: item.id },
+          data: { status: 'IN_AUDIT', movedToAuditAt: now },
+        });
+        results.queries.push({
+          unit: 'EMERGENCY',
+          category: 'REFERRED_TO_AUDIT',
+          userId: item.userId,
+          name: item.userName,
+          queryRef: item.id,
+          type: 'DEADLINE_UNATTENDED',
+        });
       }
     }
 
