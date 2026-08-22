@@ -3,10 +3,24 @@
 -- Replaces going straight to a disciplinary query. See the model comment for
 -- what "attended to" means and why a delay reason alone does not close a
 -- record.
-CREATE TYPE "DeadlineSubjectType" AS ENUM ('EMERGENCY_ALERT', 'THEATRE_SETUP', 'READINESS_LOG', 'ROSTER_SUBMISSION');
-CREATE TYPE "DeadlineAttentionStatus" AS ENUM ('OPEN', 'DELAY_LOGGED', 'RESOLVED', 'IN_AUDIT');
+--
+-- WRITTEN IDEMPOTENTLY, and not by choice. The table was created by hand on
+-- both databases before this file ran, so a plain CREATE TYPE failed with
+-- "type DeadlineSubjectType already exists" — which recorded a FAILED
+-- migration and blocked every migration after it. Prisma has no
+-- CREATE TYPE IF NOT EXISTS, hence the DO blocks.
+--
+-- The rule this is a reminder of: apply schema by migration, or write the
+-- migration to tolerate the state you already made.
+DO $$ BEGIN
+  CREATE TYPE "DeadlineSubjectType" AS ENUM ('EMERGENCY_ALERT', 'THEATRE_SETUP', 'READINESS_LOG', 'ROSTER_SUBMISSION');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TABLE "deadline_attentions" (
+DO $$ BEGIN
+  CREATE TYPE "DeadlineAttentionStatus" AS ENUM ('OPEN', 'DELAY_LOGGED', 'RESOLVED', 'IN_AUDIT');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS "deadline_attentions" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "userName" TEXT NOT NULL,
@@ -29,9 +43,9 @@ CREATE TABLE "deadline_attentions" (
 );
 
 -- One open record per person per thing missed, so a checker running every
--- fifteen minutes cannot raise the same deadline repeatedly.
-CREATE UNIQUE INDEX "deadline_attentions_userId_subjectType_subjectId_key"
+-- fifteen minutes raises each deadline once rather than ninety-six times.
+CREATE UNIQUE INDEX IF NOT EXISTS "deadline_attentions_userId_subjectType_subjectId_key"
   ON "deadline_attentions" ("userId", "subjectType", "subjectId");
-CREATE INDEX "deadline_attentions_status_idx" ON "deadline_attentions" ("status");
-CREATE INDEX "deadline_attentions_userId_status_idx" ON "deadline_attentions" ("userId", "status");
-CREATE INDEX "deadline_attentions_movedToAuditAt_idx" ON "deadline_attentions" ("movedToAuditAt");
+CREATE INDEX IF NOT EXISTS "deadline_attentions_status_idx" ON "deadline_attentions" ("status");
+CREATE INDEX IF NOT EXISTS "deadline_attentions_userId_status_idx" ON "deadline_attentions" ("userId", "status");
+CREATE INDEX IF NOT EXISTS "deadline_attentions_movedToAuditAt_idx" ON "deadline_attentions" ("movedToAuditAt");
