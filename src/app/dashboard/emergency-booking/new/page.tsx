@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature, CheckCircle } from 'lucide-react';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
@@ -66,6 +66,20 @@ type SurgicalUnitOption = {
 export default function NewEmergencyBookingPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  /**
+   * Five steps, and the theatre is told after the second.
+   *
+   * Patient and surgery details are everything the theatre needs to start
+   * preparing a room. Team, consent and packs are all required, but making the
+   * theatre wait for them costs minutes an emergency does not have. So the
+   * booking is submitted at step 2 and the rest is completed against a case
+   * that is already live — with the holding area refusing the patient until it
+   * IS complete. Nothing is skipped; it is only reordered.
+   */
+  const [step, setStep] = useState(1);
+  const [bookedId, setBookedId] = useState<string | null>(null);
+  const [savingStep, setSavingStep] = useState(false);
+  const [stepNote, setStepNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Holds the just-booked surgery id while the no-paper-prescription dialog is
@@ -83,6 +97,12 @@ export default function NewEmergencyBookingPage() {
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
+  // A signed paper consent, photographed. In an emergency the paper form is
+  // very often what actually exists — signed at the bedside or in A&E by a
+  // relative while the patient is being resuscitated. Refusing it and demanding
+  // the form be re-keyed electronically is how consent ends up recorded nowhere.
+  const [consentFile, setConsentFile] = useState<{ name: string; mimeType: string; base64: string; size: number } | null>(null);
+  const [consentError, setConsentError] = useState('');
 
   // The manual-override state that used to live here is gone with the picker.
   // Nobody overrides the roster from this form any more, so the field always
@@ -281,6 +301,113 @@ export default function NewEmergencyBookingPage() {
     }
   };
 
+  /** Same rules as the elective form: one behaviour for consent, everywhere. */
+  async function handleConsentFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setConsentError('');
+    const file = e.target.files?.[0];
+    if (!file) { setConsentFile(null); return; }
+    if (file.size > 10 * 1024 * 1024) { setConsentError('Consent file must be \u2264 10 MB.'); return; }
+    if (!/^(application\/pdf|image\/(png|jpe?g|webp|heic))$/i.test(file.type)) {
+      setConsentError('Allowed formats: PDF, PNG, JPG, WEBP, HEIC.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',').pop() || '' : result;
+      setConsentFile({ name: file.name, mimeType: file.type, base64, size: file.size });
+    };
+    reader.onerror = () => setConsentError('Failed to read file.');
+    reader.readAsDataURL(file);
+  }
+
+  const STEPS = [
+    { n: 1, label: 'Patient' },
+    { n: 2, label: 'Surgery details' },
+    { n: 3, label: 'Team' },
+    { n: 4, label: 'Consent' },
+    { n: 5, label: 'Packs' },
+  ];
+
+  /** What must be answered before a step can be left. */
+  function stepProblem(n: number): string | null {
+    if (n === 1) {
+      if (!form.patientName.trim()) return 'Patient name is required.';
+      if (!form.folderNumber.trim()) return 'Folder number is required.';
+      if (!form.diagnosis.trim()) return 'Diagnosis is required.';
+    }
+    if (n === 2) {
+      if (!form.procedureName.trim()) return 'Procedure name is required.';
+      if (!form.surgicalUnit.trim()) return 'Surgical unit is required.';
+      if (!form.indication.trim()) return 'Say why this is an emergency.';
+      if (!form.surgeonId) return 'Choose the surgeon.';
+    }
+    return null;
+  }
+
+  /**
+   * Save what a step collected against the already-created booking.
+   *
+   * A failure does NOT advance the step: silently moving on would tell somebody
+   * their consent was recorded when it was not.
+   */
+  async function saveStep(n: number): Promise<boolean> {
+    if (!bookedId) return true;
+    const payload: Record<string, unknown> = {};
+    if (n === 3) payload.teamMembers = teamMembers.filter((m) => m.name.trim());
+    if (n === 4) {
+      if (isConsentSigned(consentForm) || consentForm.procedureText.trim()) payload.consentForm = consentForm;
+      if (consentFile) {
+        payload.consentFile = { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 };
+      }
+    }
+    if (n === 5) {
+      payload.consumableRequests = packPick.consumableRequests;
+      payload.drugDressingRequests = packPick.drugDressingRequests;
+    }
+    if (Object.keys(payload).length === 0) return true;
+
+    setSavingStep(true);
+    setStepNote('');
+    try {
+      const res = await fetch(`/api/emergency-booking/${bookedId}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, step: n === 3 ? 'team' : n === 4 ? 'consent' : 'packs' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStepNote(d.error ?? 'Could not save that step. Please try again.');
+        return false;
+      }
+      setStepNote('Saved.');
+      return true;
+    } catch {
+      setStepNote('Could not save that step. Please try again.');
+      return false;
+    } finally {
+      setSavingStep(false);
+    }
+  }
+
+  /** Forward. Step 2 is where the theatre gets told. */
+  async function nextStep(e: React.MouseEvent) {
+    e.preventDefault();
+    const problem = stepProblem(step);
+    if (problem) { setStepNote(problem); return; }
+    setStepNote('');
+
+    if (step === 2 && !bookedId) {
+      await handleSubmit(e as unknown as React.FormEvent);
+      return;
+    }
+    if (step >= 3) {
+      const ok = await saveStep(step);
+      if (!ok) return;
+    }
+    setStep((x) => Math.min(x + 1, 5));
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -332,6 +459,11 @@ export default function NewEmergencyBookingPage() {
         consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
           ? consentForm
           : undefined,
+        // The signed paper form, photographed. Either route satisfies consent;
+        // the holding-area gate accepts whichever arrived.
+        consentFile: consentFile
+          ? { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 }
+          : undefined,
         // Auto-fetched on-duty emergency team (advisory — backend may use to notify)
         onDutyTeam: onDuty
           ? {
@@ -376,6 +508,9 @@ export default function NewEmergencyBookingPage() {
       const created = await res.json().catch(() => null);
       const newSurgeryId = created?.surgery?.id;
       setBookedSurgeryId(newSurgeryId ?? '');
+      // The theatre has been told. The booking exists now, and the remaining
+      // steps attach to it rather than being held back until the end.
+      setBookedId(created?.booking?.id ?? null);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -387,11 +522,14 @@ export default function NewEmergencyBookingPage() {
     <div className="p-6 max-w-4xl mx-auto">
       {bookedSurgeryId !== null && !showNextSteps && (
         <NoPaperPrescriptionDialog
-          onAcknowledge={() =>
-            bookedSurgeryId
-              ? setShowNextSteps(true)
-              : router.push('/dashboard/emergency-booking')
-          }
+          onAcknowledge={() => {
+            if (!bookedSurgeryId) { router.push('/dashboard/emergency-booking'); return; }
+            // Straight on to team, consent and packs. The case is already with
+            // the theatre; what follows is what the holding area will check
+            // before the patient is let through the door.
+            setBookedSurgeryId(null);
+            setStep(3);
+          }}
         />
       )}
 
@@ -445,7 +583,43 @@ export default function NewEmergencyBookingPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Where we are, and what the theatre already knows. The second step
+            is marked, because a booker needs to understand that the theatre is
+            told THERE and not at the end — otherwise the later steps feel
+            optional, and they are not. */}
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {STEPS.map((st) => (
+              <div key={st.n} className="flex items-center gap-2">
+                <span
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                    st.n === step
+                      ? 'bg-red-600 text-white'
+                      : st.n < step
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {st.n < step ? '✓' : st.n}
+                </span>
+                <span className={`text-xs ${st.n === step ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
+                  {st.label}
+                </span>
+                {st.n < STEPS.length && <span className="text-gray-300">→</span>}
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-gray-600">
+            {bookedId
+              ? 'The theatre has the case and is preparing. Finish the remaining steps — the holding area will not receive the patient without them.'
+              : step < 2
+                ? 'The theatre is told as soon as you finish step 2.'
+                : 'Finishing this step sends the case to the theatre so preparation can start.'}
+          </p>
+        </div>
+
         {/* Patient Information */}
+        {step === 1 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Patient Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -479,8 +653,10 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Surgery Details */}
+        {step === 2 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Surgery Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -638,8 +814,10 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Surgical Team Members */}
+        {step === 3 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Surgical Team Members</h2>
           <p className="text-xs text-gray-500 mb-4">
@@ -701,26 +879,68 @@ export default function NewEmergencyBookingPage() {
             );
           })}
         </div>
+        )}
 
         {/* Consent form — UNTH consent captured & signed inline */}
+        {step === 4 && (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-lg font-semibold text-gray-800">Consent Form</h2>
-            {isConsentSigned(consentForm) && (
+            {(isConsentSigned(consentForm) || consentFile) && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                 Signed
               </span>
             )}
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Complete and sign the UNTH consent form here. Once signed, it is stored with the case and
-            recognised across the app.
+            Either attach the signed paper form or complete it electronically below. One is
+            enough — the theatre needs consent recorded, not recorded twice.
           </p>
-          <ConsentFormFields value={consentForm} onChange={setConsentForm} />
+
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+            <div className="flex items-center gap-2">
+              <FileSignature className="h-5 w-5 text-emerald-600" />
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Attach a signed consent</h3>
+                <p className="text-xs text-gray-600">
+                  Photograph the signed paper form — PDF or image, up to 10 MB.
+                </p>
+              </div>
+            </div>
+            <input
+              aria-label="Upload signed informed consent file"
+              title="Upload signed informed consent file"
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
+              onChange={handleConsentFileChange}
+              className="mt-3 block text-sm"
+            />
+            {consentError && <div className="mt-2 text-sm text-red-600">{consentError}</div>}
+            {consentFile && (
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="font-medium">{consentFile.name}</span>
+                <span className="text-gray-500">{(consentFile.size / 1024).toFixed(0)} KB</span>
+                <button type="button" className="text-xs text-red-600 underline" onClick={() => setConsentFile(null)}>
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+
+          <details className="rounded-lg border border-gray-200 p-3" open={!consentFile}>
+            <summary className="cursor-pointer text-sm font-semibold text-gray-800">
+              Or complete the UNTH consent form electronically
+            </summary>
+            <div className="mt-3">
+              <ConsentFormFields value={consentForm} onChange={setConsentForm} />
+            </div>
+          </details>
         </div>
+        )}
 
         {/* On-Duty Emergency Team — auto-fetched from roster */}
-        {form.requiredByTime && (
+        {step === 3 && form.requiredByTime && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold mb-1 text-gray-800 flex items-center gap-2">
               <Users className="h-5 w-5 text-red-600" />
@@ -792,6 +1012,7 @@ export default function NewEmergencyBookingPage() {
         )}
 
         {/* Priority & Classification */}
+        {step === 2 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Priority</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -831,8 +1052,10 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Blood Requirements */}
+        {step === 2 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800 flex items-center gap-2">
             <Droplet className="h-5 w-5 text-red-500" />
@@ -867,8 +1090,10 @@ export default function NewEmergencyBookingPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Special Requirements */}
+        {step === 2 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Special Requirements</h2>
           <div className="grid grid-cols-1 gap-4">
@@ -882,19 +1107,23 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
+        {step === 5 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-3 text-gray-800">Apply a pack</h2>
           <SurgicalPackPicker subspecialty={form.surgicalUnit || undefined} emergency onChange={setPackPick} />
         </div>
+        )}
 
         {/* Manual pre-pack tick-lists removed — the "Apply a pack" picker above
             supplies consumables (→ Consumable Pack Provider) and drugs/IV fluids
             (→ Pharmacy); the mandatory base pack still auto-attaches server-side.
             Surgeons fine-tune per case via "View pack content". */}
 
-        {/* Warning Banner */}
+        {/* Warning Banner — shown on the step that actually raises the alert. */}
+        {step === 2 && !bookedId && (
         <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <Siren className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
@@ -907,25 +1136,55 @@ export default function NewEmergencyBookingPage() {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex-1 bg-red-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                Submitting Emergency Booking...
-              </>
-            ) : (
-              <>
-                <Siren className="h-5 w-5" />
-                Submit Emergency Booking
-              </>
-            )}
-          </button>
+        <div className="flex flex-wrap gap-3">
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={() => { setStepNote(''); setStep((x) => Math.max(1, x - 1)); }}
+              className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Back
+            </button>
+          )}
+
+          {step < 5 ? (
+            <button
+              type="button"
+              onClick={nextStep}
+              disabled={loading || savingStep}
+              className="flex-1 bg-red-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading || savingStep ? (
+                <>
+                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                  {step === 2 ? 'Sending to theatre…' : 'Saving…'}
+                </>
+              ) : step === 2 && !bookedId ? (
+                <>
+                  <Siren className="h-5 w-5" />
+                  Send to theatre &amp; continue
+                </>
+              ) : (
+                'Save & continue'
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.preventDefault();
+                const ok = await saveStep(5);
+                if (ok) router.push('/dashboard/emergency-booking');
+              }}
+              disabled={savingStep}
+              className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
+            >
+              {savingStep ? 'Saving…' : 'Finish booking'}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => router.back()}
@@ -934,6 +1193,13 @@ export default function NewEmergencyBookingPage() {
             Cancel
           </button>
         </div>
+
+        {stepNote && (
+          <p className={`text-sm ${stepNote === 'Saved.' ? 'text-green-700' : 'text-red-600'}`}>
+            {stepNote}
+          </p>
+        )}
+
       </form>
     </div>
   );
