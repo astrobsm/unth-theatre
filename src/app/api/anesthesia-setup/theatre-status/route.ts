@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { caseTeamSlots, CASE_TEAM_SELECT } from '@/lib/theatreOps/caseTeam';
+import { readiness, summarise, type TeamMemberState, type CheckInStatus } from '@/lib/theatreOps/checkIn';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,6 +144,16 @@ export async function GET(request: NextRequest) {
         ...(onlyTheatreId ? { theatreId: onlyTheatreId } : {}),
       },
       select: {
+        // Who is expected, and whether each of them has said they are coming.
+        // Readiness that counts equipment but not people answers the wrong
+        // question: a prepared room with no anaesthetist is not a ready theatre.
+        //
+        // Spread FIRST, deliberately. CASE_TEAM_SELECT carries a narrow
+        // surgeon/anaesthetist select (fullName only); this board needs the
+        // phone numbers too, and whichever comes last wins. Spread it after
+        // and the contact numbers vanish from a board whose whole purpose is
+        // ringing the person who has not arrived.
+        ...CASE_TEAM_SELECT,
         id: true,
         theatreId: true,
         theatreTechnicianId: true,
@@ -149,6 +161,7 @@ export async function GET(request: NextRequest) {
         surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         assistantSurgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
+        teamCheckIns: { select: { userId: true, status: true, reason: true, etaMinutes: true } },
       },
     });
 
@@ -216,6 +229,54 @@ export async function GET(request: NextRequest) {
 
       // Surgeons (and any surgery-level anaesthetists) scheduled in this theatre
       const theatreSurgeries = surgeries.filter(s => s.theatreId === theatre.id);
+
+      /**
+       * Team availability for this room, from the check-in board.
+       *
+       * The same definition of "who is on this case" the check-in screen uses
+       * — imported, not re-derived, so the two boards cannot disagree about
+       * whether a team is complete.
+       *
+       * Counted per PERSON across the room's cases, not per case: a scrub
+       * nurse covering three lists in Theatre 4 is one person to chase, and
+       * counting them three times would make one silent nurse look like three.
+       * The first status found for someone wins, which matters only when a
+       * person has answered for one case and not another — and in that case
+       * they have demonstrably seen the board.
+       */
+      const seenPerson = new Set<string>();
+      const roomTeam: TeamMemberState[] = [];
+      const notComing: { name: string | null; roleOnCase: string; status: string; reason: string | null }[] = [];
+
+      for (const sg of theatreSurgeries) {
+        const checkInByUser = new Map(
+          (sg.teamCheckIns ?? []).map((c) => [c.userId, c]),
+        );
+        for (const slot of caseTeamSlots(sg as never)) {
+          if (seenPerson.has(slot.userId)) continue;
+          seenPerson.add(slot.userId);
+          const ci = checkInByUser.get(slot.userId);
+          const status = (ci?.status as CheckInStatus | undefined) ?? null;
+          roomTeam.push({
+            userId: slot.userId,
+            name: slot.name,
+            roleOnCase: slot.roleOnCase,
+            status,
+          });
+          // The actionable list: who is not going to be here, and why. This is
+          // what a coordinator acts on — the counts only say how bad it is.
+          if (status === 'UNAVAILABLE' || status === 'REPLACED' || status === 'DELAYED') {
+            notComing.push({
+              name: slot.name,
+              roleOnCase: slot.roleOnCase,
+              status,
+              reason: ci?.reason ?? null,
+            });
+          }
+        }
+      }
+
+      const teamReadiness = roomTeam.length ? readiness(roomTeam) : null;
       const theatreSurgeryIds = new Set(theatreSurgeries.map((s) => s.id));
       const surgeonMap = new Map<string, { name: string; phone: string | null }>();
       const anaesthetistMap = new Map<string, { name: string; phone: string | null }>();
@@ -292,6 +353,12 @@ export async function GET(request: NextRequest) {
           : theatreAllocations.length,
         // Summary only: what a closed card needs in order to be worth opening.
         caseCount: isSummary ? (caseCountBy.get(theatre.id) ?? 0) : surgeries.filter((x) => x.theatreId === theatre.id).length,
+        // Has the team for this room said they are coming? Null when nobody is
+        // assigned to the room today — which is different from "nobody has
+        // answered", and must not read as a warning.
+        teamReadiness,
+        teamSummary: teamReadiness ? summarise(teamReadiness) : null,
+        teamNotComing: notComing,
       };
     });
 

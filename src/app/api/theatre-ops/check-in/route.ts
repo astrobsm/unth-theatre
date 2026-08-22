@@ -20,6 +20,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { scheduledInstant } from '@/lib/theatreOps/clock';
+import { watDayRange, watToday } from '@/lib/watDay';
+import { caseTeamSlots as slotsOf, CASE_TEAM_SELECT } from '@/lib/theatreOps/caseTeam';
 import { assessFix } from '@/lib/theatreOps/geofence';
 import {
   isCheckInStatus,
@@ -33,39 +35,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-/** The named slots on a case, in the order a theatre would read them. */
-function slotsOf(s: {
-  surgeonId: string | null; surgeonName: string | null; surgeon: { fullName: string } | null;
-  assistantSurgeonId: string | null; assistantSurgeon: { fullName: string } | null;
-  anesthetistId: string | null; anesthetist: { fullName: string } | null;
-  scrubNurseId: string | null; theatreTechnicianId: string | null;
-  supervisingConsultantId: string | null; supervisingConsultantName: string | null;
-  teamMembers: { userId: string | null; memberName: string | null; role: string }[];
-}): { userId: string; name: string | null; roleOnCase: string }[] {
-  const raw = [
-    { userId: s.surgeonId, name: s.surgeon?.fullName ?? s.surgeonName, roleOnCase: 'Surgeon' },
-    { userId: s.assistantSurgeonId, name: s.assistantSurgeon?.fullName ?? null, roleOnCase: 'Assistant Surgeon' },
-    { userId: s.anesthetistId, name: s.anesthetist?.fullName ?? null, roleOnCase: 'Anaesthetist' },
-    { userId: s.scrubNurseId, name: null, roleOnCase: 'Scrub Nurse' },
-    { userId: s.theatreTechnicianId, name: null, roleOnCase: 'Anaesthetic Technician' },
-    { userId: s.supervisingConsultantId, name: s.supervisingConsultantName, roleOnCase: 'Supervising Consultant' },
-    ...s.teamMembers.map((m) => ({
-      userId: m.userId,
-      name: m.memberName,
-      roleOnCase: m.role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
-    })),
-  ];
-
-  const seen = new Set<string>();
-  const out: { userId: string; name: string | null; roleOnCase: string }[] = [];
-  for (const r of raw) {
-    if (!r.userId || seen.has(r.userId)) continue;
-    seen.add(r.userId);
-    out.push({ userId: r.userId, name: r.name ?? null, roleOnCase: r.roleOnCase });
-  }
-  return out;
-}
-
 const CASE_SELECT = {
   id: true,
   procedureName: true,
@@ -75,18 +44,7 @@ const CASE_SELECT = {
   surgeryType: true,
   unit: true,
   location: true,
-  surgeonId: true,
-  surgeonName: true,
-  assistantSurgeonId: true,
-  anesthetistId: true,
-  scrubNurseId: true,
-  theatreTechnicianId: true,
-  supervisingConsultantId: true,
-  supervisingConsultantName: true,
-  surgeon: { select: { fullName: true } },
-  assistantSurgeon: { select: { fullName: true } },
-  anesthetist: { select: { fullName: true } },
-  teamMembers: { select: { userId: true, memberName: true, role: true } },
+  ...CASE_TEAM_SELECT,
   patient: { select: { name: true, ward: true } },
   teamCheckIns: {
     select: {
@@ -105,10 +63,12 @@ export async function GET(request: NextRequest) {
   const me = session?.user as { id?: string } | undefined;
   if (!me?.id) return NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 });
 
+  // The theatre's day, not UTC's. This server runs Etc/UTC and the hospital is
+  // on WAT, so a UTC midnight boundary puts a 00:30 case on the previous day's
+  // board — and the team checking in for it would not find it.
   const sp = request.nextUrl.searchParams;
-  const dayStart = sp.get('date') ? new Date(`${sp.get('date')}T00:00:00.000Z`) : new Date();
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 3_600_000);
+  const day = sp.get('date') || watToday();
+  const { start: dayStart, end: dayEnd } = watDayRange(day);
 
   try {
     const surgeries = await prisma.surgery.findMany({
@@ -169,7 +129,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      date: dayStart.toISOString().slice(0, 10),
+      date: day,
       cases,
       mine: cases.filter((c) => c.myRole),
     });

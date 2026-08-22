@@ -54,6 +54,16 @@ interface TheatreStatus {
   teamScrubNurses?: StaffContact[];
   teamCirculatingNurses?: StaffContact[];
   totalAllocations: number;
+  /// Whether the people assigned to this room have said they are coming.
+  /// Null when nobody is assigned today — which is not the same as nobody
+  /// having answered, and must not read as a warning.
+  teamReadiness: {
+    assigned: number; responded: number; present: number; enRoute: number;
+    delayed: number; unavailable: number; replaced: number; silent: number;
+    ready: boolean; gaps: string[];
+  } | null;
+  teamSummary: string | null;
+  teamNotComing: { name: string | null; roleOnCase: string; status: string; reason: string | null }[];
 }
 
 interface Statistics {
@@ -479,6 +489,69 @@ export default function TheatreReadinessDashboard() {
               <div className="text-center py-4 text-gray-500">
                 <div className="text-3xl mb-2">⭕</div>
                 <div className="text-sm">No setup logged yet</div>
+              </div>
+            )}
+
+            {/* ── Is the team coming? ────────────────────────────────────
+                A room can be scrubbed, stocked and powered and still not be
+                ready, because readiness is about people as much as equipment.
+                This reads from the same check-in board the team answers on,
+                so the two screens cannot disagree.
+
+                Shown ABOVE the assignment list on purpose: who is assigned is
+                reference, who is missing is the thing to act on. */}
+            {theatre.teamReadiness && theatre.teamReadiness.assigned > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1">
+                    🙋 Team availability
+                  </h4>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      theatre.teamReadiness.ready
+                        ? 'bg-green-100 text-green-800'
+                        : theatre.teamReadiness.silent > 0
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {theatre.teamReadiness.ready
+                      ? 'Team complete'
+                      : `${theatre.teamReadiness.responded}/${theatre.teamReadiness.assigned} responded`}
+                  </span>
+                </div>
+
+                {theatre.teamSummary && (
+                  <p className="mt-1 text-xs text-gray-600">{theatre.teamSummary}</p>
+                )}
+
+                {/* Who is not coming, and why. The counts say how bad it is;
+                    this says what to do about it. */}
+                {theatre.teamNotComing.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {theatre.teamNotComing.map((p, i) => (
+                      <li key={i} className="text-xs bg-red-50 border border-red-100 rounded px-2 py-1">
+                        <span className="font-semibold text-red-900">
+                          {p.name || p.roleOnCase}
+                        </span>
+                        <span className="text-red-700"> — {p.status.replace(/_/g, ' ').toLowerCase()}</span>
+                        {p.reason && <span className="text-gray-600"> · {p.reason}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Silence is the common case and the one worth naming, because
+                    an unanswered slot looks identical to a filled one on every
+                    other board in this system. */}
+                {theatre.teamReadiness.silent > 0 && (
+                  <p className="mt-2 text-xs text-amber-800">
+                    {theatre.teamReadiness.silent} yet to respond
+                    {theatre.teamReadiness.gaps.length > 0
+                      ? `: ${theatre.teamReadiness.gaps.join(', ')}`
+                      : ''}
+                  </p>
+                )}
               </div>
             )}
 

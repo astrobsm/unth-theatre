@@ -29,6 +29,9 @@ const PerfBeacon = dynamic(() => import('@/components/PerfBeacon'), { ssr: false
 // Asks a surgeon once whether they are a consultant or a resident, then never
 // again. Client-only: it renders nothing for everybody else.
 const SurgeonGradePrompt = dynamic(() => import('@/components/SurgeonGradePrompt'), { ssr: false });
+
+// Availability for today's cases, for whoever is on a team today.
+const TeamCheckInCard = dynamic(() => import('@/components/TeamCheckInCard'), { ssr: false });
 import {
   LayoutDashboard,
   Package,
@@ -848,6 +851,11 @@ export default function DashboardLayout({
           <div className="relative">
             <PerfBeacon />
             <CarelineBar />
+            {/* "Am I coming?" — in the layout because each role lands on a
+                different page and the people whose answer the theatre needs
+                are the least likely to go looking for the board. Renders
+                nothing for anyone not on a team today, which is most people. */}
+            <TeamCheckInCard />
             <OrmGoLiveBanner />
             <OrmHourlyBroadcast />
             {children}
