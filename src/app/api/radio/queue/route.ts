@@ -173,13 +173,66 @@ async function handleGET(_req: NextRequest) {
   // ----------------------------------------------------------------
   try {
     const ACTIVE_BOOKING_STATUSES = ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED'] as const;
+
+    /**
+     * An emergency alert has a life, and it ends.
+     *
+     * It used to have none. The query below was bounded only by status, so a
+     * booking left in SUBMITTED or APPROVED — which is where they stay when
+     * nobody closes them — remained announceable forever. The only thing
+     * stopping it was the presence of an old announcement row acting as a
+     * dedupe marker, which is a silence that depends on never tidying up.
+     *
+     * On 22 August a retention prune removed those markers and the next poll
+     * re-raised TWENTY historical emergencies at once, every one of them
+     * repeating until acknowledged. That is the failure this bound prevents:
+     * an alert older than twelve hours is not an emergency, it is a leftover.
+     */
+    const ALERT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+    /** Announce up to an hour past the time surgery was required to start. */
+    const STOP_AFTER_REQUIRED_MS = 60 * 60 * 1000;
+
     const bookings = await prisma.emergencySurgeryBooking.findMany({
-      where: { status: { in: ACTIVE_BOOKING_STATUSES as any } },
+      where: {
+        status: { in: ACTIVE_BOOKING_STATUSES as any },
+        createdAt: { gte: new Date(Date.now() - ALERT_MAX_AGE_MS) },
+      },
+      // The scrub nurse lives on the surgery, not the booking, and together
+      // with the theatre it is what tells us somebody has taken the case.
+      include: { surgery: { select: { scrubNurseId: true } } },
       orderBy: { createdAt: 'desc' },
       take: 25,
     });
 
     for (const b of bookings) {
+      /**
+       * Assignment IS acknowledgement.
+       *
+       * A theatre and a scrub nurse mean a named person and a named room have
+       * taken this case. Continuing to shout at the whole department after
+       * that is noise, and noise is what makes people stop listening to the
+       * alert that matters.
+       */
+      const taken = Boolean(b.theatreId && b.surgery?.scrubNurseId);
+      const pastDeadline = b.requiredByTime
+        ? Date.now() > b.requiredByTime.getTime() + STOP_AFTER_REQUIRED_MS
+        : false;
+
+      if (taken || pastDeadline) {
+        // Silence whatever is still repeating, but KEEP the row. It is the
+        // dedupe marker, and deleting markers is what caused the 22 August
+        // storm. status EXPIRED and repeatUntilAck false stop the client
+        // replaying it; the row stays as the record that this was announced.
+        await prisma.radioAnnouncement.updateMany({
+          where: {
+            dedupeKey: `emergencyBookingId:${b.id}`,
+            status: { in: ['PENDING', 'PLAYING'] },
+          },
+          data: { status: 'EXPIRED', repeatUntilAck: false },
+        });
+        continue;
+      }
+
       const dup = await prisma.radioAnnouncement.findFirst({
         where: { dedupeKey: `emergencyBookingId:${b.id}` },
         select: { id: true },
@@ -215,7 +268,7 @@ async function handleGET(_req: NextRequest) {
           status: 'PENDING',
           requireAck: true,
           repeatUntilAck: true,
-          repeatEverySec: 300, // 5 minutes
+          repeatEverySec: 600, // 10 minutes, until taken or an hour past the required time
           metadata: JSON.stringify({
             emergencyBookingId: b.id,
             tripleRepeat: true,
