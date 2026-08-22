@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { assessFix } from '@/lib/theatreOps/geofence';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -112,7 +113,21 @@ export async function POST(request: NextRequest) {
         locationName: validatedData.locationName,
         locationAddress: validatedData.locationAddress,
         locationAccuracy: validatedData.locationAccuracy,
-        distanceFromFacility: validatedData.distanceFromFacility,
+        // Computed HERE, not taken from the browser.
+        //
+        // The client used to send this and it was stored verbatim. When the
+        // hospital's reference coordinates were corrected, every stored value
+        // stayed wrong, and a phone running a cached bundle would keep writing
+        // wrong ones. The position is the fact; the distance is a derivation,
+        // and derivations belong on the side that can be fixed by a deploy.
+        distanceFromFacility: (() => {
+          const fix = assessFix({
+            latitude: validatedData.latitude,
+            longitude: validatedData.longitude,
+            accuracyM: validatedData.locationAccuracy,
+          });
+          return fix.distanceM == null ? null : fix.distanceM / 1000;
+        })(),
         status: 'IN_PROGRESS',
       },
     });

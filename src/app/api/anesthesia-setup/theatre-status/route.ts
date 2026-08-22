@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { caseTeamSlots, CASE_TEAM_SELECT } from '@/lib/theatreOps/caseTeam';
+import { assessFix } from '@/lib/theatreOps/geofence';
 import { readiness, summarise, type TeamMemberState, type CheckInStatus } from '@/lib/theatreOps/checkIn';
 
 export const dynamic = 'force-dynamic';
@@ -161,7 +162,7 @@ export async function GET(request: NextRequest) {
         surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         assistantSurgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
-        teamCheckIns: { select: { userId: true, status: true, reason: true, etaMinutes: true } },
+        teamCheckIns: { select: { userId: true, status: true, reason: true, etaMinutes: true, fixVerdict: true, distanceM: true } },
       },
     });
 
@@ -245,6 +246,7 @@ export async function GET(request: NextRequest) {
        * they have demonstrably seen the board.
        */
       const seenPerson = new Set<string>();
+      let onSiteCount = 0;
       const roomTeam: TeamMemberState[] = [];
       const notComing: { name: string | null; roleOnCase: string; status: string; reason: string | null }[] = [];
 
@@ -263,6 +265,10 @@ export async function GET(request: NextRequest) {
             roleOnCase: slot.roleOnCase,
             status,
           });
+          // What the device said, kept separate from what the person said.
+          // A phone in a windowless theatre often cannot get a fix, so this
+          // corroborates a claim of presence and never contradicts it.
+          if (ci?.fixVerdict === 'ON_SITE') onSiteCount++;
           // The actionable list: who is not going to be here, and why. This is
           // what a coordinator acts on — the counts only say how bad it is.
           if (status === 'UNAVAILABLE' || status === 'REPLACED' || status === 'DELAYED') {
@@ -335,7 +341,30 @@ export async function GET(request: NextRequest) {
         latitude: setupLog?.latitude || null,
         longitude: setupLog?.longitude || null,
         locationAccuracy: setupLog?.locationAccuracy || null,
-        distanceFromFacility: setupLog?.distanceFromFacility || null,
+        /**
+         * Distance is RECOMPUTED here from the stored position, and the value
+         * the client wrote at capture time is ignored.
+         *
+         * distanceFromFacility is sent by the browser and frozen into the row.
+         * When the hospital's reference coordinates were corrected — they were
+         * out by thirteen kilometres — every existing row kept the old answer,
+         * so technicians standing in the theatre complex went on being reported
+         * as 13.37 km away. A cached computation cannot be corrected; the
+         * inputs can. Deriving it on read fixes all 144 historical captures at
+         * once and means the next correction needs no backfill either.
+         */
+        ...(() => {
+          const fix = assessFix({
+            latitude: setupLog?.latitude,
+            longitude: setupLog?.longitude,
+            accuracyM: setupLog?.locationAccuracy,
+          });
+          return {
+            distanceFromFacility: fix.distanceM == null ? null : fix.distanceM / 1000,
+            siteVerdict: fix.verdict,
+            siteLabel: fix.label,
+          };
+        })(),
         malfunctioningEquipment: setupLog?.equipmentChecks.length || 0,
         blockingIssues: setupLog?.blockingIssues || null,
         setupNotes: setupLog?.setupNotes || null,
@@ -359,6 +388,8 @@ export async function GET(request: NextRequest) {
         teamReadiness,
         teamSummary: teamReadiness ? summarise(teamReadiness) : null,
         teamNotComing: notComing,
+        // How many of them the geofence actually places in the hospital.
+        teamOnSite: onSiteCount,
       };
     });
 

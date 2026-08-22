@@ -120,6 +120,21 @@ export default function TeamCheckInCard() {
         setNote((n) => ({ ...n, [surgeryId]: d.error ?? 'Could not record that. Please try again.' }));
         return;
       }
+      // Tell them what the geofence made of it. Their check-in is recorded
+      // either way — a phone that cannot see satellites through a theatre
+      // ceiling is not a reason to refuse somebody's word that they are here.
+      const verdict = d?.fix?.verdict as string | undefined;
+      setNote((n) => ({
+        ...n,
+        [surgeryId]:
+          verdict === 'ON_SITE'
+            ? 'Recorded — your phone confirms you are in the hospital.'
+            : verdict === 'OFF_SITE'
+              ? 'Recorded. Your phone places you away from the hospital, which the board will show.'
+              : verdict === 'IMPRECISE'
+                ? 'Recorded. Your phone could not place you precisely — that is common indoors and does not affect your check-in.'
+                : 'Recorded.',
+      }));
       setOpen(null);
       setPicked(null);
       setReason('');
@@ -277,7 +292,13 @@ export default function TeamCheckInCard() {
                 </div>
               )}
 
-              {note[c.id] && <p className="mt-2 text-xs text-red-600">{note[c.id]}</p>}
+              {note[c.id] && (
+                <p className={`mt-2 text-xs ${
+                  note[c.id].startsWith('Recorded') ? 'text-green-700' : 'text-red-600'
+                }`}>
+                  {note[c.id]}
+                </p>
+              )}
             </div>
           );
         })}

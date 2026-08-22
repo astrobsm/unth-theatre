@@ -41,6 +41,10 @@ interface TheatreStatus {
   longitude: number | null;
   locationAccuracy: number | null;
   distanceFromFacility: number | null;
+  /// Derived on the server from the stored position, against one site radius.
+  /// Not a number the browser wrote and nobody could correct afterwards.
+  siteVerdict?: 'ON_SITE' | 'OFF_SITE' | 'IMPRECISE' | 'NO_FIX' | null;
+  siteLabel?: string | null;
   malfunctioningEquipment: number;
   blockingIssues: string | null;
   setupNotes: string | null;
@@ -64,6 +68,8 @@ interface TheatreStatus {
   } | null;
   teamSummary: string | null;
   teamNotComing: { name: string | null; roleOnCase: string; status: string; reason: string | null }[];
+  /// How many of the team the geofence places inside the hospital.
+  teamOnSite?: number;
 }
 
 interface Statistics {
@@ -435,18 +441,38 @@ export default function TheatreReadinessDashboard() {
                   </div>
                 )}
 
-                {theatre.distanceFromFacility != null && (
+                {/* On site or not, decided by the SAME geofence the team
+                    check-in uses — one site radius for the whole hospital.
+                    The old test was a bare "5 km" written here, which is both a
+                    second opinion about where the hospital is and far too
+                    coarse: it called a technician standing in the theatre
+                    complex "far from facility" for months. */}
+                {theatre.siteVerdict && theatre.siteVerdict !== 'NO_FIX' && (
                   <div className={`text-xs font-medium mt-1 px-2 py-1 rounded ${
-                    theatre.distanceFromFacility < 1
+                    theatre.siteVerdict === 'ON_SITE'
                       ? 'bg-green-100 text-green-800'
-                      : theatre.distanceFromFacility < 5
-                        ? 'bg-yellow-100 text-yellow-800'
+                      : theatre.siteVerdict === 'IMPRECISE'
+                        ? 'bg-gray-100 text-gray-700'
                         : 'bg-red-100 text-red-800'
                   }`}>
-                    📏 {theatre.distanceFromFacility < 1
-                      ? `${Math.round(theatre.distanceFromFacility * 1000)}m from UNTH`
-                      : `${theatre.distanceFromFacility}km from UNTH`}
-                    {theatre.distanceFromFacility >= 5 && ' ⚠️ Far from facility'}
+                    {theatre.siteVerdict === 'ON_SITE' && (
+                      <>
+                        ✅ In the hospital
+                        {theatre.distanceFromFacility != null &&
+                          ` · ${Math.round(theatre.distanceFromFacility * 1000)}m from centre`}
+                      </>
+                    )}
+                    {theatre.siteVerdict === 'OFF_SITE' && (
+                      <>
+                        📏 {theatre.distanceFromFacility != null && theatre.distanceFromFacility < 1
+                          ? `${Math.round(theatre.distanceFromFacility * 1000)}m from UNTH`
+                          : `${theatre.distanceFromFacility?.toFixed(2)}km from UNTH`}
+                        {' ⚠️ Away from the hospital'}
+                      </>
+                    )}
+                    {/* A vague fix is not a location. Saying so is honest;
+                        turning it into a distance would not be. */}
+                    {theatre.siteVerdict === 'IMPRECISE' && '📍 Position unclear — phone could not place them'}
                   </div>
                 )}
 
@@ -523,6 +549,15 @@ export default function TheatreReadinessDashboard() {
 
                 {theatre.teamSummary && (
                   <p className="mt-1 text-xs text-gray-600">{theatre.teamSummary}</p>
+                )}
+
+                {/* Corroboration, not contradiction. A phone in a windowless
+                    theatre often cannot get a fix, so this only ever ADDS to
+                    what somebody said — it never calls them a liar. */}
+                {typeof theatre.teamOnSite === 'number' && theatre.teamOnSite > 0 && (
+                  <p className="mt-1 text-xs text-green-700">
+                    📍 {theatre.teamOnSite} confirmed inside the hospital by their phone
+                  </p>
                 )}
 
                 {/* Who is not coming, and why. The counts say how bad it is;

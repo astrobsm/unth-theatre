@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { THEATRES, FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
+import { assessFix } from '@/lib/theatreOps/geofence';
 import TheatreSetupDeclaration from '@/components/TheatreSetupDeclaration';
 import { outstandingChecks } from '@/lib/theatreOps/setupCertification';
 
@@ -245,7 +246,21 @@ export default function AnesthesiaSetupPage() {
 
     try {
       const location = await requestLocation();
-      setMessage(`📍 Location: ${location.locationName} (±${location.accuracy}m, ${location.distanceFromFacility}km from UNTH)`);
+      // Same verdict the boards use, so the technician is told what everyone
+      // else will be shown. "0.02km from UNTH" is technically true and reads
+      // like a fault; "In the hospital" is what it means.
+      const siteFix = assessFix({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracyM: location.accuracy,
+      });
+      setMessage(
+        siteFix.verdict === 'ON_SITE'
+          ? `📍 In the hospital — ${location.locationName} (±${location.accuracy}m)`
+          : siteFix.verdict === 'IMPRECISE'
+            ? `📍 ${location.locationName} — your phone could not place you precisely (±${location.accuracy}m). Setup will still be logged.`
+            : `📍 ${location.locationName} (±${location.accuracy}m, ${location.distanceFromFacility}km from UNTH)`,
+      );
 
       const response = await fetch('/api/anesthesia-setup/start', {
         method: 'POST',
