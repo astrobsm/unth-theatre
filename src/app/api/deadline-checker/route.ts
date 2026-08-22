@@ -630,7 +630,29 @@ export async function GET(request: NextRequest) {
     // confirmed hearing an announcement — not from a guess. Anyone who
     // acknowledged is not queried, whatever else happened.
     // =====================================================================
-    if (action === 'check-emergency-alerts' || action === 'check-all') {
+    /**
+     * PAUSED 22 August 2026, deliberately, and not because it is broken.
+     *
+     * This check issues a formal disciplinary query to a named clinician and
+     * escalates it to the Chief Medical Director after six hours. It works.
+     * But nobody in the department has been told the mechanism exists, so the
+     * first any of them would learn of it is by receiving a letter — and after
+     * a fortnight in which the residents told us, at length and correctly,
+     * that the system had been quietly moving work onto them, that is the
+     * worst possible way to introduce it.
+     *
+     * It is being replaced by a gentler sequence, already specified: a
+     * notification on the individual's dashboard, "attended to" meaning the
+     * case is marked started OR a delay reason is logged AND later closed out
+     * with how it was resolved, and only after twelve hours unattended does it
+     * move to Theatre Audit, where staff are invited to a discussion rather
+     * than sent a query.
+     *
+     * Flip this to true only when that flow is live and people have been told.
+     */
+    const EMERGENCY_QUERIES_ENABLED = false;
+
+    if (EMERGENCY_QUERIES_ENABLED && (action === 'check-emergency-alerts' || action === 'check-all')) {
       /** The alert is still running until an hour past the required time. */
       const ALERT_GRACE_MS = 60 * 60 * 1000;
       /** Unanswered this long and it goes to the CMD. */
