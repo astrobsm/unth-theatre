@@ -20,8 +20,8 @@ import {
   isImprestLocked,
   daysUntilRetirementDue,
   isOpenImprest,
-} from './quarterlyRules';
-import { ImprestStatus, Quarter, RetirementStatus, STANDING_IMPREST_KOBO, WorkflowStage } from './enums';
+} from '../../src/lib/imprest/quarterlyRules';
+import { ImprestStatus, Quarter, RetirementStatus, STANDING_IMPREST_KOBO, WorkflowStage } from '../../src/lib/imprest/enums';
 
 const imprest = (o: Partial<Parameters<typeof canRaiseQuarterlyImprest>[0]['existing'][0]> = {}) => ({
   id: 'i1',

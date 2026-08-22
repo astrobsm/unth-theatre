@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { clientIp, diffFields } from './audit';
+import { clientIp, diffFields } from '../../src/lib/imprest/audit';
 
 /** Minimal stand-in for NextRequest — only `headers.get` is used. */
 const req = (headers: Record<string, string>) =>

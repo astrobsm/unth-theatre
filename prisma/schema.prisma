@@ -410,6 +410,11 @@ model User {
   rotationSpecialty     String? // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
   rotationStartDate     DateTime?
   rotationEndDate       DateTime?
+  // When a surgeon last told us whether they are a consultant or a resident.
+  // 194 of 196 surgeons sat under the undifferentiated SURGEON role, so the
+  // schedule could not tell who was supervising whom. Null means "not asked
+  // yet" and is what makes the sign-in prompt appear exactly once.
+  surgeonGradeConfirmedAt DateTime?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   approvedBy            String?

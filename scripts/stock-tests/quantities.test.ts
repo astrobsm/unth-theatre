@@ -16,7 +16,7 @@ import {
   withMovement,
   writtenOff,
   ZERO_QUANTITIES,
-} from './quantities';
+} from '../../src/lib/stock/quantities';
 
 const q = (o: Partial<typeof ZERO_QUANTITIES> = {}) => ({ ...ZERO_QUANTITIES, ...o });
 

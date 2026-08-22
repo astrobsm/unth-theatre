@@ -90,7 +90,11 @@ export async function GET(request: NextRequest) {
       // quietly removing fields from all of them to speed up one page is how a
       // screen somewhere else starts rendering blanks.
       select: slim
-        ? { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true }
+        // department is here so the booking screen can show only the surgeons
+        // in the chosen subspecialty. It is one short string per person — the
+        // 188 kB this projection was created to avoid was e-mail addresses and
+        // approval history, not this.
+        ? { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, department: true }
         : {
             id: true,
             username: true,

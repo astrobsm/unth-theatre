@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ApprovalDecision, RetirementStatus, UserRole, WorkflowStage } from './enums';
-import { canActOnStage, hasPermission, Permission, permissionsForRole, rolesForStage } from './permissions';
+import { ApprovalDecision, RetirementStatus, UserRole, WorkflowStage } from '../../src/lib/imprest/enums';
+import { canActOnStage, hasPermission, Permission, permissionsForRole, rolesForStage } from '../../src/lib/imprest/permissions';
 import {
   applyClosure,
   applyDecision,
@@ -14,7 +14,7 @@ import {
   stageProgress,
   statusForStage,
   WorkflowError,
-} from './workflow';
+} from '../../src/lib/imprest/workflow';
 
 describe('chain shape', () => {
   it('advances through every office in order', () => {

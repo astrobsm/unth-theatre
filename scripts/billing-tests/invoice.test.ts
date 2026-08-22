@@ -16,7 +16,7 @@ import {
   linesFromReservations,
   overpayment,
   statusAfterPayment,
-} from './invoice';
+} from '../../src/lib/billing/invoice';
 
 const res = (o: Record<string, unknown> = {}) => ({
   id: 'r1',

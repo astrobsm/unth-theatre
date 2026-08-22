@@ -25,6 +25,10 @@ const CarelineBar = dynamic(() => import('@/components/CarelineBar'), { ssr: fal
 // Reports what a page actually took, for one load in ten. See PerfBeacon for
 // why it is sampled, beaconed and anonymous.
 const PerfBeacon = dynamic(() => import('@/components/PerfBeacon'), { ssr: false });
+
+// Asks a surgeon once whether they are a consultant or a resident, then never
+// again. Client-only: it renders nothing for everybody else.
+const SurgeonGradePrompt = dynamic(() => import('@/components/SurgeonGradePrompt'), { ssr: false });
 import {
   LayoutDashboard,
   Package,
@@ -851,6 +855,13 @@ export default function DashboardLayout({
         </main>
       </div>
       <AssistantWidget />
+      {/* Rendered here, at the root of the layout rather than inside the
+          content wrapper, so its fixed overlay is not trapped in a stacking
+          context — see the note above. In the layout rather than on the
+          dashboard page because surgeons land on /dashboard/surgeries, and a
+          prompt mounted on /dashboard would never be seen by the people it is
+          for. It asks once and then returns null forever. */}
+      <SurgeonGradePrompt />
     </div>
   );
 }

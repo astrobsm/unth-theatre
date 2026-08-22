@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DocumentType } from './enums';
+import { DocumentType } from '../../src/lib/imprest/enums';
 import {
   buildDocumentId,
   buildVerifyUrl,
@@ -7,7 +7,7 @@ import {
   formatImprestNumber,
   formatRetirementNumber,
   parseDocumentNumber,
-} from './numbering';
+} from '../../src/lib/imprest/numbering';
 import {
   formatDateTime,
   formatLongDate,
@@ -19,7 +19,7 @@ import {
   monthRange,
   relativeDays,
   truncate,
-} from './format';
+} from '../../src/lib/imprest/format';
 
 describe('document numbering', () => {
   it('formats each series with its own padding', () => {

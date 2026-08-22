@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone } from 'lucide-react';
 import Link from 'next/link';
@@ -15,6 +15,7 @@ import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarn
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import ProcedurePicker from '@/components/ProcedurePicker';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
+import { surgeonMatchesSubspecialty } from '@/lib/subspecialtyMatch';
 import { isOfflineQueued, queuedMessage } from '@/lib/offlineResponse';
 import { MIN_OVERRIDE_REASON } from '@/lib/preopRequirements';
 import { notify } from '@/lib/notifications';
@@ -40,6 +41,9 @@ interface Surgeon {
   fullName: string;
   role?: string;
   staffCode?: string | null;
+  /** Free text on the staff record, e.g. "Surgery (Ophthalmic)". Mapped to a
+   *  booking subspecialty by lib/subspecialtyMatch. */
+  department?: string | null;
 }
 
 interface TeamMember {
@@ -149,6 +153,13 @@ export default function NewSurgeryPage() {
   const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [surgeons, setSurgeons] = useState<Surgeon[]>([]);
+  // Typing a few letters of a name beats scrolling 194 of them on a phone.
+  const [surgeonSearch, setSurgeonSearch] = useState('');
+  const [consultantSearch, setConsultantSearch] = useState('');
+  // The escape hatch. Subspecialty filtering is a convenience, and the moment
+  // it becomes a wall — a visiting surgeon, a joint case, a department typed
+  // in wrongly years ago — this turns it off.
+  const [showAllSurgeons, setShowAllSurgeons] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -567,6 +578,47 @@ export default function NewSurgeryPage() {
 
     return () => { clearTimeout(timer); controller.abort(); };
   }, [searchPatient]);
+
+  /**
+   * Who appears in the two pickers.
+   *
+   * Two filters, applied in this order: the chosen subspecialty (unless the
+   * booker has ticked out of it), then whatever they have typed.
+   *
+   * Neither filter can hide a surgeon whose department we cannot place — see
+   * surgeonMatchesSubspecialty. The failure that matters here is an empty
+   * dropdown, not a long one: a booker who cannot find their surgeon stops and
+   * rings the theatre, and we are back to paper.
+   */
+  const matchesTyped = (s: Surgeon, typed: string) => {
+    const q = typed.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (s.fullName || '').toLowerCase().includes(q) ||
+      (s.staffCode || '').toLowerCase().includes(q)
+    );
+  };
+
+  const surgeonsInSubspecialty = useMemo(
+    () =>
+      showAllSurgeons
+        ? surgeons
+        : surgeons.filter((s) => surgeonMatchesSubspecialty(s.department, subspecialty)),
+    [surgeons, subspecialty, showAllSurgeons],
+  );
+
+  const visibleSurgeons = useMemo(
+    () => surgeonsInSubspecialty.filter((s) => matchesTyped(s, surgeonSearch)),
+    [surgeonsInSubspecialty, surgeonSearch],
+  );
+
+  const visibleConsultants = useMemo(
+    () =>
+      surgeonsInSubspecialty
+        .filter((s) => !supervisingConsultantIds.includes(s.id))
+        .filter((s) => matchesTyped(s, consultantSearch)),
+    [surgeonsInSubspecialty, supervisingConsultantIds, consultantSearch],
+  );
 
   const fetchSurgeons = async () => {
     try {
@@ -1372,84 +1424,6 @@ ${pretty} — ${days} days from today.
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="label">Surgeon *</label>
-              <select
-                name="surgeonId"
-                required
-                value={selectedSurgeonId}
-                onChange={(e) => setSelectedSurgeonId(e.target.value)}
-                className="input-field"
-                title="Select operating surgeon"
-              >
-                <option value="">— Select Surgeon —</option>
-                {surgeons.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
-                  </option>
-                ))}
-              </select>
-              {surgeons.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
-                  No surgeons found in the staff database. Ask an administrator to add users with role SURGEON / CONSULTANT_SURGEON.
-                </p>
-              )}
-              {/* Hidden field keeps the surgeon name in the form payload for legacy validation */}
-              <input type="hidden" name="surgeonName" value={surgeons.find((s) => s.id === selectedSurgeonId)?.fullName || ''} />
-            </div>
-
-            <div>
-              <label className="label">Unit Supervising Consultant(s)</label>
-              <select
-                value=""
-                onChange={(e) => {
-                  const id = e.target.value;
-                  if (id && !supervisingConsultantIds.includes(id)) {
-                    setSupervisingConsultantIds((prev) => [...prev, id]);
-                  }
-                }}
-                className="input-field"
-                title="Add a unit supervising consultant (you can add more than one)"
-              >
-                <option value="">— Add Consultant —</option>
-                {surgeons
-                  .filter((s) => !supervisingConsultantIds.includes(s.id))
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
-                    </option>
-                  ))}
-              </select>
-              {supervisingConsultantIds.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {supervisingConsultantIds.map((id) => {
-                    const c = surgeons.find((s) => s.id === id);
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1 bg-primary-50 border border-primary-200 text-primary-800 text-xs font-medium rounded-full px-3 py-1"
-                      >
-                        {c?.fullName || 'Unknown'}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSupervisingConsultantIds((prev) => prev.filter((x) => x !== id))
-                          }
-                          className="text-primary-500 hover:text-red-600"
-                          title="Remove"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              <p className="text-xs text-gray-500 mt-1">
-                Chosen from the surgeon database. You can add more than one. Displayed beside the theatre and unit on the schedule.
-              </p>
-            </div>
-
-            <div>
               <label className="label">Location *</label>
               <select
                 value={selectedLocation}
@@ -1556,6 +1530,156 @@ ${pretty} — ${days} days from today.
                 )}
               </select>
             </div>
+
+            {/* Surgeon comes AFTER location, unit and subspecialty on purpose.
+                Choosing the subspecialty first is what lets this list show the
+                eleven urologists rather than all 194 surgeons in the hospital.
+                The two vocabularies do not match on the nose — staff records
+                say "Surgery (Urology)", bookings say "Urology" — so the
+                matching lives in lib/subspecialtyMatch, with the real
+                department strings under test. */}
+            <div>
+              <label className="label">Surgeon *</label>
+
+              <input
+                type="text"
+                value={surgeonSearch}
+                onChange={(e) => setSurgeonSearch(e.target.value)}
+                placeholder="Search by name…"
+                className="input-field mb-2"
+                autoComplete="off"
+                title="Type part of a surgeon's name to narrow the list"
+              />
+
+              <select
+                name="surgeonId"
+                required
+                value={selectedSurgeonId}
+                onChange={(e) => setSelectedSurgeonId(e.target.value)}
+                className="input-field"
+                title="Select operating surgeon"
+                size={visibleSurgeons.length > 8 ? 8 : undefined}
+              >
+                <option value="">— Select Surgeon —</option>
+                {visibleSurgeons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
+                  </option>
+                ))}
+                {/* A surgeon already chosen must never disappear because the
+                    subspecialty changed underneath them — the form would then
+                    submit an id with no visible selection. */}
+                {selectedSurgeonId && !visibleSurgeons.some((s) => s.id === selectedSurgeonId) && (
+                  <option value={selectedSurgeonId}>
+                    {surgeons.find((s) => s.id === selectedSurgeonId)?.fullName || 'Selected surgeon'}
+                  </option>
+                )}
+              </select>
+
+              {surgeons.length === 0 ? (
+                <p className="text-xs text-amber-600 mt-1">
+                  No surgeons found in the staff database. Ask an administrator to add users with role SURGEON / CONSULTANT_SURGEON.
+                </p>
+              ) : (
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-gray-500">
+                    {subspecialty && !showAllSurgeons
+                      ? `Showing ${visibleSurgeons.length} of ${surgeons.length} — ${subspecialty}`
+                      : `Showing ${visibleSurgeons.length} of ${surgeons.length}`}
+                  </p>
+                  {subspecialty && (
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showAllSurgeons}
+                        onChange={(e) => setShowAllSurgeons(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      Show all subspecialties
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Nobody left. Say why, and say how to get out of it — an empty
+                  dropdown with no explanation is where a booking stops. */}
+              {surgeons.length > 0 && visibleSurgeons.length === 0 && (
+                <p className="text-xs text-amber-700 mt-1">
+                  {surgeonSearch
+                    ? 'No surgeon matches that name. Clear the search, or tick "Show all subspecialties".'
+                    : 'No surgeon is recorded under this subspecialty. Tick "Show all subspecialties" to choose anyway.'}
+                </p>
+              )}
+
+              {/* Hidden field keeps the surgeon name in the form payload for legacy validation */}
+              <input type="hidden" name="surgeonName" value={surgeons.find((s) => s.id === selectedSurgeonId)?.fullName || ''} />
+            </div>
+
+            <div>
+              <label className="label">Unit Supervising Consultant(s)</label>
+
+              <input
+                type="text"
+                value={consultantSearch}
+                onChange={(e) => setConsultantSearch(e.target.value)}
+                placeholder="Search by name…"
+                className="input-field mb-2"
+                autoComplete="off"
+                title="Type part of a consultant's name to narrow the list"
+              />
+
+              <select
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (id && !supervisingConsultantIds.includes(id)) {
+                    setSupervisingConsultantIds((prev) => [...prev, id]);
+                  }
+                  // Clearing the search after a pick is what makes adding a
+                  // second consultant feel like adding the first.
+                  setConsultantSearch('');
+                }}
+                className="input-field"
+                title="Add a unit supervising consultant (you can add more than one)"
+              >
+                <option value="">— Add Consultant —</option>
+                {visibleConsultants.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
+                  </option>
+                ))}
+              </select>
+
+              {supervisingConsultantIds.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {supervisingConsultantIds.map((id) => {
+                    const c = surgeons.find((s) => s.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 bg-primary-50 border border-primary-200 text-primary-800 text-xs font-medium rounded-full px-3 py-1"
+                      >
+                        {c?.fullName || 'Unknown'}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSupervisingConsultantIds((prev) => prev.filter((x) => x !== id))
+                          }
+                          className="text-primary-500 hover:text-red-600"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Chosen from the surgeon database. You can add more than one. Displayed beside the theatre and unit on the schedule.
+              </p>
+            </div>
+
 
             <div>
               <label className="label">Indication *</label>

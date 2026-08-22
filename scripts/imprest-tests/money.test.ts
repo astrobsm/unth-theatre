@@ -14,7 +14,7 @@ import {
   percentageRatio,
   subtractKobo,
   sumBy,
-} from './money';
+} from '../../src/lib/imprest/money';
 
 describe('kobo validity', () => {
   it('accepts non-negative integers', () => {

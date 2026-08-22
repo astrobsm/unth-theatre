@@ -1,0 +1,13 @@
+-- Records when a surgeon told us whether they are a consultant or a resident.
+--
+-- 194 of the 196 surgeons on this system sat under the undifferentiated
+-- SURGEON role; only 2 were CONSULTANT_SURGEON. The schedule therefore could
+-- not show who was supervising whom, and the booking screen could not offer a
+-- sensible list of supervising consultants.
+--
+-- NULL means "never asked", which is what makes the sign-in prompt appear
+-- once and then stop.
+--
+-- IF NOT EXISTS because this column may already have been added by hand on a
+-- server before the migration reached it.
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "surgeonGradeConfirmedAt" TIMESTAMP(3);

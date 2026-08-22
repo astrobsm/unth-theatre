@@ -13,7 +13,7 @@ import {
   priceForItem,
   priceHistory,
   priceOn,
-} from './pricing';
+} from '../../src/lib/billing/pricing';
 
 const t = (o: Record<string, unknown>) => ({
   id: 'x',

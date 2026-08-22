@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { allocateFefo, summariseAvailability } from './allocate';
-import { ZERO_QUANTITIES } from './quantities';
+import { allocateFefo, summariseAvailability } from '../../src/lib/stock/allocate';
+import { ZERO_QUANTITIES } from '../../src/lib/stock/quantities';
 
 const NOW = new Date('2026-08-01T09:00:00Z');
 

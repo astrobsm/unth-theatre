@@ -14,7 +14,7 @@ import {
   percentToBasisPoints,
   sumShares,
   validateRules,
-} from './revenue';
+} from '../../src/lib/billing/revenue';
 
 const rule = (accountId: string, bp: number) => ({ accountId, shareBasisPoints: bp });
 

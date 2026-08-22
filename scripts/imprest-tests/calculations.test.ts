@@ -12,8 +12,8 @@ import {
   deriveImprestStatus,
   extractInclusiveVat,
   isRetirementOverdue,
-} from './calculations';
-import { ExpenditureStatus, ImprestStatus } from './enums';
+} from '../../src/lib/imprest/calculations';
+import { ExpenditureStatus, ImprestStatus } from '../../src/lib/imprest/enums';
 
 const line = (overrides: Partial<{
   id: string;

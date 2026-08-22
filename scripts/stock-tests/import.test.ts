@@ -15,7 +15,7 @@ import {
   parseMoney,
   validateCell,
   validateSheet,
-} from './import';
+} from '../../src/lib/stock/import';
 
 const ITEM_HEADERS = ['Item Name', 'Category', 'Description', 'Unit Cost (Naira)', 'Reorder Level', 'Supplier'];
 

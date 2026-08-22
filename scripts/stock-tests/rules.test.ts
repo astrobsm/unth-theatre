@@ -13,8 +13,8 @@ import {
   expiresWithin,
   isExpired,
   transfersOwnershipOnConsumption,
-} from './rules';
-import { ZERO_QUANTITIES } from './quantities';
+} from '../../src/lib/stock/rules';
+import { ZERO_QUANTITIES } from '../../src/lib/stock/quantities';
 
 const NOW = new Date('2026-08-01T09:00:00Z');
 
