@@ -31,8 +31,17 @@ export interface CaseForTasks {
   theatreTechnicianId: string | null;
   supervisingConsultantId: string | null;
   theatreId: string | null;
-  consentFileData: string | null;
-  consentFormData: string | null;
+  /**
+   * Whether consent exists — not the consent itself.
+   *
+   * These were the full base64 columns, carried all the way from Postgres to
+   * the browser so that one line below could ask whether they were empty.
+   * Measured on 22 August over fourteen days of cases: 2,973 kB pulled to
+   * answer a question that 213 bytes of consentFileName answers, on a route
+   * called 437 times a day.
+   */
+  hasConsentFile: boolean;
+  hasConsentForm: boolean;
   preopOutstanding: string | null;
   patientName: string | null;
   folderNumber: string | null;
@@ -115,7 +124,7 @@ export function caseTasksFor(
 
   // ---- The surgeon and the supervising consultant own the booking ---------
   if (role === 'SURGEON' || role === 'CONSULTANT') {
-    if (!started && !surgery.consentFileData && !surgery.consentFormData) {
+    if (!started && !surgery.hasConsentFile && !surgery.hasConsentForm) {
       add('consent',
         `Consent not recorded — ${surgery.procedureName}`,
         `No informed consent is on file for ${patient}. The case cannot proceed until it is uploaded or completed on the app.`,

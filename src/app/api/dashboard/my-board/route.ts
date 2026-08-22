@@ -73,7 +73,10 @@ export async function GET(_req: NextRequest) {
           status: true, theatreId: true,
           surgeonId: true, anesthetistId: true, scrubNurseId: true,
           theatreTechnicianId: true, supervisingConsultantId: true,
-          consentFileData: true, consentFormData: true, preopOutstanding: true,
+          // Cheap stand-ins for "is there consent?": a filename, a flag and a
+          // timestamp, instead of the megabytes of base64 they describe.
+          consentFileName: true, consentSignedElectronically: true,
+          consentCompletedAt: true, preopOutstanding: true,
           patient: { select: { name: true, folderNumber: true } },
         },
         orderBy: { scheduledDate: 'asc' },
@@ -109,8 +112,8 @@ export async function GET(_req: NextRequest) {
         theatreTechnicianId: s.theatreTechnicianId,
         supervisingConsultantId: s.supervisingConsultantId,
         theatreId: s.theatreId,
-        consentFileData: s.consentFileData,
-        consentFormData: s.consentFormData,
+        hasConsentFile: Boolean(s.consentFileName),
+        hasConsentForm: Boolean(s.consentSignedElectronically || s.consentCompletedAt),
         preopOutstanding: s.preopOutstanding,
         patientName: s.patient?.name ?? null,
         folderNumber: s.patient?.folderNumber ?? null,

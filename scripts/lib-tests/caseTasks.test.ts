@@ -15,8 +15,8 @@ const surgery = (over: Partial<CaseForTasks> = {}): CaseForTasks => ({
   theatreTechnicianId: 'tech-1',
   supervisingConsultantId: null,
   theatreId: 'theatre-2',
-  consentFileData: 'base64…',
-  consentFormData: null,
+  hasConsentFile: true,
+  hasConsentForm: false,
   preopOutstanding: null,
   patientName: 'Nwoke Ngozi',
   folderNumber: '0294817',
@@ -51,28 +51,28 @@ describe('a case in order produces NOTHING', () => {
   });
 
   it('gives nobody anything once the case is completed', () => {
-    const done = surgery({ status: 'COMPLETED', consentFileData: null, theatreId: null });
+    const done = surgery({ status: 'COMPLETED', hasConsentFile: false, theatreId: null });
     for (const who of ['surgeon-1', 'anaes-1', 'scrub-1', 'tech-1']) {
       expect(caseTasksFor(done, who, NOW)).toHaveLength(0);
     }
   });
 
   it('gives nobody anything once the case is cancelled', () => {
-    const off = surgery({ status: 'CANCELLED', consentFileData: null });
+    const off = surgery({ status: 'CANCELLED', hasConsentFile: false });
     expect(caseTasksFor(off, 'surgeon-1', NOW)).toHaveLength(0);
   });
 });
 
 describe('the surgeon owns the booking', () => {
   it('flags missing consent', () => {
-    const [task] = caseTasksFor(surgery({ consentFileData: null }), 'surgeon-1', NOW);
+    const [task] = caseTasksFor(surgery({ hasConsentFile: false }), 'surgeon-1', NOW);
     expect(task.title).toMatch(/consent not recorded/i);
     expect(task.detail).toContain('Nwoke Ngozi');
     expect(task.detail).toContain('0294817');
   });
 
   it('accepts the structured consent form as consent', () => {
-    const s = surgery({ consentFileData: null, consentFormData: '{"signed":true}' });
+    const s = surgery({ hasConsentFile: false, hasConsentForm: true });
     expect(caseTasksFor(s, 'surgeon-1', NOW)).toHaveLength(0);
   });
 
@@ -151,7 +151,7 @@ describe('urgency uses the scheduled TIME, not midnight', () => {
 describe('personalCaseTasks', () => {
   it('collects across cases and skips the ones in order', () => {
     const tasks = personalCaseTasks(
-      [surgery({ id: 'a' }), surgery({ id: 'b', consentFileData: null })],
+      [surgery({ id: 'a' }), surgery({ id: 'b', hasConsentFile: false })],
       'surgeon-1', NOW,
     );
     expect(tasks).toHaveLength(1);

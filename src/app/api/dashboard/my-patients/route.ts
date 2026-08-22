@@ -65,7 +65,9 @@ export async function GET(req: NextRequest) {
       select: {
         id: true, procedureName: true, scheduledDate: true, scheduledTime: true,
         status: true, theatreId: true,
-        consentFileData: true, consentFormData: true, preopOutstanding: true,
+        // See my-board: the boolean is the whole question being asked.
+        consentFileName: true, consentSignedElectronically: true,
+        consentCompletedAt: true, preopOutstanding: true,
         patient: { select: { name: true, folderNumber: true } },
         movements: { select: { phase: true, timestamp: true } },
         preOpReviews: {
@@ -122,7 +124,7 @@ export async function GET(req: NextRequest) {
             }
           : null,
         hasAnaestheticReview: !!review,
-        hasConsent: !!(s.consentFileData || s.consentFormData),
+        hasConsent: Boolean(s.consentFileName || s.consentSignedElectronically || s.consentCompletedAt),
         preopOutstanding: s.preopOutstanding,
       });
     });
