@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { creditForCheckIn, checkInReason } from "@/lib/mealQualification";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
 
-    const [roster, surgicalMembership, transportCredit, theatreTaskCredit] =
+    const [roster, surgicalMembership, transportCredit, theatreTaskCredit, myCheckIns] =
       await Promise.all([
         prisma.roster.findFirst({
           where: { userId, date: { gte: start, lt: end } },
@@ -76,6 +77,11 @@ export async function GET(request: NextRequest) {
           },
           select: { id: true, theatreName: true },
         }),
+        // This person's own check-ins for today's cases.
+        prisma.surgeryTeamCheckIn.findMany({
+          where: { userId, surgery: { scheduledDate: { gte: start, lt: end } } },
+          select: { status: true, surgery: { select: { procedureName: true } } },
+        }),
       ]);
 
     // ── Rostered is EXPECTED, not eligible ──────────────────────────────────
@@ -103,9 +109,23 @@ export async function GET(request: NextRequest) {
       select: { id: true, procedureName: true, status: true },
     });
 
+    // A declared presence for a case. Affirmative, timestamped, attributable
+    // and usually geofenced — stronger evidence than being on an assignment
+    // list, and treated as work. "On the way" and "delayed" are NOT: at
+    // lunchtime they are a promise made earlier, so they fall through to the
+    // expected branch below and somebody confirms.
+    const presentCheckIn = myCheckIns.find((c) => creditForCheckIn(c.status) === 'QUALIFYING');
+
     const activity =
       caseWorked
         ? { source: 'CASE_WORKED', details: { task: `${caseWorked.procedureName} — ${caseWorked.status.toLowerCase()}` } }
+        : presentCheckIn
+          ? {
+              source: 'TEAM_CHECK_IN',
+              details: {
+                task: `Checked in as present — ${presentCheckIn.surgery?.procedureName ?? 'case today'}`,
+              },
+            }
         : transportCredit
           ? { source: 'PATIENT_TRANSPORT', details: { task: 'Transported a patient to the holding area' } }
           : theatreTaskCredit
@@ -122,6 +142,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Expected, but nothing recorded. Not refused — flagged.
+    const pendingCheckIn = myCheckIns.find((c) => creditForCheckIn(c.status) === 'EXPECTED');
+    if (!roster && !surgicalMembership && pendingCheckIn) {
+      return NextResponse.json({
+        eligible: true,
+        verified: false,
+        requiresVerification: true,
+        source: 'CHECK_IN_PENDING',
+        reason: checkInReason(pendingCheckIn.status),
+        details: { task: pendingCheckIn.surgery?.procedureName ?? 'Case today' },
+      });
+    }
+
     const expected = roster ?? surgicalMembership ?? null;
     if (expected) {
       return NextResponse.json({

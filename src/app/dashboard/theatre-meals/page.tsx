@@ -233,7 +233,7 @@ function DailyStaffTab() {
           </h1>
           <p className="text-gray-600 mt-2 max-w-3xl">
             Surgical teams from today&apos;s surgery bookings plus all staff on duty from the roster.
-            Use the activity badges to dispense lunch only to those who have logged activity for the day.
+            Use the activity badges to dispense lunch only to those who have worked, checked in as present, or been confirmed at the counter.
           </p>
         </div>
         <div className="flex items-end gap-2">
@@ -265,9 +265,13 @@ function DailyStaffTab() {
       <div className="card p-3 flex flex-wrap items-center gap-3 text-xs">
         <span className="font-semibold text-gray-700">Activity legend:</span>
         <ActivityBadge status={true} />
-        <span className="text-gray-500">staff has logged at least one duty in the system today.</span>
+        <span className="text-gray-500">
+          worked a case that ran, carried out a theatre task, or checked in as present for a case today.
+        </span>
         <ActivityBadge status={false} />
-        <span className="text-gray-500">staff is on the team / roster but has not logged anything yet.</span>
+        <span className="text-gray-500">
+          on the team or roster, or checked in as on the way / delayed, but nothing confirms they arrived.
+        </span>
         <ActivityBadge status={null} />
         <span className="text-gray-500">free-text member, not linked to a user account.</span>
       </div>

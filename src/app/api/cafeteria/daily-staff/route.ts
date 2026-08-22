@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { creditForCheckIn } from "@/lib/mealQualification";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
     //
     // These three are the same sources /api/meals/eligibility uses, so the board
     // and a staff member's own check can never disagree.
-    const [casesWorked, transports, theatreTasks] = await Promise.all([
+    const [casesWorked, transports, theatreTasks, checkIns] = await Promise.all([
       // A case that actually RAN with this person on it. Assignment is not work;
       // a case that reached theatre and started or finished is.
       prisma.surgery.findMany({
@@ -113,6 +114,14 @@ export async function GET(request: NextRequest) {
         where: { updatedAt: { gte: start, lt: end } },
         select: { porterIds: true, cleanerIds: true },
       }),
+      // Team check-ins for today's cases. Somebody who declared themselves
+      // present for a case has done something affirmative, timestamped and
+      // attributable — and usually geofenced. That is stronger evidence than
+      // appearing on an assignment list, which is why it counts as work.
+      prisma.surgeryTeamCheckIn.findMany({
+        where: { surgery: { scheduledDate: { gte: start, lt: end } } },
+        select: { userId: true, status: true },
+      }),
     ]);
 
     const qualifyingUserIds = new Set<string>();
@@ -129,6 +138,20 @@ export async function GET(request: NextRequest) {
     for (const t of theatreTasks) {
       for (const id of idsIn(t.porterIds)) qualifyingUserIds.add(id);
       for (const id of idsIn(t.cleanerIds)) qualifyingUserIds.add(id);
+    }
+
+    // ── Check-ins ───────────────────────────────────────────────────────────
+    // PRESENT counts as work. "On the way" and "delayed" do not: at lunchtime
+    // they are a promise made earlier in the day, and the system has no later
+    // signal unless the case actually ran. They land in the middle state so
+    // the person dispensing confirms rather than refuses — see
+    // lib/mealQualification, which the staff member's own eligibility check
+    // uses too, so the counter and the phone can never disagree.
+    const checkedInUserIds = new Set<string>();
+    for (const c of checkIns) {
+      const credit = creditForCheckIn(c.status);
+      if (credit === "QUALIFYING") qualifyingUserIds.add(c.userId);
+      else if (credit === "EXPECTED") checkedInUserIds.add(c.userId);
     }
 
     const checkActivity = (userId: string | null | undefined): boolean | null => {
@@ -149,6 +172,9 @@ export async function GET(request: NextRequest) {
     const activityLevel = (userId: string | null | undefined): string | null => {
       if (!userId) return null;
       if (qualifyingUserIds.has(userId)) return 'QUALIFYING';
+      // Said they were coming but nothing has confirmed they arrived. Shown
+      // for confirmation, not refused.
+      if (checkedInUserIds.has(userId)) return 'SYSTEM_ONLY';
       if (activeUserIds.has(userId)) return 'SYSTEM_ONLY';
       return 'NONE';
     };
