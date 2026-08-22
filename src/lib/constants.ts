@@ -77,11 +77,28 @@ export const CANONICAL_THEATRES: Array<{ name: string; location: Location; capac
   { name: 'CTU TH1', location: 'Cardiothoracic Centre' },
 ];
 
-// University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla
-// Nkanu West Local Government Area, Enugu State, Nigeria
+/**
+ * University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla.
+ *
+ * MEASURED, not looked up. These were 6.4041, 7.5199 — about 13.4km north-east
+ * of here, near Enugu city rather than the hospital — and the consequence was
+ * that a technician standing in the theatre complex was told, on the readiness
+ * board, "13.38km from UNTH, far from facility", on the same row as a
+ * reverse-geocoded address reading "University of Nigeria teaching hospital"
+ * with 17 metres of accuracy. The board contradicted itself and the staff were
+ * right.
+ *
+ * Derived on 22 August from 144 theatre setup logs — technicians physically in
+ * the complex, phone GPS, median accuracy about 20 metres. 134 of the 144 sit
+ * within 300 metres of this point. The nine beyond 3km are genuinely off-site,
+ * which is the thing the geofence is supposed to notice.
+ *
+ * If this ever needs changing again, do it the same way: take the median of
+ * where staff actually stand, not a pin dropped on a map.
+ */
 export const FACILITY_COORDS = {
-  latitude: 6.4041,
-  longitude: 7.5199,
+  latitude: 6.29997,
+  longitude: 7.45912,
   name: 'UNTH Ituku-Ozalla, Nkanu West LGA, Enugu',
 } as const;
 

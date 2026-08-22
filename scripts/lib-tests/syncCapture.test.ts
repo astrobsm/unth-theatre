@@ -128,12 +128,33 @@ function tablesEnabledBy(sql: string): string[] {
   return [...found];
 }
 
+/**
+ * Tables a migration switches capture OFF for.
+ *
+ * The counterpart to tablesEnabledBy. Capture stopped being one-way on 22
+ * August, when notifications was disabled — 45 writers, no readers, and the
+ * dominant load on a link that had already deadlocked once.
+ */
+function tablesDisabledBy(sql: string): string[] {
+  const out: string[] = [];
+  const re = /DROP\s+TRIGGER\s+IF\s+EXISTS\s+zz_sync_capture(?:_del)?\s+ON\s+"?([a-z_]+)"?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sql))) out.push(m[1]);
+  return out;
+}
+
 function capturedTables(): Set<string> {
   const captured = new Set<string>();
-  for (const dir of fs.readdirSync(MIGRATIONS)) {
+  // Directory names are timestamps, so sorting them replays the migrations in
+  // the order Postgres applied them. That matters now that capture can be
+  // switched OFF as well as on: a later DROP TRIGGER must win over an earlier
+  // sync_enable_table, exactly as it does in the database.
+  for (const dir of fs.readdirSync(MIGRATIONS).sort()) {
     const file = path.join(MIGRATIONS, dir, 'migration.sql');
     if (!fs.existsSync(file)) continue;
-    for (const t of tablesEnabledBy(fs.readFileSync(file, 'utf8'))) captured.add(t);
+    const sql = fs.readFileSync(file, 'utf8');
+    for (const t of tablesEnabledBy(sql)) captured.add(t);
+    for (const t of tablesDisabledBy(sql)) captured.delete(t);
   }
   return captured;
 }

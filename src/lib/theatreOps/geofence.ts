@@ -17,6 +17,7 @@
 // obstruction, and she would work around it by not checking in at all.
 // ============================================================
 
+import { FACILITY_COORDS } from '@/lib/constants';
 import { distanceMetres } from '@/lib/staffLocation';
 
 /**
@@ -28,8 +29,12 @@ import { distanceMetres } from '@/lib/staffLocation';
  * change to work.
  */
 export const HOSPITAL_CENTRE = {
-  latitude: Number(process.env.NEXT_PUBLIC_HOSPITAL_LAT ?? 6.4025),
-  longitude: Number(process.env.NEXT_PUBLIC_HOSPITAL_LNG ?? 7.5103),
+  // Defaults come from FACILITY_COORDS so there is ONE measured position for
+  // this hospital. There used to be three — 6.4025/7.5103 here, 6.4041/7.5199
+  // in constants, 6.3936/7.5078 in team-availability — disagreeing with each
+  // other by more than a kilometre and with the theatre complex by thirteen.
+  latitude: Number(process.env.NEXT_PUBLIC_HOSPITAL_LAT ?? FACILITY_COORDS.latitude),
+  longitude: Number(process.env.NEXT_PUBLIC_HOSPITAL_LNG ?? FACILITY_COORDS.longitude),
 };
 
 /**

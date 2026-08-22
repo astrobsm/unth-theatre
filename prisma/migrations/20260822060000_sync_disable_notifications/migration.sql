@@ -1,0 +1,21 @@
+-- Stop replicating notifications.
+--
+-- Applied by hand to both databases on 22 August 2026; this migration exists so
+-- a fresh database matches production, and so a re-run of the migrations cannot
+-- quietly switch replication back on.
+--
+-- Why: the table had 45 write call-sites (30 create, 15 createMany), ZERO reads
+-- through Prisma, no retention, 79,275 rows and 40 MB. Every row crossed a
+-- domestic uplink to a cloud database where nothing read it either, and on 18
+-- August that journal deadlocked with 176 unsent entries, 154 of them
+-- notifications.
+--
+-- The rows are still written. They are simply local now.
+--
+-- To reverse: SELECT sync_enable_table('notifications'); and restore the
+-- APPEND_ONLY entry in TABLE_POLICIES. Note that scripts/local-server/
+-- prune-ephemera.sh REFUSES to run while these triggers exist, because its
+-- single-statement delete of tens of thousands of rows is only safe while
+-- nothing journals them.
+DROP TRIGGER IF EXISTS zz_sync_capture ON "notifications";
+DROP TRIGGER IF EXISTS zz_sync_capture_del ON "notifications";

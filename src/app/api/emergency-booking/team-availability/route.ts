@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { FACILITY_COORDS } from '@/lib/constants';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -58,8 +59,9 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 // UNTH Ituku-Ozalla coordinates (approximate)
-const HOSPITAL_LAT = 6.3936;
-const HOSPITAL_LON = 7.5078;
+// One measured position for the hospital, shared. See FACILITY_COORDS.
+const HOSPITAL_LAT = FACILITY_COORDS.latitude;
+const HOSPITAL_LON = FACILITY_COORDS.longitude;
 
 // GET - Fetch team availability for a specific emergency booking
 export async function GET(request: NextRequest) {
