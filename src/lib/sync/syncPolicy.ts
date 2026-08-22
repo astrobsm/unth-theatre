@@ -65,7 +65,21 @@ export interface TablePolicy {
 export const TABLE_POLICIES: TablePolicy[] = [
   // ---- Class 1: append-only event streams -------------------------------
   { table: 'audit_logs', cls: 'APPEND_ONLY', why: 'Immutable by definition; an edited audit log is not an audit log.' },
-  { table: 'notifications', cls: 'APPEND_ONLY', why: 'Insert then read; the read flag is per-node noise, not clinical data.' },
+  // notifications is deliberately ABSENT from this list as of 22 August 2026.
+  //
+  // Its zz_sync_capture triggers were dropped on both databases, so nothing
+  // from it is journalled or replicated any more. The reason is not that
+  // replicating it was wrong in principle — it is that nothing reads it.
+  // Measured: 45 write call-sites (30 create, 15 createMany), ZERO reads
+  // through Prisma, no retention, 79,275 rows and 40 MB. Every row crossed a
+  // domestic uplink to a cloud database where nothing read it either, and on
+  // 18 August that journal deadlocked with 176 unsent entries, 154 of them
+  // notifications.
+  //
+  // If a feature ever reads notifications across nodes, re-enable capture with
+  // sync_enable_table('notifications') and put the APPEND_ONLY entry back —
+  // the old rationale, "insert then read; the read flag is per-node noise",
+  // was sound. It was simply describing a read that never happened.
   { table: 'patient_movements', cls: 'APPEND_ONLY', why: 'The single patient timeline, milestones included. Two nodes recording different events both happened.' },
   { table: 'radio_acknowledgments', cls: 'APPEND_ONLY', why: 'Who confirmed hearing an announcement, and when. The record that an announcement was answered; two nodes recording different confirmations both happened.' },
   { table: 'patient_transfers', cls: 'APPEND_ONLY', why: 'A movement between two locations at a time, by a named person. It has no lifecycle to conflict over — the row is the event.' },
