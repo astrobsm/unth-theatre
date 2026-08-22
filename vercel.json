@@ -40,7 +40,6 @@
       "schedule": "0 17 * * 6"
     },
     {
-      "_comment": "Emergency alerts that nobody answered. Runs all day and all night, because emergencies do not keep office hours, and because escalation to the CMD is time-based: six hours unanswered. A checker that only ran on weekday afternoons would let a Saturday night alert age past escalation unnoticed.",
       "path": "/api/deadline-checker?action=check-emergency-alerts",
       "schedule": "*/15 * * * *"
     },

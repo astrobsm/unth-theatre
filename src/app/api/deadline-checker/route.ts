@@ -646,6 +646,15 @@ export async function GET(request: NextRequest) {
     //
     // The rule is in lib/deadlineAttention.ts, applied and not reimplemented.
     // =====================================================================
+    // Scheduled in vercel.json at */15 * * * * — all day and all night, because
+    // emergencies do not keep office hours and escalation to the CMD is
+    // time-based: six hours unanswered. A checker that only ran on weekday
+    // afternoons would let a Saturday night alert age past escalation unnoticed.
+    //
+    // That reasoning lives here rather than beside the schedule because
+    // vercel.json is strict JSON with no comment syntax: an explanatory
+    // "_comment" key on a cron entry is an unknown property, and Vercel rejects
+    // the whole deployment for it. It did — every push for nine commits.
     if (action === 'check-emergency-alerts' || action === 'check-all') {
       const ALERT_GRACE_MS = 60 * 60 * 1000;
 
