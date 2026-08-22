@@ -331,6 +331,28 @@ export default function EmergencyBookingPage() {
   const [bookings, setBookings] = useState<EmergencyBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('');
+
+  /**
+   * The page opens on a choice, not on a list.
+   *
+   * It used to render every emergency ever recorded — 105 of them, 73 still
+   * "active" because nothing closes a case that was handled and never updated.
+   * The result was a page whose first screen showed a laparotomy from July as
+   * though it needed a theatre now, each card carrying a full assignment form.
+   * A board that cries wolf 73 times is not read.
+   */
+  const [view, setView] = useState<'menu' | 'list'>('menu');
+
+  /**
+   * Which day's emergencies to show. Defaults to today.
+   *
+   * The day an emergency BELONGS to is the day it was required, falling back
+   * to the day it was raised — not the day somebody last touched the record.
+   */
+  const [selectedDate, setSelectedDate] = useState<string>(
+    () => new Date().toISOString().slice(0, 10),
+  );
+  const [allDates, setAllDates] = useState(false);
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [teamData, setTeamData] = useState<Record<string, TeamMember[]>>({});
   const [onDutyTeams, setOnDutyTeams] = useState<Record<string, OnDutyTeam>>({});
@@ -780,8 +802,22 @@ export default function EmergencyBookingPage() {
     );
   }
 
-  const activeBookings = bookings.filter(b => ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED', 'IN_PROGRESS'].includes(b.status));
-  const pastBookings = bookings.filter(b => ['COMPLETED', 'CANCELLED'].includes(b.status));
+  /** The day a case belongs to: when it was required, else when it was raised. */
+  const dayOf = (b: EmergencyBooking) =>
+    new Date(b.requiredByTime || b.requestedAt).toISOString().slice(0, 10);
+
+  const onSelectedDay = allDates
+    ? bookings
+    : bookings.filter((b) => dayOf(b) === selectedDate);
+
+  const activeBookings = onSelectedDay.filter(b => ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED', 'IN_PROGRESS'].includes(b.status));
+  const pastBookings = onSelectedDay.filter(b => ['COMPLETED', 'CANCELLED'].includes(b.status));
+  // Counted across ALL days, so narrowing the view never hides the fact that
+  // older cases are still sitting open somewhere.
+  const openOnOtherDays = bookings.filter(
+    (b) => ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED', 'IN_PROGRESS'].includes(b.status)
+      && dayOf(b) !== selectedDate,
+  ).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -810,6 +846,98 @@ export default function EmergencyBookingPage() {
             </Link>
           )}
         </div>
+      </div>
+
+      {/* ── The two ways in ─────────────────────────────────────────────── */}
+      {view === 'menu' && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {canCreateBooking && (
+            <Link
+              href="/dashboard/emergency-booking/new"
+              className="group rounded-2xl border-2 border-red-200 bg-red-50 p-6 transition hover:border-red-400 hover:bg-red-100"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white">
+                  <Plus className="h-6 w-6" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-red-900">Book emergency surgery</h2>
+                  <p className="text-sm text-red-800">
+                    Raise a new emergency case and alert the theatre
+                  </p>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setView('list')}
+            className="group rounded-2xl border-2 border-slate-200 bg-white p-6 text-left transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-white">
+                <Calendar className="h-6 w-6" />
+              </span>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">View booked emergencies</h2>
+                <p className="text-sm text-slate-600">
+                  {bookings.length} recorded &middot; choose a date to see that day&rsquo;s cases
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {view === 'list' && (
+      <>
+      {/* ── Which day ───────────────────────────────────────────────────── */}
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-3">
+        <button
+          type="button"
+          onClick={() => setView('menu')}
+          className="text-sm text-gray-500 hover:text-gray-800"
+        >
+          &larr; Back
+        </button>
+        <label htmlFor="emergency-date" className="text-sm font-semibold text-gray-800">
+          Emergencies for
+        </label>
+        <input
+          id="emergency-date"
+          type="date"
+          value={selectedDate}
+          onChange={(e) => { setSelectedDate(e.target.value); setAllDates(false); }}
+          disabled={allDates}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={() => { setSelectedDate(new Date().toISOString().slice(0, 10)); setAllDates(false); }}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+        >
+          Today
+        </button>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={allDates}
+            onChange={(e) => setAllDates(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Every date
+        </label>
+        {/* Narrowing the view must never hide an open case. */}
+        {!allDates && openOnOtherDays > 0 && (
+          <button
+            type="button"
+            onClick={() => setAllDates(true)}
+            className="ml-auto rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200"
+          >
+            {openOnOtherDays} still open on other dates &mdash; show all
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -1430,6 +1558,8 @@ export default function EmergencyBookingPage() {
             </Link>
           )}
         </div>
+      )}
+      </>
       )}
 
       {/* Pre-Anaesthetic Review Modal */}
