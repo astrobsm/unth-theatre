@@ -52,8 +52,18 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return new NextResponse(null, { status: 204 });
   const d = parsed.data;
 
-  // One line, greppable, fixed field order.
-  console.log(
+  // console.WARN, not console.log, and not by preference.
+  //
+  // next.config.js strips console.log from production builds
+  // (removeConsole, excluding only 'error' and 'warn'). This endpoint was
+  // deployed, accepted beacons, returned 204 and discarded every one of them —
+  // found by checking the log rather than trusting the status code, which is
+  // the whole reason instrumentation gets verified end to end.
+  //
+  // warn is the quietest channel that survives the build. It is not a warning;
+  // it is a measurement, and it lands in orm-error.log alongside the other
+  // surviving application output.
+  console.warn(
     `[perf] route=${d.route} ttfb=${d.ttfb ?? '-'} domReady=${d.domReady ?? '-'} ` +
       `load=${d.loadComplete ?? '-'} lcp=${d.lcp ?? '-'} ` +
       `cores=${d.cores ?? '-'} memGb=${d.memoryGb ?? '-'} ` +
