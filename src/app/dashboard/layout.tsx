@@ -22,6 +22,9 @@ const AssistantWidget = dynamic(() => import('@/components/AssistantWidget'), { 
 const OrmGoLiveBanner = dynamic(() => import('@/components/OrmGoLiveBanner'), { ssr: false });
 const OrmHourlyBroadcast = dynamic(() => import('@/components/OrmHourlyBroadcast'), { ssr: false });
 const CarelineBar = dynamic(() => import('@/components/CarelineBar'), { ssr: false });
+// Reports what a page actually took, for one load in ten. See PerfBeacon for
+// why it is sampled, beaconed and anonymous.
+const PerfBeacon = dynamic(() => import('@/components/PerfBeacon'), { ssr: false });
 import {
   LayoutDashboard,
   Package,
@@ -839,6 +842,7 @@ export default function DashboardLayout({
             the root stacking context.
           */}
           <div className="relative">
+            <PerfBeacon />
             <CarelineBar />
             <OrmGoLiveBanner />
             <OrmHourlyBroadcast />
