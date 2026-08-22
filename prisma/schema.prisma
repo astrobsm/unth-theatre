@@ -11320,3 +11320,83 @@ model OcrSignatureRegion {
   @@index([documentId])
   @@map("ocr_signature_regions")
 }
+
+/// A missed deadline, addressed to the person who can still fix it.
+///
+/// This replaces going straight to a disciplinary query. A query is a letter
+/// from the CMD's office; it ends a conversation before one has been had, and
+/// it lands on people who may well have been in theatre at the time. The
+/// sequence here is: tell the person, give them a way to say what happened,
+/// and only escalate what nobody attends to.
+///
+/// ATTENDED TO means one of two things, and the second has a tail:
+///   • the case is marked STARTED, or
+///   • a reason for the delay is logged — which does NOT close it. A reason is
+///     an explanation, not an outcome, so the record stays open until it is
+///     followed by the surgery starting, the case being marked done, or the
+///     issue being resolved WITH a note of how.
+///
+/// Twelve hours unattended and it moves to Theatre Audit, where staff are
+/// invited to a discussion rather than sent a query.
+model DeadlineAttention {
+  id String @id @default(uuid())
+
+  /// Who is being asked. Name and role are snapshotted: a query about what
+  /// somebody was rostered as in August should not change when they are
+  /// promoted in November.
+  userId   String
+  userName String
+  userRole String
+
+  /// What was missed. subjectId is the emergency booking, surgery or roster
+  /// row it concerns, so the same deadline is never raised twice.
+  subjectType  DeadlineSubjectType
+  subjectId    String
+  subjectLabel String
+
+  /// When the thing should have happened, and when we told them it had not.
+  deadlineAt DateTime
+  notifiedAt DateTime @default(now())
+
+  status DeadlineAttentionStatus @default(OPEN)
+
+  /// Their account of the delay. Recorded, and deliberately not sufficient.
+  delayReason    String?
+  delayLoggedAt  DateTime?
+
+  /// The outcome, and how it was reached. This is what closes the record.
+  resolution   String?
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  /// Set when twelve hours passed with nothing attended to.
+  movedToAuditAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One open record per person per thing missed.
+  @@unique([userId, subjectType, subjectId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([movedToAuditAt])
+  @@map("deadline_attentions")
+}
+
+enum DeadlineSubjectType {
+  EMERGENCY_ALERT
+  THEATRE_SETUP
+  READINESS_LOG
+  ROSTER_SUBMISSION
+}
+
+enum DeadlineAttentionStatus {
+  /// Notified; nothing said yet.
+  OPEN
+  /// A reason was given. Still owes an outcome.
+  DELAY_LOGGED
+  /// Case started, done, or issue resolved with how. Closed.
+  RESOLVED
+  /// Twelve hours unattended. Now an audit matter.
+  IN_AUDIT
+}
