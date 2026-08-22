@@ -613,6 +613,185 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // =====================================================================
+    // 4. EMERGENCY ALERTS THAT NOBODY ANSWERED
+    // ---------------------------------------------------------------------
+    // An emergency alert stops announcing when a theatre AND a scrub nurse are
+    // assigned — assignment is acknowledgement — or an hour past the time
+    // surgery was required to start. See the lifecycle in
+    // src/app/api/radio/queue/route.ts.
+    //
+    // When it stops WITHOUT having been taken, the alert went unanswered. That
+    // is the case this check exists for: it names the people who were expected
+    // to respond and did not, and after six hours it puts the matter in front
+    // of the Chief Medical Director.
+    //
+    // "Did not respond" is read from radio_acknowledgments — the record of who
+    // confirmed hearing an announcement — not from a guess. Anyone who
+    // acknowledged is not queried, whatever else happened.
+    // =====================================================================
+    if (action === 'check-emergency-alerts' || action === 'check-all') {
+      /** The alert is still running until an hour past the required time. */
+      const ALERT_GRACE_MS = 60 * 60 * 1000;
+      /** Unanswered this long and it goes to the CMD. */
+      const ESCALATE_AFTER_MS = 6 * 60 * 60 * 1000;
+
+      const candidates = await prisma.emergencySurgeryBooking.findMany({
+        where: {
+          status: { in: ['SUBMITTED', 'APPROVED', 'THEATRE_ASSIGNED'] as any },
+          // A day is as far back as this looks. Older than that and the
+          // question is not "who ignored the alert" but "why is this booking
+          // still open", which is a different conversation.
+          createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        },
+        include: { surgery: { select: { scrubNurseId: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+
+      for (const booking of candidates) {
+        // Taken. Nothing to answer for.
+        if (booking.theatreId && booking.surgery?.scrubNurseId) continue;
+
+        const deadline = booking.requiredByTime ?? booking.createdAt;
+        const sinceDeadline = now.getTime() - deadline.getTime();
+        // The alert may still be sounding; give it its full life first.
+        if (sinceDeadline < ALERT_GRACE_MS) continue;
+
+        const shouldEscalate = sinceDeadline >= ESCALATE_AFTER_MS;
+
+        // Who confirmed hearing it.
+        const acks = await prisma.radioAcknowledgment.findMany({
+          where: { announcement: { dedupeKey: `emergencyBookingId:${booking.id}` } },
+          select: { userId: true },
+        });
+        const acknowledged = new Set(acks.map((a) => a.userId));
+
+        // Who was expected to. The surgeon who raised it, plus everybody
+        // rostered on duty that day — which is where the anaesthetists and
+        // technicians are recorded.
+        const dayStart = new Date(deadline); dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(deadline); dayEnd.setHours(23, 59, 59, 999);
+        const rostered = await prisma.roster.findMany({
+          where: { date: { gte: dayStart, lte: dayEnd } },
+          select: { userId: true, staffName: true, staffCategory: true },
+          take: 60,
+        });
+
+        const expected = new Map<string, { name: string; role: string }>();
+        if (booking.surgeonId) {
+          expected.set(booking.surgeonId, {
+            name: booking.surgeonName ?? 'Surgeon',
+            role: 'SURGEON',
+          });
+        }
+        for (const r of rostered) {
+          if (!r.userId) continue;
+          expected.set(r.userId, {
+            name: r.staffName ?? 'Staff member',
+            role: String(r.staffCategory ?? 'THEATRE'),
+          });
+        }
+
+        const when = deadline.toLocaleString('en-GB', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
+        // One query per person per booking, keyed so re-runs update rather
+        // than duplicate. This checker may run every few minutes.
+        const deadlineType = `EMERGENCY_ALERT:${booking.id}`;
+
+        for (const [userId, person] of Array.from(expected.entries())) {
+          if (acknowledged.has(userId)) continue;
+
+          const existing = await prisma.disciplinaryQuery.findFirst({
+            where: { recipientId: userId, deadlineType },
+          });
+
+          if (existing) {
+            // Already queried. The only thing left is the six-hour escalation.
+            if (shouldEscalate && existing.status !== 'ESCALATED' && !existing.escalatedAt) {
+              await prisma.disciplinaryQuery.update({
+                where: { id: existing.id },
+                data: {
+                  status: 'ESCALATED',
+                  escalatedTo: 'CHIEF_MEDICAL_DIRECTOR',
+                  escalatedAt: now,
+                  escalationReason:
+                    'Auto-escalated: emergency alert unanswered for six hours',
+                },
+              });
+              results.queries.push({
+                unit: 'EMERGENCY',
+                category: 'ALERT_UNANSWERED_ESCALATED',
+                userId,
+                name: person.name,
+                queryRef: existing.referenceNumber,
+                type: 'DUTY_ABANDONMENT',
+              });
+            }
+            continue;
+          }
+
+          const query = await prisma.disciplinaryQuery.create({
+            data: {
+              referenceNumber: generateRefNumber(),
+              recipientId: userId,
+              recipientName: person.name,
+              recipientRole: person.role,
+              recipientUnit: 'THEATRE',
+              queryType: 'DUTY_ABANDONMENT',
+              subject: `No response to emergency surgery alert — ${booking.patientName ?? 'emergency case'}`,
+              description:
+                `Dear ${person.name},\n\n` +
+                `An emergency surgery alert was broadcast for ${booking.patientName ?? 'an emergency case'} ` +
+                `(${booking.procedureName ?? 'procedure not stated'}), required by ${when}.\n\n` +
+                `The alert repeated every ten minutes until one hour past that time. ` +
+                `The record shows no acknowledgement from you, and the case had neither a theatre ` +
+                `nor a scrub nurse assigned when the alert stopped.\n\n` +
+                `An emergency alert that nobody answers is a patient waiting. ` +
+                `You are required to provide a written explanation within 24 hours of receipt.\n\n` +
+                `If you did respond and this is in error, say so in your reply and it will be ` +
+                `withdrawn — the acknowledgement record is what this query was raised from.\n\n` +
+                `Signed,\nOffice of the Chief Medical Director\n` +
+                `University of Nigeria Teaching Hospital, Ituku Ozalla`,
+              deadlineTime: deadline,
+              deadlineType,
+              status: shouldEscalate ? 'ESCALATED' : 'ISSUED',
+              ...(shouldEscalate
+                ? {
+                    escalatedTo: 'CHIEF_MEDICAL_DIRECTOR',
+                    escalatedAt: now,
+                    escalationReason:
+                      'Auto-escalated: emergency alert unanswered for six hours',
+                  }
+                : {}),
+              evidence: JSON.stringify({
+                emergencyBookingId: booking.id,
+                patient: booking.patientName ?? null,
+                requiredByTime: booking.requiredByTime?.toISOString() ?? null,
+                theatreAssigned: Boolean(booking.theatreId),
+                scrubNurseAssigned: Boolean(booking.surgery?.scrubNurseId),
+                hoursUnanswered: Math.round(sinceDeadline / 3600000),
+                acknowledgedBy: acks.length,
+              }),
+              issuedByName: 'Office of the Chief Medical Director',
+              issuedByTitle: 'University of Nigeria Teaching Hospital, Ituku Ozalla',
+            },
+          });
+
+          results.queries.push({
+            unit: 'EMERGENCY',
+            category: shouldEscalate ? 'ALERT_UNANSWERED_ESCALATED' : 'ALERT_UNANSWERED',
+            userId,
+            name: person.name,
+            queryRef: query.referenceNumber,
+            type: 'DUTY_ABANDONMENT',
+          });
+        }
+      }
+    }
+
     return NextResponse.json(results);
   } catch (error) {
     console.error('Error in deadline checker:', error);
