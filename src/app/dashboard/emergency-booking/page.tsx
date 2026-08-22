@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
 import { availabilityMeta } from '@/lib/staffAvailability';
+import { watDay, watToday } from '@/lib/watDay';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
@@ -349,9 +350,7 @@ export default function EmergencyBookingPage() {
    * The day an emergency BELONGS to is the day it was required, falling back
    * to the day it was raised — not the day somebody last touched the record.
    */
-  const [selectedDate, setSelectedDate] = useState<string>(
-    () => new Date().toISOString().slice(0, 10),
-  );
+  const [selectedDate, setSelectedDate] = useState<string>(() => watToday());
   const [allDates, setAllDates] = useState(false);
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [teamData, setTeamData] = useState<Record<string, TeamMember[]>>({});
@@ -802,9 +801,15 @@ export default function EmergencyBookingPage() {
     );
   }
 
-  /** The day a case belongs to: when it was required, else when it was raised. */
-  const dayOf = (b: EmergencyBooking) =>
-    new Date(b.requiredByTime || b.requestedAt).toISOString().slice(0, 10);
+  /**
+   * The day a case belongs to: when it was required, else when it was raised.
+   *
+   * In WAT, not UTC. A case required at 00:30 on the 23rd is 23:30 UTC on the
+   * 22nd, and a UTC day-stamp files it under the 22nd — so the surgeon who
+   * picks the day it is actually happening does not see it. Night emergencies
+   * are the ones that matter most here.
+   */
+  const dayOf = (b: EmergencyBooking) => watDay(b.requiredByTime || b.requestedAt);
 
   const onSelectedDay = allDates
     ? bookings
@@ -914,7 +919,7 @@ export default function EmergencyBookingPage() {
         />
         <button
           type="button"
-          onClick={() => { setSelectedDate(new Date().toISOString().slice(0, 10)); setAllDates(false); }}
+          onClick={() => { setSelectedDate(watToday()); setAllDates(false); }}
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
         >
           Today
