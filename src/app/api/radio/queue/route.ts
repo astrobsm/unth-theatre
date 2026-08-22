@@ -121,7 +121,10 @@ async function handleGET(_req: NextRequest) {
       const existing = await prisma.radioAnnouncement.findFirst({
         where: {
           status: { in: ['PENDING', 'PLAYING'] },
-          metadata: { contains: `"announcementId":"${a.id}"` },
+          // Equality on an indexed column. This was a substring match on the
+          // metadata JSON, which sequentially scanned the whole table on every
+          // poll — see dedupeKey in the schema for the measurements.
+          dedupeKey: `announcementId:${a.id}`,
         },
       });
       if (existing) continue;
@@ -136,6 +139,7 @@ async function handleGET(_req: NextRequest) {
           triggerSource: 'SCHEDULED',
           status: 'PENDING',
           metadata: JSON.stringify({ announcementId: a.id }),
+          dedupeKey: `announcementId:${a.id}`,
         },
       });
 
@@ -177,7 +181,7 @@ async function handleGET(_req: NextRequest) {
 
     for (const b of bookings) {
       const dup = await prisma.radioAnnouncement.findFirst({
-        where: { metadata: { contains: `"emergencyBookingId":"${b.id}"` } },
+        where: { dedupeKey: `emergencyBookingId:${b.id}` },
         select: { id: true },
       });
       if (dup) continue;
@@ -217,6 +221,7 @@ async function handleGET(_req: NextRequest) {
             tripleRepeat: true,
             source: 'EmergencySurgeryBooking',
           }),
+          dedupeKey: `emergencyBookingId:${b.id}`,
         },
       });
     }
@@ -230,7 +235,7 @@ async function handleGET(_req: NextRequest) {
 
     for (const p of prescriptions) {
       const dup = await prisma.radioAnnouncement.findFirst({
-        where: { metadata: { contains: `"emergencyPrescriptionId":"${p.id}"` } },
+        where: { dedupeKey: `emergencyPrescriptionId:${p.id}` },
         select: { id: true },
       });
       if (dup) continue;
@@ -274,6 +279,7 @@ async function handleGET(_req: NextRequest) {
             tripleRepeat: true,
             source: 'EmergencyPrescription',
           }),
+          dedupeKey: `emergencyPrescriptionId:${p.id}`,
         },
       });
     }
@@ -325,7 +331,7 @@ async function handleGET(_req: NextRequest) {
       if (minutesUntilStart > 10 || minutesUntilStart < -2) continue;
 
       const dup = await prisma.radioAnnouncement.findFirst({
-        where: { metadata: { contains: `"surgeryReminderId":"${c.id}"` } },
+        where: { dedupeKey: `surgeryReminderId:${c.id}` },
         select: { id: true },
       });
       if (dup) continue;
@@ -355,6 +361,7 @@ async function handleGET(_req: NextRequest) {
             surgeryReminderId: c.id,
             source: 'SurgeryPreStartReminder',
           }),
+          dedupeKey: `surgeryReminderId:${c.id}`,
         },
       });
     }

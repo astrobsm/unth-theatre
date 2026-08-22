@@ -7191,6 +7191,17 @@ model RadioAnnouncement {
   acknowledgedAt   DateTime?
   acknowledgedById String?
   metadata         String? // JSON blob (event-specific data)
+  /// What this announcement was raised FOR, as an indexable equality key.
+  ///
+  /// The scheduler needs to ask "have I already announced this booking?" on
+  /// every poll. It asked by substring-matching the metadata JSON —
+  /// metadata LIKE '%"emergencyBookingId":"abc"%' — which no B-tree can serve,
+  /// so every check sequentially scanned the whole table. Measured on 22
+  /// August: 2,088,030 sequential scans and 4.67 BILLION tuples read, four
+  /// checks per poll, 14,464 polls a day, from 17 clients.
+  ///
+  /// Shaped "<source>:<id>", e.g. "emergencyBookingId:abc-123".
+  dedupeKey        String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -7208,6 +7219,7 @@ model RadioAnnouncement {
   @@index([priority])
   @@index([category])
   @@index([createdAt])
+  @@index([dedupeKey])
   @@map("radio_announcements")
 }
 
