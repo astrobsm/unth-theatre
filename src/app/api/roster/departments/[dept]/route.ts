@@ -146,9 +146,23 @@ const patchSchema = z.object({
   pendingRemoval: z.boolean().optional(), // stage/un-stage a PUBLISHED row
   date: z.string().optional(),            // move a DRAFT row (drag & drop)
   shift: z.enum(['MORNING', 'CALL', 'NIGHT']).optional(),
+  // Full edit of one assignment. Kept under its own key so a drag-move
+  // (bare date/shift, above) stays unambiguous.
+  edit: z
+    .object({
+      userId: z.string().optional(),
+      date: z.string().optional(),
+      shift: z.enum(['MORNING', 'CALL', 'NIGHT']).optional(),
+      subRole: z.string().nullish(),
+      seniorityLevel: z.string().nullish(),
+      location: z.string().nullish(),
+      notes: z.string().nullish(),
+    })
+    .optional(),
 });
 
-// PATCH — two operations, manager only:
+// PATCH — three operations, manager only:
+//   • edit an assignment (staff, day, shift, seniority, assignment, notes).
 //   • stage/un-stage a PUBLISHED row for removal (pendingRemoval). The row stays
 //     live until the next Publish (draft-style editing of published rosters).
 //   • move a DRAFT row to another day/shift (date/shift) — drag & drop.
@@ -163,8 +177,72 @@ export async function PATCH(request: NextRequest, { params }: { params: { dept: 
   const parsed = patchSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
   const d = parsed.data;
-  const row = await prisma.roster.findUnique({ where: { id: d.id }, select: { status: true, staffCategory: true } });
+  const row = await prisma.roster.findUnique({ where: { id: d.id } });
   if (!row || row.staffCategory !== dept.category) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  /**
+   * Edit an assignment.
+   *
+   * A DRAFT is changed in place. A PUBLISHED row is NOT: editing it directly
+   * would rewrite what the department has already signed off and what the
+   * on-duty resolver, meal counts and booking are reading right now, while the
+   * version history went on claiming v-N said something else. Instead the
+   * published row is staged for removal and the edit becomes a new draft
+   * alongside it — so the live roster keeps working, the change is visible as
+   * pending, and Publish swaps them together. Exactly what editing a published
+   * roster already meant here; it just did it in two manual steps.
+   */
+  if (d.edit) {
+    const e = d.edit;
+    const allowedShifts = getShiftOptions(dept);
+    if (e.shift && !allowedShifts.some((s) => s.value === e.shift)) {
+      return NextResponse.json(
+        { error: `${dept.label} rosters only use: ${allowedShifts.map((s) => s.label).join(', ')}` },
+        { status: 400 },
+      );
+    }
+
+    // Changing who is assigned has to carry the name across too — staffName is
+    // what the roster shows and what the Excel export prints.
+    let staffName = row.staffName;
+    let userId = row.userId;
+    if (e.userId && e.userId !== row.userId) {
+      const user = await prisma.user.findUnique({ where: { id: e.userId }, select: { id: true, fullName: true } });
+      if (!user) return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
+      userId = user.id;
+      staffName = user.fullName;
+    }
+
+    const next = {
+      userId,
+      staffName,
+      date: e.date ? dateOnly(e.date) : row.date,
+      shift: (e.shift ?? row.shift) as any,
+      subRole: e.subRole === undefined ? row.subRole : (e.subRole || null),
+      seniorityLevel: e.seniorityLevel === undefined ? row.seniorityLevel : (e.seniorityLevel || null),
+      location: e.location === undefined ? row.location : (e.location || null),
+      notes: e.notes === undefined ? row.notes : (e.notes || null),
+    };
+
+    if (row.status === 'DRAFT') {
+      await prisma.roster.update({ where: { id: row.id }, data: next });
+      return NextResponse.json({ ok: true, mode: 'draft-updated' });
+    }
+
+    const [, created] = await prisma.$transaction([
+      prisma.roster.update({ where: { id: row.id }, data: { pendingRemoval: true } }),
+      prisma.roster.create({
+        data: {
+          ...next,
+          staffCategory: dept.category as any,
+          theatreId: row.theatreId,
+          status: 'DRAFT',
+          uploadedBy: (session.user as any).id,
+        },
+      }),
+    ]);
+    return NextResponse.json({ ok: true, mode: 'draft-replacement', id: created.id });
+  }
 
   // Move a draft (drag & drop).
   if (d.date || d.shift) {

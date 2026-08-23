@@ -62,6 +62,29 @@ type OnDutyMember = {
   seniorityLevel: string | null;
 };
 
+type AnaesthetistContact = {
+  userId: string;
+  name: string;
+  phone: string | null;
+  seniority: string | null;
+  role: string | null;
+};
+
+/**
+ * The anaesthetists rostered to THIS list's surgical specialty for the day, as
+ * distinct from whoever holds the shift. A CTU list is anaesthetised by the
+ * cardiothoracic team; the on-duty lookup answers a different question, so both
+ * are shown.
+ */
+type AnaesthetistTeam = {
+  subspecialty: string | null;
+  consultant: AnaesthetistContact | null;
+  seniorRegistrar: AnaesthetistContact | null;
+  registrar: AnaesthetistContact | null;
+  members: AnaesthetistContact[];
+  source: 'subspecialty' | 'on-call' | 'none';
+};
+
 type OnDutyTeam = {
   date: string;
   shift: string;
@@ -281,6 +304,9 @@ export default function NewSurgeryPage() {
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
+  // Anaesthetists rostered to this list's specialty for the day.
+  const [anaesTeam, setAnaesTeam] = useState<AnaesthetistTeam | null>(null);
+  const [anaesTeamLoading, setAnaesTeamLoading] = useState(false);
 
   // Clinical Summary (comorbidities + current medications)
   const [comorbidities, setComorbidities] = useState<string[]>([]);
@@ -451,6 +477,35 @@ export default function NewSurgeryPage() {
     run();
     return () => controller.abort();
   }, [scheduledDate, scheduledTime, selectedTheatreId]);
+
+  /**
+   * The specialty's anaesthetist team for the day, from the published roster.
+   *
+   * Keyed on date + unit/subspecialty rather than the shift: a Tuesday CTU list
+   * wants the cardiothoracic anaesthetists rostered that Tuesday, whoever is
+   * holding the shift. Needs no time, so it resolves as soon as a date and a
+   * unit are chosen.
+   */
+  useEffect(() => {
+    if (!scheduledDate || (!unit && !subspecialty)) { setAnaesTeam(null); return; }
+    const controller = new AbortController();
+    const run = async () => {
+      setAnaesTeamLoading(true);
+      try {
+        const params = new URLSearchParams({ date: scheduledDate });
+        if (subspecialty) params.set('subspecialty', subspecialty);
+        if (unit) params.set('unit', unit);
+        const res = await fetch(`/api/roster/anaesthetist-team?${params.toString()}`, { signal: controller.signal });
+        setAnaesTeam(res.ok ? await res.json() : null);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') setAnaesTeam(null);
+      } finally {
+        setAnaesTeamLoading(false);
+      }
+    };
+    run();
+    return () => controller.abort();
+  }, [scheduledDate, unit, subspecialty]);
 
   // Elective cases are auto-scheduled: the first case of the day starts at 09:00
   // and each subsequent case is sequenced by the server (15-min grace + 30-min
@@ -1994,6 +2049,83 @@ ${pretty} — ${days} days from today.
             </div>
           </div>
         </div>
+
+        {/* Specialty anaesthetist team — who covers THIS unit's list today.
+            Separate from the on-duty panel below: that one answers "who holds
+            the shift", this one answers "who is anaesthetising this list". */}
+        {scheduledDate && (unit || subspecialty) && (
+          <div className={`${stepClass(2)} card`}>
+            <div className="flex items-center gap-3 mb-1">
+              <Users className="w-6 h-6 text-teal-600" />
+              <h2 className="text-xl font-semibold">Anaesthetist Team — {subspecialty || unit}</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              From the published anaesthetists&apos; roster for {scheduledDate}.
+            </p>
+
+            {anaesTeamLoading && (
+              <div className="text-sm text-gray-600 flex items-center gap-2">
+                <div className="animate-spin h-4 w-4 border-2 border-teal-500 border-t-transparent rounded-full" />
+                Looking up the specialty roster…
+              </div>
+            )}
+
+            {anaesTeam && !anaesTeamLoading && anaesTeam.source === 'none' && (
+              <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+                No anaesthetist is rostered to {subspecialty || unit} on {scheduledDate}, and nobody is on call.
+                Assign one manually below.
+              </div>
+            )}
+
+            {anaesTeam && !anaesTeamLoading && anaesTeam.source === 'on-call' && (
+              <div className="mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+                Nobody is rostered to {subspecialty || unit} on this date — showing the day&apos;s
+                <strong> on-call</strong> cover instead. Worth checking the roster before the list runs.
+              </div>
+            )}
+
+            {anaesTeam && !anaesTeamLoading && anaesTeam.source !== 'none' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { label: 'Consultant', m: anaesTeam.consultant },
+                  { label: 'Senior Registrar', m: anaesTeam.seniorRegistrar },
+                  { label: 'Registrar', m: anaesTeam.registrar },
+                ].map(({ label, m }) => (
+                  <div
+                    key={label}
+                    className={`p-3 rounded border ${m ? 'bg-teal-50 border-teal-200' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+                    {m ? (
+                      <>
+                        <p className="font-semibold text-gray-900">{m.name}</p>
+                        <p className="text-xs text-gray-600">
+                          {(m.role || '').replace(/_/g, ' ')}
+                          {m.phone && <span className="ml-2">· <PhoneLink phone={m.phone} /></span>}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">Not rostered</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Anyone rostered to the specialty beyond the three named grades. */}
+            {anaesTeam && !anaesTeamLoading && anaesTeam.members.length > 0 && (() => {
+              const named = [anaesTeam.consultant, anaesTeam.seniorRegistrar, anaesTeam.registrar]
+                .filter(Boolean).map((m) => m!.userId);
+              const extra = anaesTeam.members.filter((m) => !named.includes(m.userId));
+              if (extra.length === 0) return null;
+              return (
+                <p className="mt-3 text-xs text-gray-600">
+                  Also rostered: {extra.map((m) => `${m.name}${m.seniority ? ` (${m.seniority.replace(/_/g, ' ')})` : ''}`).join(', ')}
+                </p>
+              );
+            })()}
+          </div>
+        )}
 
         {/* On-Duty Team — auto-fetched from roster when date + time are picked */}
         {scheduledDate && scheduledTime && (

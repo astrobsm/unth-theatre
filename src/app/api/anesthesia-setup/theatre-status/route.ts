@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { caseTeamSlots, CASE_TEAM_SELECT } from '@/lib/theatreOps/caseTeam';
 import { assessFix } from '@/lib/theatreOps/geofence';
 import { readiness, summarise, type TeamMemberState, type CheckInStatus } from '@/lib/theatreOps/checkIn';
+import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam';
 
 export const dynamic = 'force-dynamic';
 
@@ -158,6 +159,10 @@ export async function GET(request: NextRequest) {
         id: true,
         theatreId: true,
         theatreTechnicianId: true,
+        // Which specialty's list this is. Used to find the anaesthetist team
+        // rostered to it when the allocation names nobody.
+        subspecialty: true,
+        unit: true,
         surgeonName: true,
         surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
         assistantSurgeon: { select: { id: true, fullName: true, phoneNumber: true } },
@@ -206,30 +211,86 @@ export async function GET(request: NextRequest) {
     const contact = (u: { fullName: string; phoneNumber: string | null } | null | undefined) =>
       u ? { name: u.fullName, phone: u.phoneNumber || null } : null;
 
+    /**
+     * Anaesthetist cover from the published roster, for rooms where the
+     * allocation names nobody.
+     *
+     * An allocation's anaesthetist fields are filled in by hand and very often
+     * are not, which left this board showing an empty anaesthetist slot for a
+     * list the department had in fact rostered. The roster knows: it records
+     * the specialty each anaesthetist covers that day. Resolved ONCE for the
+     * whole board rather than per room — every room reads the same day's rows.
+     */
+    const rosterTeams = isSummary ? null : await getAnaesthetistTeamsForDate(startOfDay);
+    // Allocations carry a unit NAME ("CTU 1"); the roster carries a
+    // SUBSPECIALTY ("Cardiothoracic Surgery"). surgical_units bridges them.
+    const unitRows = isSummary ? [] : await prisma.surgicalUnit.findMany({
+      select: { name: true, subspecialty: true },
+    });
+    const subspecialtyByUnit = new Map(
+      unitRows.map((u) => [u.name.trim().toLowerCase(), u.subspecialty]),
+    );
+    const resolveSubspecialty = (raw: string | null | undefined): string | null => {
+      const v = (raw || '').trim();
+      if (!v) return null;
+      return subspecialtyByUnit.get(v.toLowerCase()) ?? v;
+    };
+
     // Create theatre status map
     const theatreStatus = theatres.map(theatre => {
       const setupLog = setupLogs.find(log => log.theatreId === theatre.id);
       const theatreAllocations = allocations.filter(a => a.theatreId === theatre.id);
 
-      // Aggregate staff from allocations (name + phone for quick contact)
-      const a0 = theatreAllocations[0];
-      const staffAssignments = a0 ? {
-        scrubNurse: contact(a0.scrubNurse),
-        circulatingNurse: contact(a0.circulatingNurse),
-        anaestheticTechnician: contact(a0.anaestheticTechnician),
-        anaesthetistConsultant: contact(a0.anaesthetistConsultant),
-        anaesthetistSeniorRegistrar: contact(a0.anaesthetistSeniorRegistrar),
-        anaesthetistRegistrar: contact(a0.anaesthetistRegistrar),
-        cleaner: contact(a0.cleaner),
-        porter: contact(a0.porter),
-        shift: a0.shift || null,
-        surgicalUnit: a0.surgicalUnit || null,
-        startTime: a0.startTime || null,
-        endTime: a0.endTime || null,
-      } : null;
-
       // Surgeons (and any surgery-level anaesthetists) scheduled in this theatre
       const theatreSurgeries = surgeries.filter(s => s.theatreId === theatre.id);
+
+      // Aggregate staff from allocations (name + phone for quick contact)
+      const a0 = theatreAllocations[0];
+
+      /**
+       * Which specialty is operating in this room today — the allocation's unit
+       * if it has one, otherwise the first case's. That is the key the
+       * anaesthetists' roster is filed under.
+       */
+      const roomSubspecialty = resolveSubspecialty(
+        a0?.surgicalUnit
+        ?? (theatreSurgeries[0] as any)?.subspecialty
+        ?? (theatreSurgeries[0] as any)?.unit,
+      );
+      const rosterTeam = rosterTeams && roomSubspecialty
+        ? selectTeam(rosterTeams, roomSubspecialty)
+        : null;
+      const asContact = (m: { name: string; phone: string | null } | null) =>
+        m ? { name: m.name, phone: m.phone } : null;
+
+      // Named on the allocation wins; the roster fills the gaps. `source` says
+      // which, so the board can show cover that came from the roster as exactly
+      // that rather than implying somebody assigned it to this room.
+      const allocConsultant = contact(a0?.anaesthetistConsultant);
+      const allocSenior = contact(a0?.anaesthetistSeniorRegistrar);
+      const allocRegistrar = contact(a0?.anaesthetistRegistrar);
+      const anyAllocated = !!(allocConsultant || allocSenior || allocRegistrar);
+      const usingRoster = !anyAllocated && !!rosterTeam && rosterTeam.source !== 'none';
+
+      const staffAssignments = (a0 || usingRoster) ? {
+        scrubNurse: contact(a0?.scrubNurse),
+        circulatingNurse: contact(a0?.circulatingNurse),
+        anaestheticTechnician: contact(a0?.anaestheticTechnician),
+        anaesthetistConsultant: allocConsultant ?? (usingRoster ? asContact(rosterTeam!.consultant) : null),
+        anaesthetistSeniorRegistrar: allocSenior ?? (usingRoster ? asContact(rosterTeam!.seniorRegistrar) : null),
+        anaesthetistRegistrar: allocRegistrar ?? (usingRoster ? asContact(rosterTeam!.registrar) : null),
+        /** 'allocation' | 'roster' | 'on-call' | null — where the anaesthetists came from. */
+        anaesthetistSource: anyAllocated
+          ? 'allocation'
+          : usingRoster ? (rosterTeam!.source === 'on-call' ? 'on-call' : 'roster') : null,
+        anaesthetistSpecialty: usingRoster ? (rosterTeam!.subspecialty ?? roomSubspecialty) : null,
+        cleaner: contact(a0?.cleaner),
+        porter: contact(a0?.porter),
+        shift: a0?.shift || null,
+        surgicalUnit: a0?.surgicalUnit || roomSubspecialty || null,
+        startTime: a0?.startTime || null,
+        endTime: a0?.endTime || null,
+      } : null;
 
       /**
        * Team availability for this room, from the check-in board.

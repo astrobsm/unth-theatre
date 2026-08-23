@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2, UploadCloud, History,
-  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move, Link2, Check,
+  Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move, Link2, Check, X,
 } from 'lucide-react';
 import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -70,6 +70,8 @@ export default function DepartmentRosterPage() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  // The assignment currently open in the edit dialog.
+  const [editRow, setEditRow] = useState<Row | null>(null);
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/roster/${dept}` : `/roster/${dept}`;
   const copyShareLink = async () => {
     try { await navigator.clipboard.writeText(shareUrl); }
@@ -198,6 +200,28 @@ export default function DepartmentRosterPage() {
     setMsg(res.ok ? `Copied ${j.copied} draft(s) to ${DAY_LABEL(copyDst)}.` : (j?.error || 'Copy failed'));
     if (res.ok) { setShowCopyDay(false); await load(); }
   };
+  /**
+   * Save an edit to one assignment.
+   *
+   * Editing a PUBLISHED row does not rewrite it — the server stages it for
+   * removal and files the change as a draft beside it, so the live roster keeps
+   * working until somebody publishes. The message says so, because "saved" on a
+   * published roster that has not changed live would be a lie.
+   */
+  const saveEdit = async (id: string, edit: Record<string, unknown>) => {
+    const res = await fetch(`/api/roster/departments/${dept}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, edit }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { setMsg(j?.error || 'Could not save that change.'); return false; }
+    setMsg(j.mode === 'draft-replacement'
+      ? 'Change saved as a draft. The published entry stays live until you publish.'
+      : 'Change saved.');
+    setEditRow(null);
+    await load();
+    return true;
+  };
+
   const moveRow = async (id: string, date: string, shift: string) => {
     const res = await fetch(`/api/roster/departments/${dept}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, date, shift }),
@@ -249,6 +273,21 @@ export default function DepartmentRosterPage() {
           weekStart={weekStart}
           onClose={() => setShowBulk(false)}
           onUploaded={load}
+        />
+      )}
+
+      {editRow && data && canManage && (
+        <EditAssignmentDialog
+          row={editRow}
+          dept={data.department}
+          days={days}
+          shiftOptions={shiftOptions}
+          staffOptions={staffOptions}
+          assignmentLabel={assignmentLabel}
+          assignmentOptions={assignmentOptions}
+          hasAssignmentPicker={hasAssignmentPicker}
+          onSave={saveEdit}
+          onClose={() => setEditRow(null)}
         />
       )}
 
@@ -411,8 +450,8 @@ export default function DepartmentRosterPage() {
             {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
             {shiftOptions.map((s) => (
               <FragmentRow key={s.value} shift={s.value} shiftLabel={s.label} days={days} rowsFor={rowsFor} canManage={!!canManage}
-                onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow} conflictIds={conflictIds}
-                dragId={dragId} setDragId={setDragId} />
+                onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow} onEdit={setEditRow}
+                conflictIds={conflictIds} dragId={dragId} setDragId={setDragId} />
             ))}
           </div>
 
@@ -439,7 +478,7 @@ export default function DepartmentRosterPage() {
                               {rows.map((r) => (
                                 <RosterChip
                                   key={r.id} row={r} canManage={!!canManage} conflict={conflictIds.has(r.id)}
-                                  onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow}
+                                  onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow} onEdit={setEditRow}
                                   days={days} shiftOptions={shiftOptions} showMoveControl
                                 />
                               ))}
@@ -485,10 +524,10 @@ export default function DepartmentRosterPage() {
   );
 }
 
-function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, onStage, onMove, conflictIds, dragId, setDragId }: {
+function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, onStage, onMove, onEdit, conflictIds, dragId, setDragId }: {
   shift: string; shiftLabel: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean;
   onDelete: (id: string) => void; onStage: (id: string, pendingRemoval: boolean) => void;
-  onMove: (id: string, date: string, shift: string) => void; conflictIds: Set<string>;
+  onMove: (id: string, date: string, shift: string) => void; onEdit: (row: Row) => void; conflictIds: Set<string>;
   dragId: string | null; setDragId: (id: string | null) => void;
 }) {
   return (
@@ -505,7 +544,7 @@ function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, on
             {rows.map((r) => (
               <RosterChip
                 key={r.id} row={r} canManage={canManage} conflict={conflictIds.has(r.id)}
-                onDelete={onDelete} onStage={onStage} onMove={onMove}
+                onDelete={onDelete} onStage={onStage} onMove={onMove} onEdit={onEdit}
                 draggable onDragStart={() => setDragId(r.id)} onDragEnd={() => setDragId(null)}
               />
             ))}
@@ -517,6 +556,150 @@ function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, on
 }
 
 /**
+ * Edit one assignment — staff, day, shift, seniority, assignment, notes.
+ *
+ * Works on published entries as well as drafts. On a published one the server
+ * files the change as a draft beside the original rather than rewriting it, so
+ * the roster the hospital is currently working to does not change under it
+ * mid-week; the banner says so plainly.
+ */
+function EditAssignmentDialog({
+  row, dept, days, shiftOptions, staffOptions, assignmentLabel, assignmentOptions,
+  hasAssignmentPicker, onSave, onClose,
+}: {
+  row: Row;
+  dept: DeptData['department'];
+  days: string[];
+  shiftOptions: ShiftOption[];
+  staffOptions: { value: string; label: string; hint?: string }[];
+  assignmentLabel: string;
+  assignmentOptions: string[];
+  hasAssignmentPicker: boolean;
+  onSave: (id: string, edit: Record<string, unknown>) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [staff, setStaff] = useState(row.userId);
+  const [date, setDate] = useState(row.date);
+  const [shift, setShift] = useState(row.shift);
+  const [sub, setSub] = useState(row.subRole ?? '');
+  const [sen, setSen] = useState(row.seniorityLevel ?? '');
+  const [loc, setLoc] = useState(row.location ?? 'MAIN_THEATRE');
+  const [notes, setNotes] = useState(row.notes ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const isPublished = row.status === 'PUBLISHED';
+  // The day list only spans the visible week; a row dragged in from elsewhere
+  // must not lose its date just because the picker cannot show it.
+  const dayChoices = days.includes(date) ? days : [date, ...days];
+
+  const submit = async () => {
+    setSaving(true);
+    const ok = await onSave(row.id, {
+      userId: staff, date, shift,
+      subRole: sub || null,
+      seniorityLevel: sen || null,
+      location: loc || null,
+      notes: notes || null,
+    });
+    if (!ok) setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
+      <div
+        className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-xl shadow-xl max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200 sticky top-0 bg-white">
+          <h3 className="font-semibold text-gray-900">Edit assignment</h3>
+          <button onClick={onClose} className="p-2 -m-2 text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {isPublished && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+              This entry is <strong>published</strong>. Saving files the change as a draft and marks the
+              current entry for removal — the live roster keeps working until you press Publish.
+            </div>
+          )}
+
+          <div>
+            <label className="label">Staff</label>
+            <SearchableSelect
+              options={staffOptions} value={staff} onChange={setStaff}
+              placeholder="Search staff by name…" ariaLabel="Staff" allowClear={false}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label">Day</label>
+              <select className="input-field" value={date} onChange={(e) => setDate(e.target.value)}>
+                {dayChoices.map((d) => <option key={d} value={d}>{DAY_LABEL(d)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Shift</label>
+              <select className="input-field" value={shift} onChange={(e) => setShift(e.target.value)}>
+                {shiftOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {dept.seniorityLevels.length > 0 && (
+            <div>
+              <label className="label">Seniority</label>
+              <select className="input-field" value={sen} onChange={(e) => setSen(e.target.value)}>
+                <option value="">—</option>
+                {dept.seniorityLevels.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          )}
+
+          {hasAssignmentPicker ? (
+            <div>
+              <label className="label">{assignmentLabel}</label>
+              <SearchableSelect
+                options={assignmentOptions.map((s) => ({ value: s, label: s }))}
+                value={sub} onChange={setSub}
+                placeholder="Search…" ariaLabel={assignmentLabel}
+              />
+            </div>
+          ) : dept.subRoles.length > 0 ? (
+            <div>
+              <label className="label">{assignmentLabel}</label>
+              <select className="input-field" value={sub} onChange={(e) => setSub(e.target.value)}>
+                <option value="">—</option>
+                {dept.subRoles.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="label">Location</label>
+              <select className="input-field" value={loc} onChange={(e) => setLoc(e.target.value)}>
+                {LOCATIONS.map((l) => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="label">Notes (optional)</label>
+            <input className="input-field" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. holding area cover" />
+          </div>
+        </div>
+
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-4 py-3 border-t border-gray-200 sticky bottom-0 bg-white">
+          <button onClick={onClose} className="btn-secondary text-sm w-full sm:w-auto">Cancel</button>
+          <button onClick={submit} disabled={saving} className="btn-primary text-sm w-full sm:w-auto inline-flex items-center justify-center gap-1 disabled:opacity-50">
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <><Check className="w-4 h-4" /> Save change</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * One person's assignment. Shared by the desktop grid and the mobile day cards
  * so the two views can't show different information.
  *
@@ -524,13 +707,14 @@ function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, on
  * mouse gesture, and on a phone there'd otherwise be no way to reschedule.
  */
 function RosterChip({
-  row: r, canManage, conflict, onDelete, onStage, onMove,
+  row: r, canManage, conflict, onDelete, onStage, onMove, onEdit,
   draggable = false, onDragStart, onDragEnd,
   showMoveControl = false, days = [], shiftOptions = [],
 }: {
   row: Row; canManage: boolean; conflict: boolean;
   onDelete: (id: string) => void; onStage: (id: string, pendingRemoval: boolean) => void;
   onMove: (id: string, date: string, shift: string) => void;
+  onEdit?: (row: Row) => void;
   draggable?: boolean; onDragStart?: () => void; onDragEnd?: () => void;
   showMoveControl?: boolean; days?: string[]; shiftOptions?: ShiftOption[];
 }) {
@@ -549,6 +733,24 @@ function RosterChip({
       className={`text-[11px] rounded px-1.5 py-1 ${cls} ${conflict ? 'ring-2 ring-red-400' : ''} ${draggable && canManage && isDraft ? 'cursor-move' : ''}`}
     >
       <div className="flex items-start justify-between gap-1">
+        {/* The whole body is the edit affordance — a manager's first instinct on
+            seeing a wrong name is to tap it. Published rows included: the server
+            turns that into a draft change rather than a live rewrite. */}
+        {canManage && onEdit ? (
+          <button
+            type="button"
+            onClick={() => onEdit(r)}
+            title={`Edit ${r.staffName}`}
+            className="leading-tight min-w-0 text-left flex-1 cursor-pointer hover:underline"
+          >
+            {conflict ? <AlertCircle className="w-3 h-3 text-red-500 inline mr-0.5 -mt-0.5" /> : null}
+            <span className="text-xs font-medium">{r.staffName}</span>
+            {r.subRole ? <span className="block text-[10px] opacity-70 no-underline">{r.subRole}</span> : null}
+            {r.seniorityLevel ? <span className="block text-[10px] opacity-70 no-underline">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
+            {r.notes ? <span className="block text-[10px] opacity-60 no-underline">{r.notes}</span> : null}
+            {staged ? <span className="block text-[9px] font-semibold text-red-600 no-underline">will be removed on publish</span> : null}
+          </button>
+        ) : (
         <span className="leading-tight min-w-0">
           {conflict ? <AlertCircle className="w-3 h-3 text-red-500 inline mr-0.5 -mt-0.5" /> : null}
           <span className="text-xs font-medium">{r.staffName}</span>
@@ -557,6 +759,7 @@ function RosterChip({
           {r.notes ? <span className="block text-[10px] opacity-60 no-underline">{r.notes}</span> : null}
           {staged ? <span className="block text-[9px] font-semibold text-red-600 no-underline">will be removed on publish</span> : null}
         </span>
+        )}
         {canManage && (
           isDraft ? (
             <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0 p-1 -m-1" aria-label={`Remove draft for ${r.staffName}`}><Trash2 className="w-4 h-4" /></button>

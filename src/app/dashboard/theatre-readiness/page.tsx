@@ -16,6 +16,14 @@ interface StaffAssignments {
   anaesthetistConsultant: StaffContact | null;
   anaesthetistSeniorRegistrar: StaffContact | null;
   anaesthetistRegistrar: StaffContact | null;
+  /**
+   * Where the three above came from. 'allocation' = named on this room's
+   * allocation; 'roster' = the team rostered to this specialty for the day;
+   * 'on-call' = nobody was rostered to it, so the day's on-call cover instead.
+   */
+  anaesthetistSource?: 'allocation' | 'roster' | 'on-call' | null;
+  /** The specialty the roster was read for, when source isn't 'allocation'. */
+  anaesthetistSpecialty?: string | null;
   cleaner: StaffContact | null;
   porter: StaffContact | null;
   shift: string | null;
@@ -623,6 +631,24 @@ export default function TheatreReadinessDashboard() {
                   {theatre.surgeryTechnicians && theatre.surgeryTechnicians.length > 0 && theatre.surgeryTechnicians.map((t, i) => (
                     <StaffRow key={`tech-${i}`} label="Technician (case)" contact={t} color="bg-green-50" />
                   ))}
+                  {/* Where these three came from matters. Cover pulled from the
+                      duty roster is real cover, but nobody has assigned it to
+                      THIS room — so say so rather than letting it read as a
+                      confirmed allocation. */}
+                  {theatre.staffAssignments?.anaesthetistSource === 'roster' && (
+                    <div className="px-2 py-1 rounded bg-teal-50 text-teal-800 text-[11px]">
+                      Anaesthetists below are from the published duty roster for
+                      {theatre.staffAssignments.anaesthetistSpecialty ? ` ${theatre.staffAssignments.anaesthetistSpecialty}` : ' this specialty'},
+                      not assigned to this room.
+                    </div>
+                  )}
+                  {theatre.staffAssignments?.anaesthetistSource === 'on-call' && (
+                    <div className="px-2 py-1 rounded bg-amber-50 text-amber-800 text-[11px]">
+                      Nobody is rostered to
+                      {theatre.staffAssignments.anaesthetistSpecialty ? ` ${theatre.staffAssignments.anaesthetistSpecialty}` : ' this specialty'} today —
+                      showing the day&apos;s on-call cover.
+                    </div>
+                  )}
                   <StaffRow label="Consultant Anaesthetist" contact={theatre.staffAssignments?.anaesthetistConsultant ?? null} color="bg-green-50" />
                   <StaffRow label="Senior Reg. Anaesthesia" contact={theatre.staffAssignments?.anaesthetistSeniorRegistrar ?? null} color="bg-green-50" />
                   <StaffRow label="Registrar Anaesthesia" contact={theatre.staffAssignments?.anaesthetistRegistrar ?? null} color="bg-green-50" />

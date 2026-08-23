@@ -34,6 +34,24 @@ type OnDutyTeam = {
   rostersFound: number;
 };
 
+type AnaesthetistContact = {
+  userId: string;
+  name: string;
+  phone: string | null;
+  seniority: string | null;
+  role: string | null;
+};
+
+/** The day's on-call anaesthetists, as resolved from the published roster. */
+type AnaesthetistTeam = {
+  subspecialty: string | null;
+  consultant: AnaesthetistContact | null;
+  seniorRegistrar: AnaesthetistContact | null;
+  registrar: AnaesthetistContact | null;
+  members: AnaesthetistContact[];
+  source: 'subspecialty' | 'on-call' | 'none';
+};
+
 type TeamRole = 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER';
 
 type TeamMember = {
@@ -95,6 +113,11 @@ export default function NewEmergencyBookingPage() {
   const [anesthetists, setAnesthetists] = useState<{ id: string; fullName: string }[]>([]);
   const [onDuty, setOnDuty] = useState<OnDutyTeam | null>(null);
   const [onDutyLoading, setOnDutyLoading] = useState(false);
+  // The day's ON-CALL anaesthetists from the published roster. An emergency has
+  // no elective list, so specialty cover is the wrong question for it — the
+  // roster's CALL / "all emergencies" entry is who actually takes this case.
+  const [callTeam, setCallTeam] = useState<AnaesthetistTeam | null>(null);
+  const [callTeamLoading, setCallTeamLoading] = useState(false);
   const [onDutyError, setOnDutyError] = useState('');
   const [packPick, setPackPick] = useState<PackPickerPayload>({ consumableRequests: [], drugDressingRequests: [] });
   const [theatres, setTheatres] = useState<Theatre[]>([]);
@@ -272,13 +295,10 @@ export default function NewEmergencyBookingPage() {
         }
         const data: OnDutyTeam = await res.json();
         setOnDuty(data);
-        // Whoever is on call for the selected day. Followed unconditionally now
-        // that the form has no override — there is no manual choice left to
-        // preserve, so the field simply tracks the roster as the date changes.
-        setForm((prev) => ({
-          ...prev,
-          anesthetistId: data.team.anaesthetist?.userId || '',
-        }));
+        // The assigned anaesthetist is NOT set here. Two lookups feed that one
+        // field (this and the on-call team below) and both are keyed on the
+        // same date, so writing it from either would make the winner depend on
+        // which fetch returned first. It is derived from both instead.
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         setOnDuty(null);
@@ -290,6 +310,55 @@ export default function NewEmergencyBookingPage() {
     run();
     return () => controller.abort();
   }, [form.requiredByTime]);
+
+  /**
+   * The day's on-call anaesthetists, straight from the published roster.
+   *
+   * /api/roster/on-duty answers "who holds this shift" and returns a single
+   * anaesthetist. An emergency needs the whole on-call team by grade — the
+   * consultant covering all emergencies plus the registrars with them — which
+   * is what the roster's CALL entries record. Keyed on the DATE alone: on-call
+   * is a property of the day, not of the minute the case was booked.
+   */
+  useEffect(() => {
+    if (!form.requiredByTime) { setCallTeam(null); return; }
+    const controller = new AbortController();
+    const run = async () => {
+      setCallTeamLoading(true);
+      try {
+        const date = form.requiredByTime.slice(0, 10);
+        const res = await fetch(`/api/roster/anaesthetist-team?date=${encodeURIComponent(date)}&oncall=true`, {
+          signal: controller.signal,
+        });
+        setCallTeam(res.ok ? await res.json() : null);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') setCallTeam(null);
+      } finally {
+        setCallTeamLoading(false);
+      }
+    };
+    run();
+    return () => controller.abort();
+  }, [form.requiredByTime]);
+
+  /**
+   * Who the case is assigned to, derived from both lookups rather than written
+   * by whichever finished last.
+   *
+   * The on-call roster wins where it has somebody: it is the specific answer to
+   * "who takes an emergency today", and it is graded, so the consultant covering
+   * emergencies is preferred over a registrar. The shift's on-duty anaesthetist
+   * is the fallback for a day nobody was rostered on call.
+   */
+  useEffect(() => {
+    const preferred =
+      callTeam?.consultant
+      ?? callTeam?.seniorRegistrar
+      ?? callTeam?.registrar
+      ?? null;
+    const next = preferred?.userId ?? onDuty?.team.anaesthetist?.userId ?? '';
+    setForm((prev) => (prev.anesthetistId === next ? prev : { ...prev, anesthetistId: next }));
+  }, [callTeam, onDuty]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -964,6 +1033,76 @@ export default function NewEmergencyBookingPage() {
             )}
           </div>
         </div>
+        )}
+
+        {/* On-call anaesthetists for the day, by grade. Distinct from the panel
+            below: that lists the shift's team across every role, this is who
+            takes the emergency itself. */}
+        {step === 3 && form.requiredByTime && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold mb-1 text-gray-800 flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-red-600" />
+              On-Call Anaesthetists
+            </h2>
+            <p className="text-xs text-gray-500 mb-4">
+              From the published anaesthetists&apos; roster — whoever is on call for emergencies
+              on {form.requiredByTime.slice(0, 10)}.
+            </p>
+
+            {callTeamLoading && (
+              <div className="text-sm text-gray-600 flex items-center gap-2">
+                <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full" />
+                Looking up the on-call roster…
+              </div>
+            )}
+
+            {callTeam && !callTeamLoading && callTeam.source === 'none' && (
+              <div className="text-sm text-red-800 bg-red-50 border border-red-300 rounded p-3">
+                <strong>Nobody is rostered on call for anaesthesia on this date.</strong> The emergency
+                alert will still go out, but somebody has to be found — assign an anaesthetist manually below.
+              </div>
+            )}
+
+            {callTeam && !callTeamLoading && callTeam.source !== 'none' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { label: 'Consultant (on call)', m: callTeam.consultant },
+                  { label: 'Senior Registrar', m: callTeam.seniorRegistrar },
+                  { label: 'Registrar', m: callTeam.registrar },
+                ].map(({ label, m }) => (
+                  <div
+                    key={label}
+                    className={`p-3 rounded border ${m ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+                    {m ? (
+                      <>
+                        <p className="font-semibold text-gray-900">{m.name}</p>
+                        <p className="text-xs text-gray-600">
+                          {(m.role || '').replace(/_/g, ' ')}
+                          {m.phone && <span className="ml-2">· <PhoneLink phone={m.phone} /></span>}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">Nobody on call at this grade</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {callTeam && !callTeamLoading && callTeam.members.length > 0 && (() => {
+              const named = [callTeam.consultant, callTeam.seniorRegistrar, callTeam.registrar]
+                .filter(Boolean).map((m) => m!.userId);
+              const extra = callTeam.members.filter((m) => !named.includes(m.userId));
+              if (extra.length === 0) return null;
+              return (
+                <p className="mt-3 text-xs text-gray-600">
+                  Also on call: {extra.map((m) => `${m.name}${m.seniority ? ` (${m.seniority.replace(/_/g, ' ')})` : ''}`).join(', ')}
+                </p>
+              );
+            })()}
+          </div>
         )}
 
         {/* On-Duty Emergency Team — auto-fetched from roster */}
