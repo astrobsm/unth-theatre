@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { getRosterDept, canManageRosterDept, getShiftOptions } from '@/lib/rosterDepartments';
+import { getSubRoleOptions } from '@/lib/rosterAssignments';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   const draftCount = rows.filter((r) => r.status === 'DRAFT').length;
   const pendingRemovalCount = rows.filter((r) => r.status === 'PUBLISHED' && r.pendingRemoval).length;
   const role = (session.user as any).role;
+  const subRoleOptions = await getSubRoleOptions(dept);
 
   return NextResponse.json({
     department: {
@@ -50,6 +52,9 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
       shiftOptions: getShiftOptions(dept),
       subRoleSource: dept.subRoleSource ?? null,
       subRoleLabel: dept.subRoleLabel ?? 'Sub-role',
+      // Resolved here rather than fetched separately so a phone loading this
+      // page makes one request, not two.
+      subRoleOptions,
     },
     weekStart: start.toISOString().slice(0, 10),
     canManage: canManageRosterDept(dept, role),

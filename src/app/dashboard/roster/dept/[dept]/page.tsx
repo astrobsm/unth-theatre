@@ -8,6 +8,7 @@ import {
   Loader2, ShieldCheck, Lock, RotateCcw, CheckCircle2, AlertCircle, Copy, Download, Printer, Move, Link2, Check,
 } from 'lucide-react';
 import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const LOCATIONS = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU'];
 
@@ -17,9 +18,6 @@ const DEFAULT_SHIFT_OPTIONS: ShiftOption[] = [
   { value: 'CALL', label: 'CALL' },
   { value: 'NIGHT', label: 'NIGHT' },
 ];
-// Must match ON_CALL_ALL_SPECIALTIES in @/lib/rosterDepartments — the bulk-upload
-// template offers the same string, and anaesthetist-coverage pattern-matches it.
-const ON_CALL_ALL_SPECIALTIES = 'ALL EMERGENCIES (on-call)';
 
 interface ShiftOption { value: string; label: string }
 interface Row {
@@ -31,6 +29,8 @@ interface DeptData {
   department: {
     slug: string; label: string; category: string; subRoles: string[]; seniorityLevels: string[]; userRoles: string[];
     shiftOptions?: ShiftOption[]; subRoleSource?: string | null; subRoleLabel?: string;
+    /** Assignment options, resolved server-side (live theatres / specialties). */
+    subRoleOptions?: string[];
   };
   weekStart: string; canManage: boolean; currentVersion: number; lastPublishedAt: string | null;
   draftCount: number; pendingRemovalCount: number; pendingChanges: number; rows: Row[];
@@ -63,8 +63,6 @@ export default function DepartmentRosterPage() {
   // add-form state
   const [fStaff, setFStaff] = useState(''); const [fDate, setFDate] = useState(''); const [fShift, setFShift] = useState('MORNING');
   const [fSub, setFSub] = useState(''); const [fSen, setFSen] = useState(''); const [fLoc, setFLoc] = useState('MAIN_THEATRE'); const [fNotes, setFNotes] = useState('');
-  // Live surgical specialties, for departments rostered by specialty (anaesthetists).
-  const [specialties, setSpecialties] = useState<string[]>([]);
   // P4: conflicts + copy-day + drag
   const [conflictIds, setConflictIds] = useState<Set<string>>(new Set());
   const [conflictList, setConflictList] = useState<Array<{ staffName: string; date: string; shift: string; count: number }>>([]);
@@ -127,7 +125,13 @@ export default function DepartmentRosterPage() {
     (s: string) => shiftOptions.find((o) => o.value === s)?.label ?? s,
     [shiftOptions],
   );
-  const bySpecialty = data?.department.subRoleSource === 'SURGICAL_SPECIALTY';
+  // Departments whose assignment list comes from the database (anaesthetists →
+  // surgical specialties, technicians → theatres) put that picker where the
+  // static Location dropdown would otherwise sit.
+  const assignmentSource = data?.department.subRoleSource ?? null;
+  const assignmentLabel = data?.department.subRoleLabel ?? 'Sub-role';
+  const assignmentOptions = data?.department.subRoleOptions ?? [];
+  const hasAssignmentPicker = !!assignmentSource;
 
   // Keep the form's shift on an option this department actually offers — the
   // default 'MORNING' isn't valid everywhere.
@@ -135,14 +139,10 @@ export default function DepartmentRosterPage() {
     if (shiftOptions.length && !shiftOptions.some((o) => o.value === fShift)) setFShift(shiftOptions[0].value);
   }, [shiftOptions, fShift]);
 
-  // Specialty list is admin-maintained in surgical_units, so read it live.
-  useEffect(() => {
-    if (!bySpecialty) return;
-    fetch('/api/roster/specialties', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { specialties: [] }))
-      .then((d) => setSpecialties(Array.isArray(d.specialties) ? d.specialties : []))
-      .catch(() => {});
-  }, [bySpecialty]);
+  const staffOptions = useMemo(
+    () => eligibleStaff.map((s) => ({ value: s.id, label: s.fullName, hint: s.role.replace(/_/g, ' ') })),
+    [eligibleStaff],
+  );
 
   const addRow = async () => {
     if (!fStaff || !fDate) { setMsg('Pick staff and a day.'); return; }
@@ -252,12 +252,12 @@ export default function DepartmentRosterPage() {
         />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-lg bg-primary-100 flex items-center justify-center"><CalendarDays className="w-6 h-6 text-primary-600" /></div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{data?.department.label ?? dept} Roster</h1>
-            <p className="text-sm text-gray-500">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0"><CalendarDays className="w-6 h-6 text-primary-600" /></div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{data?.department.label ?? dept} Roster</h1>
+            <p className="text-xs sm:text-sm text-gray-500">
               {canManage
                 ? <span className="inline-flex items-center gap-1 text-green-700"><ShieldCheck className="w-4 h-4" /> You can manage this roster</span>
                 : <span className="inline-flex items-center gap-1 text-gray-500"><Lock className="w-4 h-4" /> View only — a department supervisor publishes changes</span>}
@@ -265,10 +265,11 @@ export default function DepartmentRosterPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="btn-secondary text-sm p-2" aria-label="Previous week"><ChevronLeft className="w-4 h-4" /></button>
-          <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(new Date(e.target.value + 'T00:00:00Z')))} className="input-field text-sm py-1.5" />
-          <button onClick={() => setWeekStart(addDays(weekStart, 7))} className="btn-secondary text-sm p-2" aria-label="Next week"><ChevronRight className="w-4 h-4" /></button>
+        {/* Week picker — full width on a phone so the arrows stay thumb-sized. */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="btn-secondary text-sm p-2 flex-shrink-0" aria-label="Previous week"><ChevronLeft className="w-4 h-4" /></button>
+          <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(new Date(e.target.value + 'T00:00:00Z')))} className="input-field text-sm py-1.5 flex-1 sm:flex-none min-w-0" aria-label="Week starting" />
+          <button onClick={() => setWeekStart(addDays(weekStart, 7))} className="btn-secondary text-sm p-2 flex-shrink-0" aria-label="Next week"><ChevronRight className="w-4 h-4" /></button>
         </div>
       </div>
 
@@ -277,14 +278,14 @@ export default function DepartmentRosterPage() {
 
       {/* Publish bar */}
       {canManage && data && data.pendingChanges > 0 && (
-        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 flex items-center justify-between gap-3">
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-amber-800">
             <strong>{data.pendingChanges}</strong> unpublished change(s) this week
             {data.draftCount > 0 && <> — {data.draftCount} addition(s)</>}
             {data.pendingRemovalCount > 0 && <>{data.draftCount > 0 ? ',' : ' —'} {data.pendingRemovalCount} removal(s)</>}
             . Removals stay live until you publish.
           </span>
-          <button onClick={publish} className="btn-primary text-sm inline-flex items-center gap-1"><UploadCloud className="w-4 h-4" /> Publish roster</button>
+          <button onClick={publish} className="btn-primary text-sm inline-flex items-center justify-center gap-1 w-full sm:w-auto flex-shrink-0"><UploadCloud className="w-4 h-4" /> Publish roster</button>
         </div>
       )}
 
@@ -295,10 +296,14 @@ export default function DepartmentRosterPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
             <div className="lg:col-span-2">
               <label className="label">Staff</label>
-              <select className="input-field" value={fStaff} onChange={(e) => setFStaff(e.target.value)}>
-                <option value="">Select staff…</option>
-                {eligibleStaff.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}
-              </select>
+              <SearchableSelect
+                options={staffOptions}
+                value={fStaff}
+                onChange={setFStaff}
+                placeholder="Search staff by name…"
+                emptyLabel="No matching staff in this department"
+                ariaLabel="Staff"
+              />
             </div>
             <div>
               <label className="label">Day</label>
@@ -310,9 +315,10 @@ export default function DepartmentRosterPage() {
               <label className="label">Shift</label>
               <select className="input-field" value={fShift} onChange={(e) => setFShift(e.target.value)}>{shiftOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
             </div>
-            {data.department.subRoles.length > 0 && !bySpecialty && (
+            {/* Static sub-roles, for departments that aren't driven by the DB. */}
+            {!hasAssignmentPicker && data.department.subRoles.length > 0 && (
               <div>
-                <label className="label">{data.department.subRoleLabel ?? 'Sub-role'}</label>
+                <label className="label">{assignmentLabel}</label>
                 <select className="input-field" value={fSub} onChange={(e) => setFSub(e.target.value)}><option value="">—</option>{data.department.subRoles.map((s) => <option key={s} value={s}>{s}</option>)}</select>
               </div>
             )}
@@ -322,16 +328,23 @@ export default function DepartmentRosterPage() {
                 <select className="input-field" value={fSen} onChange={(e) => setFSen(e.target.value)}><option value="">—</option>{data.department.seniorityLevels.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select>
               </div>
             )}
-            {bySpecialty ? (
+            {hasAssignmentPicker ? (
               <div>
-                <label className="label">{data.department.subRoleLabel ?? 'Surgical Specialty'}</label>
-                <select className="input-field" value={fSub} onChange={(e) => setFSub(e.target.value)}>
-                  <option value="">—</option>
-                  <option value={ON_CALL_ALL_SPECIALTIES}>{ON_CALL_ALL_SPECIALTIES}</option>
-                  {specialties.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-                {specialties.length === 0 && (
-                  <p className="text-[11px] text-gray-400 mt-0.5">No surgical units set up yet — add them under Admin → Surgical Units.</p>
+                <label className="label">{assignmentLabel}</label>
+                <SearchableSelect
+                  options={assignmentOptions.map((s) => ({ value: s, label: s }))}
+                  value={fSub}
+                  onChange={setFSub}
+                  placeholder={assignmentSource === 'THEATRE' ? 'Search theatres…' : 'Search specialties…'}
+                  emptyLabel="No matches"
+                  ariaLabel={assignmentLabel}
+                />
+                {assignmentOptions.length === 0 && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {assignmentSource === 'THEATRE'
+                      ? 'No theatres set up yet — add them under Admin → Theatres.'
+                      : 'No surgical units set up yet — add them under Admin → Surgical Units.'}
+                  </p>
                 )}
               </div>
             ) : (
@@ -340,11 +353,11 @@ export default function DepartmentRosterPage() {
                 <select className="input-field" value={fLoc} onChange={(e) => setFLoc(e.target.value)}>{LOCATIONS.map((l) => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}</select>
               </div>
             )}
-            <div className="lg:col-span-5">
+            <div className="sm:col-span-2 lg:col-span-5">
               <label className="label">Notes (optional)</label>
               <input className="input-field" value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="e.g. holding area cover" />
             </div>
-            <button onClick={addRow} className="btn-primary text-sm inline-flex items-center justify-center gap-1 h-[38px]"><Plus className="w-4 h-4" /> Add</button>
+            <button onClick={addRow} className="btn-primary text-sm inline-flex items-center justify-center gap-1 w-full sm:col-span-2 lg:col-span-1"><Plus className="w-4 h-4" /> Add</button>
           </div>
         </div>
       )}
@@ -356,16 +369,18 @@ export default function DepartmentRosterPage() {
         <button onClick={exportCsv} className="btn-secondary text-sm inline-flex items-center gap-1"><Download className="w-4 h-4" /> Export CSV</button>
         <button onClick={() => window.print()} className="btn-secondary text-sm inline-flex items-center gap-1"><Printer className="w-4 h-4" /> Print / PDF</button>
         {canManage && (
-          <span className="text-[11px] text-gray-400 ml-auto inline-flex items-center gap-1"><Move className="w-3.5 h-3.5" /> drag draft chips between cells to reschedule</span>
+          // Drag-and-drop is the desktop grid's affordance; the mobile cards use
+          // a per-row day/shift picker instead.
+          <span className="hidden lg:inline-flex text-[11px] text-gray-400 ml-auto items-center gap-1"><Move className="w-3.5 h-3.5" /> drag draft chips between cells to reschedule</span>
         )}
       </div>
       {showCopyDay && canManage && (
-        <div className="card flex flex-wrap items-end gap-2">
+        <div className="card grid gap-2 sm:grid-cols-3 sm:items-end">
           <div><label className="label">From day</label>
             <select className="input-field" value={copySrc} onChange={(e) => setCopySrc(e.target.value)}><option value="">Select…</option>{days.map((d) => <option key={d} value={d}>{DAY_LABEL(d)}</option>)}</select></div>
           <div><label className="label">To day</label>
             <select className="input-field" value={copyDst} onChange={(e) => setCopyDst(e.target.value)}><option value="">Select…</option>{days.map((d) => <option key={d} value={d}>{DAY_LABEL(d)}</option>)}</select></div>
-          <button onClick={copyDay} className="btn-primary text-sm">Copy day</button>
+          <button onClick={copyDay} className="btn-primary text-sm w-full">Copy day</button>
         </div>
       )}
 
@@ -382,12 +397,16 @@ export default function DepartmentRosterPage() {
         </div>
       )}
 
-      {/* Week grid */}
+      {/* Week view.
+          Below lg the 8-column grid can't fit without either a horizontal
+          scroller or hidden columns, and rosters are filled in on phones — so
+          small screens get a day-by-day stack instead, showing every field. */}
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 py-10 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Loading…</div>
       ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-[900px] grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+        <>
+          {/* Desktop: week-at-a-glance grid */}
+          <div className="hidden lg:grid grid-cols-8 gap-2">
             <div className="text-xs font-semibold text-gray-400 pt-8">Shift</div>
             {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
             {shiftOptions.map((s) => (
@@ -396,7 +415,45 @@ export default function DepartmentRosterPage() {
                 dragId={dragId} setDragId={setDragId} />
             ))}
           </div>
-        </div>
+
+          {/* Mobile / tablet: one card per day */}
+          <div className="lg:hidden space-y-3">
+            {days.map((day) => {
+              const dayTotal = shiftOptions.reduce((n, s) => n + rowsFor(day, s.value).length, 0);
+              return (
+                <div key={day} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                    <span className="text-sm font-semibold text-gray-800">{DAY_LABEL(day)}</span>
+                    <span className="text-xs text-gray-500">{dayTotal === 0 ? 'nobody rostered' : `${dayTotal} assigned`}</span>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {shiftOptions.map((s) => {
+                      const rows = rowsFor(day, s.value);
+                      return (
+                        <div key={s.value} className="p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5">{s.label}</p>
+                          {rows.length === 0 ? (
+                            <p className="text-xs text-gray-300">—</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {rows.map((r) => (
+                                <RosterChip
+                                  key={r.id} row={r} canManage={!!canManage} conflict={conflictIds.has(r.id)}
+                                  onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow}
+                                  days={days} shiftOptions={shiftOptions} showMoveControl
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Version history */}
@@ -445,42 +502,83 @@ function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, on
             onDragOver={(e) => { if (canManage && dragId) e.preventDefault(); }}
             onDrop={(e) => { e.preventDefault(); if (canManage && dragId) onMove(dragId, d, shift); setDragId(null); }}
           >
-            {rows.map((r) => {
-              const staged = r.status === 'PUBLISHED' && r.pendingRemoval;
-              const conflict = conflictIds.has(r.id);
-              const cls = staged
-                ? 'bg-red-50 text-red-800 line-through'
-                : r.status === 'DRAFT' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900';
-              const isDraft = r.status === 'DRAFT';
-              return (
-                <div key={r.id}
-                  draggable={canManage && isDraft}
-                  onDragStart={() => setDragId(r.id)}
-                  onDragEnd={() => setDragId(null)}
-                  title={conflict ? 'Double-booked this day/shift' : (canManage && isDraft ? 'Drag to reschedule' : undefined)}
-                  className={`text-[11px] rounded px-1.5 py-1 flex items-start justify-between gap-1 ${cls} ${conflict ? 'ring-2 ring-red-400' : ''} ${canManage && isDraft ? 'cursor-move' : ''}`}>
-                  <span className="leading-tight">
-                    {conflict ? <AlertCircle className="w-3 h-3 text-red-500 inline mr-0.5 -mt-0.5" /> : null}
-                    {r.staffName}
-                    {r.subRole ? <span className="block text-[10px] opacity-70 no-underline">{r.subRole}</span> : null}
-                    {r.seniorityLevel ? <span className="block text-[10px] opacity-70 no-underline">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
-                    {staged ? <span className="block text-[9px] font-semibold text-red-600 no-underline">will be removed on publish</span> : null}
-                  </span>
-                  {canManage && (
-                    isDraft ? (
-                      <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0" aria-label="Remove draft"><Trash2 className="w-3 h-3" /></button>
-                    ) : staged ? (
-                      <button onClick={() => onStage(r.id, false)} className="text-primary-600 hover:text-primary-700 flex-shrink-0" aria-label="Keep (undo removal)"><RotateCcw className="w-3 h-3" /></button>
-                    ) : (
-                      <button onClick={() => onStage(r.id, true)} className="text-red-400 hover:text-red-600 flex-shrink-0" aria-label="Stage removal"><Trash2 className="w-3 h-3" /></button>
-                    )
-                  )}
-                </div>
-              );
-            })}
+            {rows.map((r) => (
+              <RosterChip
+                key={r.id} row={r} canManage={canManage} conflict={conflictIds.has(r.id)}
+                onDelete={onDelete} onStage={onStage} onMove={onMove}
+                draggable onDragStart={() => setDragId(r.id)} onDragEnd={() => setDragId(null)}
+              />
+            ))}
           </div>
         );
       })}
     </>
+  );
+}
+
+/**
+ * One person's assignment. Shared by the desktop grid and the mobile day cards
+ * so the two views can't show different information.
+ *
+ * `showMoveControl` swaps drag-and-drop for a day/shift picker: dragging is a
+ * mouse gesture, and on a phone there'd otherwise be no way to reschedule.
+ */
+function RosterChip({
+  row: r, canManage, conflict, onDelete, onStage, onMove,
+  draggable = false, onDragStart, onDragEnd,
+  showMoveControl = false, days = [], shiftOptions = [],
+}: {
+  row: Row; canManage: boolean; conflict: boolean;
+  onDelete: (id: string) => void; onStage: (id: string, pendingRemoval: boolean) => void;
+  onMove: (id: string, date: string, shift: string) => void;
+  draggable?: boolean; onDragStart?: () => void; onDragEnd?: () => void;
+  showMoveControl?: boolean; days?: string[]; shiftOptions?: ShiftOption[];
+}) {
+  const staged = r.status === 'PUBLISHED' && r.pendingRemoval;
+  const isDraft = r.status === 'DRAFT';
+  const cls = staged
+    ? 'bg-red-50 text-red-800 line-through'
+    : isDraft ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900';
+
+  return (
+    <div
+      draggable={draggable && canManage && isDraft}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      title={conflict ? 'Double-booked this day/shift' : (draggable && canManage && isDraft ? 'Drag to reschedule' : undefined)}
+      className={`text-[11px] rounded px-1.5 py-1 ${cls} ${conflict ? 'ring-2 ring-red-400' : ''} ${draggable && canManage && isDraft ? 'cursor-move' : ''}`}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <span className="leading-tight min-w-0">
+          {conflict ? <AlertCircle className="w-3 h-3 text-red-500 inline mr-0.5 -mt-0.5" /> : null}
+          <span className="text-xs font-medium">{r.staffName}</span>
+          {r.subRole ? <span className="block text-[10px] opacity-70 no-underline">{r.subRole}</span> : null}
+          {r.seniorityLevel ? <span className="block text-[10px] opacity-70 no-underline">{r.seniorityLevel.replace(/_/g, ' ')}</span> : null}
+          {r.notes ? <span className="block text-[10px] opacity-60 no-underline">{r.notes}</span> : null}
+          {staged ? <span className="block text-[9px] font-semibold text-red-600 no-underline">will be removed on publish</span> : null}
+        </span>
+        {canManage && (
+          isDraft ? (
+            <button onClick={() => onDelete(r.id)} className="text-red-500 hover:text-red-700 flex-shrink-0 p-1 -m-1" aria-label={`Remove draft for ${r.staffName}`}><Trash2 className="w-4 h-4" /></button>
+          ) : staged ? (
+            <button onClick={() => onStage(r.id, false)} className="text-primary-600 hover:text-primary-700 flex-shrink-0 p-1 -m-1" aria-label={`Keep ${r.staffName} (undo removal)`}><RotateCcw className="w-4 h-4" /></button>
+          ) : (
+            <button onClick={() => onStage(r.id, true)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-1 -m-1" aria-label={`Stage removal for ${r.staffName}`}><Trash2 className="w-4 h-4" /></button>
+          )
+        )}
+      </div>
+      {showMoveControl && canManage && isDraft && days.length > 0 && (
+        <select
+          className="mt-1.5 w-full text-[11px] rounded border border-amber-300 bg-white/70 px-1.5 py-1"
+          value={`${r.date}|${r.shift}`}
+          onChange={(e) => { const [d, s] = e.target.value.split('|'); onMove(r.id, d, s); }}
+          aria-label={`Reschedule ${r.staffName}`}
+        >
+          {days.flatMap((d) => shiftOptions.map((s) => (
+            <option key={`${d}|${s.value}`} value={`${d}|${s.value}`}>{DAY_LABEL(d)} · {s.label}</option>
+          )))}
+        </select>
+      )}
+    </div>
   );
 }

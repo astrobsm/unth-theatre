@@ -30,11 +30,14 @@ export interface RosterDept {
    */
   shiftOptions?: ShiftOption[];
   /**
-   * Where the `subRole` dropdown gets its options. 'SURGICAL_SPECIALTY' pulls the
-   * live surgical subspecialties out of the SurgicalUnit table (via
-   * /api/roster/specialties) instead of using the static `subRoles` list.
+   * Where the `subRole` dropdown gets its options, instead of the static
+   * `subRoles` list:
+   *   'SURGICAL_SPECIALTY' — live subspecialties from the SurgicalUnit table.
+   *   'THEATRE'            — live theatre names from the TheatreSuite table.
+   * Resolved server-side by getSubRoleOptions() in @/lib/rosterAssignments, so
+   * a department's options track the database with no code change.
    */
-  subRoleSource?: 'SURGICAL_SPECIALTY';
+  subRoleSource?: 'SURGICAL_SPECIALTY' | 'THEATRE';
   /** Field label for `subRole` where the generic "Sub-role" is wrong for the dept. */
   subRoleLabel?: string;
 }
@@ -57,13 +60,19 @@ export const DEFAULT_SHIFT_OPTIONS: ShiftOption[] = [
 // the web form and the bulk-upload template offer the exact same string.
 export const ON_CALL_ALL_SPECIALTIES = 'ALL EMERGENCIES (on-call)';
 
+// A technician is assigned to a theatre, or to one of these. The strings are
+// pattern-matched by /api/roster/technician-coverage — don't reword them.
+export const TECHNICIAN_SPECIAL_ASSIGNMENTS = [
+  'DAY CALL (emergency cover)',
+  'NIGHT CALL (emergency cover)',
+  'ICU',
+];
+
+// NOTE: perioperative nursing is deliberately NOT a department roster. Scrub
+// nurses are allocated to theatres day by day rather than rostered a week ahead,
+// and that allocation surfaces on the Theatre Readiness page — a weekly nursing
+// roster here would be a second, competing source of truth.
 export const ROSTER_DEPARTMENTS: RosterDept[] = [
-  {
-    slug: 'nursing', label: 'Perioperative Nursing', category: 'NURSES',
-    subRoles: ['SCRUB', 'CIRCULATING', 'HOLDING_AREA', 'SUPERVISING'],
-    userRoles: ['SCRUB_NURSE'],
-    managerRoles: [...ROSTER_ADMIN_ROLES],
-  },
   {
     slug: 'anaesthetists', label: 'Anaesthetists', category: 'ANAESTHETISTS',
     seniorityLevels: ['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR'],
@@ -91,6 +100,11 @@ export const ROSTER_DEPARTMENTS: RosterDept[] = [
     seniorityLevels: ['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR'],
     userRoles: ['ANAESTHETIC_TECHNICIAN'],
     managerRoles: [...ROSTER_ADMIN_ROLES],
+    // A technician covers a THEATRE (or day/night call, or ICU), so the dropdown
+    // is every theatre in the database — /api/roster/technician-coverage matches
+    // a case's theatre against this to find the technician on it.
+    subRoleSource: 'THEATRE',
+    subRoleLabel: 'Theatre',
   },
   {
     slug: 'porters', label: 'Porters', category: 'PORTERS',

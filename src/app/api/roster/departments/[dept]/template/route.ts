@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import {
-  getRosterDept, canManageRosterDept, LOCATIONS, getShiftOptions, ON_CALL_ALL_SPECIALTIES,
-} from '@/lib/rosterDepartments';
+import { getRosterDept, canManageRosterDept, LOCATIONS, getShiftOptions } from '@/lib/rosterDepartments';
+import { getSubRoleOptions } from '@/lib/rosterAssignments';
 import ExcelJS from 'exceljs';
 
 export const dynamic = 'force-dynamic';
@@ -60,33 +59,11 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   });
   const names = staff.map((s) => s.fullName).filter(Boolean);
 
-  // Anaesthetists work by SURGICAL SUBSPECIALTY: on elective days each anaesthetist
-  // covers one or more surgical subspecialties; the CALL consultant covers ALL
-  // emergencies. So for this department the "Sub-role" column becomes a dropdown
-  // of real surgical subspecialties (+ an ALL EMERGENCIES option for on-call).
-  const isAnaes = dept.slug === 'anaesthetists';
-  const ON_CALL_ALL = ON_CALL_ALL_SPECIALTIES;
-  let subspecialties: string[] = [];
-  if (isAnaes) {
-    const units = await prisma.surgicalUnit.findMany({
-      where: { active: true },
-      select: { subspecialty: true },
-      orderBy: { subspecialty: 'asc' },
-    });
-    subspecialties = Array.from(new Set(units.map((u) => u.subspecialty).filter(Boolean)));
-  }
-
-  // Anaesthetic technicians are assigned to a THEATRE, or to day-call / night-call
-  // emergency cover, or ICU. So for this department the "Sub-role" column becomes
-  // an "Assignment" dropdown of real theatres + those call/ICU options — the app
-  // later matches a case's theatre to the technician assigned to it.
-  const isTech = dept.slug === 'anaesthetic-technicians';
-  const TECH_SPECIALS = ['DAY CALL (emergency cover)', 'NIGHT CALL (emergency cover)', 'ICU'];
-  let theatreNames: string[] = [];
-  if (isTech) {
-    const theatres = await prisma.theatreSuite.findMany({ select: { name: true }, orderBy: { name: 'asc' } });
-    theatreNames = theatres.map((t) => t.name).filter(Boolean);
-  }
+  // Anaesthetists are rostered by surgical subspecialty and technicians by
+  // theatre, both read live from the database. The same resolver feeds the web
+  // form, so the spreadsheet can't offer a different list.
+  const isAnaes = dept.subRoleSource === 'SURGICAL_SPECIALTY';
+  const isTech = dept.subRoleSource === 'THEATRE';
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'UNTH Theatre ORM';
@@ -94,18 +71,15 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   const lists = wb.addWorksheet('Lists');
   lists.state = 'veryHidden';
 
-  const subRoles = isAnaes
-    ? [ON_CALL_ALL, ...subspecialties]
-    : isTech
-      ? [...theatreNames, ...TECH_SPECIALS]
-      : dept.subRoles?.length ? dept.subRoles : SUBROLE_FALLBACK;
+  const resolvedSubRoles = await getSubRoleOptions(dept);
+  const subRoles = resolvedSubRoles.length ? resolvedSubRoles : SUBROLE_FALLBACK;
   const seniority = dept.seniorityLevels?.length ? dept.seniorityLevels : SENIORITY_FALLBACK;
   const locations = [...LOCATIONS];
   // Offer the shift wording this department uses on its own roster page, so the
   // spreadsheet and the web form can't drift apart. normShift() on the upload
   // side maps these labels back onto the stored DutyShift values.
   const shiftLabels = getShiftOptions(dept).map((s) => s.label);
-  const col4Label = isAnaes ? 'Subspecialty' : isTech ? 'Assignment' : 'Sub-role';
+  const col4Label = dept.subRoleLabel ?? 'Sub-role';
   const headers = ['Name', 'Date', 'Shift', col4Label, 'Seniority', 'Location', 'Notes'];
 
   // Lists sheet — one column per option set (A..G). Dates are stored as TEXT so

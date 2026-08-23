@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Upload, Users, Clock, Building2, Plus, Trash2, Download, ClipboardCheck, Pencil, Check, X } from 'lucide-react';
+import { Calendar, Clock, Building2, Plus, Trash2, ClipboardCheck, Pencil, Check, X } from 'lucide-react';
 // XLSX loaded dynamically when needed (export/import actions)
 import { THEATRES } from '@/lib/constants';
 
@@ -39,10 +39,8 @@ export default function RosterPage() {
   const [rosters, setRosters] = useState<Roster[]>([]);
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState('');
-  const [uploadResult, setUploadResult] = useState<any>(null);
   const [editingRosterId, setEditingRosterId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditRosterForm | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -98,57 +96,6 @@ export default function RosterPage() {
       }
     } catch (error) {
       console.error('Failed to fetch theatres:', error);
-    }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, category: string) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setUploadResult(null);
-
-    try {
-      const data = await file.arrayBuffer();
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-      // Transform Excel data to roster format
-      const rosterData = jsonData.map((row: any) => ({
-        name: row.Name || row.name || '',
-        date: row.Date || row.date || '',
-        theatre: row.Theatre || row.theatre || '',
-        shift: row.Shift || row.shift || row.Duty || row.duty || '',
-        seniorityLevel: row['Seniority Level'] || row.seniorityLevel || row.SeniorityLevel || row.Level || row.level || '',
-        notes: row.Notes || row.notes || '',
-      }));
-
-      // Upload to backend
-      const response = await fetch('/api/roster/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rosters: rosterData,
-          staffCategory: category,
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setUploadResult(result);
-        fetchRosters();
-      } else {
-        const error = await response.json();
-        alert(`Upload failed: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('File upload error:', error);
-      alert('Failed to process Excel file');
-    } finally {
-      setUploading(false);
-      event.target.value = ''; // Reset file input
     }
   };
 
@@ -242,60 +189,6 @@ export default function RosterPage() {
     }
   };
 
-  const downloadTemplate = async (category?: string) => {
-    const XLSX = await import('xlsx');
-    
-    if (category === 'ANAESTHETISTS') {
-      // Special template for anaesthetists with seniority level columns
-      const template = [
-        {
-          Name: 'Dr. John Doe',
-          'Seniority Level': 'CONSULTANT',
-          Date: '2025-12-15',
-          Theatre: 'NEUROSURGERY THEATRE',
-          Shift: 'MORNING',
-          Notes: 'Optional notes',
-        },
-        {
-          Name: 'Dr. Jane Smith',
-          'Seniority Level': 'SENIOR_REGISTRAR',
-          Date: '2025-12-15',
-          Theatre: 'NEUROSURGERY THEATRE',
-          Shift: 'MORNING',
-          Notes: '',
-        },
-        {
-          Name: 'Dr. Mike Johnson',
-          'Seniority Level': 'REGISTRAR',
-          Date: '2025-12-15',
-          Theatre: 'NEUROSURGERY THEATRE',
-          Shift: 'CALL',
-          Notes: '',
-        },
-      ];
-      const ws = XLSX.utils.json_to_sheet(template);
-      // Set column widths
-      ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 20 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Anaesthetist Roster');
-      XLSX.writeFile(wb, 'anaesthetist_roster_template.xlsx');
-    } else {
-      const template = [
-        {
-          Name: 'John Doe',
-          Date: '2025-12-15',
-          Theatre: 'NEUROSURGERY THEATRE',
-          Shift: 'MORNING',
-          Notes: 'Optional notes',
-        },
-      ];
-      const ws = XLSX.utils.json_to_sheet(template);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Roster Template');
-      XLSX.writeFile(wb, 'roster_template.xlsx');
-    }
-  };
-
   const getShiftBadge = (shift: string) => {
     const colors: any = {
       MORNING: 'bg-blue-100 text-blue-800',
@@ -325,43 +218,17 @@ export default function RosterPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Duty Roster Management</h1>
-          <p className="text-gray-600 mt-2">Upload and manage staff duty rosters</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => downloadTemplate()} className="btn-secondary">
-            <Download className="w-5 h-5 mr-2" />
-            General Template
-          </button>
-          <button onClick={() => downloadTemplate('ANAESTHETISTS')} className="btn-secondary">
-            <Download className="w-5 h-5 mr-2" />
-            Anaesthetist Template
-          </button>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Duty Roster Management</h1>
+          <p className="text-gray-600 mt-2">View published duty rosters. Submit and publish them from the department rosters below.</p>
         </div>
       </div>
 
-      {/* Weekly forms call-out */}
-      <Link
-        href="/dashboard/roster/weekly"
-        className="block rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-indigo-50 p-5 hover:shadow-md transition"
-      >
-        <div className="flex items-start gap-4">
-          <div className="p-3 rounded-lg bg-primary-600 text-white">
-            <ClipboardCheck className="w-6 h-6" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-bold text-primary-900">Weekly Roster Forms</h2>
-            <p className="text-sm text-primary-800 mt-1">
-              Unit leads — submit your group&apos;s weekly roster (Nurses, Anaesthetists, Anaesthetic Technicians,
-              Porters, Cleaners, Pharmacists, Nurse Anaesthetists) <strong>every Saturday before 5:00 PM</strong>.
-              Separate forms cover the Main Theatre Complex and the Accident &amp; Emergency Theatre.
-            </p>
-            <p className="text-xs font-semibold text-primary-700 mt-2">Open weekly forms →</p>
-          </div>
-        </div>
-      </Link>
-
-      {/* Department roster (draft / publish / versioning) call-out */}
+      {/* Department rosters — the ONLY submission route.
+          The old per-category Excel uploads and the separate Weekly Roster Forms
+          used to write this same table, so a department could be rostered twice
+          with no way to tell which submission was current. Both are gone; each
+          department now drafts and publishes its own week, and only published
+          rows drive theatre readiness, booking and on-duty. */}
       <Link
         href="/dashboard/roster/departments"
         className="block rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-5 hover:shadow-md transition"
@@ -373,68 +240,16 @@ export default function RosterPage() {
           <div className="flex-1">
             <h2 className="text-lg font-bold text-teal-900">Department Rosters — Draft &amp; Publish</h2>
             <p className="text-sm text-teal-800 mt-1">
-              Standalone per-department pages (<code>/roster/nursing</code>, <code>/roster/anaesthetists</code>, …) with
-              supervisor access control: build a <strong>draft</strong>, then <strong>publish</strong> it live. Full
-              version history with one-click rollback. Only published rosters drive theatre, booking and on-duty.
+              Each department submits its own week (<code>/roster/anaesthetists</code>,
+              {' '}<code>/roster/porters</code>, …) with supervisor access control: build a <strong>draft</strong>,
+              then <strong>publish</strong> it live. Bulk Excel upload is available inside each department page.
+              Full version history with one-click rollback. Only published rosters drive theatre readiness,
+              booking and on-duty.
             </p>
             <p className="text-xs font-semibold text-teal-700 mt-2">Open department rosters →</p>
           </div>
         </div>
       </Link>
-
-      {/* Upload Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-        {staffCategories.slice(1).map((category) => (
-          <div key={category.value} className="card">
-            <div className="flex items-center justify-between mb-3">
-              <Users className="w-5 h-5 text-primary-600" />
-              <span className={`px-2 py-1 rounded text-xs font-semibold ${getCategoryBadge(category.value)}`}>
-                {category.label}
-              </span>
-            </div>
-            <label className="btn-primary cursor-pointer text-sm">
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Excel
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={(e) => handleFileUpload(e, category.value)}
-                disabled={uploading}
-              />
-            </label>
-          </div>
-        ))}
-      </div>
-
-      {/* Upload Result */}
-      {uploadResult && (
-        <div className={`card ${uploadResult.errors > 0 ? 'bg-yellow-50' : 'bg-green-50'}`}>
-          <h3 className="font-semibold mb-2">Upload Results</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-600">Created:</span>
-              <span className="ml-2 font-semibold text-green-600">{uploadResult.created}</span>
-            </div>
-            <div>
-              <span className="text-gray-600">Errors:</span>
-              <span className="ml-2 font-semibold text-red-600">{uploadResult.errors}</span>
-            </div>
-          </div>
-          {uploadResult.details.errors.length > 0 && (
-            <div className="mt-3">
-              <p className="text-sm font-semibold mb-2">Errors:</p>
-              <div className="max-h-40 overflow-y-auto text-xs space-y-1">
-                {uploadResult.details.errors.map((err: any, idx: number) => (
-                  <div key={idx} className="text-red-600">
-                    Row {err.row}: {err.error}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Filters */}
       <div className="card">
@@ -477,7 +292,7 @@ export default function RosterPage() {
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : filteredRosters.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            No roster entries found. Upload an Excel file to get started.
+            No roster entries found. Publish a department roster to get started.
           </div>
         ) : (
           <div className="overflow-x-auto">

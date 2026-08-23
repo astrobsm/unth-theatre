@@ -8,7 +8,7 @@ import { ROSTER_DEPARTMENTS, canManageRosterDept, type RosterDept } from '@/lib/
 import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
 
 const ICONS: Record<string, any> = {
-  nursing: Users, anaesthetists: Stethoscope, 'nurse-anaesthetists': HeartPulse,
+  anaesthetists: Stethoscope, 'nurse-anaesthetists': HeartPulse,
   'anaesthetic-technicians': Wrench, porters: Truck, cleaners: Sparkles, pharmacy: Pill,
 };
 
