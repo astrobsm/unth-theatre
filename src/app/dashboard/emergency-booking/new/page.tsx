@@ -5,11 +5,10 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature, CheckCircle } from 'lucide-react';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
-import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
+import { isOfflineQueued, isOfflineQueuedBody, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
-import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { NoPaperPrescriptionDialog } from '@/components/NoPaperPrescriptionWarning';
 import ProcedurePicker from '@/components/ProcedurePicker';
 
@@ -70,11 +69,16 @@ export default function NewEmergencyBookingPage() {
    * Five steps, and the theatre is told after the second.
    *
    * Patient and surgery details are everything the theatre needs to start
-   * preparing a room. Team, consent and packs are all required, but making the
+   * preparing a room. Team, packs and consent are all required, but making the
    * theatre wait for them costs minutes an emergency does not have. So the
    * booking is submitted at step 2 and the rest is completed against a case
    * that is already live — with the holding area refusing the patient until it
    * IS complete. Nothing is skipped; it is only reordered.
+   *
+   * Steps 3-5 write against `bookedId`. Never gate them on the surgery id: it
+   * can legitimately be absent (offline sync assigns it later), and doing so
+   * used to abandon the booker on the emergency list with the case only half
+   * recorded.
    */
   const [step, setStep] = useState(1);
   const [bookedId, setBookedId] = useState<string | null>(null);
@@ -83,7 +87,8 @@ export default function NewEmergencyBookingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Holds the just-booked surgery id while the no-paper-prescription dialog is
-  // shown; acknowledging navigates on to the consent form.
+  // shown; acknowledging continues to step 3. Empty string means "booked, but
+  // no surgery id yet" — still a valid state to carry on from.
   const [bookedSurgeryId, setBookedSurgeryId] = useState<string | null>(null);
   const [showNextSteps, setShowNextSteps] = useState(false);
   const [surgeons, setSurgeons] = useState<{ id: string; fullName: string }[]>([]);
@@ -96,7 +101,6 @@ export default function NewEmergencyBookingPage() {
   const [surgicalUnits, setSurgicalUnits] = useState<SurgicalUnitOption[]>([]);
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
   // A signed paper consent, photographed. In an emergency the paper form is
   // very often what actually exists — signed at the bedside or in A&E by a
   // relative while the patient is being resuscitated. Refusing it and demanding
@@ -321,12 +325,15 @@ export default function NewEmergencyBookingPage() {
     reader.readAsDataURL(file);
   }
 
+  // Packs come before consent: the pack picker fires the consumable and pharmacy
+  // requests, and those need the head start. Chasing down a signed paper form
+  // should not hold up theatre supply in an emergency.
   const STEPS = [
     { n: 1, label: 'Patient' },
     { n: 2, label: 'Surgery details' },
     { n: 3, label: 'Team' },
-    { n: 4, label: 'Consent' },
-    { n: 5, label: 'Packs' },
+    { n: 4, label: 'Packs' },
+    { n: 5, label: 'Consent' },
   ];
 
   /** What must be answered before a step can be left. */
@@ -352,18 +359,20 @@ export default function NewEmergencyBookingPage() {
    * their consent was recorded when it was not.
    */
   async function saveStep(n: number): Promise<boolean> {
-    if (!bookedId) return true;
+    // No booking to attach to. Returning true here would advance the wizard and
+    // report "Saved." while writing nothing at all.
+    if (!bookedId) {
+      setStepNote('This case has no booking reference on this device — reopen it from the emergency list.');
+      return false;
+    }
     const payload: Record<string, unknown> = {};
     if (n === 3) payload.teamMembers = teamMembers.filter((m) => m.name.trim());
     if (n === 4) {
-      if (isConsentSigned(consentForm) || consentForm.procedureText.trim()) payload.consentForm = consentForm;
-      if (consentFile) {
-        payload.consentFile = { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 };
-      }
-    }
-    if (n === 5) {
       payload.consumableRequests = packPick.consumableRequests;
       payload.drugDressingRequests = packPick.drugDressingRequests;
+    }
+    if (n === 5 && consentFile) {
+      payload.consentFile = { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 };
     }
     if (Object.keys(payload).length === 0) return true;
 
@@ -373,7 +382,7 @@ export default function NewEmergencyBookingPage() {
       const res = await fetch(`/api/emergency-booking/${bookedId}/details`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, step: n === 3 ? 'team' : n === 4 ? 'consent' : 'packs' }),
+        body: JSON.stringify({ ...payload, step: n === 3 ? 'team' : n === 4 ? 'packs' : 'consent' }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -455,12 +464,9 @@ export default function NewEmergencyBookingPage() {
         // is added server-side.
         consumableRequests: [...packPick.consumableRequests],
         drugDressingRequests: [...packPick.drugDressingRequests],
-        // Electronic UNTH consent captured & signed inline at emergency booking.
-        consentForm: isConsentSigned(consentForm) || consentForm.procedureText.trim()
-          ? consentForm
-          : undefined,
-        // The signed paper form, photographed. Either route satisfies consent;
-        // the holding-area gate accepts whichever arrived.
+        // The signed paper form, photographed — the only consent route in the
+        // emergency wizard. Normally attached at step 5, after the booking
+        // exists; included here in case it was captured before submitting.
         consentFile: consentFile
           ? { name: consentFile.name, mimeType: consentFile.mimeType, base64: consentFile.base64 }
           : undefined,
@@ -503,14 +509,36 @@ export default function NewEmergencyBookingPage() {
         return;
       }
 
-      // Show the mandatory no-paper-prescription acknowledgement before moving
-      // on to the consent form for the just-booked emergency case.
       const created = await res.json().catch(() => null);
-      const newSurgeryId = created?.surgery?.id;
-      setBookedSurgeryId(newSurgeryId ?? '');
+
+      // A queued write can be flagged in the body rather than the header.
+      if (isOfflineQueuedBody(created)) {
+        notify.success(OFFLINE_SAVED_MESSAGE);
+        setLoading(false);
+        router.push('/dashboard/emergency-booking');
+        return;
+      }
+
+      // The BOOKING id is what steps 3-5 write against. Without it there is
+      // nothing to attach team, packs or consent to — so say so plainly and
+      // stay on the page, rather than returning to the list with the case
+      // recorded but incomplete.
+      const newBookingId = created?.booking?.id ?? null;
+      if (!newBookingId) {
+        setError(
+          'The case was sent to theatre, but this device did not get the booking reference back. '
+          + 'Open the case from the emergency list to add team, packs and consent.',
+        );
+        return;
+      }
+
       // The theatre has been told. The booking exists now, and the remaining
       // steps attach to it rather than being held back until the end.
-      setBookedId(created?.booking?.id ?? null);
+      setBookedId(newBookingId);
+      // Surfaces the mandatory no-paper-prescription acknowledgement. The
+      // surgery id can legitimately be absent (offline sync assigns it later),
+      // so the wizard must never gate the remaining steps on it.
+      setBookedSurgeryId(created?.surgery?.id ?? '');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -523,12 +551,17 @@ export default function NewEmergencyBookingPage() {
       {bookedSurgeryId !== null && !showNextSteps && (
         <NoPaperPrescriptionDialog
           onAcknowledge={() => {
-            if (!bookedSurgeryId) { router.push('/dashboard/emergency-booking'); return; }
-            // Straight on to team, consent and packs. The case is already with
+            // Straight on to team, packs and consent. The case is already with
             // the theatre; what follows is what the holding area will check
             // before the patient is let through the door.
+            //
+            // This used to bail to the emergency list whenever the surgery id
+            // was missing, which silently abandoned the remaining three steps
+            // even though the booking existed and could take them. Continue on
+            // the booking id — the only id those steps actually need.
             setBookedSurgeryId(null);
-            setStep(3);
+            if (bookedId) { setStep(3); return; }
+            router.push('/dashboard/emergency-booking');
           }}
         />
       )}
@@ -882,29 +915,31 @@ export default function NewEmergencyBookingPage() {
         )}
 
         {/* Consent form — UNTH consent captured & signed inline */}
-        {step === 4 && (
+        {/* Consent — upload of the SIGNED form only. The electronic UNTH consent
+            form used to sit here as an alternative; in an emergency the paper
+            form is what actually gets signed at the bedside, and offering two
+            routes meant cases arrived at the holding area with a half-typed
+            electronic form and no signature. */}
+        {step === 5 && (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-lg font-semibold text-gray-800">Consent Form</h2>
-            {(isConsentSigned(consentForm) || consentFile) && (
+            <h2 className="text-lg font-semibold text-gray-800">Signed consent</h2>
+            {consentFile && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                Signed
+                Attached
               </span>
             )}
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Either attach the signed paper form or complete it electronically below. One is
-            enough — the theatre needs consent recorded, not recorded twice.
+            Photograph the consent form the patient or next of kin has signed and attach it here.
           </p>
 
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
             <div className="flex items-center gap-2">
               <FileSignature className="h-5 w-5 text-emerald-600" />
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Attach a signed consent</h3>
-                <p className="text-xs text-gray-600">
-                  Photograph the signed paper form — PDF or image, up to 10 MB.
-                </p>
+                <h3 className="text-sm font-semibold text-gray-900">Attach the signed consent</h3>
+                <p className="text-xs text-gray-600">PDF or image, up to 10 MB.</p>
               </div>
             </div>
             <input
@@ -912,14 +947,15 @@ export default function NewEmergencyBookingPage() {
               title="Upload signed informed consent file"
               type="file"
               accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
+              capture="environment"
               onChange={handleConsentFileChange}
-              className="mt-3 block text-sm"
+              className="mt-3 block w-full text-sm"
             />
             {consentError && <div className="mt-2 text-sm text-red-600">{consentError}</div>}
             {consentFile && (
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                 <CheckCircle className="h-4 w-4 text-green-600" />
-                <span className="font-medium">{consentFile.name}</span>
+                <span className="font-medium break-all">{consentFile.name}</span>
                 <span className="text-gray-500">{(consentFile.size / 1024).toFixed(0)} KB</span>
                 <button type="button" className="text-xs text-red-600 underline" onClick={() => setConsentFile(null)}>
                   Remove
@@ -927,15 +963,6 @@ export default function NewEmergencyBookingPage() {
               </div>
             )}
           </div>
-
-          <details className="rounded-lg border border-gray-200 p-3" open={!consentFile}>
-            <summary className="cursor-pointer text-sm font-semibold text-gray-800">
-              Or complete the UNTH consent form electronically
-            </summary>
-            <div className="mt-3">
-              <ConsentFormFields value={consentForm} onChange={setConsentForm} />
-            </div>
-          </details>
         </div>
         )}
 
@@ -1110,7 +1137,7 @@ export default function NewEmergencyBookingPage() {
         )}
 
         {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
-        {step === 5 && (
+        {step === 4 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-3 text-gray-800">Apply a pack</h2>
           <SurgicalPackPicker subspecialty={form.surgicalUnit || undefined} emergency onChange={setPackPick} />
