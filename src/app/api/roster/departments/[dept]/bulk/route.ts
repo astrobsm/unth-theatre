@@ -30,9 +30,12 @@ const bulkSchema = z.object({
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 function normShift(raw: string): 'MORNING' | 'CALL' | 'NIGHT' | null {
-  const t = raw.trim().toUpperCase().replace(/[_\s-]+/g, ' ');
-  if (['MORNING', 'AM', 'DAY', 'M', 'EARLY', 'MORN'].includes(t)) return 'MORNING';
-  if (['CALL', 'ON CALL', 'ONCALL', 'C'].includes(t)) return 'CALL';
+  // `/` folds to a space as well, so the anaesthetists' "CALL/EMERGENCIES" label
+  // arrives here as "CALL EMERGENCIES".
+  const t = raw.trim().toUpperCase().replace(/[_\s\-/]+/g, ' ').trim();
+  if (['MORNING', 'AM', 'DAY', 'M', 'EARLY', 'MORN', 'ELECTIVE', 'ELECTIVES'].includes(t)) return 'MORNING';
+  if (['CALL', 'ON CALL', 'ONCALL', 'C', 'EMERGENCY', 'EMERGENCIES',
+    'CALL EMERGENCY', 'CALL EMERGENCIES'].includes(t)) return 'CALL';
   if (['NIGHT', 'PM', 'N', 'LATE'].includes(t)) return 'NIGHT';
   return null;
 }

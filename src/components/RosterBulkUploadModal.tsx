@@ -38,10 +38,13 @@ function normalizeDate(token: string, weekStart: string): string | null {
   return null;
 }
 
+// Keep in step with normShift() in api/roster/departments/[dept]/bulk — this one
+// only drives the preview, but a mismatch would flag rows the server accepts.
 function normalizeShift(token: string): 'MORNING' | 'CALL' | 'NIGHT' | null {
-  const t = (token || '').trim().toUpperCase().replace(/[_\s-]+/g, ' ');
-  if (['MORNING', 'AM', 'DAY', 'M', 'EARLY', 'MORN'].includes(t)) return 'MORNING';
-  if (['CALL', 'ON CALL', 'ONCALL', 'C'].includes(t)) return 'CALL';
+  const t = (token || '').trim().toUpperCase().replace(/[_\s\-/]+/g, ' ').trim();
+  if (['MORNING', 'AM', 'DAY', 'M', 'EARLY', 'MORN', 'ELECTIVE', 'ELECTIVES'].includes(t)) return 'MORNING';
+  if (['CALL', 'ON CALL', 'ONCALL', 'C', 'EMERGENCY', 'EMERGENCIES',
+    'CALL EMERGENCY', 'CALL EMERGENCIES'].includes(t)) return 'CALL';
   if (['NIGHT', 'PM', 'N', 'LATE'].includes(t)) return 'NIGHT';
   return null;
 }
@@ -263,7 +266,7 @@ export default function RosterBulkUploadModal({
                 the file here to upload. You can also paste from Excel / Google Sheets or upload a CSV.
                 <ul className="ml-4 mt-1 list-disc text-[13px] text-blue-700">
                   <li>Date can be picked from the dropdown, or typed (<em>2026-07-29</em>, <em>29/07/2026</em>, or a weekday like <em>Mon</em>).</li>
-                  <li>Shift accepts MORNING/AM/Day, CALL/On-call, NIGHT/PM.</li>
+                  <li>Shift accepts MORNING/AM/Day/ELECTIVES, CALL/On-call/EMERGENCIES, NIGHT/PM.</li>
                   <li>Names are matched to your department's staff (full name, part of it, or staff code).</li>
                   <li>Everything lands as a <strong>draft</strong> — nothing goes live until you press Publish.</li>
                 </ul>

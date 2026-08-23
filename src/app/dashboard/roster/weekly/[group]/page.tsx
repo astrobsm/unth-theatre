@@ -24,6 +24,8 @@ interface GroupConfig {
   title: string;
   category: 'NURSES' | 'ANAESTHETISTS' | 'PORTERS' | 'CLEANERS' | 'ANAESTHETIC_TECHNICIANS' | 'PHARMACISTS' | 'RECOVERY_NURSES';
   shifts: Shift[];
+  /** Department wording for a shift, where the raw DutyShift name isn't what staff call it. */
+  shiftLabels?: Partial<Record<Shift, string>>;
   locations: Location[];
   seniorityLevels?: string[]; // anaesthetists only
   subRoles?: string[];        // nurses
@@ -61,10 +63,12 @@ const GROUPS: Record<string, GroupConfig> = {
     title: 'Anaesthetists Weekly Roster',
     category: 'ANAESTHETISTS',
     shifts: ['MORNING', 'CALL'],
+    // Same wording as the anaesthetists department roster page.
+    shiftLabels: { MORNING: 'ELECTIVES', CALL: 'CALL/EMERGENCIES' },
     locations: ALL_LOCATIONS,
     seniorityLevels: ['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR'],
     userRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
-    policy: 'Mon–Fri elective list = MORNING (08:00–16:00). On-call covers ALL emergencies Mon–Fri after-hours and weekends = CALL. The Accident & Emergency, Eye and CTU theatres are rostered separately — switch the location selector above.',
+    policy: 'Mon–Fri elective list = ELECTIVES (08:00–16:00). On-call covers ALL emergencies Mon–Fri after-hours and weekends = CALL/EMERGENCIES. The Accident & Emergency, Eye and CTU theatres are rostered separately — switch the location selector above.',
   },
   'anaesthetic-technicians': {
     slug: 'anaesthetic-technicians',
@@ -420,7 +424,7 @@ export default function WeeklyRosterFormPage() {
                     aria-label={`Shift row ${i + 1}`}
                   >
                     {config.shifts.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s} value={s}>{config.shiftLabels?.[s] ?? s}</option>
                     ))}
                   </select>
                 </td>

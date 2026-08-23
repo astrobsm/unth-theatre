@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getRosterDept, canManageRosterDept, LOCATIONS } from '@/lib/rosterDepartments';
+import {
+  getRosterDept, canManageRosterDept, LOCATIONS, getShiftOptions, ON_CALL_ALL_SPECIALTIES,
+} from '@/lib/rosterDepartments';
 import ExcelJS from 'exceljs';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const SHIFTS = ['MORNING', 'CALL', 'NIGHT'];
 const HEADERS = ['Name', 'Date', 'Shift', 'Sub-role', 'Seniority', 'Location', 'Notes'];
 const DATA_ROWS = 300;
 const DATE_SPAN_DAYS = 28; // exact dates offered in the Date dropdown (4 weeks)
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   // emergencies. So for this department the "Sub-role" column becomes a dropdown
   // of real surgical subspecialties (+ an ALL EMERGENCIES option for on-call).
   const isAnaes = dept.slug === 'anaesthetists';
-  const ON_CALL_ALL = 'ALL EMERGENCIES (on-call)';
+  const ON_CALL_ALL = ON_CALL_ALL_SPECIALTIES;
   let subspecialties: string[] = [];
   if (isAnaes) {
     const units = await prisma.surgicalUnit.findMany({
@@ -100,6 +101,10 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
       : dept.subRoles?.length ? dept.subRoles : SUBROLE_FALLBACK;
   const seniority = dept.seniorityLevels?.length ? dept.seniorityLevels : SENIORITY_FALLBACK;
   const locations = [...LOCATIONS];
+  // Offer the shift wording this department uses on its own roster page, so the
+  // spreadsheet and the web form can't drift apart. normShift() on the upload
+  // side maps these labels back onto the stored DutyShift values.
+  const shiftLabels = getShiftOptions(dept).map((s) => s.label);
   const col4Label = isAnaes ? 'Subspecialty' : isTech ? 'Assignment' : 'Sub-role';
   const headers = ['Name', 'Date', 'Shift', col4Label, 'Seniority', 'Location', 'Notes'];
 
@@ -109,7 +114,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   const putCol = (col: number, arr: string[]) => arr.forEach((v, i) => { lists.getCell(i + 1, col).value = v; });
   putCol(1, names.length ? names : ['(no staff found — type the name)']);
   putCol(2, dates);
-  putCol(3, SHIFTS);
+  putCol(3, shiftLabels);
   putCol(4, subRoles);
   putCol(5, seniority);
   putCol(6, locations);
@@ -139,7 +144,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   for (let r = 2; r <= DATA_ROWS + 1; r++) {
     ws.getCell(r, 1).dataValidation = listVal(ref('A', names.length), 'Choose a staff member');
     ws.getCell(r, 2).dataValidation = listVal(ref('B', dates.length), 'Choose the exact date');
-    ws.getCell(r, 3).dataValidation = listVal(ref('C', SHIFTS.length), 'MORNING / CALL / NIGHT');
+    ws.getCell(r, 3).dataValidation = listVal(ref('C', shiftLabels.length), shiftLabels.join(' / '));
     ws.getCell(r, 4).dataValidation = listVal(
       ref('D', subRoles.length),
       isAnaes

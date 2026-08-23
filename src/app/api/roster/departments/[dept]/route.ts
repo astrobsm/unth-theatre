@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
-import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
+import { getRosterDept, canManageRosterDept, getShiftOptions } from '@/lib/rosterDepartments';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +44,13 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   const role = (session.user as any).role;
 
   return NextResponse.json({
-    department: { slug: dept.slug, label: dept.label, category: dept.category, subRoles: dept.subRoles ?? [], seniorityLevels: dept.seniorityLevels ?? [], userRoles: dept.userRoles },
+    department: {
+      slug: dept.slug, label: dept.label, category: dept.category,
+      subRoles: dept.subRoles ?? [], seniorityLevels: dept.seniorityLevels ?? [], userRoles: dept.userRoles,
+      shiftOptions: getShiftOptions(dept),
+      subRoleSource: dept.subRoleSource ?? null,
+      subRoleLabel: dept.subRoleLabel ?? 'Sub-role',
+    },
     weekStart: start.toISOString().slice(0, 10),
     canManage: canManageRosterDept(dept, role),
     currentVersion: latestPublication?.version ?? 0,
@@ -86,6 +92,16 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
   const parsed = addSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 });
   const d = parsed.data;
+
+  // A department may not work every shift (anaesthetists have no NIGHT rota), so
+  // reject anything its own shift list doesn't offer.
+  const allowedShifts = getShiftOptions(dept);
+  if (!allowedShifts.some((s) => s.value === d.shift)) {
+    return NextResponse.json(
+      { error: `${dept.label} rosters only use: ${allowedShifts.map((s) => s.label).join(', ')}` },
+      { status: 400 },
+    );
+  }
 
   const user = await prisma.user.findUnique({ where: { id: d.userId }, select: { id: true, fullName: true } });
   if (!user) return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
@@ -148,6 +164,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { dept: 
   // Move a draft (drag & drop).
   if (d.date || d.shift) {
     if (row.status !== 'DRAFT') return NextResponse.json({ error: 'Only draft rows can be moved. Stage the published row and add a new draft instead.' }, { status: 409 });
+    const allowedShifts = getShiftOptions(dept);
+    if (d.shift && !allowedShifts.some((s) => s.value === d.shift)) {
+      return NextResponse.json(
+        { error: `${dept.label} rosters only use: ${allowedShifts.map((s) => s.label).join(', ')}` },
+        { status: 400 },
+      );
+    }
     await prisma.roster.update({
       where: { id: d.id },
       data: { ...(d.date ? { date: dateOnly(d.date) } : {}), ...(d.shift ? { shift: d.shift } : {}) },

@@ -9,16 +9,29 @@ import {
 } from 'lucide-react';
 import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
 
-const SHIFTS = ['MORNING', 'CALL', 'NIGHT'] as const;
 const LOCATIONS = ['MAIN_THEATRE', 'A_AND_E', 'EYE_THEATRE', 'CTU_THEATRE', 'ICU'];
 
+// Fallback wording for a department the API returned no shift list for.
+const DEFAULT_SHIFT_OPTIONS: ShiftOption[] = [
+  { value: 'MORNING', label: 'MORNING' },
+  { value: 'CALL', label: 'CALL' },
+  { value: 'NIGHT', label: 'NIGHT' },
+];
+// Must match ON_CALL_ALL_SPECIALTIES in @/lib/rosterDepartments — the bulk-upload
+// template offers the same string, and anaesthetist-coverage pattern-matches it.
+const ON_CALL_ALL_SPECIALTIES = 'ALL EMERGENCIES (on-call)';
+
+interface ShiftOption { value: string; label: string }
 interface Row {
   id: string; userId: string; staffName: string; staffCode: string | null; phoneNumber: string | null; extension: string | null;
   date: string; shift: string; subRole: string | null; seniorityLevel: string | null; location: string | null;
   theatreId: string | null; notes: string | null; status: string; version: number | null; pendingRemoval: boolean;
 }
 interface DeptData {
-  department: { slug: string; label: string; category: string; subRoles: string[]; seniorityLevels: string[]; userRoles: string[] };
+  department: {
+    slug: string; label: string; category: string; subRoles: string[]; seniorityLevels: string[]; userRoles: string[];
+    shiftOptions?: ShiftOption[]; subRoleSource?: string | null; subRoleLabel?: string;
+  };
   weekStart: string; canManage: boolean; currentVersion: number; lastPublishedAt: string | null;
   draftCount: number; pendingRemovalCount: number; pendingChanges: number; rows: Row[];
 }
@@ -50,6 +63,8 @@ export default function DepartmentRosterPage() {
   // add-form state
   const [fStaff, setFStaff] = useState(''); const [fDate, setFDate] = useState(''); const [fShift, setFShift] = useState('MORNING');
   const [fSub, setFSub] = useState(''); const [fSen, setFSen] = useState(''); const [fLoc, setFLoc] = useState('MAIN_THEATRE'); const [fNotes, setFNotes] = useState('');
+  // Live surgical specialties, for departments rostered by specialty (anaesthetists).
+  const [specialties, setSpecialties] = useState<string[]>([]);
   // P4: conflicts + copy-day + drag
   const [conflictIds, setConflictIds] = useState<Set<string>>(new Set());
   const [conflictList, setConflictList] = useState<Array<{ staffName: string; date: string; shift: string; count: number }>>([]);
@@ -104,6 +119,30 @@ export default function DepartmentRosterPage() {
     () => staff.filter((s) => data?.department.userRoles.includes(s.role)),
     [staff, data],
   );
+
+  // How this department names its shifts, and whether it rosters by surgical
+  // specialty. Both come from the server's department config.
+  const shiftOptions = data?.department.shiftOptions?.length ? data.department.shiftOptions : DEFAULT_SHIFT_OPTIONS;
+  const shiftLabel = useCallback(
+    (s: string) => shiftOptions.find((o) => o.value === s)?.label ?? s,
+    [shiftOptions],
+  );
+  const bySpecialty = data?.department.subRoleSource === 'SURGICAL_SPECIALTY';
+
+  // Keep the form's shift on an option this department actually offers — the
+  // default 'MORNING' isn't valid everywhere.
+  useEffect(() => {
+    if (shiftOptions.length && !shiftOptions.some((o) => o.value === fShift)) setFShift(shiftOptions[0].value);
+  }, [shiftOptions, fShift]);
+
+  // Specialty list is admin-maintained in surgical_units, so read it live.
+  useEffect(() => {
+    if (!bySpecialty) return;
+    fetch('/api/roster/specialties', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { specialties: [] }))
+      .then((d) => setSpecialties(Array.isArray(d.specialties) ? d.specialties : []))
+      .catch(() => {});
+  }, [bySpecialty]);
 
   const addRow = async () => {
     if (!fStaff || !fDate) { setMsg('Pick staff and a day.'); return; }
@@ -166,10 +205,10 @@ export default function DepartmentRosterPage() {
     if (res.ok) await load(); else setMsg((await res.json().catch(() => ({})))?.error || 'Move failed');
   };
   const exportCsv = () => {
-    const cols = ['Date', 'Shift', 'Staff', 'Sub-role', 'Seniority', 'Location', 'Status', 'Notes'];
+    const cols = ['Date', 'Shift', 'Staff', data?.department.subRoleLabel ?? 'Sub-role', 'Seniority', 'Location', 'Status', 'Notes'];
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const lines = [cols.join(',')];
-    for (const r of data?.rows ?? []) lines.push([r.date, r.shift, r.staffName, r.subRole, r.seniorityLevel, r.location, r.pendingRemoval ? 'PUBLISHED (to be removed)' : r.status, r.notes].map(esc).join(','));
+    for (const r of data?.rows ?? []) lines.push([r.date, shiftLabel(r.shift), r.staffName, r.subRole, r.seniorityLevel, r.location, r.pendingRemoval ? 'PUBLISHED (to be removed)' : r.status, r.notes].map(esc).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `roster-${dept}-${weekStart}.csv`; a.click(); URL.revokeObjectURL(a.href);
@@ -269,11 +308,11 @@ export default function DepartmentRosterPage() {
             </div>
             <div>
               <label className="label">Shift</label>
-              <select className="input-field" value={fShift} onChange={(e) => setFShift(e.target.value)}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+              <select className="input-field" value={fShift} onChange={(e) => setFShift(e.target.value)}>{shiftOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
             </div>
-            {data.department.subRoles.length > 0 && (
+            {data.department.subRoles.length > 0 && !bySpecialty && (
               <div>
-                <label className="label">Sub-role</label>
+                <label className="label">{data.department.subRoleLabel ?? 'Sub-role'}</label>
                 <select className="input-field" value={fSub} onChange={(e) => setFSub(e.target.value)}><option value="">—</option>{data.department.subRoles.map((s) => <option key={s} value={s}>{s}</option>)}</select>
               </div>
             )}
@@ -283,10 +322,24 @@ export default function DepartmentRosterPage() {
                 <select className="input-field" value={fSen} onChange={(e) => setFSen(e.target.value)}><option value="">—</option>{data.department.seniorityLevels.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select>
               </div>
             )}
-            <div>
-              <label className="label">Location</label>
-              <select className="input-field" value={fLoc} onChange={(e) => setFLoc(e.target.value)}>{LOCATIONS.map((l) => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}</select>
-            </div>
+            {bySpecialty ? (
+              <div>
+                <label className="label">{data.department.subRoleLabel ?? 'Surgical Specialty'}</label>
+                <select className="input-field" value={fSub} onChange={(e) => setFSub(e.target.value)}>
+                  <option value="">—</option>
+                  <option value={ON_CALL_ALL_SPECIALTIES}>{ON_CALL_ALL_SPECIALTIES}</option>
+                  {specialties.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                {specialties.length === 0 && (
+                  <p className="text-[11px] text-gray-400 mt-0.5">No surgical units set up yet — add them under Admin → Surgical Units.</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="label">Location</label>
+                <select className="input-field" value={fLoc} onChange={(e) => setFLoc(e.target.value)}>{LOCATIONS.map((l) => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}</select>
+              </div>
+            )}
             <div className="lg:col-span-5">
               <label className="label">Notes (optional)</label>
               <input className="input-field" value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="e.g. holding area cover" />
@@ -322,7 +375,7 @@ export default function DepartmentRosterPage() {
           <p className="font-semibold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> {conflictList.length} double-booking conflict(s) this week</p>
           <ul className="mt-1 space-y-0.5 text-xs">
             {conflictList.slice(0, 6).map((c, i) => (
-              <li key={i}>{c.staffName} — {DAY_LABEL(c.date)} {c.shift} ({c.count} assignments)</li>
+              <li key={i}>{c.staffName} — {DAY_LABEL(c.date)} {shiftLabel(c.shift)} ({c.count} assignments)</li>
             ))}
             {conflictList.length > 6 && <li>…and {conflictList.length - 6} more</li>}
           </ul>
@@ -337,8 +390,8 @@ export default function DepartmentRosterPage() {
           <div className="min-w-[900px] grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
             <div className="text-xs font-semibold text-gray-400 pt-8">Shift</div>
             {days.map((d) => <div key={d} className="text-xs font-semibold text-gray-600 text-center pb-1">{DAY_LABEL(d)}</div>)}
-            {SHIFTS.map((shift) => (
-              <FragmentRow key={shift} shift={shift} days={days} rowsFor={rowsFor} canManage={!!canManage}
+            {shiftOptions.map((s) => (
+              <FragmentRow key={s.value} shift={s.value} shiftLabel={s.label} days={days} rowsFor={rowsFor} canManage={!!canManage}
                 onDelete={deleteRow} onStage={stageRemoval} onMove={moveRow} conflictIds={conflictIds}
                 dragId={dragId} setDragId={setDragId} />
             ))}
@@ -375,15 +428,15 @@ export default function DepartmentRosterPage() {
   );
 }
 
-function FragmentRow({ shift, days, rowsFor, canManage, onDelete, onStage, onMove, conflictIds, dragId, setDragId }: {
-  shift: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean;
+function FragmentRow({ shift, shiftLabel, days, rowsFor, canManage, onDelete, onStage, onMove, conflictIds, dragId, setDragId }: {
+  shift: string; shiftLabel: string; days: string[]; rowsFor: (d: string, s: string) => Row[]; canManage: boolean;
   onDelete: (id: string) => void; onStage: (id: string, pendingRemoval: boolean) => void;
   onMove: (id: string, date: string, shift: string) => void; conflictIds: Set<string>;
   dragId: string | null; setDragId: (id: string | null) => void;
 }) {
   return (
     <>
-      <div className="text-xs font-semibold text-gray-500 flex items-center">{shift}</div>
+      <div className="text-xs font-semibold text-gray-500 flex items-center">{shiftLabel}</div>
       {days.map((d) => {
         const rows = rowsFor(d, shift);
         return (
