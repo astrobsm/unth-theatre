@@ -1150,6 +1150,15 @@ ${pretty} — ${days} days from today.
         const parsed = raw ? JSON.parse(raw) : null;
         if (parsed) {
           message = parsed.error || '';
+          // The server sends `detail` (and a Prisma `code`) alongside the
+          // generic word for exactly this moment. Dropping them left the
+          // surgeon — and whoever they telephone — with "Internal server
+          // error" and nothing to act on.
+          if (parsed.detail) {
+            message = `${message ? message + ' — ' : ''}${parsed.detail}`;
+          }
+          if (parsed.code) message = `${message} [${parsed.code}]`;
+          if (parsed.where) message = `${message} (${parsed.where})`;
           if (Array.isArray(parsed.details) && parsed.details.length) {
             const fields = parsed.details
               .map((d: any) => (Array.isArray(d.path) ? d.path.join('.') : d.path) + (d.message ? `: ${d.message}` : ''))

@@ -1181,10 +1181,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.error("Surgery create error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    // apiError, not a bare 500. This route already imported the helper and then
+    // did not use it here, so a failed booking reached the surgeon as the words
+    // "Internal server error" and nothing else — indistinguishable from a
+    // database outage, a missing column, a null dereference or a pool timeout.
+    // That is the exact situation apiError's own docstring says cost days.
+    // The full error still goes to the server log; the browser now also gets
+    // the Prisma code and the first line of the cause.
+    return apiError("surgeries.create", error);
   }
 }
