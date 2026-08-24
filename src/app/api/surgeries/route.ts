@@ -440,21 +440,16 @@ export async function POST(request: NextRequest) {
       ...surgeryData
     } = validatedData;
 
-    // Enforce the "haemoglobin sampled within 48 h of surgery" safety rule.
-    if (hbSampleAt) {
-      const sampleMs = new Date(hbSampleAt).getTime();
-      const surgeryMs = new Date(validatedData.scheduledDate).getTime();
-      if (Number.isNaN(sampleMs)) {
-        return NextResponse.json({ error: 'Invalid haemoglobin sample date/time.' }, { status: 400 });
-      }
-      const hoursBefore = (surgeryMs - sampleMs) / 3_600_000;
-      if (hoursBefore > 48) {
-        return NextResponse.json(
-          { error: 'Haemoglobin sample must be taken within 48 hours before surgery. Please repeat the FBC.' },
-          { status: 400 },
-        );
-      }
-    }
+    // The haemoglobin sample date is no longer able to refuse a booking.
+    //
+    // A stale FBC can be repeated between now and the morning, and an unbookable
+    // case is not one anybody repeats an FBC for. An unreadable date is simply
+    // dropped rather than rejected — it is the surgery that matters, not the
+    // timestamp. Either way checkPreopRequirements below records the gap as
+    // outstanding, it shows on every board, and the holding area still stops
+    // the patient at the door until it is put right.
+    const hbSampleAtSafe =
+      hbSampleAt && !Number.isNaN(new Date(hbSampleAt).getTime()) ? hbSampleAt : null;
 
     // Resolve surgeon: if a user id was supplied, validate it and prefer the DB fullName.
     let resolvedSurgeonId: string | null = null;
@@ -479,28 +474,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
-    // Prevent double-booking: a patient already scheduled for surgery on the same
-    // day cannot be booked again. Cancelled cases are ignored so a re-book after a
-    // cancellation is still allowed.
-    {
-      const bookDate = new Date(validatedData.scheduledDate);
-      const bDayStart = new Date(bookDate); bDayStart.setHours(0, 0, 0, 0);
-      const bDayEnd = new Date(bookDate); bDayEnd.setHours(23, 59, 59, 999);
-      const existingForPatient = await prisma.surgery.findFirst({
-        where: {
-          patientId: patient.id,
-          scheduledDate: { gte: bDayStart, lte: bDayEnd },
-          status: { notIn: ['CANCELLED'] },
-        },
-        select: { id: true },
-      });
-      if (existingForPatient) {
-        return NextResponse.json(
-          { error: `Patient already booked for surgery on ${bDayStart.toLocaleDateString()}.` },
-          { status: 409 }
-        );
-      }
-    }
+    // The same-day double-booking check used to sit here as a flat refusal. It
+    // has been removed, not weakened: the ALREADY_BOOKED guard further down now
+    // asks exactly the same question — this patient, this day, not cancelled —
+    // and answers it usefully.
+    //
+    // This one could not be got past. It ignored allowDuplicate, so the "book
+    // anyway" choice could never reach the code that honours it, and it
+    // returned a bare 409 with no ALREADY_BOOKED marker, so the form could not
+    // recognise it and show the existing case either. A surgeon with a patient
+    // genuinely returning to theatre the same day saw one sentence and had no
+    // way forward at all.
 
     // Persist Clinical Summary (comorbidities + current medications) on the Patient record
     // so the Pharmacist can read it on every prescription. We replace prior values to reflect
@@ -691,7 +675,13 @@ export async function POST(request: NextRequest) {
         hasUploadedFile: Boolean(consentFile?.base64),
         signedElectronically: Boolean(consentForm),
       },
-      deferOutstanding: validatedData.deferOutstanding === true,
+      // ALWAYS defer. A missing consent or a missing FBC is a real gap, and
+      // refusing the booking never closed it — it only kept the case off the
+      // list, so theatre did not know the patient existed and nobody was
+      // prompted to chase the thing that was missing. Deferring records the
+      // full list against the case, shows it on every board, and leaves the
+      // holding area to stop the patient at the door until it is cleared.
+      deferOutstanding: true,
       override: {
         reason: validatedData.preopOverrideReason ?? null,
         byId: (session?.user as { id?: string } | undefined)?.id ?? null,
@@ -699,17 +689,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (!preop.ok) {
-      return NextResponse.json({
-        error: preop.overrideRequired
-          ? 'This emergency is missing required documentation. Give a clinical reason to proceed without it.'
-          : 'Consent and pre-operative results are required before a case can be booked.',
-        missing: preop.missing,
-        missingDetail: preop.messages,
-        // Tells the form whether to offer the override box or simply refuse.
-        overrideRequired: preop.overrideRequired,
-      }, { status: 400 });
-    }
+    // No rejection here. With deferOutstanding set above, checkPreopRequirements
+    // always returns ok and hands back the full list, which is written onto the
+    // case as preopOutstanding a few lines further down and travels with it.
+    //
+    // Deliberately not a 400 any more: a booking refused for missing paperwork
+    // produced neither the paperwork nor the booking. What it produced was an
+    // afternoon of a surgeon retrying a form while a patient waited for a
+    // folder to be processed.
 
     // ── Is this case already booked? ────────────────────────────────────────
     // On 19 August the orthopaedic team booked a case, saw no confirmation, and
@@ -826,7 +813,7 @@ export async function POST(request: NextRequest) {
           : {}),
         scheduledDate: new Date(validatedData.scheduledDate),
         // Hb sample timestamp (drives the "within 48 h" safety rule).
-        hbSampleAt: hbSampleAt ? new Date(hbSampleAt) : null,
+        hbSampleAt: hbSampleAtSafe ? new Date(hbSampleAtSafe) : null,
         // Informed consent file (base64) — visible to the holding-area nurse for
         // pre-theatre clearance.
         ...(consentFile

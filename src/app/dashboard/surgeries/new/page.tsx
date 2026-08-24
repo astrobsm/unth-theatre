@@ -799,12 +799,20 @@ export default function NewSurgeryPage() {
     // patient is coming; everything after them is preparation.
     if (bookingEarly) {
       const fd = new FormData(e.currentTarget);
+      // ONLY what makes this a case at all: who, what, when. A booking without
+      // a patient or a procedure is not a record of anything.
+      //
+      // The theatre and the unit used to be demanded here and are not any more.
+      // Neither is knowable at the moment a case is booked — the theatre is
+      // allocated later and can be changed from the list at any time, and the
+      // API has always accepted a booking without one (theatreId is nullish).
+      // Requiring them meant a surgeon with a patient, a procedure and a date
+      // could not put the case on the list at all, which is a worse outcome
+      // than a case whose room is still to be decided.
       const essentials: string[] = [];
       if (!selectedPatientId) essentials.push('the patient');
       if (!String(fd.get('procedureName') ?? '').trim()) essentials.push('the procedure');
       if (!String(fd.get('scheduledDate') ?? '').trim()) essentials.push('the date');
-      if (!selectedTheatreId) essentials.push('the theatre');
-      if (!unit) essentials.push('the unit');
       if (essentials.length) {
         setLoading(false);
         setError(
@@ -862,25 +870,23 @@ export default function NewSurgeryPage() {
     // Booking from section 3: nothing is waived, but nothing blocks either.
     // The server records every missing item against the case and the
     // confirmation names them with their deadline.
-    if (missing.length && !bookingEarly) {
-      if (surgeryType === 'ELECTIVE') {
-        setLoading(false);
-        setError(`Please complete the compulsory pre-operative safety fields: ${missing.join(', ')}.`);
-        return;
-      }
-      // Urgent or emergency: proceed on a recorded clinical reason. The case is
-      // booked and CARRIES these as outstanding — a deferral is a debt, not a
-      // discharge, and the holding area still stops the patient at the door.
-      if (preopOverrideReason.trim().length < MIN_OVERRIDE_REASON) {
-        setLoading(false);
-        setNeedsOverride(true);
-        setError(
-          `This ${surgeryType.toLowerCase()} case is missing: ${missing.join(', ')}. ` +
-            `You can still book it now — give the clinical reason below (at least ${MIN_OVERRIDE_REASON} characters) ` +
-            'and it will be recorded against the case in your name, with these items flagged as outstanding.',
-        );
-        return;
-      }
+    // NOTHING HERE REFUSES A BOOKING ANY MORE — for any urgency.
+    //
+    // Elective used to be a hard block and urgent/emergency demanded a typed
+    // reason before the form would send. Both stopped cases being recorded at
+    // all, which does not make the missing consent or the missing FBC appear;
+    // it only means theatre never learns the patient exists. The surgeon quoted
+    // further up spent an afternoon unable to book a patient whose folder was
+    // still being processed.
+    //
+    // What is missing is not waived. It is carried on the case as an
+    // outstanding debt, shown on every board the case appears on, and the
+    // holding area still stops the patient at the door until it is cleared.
+    // The list gains a case that somebody can act on; nothing is hidden.
+    if (missing.length) {
+      // The reason box stays available for a clinician who wants to explain,
+      // and is no longer a condition of booking.
+      if (surgeryType !== 'ELECTIVE') setNeedsOverride(true);
     }
     // ── Is that date what they meant? ────────────────────────────────────
     // A case was booked for 8 October when the unit meant tomorrow, and two
@@ -928,10 +934,16 @@ ${pretty} — ${days} days from today.
       const timeStr = (e.currentTarget.elements.namedItem('scheduledTime') as HTMLInputElement)?.value;
       const surgeryWhen = new Date(`${dateStr}T${timeStr || '00:00'}`).getTime();
       const sampleWhen = new Date(preop.hbSampleAt).getTime();
+      // A stale FBC is worth saying out loud and is not worth refusing the
+      // booking over: the sample can be repeated between now and the morning,
+      // and a case nobody could book is not a case anybody repeats an FBC for.
+      // Asked once, then recorded — the holding area still checks it.
       if (!Number.isNaN(surgeryWhen) && !Number.isNaN(sampleWhen) && (surgeryWhen - sampleWhen) / 3_600_000 > 48) {
-        setLoading(false);
-        setError('The haemoglobin sample must be taken within 48 hours before surgery. Please repeat the FBC.');
-        return;
+        if (!window.confirm(
+          'The haemoglobin sample is more than 48 hours before this surgery.\n\n'
+          + 'The FBC should be repeated before the patient goes to theatre. '
+          + 'Book the case now and repeat it before the morning?'
+        )) { setLoading(false); return; }
       }
     }
 
