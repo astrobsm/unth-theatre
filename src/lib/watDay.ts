@@ -57,3 +57,54 @@ export function watDayRange(day: string): { start: Date; end: Date } {
     end: new Date(startUtcMs + 24 * 60 * 60 * 1000),
   };
 }
+
+/** Shift an instant so its UTC fields read as WAT wall-clock. */
+const watShifted = (value: Date) => new Date(value.getTime() + WAT_OFFSET_MINUTES * 60_000);
+
+/**
+ * Minutes since midnight, in WAT. 08:30 → 510.
+ *
+ * For deciding whether a scheduled time of day has arrived. Anything reaching
+ * for getHours() instead is reading the HOST's clock — UTC on both servers,
+ * and whatever a phone happens to be set to in a browser.
+ */
+export function watMinutesOfDay(value: Date | string | number): number {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return 0;
+  const s = watShifted(d);
+  return s.getUTCHours() * 60 + s.getUTCMinutes();
+}
+
+/** "HH:MM" in WAT — the wall clock a member of staff actually reads. */
+export function watClock(value: Date | string | number): string {
+  const mins = watMinutesOfDay(value);
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+/**
+ * The instant at which a WAT wall-clock time occurs: ("2026-05-11", "15:00")
+ * → the UTC Date for 15:00 in Enugu.
+ *
+ * `new Date("2026-05-11T15:00")` parses in the BROWSER's timezone, so the same
+ * form filled in on a handset left on UTC and one set to Lagos stores two
+ * different instants for the same typed time — and the announcement then goes
+ * out an hour adrift on a device nobody thinks to check.
+ */
+export function watInstantFrom(day: string, time: string): Date | null {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim());
+  const tm = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!dm || !tm) return null;
+  const [hh, mm] = [Number(tm[1]), Number(tm[2])];
+  if (hh > 23 || mm > 59) return null;
+  return new Date(
+    Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), hh, mm)
+    - WAT_OFFSET_MINUTES * 60_000,
+  );
+}
+
+/** Day of week in WAT, 0 = Sunday — matching Date.getDay()'s numbering. */
+export function watDayOfWeek(value: Date | string | number): number {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return 0;
+  return watShifted(d).getUTCDay();
+}

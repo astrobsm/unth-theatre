@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { withApiError } from '@/lib/apiError';
+import { watClock, watDay, watDayOfWeek, watDayRange, watMinutesOfDay } from '@/lib/watDay';
+import { scheduledInstant } from '@/lib/theatreOps/clock';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +20,24 @@ async function handleGET(_req: NextRequest) {
   }
 
   const now = new Date();
-  const dow = now.getDay(); // 0..6
-  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  /**
+   * SCHEDULES ARE READ IN WAT, NOT IN THE HOST'S TIMEZONE.
+   *
+   * An admin who types 18:00 for the theatre-shutdown broadcast means six in
+   * the evening in Enugu. getHours() answers in UTC here — the theatre server
+   * pins TZ=Etc/UTC deliberately, and Vercel is UTC too — so the broadcast
+   * matched at 18:00 UTC and was heard at 19:00 WAT, an hour late, every day.
+   *
+   * daysOfWeek had the same fault: between 23:00 and midnight WAT the UTC day
+   * is still yesterday, so a Monday-only broadcast could fire on what the
+   * hospital calls Tuesday and stay silent on the Monday evening it was for.
+   *
+   * lib/watDay states the offset explicitly and asks the host nothing.
+   */
+  const dow = watDayOfWeek(now); // 0..6, in WAT
+  const hhmm = watClock(now);    // "HH:MM", in WAT
+  const nowMinutes = watMinutesOfDay(now);
+  const todayWat = watDay(now);
 
   const broadcasts = await prisma.radioBroadcast.findMany({
     where: { active: true },
@@ -93,11 +111,28 @@ async function handleGET(_req: NextRequest) {
       const last = a.lastPlayedAt?.getTime() ?? 0;
       const sinceLast = now.getTime() - last;
 
+      /**
+       * A DAILY announcement fires at ITS TIME OF DAY, once per WAT day.
+       *
+       * The comment here has always said "at/after scheduled time of day" and
+       * the code never checked the time of day at all: it fired as soon as 23
+       * hours had passed since the last play. So each day it went out an hour
+       * EARLIER than the day before, walking backwards around the clock — a
+       * shutdown notice scheduled for 18:00 reaching 17:00, then 16:00, and in
+       * under a week arriving at a time bearing no relation to the schedule.
+       * That is the "announcements no longer follow their time" fault.
+       *
+       * The 23-hour slack existed to stop a second firing on the same day. The
+       * WAT calendar day does that job exactly, and without the drift.
+       */
+      const targetMinutes = watMinutesOfDay(a.scheduledDate);
+      const dueToday = nowMinutes >= targetMinutes;
+      const playedToday = a.lastPlayedAt ? watDay(a.lastPlayedAt) === todayWat : false;
+
       if (a.frequency === 'ONE_TIME') {
         shouldFire = !a.lastPlayedAt;
       } else if (a.frequency === 'DAILY') {
-        // Fire once per calendar day at/after scheduled time of day.
-        shouldFire = !a.lastPlayedAt || sinceLast >= 23 * 60 * 60 * 1000;
+        shouldFire = dueToday && !playedToday;
       } else if (a.frequency === 'WEEKLY') {
         let allowToday = true;
         if (a.repeatDays) {
@@ -106,9 +141,10 @@ async function handleGET(_req: NextRequest) {
             allowToday = days.includes(dow);
           } catch { /* keep true on malformed json */ }
         }
-        shouldFire =
-          allowToday && (!a.lastPlayedAt || sinceLast >= 23 * 60 * 60 * 1000);
+        shouldFire = allowToday && dueToday && !playedToday;
       } else if (a.frequency === 'CUSTOM_INTERVAL' && a.customIntervalMin) {
+        // An interval genuinely is "every N minutes", so elapsed time is the
+        // right test here — it is only the clock-time schedules that drifted.
         shouldFire =
           !a.lastPlayedAt || sinceLast >= a.customIntervalMin * 60 * 1000;
       }
@@ -348,10 +384,10 @@ async function handleGET(_req: NextRequest) {
   // it repeats every 2 minutes until acknowledged or auto-expired.
   // ----------------------------------------------------------------
   try {
-    const dayStart = new Date(now);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(now);
-    dayEnd.setHours(23, 59, 59, 999);
+    // The theatre's day, not the host's. setHours(0,0,0,0) on a UTC server
+    // starts the day at 01:00 WAT and ends it at 00:59 the next morning, so an
+    // early case could fall outside "today" entirely.
+    const { start: dayStart, end: dayEnd } = watDayRange(todayWat);
 
     const clearedCases = await prisma.surgery.findMany({
       where: {
@@ -370,14 +406,12 @@ async function handleGET(_req: NextRequest) {
     });
 
     for (const c of clearedCases) {
-      const [hh, mm] = (c.scheduledTime || '09:00').split(':').map((n) => parseInt(n, 10));
-      const start = new Date(c.scheduledDate);
-      start.setHours(
-        Number.isFinite(hh) ? hh : 9,
-        Number.isFinite(mm) ? mm : 0,
-        0,
-        0
-      );
+      // scheduledInstant reads "HH:MM" as clinic-local and states the offset
+      // explicitly. setHours() read it as UTC here, so a 09:00 list produced a
+      // 10:00 WAT instant and this reminder went out an hour after the patient
+      // should already have been sent for.
+      const start = scheduledInstant(c.scheduledDate, c.scheduledTime || '09:00');
+      if (!start) continue;
       const minutesUntilStart = (start.getTime() - now.getTime()) / 60000;
 
       // Fire only inside the 10-minute pre-start window (small grace either side).
@@ -389,7 +423,9 @@ async function handleGET(_req: NextRequest) {
       });
       if (dup) continue;
 
-      const startLabel = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+      // Spoken aloud, so it must be the wall clock the theatre reads. getHours()
+      // here would have announced "08:00" for an 09:00 list.
+      const startLabel = watClock(start);
       const where = c.location ? ` for ${c.location}` : '';
       const base =
         `Theatre reminder. Patient ${c.patient?.name ?? ''}, folder ${c.patient?.folderNumber ?? ''}, ` +

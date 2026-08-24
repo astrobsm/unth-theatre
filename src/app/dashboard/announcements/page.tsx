@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { watInstantFrom } from '@/lib/watDay';
 import {
   Volume2,
   Plus,
@@ -253,12 +254,22 @@ export default function AnnouncementsPage() {
         };
       }
 
-      const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+      // The typed time means THEATRE time, whatever this device's clock says.
+      // `new Date("2026-05-11T15:00")` parses in the browser's timezone, so the
+      // same schedule entered on a handset left on UTC and one set to Lagos
+      // stored two different instants — and the radio then ran an hour adrift
+      // for a reason invisible from the server.
+      const scheduledDateTime = watInstantFrom(scheduledDate, scheduledTime);
+      if (!scheduledDateTime) {
+        alert('Please give a valid date and time for the announcement.');
+        return;
+      }
+      const endInstant = endDate ? watInstantFrom(endDate, '23:59') : null;
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
         scheduledDate: scheduledDateTime.toISOString(),
-        endDate: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : null,
+        endDate: endInstant ? endInstant.toISOString() : null,
         frequency,
         repeatDays: frequency === 'WEEKLY' ? repeatDays : null,
         customIntervalMin: frequency === 'CUSTOM_INTERVAL' ? customIntervalMin : null,

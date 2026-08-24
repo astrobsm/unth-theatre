@@ -746,11 +746,31 @@ export default function RadioPlayer() {
     // untrue in the one case that matters. An emergency is spoken here whether
     // this window is muted or holding the lock, so the status must say so
     // rather than tell a nurse her alert is being handled somewhere else.
-    const urgentNow = !!current && (current.category === 'EMERGENCY' || current.priority >= 90);
+    /**
+     * Judge the item ON SCREEN, not the one that got past the playback gate.
+     *
+     * This read `current` — state set INSIDE the play effect, and only after
+     * its early returns. The acknowledge button beside it renders from `top`.
+     * So whenever the gate returned early (this window is not the leader, or
+     * was hidden when the alert arrived) `current` stayed null while `top` was
+     * an emergency, and the panel printed "Being announced in your other open
+     * window" directly beneath a green ACKNOWLEDGE EMERGENCY button: two
+     * controls describing different announcements, with the more reassuring
+     * one wrong. Frequently nothing was being announced anywhere.
+     *
+     * `isEmergency` is already derived from `top`, for exactly this reason.
+     */
+    const urgentNow = !!isEmergency;
     if (muted) {
       return urgentNow
         ? { text: 'Muted — emergencies are still announced', tone: 'warn' as const }
         : { text: 'Muted — announcement not being spoken', tone: 'warn' as const };
+    }
+    // An emergency speaks in every VISIBLE window, so a hidden one is the only
+    // case where the leader really is announcing it elsewhere. Say that,
+    // instead of claiming it for a window nobody can hear.
+    if (urgentNow && typeof document !== 'undefined' && document.hidden && !isLeader) {
+      return { text: 'Announced in the window you are viewing', tone: 'info' as const };
     }
     if (!isLeader && !urgentNow) {
       return { text: 'Being announced in your other open window', tone: 'info' as const };
