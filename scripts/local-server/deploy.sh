@@ -179,10 +179,23 @@ else
   # healthy deploy. Forgetting the worker is the third trap named in this file's
   # header; a silent sudo failure is that same trap wearing a different hat, and
   # it happened on 19 August.
+  #
+  # PROBE THE COMMAND, NOT SUDO IN GENERAL. install-worker-restart-sudo.sh
+  # deliberately grants ONE command — `/usr/bin/systemctl restart orm-sync` —
+  # and nothing else, which is the whole point of it: the app user does not get
+  # the machine. But `sudo -n true` asks "may I run ANY command without a
+  # password", and under that rule the answer is no. So the check said there was
+  # no passwordless sudo on a box where the restart would in fact have worked,
+  # and every deploy left the worker behind while printing the warning the rule
+  # was installed to eliminate. `sudo -n -l <cmd>` asks about the command that
+  # is actually about to run.
   worker_restarted=0
   if [[ "$(id -u)" -eq 0 ]]; then
     systemctl restart orm-sync && worker_restarted=1
+  elif sudo -n -l /usr/bin/systemctl restart orm-sync >/dev/null 2>&1; then
+    sudo -n /usr/bin/systemctl restart orm-sync && worker_restarted=1
   elif sudo -n true 2>/dev/null; then
+    # Blanket passwordless sudo — some boxes are set up that way.
     sudo -n systemctl restart orm-sync && worker_restarted=1
   fi
   if [[ $worker_restarted -eq 1 ]]; then
