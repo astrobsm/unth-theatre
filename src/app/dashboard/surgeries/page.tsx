@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Copy } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { outstandingLabel } from '@/lib/preopRequirements';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -101,8 +101,12 @@ export default function SurgeriesPage() {
   const canReschedule = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
   // Surgeons & perioperative nurses can change the order a unit's cases are listed.
   const canReorder = ['SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
+  // Withdrawing a case as a duplicate is a correction to the list rather than a
+  // clinical decision, so it sits with the people who own the list.
+  const canMarkDuplicate = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
   const [reordering, setReordering] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
   // Quick "change theatre" modal state.
   const [theatres, setTheatres] = useState<{ id: string; name: string; location?: string }[]>([]);
   const [reassignSurgery, setReassignSurgery] = useState<Surgery | null>(null);
@@ -291,8 +295,57 @@ export default function SurgeriesPage() {
     }
   };
 
+  /**
+   * Withdraw a case that was booked more than once.
+   *
+   * Goes through /api/cancellations like any other cancellation, so it writes a
+   * CaseCancellation record naming who did it and why, rather than quietly
+   * flipping a status. Category ADMINISTRATIVE: nothing clinical changed, the
+   * list was wrong.
+   *
+   * The server refuses to cancel a COMPLETED or IN_PROGRESS case, which matters
+   * most precisely here — among several copies of one booking, the completed
+   * row is the operation that actually happened and looks no different in a
+   * list from its duplicates.
+   */
+  const handleMarkDuplicate = async (surgery: { id: string; procedureName?: string; patient?: { name?: string } | null }) => {
+    const who = surgery.patient?.name ? ` for ${surgery.patient.name}` : '';
+    if (!window.confirm(
+      `Withdraw this case${who} as a duplicate?\n\n`
+      + `It is removed from the theatre list and its slot and pack are released. `
+      + `The other copy stays. This is recorded against your name and can be reviewed in cancellations.`
+    )) return;
+
+    setDuplicateId(surgery.id);
+    try {
+      const response = await fetch('/api/cancellations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          surgeryId: surgery.id,
+          category: 'ADMINISTRATIVE',
+          reason: 'Duplicate booking',
+          detailedNotes:
+            'Withdrawn as a duplicate: the same patient was booked more than once for this date, '
+            + 'so the case held a second theatre slot and had a second pack prepared. The remaining '
+            + 'booking is unaffected.',
+        }),
+      });
+      if (response.ok) {
+        await fetchSurgeries();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Could not withdraw this case as a duplicate.');
+      }
+    } catch {
+      alert('A network error occurred while withdrawing the duplicate.');
+    } finally {
+      setDuplicateId(null);
+    }
+  };
+
   // Theatre staff confirm an en-route patient has physically arrived in the theatre.
-  const canReceiveInTheatre = ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
+  const canReceiveInTheatre =['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
   const [receivingId, setReceivingId] = useState<string | null>(null);
 
   const handleReceiveInTheatre = async (assessmentId: string) => {
@@ -1384,6 +1437,25 @@ export default function SurgeriesPage() {
                             title="Reschedule to another day"
                           >
                             <Calendar className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        {/* Withdraw a case booked more than once. Never offered
+                            for a COMPLETED or in-progress case: that row is the
+                            operation that actually took place, and among copies
+                            of one booking it is the one that must survive. */}
+                        {canMarkDuplicate
+                          && surgery.status !== 'COMPLETED'
+                          && surgery.status !== 'IN_PROGRESS'
+                          && surgery.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => handleMarkDuplicate(surgery)}
+                            disabled={duplicateId === surgery.id}
+                            className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Withdraw as a duplicate booking"
+                            aria-label="Withdraw as a duplicate booking"
+                          >
+                            <Copy className="w-4 h-4" />
                           </button>
                         )}
 

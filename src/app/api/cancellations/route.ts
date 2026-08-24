@@ -92,6 +92,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Surgery is already cancelled' }, { status: 400 });
     }
 
+    /**
+     * An operation that has already happened cannot be cancelled.
+     *
+     * Nothing stopped that before, and the way it bites is specific. Where a
+     * case was booked two or three times over, one of those rows is the one
+     * theatre actually used and carries the completed record. Tidying the
+     * copies by eye, the completed row looks no more like "the real one" than
+     * its duplicates — cancel it and the operation reads as never having taken
+     * place while a phantom booking survives in its stead. That is exactly the
+     * shape of the 22 August laparotomy: three copies, the middle one
+     * COMPLETED.
+     */
+    if (surgery.status === 'COMPLETED' || surgery.status === 'IN_PROGRESS') {
+      return NextResponse.json(
+        {
+          error: surgery.status === 'COMPLETED'
+            ? 'This operation has already been performed, so it cannot be cancelled. If it is one of several copies, cancel a copy that was not operated on.'
+            : 'This operation is under way and cannot be cancelled.',
+          code: 'SURGERY_NOT_CANCELLABLE',
+          surgeryStatus: surgery.status,
+        },
+        { status: 409 },
+      );
+    }
+
     // Create cancellation record and update surgery status in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create cancellation record
