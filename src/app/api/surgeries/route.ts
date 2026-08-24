@@ -724,16 +724,30 @@ export async function POST(request: NextRequest) {
     // would be wrong in a way nobody could work around. It asks instead: the
     // booker is shown what already exists and must say explicitly that they
     // mean to book another.
+    // Matched on the PATIENT and the DAY, not on the procedure name.
+    //
+    // Keying on procedureName as well meant the guard only ever caught a
+    // literal re-submission of the same words, and said nothing when the same
+    // patient was booked twice for the same day under two different procedures
+    // — which is the common case, because a laparotomy and the colostomy done
+    // through it are one operation. Booked separately they take two theatre
+    // slots, have two packs prepared and appear on the list as two patients.
+    // Seen from the list that is indistinguishable from a duplicate, which is
+    // what it was reported as.
+    //
+    // The form already supports additional procedures on one case; nothing was
+    // telling the booker that was the thing to do. Still not a hard block — a
+    // patient genuinely returning to theatre the same day is real — but it now
+    // has to be a decision rather than an accident.
     if (!validatedData.allowDuplicate) {
       const already = await prisma.surgery.findFirst({
         where: {
           patientId: validatedData.patientId,
-          procedureName: validatedData.procedureName,
           scheduledDate: new Date(validatedData.scheduledDate),
           status: { notIn: ['CANCELLED'] },
         },
         select: {
-          id: true, scheduledTime: true, createdAt: true,
+          id: true, scheduledTime: true, createdAt: true, procedureName: true,
           bookedByName: true, consumablePackCode: true, pharmacyDrugCode: true,
           patient: { select: { name: true, folderNumber: true } },
         },
@@ -741,10 +755,22 @@ export async function POST(request: NextRequest) {
       });
 
       if (already) {
+        // Same words or a different procedure on the same patient and day are
+        // two different conversations, so the message distinguishes them: one
+        // is "you have already booked this", the other is "this patient is
+        // already going to theatre today — should this be part of that case?"
+        const samePr =
+          already.procedureName?.trim().toLowerCase()
+          === validatedData.procedureName.trim().toLowerCase();
         return NextResponse.json(
           {
-            error: 'This case is already booked.',
+            error: samePr
+              ? 'This case is already booked.'
+              : `${already.patient?.name ?? 'This patient'} already has a case on the theatre list for this day: `
+                + `${already.procedureName} at ${already.scheduledTime}. If this procedure is part of that `
+                + `operation, add it to that case instead of booking a second slot.`,
             code: 'ALREADY_BOOKED',
+            sameProcedure: samePr,
             existing: already,
           },
           { status: 409 },

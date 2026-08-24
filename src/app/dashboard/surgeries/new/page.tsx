@@ -208,11 +208,14 @@ export default function NewSurgeryPage() {
     id: string;
     scheduledTime?: string | null;
     createdAt?: string | null;
+    procedureName?: string | null;
     bookedByName?: string | null;
     consumablePackCode?: string | null;
     pharmacyDrugCode?: string | null;
     patient?: { name?: string | null; folderNumber?: string | null } | null;
   } | null>(null);
+  /** False when the clash is a DIFFERENT procedure on the same patient and day. */
+  const [alreadyBookedSameProcedure, setAlreadyBookedSameProcedure] = useState(true);
   // ── One section at a time, and it survives an interruption ───────────────
   // The form asks for a great deal, and it used to be all or nothing: a phone
   // that slept or a nurse called away meant starting again at the patient
@@ -1139,6 +1142,9 @@ ${pretty} — ${days} days from today.
       if (response.status === 409) {
         const parsed = await response.json().catch(() => null);
         if (parsed?.code === 'ALREADY_BOOKED' && parsed?.existing) {
+          // Absent on an older server: treat it as the same-procedure clash,
+          // which is the wording that was always shown.
+          setAlreadyBookedSameProcedure(parsed.sameProcedure !== false);
           setAlreadyBooked(parsed.existing);
           setLoading(false);
           return;
@@ -1320,6 +1326,7 @@ ${pretty} — ${days} days from today.
       {alreadyBooked && (
         <AlreadyBookedModal
           existing={alreadyBooked}
+          sameProcedure={alreadyBookedSameProcedure}
           onOpenExisting={() => router.push(`/dashboard/surgeries/${alreadyBooked.id}`)}
           onCancel={() => setAlreadyBooked(null)}
           onBookAnyway={async () => {
@@ -2926,6 +2933,7 @@ ${pretty} — ${days} days from today.
  */
 function AlreadyBookedModal({
   existing,
+  sameProcedure = true,
   onOpenExisting,
   onBookAnyway,
   onCancel,
@@ -2934,11 +2942,14 @@ function AlreadyBookedModal({
     id: string;
     scheduledTime?: string | null;
     createdAt?: string | null;
+    procedureName?: string | null;
     bookedByName?: string | null;
     consumablePackCode?: string | null;
     pharmacyDrugCode?: string | null;
     patient?: { name?: string | null; folderNumber?: string | null } | null;
   };
+  /** False when the patient already has a DIFFERENT procedure booked that day. */
+  sameProcedure?: boolean;
   onOpenExisting: () => void;
   onBookAnyway: () => void;
   onCancel: () => void;
@@ -2948,16 +2959,35 @@ function AlreadyBookedModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
         <div className="flex items-center gap-2 border-b px-5 py-4">
-          <CheckCircle className="w-6 h-6 text-green-600" />
-          <h2 className="text-lg font-bold text-gray-900">This case is already booked</h2>
+          <CheckCircle className={`w-6 h-6 ${sameProcedure ? 'text-green-600' : 'text-amber-600'}`} />
+          <h2 className="text-lg font-bold text-gray-900">
+            {sameProcedure
+              ? 'This case is already booked'
+              : 'This patient is already on the list today'}
+          </h2>
         </div>
         <div className="px-5 py-4 space-y-3">
-          <p className="text-sm text-gray-700">
-            <span className="font-semibold">{existing.patient?.name ?? 'This patient'}</span>
-            {existing.patient?.folderNumber ? ` (${existing.patient.folderNumber})` : ''} is already
-            on the list for this procedure on this date. Nothing further is needed.
-          </p>
+          {sameProcedure ? (
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold">{existing.patient?.name ?? 'This patient'}</span>
+              {existing.patient?.folderNumber ? ` (${existing.patient.folderNumber})` : ''} is already
+              on the list for this procedure on this date. Nothing further is needed.
+            </p>
+          ) : (
+            /* The reason a patient shows up twice on the theatre list. A second
+               procedure through the same incision is one operation, and booking
+               it separately takes a second slot and prepares a second pack. */
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold">{existing.patient?.name ?? 'This patient'}</span>
+              {existing.patient?.folderNumber ? ` (${existing.patient.folderNumber})` : ''} already has
+              a case on this date. If what you are booking is part of that same operation, add it to
+              that case as an additional procedure rather than booking a second theatre slot.
+            </p>
+          )}
           <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm space-y-1">
+            {existing.procedureName && (
+              <div><span className="text-gray-500">Already booked:</span> <span className="font-medium">{existing.procedureName}</span></div>
+            )}
             {existing.scheduledTime && (
               <div><span className="text-gray-500">Scheduled:</span> <span className="font-medium">{existing.scheduledTime}</span></div>
             )}
