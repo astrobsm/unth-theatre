@@ -410,6 +410,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
 
+    // EVERY key left in `surgeryData` is spread into prisma.surgery.create().
+    // A field that the form sends but the Surgery model does not have must be
+    // pulled out HERE, or Prisma rejects the whole call with
+    // "Invalid `prisma.surgery.create()` invocation: Unknown argument".
+    //
+    // deferOutstanding and allowDuplicate are both instructions to this handler
+    // rather than columns — one defers the outstanding pre-op items, the other
+    // waives the duplicate check — and both were read further down but never
+    // removed from the spread. The form sends deferOutstanding on every
+    // submission, not only an early one, so this broke booking outright.
     const {
       teamMembers,
       surgeryType,
@@ -425,6 +435,8 @@ export async function POST(request: NextRequest) {
       consentFile,
       consentForm,
       hbSampleAt,
+      deferOutstanding: _deferOutstanding,
+      allowDuplicate: _allowDuplicate,
       ...surgeryData
     } = validatedData;
 
