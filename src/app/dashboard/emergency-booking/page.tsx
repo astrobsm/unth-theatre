@@ -14,6 +14,7 @@ import {
   Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2
 } from 'lucide-react';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
+import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
 
 // ==================== BNF DRUG DIRECTORY ====================
 interface DrugEntry { name: string; unit: string; commonDoses: string[]; }
@@ -313,6 +314,37 @@ const EMERGENCY_TEAM_USER_ROLES = [
   'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR',
 ];
 
+/**
+ * The pre-anaesthetic assessment, in the order it is actually done: look at the
+ * patient, read the numbers, decide the technique and draw the kit for it, then
+ * prescribe. One long scrolling form buried the anaesthetic plan halfway down,
+ * which is the field everything else depends on.
+ */
+const REVIEW_STEPS = [
+  { n: 1, label: 'Assessment' },
+  { n: 2, label: 'Vitals & bloods' },
+  { n: 3, label: 'Plan & packs' },
+  { n: 4, label: 'Prescription' },
+];
+
+/**
+ * The plan wording an anaesthetist picks → the AnesthesiaType the packs are
+ * filed under. "Combined General + Regional" maps to GENERAL: the general
+ * anaesthetic is what determines the kit, and the block is an adjunct the
+ * anaesthetist adds from the picker.
+ */
+const PLAN_TO_TECHNIQUE: Record<string, string> = {
+  'General Anaesthesia - ETT': 'GENERAL',
+  'General Anaesthesia - LMA': 'GENERAL',
+  'Regional - Spinal': 'SPINAL',
+  'Regional - Epidural': 'EPIDURAL',
+  'Regional - Combined Spinal-Epidural': 'COMBINED_SPINAL_EPIDURAL',
+  'Regional - Nerve Block': 'REGIONAL',
+  'Combined General + Regional': 'GENERAL',
+  'Monitored Anaesthesia Care (MAC)': 'SEDATION',
+  'Local Anaesthesia + Sedation': 'LOCAL',
+};
+
 // Roles allowed to change the overall status of an emergency booking.
 const STATUS_UPDATE_ROLES = [
   'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN',
@@ -498,18 +530,56 @@ export default function EmergencyBookingPage() {
     setPrescribedMeds(prev => prev.map(m => m.id === id ? { ...m, status } : m));
   };
 
-  // Review form state
+  // Review form state.
+  // Weight, height, estimated blood loss and coagulation status are gone from
+  // this form: nobody weighs or measures a patient being resuscitated, and the
+  // two haematology fields duplicated the lab workup.
   const [reviewForm, setReviewForm] = useState({
     airwayAssessment: '', asaClassification: '', allergies: '',
     currentMedications: '', pastMedicalHistory: '', lastMealTime: '',
     bloodPressure: '', heartRate: '', oxygenSaturation: '', temperature: '',
-    weight: '', height: '',
-    estimatedBloodLoss: '', coagulationStatus: '', hemoglobinLevel: '',
+    hemoglobinLevel: '',
     crossMatchStatus: '', ivAccess: '', patientNPOStatus: '',
     anaestheticPlan: '', specialConsiderations: '', riskAssessment: '',
     consentObtained: false, consentNotes: '',
     medications: '', fluids: '', emergencyDrugs: '', specialInstructions: '',
   });
+
+  /** Which step of the assessment is open (1..REVIEW_STEPS.length). */
+  const [reviewStep, setReviewStep] = useState(1);
+  /**
+   * Anaesthesia packs for the chosen technique — the same picker, the same
+   * packs and the same routing the elective pre-anaesthetic review uses, so a
+   * General anaesthetic pulls identical kit whether the case is elective or an
+   * emergency.
+   */
+  const [anaesPacks, setAnaesPacks] = useState<AnaesPackPayload>({ medications: [], consumableRequests: [] });
+
+  /**
+   * How much of the assessment is actually filled in.
+   *
+   * Counts the clinically meaningful fields rather than every input, so the bar
+   * cannot read 90% because somebody typed three notes and left the airway and
+   * the plan blank.
+   */
+  const REVIEW_TRACKED_FIELDS: (keyof typeof reviewForm)[] = [
+    'airwayAssessment', 'asaClassification', 'allergies', 'patientNPOStatus',
+    'bloodPressure', 'heartRate', 'oxygenSaturation', 'temperature',
+    'hemoglobinLevel', 'crossMatchStatus', 'ivAccess',
+    'anaestheticPlan', 'riskAssessment',
+  ];
+  const reviewProgress = (() => {
+    const done = REVIEW_TRACKED_FIELDS.filter((k) => String(reviewForm[k] ?? '').trim() !== '').length;
+    // The packs and the prescription each count as one more "field", so the bar
+    // cannot reach 100% while the technique has no kit drawn against it.
+    const extras = (anaesPacks.medications.length + anaesPacks.consumableRequests.length > 0 ? 1 : 0)
+      + (prescribedMeds.length > 0 ? 1 : 0);
+    const total = REVIEW_TRACKED_FIELDS.length + 2;
+    return Math.round(((done + extras) / total) * 100);
+  })();
+
+  /** The pack technique implied by the chosen plan, or '' while none is chosen. */
+  const reviewTechnique = PLAN_TO_TECHNIQUE[reviewForm.anaestheticPlan] ?? '';
 
   const fetchBookings = useCallback(async () => {
     try {
@@ -722,27 +792,47 @@ export default function EmergencyBookingPage() {
       // Map form fields
       Object.entries(reviewForm).forEach(([key, val]) => {
         if (val === '' || val === false) return;
-        if (['heartRate', 'oxygenSaturation', 'temperature', 'weight', 'height', 'hemoglobinLevel'].includes(key)) {
+        if (['heartRate', 'oxygenSaturation', 'temperature', 'hemoglobinLevel'].includes(key)) {
           payload[key] = parseFloat(val as string);
         } else if (key !== 'medications') {
           payload[key] = val;
         }
       });
 
-      // Serialize structured medications
-      if (prescribedMeds.length > 0) {
-        payload.medications = JSON.stringify(
-          prescribedMeds.map(m => ({
-            name: m.drugName,
-            dose: `${m.dose}${m.unit}`,
-            route: m.route,
-            frequency: m.frequency,
-            category: m.category,
-            status: m.status,
-            notes: m.notes,
-          }))
-        );
+      /**
+       * The prescription is what was typed here PLUS the pack's drugs.
+       *
+       * A pack's PHARMACY items are drugs like any other, so they travel on the
+       * emergency prescription rather than by a second route — one list for the
+       * pharmacist to dispense, which is also how the elective review does it.
+       */
+      const packMeds = anaesPacks.medications.map(m => ({
+        name: m.name,
+        dose: [m.dose, m.unit].filter(Boolean).join(''),
+        route: m.route,
+        frequency: m.timing || 'STAT',
+        category: m.category,
+        status: 'PENDING',
+        notes: m.notes || 'Anaesthesia pack',
+      }));
+      const typedMeds = prescribedMeds.map(m => ({
+        name: m.drugName,
+        dose: `${m.dose}${m.unit}`,
+        route: m.route,
+        frequency: m.frequency,
+        category: m.category,
+        status: m.status,
+        notes: m.notes,
+      }));
+      const allMeds = [...typedMeds, ...packMeds];
+      if (allMeds.length > 0) payload.medications = JSON.stringify(allMeds);
+
+      // Pack consumables → Consumable Pack Provider, same routing as elective.
+      if (anaesPacks.consumableRequests.length > 0) {
+        payload.consumableRequests = anaesPacks.consumableRequests;
       }
+      // Needed to hang the consumable requests on a case.
+      if (reviewBooking.surgeryId) payload.surgeryId = reviewBooking.surgeryId;
 
       const res = await fetch('/api/emergency-pre-anaesthetic', {
         method: 'POST',
@@ -757,14 +847,15 @@ export default function EmergencyBookingPage() {
           airwayAssessment: '', asaClassification: '', allergies: '',
           currentMedications: '', pastMedicalHistory: '', lastMealTime: '',
           bloodPressure: '', heartRate: '', oxygenSaturation: '', temperature: '',
-          weight: '', height: '',
-          estimatedBloodLoss: '', coagulationStatus: '', hemoglobinLevel: '',
+          hemoglobinLevel: '',
           crossMatchStatus: '', ivAccess: '', patientNPOStatus: '',
           anaestheticPlan: '', specialConsiderations: '', riskAssessment: '',
           consentObtained: false, consentNotes: '',
           medications: '', fluids: '', emergencyDrugs: '', specialInstructions: '',
         });
         setPrescribedMeds([]);
+        setAnaesPacks({ medications: [], consumableRequests: [] });
+        setReviewStep(1);
         if (expandedBooking) fetchReviews(expandedBooking);
         alert('Pre-anaesthetic review submitted. Emergency prescription sent to pharmacy.');
       } else {
@@ -1299,7 +1390,7 @@ export default function EmergencyBookingPage() {
                         booking.anaesthesiaType !== 'LOCAL' &&
                         booking.anaesthesiaType !== 'NONE' && (
                         <button
-                          onClick={() => { setReviewBooking(booking); setShowReviewModal(true); }}
+                          onClick={() => { setReviewBooking(booking); setReviewStep(1); setShowReviewModal(true); }}
                           className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 ml-auto"
                         >
                           <Stethoscope className="h-4 w-4" />
@@ -1582,9 +1673,44 @@ export default function EmergencyBookingPage() {
               <p className="text-xs text-red-600 font-bold mt-1">
                 Prescriptions from this review will be IMMEDIATELY visible to the Pharmacy as EMERGENCY
               </p>
+
+              {/* Progress. Shows how much of the assessment is filled in, not
+                  merely which step is open — an anaesthetist stepping away
+                  mid-assessment needs to see what is still missing. */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-purple-800 mb-1">
+                  <span>Step {reviewStep} of {REVIEW_STEPS.length} — {REVIEW_STEPS[reviewStep - 1]?.label}</span>
+                  <span>{reviewProgress}% complete</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-purple-100 overflow-hidden">
+                  <div
+                    className="h-full bg-purple-600 transition-all duration-300"
+                    style={{ width: `${reviewProgress}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {REVIEW_STEPS.map((st) => (
+                    <button
+                      key={st.n}
+                      type="button"
+                      onClick={() => setReviewStep(st.n)}
+                      className={`px-2 py-1 rounded-full text-[11px] font-medium border transition ${
+                        st.n === reviewStep
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50'
+                      }`}
+                    >
+                      {st.n}. {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* ── Step 1: look at the patient ────────────────────────── */}
+              {reviewStep === 1 && (
+              <>
               {/* Airway */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Airway Assessment</label>
@@ -1623,6 +1749,39 @@ export default function EmergencyBookingPage() {
                 </select>
               </div>
 
+              {/* Allergies */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-red-700 mb-1">Allergies (Critical)</label>
+                <input type="text" placeholder="e.g. Penicillin, Latex" value={reviewForm.allergies}
+                  onChange={e => setReviewForm(f => ({ ...f, allergies: e.target.value }))}
+                  className="w-full border border-red-300 rounded-lg p-2 text-sm bg-red-50" />
+              </div>
+
+              {/* Fasting — decides rapid-sequence induction, so it belongs with
+                  the airway rather than buried among the bloods. */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">NPO / Fasting Status</label>
+                <select
+                  value={reviewForm.patientNPOStatus}
+                  onChange={e => setReviewForm(f => ({ ...f, patientNPOStatus: e.target.value }))}
+                  className="w-full border rounded-lg p-2 text-sm"
+                  title="NPO / Fasting Status"
+                >
+                  <option value="">Select...</option>
+                  <option>NPO &gt; 8 hours</option>
+                  <option>NPO 6-8 hours</option>
+                  <option>NPO 2-6 hours</option>
+                  <option>NPO &lt; 2 hours</option>
+                  <option>Not fasted - Full stomach</option>
+                  <option>Unknown</option>
+                </select>
+              </div>
+              </>
+              )}
+
+              {/* ── Step 2: the numbers ────────────────────────────────── */}
+              {reviewStep === 2 && (
+              <>
               {/* Vitals */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Blood Pressure</label>
@@ -1647,45 +1806,6 @@ export default function EmergencyBookingPage() {
                 <input type="number" step="0.1" placeholder="36.5" value={reviewForm.temperature}
                   onChange={e => setReviewForm(f => ({ ...f, temperature: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Weight (kg)</label>
-                <input type="number" placeholder="70" value={reviewForm.weight}
-                  onChange={e => setReviewForm(f => ({ ...f, weight: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Height (cm)</label>
-                <input type="number" placeholder="170" value={reviewForm.height}
-                  onChange={e => setReviewForm(f => ({ ...f, height: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-
-              {/* Allergies */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-red-700 mb-1">Allergies (Critical)</label>
-                <input type="text" placeholder="e.g. Penicillin, Latex" value={reviewForm.allergies}
-                  onChange={e => setReviewForm(f => ({ ...f, allergies: e.target.value }))}
-                  className="w-full border border-red-300 rounded-lg p-2 text-sm bg-red-50" />
-              </div>
-
-              {/* Emergency-specific fields */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">NPO / Fasting Status</label>
-                <select
-                  value={reviewForm.patientNPOStatus}
-                  onChange={e => setReviewForm(f => ({ ...f, patientNPOStatus: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm"
-                  title="NPO / Fasting Status"
-                >
-                  <option value="">Select...</option>
-                  <option>NPO &gt; 8 hours</option>
-                  <option>NPO 6-8 hours</option>
-                  <option>NPO 2-6 hours</option>
-                  <option>NPO &lt; 2 hours</option>
-                  <option>Not fasted - Full stomach</option>
-                  <option>Unknown</option>
-                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">IV Access</label>
@@ -1714,19 +1834,12 @@ export default function EmergencyBookingPage() {
                   <option>Not required</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Blood Loss</label>
-                <input type="text" placeholder="e.g. 500ml expected" value={reviewForm.estimatedBloodLoss}
-                  onChange={e => setReviewForm(f => ({ ...f, estimatedBloodLoss: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Coagulation Status</label>
-                <input type="text" placeholder="e.g. PT/INR normal" value={reviewForm.coagulationStatus}
-                  onChange={e => setReviewForm(f => ({ ...f, coagulationStatus: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
+              </>
+              )}
 
+              {/* ── Step 3: plan, then the kit that plan implies ───────── */}
+              {reviewStep === 3 && (
+              <>
               {/* Plan */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthetic Plan</label>
@@ -1748,6 +1861,21 @@ export default function EmergencyBookingPage() {
                   <option>Local Anaesthesia + Sedation</option>
                 </select>
               </div>
+              {/* Anaesthesia packs for the chosen technique — the same picker
+                  and the same packs as the elective pre-anaesthetic review.
+                  Appears only once a plan is chosen, because the technique is
+                  what selects the packs. */}
+              <div className="md:col-span-2">
+                {reviewTechnique ? (
+                  <AnaesthesiaPackPicker anaesthesiaType={reviewTechnique} onChange={setAnaesPacks} />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                    Choose an anaesthetic plan above to load its anaesthesia packs
+                    (drugs go to the Pharmacy, consumables to the Consumable Pack Provider).
+                  </div>
+                )}
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Risk Assessment / Special Considerations</label>
                 <textarea rows={2} value={reviewForm.riskAssessment}
@@ -1762,7 +1890,12 @@ export default function EmergencyBookingPage() {
                   className="h-4 w-4" />
                 <label htmlFor="consent" className="text-sm font-medium text-gray-700">Consent obtained from patient/NOK</label>
               </div>
+              </>
+              )}
 
+              {/* ── Step 4: prescribe ──────────────────────────────────── */}
+              {reviewStep === 4 && (
+              <>
               {/* PRESCRIPTION SECTION */}
               <div className="md:col-span-2 border-t pt-4 mt-2">
                 <h4 className="font-bold text-orange-800 flex items-center gap-2 mb-2">
@@ -1982,34 +2115,59 @@ export default function EmergencyBookingPage() {
                   onChange={e => setReviewForm(f => ({ ...f, specialInstructions: e.target.value }))}
                   className="w-full border rounded-lg p-2 text-sm" />
               </div>
+              </>
+              )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
+            {/* Modal Footer — step navigation. Submit appears only on the last
+                step, so an assessment cannot be sent to the pharmacy from step 1
+                by somebody reaching for the obvious button. */}
+            <div className="p-4 sm:p-6 border-t bg-gray-50 rounded-b-xl flex flex-col-reverse sm:flex-row sm:justify-between gap-3 sticky bottom-0">
               <button
                 onClick={() => { setShowReviewModal(false); setReviewBooking(null); }}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 w-full sm:w-auto"
                 disabled={submittingReview}
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSubmitReview}
-                disabled={submittingReview}
-                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center gap-2 disabled:opacity-50"
-              >
-                {submittingReview ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Submit Review &amp; Send Prescription to Pharmacy
-                  </>
+
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:items-center">
+                {reviewStep > 1 && (
+                  <button
+                    onClick={() => setReviewStep(s => Math.max(1, s - 1))}
+                    disabled={submittingReview}
+                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 w-full sm:w-auto"
+                  >
+                    Back
+                  </button>
                 )}
-              </button>
+                {reviewStep < REVIEW_STEPS.length ? (
+                  <button
+                    onClick={() => setReviewStep(s => Math.min(REVIEW_STEPS.length, s + 1))}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium w-full sm:w-auto"
+                  >
+                    Continue to {REVIEW_STEPS[reviewStep]?.label}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSubmitReview}
+                    disabled={submittingReview}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50 w-full sm:w-auto"
+                  >
+                    {submittingReview ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        Submit Review &amp; Send Prescription to Pharmacy
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

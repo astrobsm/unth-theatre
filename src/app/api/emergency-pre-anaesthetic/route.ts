@@ -24,11 +24,11 @@ const createReviewSchema = z.object({
   heartRate: z.number().optional(),
   oxygenSaturation: z.number().optional(),
   temperature: z.number().optional(),
-  weight: z.number().optional(),
-  height: z.number().optional(),
+  // Weight, height, estimated blood loss and coagulation status were dropped
+  // from this form: nobody weighs or measures a patient being resuscitated, and
+  // the two haematology fields duplicated the lab workup. The DB columns remain
+  // so historical reviews keep their values.
   // Emergency-specific
-  estimatedBloodLoss: z.string().optional(),
-  coagulationStatus: z.string().optional(),
   hemoglobinLevel: z.number().optional(),
   crossMatchStatus: z.string().optional(),
   ivAccess: z.string().optional(),
@@ -44,6 +44,22 @@ const createReviewSchema = z.object({
   fluids: z.string().optional(),
   emergencyDrugs: z.string().optional(),
   specialInstructions: z.string().optional(),
+  // Anaesthesia pack consumables, chosen from the technique's packs exactly as
+  // on the elective review. Routed to the Consumable Pack Provider; the pack's
+  // PHARMACY items arrive folded into `medications` above, so they reach the
+  // pharmacy through the emergency prescription like every other drug here.
+  consumableRequests: z
+    .array(
+      z.object({
+        name: z.string(),
+        category: z.string(),
+        size: z.string().nullish(),
+        unit: z.string().optional(),
+        quantity: z.number().optional(),
+        notes: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 // GET - Fetch reviews for a booking
@@ -101,13 +117,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = createReviewSchema.parse(body);
 
-    // BMI calculation
-    let bmi: number | undefined;
-    if (data.weight && data.height) {
-      const heightM = data.height / 100;
-      bmi = Math.round((data.weight / (heightM * heightM)) * 10) / 10;
-    }
-
     // Create the review
     const review = await prisma.emergencyPreAnaestheticReview.create({
       data: {
@@ -127,11 +136,6 @@ export async function POST(request: NextRequest) {
         heartRate: data.heartRate,
         oxygenSaturation: data.oxygenSaturation,
         temperature: data.temperature,
-        weight: data.weight,
-        height: data.height,
-        bmi,
-        estimatedBloodLoss: data.estimatedBloodLoss,
-        coagulationStatus: data.coagulationStatus,
         hemoglobinLevel: data.hemoglobinLevel,
         crossMatchStatus: data.crossMatchStatus,
         ivAccess: data.ivAccess,
@@ -187,6 +191,60 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         // Notification failure shouldn't block the review
         console.error('Failed to notify pharmacists:', e);
+      }
+    }
+
+    /**
+     * Anaesthesia pack consumables → Consumable Pack Provider.
+     *
+     * Same routing as the elective pre-anaesthetic review, so a technique's
+     * pack produces the same requests whether the case is booked electively or
+     * as an emergency — flagged EMERGENCY so it is packed first.
+     *
+     * Needs a surgeryId to hang the request on; an emergency review taken
+     * before the surgery record exists simply has nowhere to put it.
+     */
+    if (data.consumableRequests?.length && data.surgeryId) {
+      const CONS_CATEGORIES = new Set([
+        'GLOVES', 'GOWNS_DRAPES', 'SUTURES', 'SYRINGES_NEEDLES', 'CATHETERS_TUBING',
+        'DRESSING_PACKS', 'SKIN_PREP', 'CLEANING_SOLUTION', 'STERILE_DRESSINGS',
+        'IRRIGATION', 'DIATHERMY', 'SUCTION', 'ANAESTHESIA_AIRWAY', 'PPE', 'OTHER',
+      ]);
+      await prisma.surgeryConsumableRequest.createMany({
+        data: data.consumableRequests.map((c) => ({
+          surgeryId: data.surgeryId!,
+          name: c.name,
+          category: (CONS_CATEGORIES.has(c.category) ? c.category : 'ANAESTHESIA_AIRWAY') as any,
+          size: c.size ?? null,
+          unit: c.unit ?? 'piece',
+          quantity: c.quantity ?? 1,
+          notes: c.notes ?? 'Anaesthesia pack (EMERGENCY)',
+          requestedById: session.user.id,
+          requestedByName: session.user.name || '',
+        })),
+      });
+      try {
+        const providers = await prisma.user.findMany({
+          where: {
+            role: { in: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER', 'ADMIN'] as any },
+            status: 'APPROVED' as any,
+          },
+          select: { id: true },
+        });
+        if (providers.length) {
+          await prisma.notification.createMany({
+            data: providers.map((u) => ({
+              userId: u.id,
+              type: 'EMERGENCY' as any,
+              title: '🚨 EMERGENCY anaesthesia consumables',
+              message: `${data.consumableRequests!.length} anaesthesia consumable(s) needed NOW for ${data.patientName} (${data.folderNumber}).`,
+              link: '/dashboard/consumable-pack-provider',
+            })),
+          });
+        }
+      } catch (e) {
+        // A failed notification must not lose the request that was written.
+        console.error('Failed to notify consumable pack providers:', e);
       }
     }
 
