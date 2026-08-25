@@ -62,8 +62,20 @@ const NAS_ALLOW = (process.env.RADIUS_NAS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
-/** How long a granted network session lasts before the portal is shown again. */
-const SESSION_TIMEOUT_SECONDS = Number(process.env.RADIUS_SESSION_TIMEOUT || 12 * 60 * 60);
+/**
+ * How long a granted network session lasts before the portal is shown again.
+ *
+ * A full working day plus the changeover either side of it. Twelve hours put
+ * the expiry in the middle of a long list: somebody who authenticated at seven
+ * in the morning was asked to log in again at seven in the evening, while still
+ * in theatre.
+ *
+ * The default rather than the environment variable carries this, deliberately.
+ * .env.local is rebuilt by setup-local-db.sh, and a setting that only exists
+ * there returns silently to twelve hours the next time that happens — with
+ * nothing to show that it had.
+ */
+const SESSION_TIMEOUT_SECONDS = Number(process.env.RADIUS_SESSION_TIMEOUT || 24 * 60 * 60);
 
 if (!SECRET) {
   console.error('RADIUS_SECRET is not set. Refusing to start: an empty shared secret');

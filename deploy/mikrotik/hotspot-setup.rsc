@@ -58,7 +58,32 @@ add service=hotspot address=$srv secret=$secret timeout=5s comment="ORM radius-b
 # against hashed credentials — which is also why RADIUS must point at the server
 # by IP on the local subnet and never across the internet.
 /ip hotspot profile
-set [find where default=yes] use-radius=yes login-by=http-pap html-directory=hotspot
+set [find where default=yes] use-radius=yes login-by=http-pap,mac-cookie html-directory=hotspot
+
+# --- 4b. Roaming: stop asking the same device to log in again ----------------
+# mac-cookie is what makes a second access point stop being a second login.
+#
+# Without it the portal is shown on RE-ASSOCIATION, not on expiry, and the
+# RADIUS log shows exactly that: one user authenticated 14 times in three days
+# and another twice 17 minutes apart, against a session that lasts hours. Walking
+# from one theatre to the next is enough to trigger it. That is not a session
+# ending — it is the router treating a device it has already authorised as a
+# stranger because it arrived on a different AP.
+#
+# The cookie is issued after a successful login and presented on re-association,
+# so the device is recognised instead of challenged. It is NOT a bypass: the
+# cookie is only issued to a device that has already authenticated with real
+# credentials, it expires with the timeout below, and RADIUS still authorises
+# every new login.
+#
+# NOTE ON SHARED DEVICES. Ten staff share eight handsets here — one MAC
+# authenticated as two different nurses five hours apart. A cookie is bound to
+# the DEVICE, so whoever used it last keeps the NETWORK session. That is
+# acceptable only because the two sessions are separate things: the ORM
+# application still demands its own login and its own role. It must not be
+# enabled on the assumption that network identity implies clinical identity.
+/ip hotspot user profile
+set [find where default=yes] mac-cookie-timeout=1d session-timeout=1d idle-timeout=none keepalive-timeout=none
 
 # --- 5. Cache ---------------------------------------------------------------
 # Devices hold DNS answers. Without this, a phone that looked the name up before

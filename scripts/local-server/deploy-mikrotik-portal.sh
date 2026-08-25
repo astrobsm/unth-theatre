@@ -140,6 +140,23 @@ fi
 grep -q 'use-radius=yes' <<<"$PROFILE" && ok "use-radius=yes" \
   || echo "  ${R}wrong${N} use-radius is not enabled"
 
+# mac-cookie is the difference between roaming and logging in again, and its
+# absence is invisible: everything works, staff simply re-authenticate all day.
+# Checked here because a silent omission looks exactly like a working portal.
+if grep -q 'login-by=.*mac-cookie' <<<"$PROFILE"; then
+  ok "login-by includes mac-cookie (device re-association will not re-prompt)"
+else
+  echo "  ${R}missing${N} mac-cookie — staff will be asked to log in again when they"
+  echo "         move between access points, however long the session lasts"
+fi
+
+# The cookie and the session must both outlast a working day, or the roaming fix
+# expires in the middle of a list.
+UPROF="$(RUN_SSH '/ip hotspot user profile print terse where default=yes' 2>/dev/null || true)"
+grep -qE 'mac-cookie-timeout=(1d|23h|24h|1w)' <<<"$UPROF" \
+  && ok "mac-cookie lasts a full day" \
+  || { echo "  ${R}check${N} mac-cookie-timeout is not a day:"; echo "         $UPROF"; }
+
 WG="$(RUN_SSH '/ip hotspot walled-garden ip print terse' 2>/dev/null || true)"
 grep -q '192.168.88.252' <<<"$WG" && ok "walled-garden IP rule present (needed for HTTPS)" \
   || echo "  ${R}missing${N} walled-garden IP rule — the portal will not load"
