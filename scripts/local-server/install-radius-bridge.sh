@@ -16,7 +16,16 @@ APP_DIR="${ORM_APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 ENV_FILE="/etc/orm-radius.env"
 UNIT="/etc/systemd/system/orm-radius.service"
 NAS=""
-SESSION_TIMEOUT="${RADIUS_SESSION_TIMEOUT:-43200}"   # 12 hours
+# 24 hours: a full working day plus the changeover either side. Twelve put the
+# expiry in the middle of a long list — authenticate at seven in the morning, be
+# challenged again at seven in the evening, still in theatre.
+#
+# THIS is the value that actually takes effect. This script writes
+# /etc/orm-radius.env, and the systemd unit loads it as an EnvironmentFile, so
+# the default in radius-bridge.ts is consulted only when the variable is absent
+# — and here it never is. Changing the code default alone left the bridge still
+# reporting 43200s after a restart, which reads exactly like a failed change.
+SESSION_TIMEOUT="${RADIUS_SESSION_TIMEOUT:-86400}"   # 24 hours
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
