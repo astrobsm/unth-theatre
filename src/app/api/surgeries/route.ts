@@ -335,28 +335,41 @@ export async function GET(request: NextRequest) {
 
     // Resolve assigned anaesthetist + anaesthetic technician (both soft refs to
     // User.id, no Prisma relation) so every board can show them on the case.
+    // bookedById joins the same lookup. A case with something outstanding needs
+    // the person who booked it reachable — a name in a column cannot be rung,
+    // and "who booked this?" was being answered by asking around the theatre.
     const staffIds = Array.from(
       new Set(
         surgeries
-          .flatMap(s => [s.anesthetistId, (s as any).theatreTechnicianId])
+          .flatMap(s => [s.anesthetistId, (s as any).theatreTechnicianId, s.bookedById])
           .filter((x): x is string => !!x)
       )
     );
     const staff = staffIds.length
       ? await prisma.user.findMany({
           where: { id: { in: staffIds } },
-          select: { id: true, fullName: true, phoneNumber: true },
+          // role travels too: whether the booker is the consultant, the
+          // registrar or a booking officer changes who you chase and how.
+          select: { id: true, fullName: true, phoneNumber: true, role: true },
         })
       : [];
     const staffMap = new Map(staff.map(u => [u.id, u]));
 
-    const enriched = surgeries.map(s => ({
-      ...s,
-      theatre: s.theatreId ? theatreMap.get(s.theatreId) ?? null : null,
-      theatreName: s.theatreId ? theatreMap.get(s.theatreId)?.name ?? null : null,
-      anaesthetist: s.anesthetistId ? staffMap.get(s.anesthetistId) ?? null : null,
-      theatreTechnician: (s as any).theatreTechnicianId ? staffMap.get((s as any).theatreTechnicianId) ?? null : null,
-    }));
+    const enriched = surgeries.map(s => {
+      const booker = s.bookedById ? staffMap.get(s.bookedById) ?? null : null;
+      return {
+        ...s,
+        theatre: s.theatreId ? theatreMap.get(s.theatreId) ?? null : null,
+        theatreName: s.theatreId ? theatreMap.get(s.theatreId)?.name ?? null : null,
+        anaesthetist: s.anesthetistId ? staffMap.get(s.anesthetistId) ?? null : null,
+        theatreTechnician: (s as any).theatreTechnicianId ? staffMap.get((s as any).theatreTechnicianId) ?? null : null,
+        bookedBy: booker
+          ? { id: booker.id, name: booker.fullName, role: booker.role, phone: booker.phoneNumber }
+          // The name was captured on the case at booking, so a booker whose
+          // account has since gone still shows as a name — just not reachable.
+          : (s.bookedByName ? { id: null, name: s.bookedByName, role: null, phone: null } : null),
+      };
+    });
 
     // For daily planning views: sort by DATE first, then surgical UNIT, then the
     // theatre for that day, and finally the scheduled start time within the theatre.

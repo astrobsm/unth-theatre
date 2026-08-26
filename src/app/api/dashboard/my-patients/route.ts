@@ -52,14 +52,49 @@ export async function GET(req: NextRequest) {
   const { start, end } = localDayBounds(now, daysAhead);
 
   try {
+    // Cases this person was put on through the theatre team board. Its
+    // surgeryId is a plain column with no relation to Surgery, so the link has
+    // to be resolved to ids before the main query rather than filtered inside
+    // it. removedAt excludes anyone taken off a case again.
+    const assignedSurgeryIds = (
+      await prisma.theatreTeamAssignment.findMany({
+        where: { userId, removedAt: null },
+        select: { surgeryId: true },
+      })
+    ).map((a) => a.surgeryId);
+
     const surgeries = await prisma.surgery.findMany({
       where: {
         scheduledDate: { gte: start, lte: end },
         status: { notIn: ['CANCELLED'] },
+        /**
+         * EVERY way a person can be attached to a case, not just the three
+         * surgical ones.
+         *
+         * This listed surgeon, assistant and supervising consultant only, so a
+         * scrub nurse, an anaesthetist, a technician or a house officer named
+         * on the team opened their dashboard and saw nothing — for a case they
+         * were on that morning. They then had to find it through the general
+         * list, which is the opposite of what a personal board is for.
+         *
+         * Named on the case, named on the team, or the person who booked it:
+         * all of them are linked to it, so all of them see it.
+         */
         OR: [
           { surgeonId: userId },
           { assistantSurgeonId: userId },
           { supervisingConsultantId: userId },
+          { anesthetistId: userId },
+          { scrubNurseId: userId },
+          // Soft reference to User.id, no FK — matched by value like the rest.
+          { theatreTechnicianId: userId },
+          { bookedById: userId },
+          // House officers and the rest of the named surgical team.
+          { teamMembers: { some: { userId } } },
+          // Assigned through the theatre team board. That table holds surgeryId
+          // as a plain column with no relation, so it cannot be filtered from
+          // here and is resolved into ids above.
+          ...(assignedSurgeryIds.length ? [{ id: { in: assignedSurgeryIds } }] : []),
         ],
       },
       select: {

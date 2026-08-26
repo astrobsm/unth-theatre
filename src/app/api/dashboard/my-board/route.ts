@@ -42,6 +42,16 @@ export async function GET(_req: NextRequest) {
   const { start, end } = localDayBounds(now);
 
   try {
+    // Resolved before the list: theatre_team_assignments holds surgeryId as a
+    // plain column with no relation to Surgery, so it cannot be filtered from
+    // inside the query. removedAt excludes anyone taken off a case again.
+    const assignedSurgeryIds = (
+      await prisma.theatreTeamAssignment.findMany({
+        where: { userId, removedAt: null },
+        select: { surgeryId: true },
+      }).catch(() => [])
+    ).map((a) => a.surgeryId);
+
     const [queries, surgeries, notifications] = await Promise.all([
       // Only this person's, and only since the cutoff. Filtered in the query
       // rather than afterwards so a large history never crosses the wire.
@@ -60,12 +70,19 @@ export async function GET(_req: NextRequest) {
         where: {
           scheduledDate: { gte: start, lte: end },
           status: { notIn: ['CANCELLED', 'COMPLETED'] },
+          // Same reach as my-patients: everyone attached to the case, not only
+          // the named post-holders. A house officer on the team, or the person
+          // who booked it, is on the case and belongs on its board.
           OR: [
             { surgeonId: userId },
+            { assistantSurgeonId: userId },
             { anesthetistId: userId },
             { supervisingConsultantId: userId },
             { scrubNurseId: userId },
             { theatreTechnicianId: userId },
+            { bookedById: userId },
+            { teamMembers: { some: { userId } } },
+            ...(assignedSurgeryIds.length ? [{ id: { in: assignedSurgeryIds } }] : []),
           ],
         },
         select: {

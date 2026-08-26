@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
-import { AlertTriangle, Copy } from 'lucide-react';
+import { AlertTriangle, Copy, MessageCircle } from 'lucide-react';
+import PhoneLink from '@/components/PhoneLink';
+import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { outstandingLabel } from '@/lib/preopRequirements';
 import { SYNC_INTERVALS } from '@/lib/sync';
@@ -36,6 +38,8 @@ interface Surgery {
    * one screen that did not say a case was unprepared.
    */
   preopOutstanding?: string | null;
+  /** Who booked the case, with the role and number needed to reach them. */
+  bookedBy?: { id: string | null; name: string | null; role: string | null; phone: string | null } | null;
   procedureName: string;
   indication?: string;
   scheduledDate: string;
@@ -1330,6 +1334,57 @@ export default function SurgeriesPage() {
                               >
                                 Late booking
                               </span>
+                            )}
+
+                            {/* Who booked it, and how to reach them.
+                                A timestamp alone answers "when" and leaves
+                                "who do I ask?" to be settled by walking round
+                                the theatre. The role matters as much as the
+                                name: chasing a consultant and chasing a
+                                booking officer are different conversations. */}
+                            {surgery.bookedBy?.name && (
+                              <div className="mt-1 leading-tight">
+                                <div className="text-xs font-medium text-gray-700">{surgery.bookedBy.name}</div>
+                                {surgery.bookedBy.role && (
+                                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                                    {surgery.bookedBy.role.replace(/_/g, ' ')}
+                                  </div>
+                                )}
+                                {surgery.bookedBy.phone && (
+                                  <div className="text-[11px]">
+                                    <PhoneLink phone={surgery.bookedBy.phone} />
+                                  </div>
+                                )}
+
+                                {/* Offered only when something is actually
+                                    outstanding — a chase button on a complete
+                                    case is a button that gets pressed by
+                                    habit. */}
+                                {surgery.preopOutstanding && surgery.bookedBy.phone && (() => {
+                                  const url = bookerChaseWhatsAppUrl(surgery.bookedBy.phone, {
+                                    patientName: surgery.patient?.name,
+                                    folderNumber: surgery.patient?.folderNumber,
+                                    procedureName: surgery.procedureName,
+                                    scheduledDate: surgery.scheduledDate,
+                                    scheduledTime: surgery.scheduledTime,
+                                    theatreName: surgery.theatreName ?? undefined,
+                                    outstanding: surgery.preopOutstanding,
+                                    fromName: session?.user?.name ?? null,
+                                  });
+                                  if (!url) return null;
+                                  return (
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Send the booker a WhatsApp naming what is still outstanding"
+                                      className="mt-1 inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-800 hover:bg-green-100"
+                                    >
+                                      <MessageCircle className="h-3 w-3" /> Chase on WhatsApp
+                                    </a>
+                                  );
+                                })()}
+                              </div>
                             )}
                           </>
                         );
