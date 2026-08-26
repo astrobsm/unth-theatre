@@ -509,7 +509,11 @@ export default function AnesthesiaMonitoringPage() {
 
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
           <div className="text-sm text-indigo-600 font-medium">Vital Signs Records</div>
-          <div className="text-2xl font-bold text-indigo-900">{record.vitalSignsRecords.length}</div>
+          {/* ?? [] here and below. A record that arrives without this array has
+              to read as nought readings, not blank the anaesthetic chart in the
+              middle of a case. The create endpoint omitted it, and this line
+              took the whole screen down on every initialisation. */}
+          <div className="text-2xl font-bold text-indigo-900">{(record.vitalSignsRecords ?? []).length}</div>
         </div>
       </div>
 
@@ -651,9 +655,9 @@ export default function AnesthesiaMonitoringPage() {
 
           {/* Live charts of recorded vitals */}
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-            ✅ Live charts enabled — plotting {record.vitalSignsRecords.length} reading{record.vitalSignsRecords.length === 1 ? '' : 's'}.
+            ✅ Live charts enabled — plotting {(record.vitalSignsRecords ?? []).length} reading{(record.vitalSignsRecords ?? []).length === 1 ? '' : 's'}.
           </div>
-          <VitalsChart records={record.vitalSignsRecords} startTimeISO={(record as any).inductionTime || undefined} />
+          <VitalsChart records={record.vitalSignsRecords ?? []} startTimeISO={(record as any).inductionTime || undefined} />
 
           <div className="bg-white border rounded-lg overflow-x-auto">
             <table className="w-full">
@@ -670,7 +674,7 @@ export default function AnesthesiaMonitoringPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {record.vitalSignsRecords.map((vital) => (
+                {(record.vitalSignsRecords ?? []).map((vital) => (
                   <tr key={vital.id} className={vital.alertTriggered ? 'bg-red-50' : ''}>
                     <td className="px-4 py-3 text-sm">
                       {new Date(vital.recordedAt).toLocaleTimeString()}

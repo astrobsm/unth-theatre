@@ -169,7 +169,13 @@ export async function POST(
             procedureName: true,
             patient: { select: { name: true } }
           }
-        }
+        },
+        // Empty on a record that has just been created, but the SHAPE has to
+        // match what GET and PATCH return. Without it this endpoint handed the
+        // page a record with no vitalSignsRecords at all, and the first render
+        // after initialising read .length on undefined and took the screen
+        // down — every time anaesthesia monitoring was started.
+        vitalSignsRecords: { orderBy: { recordedAt: 'asc' } }
       }
     });
 
