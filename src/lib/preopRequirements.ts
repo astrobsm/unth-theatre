@@ -60,6 +60,21 @@ export interface PreopConsent {
   hasUploadedFile?: boolean;
   /** The structured UNTH form completed and signed in the app. */
   signedElectronically?: boolean;
+  /**
+   * A nurse saw the signed consent in the folder at the pre-operative visit.
+   *
+   * The third way consent is genuinely obtained here, and the commonest. The
+   * form is signed on the ward and lives in the paper folder; the nurse who
+   * visits the patient the day before confirms it is there. Recognising only an
+   * upload or an in-app signature meant that case still read as unconsented —
+   * so the ward was chased for a consent that had been signed, seen, and
+   * recorded by name.
+   *
+   * PreOperativeVisit.consentStatus = OBTAINED is that confirmation. It is a
+   * clinical assertion by an identified nurse against a specific case, which is
+   * what the requirement asks for.
+   */
+  confirmedAtPreopVisit?: boolean;
 }
 
 export interface PreopOverride {
@@ -239,10 +254,17 @@ export function checkPreopRequirements(input: PreopCheckInput): PreopCheckResult
   // while only the blocking subset can refuse the booking.
   const missing: MissingItem[] = [];
 
-  // Consent: either route satisfies it. A signed paper form scanned on a phone is
-  // as valid as an electronic signature, and insisting on the app would push
-  // staff to book without consent rather than to consent properly.
-  const consented = Boolean(input.consent?.hasUploadedFile || input.consent?.signedElectronically);
+  // Consent: any of the three routes satisfies it. A signed paper form scanned
+  // on a phone is as valid as an electronic signature, and so is a nurse
+  // confirming at the pre-operative visit that the signed form is in the folder
+  // — which is how most consent in this hospital actually exists. Insisting on
+  // the app would push staff to book without consent rather than to consent
+  // properly.
+  const consented = Boolean(
+    input.consent?.hasUploadedFile
+    || input.consent?.signedElectronically
+    || input.consent?.confirmedAtPreopVisit,
+  );
   if (!consented) missing.push('CONSENT');
 
   // Haemoglobin needs its sample time too: a figure with no date cannot be

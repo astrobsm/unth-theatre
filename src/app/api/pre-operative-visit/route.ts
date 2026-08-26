@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { PreOpVisitStatus } from '@prisma/client';
+import { clearanceFor } from '@/lib/preopVisitClearance';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,28 +136,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Surgery not found' }, { status: 404 });
     }
 
-    // Determine overall status based on critical flags
-    let overallStatus: PreOpVisitStatus = 'CLEARED';
-    const criticalFlags = [
-      body.patientAvailableInWard === false,
-      body.consentStatus === 'NOT_OBTAINED' || body.consentStatus === 'REFUSED',
-      body.surgicalFeePaymentStatus === 'NOT_PAID',
-      body.preAnaestheticReviewDone === false,
-      body.npoStatus === 'NOT_FASTING',
-      body.investigationsComplete === false,
-      body.patientEmotionalReadiness === 'REFUSED',
-    ];
+    // A consent recorded on the case by a surgeon answers a nurse's
+    // NOT_OBTAINED: that flag means "no consent in the folder when I looked",
+    // and a consent taken since is exactly the answer to it. A REFUSED is not
+    // answered — see consentBlocks.
+    const surgeryHasConsent = Boolean(
+      surgery.consentFileData || surgery.consentSignedElectronically || surgery.consentCompletedAt,
+    );
 
-    if (criticalFlags.some(f => f)) {
-      overallStatus = 'NOT_CLEARED';
-    } else if (
-      body.patientEmotionalReadiness === 'ANXIOUS' ||
-      body.patientEmotionalReadiness === 'VERY_ANXIOUS' ||
-      body.patientEmotionalReadiness === 'NEEDS_COUNSELLING' ||
-      body.npoStatus === 'PARTIALLY_COMPLIANT'
-    ) {
-      overallStatus = 'VISITED'; // Visited but with concerns
-    }
+    let overallStatus: PreOpVisitStatus = clearanceFor(
+      {
+        patientAvailableInWard: body.patientAvailableInWard,
+        consentStatus: body.consentStatus,
+        surgicalFeePaymentStatus: body.surgicalFeePaymentStatus,
+        preAnaestheticReviewDone: body.preAnaestheticReviewDone,
+        npoStatus: body.npoStatus,
+        investigationsComplete: body.investigationsComplete,
+        patientEmotionalReadiness: body.patientEmotionalReadiness,
+      },
+      surgeryHasConsent,
+    ) as PreOpVisitStatus;
 
     // Allow manual override
     if (body.overallStatus) {

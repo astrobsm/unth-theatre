@@ -68,6 +68,15 @@ export async function GET(req: NextRequest) {
         // See my-board: the boolean is the whole question being asked.
         consentFileName: true, consentSignedElectronically: true,
         consentCompletedAt: true, preopOutstanding: true,
+        // A nurse confirming at the pre-operative visit that the signed form is
+        // in the folder counts as consent, the same as it does at the
+        // holding-area door. Newest visit only: an earlier OBTAINED must not
+        // outvote a later visit that found it missing.
+        preOperativeVisits: {
+          select: { consentStatus: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
         patient: { select: { name: true, folderNumber: true } },
         movements: { select: { phase: true, timestamp: true } },
         preOpReviews: {
@@ -124,7 +133,10 @@ export async function GET(req: NextRequest) {
             }
           : null,
         hasAnaestheticReview: !!review,
-        hasConsent: Boolean(s.consentFileName || s.consentSignedElectronically || s.consentCompletedAt),
+        hasConsent: Boolean(
+          s.consentFileName || s.consentSignedElectronically || s.consentCompletedAt
+          || s.preOperativeVisits?.[0]?.consentStatus === 'OBTAINED',
+        ),
         preopOutstanding: s.preopOutstanding,
       });
     });

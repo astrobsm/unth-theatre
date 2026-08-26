@@ -152,13 +152,24 @@ export async function POST(request: NextRequest) {
         consentSignedElectronically: true,
         consentCompletedAt: true,
         patient: { select: { name: true } },
+        // A nurse confirming at the pre-operative visit that the signed form is
+        // in the folder is the third way consent genuinely exists here, and the
+        // commonest: most consent is signed on the ward and stays on paper.
+        // Only the newest visit counts — an OBTAINED recorded before a later
+        // visit found it missing must not outvote the later one.
+        preOperativeVisits: {
+          select: { consentStatus: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
     const hasConsent = Boolean(
       surgery?.consentFileData ||
       surgery?.consentSignedElectronically ||
-      surgery?.consentCompletedAt,
+      surgery?.consentCompletedAt ||
+      surgery?.preOperativeVisits?.[0]?.consentStatus === 'OBTAINED',
     );
     const reason = String(consentDeferralReason ?? '').trim();
 

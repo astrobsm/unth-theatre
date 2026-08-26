@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { clearanceFor } from "@/lib/preopVisitClearance";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,48 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await prisma.surgery.update({ where: { id: params.id }, data });
+
+  /**
+   * Recording consent here also clears it as a blocker on the pre-operative
+   * visit, so the patient can be called for the morning list.
+   *
+   * The visit is what call-for-patient reads: a visit sitting at NOT_CLEARED
+   * stops the patient being sent for. A nurse who found no consent in the
+   * folder yesterday correctly recorded NOT_OBTAINED — and nothing re-examined
+   * that when the consent was taken afterwards, so a signed consent sat on the
+   * case while the ward was told the patient was not cleared.
+   *
+   * Only the newest visit is touched, only its consent flag, and the status is
+   * recomputed from the visit's OWN stored facts — so any OTHER reason it was
+   * held back (unpaid fee, not fasted, no anaesthetic review) still holds it
+   * back. This clears consent, not the visit.
+   *
+   * A REFUSED consent is never overwritten: that is the patient's decision.
+   *
+   * Best-effort. A consent that was recorded must not fail because a visit row
+   * could not be updated.
+   */
+  try {
+    const visit = await prisma.preOperativeVisit.findFirst({
+      where: { surgeryId: params.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (visit && visit.consentStatus !== 'OBTAINED' && visit.consentStatus !== 'REFUSED') {
+      const next = clearanceFor({ ...visit, consentStatus: 'OBTAINED' }, true);
+      await prisma.preOperativeVisit.update({
+        where: { id: visit.id },
+        data: {
+          consentStatus: 'OBTAINED',
+          overallStatus: next as any,
+          consentNotes: [visit.consentNotes, `Consent recorded by ${user.name} in the app.`]
+            .filter(Boolean)
+            .join(' '),
+        },
+      });
+    }
+  } catch (e) {
+    console.error('[consent-form] could not refresh pre-operative visit clearance:', e);
+  }
 
   return NextResponse.json({ ok: true });
 }

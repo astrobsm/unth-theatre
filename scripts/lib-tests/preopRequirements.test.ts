@@ -38,6 +38,25 @@ describe('complete booking', () => {
     });
     expect(r.ok).toBe(true);
   });
+
+  it('accepts a nurse confirming the signed form at the pre-operative visit', () => {
+    // How most consent in this hospital exists: signed on the ward, kept in the
+    // paper folder, seen by the nurse who visits the day before. Counting only
+    // an upload or an in-app signature left those cases reading as unconsented,
+    // so the ward was chased for a consent that had already been signed.
+    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+      urgency: 'ELECTIVE', labs: fullLabs, consent: { confirmedAtPreopVisit: true },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.outstanding).not.toContain('CONSENT');
+  });
+
+  it('still reports consent outstanding when no route has produced one', () => {
+    const r = checkPreopRequirements({ prescriptionItemCount: 2, consumableRequestCount: 4,
+      urgency: 'ELECTIVE', labs: fullLabs, consent: {},
+    });
+    expect(r.outstanding).toContain('CONSENT');
+  });
 });
 
 // The policy list is empty in production: nothing refuses a booking. These

@@ -77,6 +77,13 @@ export async function GET(_req: NextRequest) {
           // timestamp, instead of the megabytes of base64 they describe.
           consentFileName: true, consentSignedElectronically: true,
           consentCompletedAt: true, preopOutstanding: true,
+          // The third route to consent: a nurse confirmed at the pre-operative
+          // visit that the signed form is in the folder. Newest visit only.
+          preOperativeVisits: {
+            select: { consentStatus: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
           patient: { select: { name: true, folderNumber: true } },
         },
         orderBy: { scheduledDate: 'asc' },
@@ -113,7 +120,13 @@ export async function GET(_req: NextRequest) {
         supervisingConsultantId: s.supervisingConsultantId,
         theatreId: s.theatreId,
         hasConsentFile: Boolean(s.consentFileName),
-        hasConsentForm: Boolean(s.consentSignedElectronically || s.consentCompletedAt),
+        // Nurse confirmation at the pre-operative visit satisfies consent, so it
+        // belongs with the form rather than the file: there is no scan to open,
+        // but the signed paper exists and somebody has said so by name.
+        hasConsentForm: Boolean(
+          s.consentSignedElectronically || s.consentCompletedAt
+          || s.preOperativeVisits?.[0]?.consentStatus === 'OBTAINED',
+        ),
         preopOutstanding: s.preopOutstanding,
         patientName: s.patient?.name ?? null,
         folderNumber: s.patient?.folderNumber ?? null,
