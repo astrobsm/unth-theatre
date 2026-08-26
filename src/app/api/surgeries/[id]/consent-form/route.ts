@@ -5,12 +5,29 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// Roles allowed to view / complete a patient's surgical consent form.
+/**
+ * Roles allowed to view / complete a patient's surgical consent form.
+ *
+ * CONSULTANT_SURGEON was missing. SURGEON was here and its consultant grade was
+ * not, so the senior surgeon who most often takes consent was the one person
+ * refused — a 403 on the morning's list, with nothing on screen explaining why.
+ * Every other pairing in this list carries both grades: ANAESTHETIST sits beside
+ * CONSULTANT_ANAESTHETIST, and this one had been left half-written.
+ *
+ * THEATRE_CHAIRMAN is added on the same principle, as the grade above
+ * THEATRE_MANAGER, which was already here.
+ *
+ * Deliberately NOT widened further. Consent is a clinical act, and the roles
+ * that cannot take it — porters, cleaners, pharmacy, stores, engineering —
+ * stay out.
+ */
 const ALLOWED_ROLES = [
   "ADMIN",
   "SYSTEM_ADMINISTRATOR",
   "THEATRE_MANAGER",
+  "THEATRE_CHAIRMAN",
   "SURGEON",
+  "CONSULTANT_SURGEON",
   "HOUSE_OFFICER",
   "ANAESTHETIST",
   "CONSULTANT_ANAESTHETIST",

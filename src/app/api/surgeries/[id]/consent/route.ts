@@ -7,16 +7,24 @@ export const dynamic = "force-dynamic";
 
 // GET /api/surgeries/[id]/consent — streams the uploaded consent file
 // Visible to: Holding-area nurses, surgeons, anaesthetists, theatre managers, admins.
+// CONSULTANT_SURGEON and THEATRE_CHAIRMAN added for the same reason as in
+// ../consent-form: the consultant grades were missing while their junior grades
+// were present, so the senior surgeon could neither record a consent nor open
+// the one already uploaded. ANAESTHETIST/CONSULTANT_ANAESTHETIST were paired
+// correctly here; the surgical pair was not.
 const ALLOWED_ROLES = [
   "ADMIN",
   "SYSTEM_ADMINISTRATOR",
   "THEATRE_MANAGER",
+  "THEATRE_CHAIRMAN",
   "RECOVERY_ROOM_NURSE",
   "SCRUB_NURSE",
+  "CIRCULATING_NURSE",
   "ANAESTHETIST",
   "CONSULTANT_ANAESTHETIST",
   "ANAESTHETIC_TECHNICIAN",
   "SURGEON",
+  "CONSULTANT_SURGEON",
   "HOUSE_OFFICER",
 ];
 
