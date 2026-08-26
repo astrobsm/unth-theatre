@@ -10,6 +10,7 @@ import { notify } from '@/lib/notifications';
 import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import { NoPaperPrescriptionDialog } from '@/components/NoPaperPrescriptionWarning';
+import { useFormDraft } from '@/lib/useFormDraft';
 import ProcedurePicker from '@/components/ProcedurePicker';
 
 type OnDutyMember = {
@@ -167,6 +168,39 @@ export default function NewEmergencyBookingPage() {
   // than asked for twice. Declared AFTER `form` — it reads it.
   const selectedUnitSubspecialty =
     surgicalUnits.find((u) => u.name === form.surgicalUnit)?.subspecialty ?? '';
+
+  /**
+   * Keep this wizard if the tab is discarded.
+   *
+   * Five steps of typing, done under time pressure, with a phone that will be
+   * put down to answer a call or look up a folder number. Android reclaims the
+   * tab, the form remounts empty, and the whole emergency is entered again from
+   * the patient's name — at the moment there is least time for it.
+   *
+   * The consent FILE is deliberately excluded. It is base64 and can be several
+   * megabytes, which will not fit in localStorage and would throw the quota
+   * error on every keystroke. Everything typed is kept; the photograph is
+   * attached again.
+   *
+   * Cleared on a successful booking, further down: a draft outliving the case
+   * it drafted is how this page reopens holding an emergency already sent to
+   * theatre.
+   */
+  const draft = useFormDraft({
+    key: 'emergencyBooking',
+    userId: (session?.user as { id?: string } | undefined)?.id ?? null,
+    value: { step, form, teamMembers, packPick },
+    onRestore: (saved) => {
+      if (saved.form) setForm((prev) => ({ ...prev, ...saved.form }));
+      if (Array.isArray(saved.teamMembers)) setTeamMembers(saved.teamMembers);
+      if (saved.packPick) setPackPick(saved.packPick);
+      // Restored last: putting somebody back on step 4 before the fields behind
+      // it exist shows an empty review of a case that is in fact filled in.
+      if (typeof saved.step === 'number') setStep(saved.step);
+    },
+    // A wizard is only worth keeping once the patient is identifiable.
+    isDirty: (v) => Boolean(v.form?.patientName?.trim() || v.form?.folderNumber?.trim()),
+  });
 
   // Fetch surgeons and anesthetists for dropdowns
   useEffect(() => {
@@ -573,6 +607,9 @@ export default function NewEmergencyBookingPage() {
       // return to the emergency list; the alerts fire on the server after sync.
       if (isOfflineQueued(res)) {
         notify.success(OFFLINE_SAVED_MESSAGE);
+        // Queued for sync counts as booked: the alerts fire server-side after
+        // reconnection, so the draft must not survive to be resumed.
+        draft.clear();
         setLoading(false);
         router.push('/dashboard/emergency-booking');
         return;
@@ -583,6 +620,7 @@ export default function NewEmergencyBookingPage() {
       // A queued write can be flagged in the body rather than the header.
       if (isOfflineQueuedBody(created)) {
         notify.success(OFFLINE_SAVED_MESSAGE);
+        draft.clear();
         setLoading(false);
         router.push('/dashboard/emergency-booking');
         return;
@@ -604,6 +642,10 @@ export default function NewEmergencyBookingPage() {
       // The theatre has been told. The booking exists now, and the remaining
       // steps attach to it rather than being held back until the end.
       setBookedId(newBookingId);
+      // The case is on the list, so the draft of it has done its job. Kept any
+      // longer, reopening this page would offer to resume an emergency that is
+      // already in theatre.
+      draft.clear();
       // Surfaces the mandatory no-paper-prescription acknowledgement. The
       // surgery id can legitimately be absent (offline sync assigns it later),
       // so the wizard must never gate the remaining steps on it.
@@ -681,6 +723,17 @@ export default function NewEmergencyBookingPage() {
         <div className="mb-4 bg-red-50 border border-red-300 text-red-700 p-3 rounded-lg flex items-center gap-2">
           <AlertTriangle className="h-5 w-5" />
           {error}
+        </div>
+      )}
+
+      {/* Say that the work came back. Fields quietly repopulating is
+          indistinguishable from a form that has muddled two patients, and the
+          one thing nobody should have to wonder about mid-emergency is whether
+          the name on screen is the patient in front of them. */}
+      {draft.restoredAt && !bookedId && (
+        <div className="mb-4 rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800">
+          Your unfinished entry was restored from {new Date(draft.restoredAt).toLocaleTimeString()}.
+          Check the patient details before sending this to theatre.
         </div>
       )}
 
