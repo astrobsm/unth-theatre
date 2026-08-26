@@ -205,6 +205,39 @@ else
     echo "         It needs root, and this shell has neither root nor passwordless sudo."
     echo "         Run:  sudo systemctl restart orm-sync"
   fi
+
+  # ── The RADIUS bridge is the THIRD service, and was being forgotten ────────
+  #
+  # It is what the hotspot asks whether a member of staff may join the network,
+  # and it runs from this checkout like the other two. It was not restarted
+  # here, so it kept serving whatever code was current when it last started —
+  # exactly the staleness the sync-worker restart above exists to prevent,
+  # one service along.
+  #
+  # It bit immediately: the network session was lengthened from 12 hours to 24
+  # in the source, deployed, and staff went on being logged out after 12
+  # because the process holding that number had never been restarted.
+  #
+  # Absent on a machine that does not run the bridge, so a missing unit is
+  # noted and passed over rather than treated as a failure.
+  if systemctl list-unit-files --no-pager 2>/dev/null | grep -q '^orm-radius\.service'; then
+    radius_restarted=0
+    if [[ "$(id -u)" -eq 0 ]]; then
+      systemctl restart orm-radius && radius_restarted=1
+    elif sudo -n -l /usr/bin/systemctl restart orm-radius >/dev/null 2>&1; then
+      sudo -n /usr/bin/systemctl restart orm-radius && radius_restarted=1
+    elif sudo -n true 2>/dev/null; then
+      sudo -n systemctl restart orm-radius && radius_restarted=1
+    fi
+    if [[ $radius_restarted -eq 1 ]]; then
+      ok "RADIUS bridge restarted"
+    else
+      warn "the RADIUS BRIDGE was NOT restarted — it is still running the PREVIOUS code."
+      echo "         Staff network sessions keep the OLD length until it is."
+      echo "         Run:  sudo systemctl restart orm-radius"
+      echo "         Grant it once:  sudo ./scripts/local-server/install-worker-restart-sudo.sh"
+    fi
+  fi
 fi
 
 step "6/6  Verifying"
