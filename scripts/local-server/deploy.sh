@@ -220,7 +220,19 @@ else
   #
   # Absent on a machine that does not run the bridge, so a missing unit is
   # noted and passed over rather than treated as a failure.
-  if systemctl list-unit-files --no-pager 2>/dev/null | grep -q '^orm-radius\.service'; then
+  #
+  # `systemctl cat`, NOT `list-unit-files | grep`. This script runs under
+  # `set -o pipefail`, and `grep -q` exits the instant it matches — which closes
+  # the pipe, kills systemctl with SIGPIPE (141), and makes the whole PIPELINE
+  # non-zero even though the grep succeeded. Under pipefail the guard therefore
+  # tested FALSE precisely when the unit existed, so the restart was skipped in
+  # silence: no ok, no warn, nothing to notice. It cost an afternoon, and it
+  # briefly appeared to work under `bash -x` because tracing changed the timing
+  # enough for systemctl to finish writing before grep let go.
+  #
+  # `systemctl cat` needs no pipe and answers the question directly: it exits
+  # non-zero when the unit does not exist.
+  if systemctl cat orm-radius.service >/dev/null 2>&1; then
     radius_restarted=0
     if [[ "$(id -u)" -eq 0 ]]; then
       systemctl restart orm-radius && radius_restarted=1
