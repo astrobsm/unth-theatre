@@ -275,13 +275,24 @@ export default function NewSurgeryPage() {
   const setPreopField = (k: keyof typeof preop, v: string) => setPreop((p) => ({ ...p, [k]: v }));
   const [postOpDestination, setPostOpDestination] = useState('');
   const [isDayCase, setIsDayCase] = useState(false);
-  const [surgeryType, setSurgeryType] = useState<SurgeryType>('ELECTIVE');
-  // Why an urgent/emergency case is being booked without its full documentation.
-  // Recorded against the case in the booker's name; never offered for ELECTIVE.
+  /**
+   * THIS SCREEN BOOKS ELECTIVE CASES. It is not a choice any more.
+   *
+   * It used to open with a three-way Elective / Urgent / Emergency selector,
+   * which asked the booker to classify the case on the one screen where the
+   * answer is already known: emergencies have their own fast-track module, built
+   * for the minutes an emergency actually has. Offering the choice here meant an
+   * emergency could be entered through the long elective form — reaching theatre
+   * later, and by the slower of two paths.
+   *
+   * A constant rather than state: nothing can set it, so nothing can drift.
+   */
+  const surgeryType: SurgeryType = 'ELECTIVE';
+  // Why a case is being booked without its full documentation. Recorded against
+  // the case in the booker's name.
   const [preopOverrideReason, setPreopOverrideReason] = useState('');
   const [needsOverride, setNeedsOverride] = useState(false);
   const [anesthesiaType, setAnesthesiaType] = useState<string>('');
-  const [showEmergencyWarning, setShowEmergencyWarning] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   const [estimatedDuration, setEstimatedDuration] = useState('');
@@ -885,8 +896,10 @@ export default function NewSurgeryPage() {
     // The list gains a case that somebody can act on; nothing is hidden.
     if (missing.length) {
       // The reason box stays available for a clinician who wants to explain,
-      // and is no longer a condition of booking.
-      if (surgeryType !== 'ELECTIVE') setNeedsOverride(true);
+      // and is no longer a condition of booking. Offered on every case now:
+      // gating it on "not elective" would mean never, on a screen that books
+      // nothing else.
+      setNeedsOverride(true);
     }
     // ── Is that date what they meant? ────────────────────────────────────
     // A case was booked for 8 October when the unit meant tomorrow, and two
@@ -985,12 +998,13 @@ ${pretty} — ${days} days from today.
       surgeryType: surgeryType,
       // Put it on the theatre list now; the rest is owed before the morning.
       deferOutstanding: bookingEarly,
-      // Only ever sent for urgent/emergency — the server refuses to honour it
-      // for an elective case, and sending it there would be a lie in the audit.
-      preopOverrideReason:
-        surgeryType !== 'ELECTIVE' && preopOverrideReason.trim()
-          ? preopOverrideReason.trim()
-          : null,
+      // Sent whenever one was written. This used to be withheld on elective
+      // cases because the server refused to honour it there — no longer true:
+      // checkPreopRequirements is now always called with deferOutstanding, and
+      // that branch returns before the elective refusal, so the reason is stored
+      // against the case with its outstanding items. Withholding it now would
+      // silently discard something a clinician had typed.
+      preopOverrideReason: preopOverrideReason.trim() || null,
       magnitude: (formData.get('magnitude') as string) || null,
       anesthesiaType: anesthesiaType || null,
       needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
@@ -1401,10 +1415,14 @@ ${pretty} — ${days} days from today.
         elective case: an override that is always on screen is an override that
         gets used by default, and the requirement stops meaning anything.
       */}
-      {needsOverride && surgeryType !== 'ELECTIVE' && (
+      {/* Shown whenever documentation is outstanding. It used to be gated on the
+          case NOT being elective, which on a screen that now books only elective
+          cases would have meant never — losing the one place a booker could say
+          why. It records, it does not permit: booking is not conditional on it. */}
+      {needsOverride && (
         <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
           <label htmlFor="preopOverrideReason" className="block text-sm font-semibold text-amber-900">
-            Clinical reason for booking this {surgeryType.toLowerCase()} case now
+            Clinical reason for booking this case before its documentation is complete (optional)
           </label>
           <p className="mt-1 text-xs text-amber-800">
             The case will be booked and the missing items recorded against it as outstanding, in your
@@ -1520,11 +1538,9 @@ ${pretty} — ${days} days from today.
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
-              {surgeryType === 'EMERGENCY' && selectedLocation && (
-                <p className="text-xs text-red-600 mt-1">
-                  Emergency: the perioperative nurse on duty at <strong>{selectedLocation}</strong> will assign an available theatre and the on-duty emergency team will be activated automatically.
-                </p>
-              )}
+              {/* The emergency note that stood here is gone with the selector.
+                  It described the fast-track behaviour, which belongs to — and
+                  is shown by — the emergency booking module. */}
             </div>
 
             <div>
@@ -1777,11 +1793,13 @@ ${pretty} — ${days} days from today.
 
             <div className="md:col-span-2">
               <label className="label">Procedure Name *</label>
+              {/* emergencyFirst stays false: an elective list never wants
+                  emergency procedures surfaced ahead of the rest. */}
               <ProcedurePicker
                 subspecialty={subspecialty}
                 value={procedureName}
                 onChange={setProcedureName}
-                emergencyFirst={surgeryType === 'EMERGENCY'}
+                emergencyFirst={false}
               />
 
               {/* Further procedures in the SAME operation — a tumour resection
@@ -1829,113 +1847,6 @@ ${pretty} — ${days} days from today.
               )}
             </div>
 
-            {/* Surgery Type Selection */}
-            <div className="md:col-span-2">
-              <label className="label">Surgery Type *</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-                <label
-                  className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    surgeryType === 'ELECTIVE'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="surgeryTypeRadio"
-                    value="ELECTIVE"
-                    checked={surgeryType === 'ELECTIVE'}
-                    onChange={() => {
-                      setSurgeryType('ELECTIVE');
-                      setShowEmergencyWarning(false);
-                    }}
-                    className="sr-only"
-                  />
-                  <div className="flex flex-col items-center gap-2">
-                    <CheckCircle className={`w-6 h-6 ${surgeryType === 'ELECTIVE' ? 'text-green-600' : 'text-gray-400'}`} />
-                    <span className={`font-medium ${surgeryType === 'ELECTIVE' ? 'text-green-700' : 'text-gray-600'}`}>
-                      Elective
-                    </span>
-                    <span className="text-xs text-gray-500 text-center">Scheduled in advance</span>
-                  </div>
-                </label>
-
-                <label
-                  className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    surgeryType === 'URGENT'
-                      ? 'border-orange-500 bg-orange-50'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="surgeryTypeRadio"
-                    value="URGENT"
-                    checked={surgeryType === 'URGENT'}
-                    onChange={() => {
-                      setSurgeryType('URGENT');
-                      setShowEmergencyWarning(false);
-                    }}
-                    className="sr-only"
-                  />
-                  <div className="flex flex-col items-center gap-2">
-                    <AlertCircle className={`w-6 h-6 ${surgeryType === 'URGENT' ? 'text-orange-600' : 'text-gray-400'}`} />
-                    <span className={`font-medium ${surgeryType === 'URGENT' ? 'text-orange-700' : 'text-gray-600'}`}>
-                      Urgent
-                    </span>
-                    <span className="text-xs text-gray-500 text-center">Within 24-48 hours</span>
-                  </div>
-                </label>
-
-                <label
-                  className={`relative flex items-center justify-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    surgeryType === 'EMERGENCY'
-                      ? 'border-red-500 bg-red-50 ring-2 ring-red-500 ring-offset-2'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="surgeryTypeRadio"
-                    value="EMERGENCY"
-                    checked={surgeryType === 'EMERGENCY'}
-                    onChange={() => {
-                      setSurgeryType('EMERGENCY');
-                      setShowEmergencyWarning(true);
-                    }}
-                    className="sr-only"
-                  />
-                  <div className="flex flex-col items-center gap-2">
-                    <Zap className={`w-6 h-6 ${surgeryType === 'EMERGENCY' ? 'text-red-600 animate-pulse' : 'text-gray-400'}`} />
-                    <span className={`font-medium ${surgeryType === 'EMERGENCY' ? 'text-red-700' : 'text-gray-600'}`}>
-                      Emergency
-                    </span>
-                    <span className="text-xs text-gray-500 text-center">Immediate attention</span>
-                  </div>
-                </label>
-              </div>
-
-              {/* Emergency Warning */}
-              {showEmergencyWarning && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-semibold text-red-800">Emergency Surgery Alert</h4>
-                      <p className="text-sm text-red-700 mt-1">
-                        Submitting this form will trigger an <strong>Emergency Alert</strong> that will:
-                      </p>
-                      <ul className="text-sm text-red-700 mt-2 list-disc list-inside space-y-1">
-                        <li>Display on all theatre TV displays immediately</li>
-                        <li>Announce the emergency details loudly every 2 minutes</li>
-                        <li>Continue until acknowledged by the nurse on emergency duty</li>
-                        <li>Escalate to all admin users if not acknowledged within 15 minutes</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Anaesthesia Type Selection */}
             <div className="md:col-span-2">
