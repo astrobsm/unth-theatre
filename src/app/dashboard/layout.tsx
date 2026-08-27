@@ -87,6 +87,7 @@ import {
   MessageSquareWarning,
   ShieldAlert,
   Eye,
+  Music,
   Volume2,
   GraduationCap,
   ChefHat,
@@ -371,6 +372,13 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/feedback/review', icon: Star, label: 'Patient Feedback', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/feedback/suggestions', icon: MessageCircle, label: 'Theatre User Suggestions', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/security-reports/view', icon: Eye, label: 'Review Security', badge: 'ADMIN' });
+  }
+
+  // Music library. Deliberately NOT the broader adminRoles list above: the API
+  // accepts only ADMIN and SYSTEM_ADMINISTRATOR, and a menu entry that 403s is
+  // worse than no menu entry.
+  if (['ADMIN', 'SYSTEM_ADMINISTRATOR'].includes(session.user.role)) {
+    menuItems.push({ href: '/dashboard/music-library', icon: Music, label: 'Theatre Music', badge: 'ADMIN' });
   }
 
   // Module Access editor — only true admins / theatre manager grant overrides.

@@ -42,7 +42,15 @@ export const dynamic = 'force-dynamic';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.ogg', '.oga', '.wav', '.flac', '.aac', '.webm']);
 
-/** Where the library lives. Overridable so a big library can sit on another disk. */
+/**
+ * Where the library lives.
+ *
+ * ORM_MUSIC_DIR changes which folder is LISTED, but the URLs handed to the
+ * player are always /audio/library/..., which Next serves from public/. So the
+ * override only works when that path is reachable under public/ — i.e. when
+ * public/audio/library is a SYMLINK or bind mount to the bigger disk. Point it
+ * somewhere unreachable and the tracks list but will not play.
+ */
 const LIBRARY_DIR = process.env.ORM_MUSIC_DIR
   || path.join(process.cwd(), 'public', 'audio', 'library');
 

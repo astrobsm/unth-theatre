@@ -64,3 +64,23 @@ The player skips a file it cannot decode and moves to the next one, so a single
 bad file cannot silence the theatre for the rest of the list. If everything is
 silent, check that the **Music library** tab is selected rather than Ambient,
 and that the volume is up.
+
+## Adding music without a shell
+
+Administrators (ADMIN and SYSTEM_ADMINISTRATOR) can add and remove tracks from
+**Theatre Music** in the dashboard menu — no server access needed. That screen
+writes into this folder, so the two routes are interchangeable.
+
+Uploads work on the **theatre server**. They do not work on the cloud
+deployment, which has a read-only filesystem and a request-body limit smaller
+than one track; the screen says so rather than failing obscurely.
+
+## A library too big for this disk
+
+`ORM_MUSIC_DIR` changes which folder is *listed*, but the player is always
+handed `/audio/library/...` URLs, which Next serves out of `public/`. So the
+override alone will list tracks that do not play. To put the library on another
+disk, make `public/audio/library` a **symlink or bind mount** to it:
+
+    mv public/audio/library /mnt/big/orm-music
+    ln -s /mnt/big/orm-music public/audio/library
