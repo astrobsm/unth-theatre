@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CalendarDays, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { SYNC_INTERVALS } from '@/lib/sync';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
+import { watToday } from '@/lib/watDay';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 
@@ -56,7 +57,7 @@ export default function HoldingAreaPage() {
   const [assessments, setAssessments] = useState<HoldingAreaAssessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active'>('active');
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => watToday());
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -454,13 +455,13 @@ export default function HoldingAreaPage() {
             id="ha-date"
             type="date"
             value={selectedDate}
-            max={new Date().toISOString().split('T')[0]}
+            max={watToday()}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
             title="Holding area date"
           />
           <button
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setSelectedDate(watToday())}
             className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
           >
             Today
@@ -471,7 +472,7 @@ export default function HoldingAreaPage() {
       {/* A past day is easy to leave selected by accident, and the cards below
           carry actions on real patients. Say so plainly rather than relying on
           the date field being noticed. */}
-      {selectedDate && selectedDate !== new Date().toISOString().split('T')[0] && (
+      {selectedDate && selectedDate !== watToday() && (
         <div className="mb-6 flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
           <CalendarDays className="w-4 h-4 flex-shrink-0" />
           <span>
@@ -487,7 +488,7 @@ export default function HoldingAreaPage() {
             , not today.
           </span>
           <button
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setSelectedDate(watToday())}
             className="ml-auto underline font-medium hover:no-underline"
           >
             Back to today

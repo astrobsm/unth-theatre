@@ -10,6 +10,7 @@ import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { outstandingLabel } from '@/lib/preopRequirements';
 import { SYNC_INTERVALS } from '@/lib/sync';
+import { watToday } from '@/lib/watDay';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
@@ -81,7 +82,7 @@ export default function SurgeriesPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   // Default to today's list so only the current day's cases load (lighter payload
   // for poor connections). An empty value means "all scheduled dates".
-  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dateFilter, setDateFilter] = useState(() => watToday());
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -966,7 +967,7 @@ export default function SurgeriesPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
+              onClick={() => setDateFilter(watToday())}
               className="text-xs font-medium text-blue-600 hover:text-blue-800 underline"
             >
               Today
