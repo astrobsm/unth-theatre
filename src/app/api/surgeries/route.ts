@@ -14,6 +14,7 @@ import { checkSlot } from "@/lib/theatreOps/scheduling";
 import { isClockTime } from "@/lib/theatreOps/clock";
 import { recordProcedureUse } from "@/lib/procedures/usage";
 import { ensureEmergencyBooking } from "@/lib/emergency/ensureBooking";
+import { checkRequiredByTime } from "@/lib/emergency/requiredByTime";
 import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
 import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
@@ -422,6 +423,17 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const validatedData = surgerySchema.parse(body);
+
+    // Emergencies only. An emergency whose date has already gone is a mistyped
+    // year or month, and it disappears: the radio announces on creation while
+    // every list filters to a live day. Electives are deliberately left alone —
+    // backdating one can be legitimate record-keeping.
+    if (body?.surgeryType === 'EMERGENCY') {
+      const dateVerdict = checkRequiredByTime(validatedData.scheduledDate);
+      if (!dateVerdict.ok) {
+        return NextResponse.json({ error: dateVerdict.message }, { status: 400 });
+      }
+    }
 
     // EVERY key left in `surgeryData` is spread into prisma.surgery.create().
     // A field that the form sends but the Surgery model does not have must be

@@ -11,6 +11,7 @@ import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { isSurgeonRole } from '@/lib/roleGroups';
 import { reconcileEmergencyBoard } from '@/lib/emergency/ensureBooking';
+import { checkRequiredByTime } from '@/lib/emergency/requiredByTime';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
 
 export const dynamic = 'force-dynamic';
@@ -317,6 +318,15 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const validatedData = createEmergencyBookingSchema.parse(body);
+
+    // An emergency required on a day that has already ended is a mistyped
+    // date, not a case. Rejected here, before anything is written, because the
+    // radio announces on creation while every list filters to a live day — so
+    // a past-dated booking is heard by the theatre and then findable nowhere.
+    const dateVerdict = checkRequiredByTime(validatedData.requiredByTime);
+    if (!dateVerdict.ok) {
+      return NextResponse.json({ error: dateVerdict.message }, { status: 400 });
+    }
 
     // Determine surgeon
     const surgeonId = validatedData.surgeonId || (isSurgeonRole(session.user.role) ? session.user.id : undefined);

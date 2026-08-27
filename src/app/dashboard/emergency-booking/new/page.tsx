@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { watToday } from '@/lib/watDay';
+import { checkRequiredByTime } from '@/lib/emergency/requiredByTime';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature, CheckCircle } from 'lucide-react';
@@ -393,6 +395,10 @@ export default function NewEmergencyBookingPage() {
     const next = preferred?.userId ?? onDuty?.team.anaesthetist?.userId ?? '';
     setForm((prev) => (prev.anesthetistId === next ? prev : { ...prev, anesthetistId: next }));
   }, [callTeam, onDuty]);
+
+  // Mirrors the server's rule so the booker is told before submitting, not
+  // after. The server check is the one that counts — this is only courtesy.
+  const pastDated = !checkRequiredByTime(form.requiredByTime).ok && Boolean(form.requiredByTime);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -958,7 +964,22 @@ export default function NewEmergencyBookingPage() {
             </div>
             <div>
               <label className="label">Required By (Time)</label>
-              <input name="requiredByTime" type="datetime-local" value={form.requiredByTime} onChange={handleChange} className="input-field" />
+              {/* A date picker that will not offer a day already gone. The
+                  server rejects past-dated emergencies too — this stops the
+                  mistake being made rather than reporting it afterwards. */}
+              <input
+                name="requiredByTime"
+                type="datetime-local"
+                min={`${watToday()}T00:00`}
+                value={form.requiredByTime}
+                onChange={handleChange}
+                className="input-field"
+              />
+              {pastDated && (
+                <p className="mt-1 text-sm text-red-600">
+                  That day has already passed. An emergency is for today or later.
+                </p>
+              )}
             </div>
             <div>
               <label className="label">Estimated Duration (minutes)</label>
