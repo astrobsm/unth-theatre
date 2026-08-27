@@ -606,7 +606,13 @@ export async function POST(request: NextRequest) {
     // from the Roster for the scheduled date/shift/theatre. Falls back to any theatre
     // if no one is rostered specifically for the chosen one — an anaesthetist on duty
     // anywhere in the suite is better than leaving the slot empty.
-    let resolvedAnaesthetistId: string | null = onDutyTeam?.anaesthetistId || null;
+    // The client sends whoever its on-duty lookup resolved. For an EMERGENCY
+    // that hint is worth having. For an ELECTIVE it is not trusted: the form
+    // may have resolved it before the roster was published, which is exactly
+    // how the on-call consultant ended up on fifteen elective cases. The
+    // server holds the roster, so for a planned case the server decides.
+    let resolvedAnaesthetistId: string | null =
+      surgeryType === 'ELECTIVE' ? null : (onDutyTeam?.anaesthetistId || null);
     if (!resolvedAnaesthetistId) {
       try {
         const sched = new Date(validatedData.scheduledDate);
@@ -615,20 +621,24 @@ export async function POST(request: NextRequest) {
         const hour = sched.getHours();
         const dateOnly = new Date(Date.UTC(sched.getFullYear(), sched.getMonth(), sched.getDate()));
 
-        // Which rostered shift covers this case, in order of preference.
+        // An ELECTIVE case is never covered by the call team.
         //
-        // Elective anaesthesia is the MORNING list (08:00-16:00). Everything
-        // outside that window — early mornings, evenings and overnight — is
-        // covered by the CALL team (that is what "on call" means; the roster
-        // has a single call team per day, not separate CALL/NIGHT lists).
+        // It used to be. On 27 August the next day's elective anaesthetic
+        // roster had not been published yet, so all fifteen of the following
+        // day's cases fell through to the one person rostered — the emergency
+        // on-call consultant — and were stamped with his name across eight
+        // theatres. It read as an assignment, so nobody chased the missing
+        // roster, and it put the on-call consultant on every elective list in
+        // the hospital.
         //
-        // During elective hours we still prefer someone rostered MORNING for
-        // the specific theatre, but fall back to the CALL team when no elective
-        // list exists (e.g. an urgent case slotted into a call day), so a
-        // daytime emergency is never left without an anaesthetist just because
-        // the roster only names the call cover.
-        const preferredShifts: Array<'MORNING' | 'CALL'> =
-          hour >= 8 && hour < 16 ? ['MORNING', 'CALL'] : ['CALL'];
+        // A planned case with nobody rostered to its specialty is UNASSIGNED,
+        // and says so. That is a gap somebody must fill, and it should look
+        // like one. Emergencies keep the call fallback, because covering the
+        // unplanned is exactly what being on call means.
+        const isElective = surgeryType === 'ELECTIVE';
+        const preferredShifts: Array<'MORNING' | 'CALL'> = isElective
+          ? ['MORNING']
+          : hour >= 8 && hour < 16 ? ['MORNING', 'CALL'] : ['CALL'];
 
         const rank = (s: string | null) =>
           s === 'CONSULTANT' ? 0 : s === 'SENIOR_REGISTRAR' ? 1 : s === 'REGISTRAR' ? 2 : 3;
@@ -655,7 +665,14 @@ export async function POST(request: NextRequest) {
           const pool = await poolForShift(shift);
           if (!pool.length) continue;
           const subspecialtyMatch = wantSub ? pool.filter((p) => normSub(p.subRole) === wantSub) : [];
-          const chooseFrom = subspecialtyMatch.length ? subspecialtyMatch : pool;
+          // For an elective case, an anaesthetist rostered to a DIFFERENT
+          // specialty is not cover either — it is the same mistake wearing a
+          // more convincing name. Only a match counts; otherwise the case stays
+          // unassigned and the gap stays visible.
+          const chooseFrom = subspecialtyMatch.length
+            ? subspecialtyMatch
+            : isElective ? [] : pool;
+          if (!chooseFrom.length) continue;
           chooseFrom.sort((a, b) => rank(a.seniorityLevel) - rank(b.seniorityLevel));
           resolvedAnaesthetistId = chooseFrom[0]?.user.id || null;
           if (resolvedAnaesthetistId) break;

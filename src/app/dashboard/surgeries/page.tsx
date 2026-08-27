@@ -1288,9 +1288,17 @@ export default function SurgeriesPage() {
                           Consultant: {surgery.supervisingConsultantName}
                         </div>
                       )}
-                      {surgery.anaesthetist?.fullName && (
+                      {/* An elective case with nobody rostered to its specialty
+                          is not covered by the call team — it is unassigned, and
+                          silence here is what let fifteen cases look staffed when
+                          they were not. */}
+                      {surgery.anaesthetist?.fullName ? (
                         <div className="text-xs text-gray-500 mt-0.5">
                           Anaesthetist: {surgery.anaesthetist.fullName}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-amber-700 mt-0.5 font-medium">
+                          Anaesthetist: not yet assigned
                         </div>
                       )}
                       {surgery.theatreTechnician?.fullName && (
