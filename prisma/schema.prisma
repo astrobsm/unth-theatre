@@ -404,6 +404,10 @@ model User {
   locationSource        StaffLocationSource?
   resetToken            String? // Password reset token
   resetTokenExpiry      DateTime? // Reset token expiration
+
+  /// One-time recovery codes sent to this user by SMS. See model AuthOtp:
+  /// the code itself is never stored, only an HMAC of it.
+  authOtps              AuthOtp[]
   isFirstLogin          Boolean              @default(true) // Track if user has logged in before
   mustChangePassword    Boolean              @default(false) // Force password change on next login
   // House Officer rotation tracking (null for non-HOs)
@@ -11404,4 +11408,38 @@ enum DeadlineAttentionStatus {
   RESOLVED
   /// Twelve hours unattended. Now an audit matter.
   IN_AUDIT
+}
+
+/// One-time codes for account recovery, sent by SMS to the number on file.
+///
+/// A separate table rather than more columns on User, for three reasons: a
+/// user may legitimately hold a live code for password reset and another for
+/// username recovery; expired rows are evidence of an attack pattern and are
+/// worth keeping for a while; and rate limiting needs to count requests, which
+/// a single overwritten column cannot do.
+///
+/// The CODE ITSELF IS NEVER STORED. codeHash is HMAC-SHA256 of the code under
+/// a server-side pepper, so database read access does not yield a working code.
+model AuthOtp {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// PASSWORD_RESET | USERNAME_RECOVERY
+  purpose     String
+  codeHash    String
+  /// Masked, for display only: "0803****373". Never the full number.
+  destination String
+  channel     String    @default("SMS")
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  consumedAt  DateTime?
+  /// Where the request came from, for spotting a script working through names.
+  requestIp   String?
+  /// Provider reference, for chasing a message that never arrived.
+  providerRef String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, purpose, createdAt])
+  @@index([createdAt])
+  @@map("auth_otps")
 }

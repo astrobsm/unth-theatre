@@ -487,17 +487,15 @@ export default function LoginPage() {
           </div>
           
           <div className="text-center space-y-2">
+            {/* One entry point for both. Two separate links sent people who had
+                forgotten their password to the username page and back again,
+                and both old flows delivered by email - which the 98 staff with
+                no email address on file could never receive. */}
             <Link
-              href="/auth/forgot-username"
-              className="block text-sm text-gray-600 hover:text-primary-600"
+              href="/auth/recover"
+              className="block text-sm font-medium text-primary-600 hover:text-primary-700"
             >
-              Forgot your username? Recover with your phone number
-            </Link>
-            <Link
-              href="/auth/reset-password"
-              className="block text-sm text-gray-600 hover:text-primary-600"
-            >
-              Forgot your password?
+              Forgot your username or password? Get a code by SMS
             </Link>
             <Link
               href="/onboarding"

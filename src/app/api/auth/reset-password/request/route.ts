@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
 import { sendMail, passwordResetEmail } from "@/lib/mailer";
+import { hashCode } from "@/lib/auth/otp";
 
 export const dynamic = 'force-dynamic';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EXPIRES_MIN = 60;
+const PEPPER = process.env.OTP_PEPPER || process.env.NEXTAUTH_SECRET || '';
 
 function originFromRequest(request: NextRequest): string {
   return (
@@ -69,7 +71,10 @@ export async function POST(request: NextRequest) {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { resetToken, resetTokenExpiry },
+      // Stored HASHED. The link carries the plain token; the database holds
+      // only an HMAC of it, so read access to the users table is no longer
+      // equivalent to taking over every account.
+      data: { resetToken: hashCode(resetToken, PEPPER), resetTokenExpiry },
     });
 
     const resetUrl = `${originFromRequest(request)}/auth/reset-password/confirm?token=${encodeURIComponent(

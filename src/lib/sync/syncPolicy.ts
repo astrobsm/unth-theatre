@@ -203,6 +203,24 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'conflict_approvals', cls: 'CLOUD_AUTHORITATIVE', why: 'An approval chain with two truths is not an approval chain.' },
 
   { table: 'users', cls: 'CLOUD_AUTHORITATIVE', why: 'A merged or revoked account must not be resurrected by a stale local copy.' },
+
+  // ── Account recovery ─────────────────────────────────────────────────────
+  // NOT REPLICATED, and that is a decision rather than an oversight.
+  //
+  // A one-time code is a short-lived authentication secret with an attempt
+  // counter. Replicating it would put a live credential on a second node and,
+  // worse, split the attempt cap across two databases — five guesses on the
+  // cloud plus five on the theatre server is ten, and the whole strength of a
+  // six-digit code rests on that number being five.
+  //
+  // The practical cost is small: a code is requested and typed within ten
+  // minutes on whichever server the user is already looking at. `users` is
+  // CLOUD_AUTHORITATIVE above, so the changed PASSWORD does travel.
+  //
+  // Recorded here explicitly because on 27 August emergency_surgery_bookings
+  // was absent from this list, and an absent table looks exactly like a
+  // forgotten one.
+  // { table: 'auth_otps', cls: <intentionally none> }
   { table: 'user_module_grants', cls: 'CLOUD_AUTHORITATIVE', why: 'Access control is decided centrally.' },
   { table: 'onboarding_submissions', cls: 'CLOUD_AUTHORITATIVE', why: 'Imported centrally; local copies are read-only in practice.' },
 ];

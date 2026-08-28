@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { hashCode } from "@/lib/auth/otp";
+
+const PEPPER = process.env.OTP_PEPPER || process.env.NEXTAUTH_SECRET || '';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +33,8 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findFirst({
       where: {
-        resetToken: token,
+        // Compared against the stored HMAC, not the raw token.
+        resetToken: hashCode(token, PEPPER),
         resetTokenExpiry: { gt: new Date() },
       },
     });
