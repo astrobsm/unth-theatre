@@ -497,22 +497,14 @@ export default function LoginPage() {
             >
               Forgot your username or password? Get a code by SMS
             </Link>
-            {/* The email routes stay until TERMII_API_KEY and TERMII_SENDER_ID
-                are set. Removing them while SMS cannot yet send would leave the
-                only recovery path on a live clinical system unable to deliver
-                anything. Delete these two once SMS is confirmed working. */}
-            <Link
-              href="/auth/forgot-username"
-              className="block text-xs text-gray-500 hover:text-primary-600"
-            >
-              Or recover your username by email
-            </Link>
-            <Link
-              href="/auth/reset-password"
-              className="block text-xs text-gray-500 hover:text-primary-600"
-            >
-              Or reset your password by email
-            </Link>
+            {/* Email recovery is removed, not hidden: SMTP has never been
+                configured, so both of those links failed silently and sent
+                people away believing help was coming. Until the Termii sender
+                ID clears, the honest instruction is the one that works. */}
+            <p className="text-xs text-gray-500">
+              No code arriving? Ask the Theatre Manager or an administrator to
+              reset your password from User Management — it takes a few seconds.
+            </p>
             <Link
               href="/onboarding"
               className="block text-sm text-primary-600 hover:text-primary-700"
