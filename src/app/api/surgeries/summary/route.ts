@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam';
+
+type Contact = { name: string; phone: string | null } | null;
+
+/** Who a unit's cases belong to today, as the card needs to show it. */
+interface UnitTeam {
+  theatre: string | null;
+  anaesthetists: {
+    consultant: Contact;
+    seniorRegistrar: Contact;
+    registrar: Contact;
+    /** allocated | subspecialty | on-call | none — the card says which. */
+    source: string;
+  };
+  scrubNurse: Contact;
+  circulatingNurse: Contact;
+  anaestheticTechnician: Contact;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +89,91 @@ export async function GET(req: NextRequest) {
   });
   const scheduledByUnit = new Map(scheduled.map((u) => [u.unit, u._count._all]));
 
+
+  // ── Who is on each unit today ────────────────────────────────────────────
+  //
+  // The cards used to say only how many cases a unit had, which answered the
+  // wrong question: standing in a corridor, what you need is the name and the
+  // number of the person you have to reach.
+  //
+  // Two sources, in this order.
+  //
+  // TheatreAllocation is the day's actual assignment for a unit — scrub nurse,
+  // circulating nurse, technician and all three anaesthetist grades — so it is
+  // taken first wherever it exists.
+  //
+  // The published anaesthetist roster fills the anaesthetists back in when an
+  // allocation has not been made, which is most days: the roster names a
+  // consultant, senior registrar and registrar per SURGICAL SPECIALTY, and that
+  // is a real answer rather than a blank.
+  //
+  // Both are fetched ONCE for the whole date and matched in memory. A query per
+  // unit is exactly what this endpoint exists to avoid.
+  const unitNames = byUnit.map((u) => u.unit).filter(Boolean) as string[];
+  const teamByUnit = new Map<string, UnitTeam>();
+
+  if (dateStr && unitNames.length) {
+    const base = new Date(dateStr);
+    const dayStart = new Date(base); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(base); dayEnd.setHours(23, 59, 59, 999);
+
+    const contact = (u: { id: string; fullName: string; phoneNumber: string | null } | null | undefined) =>
+      u ? { name: u.fullName, phone: u.phoneNumber ?? null } : null;
+
+    const pick = { select: { id: true, fullName: true, phoneNumber: true } };
+
+    const [allocations, rosterTeams] = await Promise.all([
+      prisma.theatreAllocation.findMany({
+        where: { date: { gte: dayStart, lte: dayEnd }, surgicalUnit: { in: unitNames } },
+        include: {
+          scrubNurse: pick,
+          circulatingNurse: pick,
+          anaestheticTechnician: pick,
+          anaesthetistConsultant: pick,
+          anaesthetistSeniorRegistrar: pick,
+          anaesthetistRegistrar: pick,
+          theatre: { select: { name: true } },
+        },
+        orderBy: { startTime: 'asc' },
+      }),
+      getAnaesthetistTeamsForDate(dayStart).catch(() => null),
+    ]);
+
+    // Unit -> subspecialty, resolved once for every unit on the list rather
+    // than one lookup at a time.
+    const units = await prisma.surgicalUnit.findMany({
+      where: { name: { in: unitNames } },
+      select: { name: true, subspecialty: true },
+    });
+    const subspecialtyOf = new Map(units.map((u) => [u.name, u.subspecialty]));
+
+    for (const unit of unitNames) {
+      const alloc = allocations.find((a) => a.surgicalUnit === unit);
+      const roster = rosterTeams ? selectTeam(rosterTeams, subspecialtyOf.get(unit)) : null;
+
+      teamByUnit.set(unit, {
+        theatre: alloc?.theatre?.name ?? null,
+        anaesthetists: {
+          consultant:
+            contact(alloc?.anaesthetistConsultant) ??
+            (roster?.consultant ? { name: roster.consultant.name, phone: roster.consultant.phone } : null),
+          seniorRegistrar:
+            contact(alloc?.anaesthetistSeniorRegistrar) ??
+            (roster?.seniorRegistrar ? { name: roster.seniorRegistrar.name, phone: roster.seniorRegistrar.phone } : null),
+          registrar:
+            contact(alloc?.anaesthetistRegistrar) ??
+            (roster?.registrar ? { name: roster.registrar.name, phone: roster.registrar.phone } : null),
+          // 'subspecialty' means somebody is rostered to this unit's specialty.
+          // 'on-call' means nobody is and this is the call team standing in —
+          // the card must be able to say so rather than showing a bare name.
+          source: alloc?.anaesthetistConsultantId ? 'allocated' : roster?.source ?? 'none',
+        },
+        scrubNurse: contact(alloc?.scrubNurse),
+        circulatingNurse: contact(alloc?.circulatingNurse),
+        anaestheticTechnician: contact(alloc?.anaestheticTechnician),
+      });
+    }
+  }
   return NextResponse.json({
     date: dateStr ?? null,
     total,
@@ -79,6 +182,7 @@ export async function GET(req: NextRequest) {
       cases: u._count._all,
       scheduled: scheduledByUnit.get(u.unit) ?? 0,
       emergencies: urgentByUnit.get(u.unit) ?? 0,
+      team: u.unit ? teamByUnit.get(u.unit) ?? null : null,
     })),
     statuses: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
   });

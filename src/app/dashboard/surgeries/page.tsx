@@ -151,8 +151,26 @@ export default function SurgeriesPage() {
   // /api/surgeries/summary answers the card question with a GROUP BY in a few
   // hundred bytes. The cases for a unit are fetched when that unit is opened,
   // and only that unit.
+  type UnitContact = { name: string; phone: string | null } | null;
   const [unitSummary, setUnitSummary] = useState<
-    { unit: string; cases: number; scheduled: number; emergencies: number }[] | null
+    {
+      unit: string;
+      cases: number;
+      scheduled: number;
+      emergencies: number;
+      team?: {
+        theatre: string | null;
+        anaesthetists: {
+          consultant: UnitContact;
+          seniorRegistrar: UnitContact;
+          registrar: UnitContact;
+          source: string;
+        };
+        scrubNurse: UnitContact;
+        circulatingNurse: UnitContact;
+        anaestheticTechnician: UnitContact;
+      } | null;
+    }[] | null
   >(null);
   const [openUnit, setOpenUnit] = useState<string | null>(null);
   // Read inside fetchSurgeries without making it depend on the open unit: the
@@ -1041,27 +1059,73 @@ export default function SurgeriesPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {unitSummary.map((u) => (
-                  <button
+                  /* A DIV, not a button. The card now contains tel: links, and
+                     an anchor inside a button is invalid markup that swallows
+                     the tap on some mobile browsers — which is every browser
+                     that matters here. The heading is the button instead. */
+                  <div
                     key={u.unit}
-                    onClick={() => void openUnitCases(u.unit)}
-                    className="text-left rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:shadow-md transition p-4 bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600"
+                    className="rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:shadow-md transition bg-white overflow-hidden"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{u.unit || 'Unassigned unit'}</p>
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          {u.scheduled} scheduled
-                          {u.emergencies > 0 && (
-                            <span className="text-red-700 font-medium"> · {u.emergencies} emergency</span>
-                          )}
-                        </p>
+                    <button
+                      type="button"
+                      onClick={() => void openUnitCases(u.unit)}
+                      className="w-full text-left p-4 pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{u.unit || 'Unassigned unit'}</p>
+                          <p className="text-sm text-gray-500 mt-0.5">
+                            {u.scheduled} scheduled
+                            {u.emergencies > 0 && (
+                              <span className="text-red-700 font-medium"> · {u.emergencies} emergency</span>
+                            )}
+                            {u.team?.theatre && (
+                              <span className="text-gray-400"> · {u.team.theatre}</span>
+                            )}
+                          </p>
+                        </div>
+                        <span className="text-2xl font-bold text-primary-600 tabular-nums flex-shrink-0">
+                          {u.cases}
+                        </span>
                       </div>
-                      <span className="text-2xl font-bold text-primary-600 tabular-nums flex-shrink-0">
-                        {u.cases}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-3">Tap to load this unit&rsquo;s cases</p>
-                  </button>
+                      <p className="text-xs text-gray-400 mt-2">Tap to load this unit&rsquo;s cases</p>
+                    </button>
+
+                    {/* Who to call. The reason this card exists at all: standing
+                        in a corridor, a count is useless and a name with a
+                        number is the whole answer. */}
+                    {u.team && (
+                      <div className="border-t border-gray-100 px-4 py-3 space-y-2 bg-gray-50/60">
+                        <TeamGroup
+                          label="Anaesthesia"
+                          note={
+                            u.team.anaesthetists.source === 'on-call'
+                              ? 'on-call cover — nobody rostered to this unit'
+                              : u.team.anaesthetists.source === 'none'
+                                ? 'not yet assigned'
+                                : null
+                          }
+                          members={[
+                            ['Consultant', u.team.anaesthetists.consultant],
+                            ['Snr registrar', u.team.anaesthetists.seniorRegistrar],
+                            ['Registrar', u.team.anaesthetists.registrar],
+                          ]}
+                        />
+                        <TeamGroup
+                          label="Nursing"
+                          members={[
+                            ['Scrub', u.team.scrubNurse],
+                            ['Circulating', u.team.circulatingNurse],
+                          ]}
+                        />
+                        <TeamGroup
+                          label="Technician"
+                          members={[['Anaes. tech', u.team.anaestheticTechnician]]}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </>
@@ -1780,6 +1844,68 @@ export default function SurgeriesPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One team, its roles, and the number to ring.
+ *
+ * Two decisions worth keeping.
+ *
+ * The phone is a tel: link, because this card is read on a phone while walking
+ * and a number you have to memorise and re-type is a number nobody rings.
+ *
+ * An unfilled role is SHOWN, greyed, rather than omitted. A card that silently
+ * lists two of three anaesthetists reads as a complete team; one that says
+ * "Registrar — not assigned" is the gap you can act on. That distinction is
+ * the whole reason the anaesthetist source is carried through from the roster.
+ */
+function TeamGroup({
+  label,
+  members,
+  note,
+}: {
+  label: string;
+  members: Array<[string, { name: string; phone: string | null } | null]>;
+  note?: string | null;
+}) {
+  const anyFilled = members.some(([, m]) => m);
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+        {label}
+        {note && <span className="ml-1 normal-case font-normal text-amber-700">· {note}</span>}
+      </p>
+      {!anyFilled ? (
+        <p className="text-xs text-gray-400 italic">Not yet assigned</p>
+      ) : (
+        <ul className="mt-0.5 space-y-0.5">
+          {members.map(([role, m]) => (
+            <li key={role} className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="text-gray-500 flex-shrink-0">{role}</span>
+              {m ? (
+                <span className="min-w-0 text-right">
+                  <span className="text-gray-900 truncate">{m.name}</span>
+                  {m.phone ? (
+                    <a
+                      href={`tel:${m.phone.replace(/[^\d+]/g, '')}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="ml-2 text-primary-600 hover:underline whitespace-nowrap"
+                    >
+                      {m.phone}
+                    </a>
+                  ) : (
+                    <span className="ml-2 text-gray-400 whitespace-nowrap">no number</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-gray-400 italic">not assigned</span>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
