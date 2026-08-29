@@ -9,6 +9,8 @@ type Contact = { name: string; phone: string | null } | null;
 /** Who a unit's cases belong to today, as the card needs to show it. */
 interface UnitTeam {
   theatre: string | null;
+  /** Distinct surgeons and supervising consultants on this unit's cases today. */
+  surgeons: Array<{ name: string; phone: string | null; role: string }>;
   anaesthetists: {
     consultant: Contact;
     seniorRegistrar: Contact;
@@ -147,12 +149,71 @@ export async function GET(req: NextRequest) {
     });
     const subspecialtyOf = new Map(units.map((u) => [u.name, u.subspecialty]));
 
+    // ── The surgeons operating in this unit today ────────────────────────────
+    //
+    // Unlike the anaesthetist or the scrub nurse, a unit does not have ONE
+    // surgeon — it has whoever is operating on each of its cases, which on a
+    // four-case ENT list is often one person and sometimes three. So the card
+    // lists the distinct surgeons, not "the surgeon".
+    //
+    // Both the operating surgeon and the supervising consultant are collected:
+    // when a list runs late the consultant is frequently the person who has to
+    // be reached, and their number is otherwise two screens away.
+    //
+    // One query for the cases, one for the people. The phone lives on the user
+    // record, not on the surgery, so it has to be joined — but joined once for
+    // every unit on the page rather than per unit.
+    const dayCases = await prisma.surgery.findMany({
+      where: { ...where, unit: { in: unitNames } },
+      select: {
+        unit: true,
+        surgeonId: true,
+        surgeonName: true,
+        supervisingConsultantId: true,
+        supervisingConsultantName: true,
+      },
+    });
+
+    const surgeonIds = Array.from(
+      new Set(
+        dayCases
+          .flatMap((s) => [s.surgeonId, s.supervisingConsultantId])
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const surgeonUsers = surgeonIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: surgeonIds } },
+          select: { id: true, fullName: true, phoneNumber: true },
+        })
+      : [];
+    const phoneOf = new Map(surgeonUsers.map((u) => [u.id, u.phoneNumber ?? null]));
+    const nameOf = new Map(surgeonUsers.map((u) => [u.id, u.fullName]));
+
+    const surgeonsByUnit = new Map<string, Array<{ name: string; phone: string | null; role: string }>>();
+    for (const s of dayCases) {
+      if (!s.unit) continue;
+      const list = surgeonsByUnit.get(s.unit) ?? [];
+      const add = (id: string | null, fallbackName: string | null, role: string) => {
+        const name = (id ? nameOf.get(id) : null) ?? fallbackName;
+        if (!name) return;
+        // De-duplicated by name: the same surgeon on three cases is one person
+        // to ring, and a card repeating them three times is a worse card.
+        if (list.some((x) => x.name === name)) return;
+        list.push({ name, phone: id ? phoneOf.get(id) ?? null : null, role });
+      };
+      add(s.surgeonId, s.surgeonName, 'Surgeon');
+      add(s.supervisingConsultantId, s.supervisingConsultantName, 'Consultant');
+      surgeonsByUnit.set(s.unit, list);
+    }
+
     for (const unit of unitNames) {
       const alloc = allocations.find((a) => a.surgicalUnit === unit);
       const roster = rosterTeams ? selectTeam(rosterTeams, subspecialtyOf.get(unit)) : null;
 
       teamByUnit.set(unit, {
         theatre: alloc?.theatre?.name ?? null,
+        surgeons: surgeonsByUnit.get(unit) ?? [],
         anaesthetists: {
           consultant:
             contact(alloc?.anaesthetistConsultant) ??

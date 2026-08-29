@@ -159,6 +159,7 @@ export default function SurgeriesPage() {
       scheduled: number;
       emergencies: number;
       team?: {
+        surgeons: { name: string; phone: string | null; role: string }[];
         theatre: string | null;
         anaesthetists: {
           consultant: UnitContact;
@@ -1097,6 +1098,18 @@ export default function SurgeriesPage() {
                         number is the whole answer. */}
                     {u.team && (
                       <div className="border-t border-gray-100 px-4 py-3 space-y-2 bg-gray-50/60">
+                        {/* Surgeons first: they are the people most often
+                            chased, and a unit has several rather than one, so
+                            this is a list of distinct names rather than a role
+                            with a single holder. */}
+                        <TeamGroup
+                          label="Surgery"
+                          members={
+                            u.team.surgeons.length
+                              ? u.team.surgeons.map((s) => [s.role, { name: s.name, phone: s.phone }] as [string, { name: string; phone: string | null }])
+                              : [['Surgeon', null]]
+                          }
+                        />
                         <TeamGroup
                           label="Anaesthesia"
                           note={
@@ -1882,8 +1895,10 @@ function TeamGroup({
         <p className="text-xs text-gray-400 italic">Not yet assigned</p>
       ) : (
         <ul className="mt-0.5 space-y-0.5">
-          {members.map(([role, m]) => (
-            <li key={role} className="flex items-baseline justify-between gap-2 text-xs">
+          {members.map(([role, m], i) => (
+            // Keyed by position, not by role: a unit with two surgeons has two
+            // rows both labelled "Surgeon", and a duplicate key drops one.
+            <li key={`${role}-${i}`} className="flex items-baseline justify-between gap-2 text-xs">
               <span className="text-gray-500 flex-shrink-0">{role}</span>
               {m ? (
                 <span className="min-w-0 text-right">
