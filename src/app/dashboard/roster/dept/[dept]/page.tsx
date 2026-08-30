@@ -45,6 +45,31 @@ function mondayOf(d: Date): string {
   x.setUTCDate(x.getUTCDate() - dow);
   return x.toISOString().slice(0, 10);
 }
+/**
+ * Which week this page should OPEN on.
+ *
+ * Not simply "the week containing today". On a Saturday or Sunday that is the
+ * week which has just finished, and nobody rosters a week that has ended —
+ * the weekend is exactly when the COMING week gets built and published.
+ *
+ * On Sunday 30 August 2026 this page opened on the week starting 24 August. A
+ * roster entered for the 31st therefore sat outside the displayed week; Publish
+ * covers only weekStart to weekStart+6, so it reported success having published
+ * the old week, while the week from the 31st still read "no published roster"
+ * and bookings found nobody. The roster was right. The page was pointing at the
+ * wrong seven days.
+ *
+ * On any weekday the current week is correct: that is the week being worked.
+ */
+function defaultWeekStart(now: Date = new Date()): string {
+  const dow = now.getDay(); // 0 = Sunday, 6 = Saturday
+  if (dow === 0 || dow === 6) {
+    const next = new Date(now);
+    next.setDate(next.getDate() + (dow === 6 ? 2 : 1)); // forward to Monday
+    return mondayOf(next);
+  }
+  return mondayOf(now);
+}
 function addDays(iso: string, n: number): string {
   const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
 }
@@ -52,7 +77,7 @@ const DAY_LABEL = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateStri
 
 export default function DepartmentRosterPage() {
   const { dept } = useParams<{ dept: string }>();
-  const [weekStart, setWeekStart] = useState<string>(() => mondayOf(new Date()));
+  const [weekStart, setWeekStart] = useState<string>(() => defaultWeekStart());
   const [data, setData] = useState<DeptData | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);

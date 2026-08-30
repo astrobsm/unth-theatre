@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
+import { backfillAnaesthetists } from '@/lib/anaesthetistBackfill';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,7 +95,37 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
     return pub;
   });
 
-  const pubPayload = { ok: true, version: result.version, published: drafts.length, removed: staged.length, totalRows: finalRows.length };
+  // ── Give the week's already-booked cases their anaesthetist ──────────────
+  //
+  // A list is usually booked days before the roster covering it is published,
+  // so at booking time there was genuinely nobody to name and the cases were
+  // left unassigned. Publishing is the moment that becomes answerable, and
+  // until now nothing went back to answer it — the rota-holder saw a published
+  // roster while the theatre saw an unstaffed list, and both were right.
+  //
+  // Only unassigned ELECTIVE cases, only a match on the case's own specialty,
+  // never the on-call team. Non-fatal: the roster is published either way.
+  let backfill: Awaited<ReturnType<typeof backfillAnaesthetists>> | null = null;
+  if (dept.category === 'ANAESTHETISTS') {
+    try {
+      backfill = await backfillAnaesthetists(start, end);
+      if (backfill.filled) {
+        console.log(`[roster/publish] backfilled ${backfill.filled} case(s) for ${dept.slug}`);
+      }
+    } catch (e) {
+      console.error('[roster/publish] anaesthetist backfill failed (roster still published):', e);
+    }
+  }
+
+  const pubPayload = {
+    ok: true, version: result.version, published: drafts.length, removed: staged.length,
+    totalRows: finalRows.length,
+    // Surfaced so the person publishing sees what it did, and — more useful —
+    // which specialties still have cases and nobody covering them.
+    casesUpdated: backfill?.filled ?? 0,
+    casesStillUnassigned: backfill?.stillUnassigned ?? 0,
+    uncoveredSpecialties: backfill?.uncoveredSpecialties ?? [],
+  };
   await rememberResult(idemKey, 200, pubPayload, 'POST /api/roster/departments/publish');
   return NextResponse.json(pubPayload);
 }
