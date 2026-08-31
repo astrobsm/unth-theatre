@@ -316,15 +316,25 @@ const EMERGENCY_TEAM_USER_ROLES = [
 
 /**
  * The pre-anaesthetic assessment, in the order it is actually done: look at the
- * patient, read the numbers, decide the technique and draw the kit for it, then
- * prescribe. One long scrolling form buried the anaesthetic plan halfway down,
- * which is the field everything else depends on.
+ * patient, read the numbers, then decide the technique and draw the kit for it.
+ * One long scrolling form buried the anaesthetic plan halfway down, which is the
+ * field everything else depends on.
+ *
+ * THREE STEPS, NOT FOUR. Prescription used to have its own, and it did not earn
+ * one: applying a drug pack on the plan step already sends fifteen drugs to
+ * pharmacy in a single tap, so for most emergencies the fourth step was a screen
+ * the anaesthetist paged through and left empty. At two in the morning a step
+ * that is usually skipped is not a step, it is an obstacle.
+ *
+ * Prescribing an individual drug is still here, folded away on the plan step for
+ * the case that genuinely needs a specific dose. Removed as a STEP, not as a
+ * capability — an emergency anaesthetist who cannot write for a drug the pack
+ * does not contain is worse off than before.
  */
 const REVIEW_STEPS = [
   { n: 1, label: 'Assessment' },
   { n: 2, label: 'Vitals & bloods' },
-  { n: 3, label: 'Plan & packs' },
-  { n: 4, label: 'Prescription' },
+  { n: 3, label: 'Plan, packs & drugs' },
 ];
 
 /**
@@ -548,6 +558,15 @@ export default function EmergencyBookingPage() {
   /** Which step of the assessment is open (1..REVIEW_STEPS.length). */
   const [reviewStep, setReviewStep] = useState(1);
   /**
+   * Prescribing a drug by name, on the plan step, folded away by default.
+   *
+   * The packs above cover the ordinary emergency in one tap. This is for the
+   * case that needs something specific, and it opens by itself whenever a
+   * drug has already been added, so a prescription can never be hidden from
+   * the person who wrote it.
+   */
+  const [showManualRx, setShowManualRx] = useState(false);
+  /**
    * Anaesthesia packs for the chosen technique — the same picker, the same
    * packs and the same routing the elective pre-anaesthetic review uses, so a
    * General anaesthetic pulls identical kit whether the case is elective or an
@@ -570,11 +589,16 @@ export default function EmergencyBookingPage() {
   ];
   const reviewProgress = (() => {
     const done = REVIEW_TRACKED_FIELDS.filter((k) => String(reviewForm[k] ?? '').trim() !== '').length;
-    // The packs and the prescription each count as one more "field", so the bar
-    // cannot reach 100% while the technique has no kit drawn against it.
-    const extras = (anaesPacks.medications.length + anaesPacks.consumableRequests.length > 0 ? 1 : 0)
-      + (prescribedMeds.length > 0 ? 1 : 0);
-    const total = REVIEW_TRACKED_FIELDS.length + 2;
+    // The packs count as one more "field", so the bar cannot reach 100% while
+    // the chosen technique has no kit drawn against it.
+    //
+    // The prescription deliberately does NOT count any more. It did while it
+    // was its own step, which meant an anaesthetist who correctly covered the
+    // case with packs alone could never reach 100% — the bar quietly told them
+    // they had missed something they had not. Optional work has no place in a
+    // completeness measure.
+    const extras = anaesPacks.medications.length + anaesPacks.consumableRequests.length > 0 ? 1 : 0;
+    const total = REVIEW_TRACKED_FIELDS.length + 1;
     return Math.round(((done + extras) / total) * 100);
   })();
 
@@ -1893,8 +1917,30 @@ export default function EmergencyBookingPage() {
               </>
               )}
 
-              {/* ── Step 4: prescribe ──────────────────────────────────── */}
-              {reviewStep === 4 && (
+              {/* ── Still on step 3: prescribe a specific drug ──────────────
+                  Folded away, because the packs above already cover the
+                  ordinary emergency in one tap. Opens by itself once anything
+                  has been prescribed, so a drug can never be hidden from the
+                  person who wrote it. */}
+              {reviewStep === 3 && !showManualRx && prescribedMeds.length === 0 && (
+                <div className="md:col-span-2 border-t pt-4 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowManualRx(true)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-orange-300 text-orange-800 bg-orange-50 rounded-lg text-sm font-medium hover:bg-orange-100"
+                  >
+                    <Pill className="h-4 w-4" />
+                    Prescribe a specific drug as well
+                  </button>
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Only if this patient needs something the packs above do not contain.
+                    Anything you add goes to Pharmacy as an emergency, immediately.
+                  </p>
+                </div>
+              )}
+
+              {/* ── Step 3: the drug-by-drug prescription ───────────────── */}
+              {reviewStep === 3 && (showManualRx || prescribedMeds.length > 0) && (
               <>
               {/* PRESCRIPTION SECTION */}
               <div className="md:col-span-2 border-t pt-4 mt-2">
