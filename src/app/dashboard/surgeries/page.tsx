@@ -16,6 +16,8 @@ import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
+import ReportBlockerButton from '@/components/ReportBlockerButton';
+import { watInstantFrom } from '@/lib/watDay';
 
 interface Surgery {
   id: string;
@@ -1547,6 +1549,22 @@ export default function SurgeriesPage() {
                           <Stethoscope className="w-4 h-4" />
                           Scribe
                         </Link>
+
+                        {/* "I am here and I cannot start." Placed with the case
+                            actions because that is where somebody is standing
+                            when they discover it. Goes amber and starts asking
+                            once the case is genuinely overdue. */}
+                        <ReportBlockerButton
+                          surgeryId={surgery.id}
+                          surgeryType={surgery.surgeryType ?? 'ELECTIVE'}
+                          status={surgery.status}
+                          scheduledStart={watInstantFrom(
+                            String(surgery.scheduledDate).slice(0, 10),
+                            surgery.scheduledTime || '08:00',
+                          )?.toISOString() ?? null}
+                          bookedAt={surgery.createdAt || new Date().toISOString()}
+                          onReported={() => void fetchSurgeries()}
+                        />
 
                         {/* Edit (re-schedule, change theatre/anaesthesia) - tracked in audit log */}
                         {surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (

@@ -381,6 +381,12 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/music-library', icon: Music, label: 'Theatre Music', badge: 'ADMIN' });
   }
 
+  // Blocked cases. Everybody may REPORT one from the case itself; this board is
+  // for the people who can unblock them and who answer for the delay.
+  if (['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN', 'CMAC', 'DC_MAC'].includes(session.user.role)) {
+    menuItems.push({ href: '/dashboard/case-blockers', icon: AlertTriangle, label: 'Blocked Cases', badge: 'NEW' });
+  }
+
   // Module Access editor — only true admins / theatre manager grant overrides.
   const accessEditorRoles = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'];
   if (accessEditorRoles.includes(session.user.role)) {

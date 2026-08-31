@@ -1329,6 +1329,9 @@ model Surgery {
   /// in a table that only grows.
   @@index([scheduledDate])
   @@map("surgeries")
+
+  /// Reports of what stopped this case starting on time. See CaseBlockerReport.
+  blockerReports CaseBlockerReport[]
 }
 
 // Scrub / circulating nurse theatre reception and between-case workflow.
@@ -4100,6 +4103,14 @@ model EmergencySurgeryBooking {
   emergencyLabRequests   EmergencyLabRequest[]           @relation("EmergencyLabRequests")
 
   @@map("emergency_surgery_bookings")
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 }
 
 enum EmergencyBookingStatus {
@@ -4279,6 +4290,14 @@ model EmergencySurgeryAlert {
   anesthetist User?   @relation("AnesthetistEmergencyAlerts", fields: [anesthetistId], references: [id])
 
   @@map("emergency_surgery_alerts")
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
 }
 
 // User Notifications
@@ -11442,4 +11461,58 @@ model AuthOtp {
   @@index([userId, purpose, createdAt])
   @@index([createdAt])
   @@map("auth_otps")
+}
+
+/// Why a case did not start when it should have.
+///
+/// The commonest event in a theatre suite and, until now, the one with nowhere
+/// to be written down. An anaesthetist arrives for a nine o'clock list and the
+/// scrub nurse is in another room; he waits, nobody outside that room learns
+/// anything, and the reason — the only part that could be fixed — is never
+/// recorded. This is that moment, with a name attached.
+///
+/// APPEND-ONLY in spirit: a report is a statement somebody made at a time. The
+/// outcome and the resolution are added later, but the reason and the reporter
+/// are never rewritten.
+model CaseBlockerReport {
+  id        String  @id @default(uuid())
+  surgeryId String
+  surgery   Surgery @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  /// One of BLOCKER_REASONS in lib/caseBlockers. A fixed list, because the
+  /// value of recording this is being able to count it.
+  reason String
+  /// Free text, required when reason is OTHER.
+  detail String? @db.Text
+
+  reportedById   String?
+  reportedByName String
+  reportedByRole String?
+  reportedAt     DateTime @default(now())
+
+  /// How late the case was when this was reported. Negative or null where that
+  /// is not meaningful, as for an emergency with no slot.
+  minutesLate Int?
+
+  /// PENDING | COMPLETED | RESCHEDULED | CANCELLED — what became of the case.
+  outcome     String    @default("PENDING")
+  outcomeNote String?   @db.Text
+  outcomeAt   DateTime?
+  outcomeById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([surgeryId, reportedAt])
+  @@index([reportedAt])
+  @@index([reason])
+  @@map("case_blocker_reports")
 }

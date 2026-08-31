@@ -204,6 +204,18 @@ export const TABLE_POLICIES: TablePolicy[] = [
 
   { table: 'users', cls: 'CLOUD_AUTHORITATIVE', why: 'A merged or revoked account must not be resurrected by a stale local copy.' },
 
+  // ── The emergency board ──────────────────────────────────────────────────
+  // Absent from this list until 31 August, and that absence is what let the
+  // theatre hear an alert for a case no screen could show: the surgery and the
+  // announcement both replicated, the booking the display renders from did not.
+  // LWW rather than APPEND_ONLY because a booking has a lifecycle — SUBMITTED
+  // to APPROVED to THEATRE_ASSIGNED — and the latest state is the true one.
+  { table: 'emergency_surgery_bookings', cls: 'LWW', why: 'One emergency case moving through its lifecycle. The latest status is the true one, and the theatre must see it on whichever node it is looking at.' },
+  { table: 'emergency_surgery_alerts', cls: 'LWW', why: 'The alert raised for that booking, and whether it is still active. It drives the emergency display, so it has to travel with the booking or the board is blank on one node.' },
+  // Why a case did not start. Replicated from the day it was created, having
+  // watched two tables cause incidents by not being.
+  { table: 'case_blocker_reports', cls: 'LWW', why: 'One report of what stopped a case, with an outcome added later. The reason and reporter never change; the latest outcome is the true one.' },
+
   // ── Account recovery ─────────────────────────────────────────────────────
   // NOT REPLICATED, and that is a decision rather than an oversight.
   //

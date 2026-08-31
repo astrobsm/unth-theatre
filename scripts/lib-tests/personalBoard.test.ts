@@ -34,10 +34,21 @@ describe('the cutoff — start clean, do not import a backlog', () => {
 });
 
 describe('queries', () => {
-  it('gives every query somewhere to go', () => {
+  // This asserted /dashboard/queries/<id> — a page that has never existed. So
+  // it passed for months while every "Read and respond" button on every
+  // dashboard returned 404, including three overdue ones on the administrator's
+  // own screen. Asserting the URL the code happens to build proves nothing; it
+  // has to point at a page that is really there and carry the id.
+  it('sends a query to a page that exists, carrying its id', () => {
     const [item] = board({ queries: [query()] });
-    expect(item.actionUrl).toContain('/dashboard/queries/q1');
+    expect(item.actionUrl).toContain('/dashboard/disciplinary-queries');
+    expect(item.actionUrl).toContain('q1');
     expect(item.actionLabel).toMatch(/respond/i);
+  });
+
+  it('never points at the page that does not exist', () => {
+    const [item] = board({ queries: [query()] });
+    expect(item.actionUrl).not.toMatch(/\/dashboard\/queries\//);
   });
 
   it('marks an overdue query CRITICAL, a pending one HIGH', () => {

@@ -210,7 +210,12 @@ export function buildPersonalBoard(input: BoardInput): BoardItem[] {
         ? `Query ${q.referenceNumber} — response OVERDUE`
         : `Query ${q.referenceNumber} — response required`,
       detail: q.subject,
-      actionUrl: `/dashboard/queries/${q.id}`,
+      // /dashboard/queries has never existed. This link 404'd for every person
+      // who was queried, which is precisely the set of people who most needed
+      // it to work — three overdue responses on one dashboard, none reachable.
+      // The disciplinary-queries page already serves both sides: admins manage,
+      // the recipient reads and responds.
+      actionUrl: `/dashboard/disciplinary-queries?query=${q.id}`,
       actionLabel: 'Read and respond',
       dueAt: due,
       compulsory: true,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import {
   FileWarning, RefreshCw, Clock, CheckCircle, AlertTriangle, XCircle,
@@ -62,6 +62,8 @@ export default function DisciplinaryQueriesPage() {
   const [responseText, setResponseText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  /** A ?query= deep link is honoured once, on the first load. */
+  const deepLinkOpened = useRef(false);
 
   const isAdmin = session?.user?.role && [
     'ADMIN', 'SYSTEM_ADMINISTRATOR', 'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC', 'THEATRE_MANAGER'
@@ -75,7 +77,19 @@ export default function DisciplinaryQueriesPage() {
       const res = await fetch(`/api/disciplinary-queries?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setQueries(Array.isArray(data) ? data : []);
+        const list: DisciplinaryQuery[] = Array.isArray(data) ? data : [];
+        setQueries(list);
+
+        // Arrived from the dashboard's "Read and respond". Open that query
+        // rather than dropping the person on a list they then have to search —
+        // they came from an item that already named the one they owe.
+        // Once only, so closing the panel does not reopen it on the next fetch.
+        if (!deepLinkOpened.current) {
+          deepLinkOpened.current = true;
+          const wanted = new URLSearchParams(window.location.search).get('query');
+          const match = wanted ? list.find((q) => q.id === wanted) : null;
+          if (match) setSelectedQuery(match);
+        }
       }
     } catch (error) {
       console.error('Error fetching queries:', error);
