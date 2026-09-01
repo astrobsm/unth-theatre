@@ -244,6 +244,39 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'nurse_handovers', cls: 'LWW', why: 'One shift handing over to the next. Written through the shift; the latest version is the one being handed over.' },
   { table: 'handover_checklist_items', cls: 'LWW', why: 'The items within that handover.' },
 
+  // ── The departments that keep the journey possible ───────────────────────
+  // Enabled 1 September, in the same sweep as the patient journey. Classified
+  // in bulk because they share a shape: a department records its own work, and
+  // the other node needs to see it. Where a row is an EVENT it is APPEND_ONLY;
+  // where it is the CURRENT STATE of a thing, LWW.
+  { table: 'roster_publications', cls: 'LWW', why: 'An immutable snapshot per version, but the ARCHIVED flag moves. Latest wins.' },
+  { table: 'surgical_units', cls: 'LWW', why: 'Reference data. Renaming a unit has no clinical history to lose.' },
+  { table: 'surgical_unit_schedules', cls: 'LWW', why: 'Which unit operates on which day.' },
+  { table: 'theatre_suites', cls: 'LWW', why: 'The rooms themselves. Reference data.' },
+  { table: 'case_cancellations', cls: 'APPEND_ONLY', why: 'A cancellation happened, with a reason and a person. Never edited.' },
+  { table: 'theatre_setups', cls: 'LWW', why: 'What was drawn for a case; status walks COLLECTED to RETURNED.' },
+  { table: 'store_consumables', cls: 'LWW', why: 'Current state of a stock line; movements carry the quantities.' },
+  { table: 'consumable_consumptions', cls: 'APPEND_ONLY', why: 'A ledger entry. Balances are summed, never overwritten.' },
+  { table: 'medication_collections', cls: 'APPEND_ONLY', why: 'A collection from pharmacy at a time.' },
+  { table: 'medication_usage_records', cls: 'QUARANTINE', why: 'What was given to a patient. An overwritten dose is a patient-safety event.' },
+  { table: 'medication_returns', cls: 'APPEND_ONLY', why: 'A return happened; two nodes recording different returns both happened.' },
+  { table: 'emergency_lab_requests', cls: 'LWW', why: 'A request with a lifecycle from requested to resulted.' },
+  { table: 'emergency_lab_tests', cls: 'QUARANTINE', why: 'A result is a claim about a patient. Two differing claims need a person.' },
+  { table: 'cssd_inventory', cls: 'LWW', why: 'Where a set is and whether it is sterile. Latest movement is the true one.' },
+  { table: 'cssd_sterilization_logs', cls: 'APPEND_ONLY', why: 'A cycle ran with parameters and a result. That is traceability.' },
+  { table: 'equipment_checkouts', cls: 'LWW', why: 'Out or back. The latest state is where the machine is.' },
+  { table: 'equipment_fault_alerts', cls: 'LWW', why: 'A fault and its repair status.' },
+  { table: 'power_house_status', cls: 'LWW', why: 'Mains, generators and fuel right now.' },
+  { table: 'oxygen_alerts', cls: 'APPEND_ONLY', why: 'An alarm raised at a time.' },
+  { table: 'plumbing_faults', cls: 'LWW', why: 'A fault and whether it is fixed.' },
+  { table: 'disciplinary_queries', cls: 'LWW', why: 'A query walks ISSUED to RESPONDED to RESOLVED. The recipient must see it on whichever node they open.' },
+  { table: 'incident_reports', cls: 'QUARANTINE', why: 'An account of something that went wrong. Both versions must survive.' },
+  { table: 'mortalities', cls: 'QUARANTINE', why: 'The formal record of a death. Nothing here may be silently merged.' },
+  { table: 'anonymous_tips', cls: 'APPEND_ONLY', why: 'Raised without a name, and never editable — that is the whole guarantee.' },
+  { table: 'security_reports', cls: 'APPEND_ONLY', why: 'An account of an event at a time.' },
+  { table: 'announcements', cls: 'LWW', why: 'What the suite hears and when. Latest wording wins.' },
+  { table: 'emergency_team_availability', cls: 'LWW', why: 'Who answered an emergency call and whether they are coming.' },
+
   // ── Account recovery ─────────────────────────────────────────────────────
   // NOT REPLICATED, and that is a decision rather than an oversight.
   //
