@@ -16,20 +16,17 @@
  * add custom, or add from the catalog dropdown). Edits are per-case only.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Package, Check, Loader2, Eye, Plus, Trash2, X, RotateCcw } from 'lucide-react';
 import { ANAESTHESIA_PACK_TECHNIQUE } from '@/lib/anaesthesiaTypes';
 
-export interface AnaesMedication {
-  id: string; category: string; name: string; dose: string; unit: string; route: string; timing: string; notes?: string;
-}
-export interface AnaesConsumableRequest {
-  name: string; category: string; size?: string | null; unit: string; quantity: number; notes?: string;
-}
-export interface AnaesPackPayload {
-  medications: AnaesMedication[];
-  consumableRequests: AnaesConsumableRequest[];
-}
+import { buildAnaesPackPayload } from '@/lib/anaesthesiaPackPayload';
+export type {
+  AnaesMedication,
+  AnaesConsumableRequest,
+  AnaesPackPayload,
+} from '@/lib/anaesthesiaPackPayload';
+import type { AnaesPackPayload as Payload } from '@/lib/anaesthesiaPackPayload';
 
 interface PackItem {
   name: string; quantity: number; unit: string;
@@ -69,7 +66,7 @@ export default function AnaesthesiaPackPicker({
   onChange,
 }: {
   anaesthesiaType?: string; // the AnesthesiaType enum value
-  onChange: (payload: AnaesPackPayload) => void;
+  onChange: (payload: Payload) => void;
 }) {
   const [packs, setPacks] = useState<Pack[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,42 +100,55 @@ export default function AnaesthesiaPackPicker({
     (p: Pack, m: Map<string, EditItem[]>): EditItem[] => m.get(p.id) ?? cloneItems(p), [],
   );
 
-  const recompute = useCallback((sel: Set<string>, m: Map<string, EditItem[]>) => {
-    const chosen = packs.filter((p) => sel.has(p.id));
-    const medications: AnaesMedication[] = [];
-    const consumableRequests: AnaesConsumableRequest[] = [];
-    for (const p of chosen) {
-      for (const it of effectiveItems(p, m)) {
-        const qty = Number(it.quantity) || 0;
-        if (it.removed || !it.name.trim() || qty < 1) continue;
-        if (p.kind === 'PHARMACY') {
-          medications.push({
-            id: uid(), category: `Anaesthesia: ${p.name}`, name: it.name.trim(),
-            dose: it.dosage ?? '', unit: it.unit || 'vial', route: it.route ?? '—',
-            timing: 'Theatre (intra-operative)', notes: it.notes ?? '',
-          });
-        } else {
-          consumableRequests.push({
-            name: it.name.trim(), category: it.category ?? 'ANAESTHESIA_AIRWAY',
-            size: it.size ?? null, unit: it.unit || 'piece', quantity: qty, notes: `Anaesthesia pack: ${p.name}`,
-          });
-        }
-      }
-    }
-    onChange({ medications, consumableRequests });
-  }, [packs, effectiveItems, onChange]);
+  /**
+   * What the current selection contributes to the review.
+   *
+   * PURE, and that is the whole point. This used to end with onChange(...) —
+   * the PARENT's setState — and was called from inside setSelected/setEdits
+   * updater functions. React runs updaters during the render phase, so pressing
+   * a pack card updated a different component mid-render. React re-invokes the
+   * updater, which fires onChange again, and it escalates to "Too many
+   * re-renders": an uncaught error thrown from render, which unmounts the whole
+   * pre-operative review. The anaesthetist saw the review vanish the moment
+   * they tried to choose a pack.
+   *
+   * So the payload is derived here and published in the effect below, after the
+   * render that produced it.
+   */
+  const payload = useMemo<Payload>(
+    // Every applied pack's items, with this case's edits substituted in.
+    () => buildAnaesPackPayload({
+      packs: packs.map((p) => ({ ...p, items: effectiveItems(p, edits) })),
+      selected,
+      edits: new Map(),
+      makeId: () => uid(),
+    }),
+    [packs, selected, edits, effectiveItems],
+  );
 
+  // Publish after the render, never during it. onChange is held in a ref so a
+  // caller passing an inline arrow cannot turn this into a render loop — the
+  // exact failure being fixed, reintroduced from the other side.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; });
+  useEffect(() => { onChangeRef.current(payload); }, [payload]);
+
+  // The updaters below are now PURE: they compute the next state and nothing
+  // else. Anything derived from them happens in the memo above.
   const toggle = (id: string) => {
-    setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); recompute(next, edits); return next; });
+    setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
-  useEffect(() => { recompute(selected, edits); /* eslint-disable-next-line */ }, [packs]);
 
   const mutateEdits = (packId: string, fn: (items: EditItem[]) => EditItem[]) => {
     setEdits((prev) => {
-      const base = prev.get(packId) ?? cloneItems(packs.find((p) => p.id === packId)!);
+      const pack = packs.find((p) => p.id === packId);
+      // Was a non-null assertion. A pack that has gone (list refreshed while a
+      // modal was open) would have thrown inside cloneItems and taken the
+      // review down with it.
+      if (!pack) return prev;
+      const base = prev.get(packId) ?? cloneItems(pack);
       const nextItems = fn(base.map((i) => ({ ...i })));
       const next = new Map(prev); next.set(packId, nextItems);
-      if (selected.has(packId)) recompute(selected, next);
       return next;
     });
   };
@@ -149,7 +159,7 @@ export default function AnaesthesiaPackPicker({
     mutateEdits(packId, (i) => [...i, kind === 'CONSUMABLE'
       ? { name: '', quantity: 1, unit: 'piece', category: 'ANAESTHESIA_AIRWAY', added: true, ...prefill }
       : { name: '', quantity: 1, unit: 'vial', drugType: 'ANAESTHETIC_ADJUNCT', added: true, ...prefill }]);
-  const resetPack = (packId: string) => setEdits((prev) => { const n = new Map(prev); n.delete(packId); if (selected.has(packId)) recompute(selected, n); return n; });
+  const resetPack = (packId: string) => setEdits((prev) => { const n = new Map(prev); n.delete(packId); return n; });
 
   const pharmacyPacks = useMemo(() => packs.filter((p) => p.kind === 'PHARMACY'), [packs]);
   const consumablePacks = useMemo(() => packs.filter((p) => p.kind === 'CONSUMABLE'), [packs]);
@@ -162,7 +172,7 @@ export default function AnaesthesiaPackPicker({
   const Card = ({ p }: { p: Pack }) => {
     const on = selected.has(p.id);
     const eff = effectiveItems(p, edits);
-    const activeCount = eff.filter((i) => !i.removed && i.name.trim()).length;
+    const activeCount = eff.filter((i) => !i.removed && (i.name ?? '').trim()).length;
     const edited = edits.has(p.id);
     const isMatch = p.technique && matchTech && p.technique === matchTech;
     return (
