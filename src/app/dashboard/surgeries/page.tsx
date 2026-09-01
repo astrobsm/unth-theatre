@@ -17,6 +17,7 @@ import ContactName from '@/components/ContactName';
 import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import ReportBlockerButton from '@/components/ReportBlockerButton';
+import CasePacksButton from '@/components/CasePacksButton';
 import { watInstantFrom } from '@/lib/watDay';
 
 interface Surgery {
@@ -1549,6 +1550,17 @@ export default function SurgeriesPage() {
                           <Stethoscope className="w-4 h-4" />
                           Scribe
                         </Link>
+
+                        {/* Packs, from the list rather than only from the case
+                            detail page. The badge shows the counts, so a case
+                            with no pack at all is visible while scanning —
+                            which is the moment it can still be fixed. */}
+                        <CasePacksButton
+                          surgeryId={surgery.id}
+                          procedureName={surgery.procedureName}
+                          patientName={surgery.patient?.name}
+                          status={surgery.status}
+                        />
 
                         {/* "I am here and I cannot start." Placed with the case
                             actions because that is where somebody is standing
