@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pill, Package, Check, Loader2, Eye, Plus, Trash2, X, RotateCcw } from 'lucide-react';
+import { ANAESTHESIA_PACK_TECHNIQUE } from '@/lib/anaesthesiaTypes';
 
 export interface AnaesMedication {
   id: string; category: string; name: string; dose: string; unit: string; route: string; timing: string; notes?: string;
@@ -48,12 +49,10 @@ interface EditItem {
 interface CatalogConsumable { id: string; name: string; category?: string | null; size?: string | null; unit?: string | null; defaultQuantity?: number | null; }
 interface CatalogDrug { id: string; name: string; type?: string | null; defaultDosage?: string | null; defaultRoute?: string | null; defaultQuantity?: number | null; unit?: string | null; }
 
-// Map the AnesthesiaType enum to the seeded pack technique label.
-const TECHNIQUE_LABEL: Record<string, string> = {
-  GENERAL: 'General', SPINAL: 'Spinal', EPIDURAL: 'Epidural',
-  COMBINED_SPINAL_EPIDURAL: 'Combined Spinal-Epidural', LOCAL: 'Local',
-  REGIONAL: 'Regional', SEDATION: 'Sedation',
-};
+// Maps the AnesthesiaType enum to the seeded pack technique label. Shared with
+// the review form and both APIs, so a technique cannot exist in one and not the
+// other — that mismatch is what rejected every epidural review with a 400.
+const TECHNIQUE_LABEL: Record<string, string> = ANAESTHESIA_PACK_TECHNIQUE;
 
 const cloneItems = (p: Pack): EditItem[] =>
   p.items.map((it) => ({

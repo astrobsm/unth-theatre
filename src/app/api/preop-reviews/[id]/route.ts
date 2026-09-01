@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { detectConflict } from '@/lib/concurrency';
 import { canCompleteReview, canDeclareFit } from '@/lib/anaesthesia/fitness';
+import { ANAESTHESIA_TYPE_VALUES } from '@/lib/anaesthesiaTypes';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,8 @@ const updatePreOpReviewSchema = z.object({
   bloodGlucose: z.number().optional(),
   otherLabResults: z.string().optional(),
   asaClass: z.string().optional(),
-  proposedAnesthesiaType: z.enum(['GENERAL', 'SPINAL', 'LOCAL', 'REGIONAL', 'SEDATION']).optional(),
+  // Same five-value list as the create route had; see @/lib/anaesthesiaTypes.
+  proposedAnesthesiaType: z.enum(ANAESTHESIA_TYPE_VALUES).optional(),
   anestheticPlan: z.string().optional(),
   specialConsiderations: z.string().optional(),
   riskLevel: z.string().optional(),

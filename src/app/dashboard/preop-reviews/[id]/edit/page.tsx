@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Syringe, Activity, Save } from 'lucide-react';
 import Link from 'next/link';
+import { ANAESTHESIA_TYPES, ANAESTHESIA_TYPE_LABELS } from '@/lib/anaesthesiaTypes';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -627,12 +628,14 @@ export default function EditPreOpReviewPage() {
                 defaultValue={review.proposedAnesthesiaType || ''}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
+                {/* This list was missing EPIDURAL and COMBINED_SPINAL_EPIDURAL.
+                    A review saved with either would open here showing "Select
+                    type", because defaultValue matched no option — and saving
+                    the form would then quietly clear the technique. */}
                 <option value="">Select type</option>
-                <option value="GENERAL">General Anesthesia</option>
-                <option value="SPINAL">Spinal Anesthesia</option>
-                <option value="LOCAL">Local Anesthesia</option>
-                <option value="REGIONAL">Regional Anesthesia</option>
-                <option value="SEDATION">Sedation</option>
+                {ANAESTHESIA_TYPES.map((t) => (
+                  <option key={t} value={t}>{ANAESTHESIA_TYPE_LABELS[t]}</option>
+                ))}
               </select>
             </div>
           </div>

@@ -12,6 +12,7 @@ import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/Anaes
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
 import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaesthesiaConsent';
+import { ANAESTHESIA_TYPES, ANAESTHESIA_TYPE_LABELS } from '@/lib/anaesthesiaTypes';
 import { OPTIMISATION_CATEGORIES, CATEGORY_LABELS } from '@/lib/anaesthesia/fitness';
 import ContactName from '@/components/ContactName';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -674,10 +675,17 @@ export default function NewPreOpReviewPage() {
           }
         } catch {}
         setError(msg);
+        // The banner is at the top of a seven-section form and the anaesthetist
+        // is at the bottom, on the submit button. Without this the review looked
+        // like it simply stopped: nothing moved, nothing was created, and the
+        // reason was off-screen. A rejection nobody can see is indistinguishable
+        // from the app being broken.
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
       console.error('Error creating review:', error);
       setError('Failed to create pre-operative review');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setSubmitting(false);
     }
@@ -1241,15 +1249,14 @@ export default function NewPreOpReviewPage() {
                   value={anaesTechnique}
                   onChange={(e) => setAnaesTechnique(e.target.value)}
                 >
+                  {/* Rendered from the shared list so the form cannot offer a
+                      technique the database will not accept. "General +
+                      Regional" used to sit here and was in no enum at all — it
+                      rejected every review it was chosen for. */}
                   <option value="">Select type</option>
-                  <option value="GENERAL">General Anesthesia</option>
-                  <option value="SPINAL">Spinal Anesthesia</option>
-                  <option value="EPIDURAL">Epidural Anesthesia</option>
-                  <option value="COMBINED_SPINAL_EPIDURAL">Combined Spinal-Epidural</option>
-                  <option value="LOCAL">Local Anesthesia</option>
-                  <option value="REGIONAL">Regional Anesthesia (Nerve Block)</option>
-                  <option value="SEDATION">Sedation</option>
-                  <option value="GENERAL_WITH_REGIONAL">General + Regional</option>
+                  {ANAESTHESIA_TYPES.map((t) => (
+                    <option key={t} value={t}>{ANAESTHESIA_TYPE_LABELS[t]}</option>
+                  ))}
                 </select>
               </div>
               {/* "Anesthetic Plan Details" and "Special Considerations" were

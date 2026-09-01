@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
+import { ANAESTHESIA_TYPE_VALUES } from '@/lib/anaesthesiaTypes';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,10 @@ const createPreOpReviewSchema = z.object({
   bloodGlucose: optNum,
   otherLabResults: optStr,
   asaClass: optStr,
-  proposedAnesthesiaType: optEnum(['GENERAL', 'SPINAL', 'LOCAL', 'REGIONAL', 'SEDATION']),
+  // Was a hand-written list of five that omitted EPIDURAL and
+  // COMBINED_SPINAL_EPIDURAL — both offered by the form, both with seeded packs.
+  // Choosing either rejected the whole review with a 400.
+  proposedAnesthesiaType: optEnum(ANAESTHESIA_TYPE_VALUES),
   anestheticPlan: optStr,
   specialConsiderations: optStr,
   riskLevel: optStr,
