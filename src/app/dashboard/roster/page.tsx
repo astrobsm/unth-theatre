@@ -340,8 +340,17 @@ export default function RosterPage() {
                             ))}
                           </select>
                         ) : (
+                          /* A row with no category used to throw here, and one
+                             bad row took the WHOLE roster table down — a blank
+                             page in place of the day's staffing. The column is
+                             NOT NULL and all 950 live rows have it, so this
+                             should be unreachable; it evidently is not. A
+                             missing value now renders as such: survivable, and
+                             visible rather than silently blank. */
                           <span className={`px-2 py-1 rounded text-xs font-semibold ${getCategoryBadge(roster.staffCategory)}`}>
-                            {roster.staffCategory.replace(/_/g, ' ')}
+                            {roster.staffCategory
+                              ? roster.staffCategory.replace(/_/g, ' ')
+                              : 'NO CATEGORY'}
                           </span>
                         )}
                       </td>
