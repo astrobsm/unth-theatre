@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
+import { normaliseShift } from '@/lib/rosterShifts';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -28,17 +29,6 @@ const bulkSchema = z.object({
 });
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-
-function normShift(raw: string): 'MORNING' | 'CALL' | 'NIGHT' | null {
-  // `/` folds to a space as well, so the anaesthetists' "CALL/EMERGENCIES" label
-  // arrives here as "CALL EMERGENCIES".
-  const t = raw.trim().toUpperCase().replace(/[_\s\-/]+/g, ' ').trim();
-  if (['MORNING', 'AM', 'DAY', 'M', 'EARLY', 'MORN', 'ELECTIVE', 'ELECTIVES'].includes(t)) return 'MORNING';
-  if (['CALL', 'ON CALL', 'ONCALL', 'C', 'EMERGENCY', 'EMERGENCIES',
-    'CALL EMERGENCY', 'CALL EMERGENCIES'].includes(t)) return 'CALL';
-  if (['NIGHT', 'PM', 'N', 'LATE'].includes(t)) return 'NIGHT';
-  return null;
-}
 
 const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T00:00:00Z').getTime());
 
@@ -113,7 +103,7 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
 
     for (const r of incoming) {
       const name = (r.name || '').trim();
-      const shift = normShift(r.shift || '');
+      const shift = normaliseShift(r.shift || '');
       const date = (r.date || '').trim();
       if (!name) { invalid.push({ name: name || '(blank)', reason: 'missing name' }); continue; }
       if (!isIsoDate(date)) { invalid.push({ name, reason: `bad date "${r.date}"` }); continue; }
@@ -135,7 +125,13 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
         userId: res.id,
         staffName: res.fullName,
         staffCategory: dept.category,
-        seniorityLevel: r.seniorityLevel?.toString().trim() || null,
+        // A department with no grades stores none, whatever the sheet says.
+        // Technicians used to have a Seniority column, so an old template is
+        // still lying around on people's laptops; re-using one must not put
+        // CONSULTANT back on a technician row after the field was removed.
+        seniorityLevel: dept.seniorityLevels?.length
+          ? r.seniorityLevel?.toString().trim() || null
+          : null,
         subRole: r.subRole?.toString().trim() || null,
         location: r.location?.toString().trim() || 'MAIN_THEATRE',
         date: new Date(date + 'T00:00:00Z'),

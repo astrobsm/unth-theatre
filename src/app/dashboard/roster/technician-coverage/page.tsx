@@ -21,13 +21,13 @@ type Tech = { userId: string; name: string; phone: string | null; seniority: str
 type CaseRow = {
   id: string; patientName: string; folderNumber: string | null; procedureName: string;
   subspecialty: string; unit: string; theatre: string; scheduledTime: string; surgeryType: string; isEmergency: boolean;
-  assigned: Tech[]; source: 'theatre' | 'call' | 'none'; covered: boolean;
+  assigned: Tech[]; source: 'specialty' | 'call' | 'none'; covered: boolean;
   currentTechnician: { id: string; name: string } | null;
 };
 type Board = {
   date: string;
   dayCall: Tech[]; nightCall: Tech[]; icu: Tech[];
-  coverageByTheatre: { theatre: string; technicians: Tech[] }[];
+  coverageBySpecialty: { specialty: string; technicians: Tech[] }[];
   cases: CaseRow[];
   gaps: string[];
   summary: { totalCases: number; covered: number; uncovered: number };
@@ -116,8 +116,8 @@ export default function TechnicianCoveragePage() {
             <Wrench className="h-7 w-7 text-blue-600" /> Technician Coverage
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Booked cases matched to the anaesthetic technician on their theatre for the day. Emergencies map to the day/night
-            call technician; ICU shown separately.
+            Booked cases matched to the anaesthetic technician rostered to their surgical specialty for the day. Emergencies
+            map to the day/night call technician; ICU shown separately.
           </p>
         </div>
         <div className="flex items-end gap-2">
@@ -174,7 +174,7 @@ export default function TechnicianCoveragePage() {
             <div className="mb-5 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <AlertTriangle className="mr-1 inline h-4 w-4" />
-                Booked theatres with <strong>no technician assigned</strong> today: {board.gaps.join(', ')}.
+                Booked specialties with <strong>no technician rostered</strong> today: {board.gaps.join(', ')}.
               </div>
               {canAlert && (
                 <button
@@ -188,16 +188,16 @@ export default function TechnicianCoveragePage() {
             </div>
           )}
 
-          {/* Theatre coverage table */}
-          {board.coverageByTheatre.length > 0 && (
+          {/* Specialty coverage table */}
+          {board.coverageBySpecialty.length > 0 && (
             <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
               <div className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">
-                Theatre coverage — theatre → technician
+                Specialty coverage — specialty → technician
               </div>
               <div className="divide-y divide-gray-100">
-                {board.coverageByTheatre.map((cov) => (
-                  <div key={cov.theatre} className="flex flex-col gap-1 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="inline-flex items-center gap-1 font-medium text-gray-800"><Building2 className="h-4 w-4 text-gray-400" /> {cov.theatre}</span>
+                {board.coverageBySpecialty.map((cov) => (
+                  <div key={cov.specialty} className="flex flex-col gap-1 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="inline-flex items-center gap-1 font-medium text-gray-800"><Building2 className="h-4 w-4 text-gray-400" /> {cov.specialty}</span>
                     <div className="flex flex-wrap gap-1">{cov.technicians.map((t) => <TechPill key={t.userId} t={t} />)}</div>
                   </div>
                 ))}
@@ -234,14 +234,14 @@ export default function TechnicianCoveragePage() {
                       </div>
                     </div>
                     <span className="text-[11px] text-gray-400">
-                      {c.source === 'theatre' ? 'matched by theatre' : c.source === 'call' ? 'call cover' : 'unassigned'}
+                      {c.source === 'specialty' ? 'matched by specialty' : c.source === 'call' ? 'call cover' : 'unassigned'}
                     </span>
                   </div>
                   <div className="mt-2">
                     {c.assigned.length ? (
                       <div className="flex flex-wrap gap-1">{c.assigned.map((t) => <TechPill key={t.userId} t={t} />)}</div>
                     ) : (
-                      <span className="text-sm text-red-600">No technician assigned to this theatre.</span>
+                      <span className="text-sm text-red-600">No technician rostered to this specialty.</span>
                     )}
                   </div>
 

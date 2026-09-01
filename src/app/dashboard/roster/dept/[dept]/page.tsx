@@ -254,10 +254,17 @@ export default function DepartmentRosterPage() {
     if (res.ok) await load(); else setMsg((await res.json().catch(() => ({})))?.error || 'Move failed');
   };
   const exportCsv = () => {
-    const cols = ['Date', 'Shift', 'Staff', data?.department.subRoleLabel ?? 'Sub-role', 'Seniority', 'Location', 'Status', 'Notes'];
+    // Seniority is omitted for a department that has no grades — the exported
+    // CSV is the same shape as the upload template, so a week can be exported,
+    // edited and uploaded straight back.
+    const withSeniority = (data?.department.seniorityLevels.length ?? 0) > 0;
+    const cols = ['Date', 'Shift', 'Staff', data?.department.subRoleLabel ?? 'Sub-role',
+      ...(withSeniority ? ['Seniority'] : []), 'Location', 'Status', 'Notes'];
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const lines = [cols.join(',')];
-    for (const r of data?.rows ?? []) lines.push([r.date, shiftLabel(r.shift), r.staffName, r.subRole, r.seniorityLevel, r.location, r.pendingRemoval ? 'PUBLISHED (to be removed)' : r.status, r.notes].map(esc).join(','));
+    for (const r of data?.rows ?? []) lines.push([r.date, shiftLabel(r.shift), r.staffName, r.subRole,
+      ...(withSeniority ? [r.seniorityLevel] : []),
+      r.location, r.pendingRemoval ? 'PUBLISHED (to be removed)' : r.status, r.notes].map(esc).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `roster-${dept}-${weekStart}.csv`; a.click(); URL.revokeObjectURL(a.href);

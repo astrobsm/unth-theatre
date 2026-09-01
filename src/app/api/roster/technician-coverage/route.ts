@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { bucketTechnicianRoster, specialtyKey } from '@/lib/technicianCoverage';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,10 +10,17 @@ type Tech = { userId: string; name: string; phone: string | null; seniority: str
 const norm = (s: string | null | undefined) => (s || '').trim().toLowerCase();
 
 // GET /api/roster/technician-coverage?date=YYYY-MM-DD
-// Anaesthetic technicians are assigned to a THEATRE (or day/night call cover or
-// ICU). This aligns each booked surgery to the technician on its theatre — the
-// theatre comes from the surgery's own theatre, else the surgical unit's
-// theatre-for-that-weekday (SurgicalUnitSchedule), else its location.
+//
+// Anaesthetic technicians are rostered to a SURGICAL SPECIALTY — Neurosurgery,
+// Orthopaedics and so on — or to day call, night call or ICU. This aligns each
+// booked surgery to the technician covering its specialty.
+//
+// It used to align on THEATRE, which the booking seldom states: the theatre was
+// derived from the surgery's own theatre, else the surgical unit's
+// theatre-for-that-weekday, else the free-text location. The specialty is on the
+// booking itself, so the match is against something a person actually entered.
+// The theatre is still resolved and returned, because it is worth SEEING on the
+// board — it is just no longer what coverage is decided by.
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -55,36 +63,23 @@ export async function GET(request: NextRequest) {
       : [];
     const userNameById = new Map(assignedUsers.map((u) => [u.id, u.fullName]));
 
-    const techOf = (r: (typeof rosterRows)[number]): Tech => ({
-      userId: r.userId,
-      name: r.user?.fullName || r.staffName || 'Unknown',
-      phone: r.user?.phoneNumber || null,
-      seniority: r.seniorityLevel || null,
-    });
+    // Bucketing lives in @/lib/technicianCoverage, shared with the gap alert so
+    // the board and the alert cannot disagree about whether a day is covered.
+    const { bySpecialty, dayCall, nightCall, icu } = bucketTechnicianRoster<Tech>(
+      rosterRows,
+      (r) => {
+        const row = r as (typeof rosterRows)[number];
+        return {
+          userId: row.userId,
+          name: row.user?.fullName || row.staffName || 'Unknown',
+          phone: row.user?.phoneNumber || null,
+          seniority: row.seniorityLevel || null,
+        };
+      },
+    );
 
-    const dayCall: Tech[] = [];
-    const nightCall: Tech[] = [];
-    const icu: Tech[] = [];
-    const byTheatre = new Map<string, { theatre: string; technicians: Tech[] }>();
-
-    for (const r of rosterRows) {
-      const t = techOf(r);
-      const sub = (r.subRole || '').trim();
-      if (/night\s*call/i.test(sub)) { nightCall.push(t); continue; }
-      if (/day\s*call/i.test(sub)) { dayCall.push(t); continue; }
-      if (/\bicu\b/i.test(sub)) { icu.push(t); continue; }
-      if (sub) {
-        const key = norm(sub);
-        const bucket = byTheatre.get(key) || { theatre: sub, technicians: [] };
-        if (!bucket.technicians.some((x) => x.userId === t.userId)) bucket.technicians.push(t);
-        byTheatre.set(key, bucket);
-        continue;
-      }
-      // No explicit assignment — fall back to the shift.
-      if (r.shift === 'NIGHT') nightCall.push(t);
-      else if (r.shift === 'CALL') dayCall.push(t);
-    }
-
+    // Still shown on the board — a coordinator wants to know WHERE the case is,
+    // even though the technician is now matched by specialty.
     const resolveTheatre = (s: (typeof surgeries)[number]): string | null => {
       if (s.theatreId && theatreById.has(s.theatreId)) return theatreById.get(s.theatreId)!;
       if (s.unit) {
@@ -97,10 +92,15 @@ export async function GET(request: NextRequest) {
     const cases = surgeries.map((s) => {
       const isEmergency = s.surgeryType === 'EMERGENCY';
       const theatre = resolveTheatre(s);
-      const match = theatre ? byTheatre.get(norm(theatre)) : undefined;
+
+      // The booking's own specialty. Falls back to the unit when the specialty
+      // field is blank, because a unit name like "Neuro Unit III" still resolves
+      // to Neurosurgery through specialtyKey.
+      const key = specialtyKey(s.subspecialty) ?? specialtyKey(s.unit);
+      const match = key ? bySpecialty.get(key) : undefined;
 
       let assigned: Tech[];
-      let source: 'theatre' | 'call' | 'none';
+      let source: 'specialty' | 'call' | 'none';
       if (isEmergency) {
         const [hh] = (s.scheduledTime || '08:00').split(':').map((n) => parseInt(n, 10));
         const daytime = !Number.isNaN(hh) && hh >= 8 && hh < 18;
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
         source = assigned.length ? 'call' : 'none';
       } else if (match && match.technicians.length) {
         assigned = match.technicians;
-        source = 'theatre';
+        source = 'specialty';
       } else {
         assigned = [];
         source = 'none';
@@ -127,24 +127,31 @@ export async function GET(request: NextRequest) {
         isEmergency,
         assigned,
         source,
-        covered: source === 'theatre' || (isEmergency && source === 'call'),
+        covered: source === 'specialty' || (isEmergency && source === 'call'),
         currentTechnician: s.theatreTechnicianId
           ? { id: s.theatreTechnicianId, name: userNameById.get(s.theatreTechnicianId) || 'Assigned' }
           : null,
       };
     });
 
-    // Theatres that have booked cases but no technician assigned.
+    // Specialties that have booked cases but no technician covering them. Named
+    // by how the booking spells it, so the coordinator can go and find it.
     const gaps = Array.from(
-      new Set(cases.filter((c) => !c.isEmergency && c.source !== 'theatre' && c.theatre !== '—').map((c) => c.theatre))
+      new Set(
+        cases
+          .filter((c) => !c.isEmergency && c.source !== 'specialty')
+          .map((c) => c.subspecialty || c.unit)
+          .filter((x): x is string => !!x && x.trim() !== ''),
+      ),
     );
 
-    const coverageByTheatre = Array.from(byTheatre.values()).sort((a, b) => a.theatre.localeCompare(b.theatre));
+    const coverageBySpecialty = Array.from(bySpecialty.values())
+      .sort((a, b) => a.specialty.localeCompare(b.specialty));
 
     return NextResponse.json({
       date: start.toISOString().slice(0, 10),
       dayCall, nightCall, icu,
-      coverageByTheatre,
+      coverageBySpecialty,
       cases,
       gaps,
       summary: {

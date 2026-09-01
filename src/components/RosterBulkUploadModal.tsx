@@ -2,6 +2,9 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { getRosterDept } from '@/lib/rosterDepartments';
+import { normaliseShift } from '@/lib/rosterShifts';
+import { resolveColumns, positionalColumns } from '@/lib/rosterUploadColumns';
 import { X, UploadCloud, Loader2, CheckCircle2, AlertTriangle, ClipboardPaste, Download } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -38,17 +41,6 @@ function normalizeDate(token: string, weekStart: string): string | null {
   return null;
 }
 
-// Keep in step with normShift() in api/roster/departments/[dept]/bulk — this one
-// only drives the preview, but a mismatch would flag rows the server accepts.
-function normalizeShift(token: string): 'MORNING' | 'CALL' | 'NIGHT' | null {
-  const t = (token || '').trim().toUpperCase().replace(/[_\s\-/]+/g, ' ').trim();
-  if (['MORNING', 'AM', 'DAY', 'M', 'EARLY', 'MORN', 'ELECTIVE', 'ELECTIVES'].includes(t)) return 'MORNING';
-  if (['CALL', 'ON CALL', 'ONCALL', 'C', 'EMERGENCY', 'EMERGENCIES',
-    'CALL EMERGENCY', 'CALL EMERGENCIES'].includes(t)) return 'CALL';
-  if (['NIGHT', 'PM', 'N', 'LATE'].includes(t)) return 'NIGHT';
-  return null;
-}
-
 function splitLine(line: string, delim: string): string[] {
   if (delim === '\t') return line.split('\t').map((s) => s.trim());
   const out: string[] = [];
@@ -82,7 +74,15 @@ type ParsedRow = {
 
 const HEADER_KEYS = ['name', 'date', 'day', 'shift', 'sub', 'role', 'senior', 'level', 'location', 'theatre', 'note'];
 
-function parse(text: string, weekStart: string): ParsedRow[] {
+/**
+ * @param hasSeniority whether this department HAS grades — decides the
+ *   positional fallback when the paste carries no header row.
+ * @param subRoleLabel what this department calls its assignment column, so the
+ *   header the template actually wrote is matched rather than guessed at. See
+ *   the note in @/lib/rosterUploadColumns about the 124 anaesthetist rows that
+ *   lost their subspecialty to a guess.
+ */
+function parse(text: string, weekStart: string, hasSeniority: boolean, subRoleLabel?: string): ParsedRow[] {
   const rawLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const delim0 = rawLines[0]?.includes('\t') ? '\t' : ',';
   // Drop rows that are entirely empty (e.g. the template's unused validated rows).
@@ -92,20 +92,11 @@ function parse(text: string, weekStart: string): ParsedRow[] {
 
   // Detect a header row.
   const first = splitLine(lines[0], delim).map((c) => c.toLowerCase());
-  const looksLikeHeader = first.some((c) => HEADER_KEYS.some((k) => c.includes(k))) && !normalizeShift(first[2] || '');
-  let idx = { name: 0, date: 1, shift: 2, subRole: 3, seniority: 4, location: 5, notes: 6 };
+  const looksLikeHeader = first.some((c) => HEADER_KEYS.some((k) => c.includes(k))) && !normaliseShift(first[2] || '');
+  let idx = positionalColumns(hasSeniority);
   let dataLines = lines;
   if (looksLikeHeader) {
-    const find = (...keys: string[]) => first.findIndex((c) => keys.some((k) => c.includes(k)));
-    idx = {
-      name: Math.max(0, find('name', 'staff')),
-      date: Math.max(0, find('date', 'day')),
-      shift: Math.max(0, find('shift')),
-      subRole: find('sub', 'role', 'assign', 'subspecial', 'theatre'),
-      seniority: find('senior', 'level', 'grade'),
-      location: find('location', 'venue'),
-      notes: find('note', 'remark'),
-    };
+    idx = resolveColumns(first, subRoleLabel);
     dataLines = lines.slice(1);
   }
 
@@ -116,7 +107,7 @@ function parse(text: string, weekStart: string): ParsedRow[] {
     const rawDate = get(idx.date);
     const rawShift = get(idx.shift);
     const date = normalizeDate(rawDate, weekStart);
-    const shift = normalizeShift(rawShift);
+    const shift = normaliseShift(rawShift);
 
     let ok = true;
     let issue = '';
@@ -138,10 +129,17 @@ function parse(text: string, weekStart: string): ParsedRow[] {
   });
 }
 
-const EXAMPLE = `Name\tDay\tShift\tSub-role\tSeniority\tLocation\tNotes
+const EXAMPLE_WITH_SENIORITY = `Name\tDay\tShift\tSub-role\tSeniority\tLocation\tNotes
 Jane Doe\tMonday\tMORNING\tSCRUB\t\tMAIN_THEATRE\t
 John Bull\tMon\tCALL\t\t\tA_AND_E\tcovering trauma
 Mary Cole\t2026-07-29\tNIGHT\tCIRCULATING\t\tMAIN_THEATRE\t`;
+
+// No Seniority column — see the note on parse(). Offering an example with a
+// column the department does not have is how a bad habit gets copied forward.
+const EXAMPLE_NO_SENIORITY = `Name\tDay\tShift\tSurgical Specialty\tLocation\tNotes
+Jane Doe\tMonday\tELECTIVES\tNeurosurgery\tMAIN_THEATRE\t
+John Bull\tMon\tDAY CALL\tDAY CALL (emergency cover)\tA_AND_E\tcovering trauma
+Mary Cole\t2026-07-29\tNIGHT CALL\tICU\tICU\t`;
 
 export default function RosterBulkUploadModal({
   dept,
@@ -156,6 +154,13 @@ export default function RosterBulkUploadModal({
   onClose: () => void;
   onUploaded?: () => void;
 }) {
+  // The department's own config decides whether this sheet has a Seniority
+  // column at all. Reading it here rather than special-casing the slug means a
+  // department that gains or loses grades needs no change in this file.
+  const deptCfg = getRosterDept(dept);
+  const hasSeniority = (deptCfg?.seniorityLevels?.length ?? 0) > 0;
+  const EXAMPLE = hasSeniority ? EXAMPLE_WITH_SENIORITY : EXAMPLE_NO_SENIORITY;
+
   const [weekStart, setWeekStart] = useState(initialWeek || mondayOf(new Date()));
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -163,7 +168,10 @@ export default function RosterBulkUploadModal({
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const parsed = useMemo(() => parse(text, weekStart), [text, weekStart]);
+  const parsed = useMemo(
+    () => parse(text, weekStart, hasSeniority, deptCfg?.subRoleLabel),
+    [text, weekStart, hasSeniority, deptCfg?.subRoleLabel],
+  );
   const valid = parsed.filter((r) => r.ok);
   const invalid = parsed.filter((r) => !r.ok);
 
@@ -213,7 +221,7 @@ export default function RosterBulkUploadModal({
             date: r.date,
             shift: r.shift,
             subRole: r.subRole || null,
-            seniorityLevel: r.seniorityLevel || null,
+            seniorityLevel: hasSeniority ? r.seniorityLevel || null : null,
             location: r.location || null,
             notes: r.notes || null,
           })),
@@ -262,7 +270,8 @@ export default function RosterBulkUploadModal({
               <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
                 <strong>Easiest:</strong> pick the week below, then click <em>Excel template</em> — it downloads a sheet where
                 <strong> every column is a dropdown</strong>: this department's staff, the <strong>exact dates</strong> of the
-                chosen 4 weeks, Shift, Sub-role, Seniority, Location and Notes. Fill it by picking from the menus, then choose
+                chosen 4 weeks, Shift, {deptCfg?.subRoleLabel ?? 'Sub-role'}{hasSeniority ? ', Seniority' : ''}, Location and
+                Notes. Fill it by picking from the menus, then choose
                 the file here to upload. You can also paste from Excel / Google Sheets or upload a CSV.
                 <ul className="ml-4 mt-1 list-disc text-[13px] text-blue-700">
                   <li>Date can be picked from the dropdown, or typed (<em>2026-07-29</em>, <em>29/07/2026</em>, or a weekday like <em>Mon</em>).</li>
@@ -280,9 +289,11 @@ export default function RosterBulkUploadModal({
                 )}
                 {dept === 'anaesthetic-technicians' && (
                   <div className="mt-2 rounded border border-blue-200 bg-white/60 p-2 text-[13px] text-blue-800">
-                    <strong>Anaesthetic technicians:</strong> the <em>Assignment</em> column is the theatre the technician covers
-                    that day — the app matches each booked case's theatre to that technician. For emergency cover choose{' '}
-                    <em>DAY CALL</em> (shift CALL) or <em>NIGHT CALL</em> (shift NIGHT); use <em>ICU</em> for ICU duty.
+                    <strong>Anaesthetic technicians:</strong> the <em>Surgical Specialty</em> column is the specialty the
+                    technician covers that day — Neurosurgery, Orthopaedics and so on — and the app matches each booked case to
+                    the technician on its specialty. For emergency cover pick <em>DAY CALL (emergency cover)</em> with shift{' '}
+                    <em>DAY CALL</em>, or <em>NIGHT CALL (emergency cover)</em> with shift <em>NIGHT CALL</em>; use <em>ICU</em>{' '}
+                    for ICU duty. There is no Seniority column — technicians do not hold medical grades.
                   </div>
                 )}
               </div>
@@ -353,7 +364,12 @@ export default function RosterBulkUploadModal({
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  placeholder={'Paste rows here…\nName  Date  Shift  Sub-role  Seniority  Location  Notes'}
+                  placeholder={
+                    'Paste rows here…\nName  Date  Shift  ' +
+                    (deptCfg?.subRoleLabel ?? 'Sub-role') +
+                    (hasSeniority ? '  Seniority' : '') +
+                    '  Location  Notes'
+                  }
                   className="input-field mt-2 h-32 w-full font-mono text-xs"
                 />
               </details>

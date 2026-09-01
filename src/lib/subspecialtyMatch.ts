@@ -29,18 +29,24 @@ import { SUBSPECIALTIES, type Subspecialty } from '@/lib/procedures/catalogue';
  * flattened to spaces), so "Plastic / Reconstructive" becomes
  * "plastic reconstructive" and matches on either half.
  */
+// The short unit abbreviations — 'gs', 'uro', 'paedo', 'maxillo' — are how the
+// theatre lists name a firm: "GS Unit II", "Paedo Unit I", "Uro Unit I". 28 of
+// the 568 cases booked in the last sixty days are spelled that way, and without
+// these they resolve to nothing, so a case shows as having no anaesthetist and
+// no technician while both are rostered. 'gs' and 'uro' are short enough that
+// hasToken requires a whole word, so "neuro" cannot match "uro".
 const TOKENS: ReadonlyArray<readonly [Subspecialty, readonly string[]]> = [
   ['Obstetrics & Gynaecology', ['obstetric', 'gynaec', 'gynec', 'o g', 'og']],
   ['Cardiothoracic Surgery', ['cardiothoracic', 'cardio', 'thoracic']],
-  ['Maxillofacial Surgery', ['maxillofacial', 'maxfax', 'oral maxillo']],
-  ['Paediatric Surgery', ['paediatric', 'pediatric', 'paeds']],
+  ['Maxillofacial Surgery', ['maxillofacial', 'maxfax', 'oral maxillo', 'maxillo']],
+  ['Paediatric Surgery', ['paediatric', 'pediatric', 'paeds', 'paedo', 'pedo']],
   ['Plastic Surgery', ['plastic', 'reconstruct', 'burns']],
   ['Orthopaedics', ['orthopaedic', 'orthopedic', 'orthopa', 'ortho', 'trauma']],
   ['Ophthalmology', ['ophthalm', 'eye']],
   ['Neurosurgery', ['neuro']],
-  ['Urology', ['urolog']],
+  ['Urology', ['urolog', 'uro']],
   ['ENT (Otorhinolaryngology)', ['otorhino', 'otolaryng', 'ent']],
-  ['General Surgery', ['general']],
+  ['General Surgery', ['general', 'gs']],
 ];
 
 /**
