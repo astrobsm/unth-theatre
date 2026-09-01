@@ -44,8 +44,28 @@ const prisma = new PrismaClient(
   process.env.TARGET_URL ? { datasources: { db: { url: process.env.TARGET_URL } } } : undefined,
 );
 
-/** Loose comparison: case, punctuation and spacing all vary in the wild. */
+/** Loose comparison for keyword matching only. Never used as a stored key. */
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * The stored key, and it MUST be byte-identical to the app's.
+ *
+ * src/lib/procedurePacks.ts packItemKey() produces "EXPLORATORY-LAPAROTOMY||"
+ * — uppercase, non-alphanumerics collapsed to hyphens, and two trailing pipes
+ * from the dosage and drugType fields it shares with pack items.
+ *
+ * The first version of this script stored its own lowercase-spaces form. The
+ * rows looked perfect and were completely dead: buildPackRequests looks up by
+ * packItemKey, the review screen groups by packItemKey, and neither would ever
+ * have matched. Worse, verifying with the same wrong function made it look
+ * correct. A key convention is not a detail to re-derive — it is copied.
+ */
+const packKey = (name) =>
+  `${name}||`
+    .toUpperCase()
+    .replace(/[^A-Z0-9|]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/(^-|-$)/g, '');
 
 /**
  * Keyword -> the procedure-specific pack it implies, per subspecialty.
@@ -134,7 +154,7 @@ async function main() {
   for (const s of surgeries) {
     const key = norm(s.procedureName);
     if (!key) continue;
-    const e = byProc.get(key) ?? { name: s.procedureName, key, count: 0, subs: new Map() };
+    const e = byProc.get(key) ?? { name: s.procedureName, key, storedKey: packKey(s.procedureName), count: 0, subs: new Map() };
     e.count += 1;
     if (s.subspecialty) e.subs.set(s.subspecialty, (e.subs.get(s.subspecialty) ?? 0) + 1);
     byProc.set(key, e);
@@ -163,7 +183,7 @@ async function main() {
     if (hit) stats.specific += 1; else stats.standard += 1;
 
     rows.push({
-      procedureKey: e.key,
+      procedureKey: e.storedKey,
       procedureName: e.name,
       subspecialty: sub,
       consumablePackId: consumable?.id ?? null,
