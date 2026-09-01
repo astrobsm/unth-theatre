@@ -216,6 +216,34 @@ export const TABLE_POLICIES: TablePolicy[] = [
   // watched two tables cause incidents by not being.
   { table: 'case_blocker_reports', cls: 'LWW', why: 'One report of what stopped a case, with an outcome added later. The reason and reporter never change; the latest outcome is the true one.' },
 
+  // ── The patient journey, enabled 1 September ─────────────────────────────
+  // These were the tables a patient actually crosses between the ward and
+  // recovery, and none of them replicated. On 1 September a patient was
+  // admitted to the holding area on one node and did not exist on the other:
+  // the nurse read "No patients in holding area" with the patient in front of
+  // her. Being classified here was never enough — see the migration; the
+  // policy records intent, the trigger does the work.
+  { table: 'holding_area_red_alerts', cls: 'APPEND_ONLY', why: 'An alarm raised about a patient at the theatre door. Two nodes raising different alarms both raised them.' },
+  { table: 'preoperative_safety_checks', cls: 'QUARANTINE', why: 'The last safety check before the door. Two differing versions both need a person to look at them.' },
+  { table: 'patient_call_ups', cls: 'LWW', why: 'The theatre asking the ward to send a patient. Status walks INVITED to ARRIVED; the latest is the true one, and the holding area cannot admit anybody without it.' },
+  { table: 'daily_first_case_sending', cls: 'LWW', why: 'Whether the first case was sent for, per theatre per day. One row, latest state.' },
+  { table: 'patient_transport_logs', cls: 'APPEND_ONLY', why: 'A porter moved a patient at a time. The row is the event.' },
+  { table: 'who_checklists', cls: 'QUARANTINE', why: 'The surgical safety checklist. Silently overwriting one side of it would hide that a check was ever made.' },
+  { table: 'surgical_timings', cls: 'LWW', why: 'Knife to skin, closure, out of theatre. Times are corrected occasionally; the latest correction is meant.' },
+  { table: 'surgical_events', cls: 'APPEND_ONLY', why: 'Things that happened during a case. Two nodes recording different events both happened.' },
+  { table: 'surgical_count_checklists', cls: 'QUARANTINE', why: 'The swab and instrument count. A count is a patient-safety record and must never be silently merged.' },
+  { table: 'surgical_count_events', cls: 'APPEND_ONLY', why: 'Each count as it was taken.' },
+  { table: 'intraoperative_records', cls: 'QUARANTINE', why: 'What was done to the patient. Two differing accounts need a person.' },
+  { table: 'anesthesia_monitoring_records', cls: 'QUARANTINE', why: 'The anaesthetic record for one case.' },
+  { table: 'anesthesia_vital_signs', cls: 'APPEND_ONLY', why: 'An observation taken at a time. A differing reading was still taken.' },
+  { table: 'anesthesia_medication_records', cls: 'QUARANTINE', why: 'Drugs given under anaesthesia. An overwritten dose is a patient-safety event.' },
+  { table: 'anesthesia_setup_logs', cls: 'APPEND_ONLY', why: 'A machine check performed at a time.' },
+  { table: 'preoperative_anesthetic_reviews', cls: 'QUARANTINE', why: 'A fitness decision. Overwriting one hides that it was made.' },
+  { table: 'emergency_pre_anaesthetic_reviews', cls: 'QUARANTINE', why: 'The same decision under time pressure, and least safe to resolve automatically.' },
+  { table: 'pacu_red_alerts', cls: 'APPEND_ONLY', why: 'A deterioration flagged in recovery. Both nodes flagging it means both saw it.' },
+  { table: 'nurse_handovers', cls: 'LWW', why: 'One shift handing over to the next. Written through the shift; the latest version is the one being handed over.' },
+  { table: 'handover_checklist_items', cls: 'LWW', why: 'The items within that handover.' },
+
   // ── Account recovery ─────────────────────────────────────────────────────
   // NOT REPLICATED, and that is a decision rather than an oversight.
   //
