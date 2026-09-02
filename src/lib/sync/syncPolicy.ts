@@ -296,6 +296,83 @@ export const TABLE_POLICIES: TablePolicy[] = [
   // { table: 'auth_otps', cls: <intentionally none> }
   { table: 'user_module_grants', cls: 'CLOUD_AUTHORITATIVE', why: 'Access control is decided centrally.' },
   { table: 'onboarding_submissions', cls: 'CLOUD_AUTHORITATIVE', why: 'Imported centrally; local copies are read-only in practice.' },
+
+  // ── The remaining modules, classified 2 September 2026 ──────────────────
+  //
+  // Capture was switched on for 47 tables by 20260901130000_sync_remaining_modules
+  // and NONE of them was classified here. That is not a harmless omission:
+  // decide() returns UNKNOWN_TABLE for an unclassified table, which parks the
+  // change rather than applying it. Nothing was destroyed — the applier keeps
+  // what it cannot classify, exactly so this mistake is recoverable — but
+  // nothing landed either, so every one of these modules was journalling
+  // faithfully and replicating nothing.
+  //
+  // Three of the 47 are NOT here: additional_medication_requests,
+  // medication_non_return_queries and medication_reconciliations all carry a
+  // prescriptionId, and anesthetic_prescriptions is classified but not yet
+  // captured. A child whose parent does not replicate fails its foreign key
+  // and parks for ever, which is the failure the pack-request note above
+  // describes. Their capture is switched off again until prescriptions travel.
+
+  // Insert-only. Every one verified as having no update/upsert call-site —
+  // an UPDATE arriving on an append-only table is quarantined as misclassified,
+  // which is precisely what happened to radio_announcements.
+  { table: 'announcement_playbacks', cls: 'APPEND_ONLY', why: 'One row per time an announcement played. Two nodes each playing it both happened.' },
+  { table: 'handover_audit_logs', cls: 'APPEND_ONLY', why: 'What changed on a nurse handover. An edited audit line is not an audit line.' },
+  { table: 'supply_records', cls: 'APPEND_ONLY', why: 'A delivery against an inventory item; the row is the event.' },
+  { table: 'surgery_items', cls: 'APPEND_ONLY', why: 'An item attached to a case. Written once; verified as having no update call-site.' },
+  { table: 'surgical_team_members', cls: 'APPEND_ONLY', why: 'Who was on the team for a case. Both nodes naming different people is a union, not a conflict.' },
+  { table: 'theatre_setup_items', cls: 'APPEND_ONLY', why: 'What was laid out for a setup; written once at setup time.' },
+  { table: 'theatre_setup_returns', cls: 'APPEND_ONLY', why: 'What came back afterwards. A return is an event.' },
+  { table: 'tv_alert_display_logs', cls: 'APPEND_ONLY', why: 'What the wall screen showed, and when. A display log nobody may rewrite.' },
+
+  // Clinical content: nothing is overwritten, a person resolves it.
+  //
+  // The first two are CLASSIFIED BUT NOT CAPTURED — see the note above about
+  // their prescriptionId parent. Deciding the class now means enabling them
+  // later is one migration, not a fresh judgement about patient safety.
+  { table: 'additional_medication_requests', cls: 'QUARANTINE', why: 'Extra drugs asked for against a prescription. An overwritten request is an overwritten drug order. NOT YET CAPTURED: its prescription parent does not replicate.' },
+  { table: 'medication_reconciliations', cls: 'QUARANTINE', why: 'What was actually given against what was ordered. Overwriting hides an administration. NOT YET CAPTURED: its prescription parent does not replicate.' },
+  { table: 'medication_non_return_queries', cls: 'LWW', why: 'A query raised about medication not returned, moving through to answered. Workflow around the drug record rather than the record itself. NOT YET CAPTURED: its prescription parent does not replicate.' },
+  { table: 'anaesthetic_optimisation_requirements', cls: 'QUARANTINE', why: 'What must be corrected before this patient is fit for surgery. Overwriting one hides a requirement a clinician recorded.' },
+  { table: 'mortality_audits', cls: 'QUARANTINE', why: 'The review of a death. Two differing accounts both need to survive to be read.' },
+  { table: 'preoperative_fitness_assessments', cls: 'QUARANTINE', why: 'A judgement about whether a patient can undergo anaesthesia. Same reasoning as the pre-operative visits above.' },
+
+  // Operational state where the latest intent is the correct one. Each of
+  // these carries a status or an updatedAt, so it is edited after insert.
+  { table: 'checkout_items', cls: 'LWW', why: 'Lines on an equipment checkout. Quantity and return state are edited in place.' },
+  { table: 'cssd_readiness_reports', cls: 'LWW', why: 'One CSSD readiness statement per shift; the latest is the operative one.' },
+  { table: 'cssd_usage_history', cls: 'LWW', why: 'A sterile-item usage record. NOT append-only: the code edits it after insert, and an update on an insert-only table is quarantined as misclassified.' },
+  { table: 'daily_equipment_status', cls: 'LWW', why: 'Today status of one device. Latest reading is the true one; history is in the check logs.' },
+  { table: 'emergency_lab_notifications', cls: 'LWW', why: 'Whether the lab was told, and answered. Edited after insert, so it resolves by clock.' },
+  { table: 'equipment_check_logs', cls: 'LWW', why: 'A pre-list equipment check, amended as items are verified.' },
+  { table: 'equipment_maintenance', cls: 'LWW', why: 'Maintenance state of a device; the latest intent is correct.' },
+  { table: 'fault_reports', cls: 'LWW', why: 'A reported fault moving through triage to repair. The lifecycle is the point.' },
+  { table: 'laundry_readiness', cls: 'LWW', why: 'Linen readiness for the day; latest statement stands.' },
+  { table: 'maintenance_alerts', cls: 'LWW', why: 'Alert state for an inventory item; acknowledged and cleared in place.' },
+  { table: 'maintenance_logs', cls: 'LWW', why: 'Work done on an item, edited as the job progresses.' },
+  { table: 'oxygen_readiness_reports', cls: 'LWW', why: 'Oxygen supply readiness for the day; latest statement stands.' },
+  { table: 'patient_feedback', cls: 'LWW', why: 'Feedback and its triage state. Two nodes triaging one row is rare; the later decision is the operative one.' },
+  { table: 'plumbing_water_status', cls: 'LWW', why: 'Current plumbing state; a status board, not a ledger.' },
+  { table: 'power_fuel_consumption', cls: 'LWW', why: 'Fuel logged against a power-house status, corrected in place.' },
+  { table: 'power_maintenance_logs', cls: 'LWW', why: 'Generator maintenance, edited as the work proceeds.' },
+  { table: 'power_readiness_reports', cls: 'LWW', why: 'Power readiness for the day; latest statement stands.' },
+  { table: 'radio_broadcasts', cls: 'LWW', why: 'A broadcast and its playback state, exactly as radio_announcements above.' },
+  { table: 'staff_duty_logs', cls: 'LWW', why: 'Who was on, and whether they signed out. Edited after the fact.' },
+  { table: 'staff_feedback', cls: 'LWW', why: 'Staff submission and its handling state.' },
+  { table: 'stock_transfers', cls: 'LWW', why: 'A transfer between stores, moving REQUESTED to RECEIVED.' },
+  { table: 'sub_store_item_faults', cls: 'LWW', why: 'A faulty item in a sub-store, resolved in place.' },
+  { table: 'sub_store_restock_requests', cls: 'LWW', why: 'A restock request through its approval lifecycle.' },
+  { table: 'sub_store_usage_logs', cls: 'LWW', why: 'Sub-store consumption, corrected in place when a count is wrong.' },
+  { table: 'surgery_drafts', cls: 'LWW', why: 'An unfinished booking. The most recent draft is the only one anybody wants.' },
+  { table: 'theatre_case_flows', cls: 'LWW', why: 'Where a case has reached in the theatre flow; the latest position is the true one.' },
+  { table: 'theatre_cleaning_logs', cls: 'LWW', why: 'A cleaning record, completed in place after it is started.' },
+  { table: 'theatre_extra_requests', cls: 'LWW', why: 'An extra item asked for mid-case, through to supplied.' },
+  { table: 'theatre_sub_stores', cls: 'LWW', why: 'The sub-store itself. Reference data with no clinical history to lose.' },
+  { table: 'user_reports', cls: 'LWW', why: 'A report raised by a user, moving through triage.' },
+  { table: 'walkie_talkie_logs', cls: 'LWW', why: 'Handset issue and return; the return is written onto the issue row.' },
+  { table: 'water_supply_logs', cls: 'LWW', why: 'Water deliveries and readings, corrected in place.' },
+  { table: 'water_supply_readiness', cls: 'LWW', why: 'Water readiness for the day; latest statement stands.' },
 ];
 
 const BY_TABLE = new Map(TABLE_POLICIES.map((p) => [p.table, p]));

@@ -50,17 +50,37 @@ const MIGRATIONS = path.join(__dirname, '../../prisma/migrations');
 const PENDING_CAPTURE = [
   // Clinical content. Quarantines rather than overwrites; needs clinical
   // sign-off on the classifications before capture begins.
+  //
+  // holding_area_assessments, pacu_assessments, pacu_medications and
+  // pacu_vital_signs have LEFT this list: 20260901120000_sync_patient_journey
+  // switched capture on for them, and a name left here after capture starts is
+  // the same stale manifest this file exists to prevent.
   'anesthetic_prescriptions',
   'blood_requests',
   'emergency_prescriptions',
-  'holding_area_assessments',
-  'pacu_assessments',
-  'pacu_medications',
-  'pacu_vital_signs',
   'postop_prescriptions',
   'pre_operative_visits',
   'preoperative_investigations',
   'prescription_medication_items',
+
+  // Replay protection. Classified APPEND_ONLY and it should be shared, but its
+  // capture triggers were DROPPED: sync_capture() takes row_id from
+  // to_jsonb(NEW)->>'id' and this table is keyed on "key", so every insert
+  // failed the row_id NOT NULL constraint. Every insert, silently, from 22
+  // August — rememberResult swallows the error — which left replay protection
+  // dead rather than merely unsynced. It travels again when capture can derive
+  // a row id from something other than "id".
+  'idempotency_keys',
+
+  // Children of anesthetic_prescriptions. Capture was switched on for these by
+  // 20260901130000_sync_remaining_modules and switched off again by
+  // 20260902130000_sync_park_prescription_children: each carries a
+  // prescriptionId, and a child whose parent does not replicate fails its
+  // foreign key on arrival and parks for ever. They travel when prescriptions
+  // do, and not before.
+  'additional_medication_requests',
+  'medication_non_return_queries',
+  'medication_reconciliations',
 
   // Identity — users, user_module_grants, onboarding_submissions — is no
   // longer here. Capture was enabled for it on 17 August 2026, on the CLOUD
