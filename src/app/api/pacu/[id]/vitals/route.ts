@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAbnormal, describeAbnormal } from '@/lib/pacu/vitals';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,12 +81,15 @@ export async function POST(
       data: vitalsData,
     });
 
-    // Check if vital signs are abnormal and trigger alert if needed
-    const abnormalVitals = 
-      (heartRate !== undefined && (heartRate < 50 || heartRate > 120)) ||
-      (oxygenSaturation !== undefined && oxygenSaturation < 92) ||
-      (vitalsData.consciousnessLevel === 'UNRESPONSIVE') ||
-      (painScore !== undefined && painScore > 8);
+    // Thresholds now live in @/lib/pacu/vitals, because the discharge check has
+    // to ask the same question in reverse — "is this patient stable again?" —
+    // and two copies of a clinical limit is how the two screens end up
+    // disagreeing about the same patient.
+    const observed = {
+      heartRate, oxygenSaturation, painScore,
+      consciousnessLevel: vitalsData.consciousnessLevel,
+    };
+    const abnormalVitals = isAbnormal(observed);
 
     if (abnormalVitals) {
       // Get assessment details
@@ -103,16 +107,7 @@ export async function POST(
       });
 
       if (assessment) {
-        let alertDescription = 'Abnormal vital signs detected: ';
-        if (heartRate !== undefined && (heartRate < 50 || heartRate > 120)) {
-          alertDescription += `HR ${heartRate}bpm, `;
-        }
-        if (oxygenSaturation !== undefined && oxygenSaturation < 92) {
-          alertDescription += `SpO2 ${oxygenSaturation}%, `;
-        }
-        if (painScore !== undefined && painScore > 8) {
-          alertDescription += `Severe pain (${painScore}/10), `;
-        }
+        const alertDescription = describeAbnormal(observed);
 
         // Create red alert
         await prisma.pACURedAlert.create({

@@ -139,6 +139,8 @@ export default function PACUAssessmentDetailPage() {
     noActiveBleedingOrOozing: false,
     dischargedTo: '',
     dischargeInstructions: '',
+    // Required only when this recovery raised a red alert; see the API.
+    stabilisationNote: '',
     wardNurseHandover: ''
   });
   
@@ -242,7 +244,8 @@ export default function PACUAssessmentDetailPage() {
           noActiveBleedingOrOozing: data.dischargeNoActiveBleedingOrOozing || false,
           dischargedTo: '',
           dischargeInstructions: '',
-          wardNurseHandover: ''
+          wardNurseHandover: '',
+          stabilisationNote: '',
         });
       } else if (response.status === 404) {
         setNotFound(true);
@@ -438,7 +441,8 @@ export default function PACUAssessmentDetailPage() {
           dischargeNoActiveBleedingOrOozing: dischargeForm.noActiveBleedingOrOozing,
           dischargedTo: dischargeForm.dischargedTo,
           dischargeInstructions: dischargeForm.dischargeInstructions,
-          wardNurseHandover: dischargeForm.wardNurseHandover
+          wardNurseHandover: dischargeForm.wardNurseHandover,
+          stabilisationNote: dischargeForm.stabilisationNote,
         })
       });
 
@@ -447,7 +451,13 @@ export default function PACUAssessmentDetailPage() {
         router.push('/dashboard/pacu');
       } else {
         const data = await response.json();
-        alert(data.error || 'Failed to discharge patient');
+        // The API explains WHICH observation is still out of range. Losing that
+        // detail is how "cannot discharge" became a dead end with nothing to act
+        // on — which is the complaint this change answers.
+        const detail = Array.isArray(data.reasons) && data.reasons.length
+          ? '\n\n' + data.reasons.map((r: string) => '• ' + r).join('\n')
+          : '';
+        alert((data.error || 'Failed to discharge patient') + detail);
       }
     } catch (error) {
       alert('Error discharging patient');
@@ -1816,6 +1826,31 @@ export default function PACUAssessmentDetailPage() {
                   <option value="HOME">Home (Day Case)</option>
                 </select>
               </div>
+
+              {assessment.redAlertTriggered && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+                  <p className="mb-2 text-sm font-semibold text-amber-900">
+                    This patient triggered a red alert during recovery
+                  </p>
+                  <p className="mb-3 text-xs text-amber-800">
+                    {assessment.redAlertDescription
+                      ? assessment.redAlertDescription
+                      : 'Abnormal observations were recorded earlier in this recovery.'}
+                    {' '}They can still be discharged once the most recent observations are back within
+                    range — record a fresh set of vitals first, then say below how they were stabilised.
+                    This is saved with the discharge and goes to the ward.
+                  </p>
+                  <SmartTextInput
+                    label="How was the patient stabilised? *"
+                    value={dischargeForm.stabilisationNote}
+                    onChange={(val) => setDischargeForm({ ...dischargeForm, stabilisationNote: val })}
+                    placeholder="e.g. Oxygen 4L via face mask, saturation back to 98% and maintained for 30 minutes. Patient awake and comfortable. 🎤 Dictate"
+                    rows={3}
+                    enableSpeech={true}
+                    medicalMode={true}
+                  />
+                </div>
+              )}
 
               <SmartTextInput
                 label="Discharge Instructions"

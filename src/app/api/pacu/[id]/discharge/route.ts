@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { stableForDischarge, stabilisationNoteProblem } from '@/lib/pacu/vitals';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,9 @@ export async function POST(
       dischargeFullyConscious,
       dischargeAbleToMobilize,
       dischargeNoActiveBleedingOrOozing,
+      // How the patient was stabilised, required only when a red alert was
+      // raised earlier in this recovery.
+      stabilisationNote,
     } = body;
 
     // Get assessment
@@ -60,18 +64,54 @@ export async function POST(
     const ableToMobilize = dischargeAbleToMobilize ?? assessment.dischargeAbleToMobilize;
     const noActiveBleeding = dischargeNoActiveBleedingOrOozing ?? assessment.dischargeNoActiveBleedingOrOozing;
 
-    // Core discharge criteria – a red alert always blocks discharge.
-    const dischargeCriteriaMet =
-      vitalsStable &&
-      painControlled &&
-      fullyConscious &&
-      !assessment.redAlertTriggered;
-
-    if (!dischargeCriteriaMet) {
+    // The nurse's own confirmations still stand on their own.
+    if (!(vitalsStable && painControlled && fullyConscious)) {
       return NextResponse.json(
-        { error: 'Cannot discharge - discharge criteria not met or red alert active' },
+        { error: 'Cannot discharge - the discharge criteria have not all been confirmed.' },
         { status: 400 }
       );
+    }
+
+    // A RED ALERT NO LONGER BLOCKS DISCHARGE FOR EVER.
+    //
+    // redAlertTriggered is a latch: abnormal observations set it and nothing
+    // ever cleared it, so one low saturation at 09:05 blocked discharge at
+    // 14:00 with the patient awake and stable. The recovery nurse had no way
+    // out of it at all.
+    //
+    // It is not simply ignored either. Discharging over an alert requires
+    // positive evidence: the MOST RECENT observations must be within range,
+    // and the nurse must say how the patient was stabilised. That explanation
+    // is stored on the assessment and travels to the ward.
+    let resolvedAlert: { note: string; vitalsId: string } | null = null;
+
+    if (assessment.redAlertTriggered) {
+      const latest = await prisma.pACUVitalSigns.findFirst({
+        where: { pacuAssessmentId: params.id },
+        orderBy: { recordedAt: 'desc' },
+      });
+
+      const verdict = stableForDischarge(latest);
+      if (!verdict.stable) {
+        return NextResponse.json(
+          {
+            error: 'Cannot discharge - this patient is not yet stable.',
+            reasons: verdict.reasons,
+            redAlert: assessment.redAlertDescription,
+          },
+          { status: 400 }
+        );
+      }
+
+      const noteProblem = stabilisationNoteProblem(stabilisationNote);
+      if (noteProblem) {
+        return NextResponse.json(
+          { error: noteProblem, requiresStabilisationNote: true, redAlert: assessment.redAlertDescription },
+          { status: 400 }
+        );
+      }
+
+      resolvedAlert = { note: String(stabilisationNote).trim(), vitalsId: latest!.id };
     }
 
     // Calculate time in PACU
@@ -95,6 +135,20 @@ export async function POST(
         dischargeNauseaFree: nauseaFree,
         dischargeAbleToMobilize: ableToMobilize,
         dischargeNoActiveBleedingOrOozing: noActiveBleeding,
+        // Close the alert rather than erase it: redAlertType, redAlertDescription
+        // and redAlertTime stay, and the PACURedAlert rows are untouched, so the
+        // ward can still see that it happened and what it was.
+        ...(resolvedAlert
+          ? {
+              redAlertTriggered: false,
+              redAlertResolvedBy: session.user.id,
+              redAlertResolvedAt: new Date(),
+              dischargeNotes: [
+                dischargeNotes ?? dischargeInstructions,
+                `Stabilised before discharge: ${resolvedAlert.note}`,
+              ].filter(Boolean).join('\n\n'),
+            }
+          : {}),
       },
       include: {
         patient: true,
