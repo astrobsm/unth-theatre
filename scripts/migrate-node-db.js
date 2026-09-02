@@ -84,12 +84,35 @@ function main() {
   console.log(`[migrate-node-db] migrating ${describe(url)}`);
   console.log(`[migrate-node-db] url taken from: ${source}`);
 
-  // DIRECT_URL is pinned to the same database. Left unset it resolves from
-  // .env, which is exactly how migrations ended up on the wrong node.
-  const env = { ...process.env, DATABASE_URL: url, DIRECT_URL: url };
+  // DIRECT_URL is pinned to the same database ONLY when we chose the url
+  // ourselves, from .env.local. That is the theatre server's own Postgres,
+  // which has no separate direct connection — and leaving DIRECT_URL alone
+  // there is exactly how migrations went to the cloud instead.
+  //
+  // It must NOT be pinned otherwise. On Vercel, DATABASE_URL is the pgbouncer
+  // pooler and DIRECT_URL is the direct connection, deliberately different:
+  // migrations take advisory locks and use prepared statements, neither of
+  // which survives a transaction pooler. Overriding it there fails the build,
+  // which is precisely what it did.
+  const env = { ...process.env, DATABASE_URL: url };
+  if (localEnv.DATABASE_URL) {
+    env.DIRECT_URL = localEnv.DIRECT_URL || url;
+  }
 
   execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'db-bootstrap.js')], { stdio: 'inherit', env, cwd: ROOT });
-  execFileSync('npx', ['prisma', 'migrate', 'deploy'], { stdio: 'inherit', env, cwd: ROOT, shell: process.platform === 'win32' });
+
+  // Run the SAME binary the npm script used to: node_modules/.bin/prisma,
+  // resolved directly. Going through npx was a second change riding along with
+  // this one, and when the Vercel build failed there was no way to tell which
+  // of the two had broken it. Falling back to npx only if the binary is absent.
+  const localPrisma = path.join(
+    ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma',
+  );
+  if (fs.existsSync(localPrisma)) {
+    execFileSync(localPrisma, ['migrate', 'deploy'], { stdio: 'inherit', env, cwd: ROOT, shell: process.platform === 'win32' });
+  } else {
+    execFileSync('npx', ['prisma', 'migrate', 'deploy'], { stdio: 'inherit', env, cwd: ROOT, shell: true });
+  }
 
   console.log(`[migrate-node-db] done: ${describe(url)}`);
 }
