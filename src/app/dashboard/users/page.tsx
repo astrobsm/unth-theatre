@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
+import { validateUsername, USERNAME_HELP } from '@/lib/usernameRules';
 import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil } from 'lucide-react';
 
 const USER_ROLES = [
@@ -121,7 +122,12 @@ export default function UsersPage() {
   const [userSearch, setUserSearch] = useState('');
   // Edit-profile modal state.
   const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ fullName: '', phoneNumber: '', email: '', department: '' });
+  const [editForm, setEditForm] = useState({ username: '', fullName: '', phoneNumber: '', email: '', department: '' });
+  // What the username was when the modal opened. The PATCH only carries a
+  // username when it has actually been edited — otherwise a THEATRE_MANAGER
+  // correcting a phone number would trip the ADMIN-only credential check and be
+  // refused for a field they never touched.
+  const [originalUsername, setOriginalUsername] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   // Contact Directory: 'ALL' or a specific role to export (e.g. HOUSE_OFFICER).
   const [directoryRole, setDirectoryRole] = useState<string>('ALL');
@@ -270,12 +276,27 @@ export default function UsersPage() {
       alert('Please enter a valid full name (at least 2 characters).');
       return;
     }
+    const nextUsername = editForm.username.trim();
+    const usernameChanged = nextUsername !== originalUsername.trim();
+    if (usernameChanged) {
+      const problem = validateUsername(nextUsername);
+      if (problem) { alert(problem); return; }
+      // Changing how somebody signs in is worth one deliberate pause. They will
+      // be locked out of the old name the moment this is saved.
+      const ok = window.confirm(
+        `Change this person's sign-in name from "${originalUsername}" to "${nextUsername}"?\n\n`
+        + 'They must use the new name next time they sign in. Their password is unchanged.',
+      );
+      if (!ok) return;
+    }
     setEditLoading(true);
     try {
       const response = await fetch(`/api/users/${editUserId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Sent ONLY when edited — see originalUsername above.
+          ...(usernameChanged ? { username: nextUsername } : {}),
           fullName: editForm.fullName.trim(),
           phoneNumber: editForm.phoneNumber.trim() || null,
           email: editForm.email.trim() || null,
@@ -1141,7 +1162,9 @@ export default function UsersPage() {
                     <button
                       onClick={() => {
                         setEditUserId(user.id);
+                        setOriginalUsername(user.username || '');
                         setEditForm({
+                          username: user.username || '',
                           fullName: user.fullName || '',
                           phoneNumber: user.phoneNumber || '',
                           email: user.email || '',
@@ -1203,6 +1226,34 @@ export default function UsersPage() {
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <Pencil className="w-5 h-5 text-emerald-600" /> Edit Profile
             </h3>
+            {session?.user.role === 'ADMIN' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Username (sign-in name) *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.username}
+                  onChange={(e) => setEditForm((f) => ({ ...f, username: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {USERNAME_HELP} Changing this changes how they sign in — their password is unchanged.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <p className="w-full rounded-lg bg-gray-50 px-3 py-2 font-mono text-sm text-gray-600">
+                  {editForm.username}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">Only an administrator can change a sign-in name.</p>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Full name *</label>
               <input

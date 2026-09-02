@@ -4,12 +4,23 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { UserRole } from "@prisma/client";
+import { validateUsername, normaliseUsername } from "@/lib/usernameRules";
 
 export const dynamic = 'force-dynamic';
 
 const ROLE_VALUES = Object.values(UserRole) as [string, ...string[]];
 
 const updateUserSchema = z.object({
+  // A LOGIN CREDENTIAL, not a profile field. The rule lives in
+  // @/lib/usernameRules so the browser and this route cannot disagree about
+  // what is acceptable.
+  username: z.string()
+    .transform(normaliseUsername)
+    .superRefine((v, ctx) => {
+      const problem = validateUsername(v);
+      if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+    })
+    .optional(),
   staffCode: z.string().optional().nullable(),
   role: z.enum(ROLE_VALUES).optional(),
   fullName: z.string().trim().min(2).optional(),
@@ -51,6 +62,48 @@ export async function PATCH(
       }
     }
 
+    // Changing a username changes how somebody signs in. It sits with the role
+    // change above rather than with phone and department: a THEATRE_MANAGER may
+    // correct a misspelt name, but only an ADMIN may alter a credential.
+    let previousUsername: string | null = null;
+    if (validatedData.username !== undefined) {
+      if (session.user.role !== "ADMIN") {
+        return NextResponse.json(
+          { error: "Only ADMIN can change a username." },
+          { status: 403 }
+        );
+      }
+
+      const target = await prisma.user.findUnique({
+        where: { id: params.id },
+        select: { username: true },
+      });
+      if (!target) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+      previousUsername = target.username;
+
+      // CASE-INSENSITIVELY unique, because that is how sign-in resolves it
+      // (findByUsername in @/lib/auth uses mode: "insensitive"). The database
+      // constraint is case-SENSITIVE, so it would happily accept "Tonia"
+      // alongside an existing "tonia" — and then two accounts answer to one
+      // login and whichever is found first wins. Checking it here is the only
+      // thing standing between that and somebody signing into the wrong record.
+      const clash = await prisma.user.findFirst({
+        where: {
+          username: { equals: validatedData.username, mode: 'insensitive' },
+          NOT: { id: params.id },
+        },
+        select: { id: true, username: true, fullName: true },
+      });
+      if (clash) {
+        return NextResponse.json(
+          { error: `That username is already used by ${clash.fullName} (${clash.username}).` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Check if staffCode is being set and if it's already in use
     if (validatedData.staffCode) {
       const existingUser = await prisma.user.findUnique({
@@ -66,6 +119,7 @@ export async function PATCH(
     }
 
     const data: {
+      username?: string;
       staffCode?: string | null;
       role?: UserRole;
       fullName?: string;
@@ -73,6 +127,7 @@ export async function PATCH(
       email?: string | null;
       department?: string | null;
     } = {};
+    if (validatedData.username !== undefined) data.username = validatedData.username;
     if (body.staffCode !== undefined) {
       data.staffCode = validatedData.staffCode || null;
     }
@@ -113,6 +168,24 @@ export async function PATCH(
         department: true,
       },
     });
+
+    if (previousUsername && previousUsername !== updatedUser.username) {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'USER_USERNAME_CHANGED',
+          tableName: 'users',
+          recordId: params.id,
+          changes: JSON.stringify({
+            from: previousUsername,
+            to: updatedUser.username,
+            subject: updatedUser.fullName,
+          }),
+        },
+        // An audit failure must not roll back a change the admin has been told
+        // succeeded; it is logged instead of swallowed silently.
+      }).catch((e) => console.error('[users] username change audit failed:', e));
+    }
 
     return NextResponse.json(updatedUser, { status: 200 });
   } catch (error) {
