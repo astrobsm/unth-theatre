@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { CONSENT_TARGET_BYTES, CONSENT_TARGET_LABEL, formatBytes } from '@/lib/consentCompression';
 import prisma from "@/lib/prisma";
 import { clearanceFor } from "@/lib/preopVisitClearance";
 
@@ -123,6 +124,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // consentFile* columns so the holding-area viewer & download endpoint pick it up.
   const hc = body?.hardCopyFile;
   if (hc && typeof hc.base64 === "string" && hc.base64.length > 0) {
+    // The browser shrinks a photographed consent before sending it, but the
+    // browser is not a boundary: a stale tab, a queued offline submission or a
+    // direct call can still arrive oversized. Refusing here keeps the column
+    // from filling with something no request can carry back out again.
+    const raw = hc.base64.includes(",") ? hc.base64.split(",").pop() ?? "" : hc.base64;
+    const bytes = Math.floor((raw.length * 3) / 4);
+    if (bytes > CONSENT_TARGET_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            `That consent file is ${formatBytes(bytes)}, over the ${CONSENT_TARGET_LABEL} limit. ` +
+            "Re-open the consent page and choose the file again — photographs are compressed automatically there.",
+        },
+        { status: 413 },
+      );
+    }
+
     data.consentFileName = hc.name || "consent.pdf";
     data.consentFileMimeType = hc.mimeType || "application/pdf";
     data.consentFileData = hc.base64.includes(",") ? hc.base64.split(",").pop() : hc.base64;

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { installPdfTextGuard } from '@/lib/pdfSafeText';
+import { planUpload, compressionSummary, CONSENT_TARGET_LABEL } from '@/lib/consentCompression';
+import { compressConsentImage, readFileUnchanged } from '@/lib/consentCompressionBrowser';
 import { useParams, useRouter } from 'next/navigation';
 // jsPDF (~400 KB) loads only when a consent PDF is actually produced.
 import type jsPDF from 'jspdf';
@@ -106,6 +108,8 @@ export default function SurgeryConsentPage() {
   const [form, setForm] = useState<ConsentForm>(emptyForm());
   const [mode, setMode] = useState<'ELECTRONIC' | 'UPLOAD'>('ELECTRONIC');
   const [uploadFile, setUploadFile] = useState<{ name: string; mimeType: string; base64: string; size: number } | null>(null);
+  const [compressing, setCompressing] = useState(false);
+  const [compressionNote, setCompressionNote] = useState('');
   const [uploadError, setUploadError] = useState('');
 
   const [loading, setLoading] = useState(true);
@@ -178,23 +182,42 @@ export default function SurgeryConsentPage() {
     setForm((f) => ({ ...f, [key]: f[key].filter((_, idx) => idx !== i) }));
 
   // ---- Upload (signed paper scan) ----
+  //
+  // A phone photograph of a consent form is 4-12 MB, and it used to be accepted
+  // up to 8 MB and posted as base64 — which costs a third on top. Anything much
+  // over 3 MB was refused by the platform before it reached any code, so the
+  // upload just failed. Photographs are now shrunk here first; see
+  // lib/consentCompression for why there is a floor below which it refuses
+  // instead of compressing further.
   async function handleUploadChange(e: React.ChangeEvent<HTMLInputElement>) {
     setUploadError('');
+    setCompressing(false);
+    setCompressionNote('');
     const file = e.target.files?.[0];
     if (!file) { setUploadFile(null); return; }
-    if (file.size > 8 * 1024 * 1024) { setUploadError('File must be ≤ 8 MB.'); return; }
-    if (!/^(application\/pdf|image\/(png|jpe?g|webp|heic))$/i.test(file.type)) {
-      setUploadError('Allowed formats: PDF, PNG, JPG, WEBP, HEIC.');
-      return;
+
+    const plan = planUpload(file.size, file.type);
+    if (plan.action === 'REJECT') { setUploadError(plan.reason); return; }
+
+    try {
+      if (plan.action === 'PASS') {
+        const kept = await readFileUnchanged(file);
+        setUploadFile(kept);
+        return;
+      }
+
+      setCompressing(true);
+      const shrunk = await compressConsentImage(file);
+      setUploadFile(shrunk);
+      setCompressionNote(compressionSummary(file.size, shrunk.size));
+    } catch (err) {
+      // The message from compressConsentImage is written for the person
+      // holding the phone: take it again, closer, without shadow.
+      setUploadError(err instanceof Error ? err.message : 'Failed to read file.');
+      setUploadFile(null);
+    } finally {
+      setCompressing(false);
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const base64 = result.includes(',') ? result.split(',').pop() || '' : result;
-      setUploadFile({ name: file.name, mimeType: file.type, base64, size: file.size });
-    };
-    reader.onerror = () => setUploadError('Failed to read file.');
-    reader.readAsDataURL(file);
   }
 
   // ---- PDF generation (filled UNTH consent + captured signatures) ----
@@ -607,6 +630,10 @@ export default function SurgeryConsentPage() {
               Print the form (use “Download blank/printable copy”), have the patient/representative sign it, then upload the scan or photo.
               The uploaded document becomes the case-note hard copy.
             </p>
+            <p className="text-xs text-gray-500 mb-3">
+              A photograph is shrunk automatically to stay under {CONSENT_TARGET_LABEL}. Fill the frame with
+              the page and avoid shadow — the signatures have to stay readable.
+            </p>
             <input
               type="file"
               accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
@@ -615,6 +642,9 @@ export default function SurgeryConsentPage() {
               aria-label="Upload signed consent file"
               title="Upload signed consent file"
             />
+            {compressing && (
+              <p className="mt-2 text-sm text-blue-700">Compressing the photograph…</p>
+            )}
             {uploadError && <p className="text-sm text-red-600 mt-2">{uploadError}</p>}
             {uploadFile && (
               <p className="mt-2 text-sm text-gray-700">
@@ -622,6 +652,7 @@ export default function SurgeryConsentPage() {
                 <span className="text-gray-500">· {(uploadFile.size / 1024).toFixed(0)} KB · {uploadFile.mimeType}</span>
               </p>
             )}
+            {compressionNote && <p className="mt-1 text-xs text-green-700">{compressionNote}</p>}
           </div>
         )}
       </div>
