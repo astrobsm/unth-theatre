@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
+import { canManageRosterDeptFor } from '@/lib/rosterSupervisors';
 import { normaliseShift } from '@/lib/rosterShifts';
 import { z } from 'zod';
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
     if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
 
     const role = (session.user as any).role;
-    if (!canManageRosterDept(dept, role)) {
+    if (!(await canManageRosterDeptFor(dept, { id: (session.user as any).id, role }))) {
       return NextResponse.json({ error: 'You are not allowed to manage this department roster' }, { status: 403 });
     }
 

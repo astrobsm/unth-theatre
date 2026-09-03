@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { ArrowLeft, CalendarDays, Users, Stethoscope, HeartPulse, Wrench, Truck, Sparkles, Pill, Link2, Check, UploadCloud } from 'lucide-react';
-import { ROSTER_DEPARTMENTS, canManageRosterDept, type RosterDept } from '@/lib/rosterDepartments';
+import { ArrowLeft, CalendarDays, Users, Stethoscope, HeartPulse, Wrench, Truck, Sparkles, Pill, Link2, Check, UploadCloud, ShieldCheck } from 'lucide-react';
+import { ROSTER_DEPARTMENTS, ROSTER_ADMIN_ROLES, canManageRosterDept, type RosterDept } from '@/lib/rosterDepartments';
 import RosterBulkUploadModal from '@/components/RosterBulkUploadModal';
 
 const ICONS: Record<string, any> = {
@@ -15,6 +15,20 @@ const ICONS: Record<string, any> = {
 export default function DepartmentRosterHub() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role as string | undefined;
+  // Departments this PERSON may manage: their role's, plus any they supervise.
+  // Role alone is no longer the whole answer, and deciding it in the browser
+  // would show a supervisor their own roster as read-only while the API
+  // accepted their edits.
+  const [supervised, setSupervised] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/roster/manageable', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { slugs: [] }))
+      .then((d) => { if (!cancelled) setSupervised(Array.isArray(d.slugs) ? d.slugs : []); })
+      .catch(() => { /* falls back to the role-only answer below */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const [copied, setCopied] = useState<string | null>(null);
   const [bulkDept, setBulkDept] = useState<RosterDept | null>(null);
 
@@ -48,10 +62,19 @@ export default function DepartmentRosterHub() {
         </div>
       </div>
 
+      {ROSTER_ADMIN_ROLES.includes(role ?? '') && (
+        <Link
+          href="/dashboard/roster/supervisors"
+          className="mb-3 inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-100"
+        >
+          <ShieldCheck className="h-4 w-4" /> Roster supervisors
+        </Link>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {ROSTER_DEPARTMENTS.map((d) => {
           const Icon = ICONS[d.slug] ?? Users;
-          const canManage = canManageRosterDept(d, role);
+          const canManage = canManageRosterDept(d, role) || supervised.includes(d.slug);
           return (
             <div key={d.slug} className="card border-2 border-transparent hover:border-primary-300 transition-colors">
               <div className="flex items-center gap-3">

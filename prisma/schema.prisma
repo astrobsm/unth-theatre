@@ -604,6 +604,10 @@ model User {
   moduleGrants UserModuleGrant[] @relation("UserGrants")
   grantsIssued UserModuleGrant[] @relation("GrantedByUser")
 
+  // Departmental roster supervision (per-user, per-department authority)
+  rosterSupervision   RosterSupervisor[] @relation("RosterSupervisorUser")
+  rosterSupervisorsAssigned RosterSupervisor[] @relation("RosterSupervisorAssignedBy")
+
   // Pre-pack & post-op pharmacy back-relations
   consumablePacks     SurgeryConsumableRequest[]   @relation("ConsumablePackedBy")
   consumableRequested SurgeryConsumableRequest[]   @relation("ConsumableRequestedBy")
@@ -677,6 +681,46 @@ model UserModuleGrant {
   @@unique([userId, moduleId])
   @@index([userId])
   @@map("user_module_grants")
+}
+
+/// A named person put in charge of ONE department's duty roster.
+///
+/// Until now, who could edit and publish a roster was decided purely by ROLE:
+/// canManageRosterDept checked the user's role against the department's
+/// managerRoles. That works for the theatre manager and it works for the
+/// consultant anaesthetist, but it cannot express "Sister Okeke runs the
+/// porters' roster" without making her a theatre manager — which would hand her
+/// every other theatre-manager power in the system as the price of one duty
+/// roster.
+///
+/// So authority is granted per person, per department, and nothing else moves.
+model RosterSupervisor {
+  id       String @id @default(uuid())
+  userId   String
+  /// The RosterDept slug — 'porters', 'anaesthetists', and so on. A slug rather
+  /// than a foreign key because departments are defined in code
+  /// (ROSTER_DEPARTMENTS), not in a table.
+  deptSlug String
+
+  assignedById String?
+  assignedAt   DateTime @default(now())
+  /// Why this person, in the words of whoever assigned them.
+  notes        String?
+
+  user       User  @relation("RosterSupervisorUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("RosterSupervisorAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([userId, deptSlug])
+  @@index([deptSlug])
+  @@map("roster_supervisors")
 }
 
 // Public staff onboarding form submissions. Anyone with the share link can

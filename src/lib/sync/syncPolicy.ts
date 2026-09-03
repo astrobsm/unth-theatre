@@ -295,6 +295,12 @@ export const TABLE_POLICIES: TablePolicy[] = [
   // forgotten one.
   // { table: 'auth_otps', cls: <intentionally none> }
   { table: 'user_module_grants', cls: 'CLOUD_AUTHORITATIVE', why: 'Access control is decided centrally.' },
+  // Authority over one department's duty roster. Same class and the same
+  // cloud-only capture as identity, and for the same reason: an in-sequence
+  // edit is applied before the class is consulted, so a privilege row written
+  // on the theatre server would reach the cloud. Supervisors are appointed
+  // centrally and the appointment travels downward.
+  { table: 'roster_supervisors', cls: 'CLOUD_AUTHORITATIVE', why: 'Who may edit a duty roster is a permission, and permissions are granted centrally.' },
   { table: 'onboarding_submissions', cls: 'CLOUD_AUTHORITATIVE', why: 'Imported centrally; local copies are read-only in practice.' },
 
   // ── The remaining modules, classified 2 September 2026 ──────────────────

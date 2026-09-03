@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { getRosterDept, canManageRosterDept, getShiftOptions } from '@/lib/rosterDepartments';
+import { canManageRosterDeptFor } from '@/lib/rosterSupervisors';
 import { getSubRoleOptions } from '@/lib/rosterAssignments';
 
 export const dynamic = 'force-dynamic';
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
       subRoleOptions,
     },
     weekStart: start.toISOString().slice(0, 10),
-    canManage: canManageRosterDept(dept, role),
+    canManage: await canManageRosterDeptFor(dept, { id: (session.user as any).id, role }),
     currentVersion: latestPublication?.version ?? 0,
     lastPublishedAt: latestPublication?.publishedAt ?? null,
     draftCount,
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const dept = getRosterDept(params.dept);
   if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
-  if (!canManageRosterDept(dept, (session.user as any).role)) {
+  if (!(await canManageRosterDeptFor(dept, { id: (session.user as any).id, role: (session.user as any).role }))) {
     return NextResponse.json({ error: 'Not authorised to manage this department roster' }, { status: 403 });
   }
   const body = await request.json();
@@ -129,7 +130,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { dept:
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const dept = getRosterDept(params.dept);
   if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
-  if (!canManageRosterDept(dept, (session.user as any).role)) {
+  if (!(await canManageRosterDeptFor(dept, { id: (session.user as any).id, role: (session.user as any).role }))) {
     return NextResponse.json({ error: 'Not authorised' }, { status: 403 });
   }
   const id = new URL(request.url).searchParams.get('id');
@@ -171,7 +172,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { dept: 
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const dept = getRosterDept(params.dept);
   if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
-  if (!canManageRosterDept(dept, (session.user as any).role)) {
+  if (!(await canManageRosterDeptFor(dept, { id: (session.user as any).id, role: (session.user as any).role }))) {
     return NextResponse.json({ error: 'Not authorised' }, { status: 403 });
   }
   const parsed = patchSchema.safeParse(await request.json());

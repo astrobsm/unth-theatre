@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
+import { canManageRosterDeptFor } from '@/lib/rosterSupervisors';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { backfillAnaesthetists } from '@/lib/anaesthetistBackfill';
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const dept = getRosterDept(params.dept);
   if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
-  if (!canManageRosterDept(dept, (session.user as any).role)) {
+  if (!(await canManageRosterDeptFor(dept, { id: (session.user as any).id, role: (session.user as any).role }))) {
     return NextResponse.json({ error: 'Not authorised to publish this department roster' }, { status: 403 });
   }
   const idemKey = idempotencyKeyFrom(request);

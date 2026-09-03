@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getRosterDept, canManageRosterDept, LOCATIONS, getShiftOptions } from '@/lib/rosterDepartments';
+import { canManageRosterDeptFor } from '@/lib/rosterSupervisors';
 import { getSubRoleOptions } from '@/lib/rosterAssignments';
 import { rosterTemplateHeaders } from '@/lib/rosterUploadColumns';
 import ExcelJS from 'exceljs';
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: { dept: st
   const dept = getRosterDept(params.dept);
   if (!dept) return NextResponse.json({ error: 'Unknown department' }, { status: 404 });
 
-  if (!canManageRosterDept(dept, (session.user as any).role)) {
+  if (!(await canManageRosterDeptFor(dept, { id: (session.user as any).id, role: (session.user as any).role }))) {
     return NextResponse.json({ error: 'Not allowed to manage this department roster' }, { status: 403 });
   }
 
