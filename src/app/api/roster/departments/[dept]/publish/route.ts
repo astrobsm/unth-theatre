@@ -7,6 +7,7 @@ import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
 import { canManageRosterDeptFor } from '@/lib/rosterSupervisors';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
 import { backfillAnaesthetists } from '@/lib/anaesthetistBackfill';
+import { backfillTechnicians } from '@/lib/technicianBackfill';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,21 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
       }
     } catch (e) {
       console.error('[roster/publish] anaesthetist backfill failed (roster still published):', e);
+    }
+  }
+
+  // The technicians get the same treatment, for the same reason: a case booked
+  // before their roster was published shows "not yet assigned", and must not
+  // stay that way once the roster arrives. Day call, night call and ICU are
+  // never used — they cover the unplanned, not a planned list.
+  if (dept.category === 'ANAESTHETIC_TECHNICIANS') {
+    try {
+      backfill = await backfillTechnicians(start, end);
+      if (backfill.filled) {
+        console.log(`[roster/publish] backfilled ${backfill.filled} technician(s) for ${dept.slug}`);
+      }
+    } catch (e) {
+      console.error('[roster/publish] technician backfill failed (roster still published):', e);
     }
   }
 
