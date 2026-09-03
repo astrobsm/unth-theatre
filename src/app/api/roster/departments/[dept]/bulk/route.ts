@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getRosterDept, canManageRosterDept } from '@/lib/rosterDepartments';
 import { canManageRosterDeptFor } from '@/lib/rosterSupervisors';
 import { normaliseShift } from '@/lib/rosterShifts';
+import { verdictForUploadedRow, batchKey } from '@/lib/rosterUploadDedupe';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -117,8 +118,11 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
         continue;
       }
 
-      const key = `${res.id}|${date}|${shift}`;
-      if (batchSeen.has(key)) continue; // duplicate line in the same sheet
+      // The assignment is PART OF THE KEY. Without it a sheet listing one
+      // anaesthetist against two specialties on the same morning lost the
+      // second line — real cover, silently dropped.
+      const key = batchKey(res.id, date, shift, r.subRole?.toString());
+      if (batchSeen.has(key)) continue; // the identical line twice in one sheet
       batchSeen.add(key);
       wantDates.add(date);
 
@@ -144,23 +148,55 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
       });
     }
 
-    // Skip rows that already exist (draft OR published) for the same person/day/shift.
+    // What is already on file for these people and days — WITH the assignment,
+    // because that is what decides whether a line is a duplicate or additional
+    // cover. See @/lib/rosterUploadDedupe.
     let duplicates = 0;
+    const toUpdate: { id: string; subRole: string }[] = [];
+
     if (toCreate.length && wantDates.size) {
       const dateObjs = Array.from(wantDates).map((d) => new Date(d + 'T00:00:00Z'));
       const existing = await prisma.roster.findMany({
         where: { staffCategory: dept.category as any, date: { in: dateObjs } },
-        select: { userId: true, date: true, shift: true },
+        select: { id: true, userId: true, date: true, shift: true, subRole: true },
       });
-      const existingSet = new Set(
-        existing.map((e) => `${e.userId}|${new Date(e.date).toISOString().slice(0, 10)}|${e.shift}`)
-      );
-      const filtered = toCreate.filter((c) => {
-        if (existingSet.has(c._key)) { duplicates += 1; return false; }
-        return true;
-      });
+
+      // Grouped by person + day + shift, which is the set a verdict is made
+      // against.
+      const byPersonShift = new Map<string, { id: string; subRole: string }[]>();
+      for (const e of existing) {
+        const k = `${e.userId}|${new Date(e.date).toISOString().slice(0, 10)}|${e.shift}`;
+        const list = byPersonShift.get(k) ?? [];
+        list.push({ id: e.id, subRole: (e.subRole ?? '').trim() });
+        byPersonShift.set(k, list);
+      }
+
+      const keep: typeof toCreate = [];
+      for (const c of toCreate) {
+        const k = `${c.userId}|${c.date.toISOString().slice(0, 10)}|${c.shift}`;
+        const onFile = byPersonShift.get(k) ?? [];
+        const verdict = verdictForUploadedRow(c.subRole, onFile);
+
+        if (verdict.action === 'SKIP') { duplicates += 1; continue; }
+        if (verdict.action === 'UPDATE') {
+          // Fill in the blank row rather than adding a second one beside it.
+          // Two rows for one person on one shift, one of them empty, fills two
+          // team slots with the same name.
+          toUpdate.push({ id: verdict.rosterId, subRole: c.subRole as string });
+          // Treat it as filled for any later line in the same sheet.
+          onFile.push({ id: verdict.rosterId, subRole: c.subRole as string });
+          continue;
+        }
+
+        keep.push(c);
+        // A second line for the same person and shift is judged against this
+        // one too, so one sheet cannot introduce its own duplicate.
+        onFile.push({ id: 'pending', subRole: (c.subRole ?? '').trim() });
+        byPersonShift.set(k, onFile);
+      }
+
       toCreate.length = 0;
-      toCreate.push(...filtered);
+      toCreate.push(...keep);
     }
 
     let created = 0;
@@ -170,10 +206,21 @@ export async function POST(request: NextRequest, { params }: { params: { dept: s
       created = result.count;
     }
 
+    let updated = 0;
+    for (const u of toUpdate) {
+      try {
+        await prisma.roster.update({ where: { id: u.id }, data: { subRole: u.subRole } });
+        updated += 1;
+      } catch (e) {
+        console.error('[roster bulk] could not fill in blank assignment', u.id, e);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       totalReceived: incoming.length,
       created,
+      updated,
       duplicates,
       unmatched,
       ambiguous,

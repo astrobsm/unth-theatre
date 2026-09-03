@@ -430,7 +430,14 @@ export default function RosterBulkUploadModal({
               <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
                 <CheckCircle2 className="mr-1 inline h-4 w-4" />
                 <strong>{result.created}</strong> draft assignment(s) added
+                {result.updated > 0 && <> · {result.updated} existing row(s) given their assignment</>}
                 {result.duplicates > 0 && <> · {result.duplicates} already existed (skipped)</>}.
+                {result.created > 0 && (
+                  <>
+                    {' '}One person may hold more than one assignment on a shift — that is cover, not a
+                    duplicate, and both lines are kept.
+                  </>
+                )}
               </div>
               {result.unmatched?.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
