@@ -1235,19 +1235,17 @@ export default function EmergencyBookingPage() {
                           const t = od?.team;
                           if (!t) return null;
                           const rows: Array<[string, OnDutyStaff | null | undefined]> = [
-                            ['Consultant/Anaesthetist', t.anaesthetist],
+                            ['Anaesthetist (1st)', t.anaesthetist],
                             ['Anaesthetist (2nd)', t.anaesthetist2],
                             ['Anaesthetic Technician', t.anaestheticTechnician],
                             ['Scrub Nurse', t.scrubNurse],
                             ['Circulating Nurse', t.circulatingNurse],
                             ...((t.supervisors ?? []).map((s, i) => [`Supervisor ${i + 1}`, s] as [string, OnDutyStaff])),
-                            ['Recovery Nurse', t.recoveryNurse],
                             ['Porter', t.porter],
                             ['Cleaner', t.cleaner],
                             ['Pharmacist', t.pharmacist],
                             ['Theatre Manager', t.theatreManager],
                             ['Blood Bank', t.bloodBank],
-                            ['CSSD', t.cssd],
                             ['Biomedical Engineer', t.biomedicalEngineer],
                           ];
                           const present = rows.filter(([, v]) => v && v.name);
@@ -1277,6 +1275,25 @@ export default function EmergencyBookingPage() {
                                 </div>
                               ) : (
                                 <span className="text-xs text-gray-400">No roster team found for this date/shift.</span>
+                              )}
+                              {/* THE GAP HAS TO ANNOUNCE ITSELF.
+                                  Emergencies used to be answered with whoever
+                                  held the elective morning list, which always
+                                  produced a name and hid a missing on-call
+                                  roster. Now that only the on-call team is
+                                  named, a day with no CALL roster published
+                                  shows nothing at all — silence that reads like
+                                  a broken screen rather than the real problem,
+                                  which is a roster nobody published. */}
+                              {!t.anaesthetist && (
+                                <p className="mt-1 flex items-start gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+                                  <AlertTriangle className="mt-px h-3 w-3 flex-shrink-0" />
+                                  <span>
+                                    <strong>No anaesthetist is rostered on {od?.shift === 'NIGHT' ? 'night' : 'day'} call</strong>
+                                    {' '}for this date. Publish the anaesthetists&apos; on-call roster for the day, or ring the
+                                    consultant on call directly — this case has no anaesthetist assigned to it.
+                                  </span>
+                                </p>
                               )}
                             </div>
                           );
