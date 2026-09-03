@@ -212,6 +212,12 @@ export const TABLE_POLICIES: TablePolicy[] = [
   // to APPROVED to THEATRE_ASSIGNED — and the latest state is the true one.
   { table: 'emergency_surgery_bookings', cls: 'LWW', why: 'One emergency case moving through its lifecycle. The latest status is the true one, and the theatre must see it on whichever node it is looking at.' },
   { table: 'emergency_surgery_alerts', cls: 'LWW', why: 'The alert raised for that booking, and whether it is still active. It drives the emergency display, so it has to travel with the booking or the board is blank on one node.' },
+  // How far the chase has got for an emergency that never started. One row per
+  // booking walking 0 -> 3, so the latest state is the true one. It must travel:
+  // the case is chased from the theatre and the invitations are sent from the
+  // cloud, and a stage fired on one node must not fire again on the other.
+  { table: 'emergency_delay_escalations', cls: 'LWW', why: 'One escalation per booking moving through its stages; the latest stage is the true one, and a stage already fired must not fire twice on the other node.' },
+  { table: 'audit_committee_invitations', cls: 'LWW', why: 'One drafted invitation per person, edited and then marked sent by an administrator. The sent mark is the whole point and the later state is correct.' },
   // Why a case did not start. Replicated from the day it was created, having
   // watched two tables cause incidents by not being.
   { table: 'case_blocker_reports', cls: 'LWW', why: 'One report of what stopped a case, with an outcome added later. The reason and reporter never change; the latest outcome is the true one.' },

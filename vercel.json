@@ -54,6 +54,10 @@
     {
       "path": "/api/maintenance/preop-alerts",
       "schedule": "*/5 4-18 * * *"
+    },
+    {
+      "path": "/api/emergency-escalation/run",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

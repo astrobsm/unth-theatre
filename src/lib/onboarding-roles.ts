@@ -34,6 +34,10 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   { value: 'BOOKING_OFFICER',          label: 'Booking Officer (Clerical)',       prefix: 'BKO' },
 
   // Heads of Department / Supervisors
+  { value: 'HEAD_OF_ANAESTHESIA',      label: 'Head of Anaesthesia',              prefix: 'ANH' },
+  { value: 'HEAD_OF_SURGERY',          label: 'Head of Surgery',                  prefix: 'SGH' },
+  { value: 'HEAD_OF_OBSTETRICS_GYNAECOLOGY', label: 'Head of Obstetrics & Gynaecology', prefix: 'OGH' },
+  { value: 'HEAD_OF_PHARMACY',         label: 'Head of Pharmacy',                 prefix: 'PHH' },
   { value: 'OXYGEN_UNIT_SUPERVISOR',   label: 'Oxygen Tech HOD',                  prefix: 'OXH' },
   { value: 'CSSD_SUPERVISOR',          label: 'CSSD HOD',                         prefix: 'CSH' },
   { value: 'LAUNDRY_SUPERVISOR',       label: 'Laundry HOD',                      prefix: 'LDH' },

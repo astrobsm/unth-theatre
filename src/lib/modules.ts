@@ -31,8 +31,11 @@ export const FULL_ACCESS_ROLES = [
 ] as const;
 
 // Convenience role groupings used by defaultRoles below.
+import { AUDIT_COMMITTEE_ROLES } from './emergencyEscalation';
+
 const CLINICAL_CORE = [
   'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC',
+  'HEAD_OF_ANAESTHESIA', 'HEAD_OF_SURGERY', 'HEAD_OF_OBSTETRICS_GYNAECOLOGY', 'HEAD_OF_PHARMACY',
   'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
   'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
   'ANAESTHETIC_TECHNICIAN',
@@ -58,6 +61,11 @@ export const MODULES: AppModule[] = [
   { id: 'desk-vendor', label: 'Vendor Accounts', paths: ['/dashboard/vendor-desk'], defaultRoles: [...ADMIN_VIEWERS, 'PROCUREMENT_OFFICER'], category: 'Overview' },
   { id: 'desk-finance', label: 'Finance Desk', paths: ['/dashboard/finance-desk'], defaultRoles: [...ADMIN_VIEWERS, 'PROCUREMENT_OFFICER'], category: 'Overview' },
   { id: 'emergency-booking', label: '🚨 Emergency Booking', paths: ['/dashboard/emergency-booking'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'PORTER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'PHARMACIST'], category: 'Overview' },
+  // The Theatre Audit Committee sees the emergencies that never started. The
+  // list is AUDIT_COMMITTEE_ROLES in lib/emergencyEscalation — every discipline
+  // that can hold a case up, because the cause is usually theirs to fix.
+  // Seeing is not sending: the invitations route keeps that with the admins.
+  { id: 'delayed-emergencies', label: 'Delayed Emergencies', paths: ['/dashboard/emergency-escalations'], defaultRoles: [...AUDIT_COMMITTEE_ROLES], category: 'Overview' },
 
   // Patient Registration & Scheduling
   // BOOKING_OFFICER gets these two and only these two. The clerical role exists

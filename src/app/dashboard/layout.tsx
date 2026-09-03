@@ -241,6 +241,7 @@ export default function DashboardLayout({
     // === OVERVIEW ===
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/dashboard/emergency-booking', icon: Ambulance, label: '🚨 Emergency Booking', badge: 'URGENT' },
+    { href: '/dashboard/emergency-escalations', icon: AlertOctagon, label: 'Delayed Emergencies', badge: 'NEW' },
 
     // === PATIENT REGISTRATION & SCHEDULING ===
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },

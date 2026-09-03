@@ -19,6 +19,14 @@ enum UserRole {
   CHIEF_MEDICAL_DIRECTOR
   CMAC
   DC_MAC
+  /// Clinical heads of department. Added 3 September 2026 so the Theatre Audit
+  /// Committee can be named by role rather than by a list of individuals.
+  /// CSSD, oxygen, works and the power plant already had head-level roles —
+  /// CSSD_SUPERVISOR is "CSSD HOD" — and are not duplicated here.
+  HEAD_OF_ANAESTHESIA
+  HEAD_OF_SURGERY
+  HEAD_OF_OBSTETRICS_GYNAECOLOGY
+  HEAD_OF_PHARMACY
   LAUNDRY_SUPERVISOR
   CSSD_SUPERVISOR
   OXYGEN_UNIT_SUPERVISOR
@@ -603,6 +611,9 @@ model User {
   // Module access grants (per-user overrides issued by admins)
   moduleGrants UserModuleGrant[] @relation("UserGrants")
   grantsIssued UserModuleGrant[] @relation("GrantedByUser")
+
+  // Invitations to appear before the Theatre Audit Committee
+  auditCommitteeInvitations AuditCommitteeInvitation[] @relation("AuditCommitteeInvitee")
 
   // Departmental roster supervision (per-user, per-department authority)
   rosterSupervision   RosterSupervisor[] @relation("RosterSupervisorUser")
@@ -4138,6 +4149,7 @@ model EmergencySurgeryBooking {
   updatedAt DateTime @updatedAt
 
   // Relations
+  delayEscalation        EmergencyDelayEscalation?
   surgeon                User                            @relation("EmergencyBookingSurgeon", fields: [surgeonId], references: [id])
   anesthetist            User?                           @relation("EmergencyBookingAnesthetist", fields: [anesthetistId], references: [id])
   surgery                Surgery?                        @relation("EmergencyBookingSurgery", fields: [surgeryId], references: [id])
@@ -4155,6 +4167,96 @@ model EmergencySurgeryBooking {
   syncVersion Int     @default(0) @map("sync_version")
   syncOrigin  String? @map("sync_origin")
   syncHlc     String? @map("sync_hlc")
+}
+
+/// A booked emergency that has not started, and how far the chase has got.
+///
+/// The theatre's rule is that a booked emergency starts within the hour. Cases
+/// were being booked, the hour passing, and no reason recorded — so a case
+/// could sit for an afternoon with no name against the delay and no trail
+/// afterwards. One row per booking; the ladder is in lib/emergencyEscalation.
+model EmergencyDelayEscalation {
+  id        String @id @default(uuid())
+  bookingId String @unique
+
+  /// Highest rung fired: 0 none, 1 team asked, 2 CMD informed, 3 committee.
+  stage    Int       @default(0)
+  stage1At DateTime?
+  stage2At DateTime?
+  stage3At DateTime?
+
+  /// How late the case was when the last rung fired, for the record.
+  minutesLateAtLastStage Int?
+  /// What was recorded as the reason, copied at the time it escalated.
+  reasonAtLastStage      String?  @db.Text
+
+  /// Set when the case starts, is cancelled or is completed. A resolved
+  /// escalation is never chased again.
+  resolvedAt     DateTime?
+  resolvedReason String?
+
+  lastCheckedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  booking     EmergencySurgeryBooking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  invitations AuditCommitteeInvitation[]
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([stage, resolvedAt])
+  @@map("emergency_delay_escalations")
+}
+
+/// One person's invitation to appear before the Theatre Audit Committee.
+///
+/// Drafted by the system at the third hour, PERSONALISED TO THEIR ROLE ON THE
+/// CASE, and sent by an administrator — never automatically. Calling somebody
+/// before a committee is not something a cron job should do unattended.
+model AuditCommitteeInvitation {
+  id           String @id @default(uuid())
+  escalationId String
+  bookingId    String
+
+  userId      String
+  personName  String
+  /// Their part in THIS case — Surgeon, Anaesthetist, Scrub Nurse.
+  roleOnCase  String
+  phoneNumber String?
+
+  /// The drafted text. Editable by the administrator before sending.
+  message String @db.Text
+
+  /// When the committee will see them. Set by the administrator at the moment
+  /// of sending; the system cannot know when the committee sits.
+  appearAt DateTime?
+
+  sentAt    DateTime?
+  sentById  String?
+  /// WHATSAPP | DASHBOARD — how it was delivered.
+  channel   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  escalation EmergencyDelayEscalation @relation(fields: [escalationId], references: [id], onDelete: Cascade)
+  user       User                     @relation("AuditCommitteeInvitee", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([escalationId, userId])
+  @@index([bookingId])
+  @@index([sentAt])
+  @@map("audit_committee_invitations")
 }
 
 enum EmergencyBookingStatus {

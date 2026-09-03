@@ -678,6 +678,64 @@ export const DUTY_SHEETS: DutySheet[] = [
   },
 
   // ---------------------------------------------------------------------
+  // The clinical heads of department, added 3 September 2026 with the Theatre
+  // Audit Committee. Their duty is oversight, so the sheet is short: the work
+  // is reading what the system already records and acting on it.
+  {
+    id: 'departmental-head',
+    title: 'Head of Department',
+    roles: [
+      'HEAD_OF_ANAESTHESIA',
+      'HEAD_OF_SURGERY',
+      'HEAD_OF_OBSTETRICS_GYNAECOLOGY',
+      'HEAD_OF_PHARMACY',
+    ],
+    headline:
+      'A delayed emergency is nearly always somebody\'s department. Yours is the desk it stops at.',
+    duties: [
+      {
+        task: 'Read the delayed emergencies board',
+        when: 'Daily, and whenever you are notified',
+        why:
+          'An emergency is expected to start within the hour of its set time. Every case listed there '
+          + 'passed that hour without starting, and the cause is usually something only a head of '
+          + 'department can move.',
+        where: 'Delayed Emergencies',
+        critical: true,
+      },
+      {
+        task: 'Make sure your staff record WHY a case has not started',
+        when: 'While the case is still waiting',
+        why:
+          'The reason is what turns a delay into something that can be fixed. A case with no reason '
+          + 'recorded escalates to the Chief Medical Director at two hours and to the audit committee '
+          + 'at three, and by then nobody can reconstruct what happened.',
+        where: '🚨 Emergency Booking',
+        critical: true,
+      },
+      {
+        task: 'Keep your department\'s on-call roster published',
+        when: 'Before the week begins',
+        why:
+          'The emergency board names the team from the published on-call roster. An unpublished roster '
+          + 'shows no anaesthetist against a live emergency, and the theatre rings round instead.',
+        where: 'Duty Roster',
+        critical: true,
+      },
+      {
+        task: 'Attend the Theatre Audit Committee when a case reaches three hours',
+        when: 'When convened',
+        why:
+          'The committee exists to understand the cause, not to apportion blame. Your department will '
+          + 'usually know the answer before the meeting starts.',
+      },
+    ],
+    remember:
+      'An emergency that has not started within the hour is your department\'s to explain, '
+      + 'and the explanation is worth more than the apology.',
+  },
+
+  // ---------------------------------------------------------------------
   {
     id: 'cssd',
     title: 'CSSD',
