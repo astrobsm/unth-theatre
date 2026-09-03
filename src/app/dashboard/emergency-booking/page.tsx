@@ -667,8 +667,12 @@ export default function EmergencyBookingPage() {
         const results = await Promise.all(
           slice.map(async ([when, ids]) => {
             try {
+              // for=emergency, ALWAYS. Asking the plain question returned the
+              // MORNING roster for a 10:00 case — the elective list — so the
+              // card named anaesthetists committed to their own theatres while
+              // the consultants actually on call appeared nowhere on it.
               const res = await fetch(
-                `/api/roster/on-duty?date=${encodeURIComponent(when)}`,
+                `/api/roster/on-duty?for=emergency&date=${encodeURIComponent(when)}`,
                 { signal: controller.signal }
               );
               if (!res.ok) return null;
@@ -1250,7 +1254,7 @@ export default function EmergencyBookingPage() {
                           return (
                             <div className="mt-1 pt-1 border-t border-gray-100">
                               <p className="text-xs font-semibold text-gray-500 mb-0.5">
-                                Emergency Response Team{od?.shift ? ` (${od.shift} shift)` : ''}
+                                Emergency Response Team{od?.shift ? ` (${od.shift === 'NIGHT' ? 'night call' : 'day call'})` : ''}
                                 {booking.theatreName ? ` · ${booking.theatreName}` : ''}
                               </p>
                               {present.length ? (

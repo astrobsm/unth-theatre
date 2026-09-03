@@ -5,19 +5,7 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Derive duty shift from a JS Date.
- * Shift windows (local time):
- *   MORNING: 08:00 – 16:00
- *   CALL:    16:00 – 22:00
- *   NIGHT:   22:00 – 08:00 (wraps)
- */
-function shiftFromDate(d: Date): "MORNING" | "CALL" | "NIGHT" {
-  const h = d.getHours();
-  if (h >= 8 && h < 16) return "MORNING";
-  if (h >= 16 && h < 22) return "CALL";
-  return "NIGHT";
-}
+import { shiftForPurpose } from "@/lib/rosterOnDutyShift";
 
 type StaffEntry = {
   id: string;
@@ -92,9 +80,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // WHAT IS BEING ASKED changes which shift answers.
+    //
+    // "Who is on duty at 10:00?" for an elective list is the MORNING roster.
+    // For an EMERGENCY it is the on-call team, and never the morning one:
+    // MORNING is the elective roster — the anaesthetists label that shift
+    // "ELECTIVES" — so answering an emergency with it names people who are
+    // committed to their own lists and are not the ones to ring.
+    const purpose = searchParams.get("for") === "emergency" ? "emergency" : "elective";
     const shift =
       (shiftParam as "MORNING" | "CALL" | "NIGHT" | null) ||
-      shiftFromDate(parsed);
+      shiftForPurpose(parsed, purpose);
 
     // Roster.date is a Prisma @db.Date — strip the time so equality matches.
     const dateOnly = new Date(
@@ -207,7 +203,16 @@ export async function GET(request: NextRequest) {
           return 3;
       }
     };
-    const sortedAnaesthetists = [...candidates.anaesthetists].sort(
+    // DE-DUPLICATED BY PERSON FIRST. The same anaesthetist can hold more than
+    // one row for a shift — on 3 September both on-call consultants had two
+    // apiece, one carrying "ALL EMERGENCIES (on-call)" and one carrying no
+    // assignment — and without this the first and second anaesthetist slots
+    // fill with the same name, which reads as a team of two and is a team of
+    // one.
+    const uniqueAnaesthetists = Array.from(
+      new Map(candidates.anaesthetists.map((a) => [a.userId, a])).values()
+    );
+    const sortedAnaesthetists = uniqueAnaesthetists.sort(
       (a, b) => senorityRank(a.seniorityLevel) - senorityRank(b.seniorityLevel)
     );
 
@@ -277,6 +282,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       date: dateOnly.toISOString().slice(0, 10),
       shift,
+      purpose,
       theatreId: where.theatreId ?? null,
       team,
       candidates,

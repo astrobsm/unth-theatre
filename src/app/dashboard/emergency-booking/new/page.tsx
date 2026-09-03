@@ -323,7 +323,10 @@ export default function NewEmergencyBookingPage() {
       setOnDutyLoading(true);
       setOnDutyError('');
       try {
-        const url = `/api/roster/on-duty?date=${encodeURIComponent(form.requiredByTime)}`;
+        // for=emergency: the team proposed for an emergency is the ON-CALL
+        // team, never the elective list that happens to be running at that
+        // hour. Without it a 10:00 case proposed the MORNING roster.
+        const url = `/api/roster/on-duty?for=emergency&date=${encodeURIComponent(form.requiredByTime)}`;
         const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
