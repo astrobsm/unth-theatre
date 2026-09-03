@@ -340,6 +340,12 @@ export default function NewPreOpReviewPage() {
   ];
   const LAST_STEP = STEP_NAMES.length - 1;
   const [step, setStep] = useState(0);
+  /**
+   * Set only by pressing the final button. A submit event arriving without it
+   * is the browser acting on a keypress somewhere in the form, not a person
+   * deciding to create the review.
+   */
+  const submitIntent = useRef(false);
   const stepClass = (n: number) => (n === step ? '' : 'hidden');
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -557,6 +563,20 @@ export default function NewPreOpReviewPage() {
       goToStep(step + 1);
       return;
     }
+
+    // ON THE LAST STEP, THE SAME KEYPRESS CREATED THE REVIEW.
+    //
+    // The guard above only covers the sections before the last one. Step 7 IS
+    // the last one, and it holds the anaesthesia pack picker — whose "view pack
+    // content" modal has quantity, dose and item-name inputs. Those inputs sit
+    // inside this form, so Enter in any of them submitted it: the review saved
+    // and the dialog appeared while the anaesthetist was still choosing packs,
+    // with whatever they had picked so far.
+    //
+    // So the button must say so. Nothing else counts as an intention to create
+    // the review and send a prescription to Pharmacy.
+    if (!submitIntent.current) return;
+    submitIntent.current = false;
 
     if (!selectedSurgeryId || !selectedSurgery) {
       setError('Please select a surgery');
@@ -1554,6 +1574,7 @@ export default function NewPreOpReviewPage() {
               ) : (
                 <button
                   type="submit"
+                  onClick={() => { submitIntent.current = true; }}
                   disabled={submitting}
                   className="flex-1 rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                 >

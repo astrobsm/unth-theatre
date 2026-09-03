@@ -211,7 +211,24 @@ export default function AnaesthesiaPackPicker({
   };
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      // ENTER MUST NOT REACH THE FORM AROUND US.
+      //
+      // This picker is rendered inside the pre-operative review's <form>, and
+      // the "view pack content" modal carries quantity, dose and item-name
+      // inputs. A browser submits a form when Enter is pressed in a text input,
+      // so adjusting a quantity and pressing Enter CREATED THE REVIEW and sent
+      // the prescription to Pharmacy, mid-edit, with whatever had been chosen
+      // so far.
+      //
+      // Enter inside this component means "I have finished typing in this
+      // box", never "submit the review". Textareas keep their newlines.
+      onKeyDown={(e) => {
+        const el = e.target as HTMLElement;
+        if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault();
+      }}
+    >
       <p className="text-xs text-gray-500">
         Apply a pack to add its items in one tap. <span className="font-medium">Drug packs</span> go to Pharmacy;
         <span className="font-medium"> consumable packs</span> (airway, monitoring, ECG electrodes, needles) go to the Consumable Pack Provider.
