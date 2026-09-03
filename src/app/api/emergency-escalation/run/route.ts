@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authoriseCron } from '@/lib/cronAuth';
 import { runEmergencyEscalation } from '@/lib/emergencyEscalationRunner';
 
 export const dynamic = 'force-dynamic';
@@ -13,28 +12,30 @@ export const maxDuration = 60;
  * now". Both routes are the same code, because a scheduled job that behaves
  * differently from the button beside it is a job nobody trusts.
  *
- * AUTHORISATION. Vercel signs its cron calls with CRON_SECRET; a signed-in
- * administrator may also run it. Nothing else may, because this writes
- * notifications to other people and drafts committee summonses.
+ * AUTHORISATION uses the shared authoriseCron, and that matters more than it
+ * looks. This route originally accepted only a CRON_SECRET bearer token — and
+ * lib/cronAuth exists precisely because that pattern had already silently
+ * disabled three scheduled jobs here: with the variable unset the scheduler is
+ * refused every time, the job never runs, and nothing appears on any screen to
+ * say so. Zero preoperative alerts had been sent since that feature shipped.
+ *
+ * Repeating it would have been worse here, because the thing that silently
+ * would not run is the chase after an emergency that never started.
+ *
+ * So: the secret if it is set, Vercel's own scheduler if it is not, or a
+ * signed-in administrator pressing "Check now".
  */
-function authorised(request: NextRequest, role: string | undefined): boolean {
-  const secret = process.env.CRON_SECRET;
-  const header = request.headers.get('authorization');
-  if (secret && header === `Bearer ${secret}`) return true;
-  return !!role && ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(role);
-}
-
 async function handle(request: NextRequest) {
-  const session = await getServerSession(authOptions).catch(() => null);
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!authorised(request, role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await authoriseCron(request);
+  if (!auth.ok) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status ?? 401 });
   }
 
   try {
     const summary = await runEmergencyEscalation(new Date());
-    return NextResponse.json({ ok: true, ...summary });
+    // Reported so an administrator can see which credential ran it — the
+    // difference between "the cron is working" and "only I can make it work".
+    return NextResponse.json({ ok: true, ranAs: auth.who, via: auth.via, ...summary });
   } catch (error) {
     console.error('[emergency-escalation] run failed:', error);
     return NextResponse.json({ error: 'The escalation check failed.' }, { status: 500 });
