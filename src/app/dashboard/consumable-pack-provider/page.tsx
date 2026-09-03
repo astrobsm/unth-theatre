@@ -92,8 +92,8 @@ export default function ConsumablePackProviderPage() {
       if (filter !== "ALL" && it.status !== filter) continue;
       // Search by PT / folder number (primary) or patient name.
       if (q) {
-        const folder = (it.surgery.patient.folderNumber || "").toLowerCase();
-        const name = (it.surgery.patient.name || "").toLowerCase();
+        const folder = (it.surgery.patient?.folderNumber || "").toLowerCase();
+        const name = (it.surgery.patient?.name || "").toLowerCase();
         if (!folder.includes(q) && !name.includes(q)) continue;
       }
       const key = it.surgeryId;
@@ -106,8 +106,8 @@ export default function ConsumablePackProviderPage() {
       if (b.surgery.surgeryType === "EMERGENCY" && a.surgery.surgeryType !== "EMERGENCY") return 1;
       const byTime = (a.surgery.scheduledTime || "").localeCompare(b.surgery.scheduledTime || "", undefined, { numeric: true });
       if (byTime !== 0) return byTime;
-      const fa = a.surgery.patient.folderNumber || "";
-      const fb = b.surgery.patient.folderNumber || "";
+      const fa = a.surgery.patient?.folderNumber || "";
+      const fb = b.surgery.patient?.folderNumber || "";
       const byFolder = fa.localeCompare(fb, undefined, { numeric: true, sensitivity: "base" });
       if (byFolder !== 0) return byFolder;
       return new Date(a.surgery.scheduledDate).getTime() - new Date(b.surgery.scheduledDate).getTime();
@@ -248,7 +248,7 @@ export default function ConsumablePackProviderPage() {
                     </span>
                   )}
                 </div>
-                <div className="font-semibold text-lg">{g.surgery.patient.name}{g.surgery.patient.folderNumber ? ` (${g.surgery.patient.folderNumber})` : ""}</div>
+                <div className="font-semibold text-lg">{g.surgery.patient?.name}{g.surgery.patient?.folderNumber ? ` (${g.surgery.patient?.folderNumber})` : ""}</div>
                 <div className="text-sm text-gray-700">{g.surgery.procedureName} — {g.surgery.surgeonName}</div>
 
                 {/* Hand the pack to the scrub nurse assigned to this theatre */}
@@ -319,34 +319,34 @@ export default function ConsumablePackProviderPage() {
 
                   <span className="text-gray-600">
                     <span className="font-medium text-gray-700">Patient:</span>{" "}
-                    {g.surgery.patient.phoneNumber ? (
+                    {g.surgery.patient?.phoneNumber ? (
                       <a
-                        href={whatsappChatLink(g.surgery.patient.phoneNumber) || `tel:${g.surgery.patient.phoneNumber.replace(/\s+/g, "")}`}
+                        href={whatsappChatLink(g.surgery.patient?.phoneNumber) || `tel:${g.surgery.patient?.phoneNumber.replace(/\s+/g, "")}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Chat on WhatsApp"
                         className="inline-flex items-center gap-1 text-green-700 hover:underline"
                       >
-                        <MessageCircle className="w-3 h-3" /> {g.surgery.patient.phoneNumber}
+                        <MessageCircle className="w-3 h-3" /> {g.surgery.patient?.phoneNumber}
                       </a>
                     ) : (
                       <span className="text-gray-400">(no phone)</span>
                     )}
                   </span>
 
-                  {g.surgery.patient.caregiverPhone && (
+                  {g.surgery.patient?.caregiverPhone && (
                     <span className="text-gray-600">
                       <span className="font-medium text-gray-700">
-                        Caregiver{g.surgery.patient.caregiverName ? ` (${g.surgery.patient.caregiverName})` : ""}:
+                        Caregiver{g.surgery.patient?.caregiverName ? ` (${g.surgery.patient?.caregiverName})` : ""}:
                       </span>{" "}
                       <a
-                        href={whatsappChatLink(g.surgery.patient.caregiverPhone) || `tel:${g.surgery.patient.caregiverPhone.replace(/\s+/g, "")}`}
+                        href={whatsappChatLink(g.surgery.patient?.caregiverPhone) || `tel:${g.surgery.patient?.caregiverPhone.replace(/\s+/g, "")}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Chat on WhatsApp"
                         className="inline-flex items-center gap-1 text-green-700 hover:underline"
                       >
-                        <MessageCircle className="w-3 h-3" /> {g.surgery.patient.caregiverPhone}
+                        <MessageCircle className="w-3 h-3" /> {g.surgery.patient?.caregiverPhone}
                       </a>
                     </span>
                   )}

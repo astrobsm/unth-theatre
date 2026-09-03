@@ -1,7 +1,10 @@
 'use client';
+// patientLabel: a missing patient record means "not loaded", never "unknown
+// patient" — see lib/patientDisplay.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { patientLabel } from '@/lib/patientDisplay';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -297,7 +300,7 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
               Holding Area Assessment
             </h1>
             <p className="text-gray-600">
-              {assessment.patient?.name || 'Unknown Patient'} • {assessment.patient?.folderNumber || 'N/A'}
+              {patientLabel(assessment.patient).name} • {patientLabel(assessment.patient).identifier}
             </p>
           </div>
           <div className="flex gap-2">
@@ -340,18 +343,25 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
       {/* Patient & Surgery Info */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-bold mb-4">Patient Information</h2>
+        {/* Every field below is optional-chained. The patient object can be
+            absent — this page renders from a cached payload, and the name a few
+            lines above was already written as patient?.name — but age, gender
+            and ward were read straight off it, so a cached assessment without
+            its patient threw "Cannot read properties of undefined (reading
+            'ward')" and took the whole page down. A missing value is a dash;
+            a missing patient is not a crash. */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-600">Age</p>
-            <p className="font-medium">{assessment.patient.age} years</p>
+            <p className="font-medium">{assessment.patient?.age != null ? `${assessment.patient.age} years` : '—'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Gender</p>
-            <p className="font-medium">{assessment.patient.gender}</p>
+            <p className="font-medium">{assessment.patient?.gender || '—'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Ward</p>
-            <p className="font-medium">{assessment.patient.ward}</p>
+            <p className="font-medium">{assessment.patient?.ward || '—'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Procedure</p>
