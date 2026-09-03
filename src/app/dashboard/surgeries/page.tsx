@@ -12,6 +12,7 @@ import { outstandingLabel } from '@/lib/preopRequirements';
 import { SYNC_INTERVALS } from '@/lib/sync';
 import { watToday } from '@/lib/watDay';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
+import { patientLabel, patientAgeSex } from '@/lib/patientDisplay';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
@@ -1324,24 +1325,35 @@ export default function SurgeriesPage() {
                     {group.rows.map((surgery, rowIndex) => (
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {surgery.patient?.name ? (
-                          <ContactName type="patient" id={surgery.patient.id} name={surgery.patient.name} />
-                        ) : (
-                          'Unknown Patient'
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {surgery.patient?.folderNumber || 'N/A'}
-                        {(surgery.patient?.age != null || surgery.patient?.gender) && (
-                          <span className="ml-1 text-gray-400">
-                            · {surgery.patient?.age ?? '?'}y {surgery.patient?.gender ?? ''}
-                          </span>
-                        )}
-                      </div>
-                      {surgery.patient?.ward && (
-                        <div className="text-xs text-gray-500">Ward: {surgery.patient.ward}</div>
-                      )}
+                      {/* "Unknown Patient" used to appear here whenever the
+                          patient object was absent. On a theatre list that
+                          reads as an UNIDENTIFIED patient, which is a real and
+                          alarming clinical category — and it was never true.
+                          patientId is NOT NULL and every patient row has a
+                          name, so an absent patient means the row came from the
+                          offline cache without it. See lib/patientDisplay. */}
+                      {(() => {
+                        const label = patientLabel(surgery.patient);
+                        const ageSex = patientAgeSex(surgery.patient);
+                        return (
+                          <>
+                            <div className={label.notLoaded ? 'text-sm font-medium text-amber-700' : 'text-sm font-medium text-gray-900'}>
+                              {label.notLoaded || !surgery.patient?.id ? (
+                                label.name
+                              ) : (
+                                <ContactName type="patient" id={surgery.patient.id} name={label.name} />
+                              )}
+                            </div>
+                            <div className={label.notLoaded ? 'text-xs text-amber-600' : 'text-xs text-gray-500'}>
+                              {label.identifier}
+                              {ageSex && <span className="ml-1 text-gray-400">· {ageSex}</span>}
+                            </div>
+                            {surgery.patient?.ward && (
+                              <div className="text-xs text-gray-500">Ward: {surgery.patient.ward}</div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">{surgery.procedureName}</div>
