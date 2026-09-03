@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone } from 'lucide-react';
 import Link from 'next/link';
@@ -19,6 +19,8 @@ import { surgeonMatchesSubspecialty } from '@/lib/subspecialtyMatch';
 import { isOfflineQueued, queuedMessage } from '@/lib/offlineResponse';
 import { MIN_OVERRIDE_REASON } from '@/lib/preopRequirements';
 import { notify } from '@/lib/notifications';
+import { bookingGate, isFormUsable, type PriorCase } from '@/lib/bookingGate';
+import BookingGateNotice from '@/components/BookingGateNotice';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -252,6 +254,7 @@ export default function NewSurgeryPage() {
   const [step, setStep] = useState(0);
   const stepClass = (n: number) => (n === step ? '' : 'hidden');
 
+
   const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
   const [resumable, setResumable] = useState<{ step: string; patientName: string | null; updatedAt: string } | null>(null);
@@ -264,6 +267,65 @@ export default function NewSurgeryPage() {
   const [remoteMatches, setRemoteMatches] = useState<Patient[]>([]);
   const [searchState, setSearchState] = useState<'idle' | 'searching' | 'done' | 'unavailable'>('idle');
   const [selectedPatientId, setSelectedPatientId] = useState('');
+
+  // ---- The two gates in front of this form -----------------------------
+  // Nothing below the patient may be filled in until a patient is chosen, and
+  // a patient whose last operation was never marked completed cannot simply be
+  // booked again — that puts one person on the theatre list twice, and
+  // afterwards nobody can tell which entry is real.
+  //
+  // null means "not checked yet", which keeps the form SHUT. Opening it while
+  // the answer is unknown and shutting it a moment later is worse than
+  // waiting: somebody types into a field that then goes dead under them.
+  const [priorCases, setPriorCases] = useState<PriorCase[] | null>(null);
+  const [completingCase, setCompletingCase] = useState<string | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
+
+  /** Ask whether this patient has an operation that was never finished. */
+  const checkPriorCases = useCallback(async (patientId: string) => {
+    if (!patientId) { setPriorCases(null); return; }
+    setPriorCases(null);
+    setGateError(null);
+    try {
+      const r = await fetch(`/api/patients/${patientId}/open-surgeries`, { cache: 'no-store' });
+      if (!r.ok) {
+        // A failed lookup leaves the gate CHECKING, which keeps the form shut.
+        // Opening it because a lookup failed is the one outcome worth avoiding.
+        setGateError('Could not check this patient for unfinished operations. Try again.');
+        return;
+      }
+      const d = await r.json();
+      setPriorCases(Array.isArray(d.cases) ? d.cases : []);
+    } catch {
+      setGateError('Could not check this patient for unfinished operations. Try again.');
+    }
+  }, []);
+
+  useEffect(() => { void checkPriorCases(selectedPatientId); }, [selectedPatientId, checkPriorCases]);
+
+  /** Close an unfinished case so this booking can go ahead. */
+  const completePriorCase = async (surgeryId: string) => {
+    setCompletingCase(surgeryId);
+    setGateError(null);
+    try {
+      const r = await fetch(`/api/surgeries/${surgeryId}/complete`, { method: 'POST' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setGateError(d.error ?? 'That operation could not be marked completed.');
+        return;
+      }
+      await checkPriorCases(selectedPatientId);
+    } finally {
+      setCompletingCase(null);
+    }
+  };
+
+  const gate = bookingGate({
+    patientId: selectedPatientId,
+    priorCases,
+    patientName: patients.find((p) => p.id === selectedPatientId)?.name ?? null,
+  });
+  const formUsable = isFormUsable(gate);
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
   // Compulsory pre-operative safety labs & risk assessments (Part of booking).
   const [preop, setPreop] = useState({
@@ -1515,6 +1577,18 @@ ${pretty} — ${days} days from today.
             </div>
           </div>
         </div>
+
+        {/* ---------------------------------------------------------------
+            NOTHING BELOW THE PATIENT WORKS UNTIL THE GATE OPENS.
+
+            A fieldset because it is the browser's own mechanism: every control
+            inside is disabled, including any added later, which a hand-written
+            disabled={...} on each input would quietly miss.
+
+            display:contents so the layout is untouched — the fieldset draws
+            nothing and takes no part in the grid.
+            --------------------------------------------------------------- */}
+        <fieldset disabled={!formUsable} className="contents" aria-busy={gate.state === 'CHECKING'}>
 
         {/* Surgery Details */}
         <div className={`${stepClass(1)} card`}>
@@ -2837,7 +2911,16 @@ ${pretty} — ${days} days from today.
             interrupted, reopen this page and continue where you stopped.
           </p>
         )}
+
+        </fieldset>
       </form>
+
+      <BookingGateNotice
+        gate={gate}
+        onComplete={completePriorCase}
+        completing={completingCase}
+        error={gateError}
+      />
     </div>
   );
 }
