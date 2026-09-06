@@ -58,6 +58,19 @@ interface TheatreStatus {
   setupNotes: string | null;
   durationMinutes: number | null;
   staffAssignments: StaffAssignments | null;
+  /**
+   * Everyone allocated to this room today through Theatre Allocations, merged
+   * across all of the day's allocations. Unlike staffAssignments this is
+   * populated on the summary too, so a closed card can name the scrub nurse
+   * instead of only admitting that one exists.
+   */
+  nursing?: {
+    scrubNurses: StaffContact[];
+    circulatingNurses: StaffContact[];
+    cleaners: StaffContact[];
+    porters: StaffContact[];
+    units: string[];
+  } | null;
   surgeons: StaffContact[];
   surgeryAnaesthetists: StaffContact[];
   surgeryTechnicians?: StaffContact[];
@@ -367,6 +380,12 @@ export default function TheatreReadinessDashboard() {
           // field below reads from `theatre` exactly as it always did.
           const theatre = detailById[summaryRow.theatreId] ?? summaryRow;
           const caseCount = (summaryRow as TheatreStatus & { caseCount?: number }).caseCount ?? 0;
+          // Read from the summary row, not the fetched detail: this line has to
+          // be right before anybody opens the card.
+          const nurseLine = [
+            ...(summaryRow.nursing?.scrubNurses ?? []).map((n) => `Scrub ${n.name}`),
+            ...(summaryRow.nursing?.circulatingNurses ?? []).map((n) => `Circ. ${n.name}`),
+          ].join(' · ');
           return (
           <div
             key={summaryRow.theatreId}
@@ -394,6 +413,20 @@ export default function TheatreReadinessDashboard() {
                         summaryRow.hasSetupLog ? 'setup logged' : null,
                       ].filter(Boolean).join(' · ') || 'Nothing recorded for this date'}
                 </p>
+                {/* Who is nursing this room, on the closed card.
+                    "Team allocated" told the coordinator a name existed
+                    without telling them the name, which is the one thing they
+                    walked over to the board to find out. */}
+                {nurseLine && (
+                  <p className="mt-0.5 text-xs font-medium text-blue-800">
+                    🧑‍⚕️ {nurseLine}
+                  </p>
+                )}
+                {!nurseLine && summaryRow.totalAllocations > 0 && (
+                  <p className="mt-0.5 text-xs text-amber-700">
+                    No nurse allocated to this theatre yet
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {summaryRow.isReady && (
@@ -599,7 +632,10 @@ export default function TheatreReadinessDashboard() {
             )}
 
             {/* Staff Assignments for the Day */}
-            {theatre.staffAssignments || (theatre.surgeons && theatre.surgeons.length > 0) ? (
+            {theatre.staffAssignments
+              || (theatre.surgeons && theatre.surgeons.length > 0)
+              || (theatre.nursing?.scrubNurses?.length ?? 0) > 0
+              || (theatre.nursing?.circulatingNurses?.length ?? 0) > 0 ? (
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <h4 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-1">
                   👥 Theatre Team
@@ -624,8 +660,22 @@ export default function TheatreReadinessDashboard() {
                   {theatre.surgeons && theatre.surgeons.length > 0 && theatre.surgeons.map((s, i) => (
                     <StaffRow key={`surg-${i}`} label="Surgeon" contact={s} color="bg-rose-50" />
                   ))}
-                  <StaffRow label="Scrub/Periop Nurse" contact={theatre.staffAssignments?.scrubNurse ?? null} color="bg-blue-50" />
-                  <StaffRow label="Circulating Nurse" contact={theatre.staffAssignments?.circulatingNurse ?? null} color="bg-blue-50" />
+                  {/* Every nurse allocated to this room today, not just the
+                      one on the first allocation. A room with a morning and an
+                      afternoon list has two scrub nurses and the board used to
+                      show one of them. */}
+                  {(theatre.nursing?.scrubNurses?.length
+                    ? theatre.nursing.scrubNurses
+                    : [theatre.staffAssignments?.scrubNurse ?? null]
+                  ).map((n, i) => (
+                    <StaffRow key={`sn-${i}`} label="Scrub/Periop Nurse" contact={n} color="bg-blue-50" />
+                  ))}
+                  {(theatre.nursing?.circulatingNurses?.length
+                    ? theatre.nursing.circulatingNurses
+                    : [theatre.staffAssignments?.circulatingNurse ?? null]
+                  ).map((n, i) => (
+                    <StaffRow key={`cn-${i}`} label="Circulating Nurse" contact={n} color="bg-blue-50" />
+                  ))}
                   <StaffRow label="Anaesthetic Technician" contact={theatre.staffAssignments?.anaestheticTechnician ?? null} color="bg-green-50" />
                   {/* Technician(s) assigned directly on the case, if any */}
                   {theatre.surgeryTechnicians && theatre.surgeryTechnicians.length > 0 && theatre.surgeryTechnicians.map((t, i) => (
@@ -673,8 +723,18 @@ export default function TheatreReadinessDashboard() {
                   {theatre.teamCirculatingNurses?.map((n, i) => (
                     <StaffRow key={`tc-${i}`} label="Circulating Nurse (assigned)" contact={n} color="bg-blue-50" />
                   ))}
-                  <StaffRow label="Cleaner" contact={theatre.staffAssignments?.cleaner ?? null} color="bg-gray-50" />
-                  <StaffRow label="Porter" contact={theatre.staffAssignments?.porter ?? null} color="bg-gray-50" />
+                  {(theatre.nursing?.cleaners?.length
+                    ? theatre.nursing.cleaners
+                    : [theatre.staffAssignments?.cleaner ?? null]
+                  ).map((n, i) => (
+                    <StaffRow key={`cl-${i}`} label="Cleaner" contact={n} color="bg-gray-50" />
+                  ))}
+                  {(theatre.nursing?.porters?.length
+                    ? theatre.nursing.porters
+                    : [theatre.staffAssignments?.porter ?? null]
+                  ).map((n, i) => (
+                    <StaffRow key={`po-${i}`} label="Porter" contact={n} color="bg-gray-50" />
+                  ))}
                 </div>
               </div>
             ) : (

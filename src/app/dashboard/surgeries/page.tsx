@@ -174,6 +174,9 @@ export default function SurgeriesPage() {
         scrubNurse: UnitContact;
         circulatingNurse: UnitContact;
         anaestheticTechnician: UnitContact;
+        cleaner: UnitContact;
+        porter: UnitContact;
+        nursingSource?: 'unit' | 'theatre' | null;
       } | null;
     }[] | null
   >(null);
@@ -1131,6 +1134,11 @@ export default function SurgeriesPage() {
                         />
                         <TeamGroup
                           label="Nursing"
+                          note={
+                            u.team.nursingSource === 'theatre'
+                              ? 'allocated to the theatre, not named to this unit'
+                              : null
+                          }
                           members={[
                             ['Scrub', u.team.scrubNurse],
                             ['Circulating', u.team.circulatingNurse],
@@ -1140,6 +1148,19 @@ export default function SurgeriesPage() {
                           label="Technician"
                           members={[['Anaes. tech', u.team.anaestheticTechnician]]}
                         />
+                        {/* Shown only when somebody was actually allocated. A
+                            cleaner and a porter are not part of the team you
+                            ring before a list starts, so an empty pair of rows
+                            here would be two lines of noise on every card. */}
+                        {(u.team.cleaner || u.team.porter) && (
+                          <TeamGroup
+                            label="Support"
+                            members={[
+                              ['Cleaner', u.team.cleaner],
+                              ['Porter', u.team.porter],
+                            ]}
+                          />
+                        )}
                       </div>
                     )}
                   </div>

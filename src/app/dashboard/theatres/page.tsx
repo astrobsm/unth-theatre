@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Calendar, Plus, Trash2, Edit, AlertCircle } from 'lucide-react';
 
@@ -69,6 +69,23 @@ export default function TheatresPage() {
     new Date().toISOString().split('T')[0]
   );
   
+  /**
+   * The surgical units, read from the registry the rest of the app books
+   * against.
+   *
+   * This dropdown used to be a hardcoded list of fifty options — "O/G FIRM 2",
+   * "GENERAL SURGERY UNIT 1", "CTU 1" — and the registry that a booked case
+   * takes its unit from says "O&G Firm 2", "GS Unit I", "CTU Unit I". Not one
+   * of the fifty was equal to the name it was supposed to mean, so the unit
+   * written onto every allocation made here matched no case in the hospital
+   * and the nurses allocated through this form appeared on no other screen.
+   *
+   * Reading the registry is what stops that recurring: the form can only offer
+   * a name a case can actually carry.
+   */
+  type UnitOption = { id: string; name: string; subspecialty: string };
+  const [surgicalUnits, setSurgicalUnits] = useState<UnitOption[]>([]);
+
   // Staff lists
   const [scrubNurses, setScrubNurses] = useState<User[]>([]);
   const [circulatingNurses, setCirculatingNurses] = useState<User[]>([]);
@@ -82,6 +99,10 @@ export default function TheatresPage() {
     fetchDailySummary();
     fetchStaff();
     fetch('/api/locations').then((r) => r.json()).then((d) => Array.isArray(d) && setLocations(d)).catch(() => {});
+    fetch('/api/surgical-units')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => Array.isArray(d) && setSurgicalUnits(d))
+      .catch(() => {});
     // Auto-refresh every 30 seconds for cross-device sync
     const interval = setInterval(() => {
       fetchTheatres();
@@ -125,17 +146,29 @@ export default function TheatresPage() {
   const fetchStaff = async () => {
     try {
       // Fetch scrub nurses
+      let scrubList: User[] = [];
       const scrubResponse = await fetch('/api/users?role=SCRUB_NURSE&status=APPROVED');
       if (scrubResponse.ok) {
         const data = await scrubResponse.json();
-        setScrubNurses(Array.isArray(data) ? data : data.users || []);
+        scrubList = Array.isArray(data) ? data : data.users || [];
+        setScrubNurses(scrubList);
       }
 
-      // Fetch circulating nurses (also scrub nurses who can circulate)
-      const circulatingResponse = await fetch('/api/users?role=SCRUB_NURSE&status=APPROVED');
+      // Circulating nurses: those held on the register as circulating nurses,
+      // AND the scrub nurses, who circulate for each other all day.
+      //
+      // This asked for role=SCRUB_NURSE twice. The comment said "also scrub
+      // nurses who can circulate" but the "also" was never implemented, so a
+      // nurse whose record says CIRCULATING_NURSE — which is most of them —
+      // could not be selected as the circulating nurse.
+      const circulatingResponse = await fetch('/api/users?role=CIRCULATING_NURSE&status=APPROVED');
       if (circulatingResponse.ok) {
         const data = await circulatingResponse.json();
-        setCirculatingNurses(Array.isArray(data) ? data : data.users || []);
+        const circulating: User[] = Array.isArray(data) ? data : data.users || [];
+        const alsoScrub: User[] = Array.isArray(scrubList) ? scrubList : [];
+        const byId = new Map<string, User>();
+        for (const n of [...circulating, ...alsoScrub]) byId.set(n.id, n);
+        setCirculatingNurses(Array.from(byId.values()));
       }
 
       // Fetch anaesthetic technicians
@@ -270,6 +303,31 @@ export default function TheatresPage() {
     }
   };
 
+  /** The registry grouped for the dropdown, subspecialty then unit name. */
+  const unitGroups = useMemo(() => {
+    const bySubspecialty: Record<string, UnitOption[]> = {};
+    for (const u of surgicalUnits) {
+      const key = u.subspecialty || 'Other';
+      (bySubspecialty[key] ?? (bySubspecialty[key] = [])).push(u);
+    }
+    return Object.keys(bySubspecialty)
+      .sort((a, b) => a.localeCompare(b))
+      .map((k) => [
+        k,
+        bySubspecialty[k].slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+      ] as [string, UnitOption[]]);
+  }, [surgicalUnits]);
+
+  /**
+   * Allocation types that belong to a surgical unit.
+   *
+   * An emergency list has a unit — it is whichever firm is on call — and the
+   * nurses allocated to it need to reach that firm's cases exactly as an
+   * elective list's do. Sending the unit only for SURGERY meant an emergency
+   * allocation was staffed and then invisible.
+   */
+  const UNIT_BEARING_TYPES = ['SURGERY', 'EMERGENCY'];
+
   const handleAddAllocation = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -301,8 +359,8 @@ export default function TheatresPage() {
       porterId: formData.get('porterId') || null,
     };
 
-    // Add surgery-specific fields if allocation type is SURGERY
-    if (formData.get('allocationType') === 'SURGERY') {
+    // Which unit's list this is — for an emergency too, not only an elective.
+    if (UNIT_BEARING_TYPES.includes(String(formData.get('allocationType')))) {
       allocationData.surgicalUnit = formData.get('surgicalUnit');
       allocationData.surgeryType = formData.get('surgeryType');
     }
@@ -819,90 +877,49 @@ export default function TheatresPage() {
               </div>
 
               {/* Surgery-specific fields */}
-              {allocationType === 'SURGERY' && (
+              {UNIT_BEARING_TYPES.includes(allocationType) && (
                 <>
                   <div>
                     <label className="label">Operating Surgical Unit *</label>
-                    <select name="surgicalUnit" required className="input-field">
-                      <option value="">Select Surgical Unit</option>
-                      <optgroup label="CTU">
-                        <option value="CTU 1">CTU 1</option>
-                        <option value="CTU 2">CTU 2</option>
-                        <option value="CTU 3">CTU 3</option>
-                        <option value="CTU 4">CTU 4</option>
-                      </optgroup>
-                      <optgroup label="Paediatric Surgery">
-                        <option value="PAEDIATRIC SURGERY UNIT 1">Paediatric Surgery Unit 1</option>
-                        <option value="PAEDIATRIC SURGERY UNIT 2">Paediatric Surgery Unit 2</option>
-                        <option value="PAEDIATRIC SURGERY UNIT 3">Paediatric Surgery Unit 3</option>
-                        <option value="PAEDIATRIC SURGERY UNIT 4">Paediatric Surgery Unit 4</option>
-                      </optgroup>
-                      <optgroup label="Plastic Surgery">
-                        <option value="PLASTIC SURGERY UNIT 1">Plastic Surgery Unit 1</option>
-                        <option value="PLASTIC SURGERY UNIT 2">Plastic Surgery Unit 2</option>
-                        <option value="PLASTIC SURGERY UNIT 3">Plastic Surgery Unit 3</option>
-                        <option value="PLASTIC SURGERY UNIT 4">Plastic Surgery Unit 4</option>
-                      </optgroup>
-                      <optgroup label="Urology">
-                        <option value="UROLOGY UNIT 1">Urology Unit 1</option>
-                        <option value="UROLOGY UNIT 2">Urology Unit 2</option>
-                        <option value="UROLOGY UNIT 3">Urology Unit 3</option>
-                        <option value="UROLOGY UNIT 4">Urology Unit 4</option>
-                      </optgroup>
-                      <optgroup label="General Surgery">
-                        <option value="GENERAL SURGERY UNIT 1">General Surgery Unit 1</option>
-                        <option value="GENERAL SURGERY UNIT 2">General Surgery Unit 2</option>
-                        <option value="GENERAL SURGERY UNIT 3">General Surgery Unit 3</option>
-                        <option value="GENERAL SURGERY UNIT 4">General Surgery Unit 4</option>
-                      </optgroup>
-                      <optgroup label="Ophthalmology">
-                        <option value="OPHTHALMOLOGY UNIT 1">Ophthalmology Unit 1</option>
-                        <option value="OPHTHALMOLOGY UNIT 2">Ophthalmology Unit 2</option>
-                        <option value="OPHTHALMOLOGY UNIT 3">Ophthalmology Unit 3</option>
-                        <option value="OPHTHALMOLOGY UNIT 4">Ophthalmology Unit 4</option>
-                        <option value="OPHTHALMOLOGY UNIT 5">Ophthalmology Unit 5</option>
-                        <option value="OPHTHALMOLOGY UNIT 6">Ophthalmology Unit 6</option>
-                      </optgroup>
-                      <optgroup label="Neurosurgery">
-                        <option value="NEUROSURGERY UNIT 1">Neurosurgery Unit 1</option>
-                        <option value="NEUROSURGERY UNIT 2">Neurosurgery Unit 2</option>
-                        <option value="NEUROSURGERY UNIT 3">Neurosurgery Unit 3</option>
-                        <option value="NEUROSURGERY UNIT 4">Neurosurgery Unit 4</option>
-                      </optgroup>
-                      <optgroup label="ENT">
-                        <option value="ENT UNIT 1">ENT Unit 1</option>
-                        <option value="ENT UNIT 2">ENT Unit 2</option>
-                        <option value="ENT UNIT 3">ENT Unit 3</option>
-                        <option value="ENT UNIT 4">ENT Unit 4</option>
-                        <option value="ENT UNIT 5">ENT Unit 5</option>
-                      </optgroup>
-                      <optgroup label="O/G Firm">
-                        <option value="O/G FIRM 1">O/G Firm 1</option>
-                        <option value="O/G FIRM 2">O/G Firm 2</option>
-                        <option value="O/G FIRM 3">O/G Firm 3</option>
-                        <option value="O/G FIRM 4">O/G Firm 4</option>
-                        <option value="O/G FIRM 5">O/G Firm 5</option>
-                        <option value="O/G FIRM 6">O/G Firm 6</option>
-                        <option value="O/G FIRM 7">O/G Firm 7</option>
-                        <option value="O/G FIRM 8">O/G Firm 8</option>
-                        <option value="O/G FIRM 9">O/G Firm 9</option>
-                        <option value="O/G FIRM 10">O/G Firm 10</option>
-                      </optgroup>
-                      <optgroup label="Maxillofacial">
-                        <option value="MAXILLOFACIAL UNIT 1">Maxillofacial Unit 1</option>
-                        <option value="MAXILLOFACIAL UNIT 2">Maxillofacial Unit 2</option>
-                        <option value="MAXILLOFACIAL UNIT 3">Maxillofacial Unit 3</option>
-                        <option value="MAXILLOFACIAL UNIT 4">Maxillofacial Unit 4</option>
-                        <option value="MAXILLOFACIAL UNIT 5">Maxillofacial Unit 5</option>
-                        <option value="MAXILLOFACIAL UNIT 6">Maxillofacial Unit 6</option>
-                      </optgroup>
-                      <optgroup label="Orthopedic Surgery">
-                        <option value="ORTHOPEDIC SURGERY UNIT 1">Orthopedic Surgery Unit 1</option>
-                        <option value="ORTHOPEDIC SURGERY UNIT 2">Orthopedic Surgery Unit 2</option>
-                        <option value="ORTHOPEDIC SURGERY UNIT 3">Orthopedic Surgery Unit 3</option>
-                        <option value="ORTHOPEDIC SURGERY UNIT 4">Orthopedic Surgery Unit 4</option>
-                      </optgroup>
-                    </select>
+                    {/* A typed box when the registry is unreachable or empty,
+                        never an empty dropdown.
+                        Reading the unit list from the registry is what stops
+                        this form inventing names, but it also means a database
+                        without seeded units would leave nothing to select — and
+                        a theatre manager who cannot allocate anybody at all is a
+                        worse morning than one whose allocation shows on the
+                        wrong screen. Typing still works: the name is matched
+                        forgivingly at the other end, so "O/G Firm 2" finds O&G
+                        Firm 2 either way. */}
+                    {surgicalUnits.length > 0 ? (
+                      <select name="surgicalUnit" required className="input-field">
+                        <option value="">Select Surgical Unit</option>
+                        {unitGroups.map(([subspecialty, units]) => (
+                          <optgroup key={subspecialty} label={subspecialty}>
+                            {units.map((u) => (
+                              // The value is the registry name verbatim. Anything
+                              // else and the allocation names a unit that no case
+                              // belongs to, which is the bug this replaced.
+                              <option key={u.id} value={u.name}>{u.name}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          name="surgicalUnit"
+                          required
+                          className="input-field"
+                          placeholder="e.g. O&G Firm 2"
+                        />
+                        <p className="mt-1 text-xs text-amber-700">
+                          The surgical unit list could not be loaded — type the unit
+                          name as it appears on the booking.
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div>

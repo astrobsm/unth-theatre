@@ -6,6 +6,7 @@ import { caseTeamSlots, CASE_TEAM_SELECT } from '@/lib/theatreOps/caseTeam';
 import { assessFix } from '@/lib/theatreOps/geofence';
 import { readiness, summarise, type TeamMemberState, type CheckInStatus } from '@/lib/theatreOps/checkIn';
 import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam';
+import { unitKey } from '@/lib/unitMatch';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,6 +80,20 @@ export async function GET(request: NextRequest) {
       orderBy: { setupStartTime: 'desc' },
     });
 
+    /**
+     * The shape both allocation queries below agree on for a staff slot — the
+     * summary's two columns, which the detail query's richer select also
+     * satisfies. One type so the merging code is written once.
+     */
+    type NurseSlot = { fullName: string; phoneNumber: string | null } | null;
+    type RoomStaffRow = {
+      surgicalUnit: string | null;
+      scrubNurse: NurseSlot;
+      circulatingNurse: NurseSlot;
+      cleaner: NurseSlot;
+      porter: NurseSlot;
+    };
+
     // Get allocations for the date with staff assignments
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -106,6 +121,39 @@ export async function GET(request: NextRequest) {
         porter: { select: { id: true, fullName: true, role: true, phoneNumber: true } },
       },
     });
+
+    /**
+     * The nursing and support team, for the closed cards.
+     *
+     * A summary skips the query above because eight user relations per
+     * allocation is not worth paying for a card nobody has opened. But
+     * "somebody allocated a scrub nurse to this theatre" is exactly what the
+     * board is for — a count that says "team allocated" tells the coordinator
+     * there is a name without telling them the name, which is one tap short of
+     * useful and the reason this board was being ignored in favour of a phone
+     * call.
+     *
+     * So: four relations, two columns each, no anaesthetists. Cheap enough for
+     * every room on the board, and it replaces the separate count query below.
+     */
+    const nurseOnly = { select: { fullName: true, phoneNumber: true } };
+    const nursingAllocations = isSummary
+      ? await prisma.theatreAllocation.findMany({
+          where: {
+            date: { gte: startOfDay, lte: endOfDay },
+            ...(onlyTheatreId ? { theatreId: onlyTheatreId } : {}),
+          },
+          select: {
+            theatreId: true,
+            surgicalUnit: true,
+            scrubNurse: nurseOnly,
+            circulatingNurse: nurseOnly,
+            cleaner: nurseOnly,
+            porter: nurseOnly,
+          },
+          orderBy: { startTime: 'asc' },
+        })
+      : [];
 
     // Explicitly assigned theatre team for the day's cases. Read once rather than
     // per theatre: one query for the whole board instead of one per room.
@@ -197,15 +245,13 @@ export async function GET(request: NextRequest) {
           _count: { _all: true },
         })
       : [];
-    const allocCounts = isSummary
-      ? await prisma.theatreAllocation.groupBy({
-          by: ['theatreId'],
-          where: { date: { gte: startOfDay, lte: endOfDay } },
-          _count: { _all: true },
-        })
-      : [];
     const caseCountBy = new Map(caseCounts.map((c) => [c.theatreId, c._count._all]));
-    const allocCountBy = new Map(allocCounts.map((c) => [c.theatreId, c._count._all]));
+    // Counted off the rows already fetched. The groupBy that used to live here
+    // asked the database the same question a second time.
+    const allocCountBy = new Map<string, number>();
+    for (const a of nursingAllocations) {
+      allocCountBy.set(a.theatreId, (allocCountBy.get(a.theatreId) ?? 0) + 1);
+    }
 
     // Helper: shape a User relation into a { name, phone } contact (or null)
     const contact = (u: { fullName: string; phoneNumber: string | null } | null | undefined) =>
@@ -230,10 +276,22 @@ export async function GET(request: NextRequest) {
     const subspecialtyByUnit = new Map(
       unitRows.map((u) => [u.name.trim().toLowerCase(), u.subspecialty]),
     );
+    // A second index on the comparable key, so an allocation still carrying the
+    // old form's spelling ("O/G FIRM 2" against a registry that says "O&G Firm
+    // 2") resolves to a subspecialty instead of falling through as a literal
+    // and finding no rostered anaesthetist.
+    const subspecialtyByKey = new Map<string, string>();
+    for (const u of unitRows) {
+      const k = unitKey(u.name);
+      if (k && !subspecialtyByKey.has(k)) subspecialtyByKey.set(k, u.subspecialty);
+    }
     const resolveSubspecialty = (raw: string | null | undefined): string | null => {
       const v = (raw || '').trim();
       if (!v) return null;
-      return subspecialtyByUnit.get(v.toLowerCase()) ?? v;
+      const exact = subspecialtyByUnit.get(v.toLowerCase());
+      if (exact) return exact;
+      const k = unitKey(v);
+      return (k ? subspecialtyByKey.get(k) : null) ?? v;
     };
 
     // Create theatre status map
@@ -246,6 +304,41 @@ export async function GET(request: NextRequest) {
 
       // Aggregate staff from allocations (name + phone for quick contact)
       const a0 = theatreAllocations[0];
+
+      /**
+       * The nursing and support team for this room, across EVERY allocation on
+       * it today rather than the first one.
+       *
+       * A room routinely carries a morning allocation and an afternoon one.
+       * Reading `a0` alone meant the board named the morning scrub nurse and
+       * silently dropped the afternoon's — so the person who came on at two
+       * o'clock did not exist as far as this screen was concerned.
+       *
+       * De-duplicated by name, because one nurse covering both sessions is one
+       * person to ring.
+       */
+      const roomAllocs: RoomStaffRow[] = isSummary
+        ? nursingAllocations.filter((a) => a.theatreId === theatre.id)
+        : theatreAllocations;
+
+      const namesFrom = (people: NurseSlot[]) => {
+        const seen = new Map<string, { name: string; phone: string | null }>();
+        for (const p of people) {
+          if (p) seen.set(p.fullName, { name: p.fullName, phone: p.phoneNumber || null });
+        }
+        return Array.from(seen.values());
+      };
+
+      const nursing = {
+        scrubNurses: namesFrom(roomAllocs.map((a) => a.scrubNurse)),
+        circulatingNurses: namesFrom(roomAllocs.map((a) => a.circulatingNurse)),
+        cleaners: namesFrom(roomAllocs.map((a) => a.cleaner)),
+        porters: namesFrom(roomAllocs.map((a) => a.porter)),
+        /** The units these allocations name, for the card's subtitle. */
+        units: Array.from(
+          new Set(roomAllocs.map((a) => a.surgicalUnit).filter((u): u is string => !!u)),
+        ),
+      };
 
       /**
        * Which specialty is operating in this room today — the allocation's unit
@@ -431,6 +524,9 @@ export async function GET(request: NextRequest) {
         setupNotes: setupLog?.setupNotes || null,
         durationMinutes: setupLog?.durationMinutes || null,
         staffAssignments,
+        // Present on a closed card too, unlike staffAssignments: allocating a
+        // scrub nurse to a theatre is meant to show on the theatre.
+        nursing,
         surgeons,
         surgeryAnaesthetists,
         surgeryTechnicians,

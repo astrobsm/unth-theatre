@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam';
+import { findByUnit } from '@/lib/unitMatch';
 
 type Contact = { name: string; phone: string | null } | null;
 
@@ -21,6 +22,16 @@ interface UnitTeam {
   scrubNurse: Contact;
   circulatingNurse: Contact;
   anaestheticTechnician: Contact;
+  cleaner: Contact;
+  porter: Contact;
+  /**
+   * How the allocation above was found: 'unit' when it names this unit,
+   * 'theatre' when it names only the room this unit's list is running in.
+   * The card says which, because a nurse allocated to the ROOM is a different
+   * claim from a nurse allocated to YOUR LIST, and the person reading the card
+   * at 7 a.m. is the one who has to know the difference.
+   */
+  nursingSource: 'unit' | 'theatre' | null;
 }
 
 export const dynamic = 'force-dynamic';
@@ -125,8 +136,17 @@ export async function GET(req: NextRequest) {
     const pick = { select: { id: true, fullName: true, phoneNumber: true } };
 
     const [allocations, rosterTeams] = await Promise.all([
+      // Every allocation for the day, NOT only those whose surgicalUnit string
+      // equals a unit name on the page.
+      //
+      // That filter was the bug. The allocation form sends "O/G FIRM 2" and the
+      // registry — and therefore the case — says "O&G Firm 2", so `in
+      // unitNames` excluded the very row it was looking for and the card
+      // reported a unit with a scrub nurse allocated to it as unstaffed. A
+      // theatre list is a dozen allocations; fetching all of them and matching
+      // in memory costs nothing and cannot miss on spelling.
       prisma.theatreAllocation.findMany({
-        where: { date: { gte: dayStart, lte: dayEnd }, surgicalUnit: { in: unitNames } },
+        where: { date: { gte: dayStart, lte: dayEnd } },
         include: {
           scrubNurse: pick,
           circulatingNurse: pick,
@@ -134,6 +154,8 @@ export async function GET(req: NextRequest) {
           anaesthetistConsultant: pick,
           anaesthetistSeniorRegistrar: pick,
           anaesthetistRegistrar: pick,
+          cleaner: pick,
+          porter: pick,
           theatre: { select: { name: true } },
         },
         orderBy: { startTime: 'asc' },
@@ -167,12 +189,31 @@ export async function GET(req: NextRequest) {
       where: { ...where, unit: { in: unitNames } },
       select: {
         unit: true,
+        theatreId: true,
         surgeonId: true,
         surgeonName: true,
         supervisingConsultantId: true,
         supervisingConsultantName: true,
       },
     });
+
+    // Which room each unit's list is running in, for the fallback below. The
+    // commonest theatre across the unit's cases rather than the first, so one
+    // case moved to another room does not redirect the whole unit's staffing.
+    const theatreOfUnit = new Map<string, string>();
+    {
+      const tally: Record<string, Record<string, number>> = {};
+      for (const s of dayCases) {
+        if (!s.unit || !s.theatreId) continue;
+        const forUnit = tally[s.unit] ?? (tally[s.unit] = {});
+        forUnit[s.theatreId] = (forUnit[s.theatreId] ?? 0) + 1;
+      }
+      for (const unit of Object.keys(tally)) {
+        const counts = tally[unit];
+        const best = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+        if (best) theatreOfUnit.set(unit, best);
+      }
+    }
 
     const surgeonIds = Array.from(
       new Set(
@@ -208,7 +249,27 @@ export async function GET(req: NextRequest) {
     }
 
     for (const unit of unitNames) {
-      const alloc = allocations.find((a) => a.surgicalUnit === unit);
+      // Named on the allocation, in whichever of the hospital's three
+      // spellings the person who made it happened to use.
+      const byUnit = findByUnit(allocations, unit, (a) => a.surgicalUnit);
+
+      // Otherwise the allocation for the ROOM this unit's list is running in.
+      //
+      // This is how the floor actually works: a unit gets a theatre for the
+      // session and the scrub nurse is allocated to the theatre, frequently
+      // without anybody naming the unit on the allocation at all. Those nurses
+      // are on this list — reporting them as absent because a text field was
+      // left blank is the same failure as the spelling mismatch, one field
+      // along. Only allocations that name NO unit are eligible, so a room
+      // explicitly allocated to a different unit is never borrowed from.
+      const theatreId = theatreOfUnit.get(unit);
+      const byTheatre = byUnit
+        ? undefined
+        : theatreId
+          ? allocations.find((a) => a.theatreId === theatreId && !a.surgicalUnit)
+          : undefined;
+
+      const alloc = byUnit ?? byTheatre;
       const roster = rosterTeams ? selectTeam(rosterTeams, subspecialtyOf.get(unit)) : null;
 
       teamByUnit.set(unit, {
@@ -232,6 +293,12 @@ export async function GET(req: NextRequest) {
         scrubNurse: contact(alloc?.scrubNurse),
         circulatingNurse: contact(alloc?.circulatingNurse),
         anaestheticTechnician: contact(alloc?.anaestheticTechnician),
+        cleaner: contact(alloc?.cleaner),
+        porter: contact(alloc?.porter),
+        nursingSource:
+          !alloc || !(alloc.scrubNurseId || alloc.circulatingNurseId)
+            ? null
+            : byUnit ? 'unit' : 'theatre',
       });
     }
   }
