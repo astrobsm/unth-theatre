@@ -24,7 +24,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import {
-  BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge,
+  BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge, isTooMuchWork,
   fitToByteBudget, MAX_PUSH_BYTES, nextByteBudget,
   backoffMs, isRetryable, isTimeout, nextBatchSize,
   type JournalEntryWire, type PullResponse, type PushResponse,
@@ -196,7 +196,9 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     // the worker stopped. The theatre server sat five days with 962 changes
     // unsent while systemd restarted it 28 times into the identical failure.
     const tooLarge = isTooLarge(res.status, res.error);
-    const tooSlow = res.timedOut || isTimeout(res.error);
+    // The peer telling us the batch was more work than it could finish is the
+    // same signal as our own request timing out: send less next time.
+    const tooSlow = res.timedOut || isTimeout(res.error) || isTooMuchWork(res.status, res.error);
     if (tooSlow || tooLarge) {
       const outcome = tooLarge ? 'too-large' : 'timeout';
       // Both limits move. Halving the row count alone does nothing once the

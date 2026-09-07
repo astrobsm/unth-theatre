@@ -255,6 +255,26 @@ export function isTimeout(error: string | null | undefined): boolean {
  * not always accompanied by the code. Vercel answers
  * "Request Entity Too Large / FUNCTION_PAYLOAD_TOO_LARGE".
  */
+/**
+ * Did the peer fail because we asked it to do too much AT ONCE?
+ *
+ * Distinct from isTooLarge, which is about the number of BYTES on the wire.
+ * This is about the work: a transaction that ran past its budget (P2028) or
+ * could not get a database connection in time (P2024). Both mean a smaller
+ * batch would have got through, and both used to reach the sender as a bare
+ * 500 with no body — indistinguishable from a fault that shrinking cannot fix,
+ * so the batch never shrank and the queue never moved.
+ */
+export function isTooMuchWork(status: number | null | undefined, error?: string | null): boolean {
+  if (status !== 503 && status !== 500) return false;
+  const e = (error ?? '').toUpperCase();
+  return e.includes('P2028')            // transaction timed out
+    || e.includes('P2024')              // could not get a connection
+    || e.includes('P2034')              // write conflict / deadlock, retry smaller
+    || e.includes('TRANSACTION ALREADY CLOSED')
+    || e.includes('TRANSACTION NOT FOUND');
+}
+
 export function isTooLarge(status: number | null | undefined, error?: string | null): boolean {
   if (status === 413) return true;
   const e = (error ?? '').toLowerCase();

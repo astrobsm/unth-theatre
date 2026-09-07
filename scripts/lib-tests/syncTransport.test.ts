@@ -19,6 +19,7 @@ import {
   nextBatchSize,
   isTimeout,
   isTooLarge,
+  isTooMuchWork,
   fitToByteBudget,
   MAX_PUSH_BYTES,
   MIN_PUSH_BYTES,
@@ -356,5 +357,48 @@ describe('adapting the byte budget', () => {
     // An audit log is a few hundred bytes; the floor must still move hundreds
     // of them per push, or the backlog never clears.
     expect(MIN_PUSH_BYTES).toBeGreaterThan(100 * 900);
+  });
+});
+
+/**
+ * The peer saying "that was more work than I could finish" must be heard as
+ * "send less", not as an unclassifiable fault.
+ *
+ * The push endpoint used to let a transaction failure escape the handler, so
+ * it reached the sender as a bare 500 with an empty body. Nothing in the retry
+ * logic could tell it apart from a fault a smaller batch would not fix, so the
+ * batch never shrank and the queue sat at ~834 for hours.
+ */
+describe('a peer that could not finish the batch', () => {
+  it('reads a transaction timeout as too much work', () => {
+    expect(isTooMuchWork(503, 'P2028: Transaction API error')).toBe(true);
+  });
+
+  it('reads a connection-pool timeout as too much work', () => {
+    expect(isTooMuchWork(503, 'P2024: Timed out fetching a new connection')).toBe(true);
+  });
+
+  it('reads a closed transaction as too much work', () => {
+    expect(isTooMuchWork(503, 'Transaction already closed')).toBe(true);
+  });
+
+  it('ignores codes that a smaller batch would not fix', () => {
+    expect(isTooMuchWork(503, 'P2002: unique constraint')).toBe(false);
+    expect(isTooMuchWork(503, 'something else entirely')).toBe(false);
+  });
+
+  it('only applies to the statuses that carry it', () => {
+    expect(isTooMuchWork(401, 'P2028')).toBe(false);
+    expect(isTooMuchWork(413, 'P2028')).toBe(false);
+    expect(isTooMuchWork(null, 'P2028')).toBe(false);
+  });
+
+  it('is not confused by a missing error body', () => {
+    expect(isTooMuchWork(503, null)).toBe(false);
+    expect(isTooMuchWork(500, '')).toBe(false);
+  });
+
+  it('503 stays retryable, so shrinking gets a chance to happen', () => {
+    expect(isRetryable(503)).toBe(true);
   });
 });

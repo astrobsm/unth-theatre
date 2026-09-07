@@ -86,7 +86,8 @@ export async function POST(req: NextRequest) {
    * now comes from the enclosing transaction and a savepoint rather than from
    * a connection of its own.
    */
-  await prisma.$transaction(
+  try {
+    await prisma.$transaction(
     async (tx) => {
       const inline: TxRunner = {
         $queryRawUnsafe: (sql: string, ...values: unknown[]) =>
@@ -161,7 +162,35 @@ export async function POST(req: NextRequest) {
       timeout: 110_000,
       maxWait: 15_000,
     },
-  );
+    );
+  } catch (err) {
+    // THE WHOLE BATCH FAILED, AND IT USED TO FAIL SILENTLY.
+    //
+    // Everything above is per-entry and caught per-entry. This catches the
+    // transaction itself — it could not start, or it ran past its budget — and
+    // that used to escape the handler entirely. Next then returned a bare 500
+    // with no body, the sender logged "push failed: " with nothing after it,
+    // and five days of diagnosis had nothing to work from. Whatever else is
+    // true, a failure has to be able to say what it was.
+    //
+    // No results are returned: the transaction rolled back, so nothing was
+    // written, and reporting decisions for entries that were not applied would
+    // have the sender acknowledge changes the peer does not hold. Every entry
+    // stays queued, which is the no-loss rule.
+    const code = (err && typeof err === 'object' && 'code' in err)
+      ? String((err as { code: unknown }).code) : 'unknown';
+    const message = err instanceof Error ? err.message.split('\n')[0].slice(0, 300) : String(err);
+    console.error(`[sync/push] batch of ${sorted.length} failed (${code}):`, err);
+
+    // 503, not 500: this is retryable and the sender must know that. The code
+    // travels in the body so the sender can tell "too much at once" (a
+    // transaction that timed out, or a connection it could not get) from a
+    // fault that a smaller batch will not fix.
+    return NextResponse.json(
+      { protocol: SYNC_PROTOCOL_VERSION, node: thisNode, error: message, code, results: [] },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json({ protocol: SYNC_PROTOCOL_VERSION, node: thisNode, results });
 }
