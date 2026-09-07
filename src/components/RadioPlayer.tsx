@@ -6,7 +6,7 @@ import { Radio, Volume2, VolumeX, CheckCircle2, AlertOctagon, Music, Loader2, Gr
 import { useMediaHub } from '@/components/MediaHub';
 import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
 import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
-import { useTabLeader } from '@/lib/useTabLeader';
+import { isUrgentAnnouncement } from '@/lib/announcementUrgency';
 import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 interface Announcement {
@@ -46,8 +46,9 @@ function pollDelay(): number {
 export default function RadioPlayer() {
   const { data: session, status } = useSession();
   const { mode, collapse, setRadioAlert } = useMediaHub();
-  const isLeader = useTabLeader();
-  // Radio service is ON by default; only the primary (leader) window speaks.
+  // Radio service is ON by default. Every open window speaks — see the
+  // playback effect below for why the leader election was removed from this
+  // path. Music and desktop notifications still elect a single window.
   const [enabled, setEnabled] = useState(true);
   const [muted, setMuted] = useState(false);
   const [queue, setQueue] = useState<Announcement[]>([]);
@@ -210,7 +211,7 @@ export default function RadioPlayer() {
   // the combined launcher can pulse and auto-enlarge the radio.
   useEffect(() => {
     const t = queue.find((q) => !suppressedRef.current.has(q.id));
-    const hasAlert = !!(t && (t.requireAck || t.category === 'EMERGENCY' || t.priority >= 90));
+    const hasAlert = isUrgentAnnouncement(t);
     setRadioAlert(hasAlert);
   }, [queue, setRadioAlert]);
 
@@ -591,23 +592,30 @@ export default function RadioPlayer() {
     const top = queue.find((q) => !suppressedRef.current.has(q.id));
     if (!top) return;
 
-    // THE LEADER GATE DOES NOT APPLY TO AN EMERGENCY.
+    // EVERY OPEN WINDOW SPEAKS. THERE IS NO LEADER GATE ON THIS PATH.
     //
-    // Deduplication exists so that three tabs on one desk do not announce a
-    // routine message three times over. That is a real annoyance and worth
-    // preventing. It is not worth an unheard emergency, and it produced
-    // exactly that: whichever window held the lock might be a background tab
-    // the browser will not let make a sound, so the emergency was displayed in
-    // the foreground window, which dutifully stayed silent and explained that
-    // it was "being announced in your other open window". It was not being
-    // announced anywhere.
+    // The election was meant to stop three tabs on one desk announcing a
+    // routine message three times over. It kept failing in the one direction
+    // that matters, and it failed silently.
     //
-    // For an emergency every VISIBLE window speaks. Two windows overlapping on
-    // one desk is a nuisance somebody notices and resolves in a second. Silence
-    // is a nuisance nobody notices at all, which is what makes it dangerous.
-    const urgent = top.category === 'EMERGENCY' || top.priority >= 90;
-    const canBeHeardHere = typeof document === 'undefined' || !document.hidden;
-    if (!isLeader && !(urgent && canBeHeardHere)) return;
+    // Two windows both reporting themselves visible is the ordinary case on
+    // Windows: a window sitting behind another is not `document.hidden`. So
+    // the lock went to whichever window asked first, which was frequently one
+    // that had never received a user gesture and therefore could not be
+    // granted audio at all. The window the nurse was actually looking at
+    // deferred to it and printed "being announced in your other open window"
+    // under a green ACKNOWLEDGE EMERGENCY banner. Nothing was announced
+    // anywhere. A previous attempt narrowed this to visible-beats-hidden,
+    // which does not help when both windows claim to be visible.
+    //
+    // An overlapping announcement is a nuisance somebody notices and fixes in
+    // a second by closing a window. Silence is a nuisance nobody notices at
+    // all, which is precisely what makes it dangerous in a theatre. So the
+    // trade is settled the other way round from here on: speak everywhere.
+    //
+    // Music and desktop notifications still elect one window — a chorus of
+    // background music has no safety argument behind it.
+    const urgent = isUrgentAnnouncement(top);
     setCurrent(top);
     const lastPlayedKey = `${top.id}`;
     const now = Date.now();
@@ -666,7 +674,7 @@ export default function RadioPlayer() {
 
     if (top.audioUrl) playAudio(top.audioUrl, onDone, isEmergency, onUnheard);
     else speak(text, onDone, isEmergency ? 0 : 2500, isEmergency, onUnheard);
-  }, [queue, enabled, isLeader, speak, playAudio, markPlayed]);
+  }, [queue, enabled, speak, playAudio, markPlayed]);
 
   // Acknowledge in a single tap — no code prompt. In a theatre, silencing the
   // alarm must be instant; a confirmation step is friction at the worst possible
@@ -726,7 +734,7 @@ export default function RadioPlayer() {
   // re-appears for an item already dealt with (even if the next server poll
   // still briefly returns it).
   const top = queue.find((q) => !suppressedRef.current.has(q.id));
-  const isEmergency = top && (top.category === 'EMERGENCY' || top.priority >= 90);
+  const isEmergency = isUrgentAnnouncement(top);
 
   /**
    * What the AUDIO is doing, in words.
@@ -766,16 +774,16 @@ export default function RadioPlayer() {
         ? { text: 'Muted — emergencies are still announced', tone: 'warn' as const }
         : { text: 'Muted — announcement not being spoken', tone: 'warn' as const };
     }
-    // An emergency speaks in every VISIBLE window, so a hidden one is the only
-    // case where the leader really is announcing it elsewhere. Say that,
-    // instead of claiming it for a window nobody can hear.
-    if (urgentNow && typeof document !== 'undefined' && document.hidden && !isLeader) {
-      return { text: 'Announced in the window you are viewing', tone: 'info' as const };
-    }
-    if (!isLeader && !urgentNow) {
-      return { text: 'Being announced in your other open window', tone: 'info' as const };
-    }
+    // Nothing here defers to another window any more, because nothing in the
+    // playback path does either. The two strings that used to live here —
+    // "Being announced in your other open window" and "Announced in the window
+    // you are viewing" — were the visible face of the bug: this window had
+    // decided not to speak, and told the reader that someone else would.
+    // Whether anyone did was never checked, and often nobody did.
     if (speaking) return { text: 'Announcing now', tone: 'live' as const };
+    if (audioBlocked) {
+      return { text: 'Tap anywhere to allow sound', tone: 'warn' as const };
+    }
     if (nextDueAt) {
       const secs = Math.max(0, Math.round((nextDueAt - Date.now()) / 1000));
       return { text: `Repeats in ${secs}s until acknowledged`, tone: 'info' as const };
