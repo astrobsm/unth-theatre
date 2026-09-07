@@ -43,6 +43,10 @@ const ONLY_TABLE = (() => {
   const i = args.indexOf('--table');
   return i >= 0 ? args[i + 1] : null;
 })();
+const EXPORT_TO = (() => {
+  const i = args.indexOf('--export');
+  return i >= 0 ? args[i + 1] : null;
+})();
 const LIMIT = (() => {
   const i = args.indexOf('--limit');
   return i >= 0 ? Number(args[i + 1]) : 400;
@@ -242,6 +246,25 @@ const trunc = (v, n = 48) => {
     } else {
       const needDetail = (byVerdict.get('DIFFERENT')?.length ?? 0) + (byVerdict.get('RIVAL_ROW')?.length ?? 0);
       if (needDetail) console.log(`\n${needDetail} entr${needDetail === 1 ? 'y needs' : 'ies need'} a decision. Re-run with --detail to see the differing fields.`);
+    }
+    if (EXPORT_TO) {
+      // Written BEFORE anything is quarantined. Once an entry is settled the
+      // local snapshot beside it is the only remaining account of what the
+      // theatre server believed, so capturing it first is the whole point.
+      const payload = {
+        capturedAt: new Date().toISOString(),
+        local: show(LOCAL_URL),
+        cloud: show(CLOUD_URL),
+        entries: verdicts
+          .filter((v) => v.verdict === 'DIFFERENT' || v.verdict === 'RIVAL_ROW')
+          .map((v) => ({
+            journalId: v.id, table: v.table_name, localRowId: v.row_id,
+            cloudRowId: v.rivalId ?? v.row_id, verdict: v.verdict,
+            attempts: v.attempts, differences: v.diffs,
+          })),
+      };
+      fs.writeFileSync(EXPORT_TO, JSON.stringify(payload, null, 2));
+      console.log(`\nWrote ${payload.entries.length} entries needing review to ${EXPORT_TO}`);
     }
     console.log();
   } finally {
