@@ -25,6 +25,7 @@
 import { PrismaClient } from '@prisma/client';
 import {
   BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge,
+  fitToByteBudget, MAX_PUSH_BYTES,
   backoffMs, isRetryable, isTimeout, nextBatchSize,
   type JournalEntryWire, type PullResponse, type PushResponse,
 } from '../../src/lib/sync/transport';
@@ -113,12 +114,30 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
 
   if (!rows.length) return { sent: 0, failed: false };
 
-  const entries: JournalEntryWire[] = rows.map((r) => ({
+  const candidates: JournalEntryWire[] = rows.map((r) => ({
     id: r.id, table: r.table_name, rowId: r.row_id, op: r.op as JournalEntryWire['op'],
     baseVersion: r.base_version, newVersion: r.new_version, hlc: r.hlc,
     originNode: r.origin_node, payload: r.payload, changedColumns: r.changed_cols,
     omittedColumns: r.omitted_cols, omittedDigest: r.omitted_digest,
   }));
+
+  // Trim to what will actually fit down the wire.
+  //
+  // The row LIMIT above is not a size limit, and rows here differ in size by
+  // four orders of magnitude: an audit log is a few hundred bytes, an
+  // announcement carrying audio is megabytes. A queue of 27 announcements
+  // weighed 49 MB, so even the minimum batch of five was refused, and halving
+  // the count — which is all the retry logic can do — never reached a size the
+  // peer would take.
+  //
+  // Done BEFORE shipped_at is stamped, so an entry trimmed off here is not
+  // recorded as having been sent.
+  const entries = fitToByteBudget(candidates);
+  if (entries.length < candidates.length) {
+    console.log(
+      `[sync] sending ${entries.length} of ${candidates.length} queued `
+      + `(byte budget ${Math.round(MAX_PUSH_BYTES / 1000)} kB reached)`);
+  }
 
   await prisma.$executeRawUnsafe(
     `update sync_journal set shipped_at = now(), attempts = attempts + 1 where id = any($1::uuid[])`,

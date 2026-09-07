@@ -118,6 +118,49 @@ export const REQUEST_TIMEOUT_MS = 120_000;
 export const MIN_BATCH_SIZE = 5;
 
 /**
+ * The most a single push may carry, in bytes of JSON.
+ *
+ * A COUNT OF ROWS IS THE WRONG UNIT and this is what proved it. On 7 September
+ * the theatre server's queue held 27 announcements totalling 49 MB — one of
+ * them 3.3 MB on its own — beside 339 audit logs totalling 219 kB. Rows of such
+ * wildly different sizes cannot be budgeted by counting them: five audit logs
+ * are a rounding error and two announcements are over any serverless body
+ * limit. Halving the row count converged to five and still sent 8 MB.
+ *
+ * 3.5 MB, against a platform limit of roughly 4.5 MB. The gap absorbs the
+ * envelope, the protocol fields and gzip's refusal to help on data that is
+ * already compressed — a consent photograph or an announcement's audio.
+ */
+export const MAX_PUSH_BYTES = 3_500_000;
+
+/**
+ * The longest prefix of `entries` that fits inside the byte budget.
+ *
+ * ALWAYS RETURNS AT LEAST ONE, even when that one is over budget by itself.
+ * The queue is ordered by HLC and applied in that order, so skipping the
+ * oversized entry to make progress on the ones behind it would reorder causally
+ * dependent changes. Sending it alone either succeeds — the budget is a guess,
+ * the peer's limit is the truth — or fails in a way that names a single row,
+ * which is exactly what an operator needs in order to act.
+ */
+export function fitToByteBudget<T>(
+  entries: readonly T[],
+  budget: number = MAX_PUSH_BYTES,
+  sizeOf: (entry: T) => number = (e) => JSON.stringify(e).length,
+): T[] {
+  if (entries.length === 0) return [];
+  const out: T[] = [entries[0]];
+  let used = sizeOf(entries[0]);
+  for (let i = 1; i < entries.length; i++) {
+    const size = sizeOf(entries[i]);
+    if (used + size > budget) break;
+    out.push(entries[i]);
+    used += size;
+  }
+  return out;
+}
+
+/**
  * How large the next push should be, given how the last one went.
  *
  * THIS EXISTS BECAUSE A FIXED BATCH SIZE DEADLOCKS. On 18 August the theatre

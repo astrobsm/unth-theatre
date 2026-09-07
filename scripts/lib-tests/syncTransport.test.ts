@@ -19,6 +19,8 @@ import {
   nextBatchSize,
   isTimeout,
   isTooLarge,
+  fitToByteBudget,
+  MAX_PUSH_BYTES,
 } from '../../src/lib/sync/transport';
 
 describe('backoff', () => {
@@ -246,5 +248,63 @@ describe('a body the peer refuses as too large', () => {
 
   it('still grows back after a success', () => {
     expect(nextBatchSize(MIN_BATCH_SIZE, 'ok')).toBeGreaterThan(MIN_BATCH_SIZE);
+  });
+});
+
+/**
+ * Why a row COUNT could never have solved this.
+ *
+ * The theatre queue held 27 announcements weighing 49 MB — one of them 3.3 MB
+ * alone — beside 339 audit logs weighing 219 kB in total. Rows differing in
+ * size by four orders of magnitude cannot be budgeted by counting them.
+ */
+describe('fitting a batch to a byte budget', () => {
+  const sized = (n: number) => ({ size: n });
+  const sizeOf = (e: { size: number }) => e.size;
+
+  it('takes as many as fit and stops', () => {
+    const got = fitToByteBudget([sized(400), sized(400), sized(400)], 1000, sizeOf);
+    expect(got.length).toBe(2);
+  });
+
+  it('stops at the first entry that would exceed the budget', () => {
+    // Deliberately does NOT skip ahead to a smaller later entry: the queue is
+    // ordered by HLC and applied in that order, so reordering it to pack the
+    // batch would apply causally dependent changes out of sequence.
+    const got = fitToByteBudget([sized(400), sized(900), sized(10)], 1000, sizeOf);
+    expect(got.length).toBe(1);
+  });
+
+  it('always sends at least one, even when that one is over budget', () => {
+    // The single oversized row. Sent alone it either gets through — the budget
+    // is our guess, the peer's limit is the truth — or fails naming one row.
+    // Skipping it would stall the queue behind it forever.
+    const got = fitToByteBudget([sized(9_000_000), sized(10)], 1000, sizeOf);
+    expect(got.length).toBe(1);
+    expect(got[0].size).toBe(9_000_000);
+  });
+
+  it('handles an empty queue', () => {
+    expect(fitToByteBudget([], 1000, sizeOf)).toEqual([]);
+  });
+
+  it('keeps the whole batch when everything fits', () => {
+    const all = [sized(10), sized(10), sized(10)];
+    expect(fitToByteBudget(all, 1000, sizeOf).length).toBe(3);
+  });
+
+  it('stays under the platform limit by default', () => {
+    // 4.5 MB is the serverless body limit; the budget must leave room for the
+    // envelope and protocol fields around the entries.
+    expect(MAX_PUSH_BYTES).toBeLessThan(4_500_000);
+  });
+
+  it('measures real entries by their JSON size when no sizer is given', () => {
+    const big = { payload: 'x'.repeat(2_000_000) };
+    const small = { payload: 'y' };
+    const got = fitToByteBudget([big, small, small]);
+    expect(got.length).toBe(3);
+    const twoBig = fitToByteBudget([big, big, small]);
+    expect(twoBig.length).toBe(1);
   });
 });
