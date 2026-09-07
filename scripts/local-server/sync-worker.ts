@@ -24,7 +24,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import {
-  BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION,
+  BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge,
   backoffMs, isRetryable, isTimeout, nextBatchSize,
   type JournalEntryWire, type PullResponse, type PushResponse,
 } from '../../src/lib/sync/transport';
@@ -137,12 +137,28 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     // is broken. Halve it so the next cycle attempts something that can
     // actually succeed — otherwise the identical batch fails forever and the
     // backlog only grows.
-    if (isTimeout(res.error)) {
-      const shrunk = nextBatchSize(pushBatchSize, 'timeout');
+    //
+    // A 413 says the same thing, and says it more plainly: the peer measured
+    // the body and refused it. It used to fall through here — 413 is not a
+    // timeout — so the batch never shrank, and it was classed as permanent, so
+    // the worker stopped. The theatre server sat five days with 962 changes
+    // unsent while systemd restarted it 28 times into the identical failure.
+    const tooLarge = isTooLarge(res.status, res.error);
+    if (isTimeout(res.error) || tooLarge) {
+      const shrunk = nextBatchSize(pushBatchSize, tooLarge ? 'too-large' : 'timeout');
       if (shrunk !== pushBatchSize) {
-        console.warn(`[sync] push of ${entries.length} timed out — batch ${pushBatchSize} -> ${shrunk}`);
+        const why = tooLarge ? 'was refused as too large' : 'timed out';
+        console.warn(`[sync] push of ${entries.length} ${why} — batch ${pushBatchSize} -> ${shrunk}`);
         pushBatchSize = shrunk;
         shrankThisCycle = true;
+      } else if (tooLarge) {
+        // Already at the floor and STILL too big: this is one oversized row,
+        // not an oversized batch, and halving cannot reach it. Say so, because
+        // the operator needs to know which row to look at.
+        console.error(
+          `[sync] batch is already at the minimum of ${pushBatchSize} and the peer still `
+          + 'refuses it. One single change is over the limit — likely a consent photograph. '
+          + 'Find it with: ./scripts/local-server/why-not-syncing.sh');
       }
     }
     throw Object.assign(new Error(`push failed: ${res.error}`), { status: res.status });

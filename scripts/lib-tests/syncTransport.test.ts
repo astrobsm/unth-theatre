@@ -18,6 +18,7 @@ import {
   MIN_BATCH_SIZE,
   nextBatchSize,
   isTimeout,
+  isTooLarge,
 } from '../../src/lib/sync/transport';
 
 describe('backoff', () => {
@@ -179,5 +180,71 @@ describe('a batch that can get smaller', () => {
     // error into a slow mysterious one.
     expect(isTimeout('push failed: HTTP 403')).toBe(false);
     expect(isTimeout(null)).toBe(false);
+  });
+});
+
+/**
+ * 7 September 2026. The theatre server stopped pushing for five days and
+ * nobody could tell, because the failure looked like a decision.
+ *
+ * Vercel answered 413 FUNCTION_PAYLOAD_TOO_LARGE. isRetryable filed that with
+ * 403 and 422 as "misconfiguration, will fail identically forever", so the
+ * worker exited; systemd restarted it 28 times into the identical failure and
+ * then gave up. 962 changes sat unsent — 50 surgeries, 32 emergency bookings,
+ * 23 PACU assessments — with the oldest five days old.
+ *
+ * 413 is the one 4xx that is a statement about the SIZE OF THIS REQUEST rather
+ * than about the link, the token or the protocol, and the remedy already
+ * existed for timeouts: halve the batch and try again.
+ */
+describe('a body the peer refuses as too large', () => {
+  it('is retryable, unlike the other 4xx', () => {
+    expect(isRetryable(413)).toBe(true);
+    // Unchanged: these really do fail identically at any size.
+    expect(isRetryable(400)).toBe(false);
+    expect(isRetryable(401)).toBe(false);
+    expect(isRetryable(403)).toBe(false);
+    expect(isRetryable(422)).toBe(false);
+  });
+
+  it('is recognised by status, and by the wording when the status is lost', () => {
+    expect(isTooLarge(413)).toBe(true);
+    expect(isTooLarge(null, 'push failed: Request Entity Too Large')).toBe(true);
+    expect(isTooLarge(null, 'FUNCTION_PAYLOAD_TOO_LARGE')).toBe(true);
+    expect(isTooLarge(null, 'payload too large')).toBe(true);
+  });
+
+  it('is not confused with an ordinary failure', () => {
+    expect(isTooLarge(500, 'internal error')).toBe(false);
+    expect(isTooLarge(403, 'forbidden')).toBe(false);
+    expect(isTooLarge(null, null)).toBe(false);
+    expect(isTooLarge(null, 'the request timed out')).toBe(false);
+  });
+
+  it('halves the batch, exactly as a timeout does', () => {
+    expect(nextBatchSize(200, 'too-large')).toBe(100);
+    expect(nextBatchSize(100, 'too-large')).toBe(50);
+  });
+
+  it('never shrinks below the floor, so progress is always possible', () => {
+    expect(nextBatchSize(MIN_BATCH_SIZE, 'too-large')).toBe(MIN_BATCH_SIZE);
+    expect(nextBatchSize(6, 'too-large')).toBe(MIN_BATCH_SIZE);
+  });
+
+  it('converges from a full batch to the floor in a handful of cycles', () => {
+    // The property that matters: repeated refusal must reach a size that can
+    // get through, rather than repeating one that cannot.
+    let size = BATCH_SIZE;
+    const seen = [size];
+    for (let i = 0; i < 10 && size > MIN_BATCH_SIZE; i++) {
+      size = nextBatchSize(size, 'too-large');
+      seen.push(size);
+    }
+    expect(size).toBe(MIN_BATCH_SIZE);
+    expect(seen.length).toBeLessThanOrEqual(8);
+  });
+
+  it('still grows back after a success', () => {
+    expect(nextBatchSize(MIN_BATCH_SIZE, 'ok')).toBeGreaterThan(MIN_BATCH_SIZE);
   });
 });

@@ -136,17 +136,24 @@ export const MIN_BATCH_SIZE = 5;
  * grows the batch back gently, because the small size is a response to
  * conditions rather than a new permanent truth.
  *
- * Deliberately not applied to non-timeout failures. A 403 fails at any size,
+ * A REJECTED BODY IS THE SAME CONDITION, and on 7 September it stopped the
+ * theatre server dead. The peer answered 413 FUNCTION_PAYLOAD_TOO_LARGE — the
+ * batch exceeded the serverless request body limit — which is "you sent too
+ * much" stated even more plainly than a timeout states it. But 413 is not a
+ * timeout, so the batch never shrank, and 413 was classed as permanent, so the
+ * worker stopped: 139 changes sat unsent and systemd gave up after 28 restarts.
+ *
+ * Deliberately still not applied to other failures. A 403 fails at any size,
  * and shrinking the batch in response would turn a clear authentication error
  * into a slow mysterious one.
  */
 export function nextBatchSize(
   current: number,
-  outcome: 'ok' | 'timeout',
+  outcome: 'ok' | 'timeout' | 'too-large',
   { max = BATCH_SIZE, min = MIN_BATCH_SIZE }: { max?: number; min?: number } = {},
 ): number {
   const clamp = (n: number) => Math.max(min, Math.min(max, n));
-  if (outcome === 'timeout') return clamp(Math.floor(current / 2));
+  if (outcome === 'timeout' || outcome === 'too-large') return clamp(Math.floor(current / 2));
   // Grow by half again, so recovery takes a few cycles rather than snapping
   // straight back to a size that has just been shown not to work.
   return clamp(Math.ceil(current * 1.5));
@@ -161,6 +168,22 @@ export function nextBatchSize(
 export function isTimeout(error: string | null | undefined): boolean {
   const e = (error ?? '').toLowerCase();
   return e.includes('abort') || e.includes('timeout') || e.includes('timed out');
+}
+
+/**
+ * Did the peer refuse this because the body was too big?
+ *
+ * Matched on the STATUS first, since 413 is unambiguous, and on the message as
+ * well because the platform's wording reaches us through several layers and is
+ * not always accompanied by the code. Vercel answers
+ * "Request Entity Too Large / FUNCTION_PAYLOAD_TOO_LARGE".
+ */
+export function isTooLarge(status: number | null | undefined, error?: string | null): boolean {
+  if (status === 413) return true;
+  const e = (error ?? '').toLowerCase();
+  return e.includes('payload_too_large')
+    || e.includes('entity too large')
+    || e.includes('payload too large');
 }
 
 export interface BackoffOptions {
@@ -208,6 +231,12 @@ export function isRetryable(status: number | null, err?: unknown): boolean {
   if (status === null) return true;
   if (status === 408 || status === 429) return true;
   if (status >= 500) return true;
+  // 413 is not a misconfiguration. It says the batch was too big, which is a
+  // statement about THIS request and not about the link, the token or the
+  // protocol — and the very next request, halved, may well succeed. Treating it
+  // as permanent stopped the theatre server's worker outright with 139 changes
+  // still queued, which is the opposite of what the no-loss rule intends.
+  if (status === 413) return true;
   // 400/401/403/409/422 are a misconfiguration or a protocol mismatch, and
   // will fail identically forever. Retrying them just hides the problem.
   if (status >= 400) return false;
