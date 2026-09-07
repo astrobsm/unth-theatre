@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { authenticateSync } from '@/lib/sync/serviceAuth';
 import { byHlc, validatePush, SYNC_PROTOCOL_VERSION, type EntryResult } from '@/lib/sync/transport';
 import { applyEntry, type TxRunner, type SqlRunner } from '@/lib/sync/applyEntry';
+import { isPermanentApplyFailure, permanentFailureReason } from '@/lib/sync/permanentFailure';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,6 +108,48 @@ export async function POST(req: NextRequest) {
           await inline.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}`);
         } catch (err) {
           await inline.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}`);
+
+          // AN ENTRY THAT CAN NEVER APPLY MUST NOT BE RETRIED FOREVER.
+          //
+          // Returning no result is right for a transient failure — the sender
+          // re-sends, and the parent row or the free connection arrives. It is
+          // wrong for a UNIQUE violation, which means the peer already holds a
+          // different row under that key and will refuse this one identically
+          // every time.
+          //
+          // On 7 September 33 such entries had each been retried 248 times.
+          // They did not merely fail: every batch carrying one spent its
+          // savepoint and rollback on them, the batch transaction then passed
+          // its 110s budget and returned 500, and 861 applicable changes sat
+          // behind them for five days while the cloud's one connection was
+          // held for a hundred seconds at a time.
+          //
+          // Quarantine settles the entry so the sender stops sending it, and
+          // records both sides in sync_conflicts for a person to resolve. It
+          // does NOT apply the change and does NOT delete anything.
+          if (isPermanentApplyFailure(err)) {
+            const reason = permanentFailureReason(err);
+            try {
+              await inline.$executeRawUnsafe(`SAVEPOINT ${sp}_q`);
+              await inline.$executeRawUnsafe(
+                `insert into sync_conflicts
+                   (table_name, row_id, sync_class, incoming, incoming_hlc, incoming_node,
+                    local_snapshot, local_hlc, reason, status)
+                 values ($1,$2,$3,$4::jsonb,$5,$6,NULL,NULL,$7,'OPEN')`,
+                e.table, e.rowId, 'PERMANENT_FAILURE',
+                JSON.stringify(e.payload ?? {}), e.hlc, e.originNode, reason);
+              await inline.$executeRawUnsafe(`RELEASE SAVEPOINT ${sp}_q`);
+              results.push({ id: e.id, decision: 'QUARANTINE', reason });
+              console.error('[sync/push] quarantined', e.table, e.rowId, reason);
+              continue;
+            } catch (qerr) {
+              // Recording the conflict is itself best-effort: if it fails the
+              // entry must go back to being retried rather than vanish.
+              await inline.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${sp}_q`).catch(() => {});
+              console.error('[sync/push] could not quarantine', e.id, qerr);
+            }
+          }
+
           // The sender retries only what it got no result for.
           console.error('[sync/push] entry failed', e.id, err);
         }
