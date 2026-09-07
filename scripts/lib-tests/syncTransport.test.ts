@@ -21,6 +21,8 @@ import {
   isTooLarge,
   fitToByteBudget,
   MAX_PUSH_BYTES,
+  MIN_PUSH_BYTES,
+  nextByteBudget,
 } from '../../src/lib/sync/transport';
 
 describe('backoff', () => {
@@ -306,5 +308,53 @@ describe('fitting a batch to a byte budget', () => {
     expect(got.length).toBe(3);
     const twoBig = fitToByteBudget([big, big, small]);
     expect(twoBig.length).toBe(1);
+  });
+});
+
+/**
+ * The byte budget has to adapt too, and this is the case that proved it.
+ *
+ * With a fixed 3.5 MB budget the 413s stopped and the pushes began timing out
+ * instead: 3.5 MB of announcement audio does not cross the theatre's link
+ * inside the 120s request timeout. Halving the ROW COUNT did nothing, because
+ * the budget just refilled the batch to the same 3.5 MB out of a shorter list.
+ * The queue sat at ~890 unsent while the backoff climbed to 754 seconds.
+ */
+describe('adapting the byte budget', () => {
+  it('halves on a timeout, like the row count does', () => {
+    expect(nextByteBudget(MAX_PUSH_BYTES, 'timeout')).toBe(Math.floor(MAX_PUSH_BYTES / 2));
+  });
+
+  it('halves on a refusal too', () => {
+    expect(nextByteBudget(2_000_000, 'too-large')).toBe(1_000_000);
+  });
+
+  it('never drops below the floor', () => {
+    expect(nextByteBudget(MIN_PUSH_BYTES, 'timeout')).toBe(MIN_PUSH_BYTES);
+    expect(nextByteBudget(1000, 'timeout')).toBe(MIN_PUSH_BYTES);
+  });
+
+  it('never grows past the ceiling', () => {
+    expect(nextByteBudget(MAX_PUSH_BYTES, 'ok')).toBe(MAX_PUSH_BYTES);
+  });
+
+  it('grows back after success, but gently', () => {
+    const grown = nextByteBudget(MIN_PUSH_BYTES, 'ok');
+    expect(grown).toBeGreaterThan(MIN_PUSH_BYTES);
+    expect(grown).toBeLessThan(MAX_PUSH_BYTES);
+  });
+
+  it('converges from the ceiling to the floor in a handful of cycles', () => {
+    let b = MAX_PUSH_BYTES;
+    let cycles = 0;
+    while (b > MIN_PUSH_BYTES && cycles < 20) { b = nextByteBudget(b, 'timeout'); cycles++; }
+    expect(b).toBe(MIN_PUSH_BYTES);
+    expect(cycles).toBeLessThanOrEqual(6);
+  });
+
+  it('keeps a floor big enough to carry ordinary rows', () => {
+    // An audit log is a few hundred bytes; the floor must still move hundreds
+    // of them per push, or the backlog never clears.
+    expect(MIN_PUSH_BYTES).toBeGreaterThan(100 * 900);
   });
 });

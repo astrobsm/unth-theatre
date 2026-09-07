@@ -134,6 +134,40 @@ export const MIN_BATCH_SIZE = 5;
 export const MAX_PUSH_BYTES = 3_500_000;
 
 /**
+ * The smallest the byte budget may shrink to.
+ *
+ * 256 kB still carries hundreds of ordinary rows, and it is small enough to
+ * cross a bad mobile link inside the request timeout. Below this the overhead
+ * per round trip stops being worth it.
+ */
+export const MIN_PUSH_BYTES = 262_144;
+
+/**
+ * How large the next push may be IN BYTES, given how the last one went.
+ *
+ * THE ROW COUNT AND THE BYTE BUDGET ARE TWO DIFFERENT LIMITS AND BOTH HAVE TO
+ * ADAPT. Once a batch is bounded by bytes, halving the number of rows changes
+ * nothing: the budget refills the batch to the same 3.5 MB out of a shorter
+ * list. The theatre server showed this precisely — with the byte budget in
+ * place the 413s stopped, and the pushes then began timing out at 120s instead,
+ * because 3.5 MB of announcement audio does not cross that link in two minutes.
+ * The queue sat at ~890 while the backoff climbed to 754 seconds.
+ *
+ * A timeout is the link telling us how much it can carry. Halve the budget and
+ * it converges in a few cycles on something that fits; success grows it back,
+ * gently, because a slow link now is not a slow link forever.
+ */
+export function nextByteBudget(
+  current: number,
+  outcome: 'ok' | 'timeout' | 'too-large',
+  { max = MAX_PUSH_BYTES, min = MIN_PUSH_BYTES }: { max?: number; min?: number } = {},
+): number {
+  const clamp = (n: number) => Math.max(min, Math.min(max, n));
+  if (outcome === 'timeout' || outcome === 'too-large') return clamp(Math.floor(current / 2));
+  return clamp(Math.ceil(current * 1.5));
+}
+
+/**
  * The longest prefix of `entries` that fits inside the byte budget.
  *
  * ALWAYS RETURNS AT LEAST ONE, even when that one is over budget by itself.

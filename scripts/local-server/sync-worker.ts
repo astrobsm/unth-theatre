@@ -25,7 +25,7 @@
 import { PrismaClient } from '@prisma/client';
 import {
   BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge,
-  fitToByteBudget, MAX_PUSH_BYTES,
+  fitToByteBudget, MAX_PUSH_BYTES, nextByteBudget,
   backoffMs, isRetryable, isTimeout, nextBatchSize,
   type JournalEntryWire, type PullResponse, type PushResponse,
 } from '../../src/lib/sync/transport';
@@ -60,6 +60,12 @@ let consecutiveErrors = 0;
 let pushBatchSize = BATCH_SIZE;
 
 /**
+ * The byte ceiling for a push, which adapts for the same reason the row count
+ * does. Held here rather than passed in so a shrink survives to the next cycle.
+ */
+let pushByteBudget = MAX_PUSH_BYTES;
+
+/**
  * Set when a timeout shrank the batch this cycle.
  *
  * The next attempt is then a DIFFERENT request rather than a repeat of a failed
@@ -76,9 +82,26 @@ async function thisNode(): Promise<string> {
   return r[0]?.node_id ?? 'unset';
 }
 
-async function call<T>(path: string, body: unknown): Promise<{ ok: true; data: T } | { ok: false; status: number | null; error: string }> {
+/**
+ * A failure must be able to describe itself.
+ *
+ * This returned the response body as the error, and when the body was empty the
+ * error was the empty string. The theatre server then logged "push failed: "
+ * and wrote '' into sync_journal.last_error for 892 entries — no status, no
+ * cause, nothing to act on. Whether that was a gateway error or an abort could
+ * not be told apart from the record, which is the state this worker must never
+ * leave an operator in.
+ *
+ * So: the status travels with the failure, the abort is reported as an abort
+ * because the timer KNOWS it fired rather than because a message happened to
+ * contain the word, and an empty body is named as an empty body.
+ */
+async function call<T>(path: string, body: unknown): Promise<
+  { ok: true; data: T } | { ok: false; status: number | null; error: string; timedOut: boolean }
+> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${PEER_URL}${path}`, {
       method: 'POST',
@@ -87,11 +110,21 @@ async function call<T>(path: string, body: unknown): Promise<{ ok: true; data: T
       signal: controller.signal,
     });
     const text = await res.text();
-    if (!res.ok) return { ok: false, status: res.status, error: text.slice(0, 300) };
+    if (!res.ok) {
+      const detail = text.trim() ? text.slice(0, 300) : '(no response body)';
+      return { ok: false, status: res.status, error: `HTTP ${res.status}: ${detail}`, timedOut: false };
+    }
     return { ok: true, data: JSON.parse(text) as T };
   } catch (e) {
+    if (timedOut) {
+      return {
+        ok: false, status: null, timedOut: true,
+        error: `request aborted after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s`,
+      };
+    }
     // No status at all: the network, which is the expected case here.
-    return { ok: false, status: null, error: e instanceof Error ? e.message : String(e) };
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: null, timedOut: false, error: msg || '(no error message)' };
   } finally {
     clearTimeout(timer);
   }
@@ -132,11 +165,11 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
   //
   // Done BEFORE shipped_at is stamped, so an entry trimmed off here is not
   // recorded as having been sent.
-  const entries = fitToByteBudget(candidates);
+  const entries = fitToByteBudget(candidates, pushByteBudget);
   if (entries.length < candidates.length) {
     console.log(
       `[sync] sending ${entries.length} of ${candidates.length} queued `
-      + `(byte budget ${Math.round(MAX_PUSH_BYTES / 1000)} kB reached)`);
+      + `(byte budget ${Math.round(pushByteBudget / 1000)} kB reached)`);
   }
 
   await prisma.$executeRawUnsafe(
@@ -163,12 +196,22 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     // the worker stopped. The theatre server sat five days with 962 changes
     // unsent while systemd restarted it 28 times into the identical failure.
     const tooLarge = isTooLarge(res.status, res.error);
-    if (isTimeout(res.error) || tooLarge) {
-      const shrunk = nextBatchSize(pushBatchSize, tooLarge ? 'too-large' : 'timeout');
-      if (shrunk !== pushBatchSize) {
+    const tooSlow = res.timedOut || isTimeout(res.error);
+    if (tooSlow || tooLarge) {
+      const outcome = tooLarge ? 'too-large' : 'timeout';
+      // Both limits move. Halving the row count alone does nothing once the
+      // batch is bounded by bytes — the budget simply refills it to the same
+      // size out of a shorter list, which is exactly how the queue stalled at
+      // ~890 with the backoff climbing to 754 seconds.
+      const shrunkRows = nextBatchSize(pushBatchSize, outcome);
+      const shrunkBytes = nextByteBudget(pushByteBudget, outcome);
+      if (shrunkRows !== pushBatchSize || shrunkBytes !== pushByteBudget) {
         const why = tooLarge ? 'was refused as too large' : 'timed out';
-        console.warn(`[sync] push of ${entries.length} ${why} — batch ${pushBatchSize} -> ${shrunk}`);
-        pushBatchSize = shrunk;
+        console.warn(
+          `[sync] push of ${entries.length} ${why} — rows ${pushBatchSize} -> ${shrunkRows}, `
+          + `budget ${Math.round(pushByteBudget / 1000)} -> ${Math.round(shrunkBytes / 1000)} kB`);
+        pushBatchSize = shrunkRows;
+        pushByteBudget = shrunkBytes;
         shrankThisCycle = true;
       } else if (tooLarge) {
         // Already at the floor and STILL too big: this is one oversized row,
@@ -217,6 +260,7 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
   // been shown not to work would stall again on the next large backlog.
   const grown = nextBatchSize(pushBatchSize, 'ok');
   if (grown !== pushBatchSize) pushBatchSize = grown;
+  pushByteBudget = nextByteBudget(pushByteBudget, 'ok');
 
   return { sent: acked.length, failed: false };
 }
