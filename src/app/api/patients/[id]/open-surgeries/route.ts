@@ -42,7 +42,40 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    return NextResponse.json({ cases });
+    // Whether this is a RE-booking, which the form needs for a different
+    // reason than the gate does.
+    //
+    // A patient booked again months later is very often on a different ward,
+    // and a child's age has moved on. Those details were captured once, at the
+    // first admission, and are then reprinted on every list, wristband and
+    // consent form thereafter — so the second booking silently carries the
+    // first admission's ward. The form offers them for correction when it
+    // knows there was a previous operation, and this is where it finds out.
+    const [previousCount, lastClosed] = await Promise.all([
+      prisma.surgery.count({
+        where: {
+          patientId: params.id,
+          status: { in: CLOSED_STATUSES as unknown as never[] },
+        },
+      }),
+      prisma.surgery.findFirst({
+        where: {
+          patientId: params.id,
+          status: { in: CLOSED_STATUSES as unknown as never[] },
+        },
+        orderBy: { scheduledDate: 'desc' },
+        select: { procedureName: true, scheduledDate: true },
+      }),
+    ]);
+
+    return NextResponse.json({
+      cases,
+      previous: {
+        count: previousCount,
+        lastProcedure: lastClosed?.procedureName ?? null,
+        lastDate: lastClosed?.scheduledDate ?? null,
+      },
+    });
   } catch (error) {
     console.error('[patients/open-surgeries] failed:', error);
     // The gate treats an error as "still checking", which keeps the form shut.

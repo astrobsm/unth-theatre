@@ -296,12 +296,86 @@ export default function NewSurgeryPage() {
       }
       const d = await r.json();
       setPriorCases(Array.isArray(d.cases) ? d.cases : []);
+      setPrevious(d.previous ?? null);
     } catch {
       setGateError('Could not check this patient for unfinished operations. Try again.');
     }
   }, []);
 
+  // ---- Details that go stale between admissions -------------------------
+  //
+  // Name, age and ward are captured once, at the first admission, and then
+  // reprinted on every list, wristband and consent form afterwards. A patient
+  // booked again six months later is very often on a different ward, and a
+  // child's age has simply moved on. Until now the only way to correct that
+  // was to leave the booking, find the patient record, edit it and come back —
+  // so in practice nobody did, and the theatre list carried the old ward.
+  //
+  // Offered here, on the booking itself, at the one moment somebody is looking
+  // at this patient and knows where they actually are.
+  const [previous, setPrevious] = useState<
+    { count: number; lastProcedure: string | null; lastDate: string | null } | null
+  >(null);
+  const [editDetails, setEditDetails] = useState(false);
+  const [details, setDetails] = useState({ name: '', age: '', ageUnit: 'years', ward: '' });
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsMsg, setDetailsMsg] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+
   useEffect(() => { void checkPriorCases(selectedPatientId); }, [selectedPatientId, checkPriorCases]);
+
+  // Load the chosen patient's details into the editor, and close it again when
+  // the patient changes — a half-typed ward must never carry to another person.
+  useEffect(() => {
+    const p = patients.find((x) => x.id === selectedPatientId);
+    setEditDetails(false);
+    setDetailsMsg(null);
+    if (!p) { setDetails({ name: '', age: '', ageUnit: 'years', ward: '' }); return; }
+    setDetails({
+      name: p.name ?? '',
+      age: p.age == null ? '' : String(p.age),
+      ageUnit: p.ageUnit ?? 'years',
+      ward: p.ward ?? '',
+    });
+  }, [selectedPatientId, patients]);
+
+  /** Write the corrected details back to the patient record. */
+  const saveDetails = async () => {
+    if (!selectedPatientId) return;
+    const age = details.age.trim() === '' ? null : Number(details.age);
+    if (!details.name.trim()) { setDetailsMsg({ tone: 'bad', text: 'A name is required.' }); return; }
+    if (age !== null && (!Number.isFinite(age) || age < 0)) {
+      setDetailsMsg({ tone: 'bad', text: 'Age must be a number.' }); return;
+    }
+    setSavingDetails(true);
+    setDetailsMsg(null);
+    try {
+      const r = await fetch(`/api/patients/${selectedPatientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: details.name.trim(),
+          ...(age === null ? {} : { age }),
+          ageUnit: details.ageUnit,
+          ward: details.ward.trim(),
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setDetailsMsg({ tone: 'bad', text: d.error ?? 'Those details could not be saved.' });
+        return;
+      }
+      const saved = await r.json();
+      // Update the list in place so the selector, the summary and anything
+      // else reading `patients` all show the corrected details at once.
+      setPatients((prev) => prev.map((p) => (p.id === saved.id ? { ...p, ...saved } : p)));
+      setDetailsMsg({ tone: 'ok', text: 'Patient details updated.' });
+      setEditDetails(false);
+    } catch {
+      setDetailsMsg({ tone: 'bad', text: 'Could not reach the server to save those details.' });
+    } finally {
+      setSavingDetails(false);
+    }
+  };
 
   /** Close an unfinished case so this booking can go ahead. */
   const completePriorCase = async (surgeryId: string) => {
@@ -1576,6 +1650,149 @@ ${pretty} — ${days} days from today.
               </select>
             </div>
           </div>
+
+          {/* Details that go stale between admissions.
+              Deliberately OUTSIDE the disabled fieldset below: an unfinished
+              earlier case must stop somebody booking a second operation, but it
+              must not stop them correcting the ward a patient is lying on. */}
+          {selectedPatientId && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    {previous && previous.count > 0
+                      ? `Booked here before — ${previous.count} previous operation${previous.count === 1 ? '' : 's'}`
+                      : 'Patient details'}
+                  </p>
+                  <p className="text-xs text-amber-800 mt-0.5 max-w-prose">
+                    {previous && previous.count > 0 ? (
+                      <>
+                        Last was {previous.lastProcedure ?? 'an operation'}
+                        {previous.lastDate
+                          ? ` on ${new Date(previous.lastDate).toLocaleDateString('en-GB')}`
+                          : ''}
+                        . These details were taken at that admission — check the ward and age
+                        are still right before booking, because they print on the list, the
+                        wristband and the consent form.
+                      </>
+                    ) : (
+                      'Correct anything that has changed since this patient was registered.'
+                    )}
+                  </p>
+                </div>
+                {!editDetails && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditDetails(true); setDetailsMsg(null); }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                  >
+                    Edit name, age or ward
+                  </button>
+                )}
+              </div>
+
+              {!editDetails ? (
+                <dl className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-amber-700">Name</dt>
+                    <dd className="text-gray-900">{details.name || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-amber-700">Age</dt>
+                    <dd className="text-gray-900">
+                      {details.age === '' ? '—' : formatAge(Number(details.age), details.ageUnit)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-amber-700">Ward</dt>
+                    <dd className="text-gray-900">{details.ward || '—'}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="lg:col-span-2">
+                      <label htmlFor="pt-name" className="block text-xs font-medium text-amber-900 mb-1">Name</label>
+                      <input
+                        id="pt-name"
+                        type="text"
+                        value={details.name}
+                        onChange={(e) => setDetails((d) => ({ ...d, name: e.target.value }))}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="pt-age" className="block text-xs font-medium text-amber-900 mb-1">Age</label>
+                      <div className="flex gap-2">
+                        <input
+                          id="pt-age"
+                          type="number"
+                          min={0}
+                          value={details.age}
+                          onChange={(e) => setDetails((d) => ({ ...d, age: e.target.value }))}
+                          className="input-field"
+                        />
+                        <select
+                          aria-label="Age unit"
+                          value={details.ageUnit}
+                          onChange={(e) => setDetails((d) => ({ ...d, ageUnit: e.target.value }))}
+                          className="input-field"
+                        >
+                          <option value="years">years</option>
+                          <option value="months">months</option>
+                          <option value="weeks">weeks</option>
+                          <option value="days">days</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="pt-ward" className="block text-xs font-medium text-amber-900 mb-1">Ward</label>
+                      <input
+                        id="pt-ward"
+                        type="text"
+                        value={details.ward}
+                        onChange={(e) => setDetails((d) => ({ ...d, ward: e.target.value }))}
+                        className="input-field"
+                        placeholder="e.g. Neurosurgical ward"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void saveDetails()}
+                      disabled={savingDetails}
+                      className="px-4 py-2 text-sm font-medium rounded-md bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-50"
+                    >
+                      {savingDetails ? 'Saving…' : 'Save details'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Discard edits by reloading from the record.
+                        const p = patients.find((x) => x.id === selectedPatientId);
+                        setDetails({
+                          name: p?.name ?? '', age: p?.age == null ? '' : String(p.age),
+                          ageUnit: p?.ageUnit ?? 'years', ward: p?.ward ?? '',
+                        });
+                        setEditDetails(false);
+                        setDetailsMsg(null);
+                      }}
+                      className="px-3 py-2 text-sm text-amber-900 hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {detailsMsg && (
+                <p className={detailsMsg.tone === 'ok' ? 'mt-2 text-sm text-green-700' : 'mt-2 text-sm text-red-700'}>
+                  {detailsMsg.text}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ---------------------------------------------------------------
