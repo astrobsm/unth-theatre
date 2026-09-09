@@ -157,47 +157,6 @@ export default function PACUAssessmentDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
 
-  // Transfer-to-ward/ICU flow: choose destination, two transporting porters and
-  // the ward nurse who will accompany the patient.
-  const [showTransfer, setShowTransfer] = useState(false);
-  const [transferring, setTransferring] = useState(false);
-  const [porters, setPorters] = useState<{ id: string; fullName: string; staffCode: string | null }[]>([]);
-  const [transferForm, setTransferForm] = useState({
-    destination: '',
-    porter1: '',
-    porter2: '',
-    accompanyingNurse: '',
-    notes: '',
-  });
-
-  // Load porters ON DUTY for the day for the transport dropdowns; fall back to
-  // the full approved list only when no roster is uploaded for the shift.
-  useEffect(() => {
-    const today = new Date().toISOString();
-    fetch(`/api/roster/on-duty?date=${encodeURIComponent(today)}&theatreId=all`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        const onDuty = Array.isArray(data?.candidates?.porters) ? data.candidates.porters : [];
-        if (onDuty.length > 0) {
-          setPorters(
-            onDuty.map((u: any) => ({ id: u.userId, fullName: u.name, staffCode: u.staffCode }))
-          );
-          return;
-        }
-        // Fallback: full approved porter list.
-        fetch('/api/users?role=PORTER&status=APPROVED')
-          .then((r) => (r.ok ? r.json() : []))
-          .then((list) =>
-            setPorters(
-              Array.isArray(list)
-                ? list.map((u: any) => ({ id: u.id, fullName: u.fullName, staffCode: u.staffCode }))
-                : []
-            )
-          )
-          .catch(() => {});
-      })
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     fetchAssessment();
@@ -447,8 +406,12 @@ export default function PACUAssessmentDetailPage() {
       });
 
       if (response.ok) {
-        alert('Patient discharged from PACU successfully');
-        router.push('/dashboard/pacu');
+        // Discharge is not the end of the job — the patient is still lying in
+        // recovery until somebody moves them. This used to bounce back to the
+        // PACU list, leaving the transfer on a button on the page the nurse had
+        // just been sent away from: discharged in the system, nobody assigned to
+        // move them, nothing printed to travel with them.
+        router.push(`/dashboard/pacu/${params.id}/transfer`);
       } else {
         const data = await response.json();
         // The API explains WHICH observation is still out of range. Losing that
@@ -466,93 +429,6 @@ export default function PACUAssessmentDetailPage() {
     }
   };
 
-  // Transfer the patient back to the ward/ICU: logs a porter transport (two
-  // porters push the trolley) and records the accompanying ward nurse.
-  const transferToWard = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!transferForm.destination || !transferForm.porter1) {
-      alert('Select a destination and at least one transporting porter.');
-      return;
-    }
-    const porter1 = porters.find((p) => p.id === transferForm.porter1);
-    const porter2 = transferForm.porter2 ? porters.find((p) => p.id === transferForm.porter2) : null;
-    if (!porter1?.staffCode) {
-      alert('The selected porter has no staff code on file.');
-      return;
-    }
-    setTransferring(true);
-    try {
-      const noteParts = [
-        transferForm.accompanyingNurse ? `Accompanying ward nurse: ${transferForm.accompanyingNurse}` : '',
-        transferForm.notes,
-      ].filter(Boolean);
-      const res = await fetch('/api/transport/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staffCode: porter1.staffCode,
-          transporter2Code: porter2?.staffCode || null,
-          patientFolderNumber: assessment?.patient?.folderNumber,
-          fromLocation: 'PACU',
-          toLocation: transferForm.destination,
-          transportType: 'Post-Op Transfer',
-          surgeryId: assessment?.surgeryId,
-          notes: noteParts.join(' • ') || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        // The porter still has an unfinished transport. Offer to force-end it
-        // and start this new one instead of blocking.
-        if (data.canForce) {
-          const proceed = window.confirm(
-            `${data.error}\n\nForce-end the porter's previous transport and start this one now?`
-          );
-          if (!proceed) return;
-          const forced = await fetch('/api/transport/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              staffCode: porter1.staffCode,
-              transporter2Code: porter2?.staffCode || null,
-              patientFolderNumber: assessment?.patient?.folderNumber,
-              fromLocation: 'PACU',
-              toLocation: transferForm.destination,
-              transportType: 'Post-Op Transfer',
-              surgeryId: assessment?.surgeryId,
-              notes: noteParts.join(' • ') || undefined,
-              force: true,
-            }),
-          });
-          const forcedData = await forced.json();
-          if (!forced.ok) {
-            alert(forcedData.error || 'Failed to start transfer');
-            return;
-          }
-        } else {
-          alert(data.error || 'Failed to start transfer');
-          return;
-        }
-      }
-      // Record the destination + accompanying nurse on the PACU assessment.
-      await fetch(`/api/pacu/${params.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dischargedTo: transferForm.destination,
-          wardNurseHandover: transferForm.accompanyingNurse || undefined,
-        }),
-      }).catch(() => {});
-      alert('Transfer started. Porter(s) notified to move the patient.');
-      setShowTransfer(false);
-      setTransferForm({ destination: '', porter1: '', porter2: '', accompanyingNurse: '', notes: '' });
-      fetchAssessment();
-    } catch (err) {
-      alert('Error starting transfer');
-    } finally {
-      setTransferring(false);
-    }
-  };
 
   const triggerRedAlert = async () => {
     const alertType = prompt('Enter alert type (e.g., RESPIRATORY_DISTRESS, HYPOTENSION, SEVERE_PAIN):');
@@ -695,7 +571,7 @@ export default function PACUAssessmentDetailPage() {
           </button>
 
           <button
-            onClick={() => setShowTransfer(true)}
+            onClick={() => router.push(`/dashboard/pacu/${params.id}/transfer`)}
             className="bg-purple-600 text-white px-4 sm:px-6 py-3 rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2 font-medium flex-1 sm:flex-none whitespace-nowrap"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -706,103 +582,6 @@ export default function PACUAssessmentDetailPage() {
         </div>
       </div>
 
-      {/* Transfer to Ward/ICU modal */}
-      {showTransfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h2 className="text-lg font-semibold text-gray-900">Transfer Patient to Ward / ICU</h2>
-              <button onClick={() => setShowTransfer(false)} className="text-gray-400 hover:text-gray-600" title="Close">✕</button>
-            </div>
-            <form onSubmit={transferToWard} className="px-5 py-4 space-y-4">
-              <div className="text-sm text-gray-600">
-                <span className="font-medium text-gray-900">{assessment.patient?.name}</span> — {assessment.patient?.folderNumber}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Destination *</label>
-                <select
-                  value={transferForm.destination}
-                  onChange={(e) => setTransferForm({ ...transferForm, destination: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  required
-                  aria-label="Transfer destination"
-                >
-                  <option value="">Select destination…</option>
-                  <option value="General Ward">General Ward</option>
-                  <option value="ICU">Intensive Care Unit (ICU)</option>
-                  <option value="HDU">High Dependency Unit (HDU)</option>
-                  <option value={assessment.patient?.ward ? `Ward: ${assessment.patient.ward}` : 'Originating Ward'}>
-                    {assessment.patient?.ward ? `Back to ${assessment.patient.ward}` : 'Originating Ward'}
-                  </option>
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transporting porter 1 *</label>
-                  <select
-                    value={transferForm.porter1}
-                    onChange={(e) => setTransferForm({ ...transferForm, porter1: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    required
-                    aria-label="Transporting porter 1"
-                  >
-                    <option value="">Select porter…</option>
-                    {porters.map((p) => <option key={p.id} value={p.id}>{p.fullName}{p.staffCode ? ` (${p.staffCode})` : ''}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transporting porter 2</label>
-                  <select
-                    value={transferForm.porter2}
-                    onChange={(e) => setTransferForm({ ...transferForm, porter2: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    aria-label="Transporting porter 2"
-                  >
-                    <option value="">(Optional) Select porter…</option>
-                    {porters.filter((p) => p.id !== transferForm.porter1).map((p) => <option key={p.id} value={p.id}>{p.fullName}{p.staffCode ? ` (${p.staffCode})` : ''}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Accompanying ward nurse</label>
-                <input
-                  type="text"
-                  value={transferForm.accompanyingNurse}
-                  onChange={(e) => setTransferForm({ ...transferForm, accompanyingNurse: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  placeholder="Name of the ward nurse accompanying the patient"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-                <textarea
-                  value={transferForm.notes}
-                  onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  placeholder="Equipment, oxygen, monitoring during transfer, etc."
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={transferring}
-                  className="flex-1 bg-purple-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {transferring ? 'Starting transfer…' : 'Start Transfer'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowTransfer(false)}
-                  className="px-4 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       <div className="bg-white border rounded-lg p-4 mb-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
