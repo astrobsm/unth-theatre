@@ -64,6 +64,9 @@ enum UserRole {
   /// and no ward clerk, secretary or booking officer anywhere in the enum. The
   /// work therefore fell to the surgical residents by default, which is what
   /// they spent a fortnight telling us. This is the way back in.
+  RADIOLOGIST
+  RADIOGRAPHER
+  INFECTION_CONTROL_NURSE
   BOOKING_OFFICER
 }
 
@@ -415,22 +418,22 @@ model User {
 
   /// One-time recovery codes sent to this user by SMS. See model AuthOtp:
   /// the code itself is never stored, only an HMAC of it.
-  authOtps              AuthOtp[]
-  isFirstLogin          Boolean              @default(true) // Track if user has logged in before
-  mustChangePassword    Boolean              @default(false) // Force password change on next login
+  authOtps                AuthOtp[]
+  isFirstLogin            Boolean   @default(true) // Track if user has logged in before
+  mustChangePassword      Boolean   @default(false) // Force password change on next login
   // House Officer rotation tracking (null for non-HOs)
-  rotationSpecialty     String? // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
-  rotationStartDate     DateTime?
-  rotationEndDate       DateTime?
+  rotationSpecialty       String? // SURGERY | OBSTETRICS_GYNAECOLOGY | MAXILLOFACIAL | ENT | OTHER
+  rotationStartDate       DateTime?
+  rotationEndDate         DateTime?
   // When a surgeon last told us whether they are a consultant or a resident.
   // 194 of 196 surgeons sat under the undifferentiated SURGEON role, so the
   // schedule could not tell who was supervising whom. Null means "not asked
   // yet" and is what makes the sign-in prompt appear exactly once.
   surgeonGradeConfirmedAt DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
-  approvedBy            String?
-  approvedAt            DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  approvedBy              String?
+  approvedAt              DateTime?
 
   // Relations
   surgeries           Surgery[]             @relation("SurgeonSurgeries")
@@ -616,7 +619,7 @@ model User {
   auditCommitteeInvitations AuditCommitteeInvitation[] @relation("AuditCommitteeInvitee")
 
   // Departmental roster supervision (per-user, per-department authority)
-  rosterSupervision   RosterSupervisor[] @relation("RosterSupervisorUser")
+  rosterSupervision         RosterSupervisor[] @relation("RosterSupervisorUser")
   rosterSupervisorsAssigned RosterSupervisor[] @relation("RosterSupervisorAssignedBy")
 
   // Pre-pack & post-op pharmacy back-relations
@@ -1345,8 +1348,8 @@ model Surgery {
   // Soft reference, no FK — as with theatreId and preopOverrideById above.
   // users is CLOUD_AUTHORITATIVE and a booking must never be rejected on a node
   // that has not yet received the booker's account.
-  bookedById          String?
-  bookedByName        String?
+  bookedById   String?
+  bookedByName String?
 
   // Patient-facing codes generated at booking. The surgeon (or anaesthetist)
   // copies these and gives them to the patient, who presents the relevant code
@@ -1378,15 +1381,15 @@ model Surgery {
   syncHlc      String?       @map("sync_hlc")
   ocrDocuments OcrDocument[]
 
+  /// Reports of what stopped this case starting on time. See CaseBlockerReport.
+  blockerReports CaseBlockerReport[]
+
   /// "What is on the list for this date" — asked by case readiness, the
   /// anaesthetist board, the theatre lists and every dashboard. It was a
   /// sequential scan reading all 606 rows to find eleven; cheap today, linear
   /// in a table that only grows.
   @@index([scheduledDate])
   @@map("surgeries")
-
-  /// Reports of what stopped this case starting on time. See CaseBlockerReport.
-  blockerReports CaseBlockerReport[]
 }
 
 // Scrub / circulating nurse theatre reception and between-case workflow.
@@ -3448,9 +3451,9 @@ model AnesthesiaSetupLog {
   /// a dialog somebody dismissed proves nothing afterwards, and once the
   /// wording is revised there is otherwise no way to say which text a person
   /// actually agreed to. Certification is refused without both.
-  complianceAcknowledged        Boolean   @default(false)
-  complianceAcknowledgedAt      DateTime?
-  complianceDeclarationVersion  String?
+  complianceAcknowledged       Boolean   @default(false)
+  complianceAcknowledgedAt     DateTime?
+  complianceDeclarationVersion String?
 
   /// Where a theatre was declared NOT ready, and by whom. Separate from
   /// blockingIssues, which is free notes — this is the moment somebody stood
@@ -3838,16 +3841,16 @@ model PreOperativeAnestheticReview {
   /// Mandatory before a review can be completed. Nullable in the column
   /// because reviews written before this existed have no answer, and
   /// backfilling one would be inventing a clinical decision nobody made.
-  fitnessDecision     AnaestheticFitness?
-  fitnessDecidedAt    DateTime?
-  fitnessDecidedById  String?
+  fitnessDecision    AnaestheticFitness?
+  fitnessDecidedAt   DateTime?
+  fitnessDecidedById String?
 
   /// Set when an anaesthetist has reassessed after the requirements were
   /// addressed. Without it, completing every task changes nothing — a patient
   /// declared unfit stays unfit until a person says otherwise.
-  reassessedAt   DateTime?
-  reassessedById String?
-  reassessmentNote String? @db.Text
+  reassessedAt     DateTime?
+  reassessedById   String?
+  reassessmentNote String?   @db.Text
 
   optimisationRequirements AnaestheticOptimisationRequirement[] @relation("ReviewOptimisation")
 
@@ -4158,8 +4161,6 @@ model EmergencySurgeryBooking {
   emergencyPrescriptions EmergencyPrescription[]
   emergencyLabRequests   EmergencyLabRequest[]           @relation("EmergencyLabRequests")
 
-  @@map("emergency_surgery_bookings")
-
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
@@ -4167,6 +4168,8 @@ model EmergencySurgeryBooking {
   syncVersion Int     @default(0) @map("sync_version")
   syncOrigin  String? @map("sync_origin")
   syncHlc     String? @map("sync_hlc")
+
+  @@map("emergency_surgery_bookings")
 }
 
 /// A booked emergency that has not started, and how far the chase has got.
@@ -4188,7 +4191,7 @@ model EmergencyDelayEscalation {
   /// How late the case was when the last rung fired, for the record.
   minutesLateAtLastStage Int?
   /// What was recorded as the reason, copied at the time it escalated.
-  reasonAtLastStage      String?  @db.Text
+  reasonAtLastStage      String? @db.Text
 
   /// Set when the case starts, is cancelled or is completed. A resolved
   /// escalation is never chased again.
@@ -4237,10 +4240,10 @@ model AuditCommitteeInvitation {
   /// of sending; the system cannot know when the committee sits.
   appearAt DateTime?
 
-  sentAt    DateTime?
-  sentById  String?
+  sentAt   DateTime?
+  sentById String?
   /// WHATSAPP | DASHBOARD — how it was delivered.
-  channel   String?
+  channel  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4435,8 +4438,6 @@ model EmergencySurgeryAlert {
   surgeon     User?   @relation("SurgeonEmergencyAlerts", fields: [surgeonId], references: [id])
   anesthetist User?   @relation("AnesthetistEmergencyAlerts", fields: [anesthetistId], references: [id])
 
-  @@map("emergency_surgery_alerts")
-
   /// Sync metadata, maintained by the capture trigger in the sync migration.
   /// Declared here ONLY so `prisma migrate diff` does not read these columns as
   /// drift and generate a DROP for them. Application code must never write
@@ -4444,6 +4445,8 @@ model EmergencySurgeryAlert {
   syncVersion Int     @default(0) @map("sync_version")
   syncOrigin  String? @map("sync_origin")
   syncHlc     String? @map("sync_hlc")
+
+  @@map("emergency_surgery_alerts")
 }
 
 // User Notifications
@@ -7551,8 +7554,8 @@ model SurgeryConsumableRequest {
   removedAt         DateTime?
   removalReason     String?
 
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   surgery     Surgery                     @relation("SurgeryConsumableRequests", fields: [surgeryId], references: [id])
   template    SurgicalConsumableTemplate? @relation(fields: [templateId], references: [id])
@@ -7588,8 +7591,8 @@ model SurgeryDrugDressingRequest {
   removedAt         DateTime?
   removalReason     String?
 
-  createdAt    DateTime                 @default(now())
-  updatedAt    DateTime                 @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   surgery  Surgery                       @relation("SurgeryDrugDressingRequests", fields: [surgeryId], references: [id])
   template SurgicalDrugDressingTemplate? @relation(fields: [templateId], references: [id])
@@ -11535,8 +11538,8 @@ model DeadlineAttention {
   status DeadlineAttentionStatus @default(OPEN)
 
   /// Their account of the delay. Recorded, and deliberately not sufficient.
-  delayReason    String?
-  delayLoggedAt  DateTime?
+  delayReason   String?
+  delayLoggedAt DateTime?
 
   /// The outcome, and how it was reached. This is what closes the record.
   resolution   String?
@@ -11661,4 +11664,268 @@ model CaseBlockerReport {
   @@index([reportedAt])
   @@index([reason])
   @@map("case_blocker_reports")
+}
+
+// ============================================================================
+// RADIOLOGY WORKFLOW
+// ----------------------------------------------------------------------------
+// Imaging is requested for a theatre case constantly and has lived entirely on
+// paper and the telephone: a house officer walks a card to radiology, and the
+// only record that a scan was asked for at all is that somebody remembers. The
+// list then runs without knowing whether the film exists.
+// ============================================================================
+
+enum ImagingModality {
+  XRAY
+  CT
+  MRI
+  ULTRASOUND
+  FLUOROSCOPY
+  MAMMOGRAPHY
+  INTERVENTIONAL
+  OTHER
+}
+
+enum ImagingUrgency {
+  ROUTINE
+  URGENT
+  EMERGENCY
+  /// Wanted in theatre, during the operation. A different job entirely.
+  INTRA_OPERATIVE
+}
+
+enum ImagingStatus {
+  REQUESTED
+  ACCEPTED
+  SCHEDULED
+  PERFORMED
+  REPORTED
+  CANCELLED
+}
+
+model ImagingRequest {
+  id        String  @id @default(uuid())
+  /// Null for imaging asked for outside a booked case.
+  surgeryId String?
+  patientId String
+
+  modality         ImagingModality
+  bodyRegion       String
+  /// What the surgeon actually wants answered. A request that says only
+  /// "CT abdomen" gets a report that answers nobody's question.
+  clinicalQuestion String
+  urgency          ImagingUrgency  @default(ROUTINE)
+  status           ImagingStatus   @default(REQUESTED)
+
+  /// Safety, asked before the request is accepted rather than at the scanner.
+  contrastRequested Boolean  @default(false)
+  /// Null where it does not apply. False is a positive statement that it was
+  /// asked and the answer was no.
+  pregnancyExcluded Boolean?
+  creatinineChecked Boolean?
+  implantsDeclared  Boolean?
+
+  requestedById   String
+  requestedByName String
+  requestedAt     DateTime @default(now())
+
+  scheduledFor    DateTime?
+  performedAt     DateTime?
+  performedById   String?
+  performedByName String?
+
+  reportText     String?
+  reportedAt     DateTime?
+  reportedById   String?
+  reportedByName String?
+
+  /// A finding that changes management today. Acknowledgement is recorded
+  /// because being in the report is not the same as somebody having read it.
+  criticalFinding   Boolean   @default(false)
+  criticalAckAt     DateTime?
+  criticalAckById   String?
+  criticalAckByName String?
+
+  cancelReason String?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([status, urgency, requestedAt])
+  @@index([surgeryId])
+  @@index([patientId])
+  @@index([scheduledFor])
+  @@map("imaging_requests")
+}
+
+// ============================================================================
+// INFECTION PREVENTION & CONTROL, AND SURGICAL SITE INFECTION SURVEILLANCE
+// ----------------------------------------------------------------------------
+// An SSI rate cannot be produced from case notes. It needs a denominator — the
+// operations actually done — and a numerator gathered by looking at wounds on a
+// schedule, whether or not anybody suspected anything. Both are recorded here
+// against the operation itself, so the rate is a fact rather than an impression.
+// ============================================================================
+
+/// The classical surgical wound classification. It is the strongest single
+/// predictor of infection and decides which denominator a case belongs in.
+enum WoundClass {
+  CLEAN
+  CLEAN_CONTAMINATED
+  CONTAMINATED
+  DIRTY_INFECTED
+}
+
+/// CDC/NHSN depth classification. Recorded only where infection is present.
+enum SsiType {
+  SUPERFICIAL_INCISIONAL
+  DEEP_INCISIONAL
+  ORGAN_SPACE
+}
+
+enum ProphylaxisTiming {
+  /// Within 60 minutes of incision, which is the window that works.
+  WITHIN_60_MIN
+  TOO_EARLY
+  TOO_LATE
+  NOT_GIVEN
+  UNKNOWN
+}
+
+enum SurveillanceStatus {
+  OPEN
+  /// Followed to 30 days, or 90 for an implant, with no infection found.
+  CLOSED_NO_INFECTION
+  CLOSED_INFECTION
+  /// The patient could not be reached. Recorded honestly rather than counted
+  /// as no-infection, which would flatter every rate produced from this.
+  LOST_TO_FOLLOW_UP
+}
+
+model SsiSurveillance {
+  id        String @id @default(uuid())
+  /// One surveillance record per operation. The denominator IS the operation.
+  surgeryId String @unique
+  patientId String
+
+  woundClass      WoundClass
+  asaGrade        String?
+  durationMinutes Int?
+  /// Whether the operation put an implant in. It extends follow-up to 90 days.
+  implantPlaced   Boolean    @default(false)
+
+  prophylaxisGiven  Boolean?
+  prophylaxisAgent  String?
+  prophylaxisTiming ProphylaxisTiming @default(UNKNOWN)
+  redosedIfLong     Boolean?
+
+  status        SurveillanceStatus @default(OPEN)
+  /// Set when an assessment first records an infection.
+  infectionType SsiType?
+  organism      String?
+  detectedOn    DateTime?
+
+  followUpDueOn DateTime?
+  closedAt      DateTime?
+  closedById    String?
+  notes         String?
+
+  openedById   String
+  openedByName String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assessments SsiAssessment[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([status, followUpDueOn])
+  @@index([woundClass])
+  @@index([patientId])
+  @@map("ssi_surveillance")
+}
+
+/// One look at the wound, on a date. Append-only by intent: a later assessment
+/// never rewrites an earlier one, because the sequence is the evidence.
+model SsiAssessment {
+  id             String @id @default(uuid())
+  surveillanceId String
+
+  assessedOn DateTime
+  dayPostOp  Int
+
+  infectionPresent Boolean  @default(false)
+  ssiType          SsiType?
+  /// Free text: purulence, dehiscence, erythema, fever, positive culture.
+  signs            String?
+  organism         String?
+  treatment        String?
+  /// Whether the wound could be seen at all. A telephone follow-up is evidence
+  /// of a kind, but not the same kind, and the rate should be able to say which.
+  woundInspected   Boolean  @default(true)
+
+  assessedById   String
+  assessedByName String
+  createdAt      DateTime @default(now())
+
+  surveillance SsiSurveillance @relation(fields: [surveillanceId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([surveillanceId, assessedOn])
+  @@map("ssi_assessments")
+}
+
+enum IpcAuditType {
+  HAND_HYGIENE
+  THEATRE_CLEANING
+  STERILISATION
+  WASTE_SEGREGATION
+  PPE_COMPLIANCE
+  THEATRE_TRAFFIC
+  SHARPS_HANDLING
+  ENVIRONMENTAL_SWAB
+}
+
+/// A counted observation round, not an opinion. compliant over observations is
+/// the only honest way to state a compliance rate.
+model IpcAudit {
+  id        String       @id @default(uuid())
+  auditType IpcAuditType
+  theatreId String?
+  area      String?
+  auditDate DateTime
+
+  observations Int
+  compliant    Int
+
+  findings       String?
+  actionsAgreed  String?
+  actionDueOn    DateTime?
+  actionClosedAt DateTime?
+
+  auditorId   String
+  auditorName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([auditType, auditDate])
+  @@index([auditDate])
+  @@map("ipc_audits")
 }

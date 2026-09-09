@@ -106,6 +106,88 @@ export const DUTY_SHEETS: DutySheet[] = [
 
   // ---------------------------------------------------------------------
   {
+    id: 'radiology',
+    title: 'Radiology',
+    roles: ['RADIOLOGIST', 'RADIOGRAPHER'],
+    headline:
+      'A scan nobody knows the result of is the same to the theatre as a scan that was never done.',
+    duties: [
+      {
+        task: 'Accept a request, so the ward can see somebody has it',
+        when: 'When it appears on the worklist',
+        why: 'Until it is accepted the requesting team has no way to tell the request from one that fell down the back of a desk, so they telephone — and the call interrupts whoever is scanning.',
+        where: 'Radiology → Accept',
+        critical: true,
+      },
+      {
+        task: 'Give it a time',
+        when: 'Once you know when it can be done',
+        why: 'The list is built around it. A booking team that knows the CT is at 11:00 can order the day; one that does not holds a theatre slot empty in case.',
+        where: 'Radiology → Schedule',
+      },
+      {
+        task: 'Report it, and say plainly whether the finding is critical',
+        when: 'When you have read the study',
+        why: 'A critical finding is not a tone of voice in the report. Marking it raises an alert that somebody has to acknowledge by name, which is the only record that anybody actually read it.',
+        where: 'Radiology → Report',
+        critical: true,
+      },
+      {
+        task: 'Refuse a contrast study that has no creatinine, and say so',
+        when: 'Before the patient is moved',
+        why: 'The refusal happens either way. Recording it here means it happens before the porter has wheeled the patient across the hospital.',
+        where: 'Radiology → Cancel, with a reason',
+      },
+    ],
+    remember:
+      'Mark a critical finding as critical. A report that is merely available has not been read by anybody, and the acknowledgement is the only proof that it was.',
+  },
+  {
+    id: 'infection-control',
+    title: 'Infection Prevention & Control',
+    roles: ['INFECTION_CONTROL_NURSE'],
+    headline:
+      'An infection rate is only as honest as its follow-up. A low rate over half a cohort is not a good result, it is an unknown one.',
+    duties: [
+      {
+        task: 'Open surveillance on operations as they are done',
+        when: 'Within a day or two of the list',
+        why: 'The denominator is the operations actually performed. Opening records only for the cases somebody already suspects produces a rate near 100% and means nothing.',
+        where: 'Infection Control → Cases under surveillance',
+        critical: true,
+      },
+      {
+        task: 'Look at wounds on the schedule, not on suspicion',
+        when: 'Around day 3, day 7 and day 30',
+        why: 'Surveillance means looking whether or not anybody is worried. Assessments recorded only when a wound already looks wrong find only the infections that had already declared themselves.',
+        where: 'Infection Control → Record assessment',
+        critical: true,
+      },
+      {
+        task: 'Record the depth when there is an infection',
+        when: 'At the assessment that finds it',
+        why: 'Superficial, deep, or organ/space is the finding. A rate that does not separate them cannot tell a stitch abscess from a leaking anastomosis.',
+        where: 'Infection Control → Record assessment',
+        critical: true,
+      },
+      {
+        task: 'Mark a patient you could not reach as unreachable',
+        when: 'When follow-up runs out',
+        why: 'Never as "no infection". Counting the unreachable as clean is the easiest way there is to make a rate look good, and it is the reason the follow-up percentage sits next to it.',
+        where: 'Infection Control → Unreachable',
+        critical: true,
+      },
+      {
+        task: 'Audit by counting, not by impression',
+        when: 'On a regular round',
+        why: '"Hand hygiene is good on this list" cannot be compared with last month. Twenty-three compliant moments out of thirty observed can.',
+        where: 'Infection Control → IPC audits',
+      },
+    ],
+    remember:
+      'Never record an unreachable patient as having no infection. It is the easiest way there is to make a rate look good, and it makes the number worthless to everyone including you.',
+  },
+  {
     id: 'porter',
     title: 'Porter',
     roles: ['PORTER'],

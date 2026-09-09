@@ -140,6 +140,17 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'pre_operative_visits', cls: 'QUARANTINE', why: 'Clearance decisions; silently overwriting one hides that it was ever made.' },
   { table: 'holding_area_assessments', cls: 'QUARANTINE', why: 'The last check before the theatre door; both versions must survive.' },
   { table: 'pacu_assessments', cls: 'QUARANTINE', why: 'Recovery observations and the discharge decision resting on them.' },
+
+  // ── Radiology, and infection control ──────────────────────────────────────
+  // Added with the tables themselves. A table given the capture trigger but no
+  // entry here journals every row and then has each one answered UNKNOWN_TABLE
+  // by the peer, which queues them unacknowledged forever — the failure that
+  // took the emergency board out on 27 August and the holding area on
+  // 1 September.
+  { table: 'imaging_requests', cls: 'LWW', why: 'A request walks REQUESTED to REPORTED and the latest state is the true one. The report text is written once, by radiology, and nothing else competes to write it.' },
+  { table: 'ssi_surveillance', cls: 'LWW', why: 'The surveillance header: wound class, prophylaxis, and the running status. Administrative state about a case, and the most recent assessment of it is correct. The findings themselves live in ssi_assessments, which is append-only.' },
+  { table: 'ssi_assessments', cls: 'APPEND_ONLY', why: 'One look at a wound on a date. A later assessment never rewrites an earlier one — the sequence IS the evidence, and both nodes’ rows are wanted.' },
+  { table: 'ipc_audits', cls: 'APPEND_ONLY', why: 'A counted observation round. Two auditors on two nodes produce two real rounds, and unioning them is right; overwriting one with the other would silently discard a completed audit.' },
   { table: 'pacu_vital_signs', cls: 'QUARANTINE', why: 'Observations on a recovering patient; a differing reading was still taken.' },
   { table: 'pacu_medications', cls: 'QUARANTINE', why: 'What was given in recovery. Overwriting hides an administration.' },
   { table: 'anesthetic_prescriptions', cls: 'QUARANTINE', why: 'Drug orders. An overwritten dose is a patient-safety event.' },

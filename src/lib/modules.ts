@@ -127,6 +127,16 @@ export const MODULES: AppModule[] = [
 
   // Post-operative
   { id: 'pacu', label: 'PACU (Recovery)', paths: ['/dashboard/pacu'], defaultRoles: ['RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Post-Op' },
+
+  // Radiology sits in Pre-Op because that is when the great majority of these
+  // are asked for, but the worklist itself spans the whole case — including the
+  // intra-operative films, which are the ones that cannot wait.
+  { id: 'radiology', label: 'Radiology', paths: ['/dashboard/radiology'], defaultRoles: ['RADIOLOGIST', 'RADIOGRAPHER', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', ...ADMIN_VIEWERS], category: 'Pre-Op' },
+
+  // Infection control is Post-Op because surveillance is: a wound is looked at
+  // on day 3, day 7 and day 30, long after the list has moved on. The audits
+  // live with it because they are what the rate is explained by.
+  { id: 'infection-control', label: 'Infection Control & QA', paths: ['/dashboard/infection-control'], defaultRoles: ['INFECTION_CONTROL_NURSE', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'CSSD_SUPERVISOR', ...ADMIN_VIEWERS], category: 'Post-Op' },
   { id: 'transfers', label: 'Patient Transfers', paths: ['/dashboard/transfers'], defaultRoles: ['PORTER', 'RECOVERY_ROOM_NURSE'], category: 'Post-Op' },
 
   // Lab
