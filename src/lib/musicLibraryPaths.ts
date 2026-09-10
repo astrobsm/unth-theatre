@@ -112,6 +112,43 @@ export function sanitiseFileName(input: string | null | undefined): FileNameResu
   return { ok: true, fileName: `${stem}${extension}`, extension };
 }
 
+export type TrackPathResult =
+  | { ok: true; category: string | null; fileName: string; relative: string }
+  | { ok: false; message: string };
+
+/**
+ * A listing id — "Classical/Bach - Air.mp3" — turned back into its safe parts.
+ *
+ * Shared by every route that acts on an existing track, because they were
+ * about to be three copies of the same rebuild: delete had one, rename needed
+ * one, and a fourth caller would have written a fifth. Two implementations of
+ * a path check drift, and the one that drifts is the one nobody is reading
+ * when it matters.
+ *
+ * The id is REBUILT from sanitised parts rather than trusted. A caller can
+ * send anything, and what comes out of here is used to move and delete files.
+ */
+export function resolveTrackId(id: string | null | undefined): TrackPathResult {
+  const raw = (id ?? '').replace(/\0/g, '').trim();
+  if (!raw) return { ok: false, message: 'Which track?' };
+
+  const segments = raw.split(/[/\\]/).filter(Boolean);
+  const named = sanitiseFileName(segments.pop());
+  if (!named.ok) return { ok: false, message: named.message };
+
+  // Everything before the file name is the category. Joined with a space
+  // before sanitising so a nested path collapses to one folder name rather
+  // than surviving as a path — the library is one level deep by design.
+  const category = segments.length ? sanitiseCategory(segments.join(' ')) : null;
+
+  return {
+    ok: true,
+    category,
+    fileName: named.fileName,
+    relative: category ? `${category}/${named.fileName}` : named.fileName,
+  };
+}
+
 /**
  * Is `candidate` genuinely inside `root`?
  *

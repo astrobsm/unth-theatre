@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { roleAllowed } from '@/lib/roleGroups';
-import { mkdir, writeFile, unlink, stat } from 'fs/promises';
+import { mkdir, writeFile, unlink, stat, rename } from 'fs/promises';
 import path from 'path';
 import {
   sanitiseCategory,
@@ -10,6 +10,7 @@ import {
   isInside,
   MAX_FILE_BYTES,
   AUDIO_EXTENSIONS,
+  resolveTrackId,
 } from '@/lib/musicLibraryPaths';
 
 export const dynamic = 'force-dynamic';
@@ -197,5 +198,109 @@ export async function DELETE(request: NextRequest) {
     }
     console.error('[music/manage] could not remove the track:', error);
     return NextResponse.json({ error: 'The track could not be removed.' }, { status: 500 });
+  }
+}
+
+// PATCH /api/music/library/manage — rename a track, or move it to another category.
+//
+// EDITING A TRACK IS A FILE MOVE. There is no database row to update: the
+// folder is the category and the file name is "Artist - Title", which is what
+// makes dropping a file into a folder work with no migration and no restart.
+// The cost of that choice is paid here — an edit has to rename on disk, and it
+// has to do so without ever writing outside the library.
+//
+// The same two-stage check as upload and delete: rebuild the path from
+// sanitised parts, then re-resolve the finished path and confirm it is still
+// inside the library. If those two disagree there is a bug in the sanitiser
+// and nothing is moved.
+export async function PATCH(request: NextRequest) {
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+
+  if (READ_ONLY_HOST) {
+    return NextResponse.json(
+      { error: 'This site runs on a read-only filesystem. Edit the track on the theatre server.' },
+      { status: 501 }
+    );
+  }
+
+  let body: { id?: string; title?: string; artist?: string; category?: string };
+  try { body = await request.json(); }
+  catch { return NextResponse.json({ error: 'That request could not be read.' }, { status: 400 }); }
+
+  const from = resolveTrackId(body.id);
+  if (!from.ok) return NextResponse.json({ error: from.message }, { status: 400 });
+
+  const fromPath = from.category
+    ? path.resolve(LIBRARY_DIR, from.category, from.fileName)
+    : path.resolve(LIBRARY_DIR, from.fileName);
+
+  if (!isInside(LIBRARY_DIR, fromPath, path.sep)) {
+    console.error('[music/manage] rejected an edit outside the library:', fromPath);
+    return NextResponse.json({ error: 'That track is not in the library.' }, { status: 400 });
+  }
+
+  // The extension is never editable. It describes what the bytes actually are,
+  // and renaming a .flac to .mp3 produces a file the player cannot decode and
+  // a listing that says it should be able to.
+  const extension = path.extname(fromPath).toLowerCase();
+  if (!(AUDIO_EXTENSIONS as readonly string[]).includes(extension)) {
+    return NextResponse.json({ error: 'That is not an audio file.' }, { status: 400 });
+  }
+
+  // Rebuild "Artist - Title" from the two fields, because " - " is exactly
+  // what the listing splits on. A title containing " - " would otherwise
+  // reappear as a different artist next time the folder is read.
+  const title = (body.title ?? '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const artist = (body.artist ?? '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!title) return NextResponse.json({ error: 'A track needs a title.' }, { status: 400 });
+
+  const stem = artist ? `${artist} - ${title}` : title;
+  const named = sanitiseFileName(`${stem}${extension}`);
+  if (!named.ok) return NextResponse.json({ error: named.message }, { status: 400 });
+
+  const toCategory = sanitiseCategory(body.category ?? from.category ?? undefined);
+  const toDir = path.resolve(LIBRARY_DIR, toCategory);
+  const toPath = path.resolve(toDir, named.fileName);
+
+  if (!isInside(LIBRARY_DIR, toPath, path.sep)) {
+    console.error('[music/manage] rejected an edit target outside the library:', toPath);
+    return NextResponse.json({ error: 'That name is not usable.' }, { status: 400 });
+  }
+
+  if (toPath === fromPath) {
+    return NextResponse.json({ ok: true, unchanged: true, track: { fileName: named.fileName, category: toCategory } });
+  }
+
+  // Never overwrite a different track that already has this name.
+  try {
+    await stat(toPath);
+    return NextResponse.json(
+      { error: `"${named.fileName}" is already in ${toCategory}. Choose another name.` },
+      { status: 409 }
+    );
+  } catch { /* free, which is what we want */ }
+
+  try {
+    await mkdir(toDir, { recursive: true });
+    await rename(fromPath, toPath);
+    console.log(`[music/manage] renamed "${from.relative}" to "${toCategory}/${named.fileName}"`);
+    return NextResponse.json({ ok: true, track: { fileName: named.fileName, category: toCategory } });
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      return NextResponse.json({ error: 'That track is no longer there — refresh the list.' }, { status: 404 });
+    }
+    // EXDEV: the library is a symlink to another disk and rename cannot cross
+    // it. Copying instead would silently double the storage for a big library,
+    // so say what happened rather than paper over it.
+    if (error?.code === 'EXDEV') {
+      console.error('[music/manage] cross-device rename refused:', error);
+      return NextResponse.json(
+        { error: 'That category is on a different disk, so the track cannot be moved here.' },
+        { status: 409 }
+      );
+    }
+    console.error('[music/manage] could not rename the track:', error);
+    return NextResponse.json({ error: 'The track could not be renamed.' }, { status: 500 });
   }
 }

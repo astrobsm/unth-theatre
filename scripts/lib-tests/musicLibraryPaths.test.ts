@@ -4,6 +4,7 @@ import {
   sanitiseFileName,
   isInside,
   DEFAULT_CATEGORY,
+  resolveTrackId,
 } from '../../src/lib/musicLibraryPaths';
 
 // This is the only part of the music feature that writes to disk using strings
@@ -148,5 +149,80 @@ describe('isInside', () => {
 
   it('works with a root that already ends in a separator', () => {
     expect(isInside('/srv/library/', '/srv/library/a.mp3')).toBe(true);
+  });
+});
+
+/**
+ * resolveTrackId now guards BOTH deleting a track and renaming one, so it is
+ * the single place a bad id could reach the filesystem. Previously the rebuild
+ * lived inline in the delete handler and rename was about to grow a second
+ * copy of it.
+ */
+describe('resolveTrackId', () => {
+  it('splits an ordinary listing id into category and file', () => {
+    const r = resolveTrackId('Classical/Bach - Air on the G String.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.category).toBe('Classical');
+    expect(r.fileName).toBe('Bach - Air on the G String.mp3');
+    expect(r.relative).toBe('Classical/Bach - Air on the G String.mp3');
+  });
+
+  it('treats a bare file as having no category', () => {
+    const r = resolveTrackId('Loose track.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.category).toBeNull();
+    expect(r.relative).toBe('Loose track.mp3');
+  });
+
+  it('refuses to climb out of the library', () => {
+    // The obvious attack. ".." sanitises away rather than surviving as a path
+    // segment, so the worst case is a file inside the library.
+    const r = resolveTrackId('../../.env.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.relative).not.toContain('..');
+    expect(r.fileName).toBe('.env.mp3'.replace(/^\.+/, ''));
+  });
+
+  it('collapses a nested path to one category, because the library is one deep', () => {
+    const r = resolveTrackId('a/b/c/Track.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.category).not.toContain('/');
+  });
+
+  it('handles a Windows separator, which a Linux server would not split on', () => {
+    const r = resolveTrackId('Classical\\Bach - Air.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fileName).toBe('Bach - Air.mp3');
+  });
+
+  it('refuses a non-audio extension', () => {
+    const r = resolveTrackId('Classical/notes.txt');
+    expect(r.ok).toBe(false);
+  });
+
+  it('refuses an empty or missing id rather than defaulting to the library root', () => {
+    expect(resolveTrackId('').ok).toBe(false);
+    expect(resolveTrackId(null).ok).toBe(false);
+    expect(resolveTrackId(undefined).ok).toBe(false);
+    expect(resolveTrackId('   ').ok).toBe(false);
+  });
+
+  it('strips a NUL byte rather than letting it truncate the path underneath', () => {
+    const r = resolveTrackId('Classical/Bach\u0000.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fileName).not.toContain('\u0000');
+  });
+
+  it('keeps the " - " that separates artist from title', () => {
+    const r = resolveTrackId('Jazz/Miles Davis - So What.mp3');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fileName).toContain(' - ');
   });
 });

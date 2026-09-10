@@ -150,6 +150,15 @@ export const MODULES: AppModule[] = [
   { id: 'oxygen-control', label: 'Oxygen Control', paths: ['/dashboard/oxygen-control', '/dashboard/oxygen-supervisor'], defaultRoles: ['OXYGEN_UNIT_SUPERVISOR'], category: 'Facility' },
   { id: 'works-supervisor', label: 'Works Supervisor', paths: ['/dashboard/works-supervisor'], defaultRoles: ['WORKS_SUPERVISOR', 'PLUMBER', 'POWER_PLANT_OPERATOR'], category: 'Facility' },
 
+  // The page has existed since 27 August and was reachable only by typing the
+  // URL, because it was never registered here — so in practice nobody could
+  // find it and the library stayed empty. Registering costs nothing at load:
+  // the App Router code-splits per route, so this entry is a link and the
+  // page's JavaScript is fetched only when somebody opens it.
+  //
+  // Administrators only. It writes files to the theatre server's disk.
+  { id: 'music-library', label: 'Theatre Music', paths: ['/dashboard/music-library'], defaultRoles: ['ADMIN', 'SYSTEM_ADMINISTRATOR'], category: 'Facility' },
+
   // Alerts & safety
   { id: 'alerts', label: 'Alerts', paths: ['/dashboard/alerts'], defaultRoles: ['*'], category: 'Alerts' },
   { id: 'radio', label: 'Theatre Radio', paths: ['/dashboard/radio'], defaultRoles: ['*'], category: 'Alerts' },

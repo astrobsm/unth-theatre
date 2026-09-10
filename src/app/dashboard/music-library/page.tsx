@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { Music, Upload, Trash2, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { Music, Upload, Trash2, RefreshCw, AlertTriangle, Info, Pencil } from 'lucide-react';
 import { AUDIO_EXTENSIONS, MAX_FILE_BYTES } from '@/lib/musicLibraryPaths';
 
 const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR'];
@@ -108,6 +108,47 @@ export default function MusicLibraryPage() {
     if (failed.length) setError(`Not added:\n${failed.join('\n')}`);
     setBusy(false);
     await load();
+  };
+
+  // ── Editing a track ───────────────────────────────────────────────────
+  //
+  // There is no row to update. The folder IS the category and the file name IS
+  // "Artist - Title", which is what lets somebody drop a file into a folder
+  // with no migration and no restart. So an edit is a rename on disk, and the
+  // server does it under the same path checks as an upload.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ title: '', artist: '', category: '' });
+
+  const beginEdit = (t: Track) => {
+    setEditingId(t.id);
+    setDraft({ title: t.title, artist: t.artist ?? '', category: t.category });
+    setError(null); setNotice(null);
+  };
+
+  const saveEdit = async (t: Track) => {
+    if (!draft.title.trim()) { setError('A track needs a title.'); return; }
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const r = await fetch('/api/music/library/manage', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: t.id,
+          title: draft.title.trim(),
+          artist: draft.artist.trim(),
+          category: draft.category.trim() || t.category,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(d.error ?? 'The track could not be renamed.'); return; }
+      setNotice(d.unchanged ? 'Nothing to change.' : `Saved "${draft.title.trim()}".`);
+      setEditingId(null);
+    } catch {
+      setError('The track could not be renamed.');
+    } finally {
+      setBusy(false);
+      await load();
+    }
   };
 
   const remove = async (track: Track) => {
@@ -263,6 +304,13 @@ export default function MusicLibraryPage() {
           </h2>
         </div>
 
+        {/* Existing folders, offered as suggestions when re-categorising. A
+            free-text field with a datalist rather than a dropdown: moving a
+            track into a NEW category has to stay possible. */}
+        <datalist id="music-categories">
+          {grouped.map(([cat]) => <option key={cat} value={cat} />)}
+        </datalist>
+
         {loading ? (
           <p className="text-sm text-gray-500">Reading the library…</p>
         ) : tracks.length === 0 ? (
@@ -280,24 +328,91 @@ export default function MusicLibraryPage() {
                 </div>
                 <ul className="divide-y divide-gray-100">
                   {items.map((t) => (
-                    <li key={t.id} className="flex items-center gap-3 px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-gray-900">{t.title}</p>
-                        <p className="truncate text-xs text-gray-500">
-                          {[t.artist, mb(t.sizeBytes)].filter(Boolean).join(' · ')}
-                        </p>
-                      </div>
-                      {/* Listen before deciding it is the wrong track. */}
-                      <audio controls preload="none" src={t.url} className="h-8 w-40 sm:w-56" />
-                      <button
-                        type="button"
-                        onClick={() => remove(t)}
-                        disabled={busy}
-                        aria-label={`Remove ${t.title}`}
-                        className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    <li key={t.id} className="px-3 py-2">
+                      {editingId === t.id ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <label className="text-xs text-gray-600">
+                              Title
+                              <input
+                                className="input-field mt-1"
+                                value={draft.title}
+                                onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                              />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                              Artist
+                              <input
+                                className="input-field mt-1"
+                                value={draft.artist}
+                                onChange={(e) => setDraft((d) => ({ ...d, artist: e.target.value }))}
+                                placeholder="Optional"
+                              />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                              Category
+                              <input
+                                className="input-field mt-1"
+                                value={draft.category}
+                                onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+                                list="music-categories"
+                              />
+                            </label>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Saving renames the file on the server. Changing the category moves it
+                            to that folder, creating the folder if it is new.
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void saveEdit(t)}
+                              disabled={busy}
+                              className="rounded bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-40"
+                            >
+                              {busy ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingId(null); setError(null); }}
+                              className="px-2 py-1.5 text-sm text-gray-600 hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm text-gray-900">{t.title}</p>
+                            <p className="truncate text-xs text-gray-500">
+                              {[t.artist, mb(t.sizeBytes)].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+                          {/* Listen before deciding it is the wrong track.
+                              preload="none" so opening this page downloads no
+                              audio at all — the list is names, not megabytes. */}
+                          <audio controls preload="none" src={t.url} className="h-8 w-40 sm:w-56" />
+                          <button
+                            type="button"
+                            onClick={() => beginEdit(t)}
+                            disabled={busy}
+                            aria-label={`Edit ${t.title}`}
+                            className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => remove(t)}
+                            disabled={busy}
+                            aria-label={`Remove ${t.title}`}
+                            className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
