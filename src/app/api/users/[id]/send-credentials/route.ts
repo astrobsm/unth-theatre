@@ -124,11 +124,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     },
   }).catch((e) => console.error('[users/send-credentials] audit failed:', e));
 
-  const body = credentialMessage({
+  const actorName = actor.fullName || actor.name || null;
+  const message = credentialMessage({
     fullName: user.fullName,
     username: user.username,
     temporaryPassword,
     expiresAt,
+    sentByName: actorName,
   });
 
   const queued = await queueMessage({
@@ -143,8 +145,10 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     templateCode: TEMPLATE_CODE,
     variables: credentialTemplateVariables({
       fullName: user.fullName, username: user.username, temporaryPassword, expiresAt,
+      sentByName: actorName,
     }),
-    body,
+    subject: message.title,
+    body: message.body,
     trigger: 'ACCOUNT_CREDENTIALS',
     // Scoped to the user AND the moment. Scoping to the user alone would make
     // a second, genuinely wanted reset look like a duplicate of the first and
@@ -153,7 +157,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     relatedType: 'user',
     relatedId: user.id,
     createdById: actor.id,
-    createdByName: actor.fullName || actor.name || null,
+    createdByName: actorName,
   });
 
   if (!queued.queued) {

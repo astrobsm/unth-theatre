@@ -71,62 +71,101 @@ describe('the message that reaches the phone', () => {
     username: 'ochinedu',
     temporaryPassword: 'K7RM-4TQX-9FHD',
     expiresAt: new Date('2026-09-15T08:00:00Z'),
+    sentByName: 'Dr Briggs',
   };
+
+  it('returns a title and a body, like every other message the app sends', () => {
+    // The house shape, set by emergencyEscalationMessages and used by the
+    // notifier. A bare string would not carry a title into the queue.
+    const m = credentialMessage(input);
+    expect(typeof m.title).toBe('string');
+    expect(typeof m.body).toBe('string');
+    expect(m.title.length).toBeGreaterThan(0);
+  });
+
+  it('opens by naming the person in full, with no greeting', () => {
+    // House style: "{name}, ..." — not "Hello Ogbu" and not an introduction.
+    const m = credentialMessage(input);
+    expect(m.body.startsWith('Ogbu Chinedu Solomon,')).toBe(true);
+    expect(m.body).not.toMatch(/^hello/i);
+    expect(m.body).not.toMatch(/this is UNTH/i);
+  });
+
+  it('names who sent it', () => {
+    // "A reminder from nobody is easy to ignore" — and a credential from
+    // nobody is indistinguishable from a phishing message.
+    expect(credentialMessage(input).body).toContain('by Dr Briggs');
+  });
+
+  it('still reads properly when the sender is unknown', () => {
+    const m = credentialMessage({ ...input, sentByName: null });
+    expect(m.body).toContain('have been reset.');
+    expect(m.body).not.toContain('by null');
+  });
 
   it('carries the username as well as the password', () => {
     // The complaint is "I have forgotten my username AND my password". A
     // message with only a password leaves half of it unanswered.
     const m = credentialMessage(input);
-    expect(m).toContain('ochinedu');
-    expect(m).toContain('K7RM-4TQX-9FHD');
-  });
-
-  it('greets them by first name only', () => {
-    expect(credentialMessage(input)).toContain('Hello Ogbu');
-    expect(credentialMessage(input)).not.toContain('Solomon');
+    expect(m.body).toContain('ochinedu');
+    expect(m.body).toContain('K7RM-4TQX-9FHD');
   });
 
   it('says the password will have to be changed', () => {
-    expect(credentialMessage(input)).toMatch(/set your own password/i);
+    expect(credentialMessage(input).body).toMatch(/set your own/i);
   });
 
-  it('says when it expires', () => {
-    expect(credentialMessage(input)).toMatch(/expires/i);
+  it('says when it stops working, in the format the app uses elsewhere', () => {
+    // "15 Sep, 09:00" — the same en-GB day/short-month/24h shape as the
+    // escalation messages, so two messages on one phone read alike.
+    expect(credentialMessage(input).body).toMatch(/\d{2} \w{3}/);
   });
 
   it('tells them what to do if they did not ask for it', () => {
-    // A credential arriving unasked is either a mistake or an attack, and the
-    // person who can tell the difference is not the recipient.
-    expect(credentialMessage(input)).toMatch(/did not ask for this/i);
+    expect(credentialMessage(input).body).toMatch(/did not ask for this/i);
   });
 
   it('contains no link', () => {
-    // A message with credentials AND a link is the exact shape of a phishing
-    // message. Staff should not be trained to expect one from the hospital.
-    const m = credentialMessage(input);
-    expect(m).not.toMatch(/https?:\/\//);
+    // Credentials AND a link is the exact shape of a phishing message. Staff
+    // should not be trained to expect one from the hospital.
+    expect(credentialMessage(input).body).not.toMatch(/https?:\/\//);
   });
 
-  it('copes with a one-word name', () => {
-    expect(credentialMessage({ ...input, fullName: 'Adaeze' })).toContain('Hello Adaeze');
-  });
-
-  it('copes with an empty name rather than greeting nobody', () => {
-    expect(credentialMessage({ ...input, fullName: '   ' })).toContain('Hello there');
+  it('copes with an empty name rather than addressing nobody', () => {
+    expect(credentialMessage({ ...input, fullName: '   ' }).body).toMatch(/^You,/);
   });
 });
 
 describe('template variables', () => {
+  const input = {
+    fullName: 'Ngozi Eze',
+    username: 'neze',
+    temporaryPassword: 'ACDE-FGHJ-KLMN',
+    expiresAt: new Date('2026-09-15T08:00:00Z'),
+    sentByName: 'Dr Briggs',
+  };
+
   it('carry the same facts as the free-text message', () => {
-    const v = credentialTemplateVariables({
-      fullName: 'Ngozi Eze',
-      username: 'neze',
-      temporaryPassword: 'ACDE-FGHJ-KLMN',
-      expiresAt: new Date('2026-09-15T08:00:00Z'),
-    });
-    expect(v.name).toBe('Ngozi');
+    const v = credentialTemplateVariables(input);
+    expect(v.name).toBe('Ngozi Eze');
     expect(v.username).toBe('neze');
     expect(v.password).toBe('ACDE-FGHJ-KLMN');
     expect(v.expires).toBeTruthy();
+    expect(v.sentBy).toBe('Dr Briggs');
+  });
+
+  it('address people by full name, as the rest of the app does', () => {
+    expect(credentialTemplateVariables(input).name).not.toBe('Ngozi');
+  });
+
+  it('never leave a variable empty, which would render as a gap in the template', () => {
+    const v = credentialTemplateVariables({ ...input, fullName: '  ', sentByName: null });
+    expect(v.name).toBeTruthy();
+    expect(v.sentBy).toBeTruthy();
+  });
+
+  it('format the expiry the same way the body does', () => {
+    const v = credentialTemplateVariables(input);
+    expect(credentialMessage(input).body).toContain(v.expires);
   });
 });

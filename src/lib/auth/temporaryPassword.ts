@@ -67,52 +67,67 @@ export function temporaryPasswordExpiry(from: Date = new Date()): Date {
 }
 
 /**
- * The message a member of staff receives.
+ * Same shape as every other message the app sends.
  *
- * Deliberately says the username as well as the password. The complaint this
- * answers is "I have forgotten my username AND my password", and a message
- * carrying only a password leaves half of it unanswered — they would still
- * have to ring somebody to ask who they are.
+ * The house convention, set by emergencyEscalationMessages and
+ * bookerChaseMessage: a builder returns { title, body }; the body opens by
+ * naming the person in full and stating their relationship to the thing; there
+ * is no greeting and no "this is UNTH Theatre" preamble, because a message that
+ * introduces itself reads like a circular; and it closes with one specific ask
+ * rather than a sign-off.
  *
- * It does NOT include a link. A message containing credentials and a link is
- * the exact shape of a phishing message, and staff should not be trained to
- * expect one from the hospital.
+ * WHO SENT IT is named, for the reason bookerChaseMessage gives — "a reminder
+ * from nobody is easy to ignore" — and for a second reason that matters more
+ * here: a credential arriving from a named colleague can be checked, and one
+ * arriving from nowhere is indistinguishable from a phishing message.
+ *
+ * The username is sent as well as the password. The complaint this answers is
+ * "I have forgotten my username AND my password", and a message carrying only a
+ * password leaves half of it unanswered.
+ *
+ * No link, for the same reason: credentials plus a link is the exact shape of
+ * the attack, and staff should not be trained to expect one from the hospital.
  */
+const when = (d: Date) =>
+  d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
 export function credentialMessage(input: {
   fullName: string;
   username: string;
   temporaryPassword: string;
   expiresAt: Date;
-}): string {
-  const when = input.expiresAt.toLocaleString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
-  const firstName = input.fullName.trim().split(/\s+/)[0] || 'there';
-  return [
-    `Hello ${firstName}, this is UNTH Theatre (ORM).`,
-    '',
-    `Username: ${input.username}`,
-    `Temporary password: ${input.temporaryPassword}`,
-    '',
-    `It expires ${when} and you will be asked to set your own password as soon as you sign in.`,
-    '',
-    'If you did not ask for this, tell the theatre manager — somebody has reset your account.',
-  ].join('\n');
+  /** The administrator who sent it, when known. */
+  sentByName?: string | null;
+}): { title: string; body: string } {
+  const name = input.fullName.trim() || 'You';
+  const by = input.sentByName?.trim();
+  return {
+    title: 'Your ORM sign-in details',
+    body:
+      `${name}, your ORM sign-in details have been reset` +
+      `${by ? ` by ${by}` : ''}.\n\n` +
+      `Username: ${input.username}\n` +
+      `Temporary password: ${input.temporaryPassword}\n\n` +
+      `This password stops working at ${when(input.expiresAt)}, and you will be asked ` +
+      `to set your own as soon as you sign in.\n\n` +
+      `If you did not ask for this, tell the theatre manager — somebody has reset your account.`,
+  };
 }
 
-/** The same, as template variables, for the approved WhatsApp template path. */
+/** The same facts as template variables, for the approved WhatsApp template. */
 export function credentialTemplateVariables(input: {
   fullName: string;
   username: string;
   temporaryPassword: string;
   expiresAt: Date;
+  sentByName?: string | null;
 }): Record<string, string> {
   return {
-    name: input.fullName.trim().split(/\s+/)[0] || 'there',
+    // Full name, as the rest of the app addresses people.
+    name: input.fullName.trim() || 'Colleague',
     username: input.username,
     password: input.temporaryPassword,
-    expires: input.expiresAt.toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-    }),
+    expires: when(input.expiresAt),
+    sentBy: input.sentByName?.trim() || 'the theatre office',
   };
 }
