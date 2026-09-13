@@ -73,7 +73,15 @@ export type CredentialFailure =
   | 'NOT_FOUND'
   | 'NOT_APPROVED'
   | 'AMBIGUOUS_PHONE'    // several approved accounts share this number
-  | 'BAD_PASSWORD';
+  | 'BAD_PASSWORD'
+  /**
+   * The password is RIGHT, but it was a temporary one and its time has run out.
+   * Distinguished from BAD_PASSWORD deliberately: telling somebody who typed
+   * the correct password that it was incorrect sends them hunting for a typo
+   * that is not there, and they ring the office instead of asking for a new
+   * one.
+   */
+  | 'TEMP_PASSWORD_EXPIRED';
 
 export interface VerifiedStaff {
   id: string;
@@ -103,11 +111,13 @@ export function failureMessage(reason: CredentialFailure): string {
       return 'That phone number is registered to more than one account. Sign in with your username instead, and ask an administrator to merge the duplicates.';
     case 'BAD_PASSWORD':
       return 'Incorrect password.';
+    case 'TEMP_PASSWORD_EXPIRED':
+      return 'That temporary password has expired. Ask an administrator to send you a new one.';
   }
 }
 
 /** The minimum the lookup needs; keeps this module free of a Prisma import. */
-interface UserRow {
+export interface UserRow {
   id: string;
   username: string;
   fullName: string;
@@ -116,6 +126,10 @@ interface UserRow {
   password: string;
   status: string;
   phoneNumber: string | null;
+  /** Set when the current password was issued by an administrator. */
+  mustChangePassword?: boolean | null;
+  /** When a temporary password stops working. Null for an ordinary one. */
+  resetTokenExpiry?: Date | string | null;
 }
 
 export interface CredentialDeps {
@@ -139,7 +153,9 @@ const MAX_PHONE_CANDIDATES = 5;
 export async function verifyStaffCredentials(
   deps: CredentialDeps,
   identifier: string | null | undefined,
-  password: string | null | undefined
+  password: string | null | undefined,
+  /** Injected so the expiry rule can be tested without waiting two days. */
+  now: Date = new Date()
 ): Promise<CredentialResult> {
   const id = (identifier ?? '').trim();
   if (!id || !password) return { ok: false, reason: 'MISSING' };
@@ -157,7 +173,7 @@ export async function verifyStaffCredentials(
     // One approved account behind the number is the ordinary case, even when
     // unapproved duplicates also carry it.
     if (approved.length === 1) {
-      return finish(deps, approved[0], password);
+      return finish(deps, approved[0], password, now);
     }
 
     // Several approved accounts share it. These are duplicate registrations of
@@ -177,16 +193,34 @@ export async function verifyStaffCredentials(
   const user = await deps.findByUsername(id);
   if (!user) return { ok: false, reason: 'NOT_FOUND' };
   if (user.status !== 'APPROVED') return { ok: false, reason: 'NOT_APPROVED' };
-  return finish(deps, user, password);
+  return finish(deps, user, password, now);
 }
 
 async function finish(
   deps: CredentialDeps,
   user: UserRow,
-  password: string
+  password: string,
+  now: Date = new Date()
 ): Promise<CredentialResult> {
   const valid = await deps.comparePassword(password, user.password);
   if (!valid) return { ok: false, reason: 'BAD_PASSWORD' };
+
+  // A temporary password has a life. Checked AFTER the comparison, so an
+  // expired credential cannot be used to discover whether an account exists —
+  // a wrong password on an expired account still answers BAD_PASSWORD.
+  //
+  // Only when mustChangePassword is set: resetTokenExpiry is also written by
+  // the reset-link flow, and an ordinary password must not stop working
+  // because somebody once requested a link and never used it.
+  if (user.mustChangePassword && user.resetTokenExpiry) {
+    const expiry = user.resetTokenExpiry instanceof Date
+      ? user.resetTokenExpiry
+      : new Date(user.resetTokenExpiry);
+    if (!Number.isNaN(expiry.getTime()) && expiry.getTime() <= now.getTime()) {
+      return { ok: false, reason: 'TEMP_PASSWORD_EXPIRED' };
+    }
+  }
+
   return { ok: true, user: publicFields(user) };
 }
 

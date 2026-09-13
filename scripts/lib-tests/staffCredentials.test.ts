@@ -192,3 +192,70 @@ describe('what the person is told', () => {
     expect(failureMessage('NOT_APPROVED').toLowerCase()).not.toContain('password');
   });
 });
+
+/**
+ * A temporary password sent on WhatsApp says "it expires <when>". That claim
+ * has to be true, or it is just words in a message.
+ */
+describe('a temporary password that has run out', () => {
+  const now = new Date('2026-09-15T12:00:00Z');
+
+  const deps = (over: Partial<UserRow> = {}) => ({
+    findByUsername: async () => ({
+      id: 'u1', username: 'neze', fullName: 'Ngozi Eze', role: 'SCRUB_NURSE',
+      email: null, password: 'hashed', status: 'APPROVED', phoneNumber: '08031234567',
+      mustChangePassword: true,
+      resetTokenExpiry: new Date('2026-09-14T12:00:00Z'),
+      ...over,
+    }),
+    findByPhoneSuffix: async () => [],
+    comparePassword: async (plain: string) => plain === 'right',
+  });
+
+  it('is refused even though the password is correct', async () => {
+    const r = await verifyStaffCredentials(deps() as never, 'neze', 'right', now);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('TEMP_PASSWORD_EXPIRED');
+  });
+
+  it('is told apart from a wrong password', async () => {
+    // Saying "incorrect password" to somebody who typed the right one sends
+    // them hunting for a typo that is not there.
+    const r = await verifyStaffCredentials(deps() as never, 'neze', 'wrong', now);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('BAD_PASSWORD');
+  });
+
+  it('still works before it expires', async () => {
+    const r = await verifyStaffCredentials(
+      deps({ resetTokenExpiry: new Date('2026-09-16T12:00:00Z') }) as never, 'neze', 'right', now);
+    expect(r.ok).toBe(true);
+  });
+
+  it('does not expire an ordinary password that merely has a stale reset link', async () => {
+    // resetTokenExpiry is also written by the reset-LINK flow. An ordinary
+    // password must not stop working because somebody once asked for a link
+    // and never used it.
+    const r = await verifyStaffCredentials(
+      deps({ mustChangePassword: false }) as never, 'neze', 'right', now);
+    expect(r.ok).toBe(true);
+  });
+
+  it('does not expire a temporary password with no expiry recorded', async () => {
+    const r = await verifyStaffCredentials(
+      deps({ resetTokenExpiry: null }) as never, 'neze', 'right', now);
+    expect(r.ok).toBe(true);
+  });
+
+  it('ignores an unparseable expiry rather than locking the account out', async () => {
+    const r = await verifyStaffCredentials(
+      deps({ resetTokenExpiry: 'not a date' }) as never, 'neze', 'right', now);
+    expect(r.ok).toBe(true);
+  });
+
+  it('has wording that tells them what to do next', () => {
+    expect(failureMessage('TEMP_PASSWORD_EXPIRED')).toMatch(/ask an administrator/i);
+  });
+});

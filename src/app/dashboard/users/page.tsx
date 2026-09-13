@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
 import { validateUsername, USERNAME_HELP } from '@/lib/usernameRules';
-import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil, MessageCircle } from 'lucide-react';
 
 const USER_ROLES = [
   'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
@@ -191,6 +191,61 @@ export default function UsersPage() {
     } catch (error) {
       console.error('Failed to reject user:', error);
       alert('Failed to reject user');
+    }
+  };
+
+  // ── Sending somebody their login details ────────────────────────────────
+  //
+  // Confirmed first, because it CHANGES THEIR PASSWORD. Anyone already signed
+  // in stays signed in, but the password they have written down stops working,
+  // and an administrator clicking the wrong row should find that out before it
+  // happens rather than afterwards.
+  const [sendingCredsTo, setSendingCredsTo] = useState<string | null>(null);
+
+  const sendCredentials = async (user: { id: string; fullName: string; username: string; phoneNumber?: string | null }) => {
+    if (!user.phoneNumber) {
+      alert(`${user.fullName} has no phone number on file, so there is nowhere to send this.`);
+      return;
+    }
+    const ok = window.confirm(
+      `Send ${user.fullName} their username and a NEW temporary password on WhatsApp?\n\n`
+      + `To: ${user.phoneNumber}\n\n`
+      + 'Their current password stops working immediately, and they will be asked to '
+      + 'set a new one as soon as they sign in.'
+    );
+    if (!ok) return;
+
+    setSendingCredsTo(user.id);
+    try {
+      const r = await fetch(`/api/users/${user.id}/send-credentials`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+
+      if (r.ok) {
+        alert(
+          `Sent to ${d.sentTo}.\n\nUsername: ${d.username}\n`
+          + `The temporary password expires in ${d.expiresInHours} hours.`
+        );
+        return;
+      }
+
+      // The one case where the server hands the password back: it changed the
+      // password and then could not send it. Saying nothing here would leave
+      // somebody locked out of an account whose password nobody knows.
+      if (d.passwordChanged && d.temporaryPassword) {
+        window.prompt(
+          `${d.error}\n\nUsername: ${d.username ?? user.username}\n`
+          + 'Copy this temporary password now — it will not be shown again:',
+          d.temporaryPassword
+        );
+        return;
+      }
+
+      alert(d.error ?? 'Those details could not be sent.');
+    } catch {
+      alert('Could not reach the server. Nothing was sent.');
+    } finally {
+      setSendingCredsTo(null);
+      fetchUsers();
     }
   };
 
@@ -1207,6 +1262,21 @@ export default function UsersPage() {
                       title="Reset user password"
                     >
                       <KeyRound className="w-5 h-5 inline" />
+                    </button>
+                    {/* The answer to "I have forgotten my username AND my
+                        password": both go to their WhatsApp, and the temporary
+                        one has to be changed on the way in. */}
+                    <button
+                      onClick={() => void sendCredentials(user)}
+                      disabled={sendingCredsTo === user.id || !user.phoneNumber}
+                      className="text-green-600 hover:text-green-900 disabled:opacity-30"
+                      title={
+                        user.phoneNumber
+                          ? 'Send username and a temporary password on WhatsApp'
+                          : 'No phone number on file, so there is nowhere to send this'
+                      }
+                    >
+                      <MessageCircle className="w-5 h-5 inline" />
                     </button>
                   </td>
                 </tr>
