@@ -251,6 +251,20 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'surgical_count_checklists', cls: 'QUARANTINE', why: 'The swab and instrument count. A count is a patient-safety record and must never be silently merged.' },
   { table: 'surgical_count_events', cls: 'APPEND_ONLY', why: 'Each count as it was taken.' },
   { table: 'intraoperative_records', cls: 'QUARANTINE', why: 'What was done to the patient. Two differing accounts need a person.' },
+  // The structured operation note and its children. QUARANTINE for the same
+  // reason as intraoperative_records above: this is the surgeon's account of
+  // what was done and what is to happen next, and the loser of an automatic
+  // resolution would be a signed clinical instruction discarded silently.
+  //
+  // The children are quarantined rather than APPEND_ONLY even though they read
+  // like event streams. They are not: a drain row is EDITED while the note is a
+  // draft, so two nodes can hold genuinely different versions of one row, which
+  // is exactly the case APPEND_ONLY assumes away.
+  { table: 'post_op_notes', cls: 'QUARANTINE', why: 'The operation note. A signed clinical instruction is never overwritten by a peer.' },
+  { table: 'post_op_prep_steps', cls: 'QUARANTINE', why: 'The skin preparation sequence, edited while the note is a draft.' },
+  { table: 'post_op_drains', cls: 'QUARANTINE', why: 'Each drain and its removal instruction.' },
+  { table: 'post_op_specimens', cls: 'QUARANTINE', why: 'What was sent to the laboratory, and where.' },
+  { table: 'post_op_held_medications', cls: 'QUARANTINE', why: 'A drug stopped for theatre and the instruction to restart it.' },
   { table: 'anesthesia_monitoring_records', cls: 'QUARANTINE', why: 'The anaesthetic record for one case.' },
   { table: 'anesthesia_vital_signs', cls: 'APPEND_ONLY', why: 'An observation taken at a time. A differing reading was still taken.' },
   { table: 'anesthesia_medication_records', cls: 'QUARANTINE', why: 'Drugs given under anaesthesia. An overwritten dose is a patient-safety event.' },

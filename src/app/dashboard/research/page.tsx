@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useEffect, useCallback } from 'react';
 import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
@@ -8,6 +10,7 @@ import {
   FlaskConical, Filter, RefreshCw, Download, BarChart3, Activity,
   Users, AlertTriangle, Layers, Database, Sigma, Play, Plus, Trash2,
   FileSpreadsheet, FileText, ClipboardList,
+  Stethoscope,
 } from 'lucide-react';
 import { exportToExcel, exportToCSV, exportMultiSheetExcel } from '@/lib/exportUtils';
 
@@ -375,6 +378,24 @@ export default function ResearchPage() {
           <p className="text-sm text-gray-500">Volume, utilization, complexity &amp; statistical analysis of theatre activity</p>
         </div>
       </div>
+
+      {/* What this page counts is theatre ACTIVITY — cases, time, utilisation.
+          What surgeons actually did inside those cases is a different question
+          and a different page. The link sits here because this is where
+          somebody comes looking for it. */}
+      <Link
+        href="/dashboard/research/surgical-practice"
+        className="mb-6 flex items-start gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 transition-colors hover:bg-indigo-100"
+      >
+        <Stethoscope className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+        <span className="text-sm">
+          <span className="font-semibold text-indigo-900">Surgical Practice Review</span>
+          <span className="ml-2 text-indigo-800">
+            Skin preparation, haemostasis, closure, post-operative orders and documentation
+            completeness, counted from signed operation notes.
+          </span>
+        </span>
+      </Link>
 
       {!canView && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">Please sign in to view research analytics.</div>

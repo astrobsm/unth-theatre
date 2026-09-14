@@ -1384,6 +1384,10 @@ model Surgery {
   /// Reports of what stopped this case starting on time. See CaseBlockerReport.
   blockerReports CaseBlockerReport[]
 
+  /// Structured operation notes. Many, because an addendum is a new note
+  /// rather than an edit of a signed one.
+  postOpNotes PostOpNote[] @relation("SurgeryPostOpNotes")
+
   /// "What is on the list for this date" — asked by case readiness, the
   /// anaesthetist board, the theatre lists and every dashboard. It was a
   /// sequential scan reading all 606 rows to find eleven; cheap today, linear
@@ -11928,4 +11932,405 @@ model IpcAudit {
   @@index([auditType, auditDate])
   @@index([auditDate])
   @@map("ipc_audits")
+}
+
+// ============================================================================
+// STRUCTURED POST-OPERATIVE NOTE
+// ----------------------------------------------------------------------------
+// What was done to the patient, and what is to happen to them next, in a form
+// that can be read by a nurse at 2 a.m. and counted by an audit committee in
+// March.
+//
+// WHAT WAS HERE BEFORE. Post-operative notes were audit_logs rows with
+// action = 'POST_OP_NOTE' and a JSON blob holding one free-text field, plus the
+// same text appended to surgeries.remarks. Those rows are still written and
+// still read — the PACU discharge PDF reads them, and every note recorded
+// before this migration exists only as one of them. Nothing here replaces
+// them; the feed the page renders merges both, and lib/postop/noteFeed.ts is
+// the one place that knows there are two shapes.
+//
+// WHY COLUMNS AND NOT ONE JSON DOCUMENT. Because the point of the exercise is
+// the questions afterwards: which preparation solutions this hospital actually
+// uses, whether a shaved patient does worse than a clipped one, how often a
+// drain goes in without a removal instruction. Every one of those is a GROUP BY
+// over a column. A JSON document answers them only through a scan and a cast,
+// and in practice therefore does not get asked.
+//
+// WHY SOME FIELDS ARE STILL JSON. `extras` holds the fields a PROCEDURE
+// TEMPLATE adds — flap pedicle, graft mesh ratio, tourniquet position. Giving
+// each of those a column would make every new template a migration on two
+// databases, which is exactly what the requirement to add templates freely
+// rules out. They are indexed with GIN, so extras->>'flapType' is still a real
+// query. A field asked of EVERY operation has earned a column and should be
+// promoted into the core with a migration.
+//
+// MULTI-SELECTS ARE text[]. A patient repositioned mid-case was in two
+// positions; an operation closed with staples AND a tissue adhesive used both.
+// Storing the first and discarding the rest is the commonest way a structured
+// form ends up less accurate than the paragraph it replaced.
+// ============================================================================
+
+enum PostOpNoteStatus {
+  /// Being written. Visible only to its author, and never on the nursing sheet.
+  DRAFT
+  /// Signed by the surgeon. This is the record, and it is not edited again.
+  SIGNED
+}
+
+enum PostOpNoteType {
+  /// The operation note itself. One per operation, normally.
+  OPERATION_NOTE
+  /// Added later, without altering what was signed before it.
+  ADDENDUM
+}
+
+model PostOpNote {
+  id        String @id @default(uuid())
+  surgeryId String
+  /// Denormalised so surveillance and audit queries need no join. The patient
+  /// of a surgery never changes, so this cannot drift.
+  patientId String
+
+  noteType PostOpNoteType   @default(OPERATION_NOTE)
+  status   PostOpNoteStatus @default(DRAFT)
+
+  /// Which template drove the form, and which version of it. Stored so a note
+  /// written today still renders against the template it was written against
+  /// after that template has moved on. 'CORE' means no procedure extension.
+  templateKey     String @default("CORE")
+  templateVersion Int    @default(1)
+
+  // ── Operation facts, as verified by the surgeon writing the note ─────────
+  // Snapshots, not a second source of truth. The surgery row remains
+  // authoritative; these record what the surgeon confirmed at signing, which
+  // is the thing a court asks about. A correction made here is applied to the
+  // surgery too and written to the audit log.
+  procedureName      String?
+  procedurePerformed String?
+  operativeDiagnosis String?
+  postOpDiagnosis    String?
+
+  // ── Positioning ─────────────────────────────────────────────────────────
+  positions           String[] @default([])
+  positionOther       String?
+  positionAtInduction String?
+  positionAtClosure   String?
+  positioningNotes    String?
+
+  // ── Hair removal ────────────────────────────────────────────────────────
+  /// NOT_RECORDED | NOT_PERFORMED | PERFORMED. Three states deliberately: a
+  /// patient nobody shaved and a patient nobody wrote up are different facts.
+  hairRemoval       String    @default("NOT_RECORDED")
+  hairRemovalMethod String?
+  hairRemovalOther  String?
+  hairRemovalArea   String?
+  /// When, not just whether. The interval between hair removal and incision is
+  /// one of the few things about preparation that the literature is firm on,
+  /// and it cannot be studied here without the timestamp.
+  hairRemovalAt     DateTime?
+  hairRemovalBy     String?
+
+  // ── Incision ────────────────────────────────────────────────────────────
+  incisionTypes    String[] @default([])
+  incisionOther    String?
+  incisionSite     String?
+  incisionLengthCm Float?
+
+  // ── Haemostasis ─────────────────────────────────────────────────────────
+  haemostasisMethods      String[] @default([])
+  haemostasisOther        String?
+  estimatedBloodLossMl    Int?
+  bleedingSource          String?
+  haemostasisSatisfactory Boolean?
+  tourniquetMinutes       Int?
+
+  // ── Findings. The surgeon's own words, and deliberately unstructured. ────
+  findings String @db.Text
+
+  // ── Structured operative detail ─────────────────────────────────────────
+  /// CLEAN | CLEAN_CONTAMINATED | CONTAMINATED | DIRTY. The same values as
+  /// SsiSurveillance.woundClass, so a note can open a surveillance record
+  /// without translation.
+  woundClass            String?
+  tissueQuality         String?
+  perfusion             String?
+  contaminationPresent  Boolean?
+  pusPresent            Boolean?
+  necrosisPresent       Boolean?
+  foreignBodyFound      Boolean?
+  adhesionsPresent      Boolean?
+  boneExposed           Boolean?
+  tendonExposed         Boolean?
+  implantPlaced         Boolean?
+  implantDetails        String?
+  nerveStatus           String?
+  vascularStatus        String?
+  fluidsGivenMl         Int?
+  urineOutputMl         Int?
+  complicationOccurred  Boolean?
+  complicationDetails   String?
+  procedureChanged      Boolean?
+  procedureChangeReason String?
+
+  // ── Closure and dressing ────────────────────────────────────────────────
+  closureMethods      String[] @default([])
+  closureOther        String?
+  sutureMaterial      String?
+  sutureMaterialOther String?
+  sutureSize          String?
+  closureNotes        String?
+
+  dressingTypes  String[] @default([])
+  dressingOther  String?
+  dressingLayers Int?
+  dressingNotes  String?
+
+  // ── Post-operative orders ───────────────────────────────────────────────
+  wardPosition             String?
+  wardPositionOther        String?
+  headElevationDegrees     Int?
+  positionRestrictions     String[] @default([])
+  positionRestrictionOther String?
+
+  feedingTiming String?
+  feedingAt     DateTime?
+  feedingOther  String?
+  dietType      String?
+  dietOther     String?
+  feedingNotes  String?
+
+  mobilisation                 String?
+  mobilisationOther            String?
+  mobilisationRestrictions     String[] @default([])
+  mobilisationRestrictionOther String?
+
+  oralMedicationTiming String?
+  oralMedicationAt     DateTime?
+  oralMedicationOther  String?
+
+  /// NOT_INDICATED | MECHANICAL | PHARMACOLOGICAL | BOTH | DEFERRED | OTHER.
+  /// Never a boolean: "no prophylaxis" and "nobody decided" must not collapse
+  /// into one value, because only one of them is a defensible entry in a chart.
+  vtePlan            String?
+  vteMechanical      String[]  @default([])
+  vteMechanicalOther String?
+  vteDrug            String?
+  vteDose            String?
+  vteRoute           String?
+  vteFrequency       String?
+  vteStartAt         DateTime?
+  vteDuration        String?
+  vteWithheldReason  String?
+
+  antibioticPlan      String?
+  antibioticDrug      String?
+  antibioticDose      String?
+  antibioticRoute     String?
+  antibioticFrequency String?
+  antibioticDuration  String?
+  antibioticReviewOn  DateTime?
+
+  analgesiaPlan          String?
+  analgesiaOther         String?
+  painAssessmentRequired Boolean?
+  analgesiaNotes         String?
+
+  fluidPlan  String?
+  fluidType  String?
+  fluidRate  String?
+  fluidNotes String?
+
+  catheterPresent    Boolean?
+  catheterType       String?
+  catheterIndication String?
+  catheterMonitoring String?
+  catheterAction     String?
+  catheterRemovalAt  DateTime?
+
+  woundMonitoring       String[]  @default([])
+  woundMonitoringOther  String?
+  firstDressingChangeAt DateTime?
+  woundMonitoringNotes  String?
+
+  observations         String[] @default([])
+  observationsOther    String?
+  observationFrequency String?
+
+  escalationTriggers String[] @default([])
+  escalationOther    String?
+  escalationNotes    String?
+  escalationContact  String?
+
+  reviewTiming String?
+  reviewAt     DateTime?
+  reviewOther  String?
+  reviewNotes  String?
+
+  /// Fields contributed by a procedure template. See the header: a column here
+  /// would make every new template a migration. GIN-indexed in the migration.
+  extras Json?
+
+  /// Intra-operative drawings and photographs, as data URLs. Carried over from
+  /// the free-text note, which already allowed two.
+  images String[] @default([])
+
+  // ── Signature ───────────────────────────────────────────────────────────
+  // A note is a claim by a named clinician. DRAFT is private to its author;
+  // SIGNED is the record and is not edited — a change after signing is an
+  // ADDENDUM, which is why there is no `editedAt`.
+  signedAt     DateTime?
+  signedById   String?
+  signedByName String?
+
+  /// Who the note says operated. Free text as well as an id, because a visiting
+  /// surgeon has no account and the name is still the truthful answer.
+  surgeonId   String?
+  surgeonName String?
+
+  createdById   String
+  createdByName String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  surgery         Surgery                @relation("SurgeryPostOpNotes", fields: [surgeryId], references: [id], onDelete: Cascade)
+  prepSteps       PostOpPrepStep[]
+  drains          PostOpDrain[]
+  specimens       PostOpSpecimen[]
+  heldMedications PostOpHeldMedication[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([surgeryId, createdAt])
+  @@index([patientId])
+  @@index([status, signedAt])
+  /// The research indexes. Each one is a question somebody has asked on paper
+  /// and could not answer: which preparation practice, which wound classes,
+  /// who operates how.
+  @@index([templateKey])
+  @@index([woundClass])
+  @@index([surgeonId, signedAt])
+  @@map("post_op_notes")
+}
+
+/// One step of the skin preparation, in the order it was carried out.
+///
+/// A ROW PER STEP, not a sentence. "Cleaned with cetrimide, then savlon, dried
+/// and prepped with povidone iodine" is unanalysable; four rows carrying a
+/// sequence number and an agent answer how many cleansing steps a theatre does,
+/// what it uses at each, and whether that has changed since last year.
+model PostOpPrepStep {
+  id     String @id @default(uuid())
+  noteId String
+
+  /// 1-based, in the order performed. The sequence IS the data.
+  sequence     Int
+  /// CLEANSE | DRY | FINAL_PREP | DRAPE
+  kind         String
+  /// The solution, for a cleansing or final preparation step.
+  agent        String?
+  /// The method, for a drying step.
+  dryingMethod String?
+  agentOther   String?
+  site         String?
+  notes        String?
+
+  createdAt DateTime @default(now())
+
+  note PostOpNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([noteId, sequence])
+  /// "How often is X used, and at which point in the sequence" — the question
+  /// the whole table exists for.
+  @@index([agent])
+  @@map("post_op_prep_steps")
+}
+
+/// One drain. A patient with two drains has two rows, each with its own
+/// removal instruction, because that is how they are actually removed.
+model PostOpDrain {
+  id     String @id @default(uuid())
+  noteId String
+
+  drainType       String
+  drainTypeOther  String?
+  site            String
+  sizeFr          String?
+  suction         String?
+  fixation        String?
+  monitoring      String?
+  removalCriteria String?
+
+  createdAt DateTime @default(now())
+
+  note PostOpNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([noteId])
+  @@map("post_op_drains")
+}
+
+/// One specimen sent. Kept here rather than in IntraOperativeRecord, whose
+/// specimenDetails is a single text field that nobody can query — this is the
+/// structured version, and the two are reconciled on the case view.
+model PostOpSpecimen {
+  id     String @id @default(uuid())
+  noteId String
+
+  label            String
+  description      String
+  site             String?
+  destination      String
+  destinationOther String?
+
+  createdAt DateTime @default(now())
+
+  note PostOpNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([noteId])
+  @@index([destination])
+  @@map("post_op_specimens")
+}
+
+/// A medication stopped for theatre, and what is to happen to it now.
+///
+/// A drug held before an operation and never restarted is one of the
+/// commonest avoidable harms in a surgical ward, and it happens because the
+/// instruction to restart it lives in nobody's handwriting. Each row here is
+/// required to carry one.
+model PostOpHeldMedication {
+  id     String @id @default(uuid())
+  noteId String
+
+  drugName           String
+  previousDose       String?
+  reasonHeld         String?
+  /// IMMEDIATELY | WHEN_ORAL_ESTABLISHED | AFTER_REVIEW | AT_TIME |
+  /// CONTINUE_WITHHOLDING | OTHER
+  restartInstruction String
+  restartAt          DateTime?
+  restartOther       String?
+
+  createdAt DateTime @default(now())
+
+  note PostOpNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([noteId])
+  @@map("post_op_held_medications")
 }

@@ -2,11 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { mergeFeed } from '@/lib/postop/noteFeed';
+import { NOTE_INCLUDE } from '@/lib/postop/service';
 
 export const dynamic = 'force-dynamic';
 
 const ALLOWED = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER'];
 
+/**
+ * Every operation note for a case, oldest shape and newest alike.
+ *
+ * There are two ways a note can be stored here. Before the structured form,
+ * every note was an audit_logs row with action = 'POST_OP_NOTE' holding one
+ * free-text field, and years of them exist. They are not migrated — doing so
+ * would mean inventing a wound class out of a paragraph — so both shapes stay
+ * and lib/postop/noteFeed.ts merges them into one chronological list.
+ *
+ * DRAFTS ARE NOT INCLUDED. This endpoint is read by anybody who can see the
+ * case; a draft is one surgeon's unfinished thinking, and is fetched separately
+ * by its author from /api/post-op-notes.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -15,21 +30,28 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const notes = await prisma.auditLog.findMany({
-      where: {
-        tableName: 'surgeries',
-        recordId: params.id,
-        action: 'POST_OP_NOTE',
-      },
-      include: {
-        user: {
-          select: { id: true, fullName: true, username: true },
+    const [legacy, structured] = await Promise.all([
+      prisma.auditLog.findMany({
+        where: {
+          tableName: 'surgeries',
+          recordId: params.id,
+          action: 'POST_OP_NOTE',
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        include: {
+          user: {
+            select: { id: true, fullName: true, username: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.postOpNote.findMany({
+        where: { surgeryId: params.id, status: 'SIGNED' },
+        include: NOTE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
-    return NextResponse.json(notes);
+    return NextResponse.json(mergeFeed(legacy as never, structured as never));
   } catch (error) {
     console.error('Error fetching post-op notes:', error);
     return NextResponse.json({ error: 'Failed to fetch notes' }, { status: 500 });
