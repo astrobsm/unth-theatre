@@ -98,6 +98,14 @@ export default function NewPatientPage() {
   const [error, setError] = useState('');
   const [duplicate, setDuplicate] = useState<any | null>(null);
   const [checkingDup, setCheckingDup] = useState(false);
+  // Records that RESEMBLE this one without being an exact identifier match.
+  // The commonest duplicate here is a folder number typed with a prefix, a
+  // hyphen, or one digit out, which the exact check cannot see.
+  const [nearMatches, setNearMatches] = useState<any[]>([]);
+  // Set when somebody has looked at those records and said this is a
+  // different person. Sent with the registration so the server lets it
+  // through, and recorded there.
+  const [confirmedDifferent, setConfirmedDifferent] = useState(false);
   // Ward list (built-in defaults + any custom wards created by admins).
   const [wards, setWards] = useState<string[]>([...WARDS]);
   useEffect(() => {
@@ -442,21 +450,63 @@ export default function NewPatientPage() {
   }, [age, ageUnit]);
 
   // Instant "already registered" detection by folder/PT number.
+  /**
+   * Ask whether this patient is already on file, as the form is filled in.
+   *
+   * Asked here rather than only on submit because this form is long: being told
+   * at the end that the patient already exists wastes the four minutes spent on
+   * the pre-operative assessment, and the person then has to decide whether to
+   * believe it or press on.
+   *
+   * Reads the fields out of the form rather than taking them as arguments, so
+   * whichever one was just filled in, the question is asked with everything
+   * known so far — a name alone finds a patient whose folder number was typed
+   * differently last time, which is how most of these duplicates happened.
+   */
+  /**
+   * Forget what was found, and the decision made about it.
+   *
+   * Both together, deliberately. A tick saying "this is a different person"
+   * refers to the records that were on screen when it was ticked; carrying it
+   * over to a re-typed folder number would let one decision wave through a
+   * patient nobody has looked at.
+   */
+  const clearMatches = () => {
+    if (nearMatches.length) setNearMatches([]);
+    if (confirmedDifferent) setConfirmedDifferent(false);
+  };
+
   const checkDuplicate = async (folderNumber?: string, ptNumber?: string) => {
-    const fn = (folderNumber || '').trim();
-    const pt = (ptNumber || '').trim();
-    if (!fn && !pt) return;
+    const form = formRef.current;
+    const field = (n: string) =>
+      ((form?.elements.namedItem(n) as HTMLInputElement | null)?.value ?? '').trim();
+
+    const fn = (folderNumber ?? field('folderNumber')).trim();
+    const pt = (ptNumber ?? field('ptNumber')).trim();
+    const nm = field('name');
+    if (!fn && !pt && nm.length < 3) return;
+
     setCheckingDup(true);
     try {
-      const params = new URLSearchParams();
-      if (fn) params.set('folderNumber', fn);
-      if (pt) params.set('ptNumber', pt);
-      const res = await fetch(`/api/patients?${params.toString()}`, { cache: 'no-store' });
-      if (res.ok) {
-        const matches = await res.json();
-        setDuplicate(Array.isArray(matches) && matches.length ? matches[0] : null);
-      }
-    } catch { /* offline / ignore — the server 409 still guards on submit */ }
+      const res = await fetch('/api/patients/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: nm, folderNumber: fn, ptNumber: pt,
+          age: age || null, ageUnit,
+        }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const matches: any[] = Array.isArray(data.matches) ? data.matches : [];
+
+      // An exact identifier collision keeps the banner it has always had — the
+      // server refuses it outright, and "already registered" is the honest
+      // words for it. Everything else is a question, shown separately.
+      const exact = matches.find((m) => m.level === 'exact');
+      setDuplicate(exact ? exact.patient : null);
+      setNearMatches(matches.filter((m) => m.level !== 'exact'));
+    } catch { /* offline — the server still guards on submit */ }
     finally { setCheckingDup(false); }
   };
 
@@ -577,7 +627,7 @@ export default function NewPatientPage() {
       const response = await fetch('/api/patients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, allowDuplicate: confirmedDifferent }),
       });
 
       if (response.ok) {
@@ -609,8 +659,19 @@ export default function NewPatientPage() {
           router.push('/dashboard/patients');
         }
       } else if (response.status === 409) {
-        // Already registered — surface the existing patient with a booking prompt.
         const j = await response.json().catch(() => ({}));
+
+        // Not an exact collision: records that merely LOOK like this one. The
+        // server refuses once and hands them back, so the decision is made by
+        // somebody looking at both rather than by the form guessing.
+        if (j?.code === 'NEAR_DUPLICATE' && Array.isArray(j.matches)) {
+          setNearMatches(j.matches);
+          setError('');
+          if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        // Already registered — surface the existing patient with a booking prompt.
         if (j?.patient) {
           setDuplicate(j.patient);
           setError('');
@@ -683,6 +744,101 @@ export default function NewPatientPage() {
                   Register a different patient
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Records that look like this one ────────────────────────────────
+          Not an exact identifier match, which is the whole point: the folder
+          number typed with a prefix, a hyphen or one digit out is what made 10
+          duplicate pairs between 20 August and 15 September, and 11 pairs now
+          carry the same operation twice.
+
+          It never registers or merges anything. It shows what is on file and
+          gives three ways out: use that patient, look at them, or say this is
+          somebody else — which is recorded. */}
+      {nearMatches.length > 0 && (
+        <div className="rounded-lg border-2 border-orange-300 bg-orange-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-orange-900">
+                {nearMatches.some((m: any) => m.level === 'strong')
+                  ? 'This patient may already be registered.'
+                  : 'Some existing records are similar — worth a look.'}
+              </p>
+              <p className="text-xs text-orange-800 mt-0.5">
+                Registering the same person twice splits their history in two, and the
+                operation gets counted twice on the theatre list.
+              </p>
+
+              <div className="mt-3 space-y-2">
+                {nearMatches.map((m: any) => (
+                  <div key={m.patient.id} className="rounded border border-orange-200 bg-white p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900">{m.patient.name}</p>
+                        <p className="text-sm text-gray-600">
+                          Folder {m.patient.folderNumber || '—'}
+                          {m.patient.ptNumber ? ` · PT ${m.patient.ptNumber}` : ''}
+                          {m.patient.age != null ? ` · ${m.patient.age} ${String(m.patient.ageUnit || 'YEARS').toLowerCase()}` : ''}
+                          {m.patient.gender ? ` · ${m.patient.gender}` : ''}
+                          {m.patient.ward ? ` · ${m.patient.ward}` : ''}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        m.level === 'strong'
+                          ? 'bg-orange-200 text-orange-900'
+                          : 'bg-gray-200 text-gray-700'
+                      }`}>
+                        {m.level === 'strong' ? 'Probably the same' : 'Possibly the same'}
+                      </span>
+                    </div>
+
+                    <ul className="mt-1 ml-4 list-disc text-xs text-gray-600">
+                      {(m.reasons || []).map((r: string, i: number) => <li key={i}>{r}</li>)}
+                    </ul>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/dashboard/surgeries/new?patientId=${m.patient.id}`)}
+                        className="btn-primary text-xs inline-flex items-center gap-1"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" /> This is the patient — book a surgery
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/dashboard/patients/${m.patient.id}`)}
+                        className="btn-secondary text-xs"
+                      >
+                        Open this record
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-start gap-2 text-sm text-orange-900">
+                  <input
+                    type="checkbox"
+                    checked={confirmedDifferent}
+                    onChange={(e) => setConfirmedDifferent(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    I have checked — this is a <b>different person</b>. Register them anyway.
+                  </span>
+                </label>
+              </div>
+              {confirmedDifferent && (
+                <p className="mt-1 text-xs text-orange-700">
+                  Recorded against this registration, so the warning can be judged on how
+                  often it is right.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -769,6 +925,8 @@ export default function NewPatientPage() {
                 required
                 className="input-field"
                 placeholder="e.g., John Doe"
+                onChange={clearMatches}
+                onBlur={() => checkDuplicate()}
               />
             </div>
 
@@ -780,7 +938,7 @@ export default function NewPatientPage() {
                 required
                 className="input-field"
                 placeholder="e.g., UNTH/2024/001"
-                onChange={() => { if (duplicate) setDuplicate(null); }}
+                onChange={() => { if (duplicate) setDuplicate(null); clearMatches(); }}
                 onBlur={(e) => checkDuplicate(e.target.value, undefined)}
               />
             </div>
@@ -792,7 +950,7 @@ export default function NewPatientPage() {
                 name="ptNumber"
                 className="input-field"
                 placeholder="e.g., PT001234"
-                onChange={() => { if (duplicate) setDuplicate(null); }}
+                onChange={() => { if (duplicate) setDuplicate(null); clearMatches(); }}
                 onBlur={(e) => checkDuplicate(undefined, e.target.value)}
               />
             </div>

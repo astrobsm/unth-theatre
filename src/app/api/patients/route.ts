@@ -1,4 +1,6 @@
 import { normaliseIdentifier } from '@/lib/patients/identity';
+import { shouldHoldRegistration, summarise } from '@/lib/patients/nearMatch';
+import { findRegistrationNearMatches } from '@/lib/patients/nearMatchQuery';
 import { findPeerPatient } from '@/lib/patients/peerLookup';
 import { auditChangesJson } from '@/lib/auditChanges';
 import { NextRequest, NextResponse } from "next/server";
@@ -265,6 +267,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── The near-match guard ────────────────────────────────────────────────
+    // The check above is exact, and deliberately so: it blocks, and a block has
+    // to be certain. It does not catch a folder number written with a prefix, a
+    // hyphen, or one digit out — and between 20 August and 15 September ten
+    // duplicate pairs were created straight through it that way. Eleven of the
+    // 37 pairs now in the database carry the SAME operation twice, which is
+    // also counted twice in every theatre activity figure.
+    //
+    // So this asks the looser question and REFUSES ONCE, returning the records
+    // it found. It is overridable in a single click, because two patients who
+    // share a name and an age are real and must still be registrable; what it
+    // stops is the duplicate nobody noticed, which is all of them.
+    //
+    // Enforced here rather than only on the form because the form is not the
+    // only way in — the offline queue replays through this endpoint too.
+    const allowDuplicate = body?.allowDuplicate === true;
+    let overrodeNearMatch: string[] = [];
+    {
+      const near = await findRegistrationNearMatches(validatedData);
+      if (allowDuplicate) {
+        // Recorded, not just permitted. How often people click past this is the
+        // only honest measure of whether it is pitched right — a warning that
+        // is always overridden is noise, and should be loosened rather than
+        // left to train everybody to ignore it.
+        overrodeNearMatch = near.map((m) => `${m.level}:${m.patient.name} (${m.patient.folderNumber})`);
+      } else if (shouldHoldRegistration(near)) {
+        return NextResponse.json(
+          {
+            error: summarise(near),
+            code: 'NEAR_DUPLICATE',
+            matches: near,
+            // What the client must send back to go ahead anyway.
+            overrideWith: 'allowDuplicate',
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // ── Ask the other database before minting an identity ───────────────────
     // The duplicate that took a case out of theatre on 20 August existed
     // because this check was local-only: two nodes, six minutes apart, both
@@ -296,7 +337,14 @@ export async function POST(request: NextRequest) {
           action: 'CREATE_PATIENT',
           tableName: 'patients',
           recordId: patient.id,
-          changes: auditChangesJson(validatedData),
+          changes: auditChangesJson(
+            overrodeNearMatch.length
+              // Which records were shown, and that somebody decided this was a
+              // different person anyway. Without it there is no way to tell a
+              // warning that is working from one everybody clicks through.
+              ? { ...validatedData, nearMatchOverridden: overrodeNearMatch }
+              : validatedData,
+          ),
         }
       });
     } catch (auditError) {
