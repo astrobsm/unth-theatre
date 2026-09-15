@@ -111,6 +111,142 @@ function idOf(row: Record<string, unknown>): string | undefined {
   return id == null ? undefined : String(id);
 }
 
+// ============================================================
+// Recognising a pending create that has already landed
+// ------------------------------------------------------------
+// A create queued offline is held under a LOCAL id (`offline-…`). When it
+// reaches the server the row comes back under a real uuid — a different id, by
+// definition. So "is this pending create already in the list?" cannot be
+// answered by comparing ids, and for a long time it was: the merge asked
+// whether any row carried the CLIENT id, which the server never sends.
+//
+// The consequence was not subtle. A queued registration that synced stayed in
+// the list forever ALONGSIDE the real record, so the patient appeared twice;
+// and the optimistic copy still carried its `offline-…` id, so a surgeon who
+// picked that one out of the booking dropdown sent an id the server had never
+// seen and was told "Patient not found" for a patient plainly on the screen.
+// Two patients registered on 15 September were duplicated this way, and neither
+// could be booked.
+//
+// The cleanup on the queue side (removePendingByIdempotencyKey after a
+// successful replay) remains the primary mechanism and still runs. This is the
+// backstop for every path that does not reach it — a first attempt that timed
+// out on this device but succeeded on the server, a queue drained by the
+// service worker, a mutation dead-lettered after the row had in fact been
+// created. Those are precisely the cases where the duplicate is permanent, so
+// the backstop has to work from evidence the list itself carries rather than
+// from bookkeeping that has already been missed once.
+//
+// A NATURAL KEY, NOT A FUZZY MATCH. Two different patients must never collapse
+// into one row, so this compares the identifier the hospital itself uses and
+// nothing looser. An entity with no natural key defined returns null, and null
+// never supersedes anything.
+// ============================================================
+
+/**
+ * Case- and punctuation-insensitive.
+ *
+ * "PT-529930", "PT529930" and "pt 529930" are one folder number written by
+ * three different people — and the patients table already holds all three
+ * spellings, so this is observed practice rather than a hypothetical.
+ */
+const normaliseKey = (v: unknown): string =>
+  String(v ?? '').trim().toUpperCase().replace(/[\s._/-]+/g, '');
+
+const firstFilled = (row: Record<string, unknown>, keys: string[]): string => {
+  for (const k of keys) {
+    const v = normaliseKey(row[k]);
+    if (v) return v;
+  }
+  return '';
+};
+
+/**
+ * What identifies this row to the hospital, rather than to the database.
+ *
+ * Returns null when the entity has no key we are confident about, or when the
+ * row does not carry enough to build one. Null NEVER supersedes: an unknown
+ * shape leaves the pending row on screen, which is the safe direction — a
+ * duplicate is visible and irritating, a silently vanished booking is neither.
+ */
+export function naturalKeyOf(
+  entityType: string,
+  row: Record<string, unknown>
+): string | null {
+  if (entityType === 'patients') {
+    // The folder number is the hospital's own identifier and is the thing a
+    // duplicate registration repeats. ptNumber is the fallback the rest of the
+    // app already uses where no folder number has been issued.
+    const identifier = firstFilled(row, ['folderNumber', 'ptNumber']);
+    if (identifier) return `patients:${identifier}`;
+    // With no identifier at all, name AND age together — a name alone is not
+    // unique in a hospital this size, and two people called Okeke Bridget must
+    // not be merged into one.
+    const name = normaliseKey(row.name);
+    const age = normaliseKey(row.age);
+    return name && age ? `patients:${name}:${age}` : null;
+  }
+
+  if (entityType === 'surgeries') {
+    // One patient, one day, one procedure. The procedure is deliberately part
+    // of it: a patient genuinely returning to theatre twice in a day is a real
+    // case this application already supports, and those two must stay separate.
+    const patientId = normaliseKey(row.patientId);
+    const date = String(row.scheduledDate ?? '').slice(0, 10);
+    const procedure = normaliseKey(row.procedureName);
+    return patientId && date && procedure
+      ? `surgeries:${patientId}:${date}:${procedure}`
+      : null;
+  }
+
+  return null;
+}
+
+/**
+ * The clientIds of pending creates the server list already contains.
+ *
+ * Exported so the caller can DELETE them locally as well as hide them: a
+ * pending record nobody clears is merged into every later read, and the point
+ * is for this to heal itself rather than to paper over the row on each render.
+ */
+export function supersededCreates(
+  rows: Record<string, unknown>[],
+  pending: PendingRecord[],
+  entityType: string
+): Set<string> {
+  const superseded = new Set<string>();
+
+  const landed = new Set<string>();
+  for (const r of rows) {
+    const key = naturalKeyOf(entityType, r);
+    if (key) landed.add(key);
+  }
+  if (!landed.size) return superseded;
+
+  for (const p of pending) {
+    if (p.op !== 'create' || !p.body) continue;
+    const key = naturalKeyOf(entityType, p.body);
+    if (key && landed.has(key)) superseded.add(p.clientId);
+  }
+  return superseded;
+}
+
+/**
+ * The same question asked of a whole response payload rather than of rows.
+ *
+ * Saves the caller having to know how a list is buried inside a response, which
+ * is knowledge this module already has and should keep.
+ */
+export function supersededInPayload(
+  payload: unknown,
+  pending: PendingRecord[],
+  entityType: string
+): Set<string> {
+  const slot = locateList(payload, entityType);
+  if (!slot) return new Set();
+  return supersededCreates(slot.get(), pending, entityType);
+}
+
 /** Build the row the UI should see for a pending create. */
 export function materialiseCreate(pending: PendingRecord): Record<string, unknown> {
   return {
@@ -156,9 +292,14 @@ export function mergePendingIntoList(
     );
   }
 
+  // Two ways a pending create can already be in this list, and both must be
+  // checked. By id, for a server that echoes the client id back; and by natural
+  // key, for the ordinary case where it came back under a real uuid — which is
+  // what made the row duplicate forever.
   const existing = new Set(rows.map((r) => idOf(r)));
+  const landed = supersededCreates(rows, pending, entityType);
   const creates = pending
-    .filter((p) => p.op === 'create' && !existing.has(p.clientId))
+    .filter((p) => p.op === 'create' && !existing.has(p.clientId) && !landed.has(p.clientId))
     .sort((a, b) => b.createdAt - a.createdAt)
     .map(materialiseCreate);
 

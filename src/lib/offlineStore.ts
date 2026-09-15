@@ -655,6 +655,24 @@ async function loadIdMap(): Promise<Record<string, string>> {
   return (await getSyncMeta<Record<string, string>>(ID_MAP_KEY)) ?? {};
 }
 
+/**
+ * The local-id to server-id map, for callers outside the queue.
+ *
+ * The fetch interceptor needs it to rewrite a LIVE mutation that still refers
+ * to a record created offline. That case is not hypothetical: a patient
+ * registered offline keeps its `offline-…` id on screen until the list is
+ * refetched, so a surgeon can select it and book while fully online — and the
+ * server, which has never seen that id, answers "Patient not found" for a
+ * patient it holds perfectly well.
+ */
+export async function loadClientIdMap(): Promise<Record<string, string>> {
+  try {
+    return await loadIdMap();
+  } catch {
+    return {};
+  }
+}
+
 export async function processOfflineQueue(): Promise<{ synced: number; failed: number; remaining: number }> {
   const queue = await getOfflineQueue();
   if (queue.length === 0) return { synced: 0, failed: 0, remaining: 0 };

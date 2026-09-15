@@ -10,6 +10,8 @@ import {
   addToOfflineQueue,
   addPendingRecord,
   getPendingRecords,
+  removePendingRecord,
+  loadClientIdMap,
 } from './offlineStore';
 import {
   parseApiPath,
@@ -17,6 +19,10 @@ import {
   mergePendingIntoRecord,
   materialiseCreate,
   offlineMutationEcho,
+  supersededInPayload,
+  remapClientIds,
+  remapUrl,
+  hasUnresolvedClientId,
   type PendingRecord,
   type PendingOp,
 } from './offlineMerge';
@@ -280,12 +286,36 @@ async function applyPending(response: Response, url: string): Promise<Response> 
     if (!relevant.length) return response;
 
     const data = await response.clone().json();
+
+    // Before merging: forget any pending create the server has since accepted.
+    //
+    // The queue clears these itself after a successful replay, and normally
+    // that is the end of it. It does NOT cover a first attempt that timed out
+    // on this device while succeeding on the server, nor a queue drained by the
+    // service worker — and in those cases the optimistic copy was merged into
+    // every read forever. That is how one registered patient came to appear
+    // twice in the list, with the duplicate carrying an `offline-…` id that no
+    // booking could use. The row the server just returned is proof the local
+    // stand-in is finished with, so it is deleted rather than merely skipped.
+    const landed = supersededInPayload(data, relevant, entityType);
+    let live = relevant;
+    if (landed.size) {
+      live = relevant.filter((p) => !landed.has(p.clientId));
+      // Fire-and-forget: a failed cleanup must not fail the read. The merge
+      // below already excludes them, so the screen is right either way and the
+      // next read tries again.
+      Promise.all(Array.from(landed).map((clientId) => removePendingRecord(clientId)))
+        .then(() => invalidatePendingSnapshot())
+        .catch(() => { /* retried on the next read */ });
+    }
+    if (!live.length) return response;
+
     // Choose by PAYLOAD SHAPE, not by URL shape. `/api/roster/departments/x`
     // has path segments after the entity but returns a list, and a list merge
     // is what it needs. mergePendingIntoList hands the payload straight back
     // when it finds no array, so we then try the single-record path.
-    let merged = mergePendingIntoList(data, relevant, entityType);
-    if (merged === data && id) merged = mergePendingIntoRecord(data, relevant, id);
+    let merged = mergePendingIntoList(data, live, entityType);
+    if (merged === data && id) merged = mergePendingIntoRecord(data, live, id);
     if (merged === data) return response;
 
     const headers = new Headers(response.headers);
@@ -655,24 +685,92 @@ async function handleMutationFetch(
   // replayed on reconnect) is de-duplicated server-side.
   const idemKey = genIdempotencyKey();
   const canInject = typeof input === 'string' || input instanceof URL;
-  const firstInit: RequestInit | undefined = canInject
-    ? { ...init, headers: { ...headersToObject(init?.headers), 'X-Idempotency-Key': idemKey } }
-    : init;
+
+  // Rewrite any reference to a record created offline that has SINCE synced.
+  //
+  // Until now this happened only when the queue replayed, which covered the
+  // case of a whole chain of work done offline and drained together. It missed
+  // the commoner one: the patient registration syncs, the surgeon is back
+  // online, but the picker still holds the `offline-…` id from before the list
+  // was refetched. The booking then goes straight out over a working network
+  // carrying an id the server has never seen, and comes back "Patient not
+  // found" — naming a patient that is sitting in the database. Two bookings
+  // were lost this way on 15 September.
+  //
+  // If the parent has NOT synced yet there is nothing to rewrite to, so the
+  // request is failed deliberately and queued by the catch below, where it
+  // waits behind its parent exactly as an offline booking does.
+  const rawBody = typeof init?.body === 'string' ? init.body : null;
+  let body: unknown = null;
   try {
-    const response = await fetchWithDeadline(input, firstInit);
+    if (init?.body) body = rawBody ? JSON.parse(rawBody) : init.body;
+  } catch {
+    body = init?.body;
+  }
+
+  // The check is skipped entirely unless a local id is actually present, which
+  // it almost never is — so the ordinary mutation does not pay for an IndexedDB
+  // read on its way out. A local id is always the literal prefix `offline-`,
+  // so a string test is a complete test.
+  let sendInit = init;
+  let sendInput = input;
+  const mentionsLocalId =
+    (rawBody?.includes('offline-') ?? false) || url.includes('offline-');
+
+  if (mentionsLocalId) {
+    const idMap = await loadClientIdMap();
+    if (hasUnresolvedClientId(url, body, idMap)) {
+      // Deliberately not sent: the parent has not reached the server yet, so
+      // this would be rejected and dead-lettered. Queueing keeps the work and
+      // it goes out behind its parent.
+      return queueMutation(url, init, idemKey, body, 'unsynced-parent');
+    }
+    if (body && typeof body === 'object') {
+      const remapped = remapClientIds(body, idMap);
+      sendInit = { ...init, body: JSON.stringify(remapped) };
+    }
+    // e.g. PATCH /api/patients/offline-… once that patient has an id.
+    if (canInject) {
+      const mappedUrl = remapUrl(url, idMap);
+      if (mappedUrl !== url) sendInput = mappedUrl;
+    }
+  }
+
+  const firstInit: RequestInit | undefined = canInject
+    ? { ...sendInit, headers: { ...headersToObject(sendInit?.headers), 'X-Idempotency-Key': idemKey } }
+    : sendInit;
+  try {
+    const response = await fetchWithDeadline(sendInput, firstInit);
     return response;
   } catch (networkError) {
-    // Offline — queue the mutation
-    const method = (init?.method ?? 'POST').toUpperCase();
-    let body: unknown = null;
+    return queueMutation(
+      url,
+      init,
+      idemKey,
+      body,
+      (networkError as Error)?.name === 'DeadlineExceeded' ? 'timeout' : 'offline',
+    );
+  }
+}
 
-    try {
-      if (init?.body) {
-        body = typeof init.body === 'string' ? JSON.parse(init.body) : init.body;
-      }
-    } catch {
-      body = init?.body;
-    }
+/**
+ * Put a mutation in the queue and hand the caller a usable record back.
+ *
+ * Reached two ways. Either the network refused it, or it referred to a record
+ * created offline that has not synced yet — in which case sending it would earn
+ * a rejection and dead-letter real clinical work, so it waits behind its parent
+ * instead. The `reason` reaches the UI as X-Offline-Reason and is the only
+ * difference between the two.
+ */
+async function queueMutation(
+  url: string,
+  init: RequestInit | undefined,
+  idemKey: string,
+  body: unknown,
+  reason: 'offline' | 'timeout' | 'unsynced-parent',
+): Promise<Response> {
+  {
+    const method = (init?.method ?? 'POST').toUpperCase();
 
     // Carry the SAME idempotency key on every replay.
     const headers: Record<string, string> = { ...headersToObject(init?.headers), 'X-Idempotency-Key': idemKey };
@@ -737,7 +835,9 @@ async function handleMutationFetch(
         'X-Offline-Record-Id': pending.clientId,
         // 'timeout' means the link was up and the server simply did not answer
         // in time, which needs a different sentence from "you are offline".
-        'X-Offline-Reason': (networkError as Error)?.name === 'DeadlineExceeded' ? 'timeout' : 'offline',
+        // 'unsynced-parent' means the network is fine and this is waiting for
+        // the record it refers to, which needs a third sentence again.
+        'X-Offline-Reason': reason,
       },
     });
   }
