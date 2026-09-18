@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import ScheduleConflictDialog from '@/components/scheduling/ScheduleConflictDialog';
 import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -435,6 +436,14 @@ export default function NewSurgeryPage() {
   // The day's list for the chosen theatre, so the form can offer the next
   // free start rather than leaving the surgeon to work it out.
   const [listPlan, setListPlan] = useState<{ suggestedStart: string; cases: Array<{ start: string; end: string }> } | null>(null);
+
+  // Opened whenever a scheduling blocker appears — and openable on demand,
+  // because looking at the list BEFORE choosing a time is better than being
+  // refused after it.
+  const [conflictOpen, setConflictOpen] = useState(false);
+  // Carried from the dialog back into the submission: the surgeon has seen
+  // the patient's other case and decided this is a separate operation.
+  const [allowDuplicateCase, setAllowDuplicateCase] = useState(false);
   const [unit, setUnit] = useState('');
   const [subspecialty, setSubspecialty] = useState('');
   // Held in state so the picker can drive it; still submitted as a form field.
@@ -1123,6 +1132,9 @@ ${pretty} — ${days} days from today.
       subspecialty: formData.get('subspecialty'),
       location: selectedLocation || null,
       theatreId: selectedTheatreId || null,
+      // Set only by the dialog, and only after the surgeon has been shown
+      // the patient's other open case and said this is a separate operation.
+      allowDuplicate: allowDuplicateCase || undefined,
       indication: formData.get('indication'),
       procedureName: procedureName.trim(),
       additionalProcedures: extraProcedures.map((p) => p.trim()).filter(Boolean),
@@ -1301,6 +1313,21 @@ ${pretty} — ${days} days from today.
       // which is what they were trying to achieve — so say that plainly, show
       // them the one that is already there, and make booking a second a
       // deliberate act rather than the accidental result of pressing again.
+      // ── A scheduling blocker opens the dialog ───────────────────────────
+      // OVERLAP and PAST_CUTOFF used to be printed as a red sentence and left
+      // there, which is where the five minutes went: the surgeon had to leave
+      // the form to find out what was actually in the theatre. The dialog shows
+      // the day, what is in the way and what can be done about it, and can
+      // carry the fix out.
+      if (response.status === 400 || response.status === 409) {
+        const peek = await response.clone().json().catch(() => null);
+        if (peek?.code === 'OVERLAP' || peek?.code === 'PAST_CUTOFF') {
+          setConflictOpen(true);
+          setLoading(false);
+          return;
+        }
+      }
+
       if (response.status === 409) {
         const parsed = await response.json().catch(() => null);
         if (parsed?.code === 'ALREADY_BOOKED' && parsed?.existing) {
@@ -1412,8 +1439,54 @@ ${pretty} — ${days} days from today.
     return Array.from(byId.values());
   })();
 
+  /**
+   * What the dialog decided, folded back into the form.
+   *
+   * It has already carried out any moves it promised, so all that is left here
+   * is to take the time, theatre and estimate it settled on. The form is then
+   * submitted again by the surgeon rather than automatically — the last press
+   * of "Book" should always be theirs.
+   */
+  const applyResolution = (r: {
+    scheduledTime: string;
+    estimatedDuration?: number;
+    theatreId?: string | null;
+    theatreName?: string | null;
+    allowDuplicate?: boolean;
+  }) => {
+    setScheduledTime(r.scheduledTime);
+    if (r.estimatedDuration) setEstimatedDuration(String(r.estimatedDuration));
+    if (r.theatreId) setSelectedTheatreId(r.theatreId);
+    if (r.allowDuplicate) setAllowDuplicateCase(true);
+    setConflictOpen(false);
+    setError('');
+    notify.success(
+      r.theatreName
+        ? `Moved to ${r.theatreName} at ${r.scheduledTime}. Press Book to confirm.`
+        : `Set to ${r.scheduledTime}. Press Book to confirm.`,
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Opened by a scheduling refusal, and by the button beside the time.
+          It is handed the REQUEST rather than a copy of the list, so it reads
+          the theatre for itself and cannot show a stale day. */}
+      <ScheduleConflictDialog
+        open={conflictOpen}
+        request={{
+          scheduledDate,
+          scheduledTime,
+          // The form holds this as text; the dialog does arithmetic with it.
+          estimatedDuration: Number(estimatedDuration) || 60,
+          theatreId: selectedTheatreId || null,
+          unit: unit || null,
+          patientId: selectedPatientId || null,
+        }}
+        onResolved={applyResolution}
+        onClose={() => setConflictOpen(false)}
+      />
+
       {bookedCodes && (
         <BookingCodesModal
           codes={bookedCodes}
@@ -2190,7 +2263,20 @@ ${pretty} — ${days} days from today.
             </div>
 
             <div>
-              <label className="label">Time *</label>
+              <div className="flex items-baseline justify-between gap-2">
+                <label className="label">Time *</label>
+                {/* Openable before anything has been refused. Being told what
+                    is in the theatre only AFTER pressing Book is what made this
+                    a five-minute errand; the list is worth a look first. */}
+                <button
+                  type="button"
+                  onClick={() => setConflictOpen(true)}
+                  disabled={!scheduledDate}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  See the theatre list
+                </button>
+              </div>
               <input
                 type="time"
                 name="scheduledTime"

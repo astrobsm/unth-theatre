@@ -201,6 +201,7 @@ export async function PUT(
     const {
       scheduledDate,
       scheduledTime,
+      estimatedDuration,
       procedureName,
       subspecialty,
       unit,
@@ -267,7 +268,7 @@ export async function PUT(
 
       const verdict = checkSlot({
         scheduledTime: nextTime,
-        estimatedDuration: existingSurgery.estimatedDuration || 60,
+        estimatedDuration: Number(estimatedDuration) || existingSurgery.estimatedDuration || 60,
         existing: sameRoom.map((x) => ({
           id: x.id,
           scheduledTime: x.scheduledTime,
@@ -341,6 +342,12 @@ export async function PUT(
 
     if (scheduledDate) updateData.scheduledDate = new Date(scheduledDate);
     if (scheduledTime) updateData.scheduledTime = scheduledTime;
+    // How long the case is expected to take was not updateable here at all,
+    // so a surgeon revising the estimate while rescheduling had no way to
+    // record it — and the slot check went on using the old figure.
+    if (estimatedDuration !== undefined && Number(estimatedDuration) > 0) {
+      updateData.estimatedDuration = Math.round(Number(estimatedDuration));
+    }
     if (procedureName) updateData.procedureName = procedureName;
     if (subspecialty) updateData.subspecialty = subspecialty;
     if (unit) updateData.unit = unit;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import ScheduleConflictDialog from '@/components/scheduling/ScheduleConflictDialog';
 import Link from 'next/link';
 import { ArrowLeft, Save, Calendar, MapPin, AlertCircle, History } from 'lucide-react';
 import { WARDS } from '@/lib/constants';
@@ -58,6 +59,13 @@ export default function EditSurgeryPage() {
   // Editable fields
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  // How long this case is expected to take. Needed to work out whether a
+  // new time actually fits, not only whether it collides with a start.
+  const [estimatedDuration, setEstimatedDuration] = useState(60);
+  // Opened when a move is refused for clashing, and from the button beside
+  // the time. Rescheduling is where the clash is MOST likely — the slot was
+  // chosen for a case that is now being moved into somebody else's.
+  const [conflictOpen, setConflictOpen] = useState(false);
   const [location, setLocation] = useState('');
   const [theatreId, setTheatreId] = useState('');
   const [unit, setUnit] = useState('');
@@ -98,6 +106,7 @@ export default function EditSurgeryPage() {
         const s = await sRes.json();
         setScheduledDate(s.scheduledDate ? new Date(s.scheduledDate).toISOString().slice(0, 10) : '');
         setScheduledTime(s.scheduledTime || '');
+        setEstimatedDuration(Number(s.estimatedDuration) || 60);
         setLocation(s.location || '');
         setTheatreId(s.theatreId || '');
         setUnit(s.unit || '');
@@ -154,6 +163,7 @@ export default function EditSurgeryPage() {
         body: JSON.stringify({
           scheduledDate,
           scheduledTime,
+          estimatedDuration,
           location: location || null,
           theatreId: theatreId || null,
           unit,
@@ -174,6 +184,14 @@ export default function EditSurgeryPage() {
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
+        // A clash is not a dead end. The dialog shows the theatre's day and
+        // can move whatever is in the way, which is the whole reason somebody
+        // is on this screen.
+        if (j?.code === 'OVERLAP' || j?.code === 'PAST_CUTOFF') {
+          setConflictOpen(true);
+          setSaving(false);
+          return;
+        }
         throw new Error(j.error || 'Failed to update case');
       }
       setSuccess('Case updated. Ward / location / theatre changes are tracked in the audit log.');
@@ -197,8 +215,49 @@ export default function EditSurgeryPage() {
     return <div className="card text-center py-10 text-gray-500">Loading case…</div>;
   }
 
+  /**
+   * Take what the dialog settled on.
+   *
+   * It has already moved whatever it said it would, so this only updates the
+   * fields. Saving stays a separate press: a reschedule is somebody's decision
+   * about a patient, and it should not happen as a side-effect of closing a box.
+   */
+  const applyResolution = (r: {
+    scheduledTime: string;
+    estimatedDuration?: number;
+    theatreId?: string | null;
+    theatreName?: string | null;
+  }) => {
+    setScheduledTime(r.scheduledTime);
+    if (r.estimatedDuration) setEstimatedDuration(r.estimatedDuration);
+    if (r.theatreId) setTheatreId(r.theatreId);
+    setConflictOpen(false);
+    setError(``);
+    setSuccess(
+      r.theatreName
+        ? `Set to ${r.theatreName} at ${r.scheduledTime}. Press Save to confirm.`
+        : `Set to ${r.scheduledTime}. Press Save to confirm.`,
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-5xl">
+      {/* The case being moved is passed as ignoreId, so it is never reported
+          as an obstacle to itself. */}
+      <ScheduleConflictDialog
+        open={conflictOpen}
+        request={{
+          scheduledDate,
+          scheduledTime,
+          estimatedDuration,
+          theatreId: theatreId || null,
+          unit: unit || null,
+          ignoreId: String(id),
+        }}
+        onResolved={applyResolution}
+        onClose={() => setConflictOpen(false)}
+      />
+
       <div className="flex items-center gap-4">
         <Link href={`/dashboard/surgeries/${id}`} className="p-2 hover:bg-gray-100 rounded-lg">
           <ArrowLeft className="w-6 h-6" />
