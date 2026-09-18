@@ -2273,8 +2273,16 @@ const rosterDeck: Deck = buildDeck(
 // ─────────────────────────────────────────────────────────────────────────────
 // Export all decks
 // ─────────────────────────────────────────────────────────────────────────────
+import { AWARENESS_DECKS } from './awarenessDecks';
+
 export const DECKS: Deck[] = [
   visionDeck,
+  // Hospital-wide ORM Awareness. Written for the theatre restructuring, one
+  // step per slide, each naming the role that owns it. They live in their own
+  // file because they are also the source for the PowerPoint files built by
+  // scripts/training/build-awareness-pptx.ts — one set of words, two places it
+  // can be read.
+  ...AWARENESS_DECKS,
   surgeryBookingDeck,
   pharmacyDeck,
   preopReviewDeck,
