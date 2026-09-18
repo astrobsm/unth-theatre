@@ -40,7 +40,7 @@ const OUT_DIR = process.env.ORM_PPTX_OUT
   ?? path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Documents', 'ORM-Awareness');
 
 const SHOT_DIR = process.env.ORM_SHOT_DIR
-  ?? path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Documents', 'phone and desktop screenshots');
+  ?? path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Documents', 'ORM-Screens');
 
 /** 16:9, in inches. Every coordinate below is derived from these two. */
 const W = 10;
@@ -63,10 +63,29 @@ const PROGRAMME = 'Hospital-wide ORM Awareness';
 /** Reported once at the end rather than per slide. */
 const missing = new Set<string>();
 
+/**
+ * Screens on disk, indexed by route slug with the capture's number stripped.
+ *
+ * The capture names files `<NN>-<slug>__desktop.png`, and NN is the route's
+ * POSITION in routes.txt. Adding one page therefore renumbers every file after
+ * it. Mapping slides to numbered filenames meant that adding a screen silently
+ * repointed a dozen slides at the wrong pages — so the number is discarded here
+ * and the mapping is by slug alone.
+ */
+const SCREENS: Map<string, string> = (() => {
+  const index = new Map<string, string>();
+  if (!fs.existsSync(SHOT_DIR)) return index;
+  for (const file of fs.readdirSync(SHOT_DIR)) {
+    const m = /^(?:\d+-)?(.+)__desktop\.png$/.exec(file);
+    if (m) index.set(m[1], path.join(SHOT_DIR, file));
+  }
+  return index;
+})();
+
 function shotPath(slug: string | undefined): string | null {
   if (!slug) return null;
-  const file = path.join(SHOT_DIR, `${slug}__desktop.png`);
-  if (fs.existsSync(file)) return file;
+  const file = SCREENS.get(slug);
+  if (file) return file;
   missing.add(slug);
   return null;
 }

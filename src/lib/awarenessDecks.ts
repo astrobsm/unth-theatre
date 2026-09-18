@@ -480,6 +480,19 @@ export const electiveFlowDeck: Deck = buildDeck(
         'Step two. Book the case: patient, procedure, indication, unit, date and time. Say honestly how long you expect it to take, because the whole list is built from that figure. You can look at the theatre list from inside the form before choosing.',
     },
     {
+      title: 'If the theatre is busy at your time',
+      subtitle: 'Surgeon · The dialog that opens on the booking form',
+      bullets: [
+        'You are shown the theatre’s whole day, not just told the slot is taken',
+        'Keep your time and push the other cases back — it lists exactly which move',
+        'Or take a free window, or use another theatre that is free at that hour',
+        'You can also type new times straight into the list and save them',
+        'A patient already in the holding area or on the table is never moved',
+      ],
+      voiceOver:
+        'If the theatre is busy at the time you chose, you are shown the theatre’s whole day rather than simply told the slot is taken. You can keep your time and push the other cases back — it lists exactly which ones move and to when — or take a free window, or use another theatre. A patient already sent for is never moved.',
+    },
+    {
       title: 'Step 3 — The pre-operative requirements',
       subtitle: 'Surgeon · Recorded at booking',
       bullets: [
