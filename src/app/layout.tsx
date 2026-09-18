@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
 import ToasterProvider from "@/components/ToasterProvider";
@@ -7,7 +7,24 @@ import InstallAppButton from "@/components/InstallAppButton";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ChunkErrorReloader from "@/components/ChunkErrorReloader";
 
-const inter = Inter({ subsets: ["latin"] });
+// SELF-HOSTED, not next/font/google.
+//
+// next/font fetches the font at BUILD time. The theatre server is expected to
+// build during an internet outage — that is most of the reason it exists — and
+// on 18 September a build there failed on `Failed to fetch Inter from Google
+// Fonts` after npm install cleared the font cache, leaving the app serving
+// nothing until the font was brought into the repository.
+//
+// 48 KB of woff2 is a small price for a build that cannot be taken down by
+// somebody else'''s CDN.
+const inter = localFont({
+  src: "./fonts/Inter-Variable-latin.woff2",
+  display: "swap",
+  variable: "--font-inter",
+  // The variable font covers the whole range; naming it stops the browser
+  // synthesising bold from the regular weight.
+  weight: "100 900",
+});
 
 export const metadata: Metadata = {
   title: "Theatre Manager - UNTH Ituku Ozalla",
