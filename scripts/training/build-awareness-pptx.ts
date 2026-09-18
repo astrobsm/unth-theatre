@@ -13,9 +13,10 @@
 // step in the app, the deck circulated on WhatsApp still shows the old one, and
 // the training contradicts the software. Editing awarenessDecks.ts changes both.
 //
-// pptxgenjs is not a dependency of the application. It is installed only to run
-// this script (`npm install --no-save pptxgenjs`), because nothing the hospital
-// runs needs it and a deployment should not carry a presentation library.
+// pptxgenjs is a devDependency, and it has to be: `next build` typechecks this
+// directory, so a module that exists only on the machine that wrote the script
+// fails the build everywhere else. It was installed with --no-save first, which
+// compiled here and took the theatre server down on the next deploy.
 // ============================================================
 
 import fs from 'fs';
