@@ -44,7 +44,9 @@ export async function GET(request: NextRequest) {
 
     // Get all theatres — or the single one being opened.
     const theatres = await prisma.theatreSuite.findMany({
-      where: onlyTheatreId ? { id: onlyTheatreId } : undefined,
+      // Only rooms an operation happens in. The holding area sat in this
+      // table as a theatre and appeared on this board as one.
+      where: onlyTheatreId ? { id: onlyTheatreId } : { isOperatingRoom: true },
       select: {
         id: true,
         name: true,

@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { scheduledTime: 'asc' },
       }),
-      prisma.theatreSuite.findMany({ select: { id: true, name: true } }),
+      // Coverage is about theatres that run lists. A waiting area has none.
+      prisma.theatreSuite.findMany({ where: { isOperatingRoom: true }, select: { id: true, name: true } }),
       prisma.surgicalUnit.findMany({ select: { id: true, name: true } }),
       prisma.surgicalUnitSchedule.findMany({ where: { dayOfWeek: dow }, select: { unitId: true, theatreName: true } }),
     ]);

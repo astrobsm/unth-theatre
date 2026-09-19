@@ -96,7 +96,11 @@ export async function POST(req: NextRequest) {
   const inScope = sameDay.filter((s) =>
     theatreId ? s.theatreId === theatreId : unit ? s.unit === unit : false);
 
+  // Offered as alternative rooms when a booking clashes, so the holding area
+  // must not be among them: it is a waiting area and nothing is operated on
+  // in it.
   const theatres = await prisma.theatreSuite.findMany({
+    where: { isOperatingRoom: true },
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   }).catch(() => [] as { id: string; name: string }[]);

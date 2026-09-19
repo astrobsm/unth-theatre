@@ -25,6 +25,9 @@ import PersonalBoard from '@/components/PersonalBoard';
 // watched, and this must not feel like that.
 import DeadlineAttentions from '@/components/DeadlineAttentions';
 import PerioperativeTracker from '@/components/PerioperativeTracker';
+// Who is coming to today's cases. Renders nothing on a day with no list, so
+// it costs anybody not operating today no space at all.
+import TeamAvailabilityCard from '@/components/theatre/TeamAvailabilityCard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -183,6 +186,12 @@ export default function DashboardPage() {
           deadline and a compulsory duty are worth more of the fold than a
           navigation card. */}
       <DeadlineAttentions />
+
+      {/* Above the personal board on purpose. On the morning of a list the
+          first question anybody has is whether the rest of the team is
+          coming, and until now that was answered by telephone. */}
+      <TeamAvailabilityCard />
+
       <PersonalBoard />
 
       {/* Where this surgeon's patients actually are. Renders nothing for

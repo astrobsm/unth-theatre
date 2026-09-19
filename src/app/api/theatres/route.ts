@@ -23,8 +23,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date");
+    // Rooms that are not places to operate — the holding area, PACU — are out
+    // of this list by default. They were entered here as theatres, so they
+    // appeared in every picker in the system and a case could be booked into
+    // the holding area. `includeAll` is for the administration screen, which
+    // still has to be able to see and edit the row.
+    const includeAll = searchParams.get("includeAll") === "true";
 
     const theatres = await prisma.theatreSuite.findMany({
+      where: includeAll ? {} : { isOperatingRoom: true },
       include: {
         allocations: date
           ? {

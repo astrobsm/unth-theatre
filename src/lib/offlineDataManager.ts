@@ -162,6 +162,7 @@ const APP_SHELL_ROUTES = [
   '/dashboard/admin/surgical-catalog',
   // Executive dashboards
   '/dashboard/cmd',
+  '/dashboard/cmd/theatre-status',
   '/dashboard/cmac',
   '/dashboard/dc-mac',
 ];

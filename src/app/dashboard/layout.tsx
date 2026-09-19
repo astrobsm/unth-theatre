@@ -293,6 +293,7 @@ export default function DashboardLayout({
     // === INTRA-OPERATIVE ===
     { href: '/dashboard/theatre-reception', icon: ClipboardCheck, label: 'Theatre Reception', badge: 'NEW' },
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
+    { href: '/dashboard/holding-area/staffing', icon: UserCheck, label: 'Holding Area Staffing', badge: 'NEW' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
     { href: '/dashboard/consumable-pack-provider', icon: PackageCheck, label: 'Consumable Packs', badge: 'NEW' },
@@ -502,6 +503,10 @@ export default function DashboardLayout({
       '/dashboard/checklists',
       '/dashboard/theatre-reception',
       '/dashboard/holding-area',
+      // Who is on the holding area, by shift. It is not a theatre and never
+      // was, but patients are received, verified and handed over there, and
+      // until now no name was recorded against it at all.
+      '/dashboard/holding-area/staffing',
       '/dashboard/call-for-patient',
       '/dashboard/theatres',
       '/dashboard/theatre-setup',

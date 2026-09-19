@@ -88,7 +88,10 @@ export async function GET(request: NextRequest) {
       allocationCounts[allocation.theatreId] = (allocationCounts[allocation.theatreId] || 0) + 1;
     });
 
+    // Utilisation of rooms that can be used. A waiting area counted as a
+    // theatre with no cases drags the figure down and means nothing.
     const theatres = await prisma.theatreSuite.findMany({
+      where: { isOperatingRoom: true },
       select: {
         id: true,
         name: true,

@@ -286,6 +286,8 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'theatre_suites', cls: 'LWW', why: 'The rooms themselves. Reference data.' },
   { table: 'case_cancellations', cls: 'APPEND_ONLY', why: 'A cancellation happened, with a reason and a person. Never edited.' },
   { table: 'theatre_setups', cls: 'LWW', why: 'What was drawn for a case; status walks COLLECTED to RETURNED.' },
+  { table: 'theatre_readiness_confirmations', cls: 'LWW', why: 'One person’s ticks for one theatre on one day. A later tick is a correction of the same statement, not a second one.' },
+  { table: 'case_team_availability', cls: 'LWW', why: 'Whether one person is coming to one case. Changing your mind replaces the answer; the newest is the true one.' },
   { table: 'store_consumables', cls: 'LWW', why: 'Current state of a stock line; movements carry the quantities.' },
   { table: 'consumable_consumptions', cls: 'APPEND_ONLY', why: 'A ledger entry. Balances are summed, never overwritten.' },
   { table: 'medication_collections', cls: 'APPEND_ONLY', why: 'A collection from pharmacy at a time.' },

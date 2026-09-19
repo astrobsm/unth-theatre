@@ -9,6 +9,13 @@ interface Theatre {
   name: string;
   location: string;
   status: string;
+  /**
+   * False for rooms that are not places to operate — the holding area, PACU.
+   * They were entered here as theatres, so they appeared in every picker in
+   * the system and a case could be booked into the holding area. They are kept
+   * (transfers, movements and rosters point at them) and hidden.
+   */
+  isOperatingRoom?: boolean;
   allocations?: Allocation[];
 }
 
@@ -55,6 +62,11 @@ export default function TheatresPage() {
   );
   const [loading, setLoading] = useState(true);
   const [showAddTheatre, setShowAddTheatre] = useState(false);
+  // Off by default. The holding area and PACU are kept in this table because
+  // transfers and movements point at them, but they are not places to operate
+  // and a case must not be bookable into one. An administrator can still
+  // reach them here to correct the record.
+  const [showNonOperating, setShowNonOperating] = useState(false);
   const [editingTheatre, setEditingTheatre] = useState<Theatre | null>(null);
   const [showAddAllocation, setShowAddAllocation] = useState(false);
   const [selectedTheatre, setSelectedTheatre] = useState<string>('');
@@ -110,11 +122,15 @@ export default function TheatresPage() {
     }, 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
+  }, [selectedDate, showNonOperating]);
 
   const fetchTheatres = async () => {
     try {
-      const response = await fetch(`/api/theatres?date=${selectedDate}`);
+      // Non-operating rooms are off this list unless somebody deliberately
+      // asks to see them, which is only ever to correct the record.
+      const response = await fetch(
+        `/api/theatres?date=${selectedDate}${showNonOperating ? '&includeAll=true' : ''}`,
+      );
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) {
@@ -479,7 +495,23 @@ export default function TheatresPage() {
           <h1 className="text-3xl font-bold text-gray-900">Theatre Allocation</h1>
           <p className="text-gray-600 mt-1">Manage theatre suites and daily allocations</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* The holding area used to sit in this list as though a case could
+              be sent there to be operated on. It is a waiting area, at the
+              same standing as PACU. The row is kept because transfers and
+              patient movements point at it, and it is reachable here when the
+              record needs correcting. */}
+          {isAdmin && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showNonOperating}
+                onChange={(e) => setShowNonOperating(e.target.checked)}
+                className="h-4 w-4 accent-gray-600"
+              />
+              Show non-operating rooms
+            </label>
+          )}
           {isAdmin && (
             <button
               onClick={() => setShowAddTheatre(true)}

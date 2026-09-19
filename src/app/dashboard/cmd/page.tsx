@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   LayoutDashboard, Activity, Users, AlertTriangle, Calendar,
-  TrendingUp, Clock, Building2, Heart, FileText, Shield
+  TrendingUp, Clock, Building2, Heart, FileText, Shield, Radio
 } from 'lucide-react';
 
 interface CMDStats {
@@ -113,6 +114,30 @@ export default function CMDDashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* The morning, in one place. Put ABOVE the hospital-wide figures
+          because a question about this morning is the one that has to be
+          answered this morning — and it currently takes six telephone calls.
+          It loads on its own screen rather than here: this dashboard opens
+          without counting anything, and that is worth keeping. */}
+      <Link
+        href="/dashboard/cmd/theatre-status"
+        className="flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-blue-700 to-indigo-600 p-5 text-white shadow transition hover:opacity-95"
+      >
+        <span className="flex items-center gap-4">
+          <span className="rounded-xl bg-white/20 p-3">
+            <Radio className="h-7 w-7" />
+          </span>
+          <span>
+            <span className="block text-lg font-bold">Theatre status today</span>
+            <span className="block text-sm text-blue-100">
+              Which theatres are ready and who confirmed · booked cases · who on each team has
+              said they are coming · message them to ask what is needed, or to say thank you
+            </span>
+          </span>
+        </span>
+        <span className="hidden shrink-0 text-2xl sm:block">&rarr;</span>
+      </Link>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

@@ -33,8 +33,15 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Get all theatre suites
+    // Every room an operation can actually happen in.
+    //
+    // Not every row in this table is one. The holding area was entered here as
+    // though it were a theatre, which put it in this allocation grid and made
+    // it possible to send a case there. It is a waiting area, at the same
+    // standing as PACU. The row stays — transfers and patient movements point
+    // at it — and it is no longer somewhere a list can be allocated.
     const theatres = await prisma.theatreSuite.findMany({
+      where: { isOperatingRoom: true },
       orderBy: { name: "asc" },
     });
 

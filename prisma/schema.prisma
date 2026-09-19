@@ -1673,8 +1673,25 @@ model TheatreSuite {
   capacity  Int                @default(1)
   equipment String? // JSON array of standard equipment
   status    TheatreSuiteStatus @default(AVAILABLE)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+
+  /// Can an operation actually be performed in this room?
+  ///
+  /// The holding area was entered here as though it were a theatre, so it
+  /// appeared in every theatre picker and a case could be booked into it. It
+  /// is a waiting area — the same standing as PACU — and no surgery happens in
+  /// it.
+  ///
+  /// A flag rather than a deletion: transfers, allocations, rosters and
+  /// movements already point at that row, and removing it would orphan real
+  /// history of patients who genuinely passed through. False keeps the record
+  /// and keeps it out of the lists where it does not belong.
+  ///
+  /// Nothing about MAINTENANCE or RESERVED covers this. Those say a theatre is
+  /// temporarily unusable; this says the room was never a theatre.
+  isOperatingRoom Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   allocations       TheatreAllocation[]
   setups            TheatreSetup[]
@@ -1876,6 +1893,119 @@ model TheatreSetupReturn {
   nurse User         @relation(fields: [returnedBy], references: [id])
 
   @@map("theatre_setup_returns")
+}
+
+/// Which of the two people answering for a theatre this confirmation is from.
+///
+/// They check different things and neither can answer for the other, so the
+/// row is per role rather than per theatre. See src/lib/theatre/readiness.ts
+/// for the lists themselves.
+enum TheatreReadinessRole {
+  SCRUB_NURSE
+  THEATRE_TECHNICIAN
+}
+
+/// One person's statement that their side of a theatre is ready, on one day.
+///
+/// Deliberately NOT hung off TheatreSetup. Readiness used to live on the
+/// material-collection record, which meant a nurse standing in a prepared
+/// theatre could not say so until somebody had first entered a collection —
+/// a stores document standing between the theatre and the announcement that
+/// it is ready. The two are now independent: collection records what was
+/// drawn, this records whether the room can receive a patient.
+///
+/// The checklist version is stored because the lists change. A confirmation is
+/// a claim about the list as it stood that day, and must still read correctly
+/// after the list is edited.
+model TheatreReadinessConfirmation {
+  id          String   @id @default(uuid())
+  theatreId   String
+  /// Snapshotted: a board printed today must still name the theatre correctly
+  /// if it is later renamed.
+  theatreName String?
+  readyDate   DateTime @db.Date
+
+  role            TheatreReadinessRole
+  confirmedById   String
+  confirmedByName String
+
+  /// Which list this was ticked against — see readiness.ts.
+  checklistVersion Int     @default(1)
+  /// JSON object: check id to true. Text, like every other JSON blob here.
+  ticks            String?
+  /// What is short or faulty, in their words. Read out with the announcement.
+  note             String?
+
+  /// Every required check is ticked.
+  complete    Boolean   @default(false)
+  completedAt DateTime?
+  /// When the radio announcement was raised. Set once, so a re-tick does not
+  /// announce the same theatre twice.
+  announcedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  /// One statement per person-role per theatre per day. A second tick edits
+  /// the first rather than adding a second opinion.
+  @@unique([theatreId, readyDate, role])
+  @@index([readyDate, complete])
+  @@map("theatre_readiness_confirmations")
+}
+
+/// "Am I coming to this case?", answered by the person themselves.
+///
+/// One row per member per case. surgeryId is a soft reference, matching
+/// TheatreTeamAssignment: the team is assembled from six columns on Surgery
+/// plus two side tables, and a foreign key here would add nothing that the
+/// server-side team assembly does not already enforce.
+///
+/// The absence of a row means NOT YET ANSWERED. It must never be rendered as a
+/// refusal — people are operating, teaching, post-call or out of signal.
+model CaseTeamAvailability {
+  id         String @id @default(uuid())
+  surgeryId  String
+  userId     String
+  /// Snapshotted, so a board still reads correctly after a rename.
+  userName   String
+  /// Their part on this case: "Surgeon", "Anaesthetist", "Scrub nurse".
+  roleOnCase String
+
+  status     CaseAvailabilityStatus
+  /// Minutes away, where they said they would be late.
+  etaMinutes Int?
+  note       String?
+
+  respondedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  /// One answer per person per case. Changing your mind edits it.
+  @@unique([surgeryId, userId])
+  @@index([surgeryId])
+  @@index([userId, respondedAt])
+  @@map("case_team_availability")
+}
+
+/// How a team member answered for a case.
+///
+/// DELAYED is coming, not missing. Separating it from UNAVAILABLE is the whole
+/// point: a surgeon twenty minutes away is not a case in trouble, and a board
+/// that colours it as one is a board people learn to ignore.
+enum CaseAvailabilityStatus {
+  AVAILABLE
+  DELAYED
+  UNAVAILABLE
 }
 
 model TheatreExtraRequest {

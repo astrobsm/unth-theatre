@@ -490,7 +490,7 @@ async function dynamicAnswer(question: string): Promise<string | null> {
 
     if ((q.includes('available') || q.includes('free')) && q.includes('theatre')) {
       const list = await prisma.theatreSuite.findMany({
-        where: { status: 'AVAILABLE' as any },
+        where: { status: 'AVAILABLE' as any, isOperatingRoom: true },
         select: { name: true, location: true },
         take: 20,
       });

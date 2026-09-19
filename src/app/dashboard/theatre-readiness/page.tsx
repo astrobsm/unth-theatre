@@ -103,16 +103,26 @@ interface Statistics {
 }
 
 // Nurse-confirmed theatre readiness (from the Theatre Setup module).
-interface NurseReadiness {
+/**
+ * A readiness confirmation as the theatre floor now records it.
+ *
+ * Read from theatre_readiness_confirmations rather than from the material
+ * collection record it used to hang off. Two people answer for a theatre —
+ * the scrub nurse and the theatre technician — and this board shows both,
+ * because a room whose machine has not been checked is not ready however
+ * prepared the sterile field is.
+ */
+interface ReadinessConfirmation {
   id: string;
-  setupDate: string;
-  materialsConfirmed: boolean;
-  radioOnChannel7: boolean;
-  inTheatreReady: boolean;
-  theatreReady: boolean;
-  readyConfirmedAt: string | null;
-  theatre: { name: string; location: string } | null;
-  nurse: { fullName: string } | null;
+  theatreId: string;
+  theatreName: string | null;
+  role: string;
+  complete: boolean;
+  confirmedByName: string;
+  completedAt: string | null;
+  announcedAt: string | null;
+  note: string | null;
+  progress: { done: number; total: number; outstanding: Array<{ id: string; label: string }> };
 }
 
 // One staff line: role label, name, and a click-to-call phone link.
@@ -142,7 +152,7 @@ function StaffRow({ label, contact, color }: { label: string; contact: StaffCont
 export default function TheatreReadinessDashboard() {
   const [theatreStatus, setTheatreStatus] = useState<TheatreStatus[]>([]);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
-  const [nurseReadiness, setNurseReadiness] = useState<NurseReadiness[]>([]);
+  const [readiness, setReadiness] = useState<ReadinessConfirmation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -202,7 +212,7 @@ export default function TheatreReadinessDashboard() {
       setOpenId(null);
       const [statusRes, setupRes] = await Promise.all([
         fetch(`/api/anesthesia-setup/theatre-status?date=${selectedDate}&view=summary`),
-        fetch(`/api/theatre-setup?date=${selectedDate}`),
+        fetch(`/api/theatre-readiness?date=${selectedDate}`),
       ]);
       if (statusRes.ok) {
         const data = await statusRes.json();
@@ -210,8 +220,8 @@ export default function TheatreReadinessDashboard() {
         setStatistics(data.statistics || null);
       }
       if (setupRes.ok) {
-        const setups = await setupRes.json();
-        setNurseReadiness(Array.isArray(setups) ? setups : []);
+        const data = await setupRes.json();
+        setReadiness(Array.isArray(data?.confirmations) ? data.confirmations : []);
       }
     } catch (error) {
       console.error('Error fetching theatre status:', error);
@@ -313,56 +323,69 @@ export default function TheatreReadinessDashboard() {
         </div>
       )}
 
-      {/* Nurse-Confirmed Theatre Readiness */}
+      {/* Theatre readiness, as the floor records it.
+
+          Both halves are shown for every theatre that has reported, because a
+          scrub nurse's confirmation beside an unchecked anaesthetic machine is
+          not a ready theatre — and the missing technician confirmation is the
+          easiest thing on this board to fail to notice. */}
       <div className="card">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <h2 className="text-xl font-bold text-gray-900">Nurse Theatre Readiness</h2>
+          <h2 className="text-xl font-bold text-gray-900">Theatre Readiness Confirmations</h2>
           <span className="text-sm text-gray-500">
-            {nurseReadiness.filter((n) => n.theatreReady).length} ready ·{' '}
-            {nurseReadiness.length} reporting
+            {readiness.filter((r) => r.complete).length} complete · {readiness.length} reporting
           </span>
         </div>
-        {nurseReadiness.length === 0 ? (
+        {readiness.length === 0 ? (
           <p className="text-gray-500 text-sm py-4 text-center">
-            No nurse readiness confirmations for this date yet.
+            Nothing confirmed for this date yet. Theatre staff tick their list on the
+            Theatre Setup screen.
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {nurseReadiness.map((n) => (
+            {readiness.map((r) => (
               <div
-                key={n.id}
-                className={`border-2 rounded-lg p-3 ${n.theatreReady ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}
+                key={r.id}
+                className={`border-2 rounded-lg p-3 ${r.complete ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}
               >
                 <div className="flex justify-between items-start gap-2">
                   <div>
-                    <div className="font-bold text-gray-900">{n.theatre?.name || 'Unknown Theatre'}</div>
-                    <div className="text-xs text-gray-500">{n.nurse?.fullName || 'Nurse'}</div>
+                    <div className="font-bold text-gray-900">{r.theatreName || 'Theatre'}</div>
+                    <div className="text-xs text-gray-500">
+                      {r.role === 'THEATRE_TECHNICIAN' ? 'Theatre technician' : 'Scrub nurse'}
+                      {' — '}{r.confirmedByName}
+                    </div>
                   </div>
-                  {n.theatreReady ? (
-                    <span className="bg-green-600 text-white px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
-                      ✅ READY
-                    </span>
-                  ) : (
-                    <span className="bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
-                      ⏳ Pending
-                    </span>
-                  )}
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap ${
+                    r.complete ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}>
+                    {r.complete ? 'CONFIRMED' : `${r.progress?.done ?? 0}/${r.progress?.total ?? 0}`}
+                  </span>
                 </div>
-                <ul className="mt-2 space-y-1 text-xs">
-                  <li className={n.materialsConfirmed ? 'text-green-700' : 'text-gray-400'}>
-                    {n.materialsConfirmed ? '✓' : '○'} Materials collected
-                  </li>
-                  <li className={n.radioOnChannel7 ? 'text-green-700' : 'text-gray-400'}>
-                    {n.radioOnChannel7 ? '✓' : '○'} Radio on channel 7
-                  </li>
-                  <li className={n.inTheatreReady ? 'text-green-700' : 'text-gray-400'}>
-                    {n.inTheatreReady ? '✓' : '○'} In theatre &amp; ready
-                  </li>
-                </ul>
-                {n.theatreReady && n.readyConfirmedAt && (
+
+                {/* Named, not counted. "2 outstanding" tells somebody to ring
+                    the theatre to find out what; the names tell them whether
+                    it matters. */}
+                {!r.complete && (r.progress?.outstanding?.length ?? 0) > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                    {r.progress.outstanding.slice(0, 4).map((o) => (
+                      <li key={o.id}>○ {o.label}</li>
+                    ))}
+                    {r.progress.outstanding.length > 4 && (
+                      <li className="text-gray-400">and {r.progress.outstanding.length - 4} more</li>
+                    )}
+                  </ul>
+                )}
+
+                {r.note && (
+                  <div className="mt-2 text-[11px] text-amber-800">Reported: {r.note}</div>
+                )}
+
+                {r.complete && r.completedAt && (
                   <div className="mt-2 text-[11px] text-green-700 font-medium">
                     Confirmed at{' '}
-                    {new Date(n.readyConfirmedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(r.completedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    {r.announcedAt ? ' · announced on the radio' : ''}
                   </div>
                 )}
               </div>
