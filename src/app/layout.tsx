@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
 import ToasterProvider from "@/components/ToasterProvider";
+import BlockerProvider from "@/components/blockers/BlockerProvider";
 import InstallAppButton from "@/components/InstallAppButton";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ChunkErrorReloader from "@/components/ChunkErrorReloader";
@@ -87,6 +88,13 @@ export default function RootLayout({
         <ServiceWorkerRegistrar />
         <Providers>{children}</Providers>
         <ToasterProvider />
+        {/* Mounted ONCE, here, on purpose. The global fetch interceptor sees
+            every mutation the application makes, so a refusal that can be
+            explained is announced as a window event and picked up here —
+            which is how every form in the system gets a way out of a block
+            without any of them being edited. A second copy would show two
+            dialogs for one refusal. */}
+        <BlockerProvider />
         <InstallAppButton />
       </body>
     </html>

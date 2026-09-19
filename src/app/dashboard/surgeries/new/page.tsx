@@ -15,6 +15,7 @@ import { queryElectiveTime } from '@/lib/theatreOps/clock';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import ProcedurePicker from '@/components/ProcedurePicker';
+import { raiseBlock } from '@/lib/blockers/raise';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
 import { surgeonMatchesSubspecialty } from '@/lib/subspecialtyMatch';
 import { isOfflineQueued, queuedMessage } from '@/lib/offlineResponse';
@@ -971,13 +972,28 @@ export default function NewSurgeryPage() {
       if (!String(fd.get('scheduledDate') ?? '').trim()) essentials.push('the date');
       if (essentials.length) {
         setLoading(false);
-        setError(
-          `Before this case can go on the theatre list it still needs ${
-            essentials.length === 1
-              ? essentials[0]
-              : `${essentials.slice(0, -1).join(', ')} and ${essentials[essentials.length - 1]}`
-          }.`,
-        );
+        const listed = essentials.length === 1
+          ? essentials[0]
+          : `${essentials.slice(0, -1).join(', ')} and ${essentials[essentials.length - 1]}`;
+        setError(`Before this case can go on the theatre list it still needs ${listed}.`);
+        // The banner is at the top of a form several screens long, so on a
+        // phone it is frequently off screen by the time the button is pressed.
+        // The dialog says the same thing where it cannot be missed, and its
+        // buttons go to the fields rather than describing them.
+        raiseBlock({
+          code: 'EARLY_BOOKING_INCOMPLETE',
+          title: 'Three things put a case on the list',
+          why: `A case can go on the theatre list before the rest is filled in, but not without ${listed}.`,
+          fields: [
+            ...(selectedPatientId ? [] : [{ name: 'patientSearch', label: 'Patient', message: 'Search for the patient and select them.' }]),
+            ...(String(fd.get('procedureName') ?? '').trim() ? [] : [{ name: 'procedureName', label: 'Procedure', message: 'Pick it from the list, or choose “Other” and name it.' }]),
+            ...(String(fd.get('scheduledDate') ?? '').trim() ? [] : [{ name: 'scheduledDate', label: 'Date', message: 'The day theatre should expect the patient.' }]),
+          ],
+          fixes: [
+            { kind: 'field', label: 'Take me to the first one', field: !selectedPatientId ? 'patientSearch' : (!String(fd.get('procedureName') ?? '').trim() ? 'procedureName' : 'scheduledDate') },
+            { kind: 'close', label: 'Close and finish the form', detail: 'Everything already entered is kept.' },
+          ],
+        });
         return;
       }
     }
@@ -1111,6 +1127,17 @@ ${pretty} — ${days} days from today.
     if (!procedureName.trim()) {
       setLoading(false);
       setError('Select the procedure, or choose "Other" and name it.');
+      raiseBlock({
+        code: 'NO_PROCEDURE',
+        title: 'The procedure is not set',
+        why: 'The procedure picker is still empty. It is what the case is called on every list, board and note, so the booking cannot be made without it.',
+        fields: [{ name: 'procedureName', label: 'Procedure name', message: 'Pick it from the list for this subspecialty, or choose “Other” and type it.' }],
+        fixes: [
+          { kind: 'field', label: 'Take me to the procedure', field: 'procedureName' },
+          { kind: 'field', label: 'Choose the subspecialty first', field: 'subspecialty', detail: 'The list of procedures follows the subspecialty; without one it cannot be shown.' },
+          { kind: 'close', label: 'Close' },
+        ],
+      });
       return;
     }
 
@@ -1683,6 +1710,8 @@ ${pretty} — ${days} days from today.
               <label className="label">Search Patient</label>
               <input
                 type="text"
+                /* Named so the block dialog can put the cursor here. */
+                id="patientSearch"
                 placeholder="Search by name or folder number..."
                 value={searchPatient}
                 onChange={(e) => setSearchPatient(e.target.value)}

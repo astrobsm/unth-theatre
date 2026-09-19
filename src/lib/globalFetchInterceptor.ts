@@ -741,6 +741,7 @@ async function handleMutationFetch(
     : sendInit;
   try {
     const response = await fetchWithDeadline(sendInput, firstInit);
+    if (!response.ok) await announceBlocked(response, url, firstInit);
     return response;
   } catch (networkError) {
     return queueMutation(
@@ -750,6 +751,54 @@ async function handleMutationFetch(
       body,
       (networkError as Error)?.name === 'DeadlineExceeded' ? 'timeout' : 'offline',
     );
+  }
+}
+
+/**
+ * Tell the application that a mutation was refused.
+ *
+ * This is the one place that sees every mutation the application makes, so
+ * announcing here gives ~150 screens a self-service dialog without any of them
+ * being edited. BlockerProvider listens; the catalogue decides whether there is
+ * anything useful to say, and stays silent when there is not.
+ *
+ * The body is read from a CLONE. Consuming the real one would hand the calling
+ * form an already-read stream, and the form's own error handling — which is
+ * often better than anything generic — would break.
+ *
+ * Nothing here may throw. A failure while explaining a failure must not become
+ * the failure the user sees.
+ */
+async function announceBlocked(
+  response: Response,
+  url: string,
+  init?: RequestInit,
+): Promise<void> {
+  try {
+    if (typeof window === 'undefined') return;
+    const type = response.headers.get('content-type') || '';
+    if (!type.includes('json')) return;
+
+    const body = await response.clone().json().catch(() => null);
+    if (!body) return;
+
+    window.dispatchEvent(new CustomEvent('orm:blocked', {
+      detail: {
+        status: response.status,
+        url,
+        method: (init?.method ?? 'POST').toUpperCase(),
+        body,
+        // Enough to send the same request again, for the retry button.
+        request: {
+          url,
+          method: (init?.method ?? 'POST').toUpperCase(),
+          headers: headersToObject(init?.headers),
+          body: typeof init?.body === 'string' ? init.body : undefined,
+        },
+      },
+    }));
+  } catch {
+    /* explaining a failure must never become one */
   }
 }
 
