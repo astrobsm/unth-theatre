@@ -366,6 +366,7 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/users', icon: Settings, label: 'User Management' });
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
+    menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/anonymous-tips/view', icon: Eye, label: 'Review Tips', badge: 'ADMIN' });
     // Two entries, not one screen with tabs. They are read by different people
     // for different reasons, and the combined screen opened on the patient tab
@@ -561,6 +562,7 @@ export default function DashboardLayout({
       '/hod-letter',
       '/dashboard/live-monitoring',
       '/dashboard/theatre-audit',
+      '/dashboard/theatre-audit/conference',
       '/dashboard/users',
       '/role-guide',
     ] },

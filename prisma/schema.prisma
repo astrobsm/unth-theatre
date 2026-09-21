@@ -4356,6 +4356,259 @@ model EmergencyDelayEscalation {
 /// Drafted by the system at the third hour, PERSONALISED TO THEIR ROLE ON THE
 /// CASE, and sent by an administrator — never automatically. Calling somebody
 /// before a committee is not something a cron job should do unattended.
+// ============================================================
+// Hospital Theatre Audit Conference
+// ------------------------------------------------------------
+// A sitting at which structural adjustments to the theatre are taken point by
+// point: each is raised, discussed, and a decision is recorded against it --
+// the decision sitting beside the point it answers, so a reader a year later
+// can see what was proposed and what was resolved without holding two
+// documents open.
+//
+// Separate from the theatre-audit REVIEW board, which lists cancellations,
+// incidents and mortalities for scrutiny. That board asks "what happened".
+// This one asks "what are we changing, who is doing it, and by when".
+// ============================================================
+
+/// Which part of theatre function a point concerns. Used to group the agenda
+/// and to order the analysis; deliberately broad, because a point that does
+/// not fit anywhere gets filed under OTHER rather than mis-filed.
+enum ConferenceArea {
+  LIST_AND_SCHEDULING
+  STAFFING_AND_ROLES
+  THEATRE_READINESS
+  EMERGENCY_PATHWAY
+  EQUIPMENT_AND_CONSUMABLES
+  COMMUNICATION
+  PATIENT_FLOW
+  RECORDS_AND_AUDIT
+  INFRASTRUCTURE
+  TRAINING
+  OTHER
+}
+
+/// What the conference resolved on one point.
+///
+/// DEFERRED and REFERRED are kept apart from REJECTED on purpose. "We will
+/// come back to this" and "somebody else decides this" are not refusals, and a
+/// minute recording all three as "not adopted" loses the only information
+/// anybody needs next time.
+enum ConferenceOutcome {
+  ADOPTED
+  ADOPTED_WITH_MODIFICATION
+  REJECTED
+  DEFERRED
+  REFERRED
+  NOTED
+}
+
+enum ConferenceStatus {
+  /// Agenda being assembled before the sitting.
+  DRAFT
+  /// The sitting itself: points being taken and decisions recorded.
+  IN_SESSION
+  /// Every point has a decision; the analysis has been run.
+  ANALYSED
+  /// The chair has adopted the resolution. Points and decisions are sealed.
+  ADOPTED
+}
+
+/// One sitting.
+model TheatreAuditConference {
+  id          String   @id @default(uuid())
+  title       String
+  sittingDate DateTime
+  venue       String?
+  /// Why this conference was called, in the caller own words.
+  purpose     String?
+
+  chairId   String?
+  chairName String
+
+  secretaryId   String?
+  /// Who is writing it down. A minute with no named recorder is a minute
+  /// nobody can be asked about.
+  secretaryName String?
+
+  status ConferenceStatus @default(DRAFT)
+
+  /// Set when the chair adopts the resolution. From that moment the points and
+  /// decisions stop being editable: a minute that can be changed after
+  /// adoption is not a minute, it is a draft that people have acted on.
+  adoptedAt     DateTime?
+  adoptedById   String?
+  adoptedByName String?
+
+  /// The sequenced resolution as it stood at adoption, stored verbatim.
+  /// Regenerating it later from changed data would silently rewrite what was
+  /// agreed in the room.
+  adoptedResolution String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  issues    ConferenceIssue[]
+  attendees ConferenceAttendee[]
+
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([sittingDate])
+  @@index([status])
+  @@map("theatre_audit_conferences")
+}
+
+/// Who was in the room. Attendance is part of the minute: a decision about
+/// anaesthetic cover taken with no anaesthetist present is a different fact
+/// from the same decision taken with three.
+model ConferenceAttendee {
+  id            String  @id @default(uuid())
+  conferenceId  String
+  userId        String?
+  name          String
+  /// Their standing at the conference: "Head of Anaesthesia", "Theatre
+  /// Manager". Snapshotted, because posts change.
+  roleAtSitting String?
+  present       Boolean @default(true)
+  /// Recorded apologies. Distinct from simply absent.
+  apologies     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  conference TheatreAuditConference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([conferenceId])
+  @@map("conference_attendees")
+}
+
+/// One point on the agenda: a proposed structural adjustment.
+///
+/// The three text fields are kept apart rather than merged into one
+/// description. What happens now, what is proposed, and why it was raised are
+/// three different claims, and a committee that cannot see them separately
+/// argues about all three at once.
+model ConferenceIssue {
+  id           String @id @default(uuid())
+  conferenceId String
+  /// Position on the agenda. Renumbering is allowed while the conference is
+  /// open; after adoption these numbers are how the resolution refers to them.
+  ordinal      Int
+
+  title           String
+  area            ConferenceArea @default(OTHER)
+  /// What prompted it.
+  background      String?
+  /// What happens today.
+  currentPractice String?
+  /// What is being proposed instead.
+  proposal        String?
+
+  raisedById   String?
+  raisedByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conference TheatreAuditConference      @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  discussion ConferenceDiscussionPoint[]
+  decision   ConferenceDecision?
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([conferenceId, ordinal])
+  @@index([conferenceId])
+  @@map("conference_issues")
+}
+
+/// A point made in discussion. Append-only: what somebody said in the room is
+/// not edited afterwards.
+model ConferenceDiscussionPoint {
+  id      String @id @default(uuid())
+  issueId String
+
+  speakerName String
+  speakerId   String?
+  point       String
+  /// Whether the speaker was arguing for or against, where they were clear
+  /// about it. Null means neither, which is most contributions.
+  stance      String?
+
+  createdAt DateTime @default(now())
+
+  issue ConferenceIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([issueId])
+  @@map("conference_discussion_points")
+}
+
+/// The decision on one point. One per point -- a second decision is an
+/// amendment of the first, not a rival to it.
+model ConferenceDecision {
+  id      String @id @default(uuid())
+  issueId String @unique
+
+  outcome      ConferenceOutcome
+  /// What was resolved, in the words that will be read out.
+  decisionText String
+  /// Why. A decision without a reason cannot be revisited intelligently when
+  /// the circumstances that produced it change.
+  rationale    String?
+
+  /// Who does it. An adopted decision with no owner is a wish.
+  ownerId   String?
+  ownerName String?
+  /// By when.
+  dueDate   DateTime?
+
+  /// Points this one cannot start before. Ids of other issues in the same
+  /// conference; the analysis sequences from these and refuses a cycle.
+  dependsOnIssueIds String[]
+
+  /// What it will cost or need -- staff, money, equipment, a room.
+  resourceImplication String?
+
+  /// Recorded where a vote was taken. Null throughout means it was taken by
+  /// consensus, which is the ordinary case and must not be shown as 0-0-0.
+  votesFor     Int?
+  votesAgainst Int?
+  votesAbstain Int?
+
+  /// For DEFERRED: when it comes back. A deferral with no return date is how
+  /// a point disappears.
+  reviewOn   DateTime?
+  /// For REFERRED: to whom.
+  referredTo String?
+
+  decidedAt      DateTime @default(now())
+  recordedById   String
+  recordedByName String?
+  updatedAt      DateTime @updatedAt
+
+  issue ConferenceIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([ownerId])
+  @@index([dueDate])
+  @@map("conference_decisions")
+}
+
 model AuditCommitteeInvitation {
   id           String @id @default(uuid())
   escalationId String
