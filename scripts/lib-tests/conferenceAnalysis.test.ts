@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   analyse, findGaps, sequence, buildResolution, isActionable,
-  AGENDA_TEMPLATE, AREA_LABEL, OUTCOME_LABEL,
+  AGENDA_TEMPLATE, AREA_LABEL, OUTCOME_LABEL, PROPOSAL_REFERENCE,
   type IssueInput, type DecisionInput,
 } from '../../src/lib/audit/conference';
 
@@ -359,39 +359,120 @@ describe('counting the sitting', () => {
   });
 });
 
-describe('the agenda of proposals', () => {
-  it('carries the changes actually put to the department', () => {
-    expect(AGENDA_TEMPLATE.length).toBeGreaterThan(8);
-    const areas = new Set(AGENDA_TEMPLATE.map((t) => t.area));
-    expect(areas.has('LIST_AND_SCHEDULING')).toBe(true);
-    expect(areas.has('THEATRE_READINESS')).toBe(true);
-    expect(areas.has('STAFFING_AND_ROLES')).toBe(true);
+describe('the agenda is the Theatre Team submission', () => {
+  it('carries every one of the eleven prayers', () => {
+    // The prayers are the decisions actually before the Chief Medical
+    // Director. A point dropped here is a decision the sitting never takes.
+    const titles = AGENDA_TEMPLATE.map((t) => t.title).join(' | ');
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 9, 10, 11]) {
+      expect(titles).toContain(`Prayer ${n} `);
+    }
+    // Prayer 8 is split, because the submission's own timetable separates the
+    // direction on payment (immediate) from the revolving fund (ninety days),
+    // and a committee that cannot adopt one without the other is being asked
+    // the wrong question.
+    expect(titles).toContain('Prayer 8a');
+    expect(titles).toContain('Prayer 8b');
   });
 
-  it('states, for each, what happens now and what is proposed instead', () => {
-    // Three separate claims. A committee that cannot see them apart argues
-    // about all three at once.
+  it('cites the submission it comes from', () => {
+    expect(PROPOSAL_REFERENCE).toContain('UNTH/THTR/TT/CMD/2026/09-02');
+  });
+
+  it('files each prayer where the submission puts it, not under Other', () => {
+    // A proposal mis-filed is a proposal the committee cannot find.
+    const byArea = new Set(AGENDA_TEMPLATE.map((t) => t.area));
+    expect(byArea.has('INFECTION_PREVENTION')).toBe(true);
+    expect(byArea.has('EMERGENCY_PATHWAY')).toBe(true);
+    expect(byArea.has('DIAGNOSTIC_AND_SUPPORT')).toBe(true);
+    expect(byArea.has('FINANCE_AND_REVENUE')).toBe(true);
+    expect(byArea.has('GOVERNANCE')).toBe(true);
+    expect(byArea.has('OTHER')).toBe(false);
+    AGENDA_TEMPLATE.forEach((t) => expect(AREA_LABEL[t.area]).toBeTruthy());
+  });
+
+  it('states for each what happens now and what is asked for', () => {
     AGENDA_TEMPLATE.forEach((t) => {
-      expect(AREA_LABEL[t.area]).toBeTruthy();
-      expect(t.background.length).toBeGreaterThan(40);
-      expect(t.currentPractice.length).toBeGreaterThan(20);
-      expect(t.proposal.length).toBeGreaterThan(20);
+      expect(t.background.length).toBeGreaterThan(80);
+      expect(t.currentPractice.length).toBeGreaterThan(40);
+      expect(t.proposal.length).toBeGreaterThan(80);
     });
   });
 
-  it('says plainly which proposals are already running', () => {
-    // Most of these were built before anybody sat down to ratify them, which
-    // is the whole reason for the sitting. A committee asked to ratify
-    // something already in use has to be told that it is.
-    const live = AGENDA_TEMPLATE.filter((t) => t.background.includes('ALREADY IN USE'));
-    expect(live.length).toBeGreaterThan(4);
+  it('carries over the submission\u2019s disclosures about what the app cannot yet do', () => {
+    // Made expressly so that Management would not be given to understand the
+    // position was further advanced than it is. Dropping them here would undo
+    // that, and the committee would ratify an appraisal drawn from records
+    // that do not exist.
+    const disclosures = AGENDA_TEMPLATE.filter((t) => t.background.includes('DISCLOSED IN THE SUBMISSION'));
+    expect(disclosures.length).toBeGreaterThanOrEqual(2);
+    const all = AGENDA_TEMPLATE.map((t) => `${t.title} ${t.background} ${t.proposal}`).join(' ');
+    expect(all).toContain('radiology');
+    expect(all).toContain('surgical site infection');
+  });
+
+  it('keeps the safeguards the submission attached to its own prayers', () => {
+    const all = AGENDA_TEMPLATE.map((t) => t.proposal).join(' ');
+    // Provision before prohibition on attire; escalation rather than a
+    // unilateral power to close a theatre; no diminution of entitlement on
+    // reintegration. Each was a deliberate qualification, and a summary that
+    // loses them misrepresents what was asked for.
+    expect(all).toContain('FOLLOW provision and not precede it');
+    expect(all).toContain('escalation rather than unilateral closure');
+    expect(all).toContain('diminution of entitlement');
+  });
+
+  it('does not put a figure where the submission declined to', () => {
+    // The decision-to-delivery interval is expressly left to the Department of
+    // Obstetrics and Gynaecology to recommend and Management to adopt, so it
+    // gets its own point and that point must not quietly supply a number.
+    const dtd = AGENDA_TEMPLATE.find((t) => t.title.includes('decision-to-delivery'))!;
+    expect(dtd).toBeTruthy();
+    expect(dtd.background).toContain('declines to propose the figure');
+    const everything = AGENDA_TEMPLATE.map((t) => t.proposal).join(' ');
+    expect(everything).not.toMatch(/\b(15|20|30|45|60)\s*minutes\b/);
+  });
+
+  it('puts every ask on the agenda, not only the prayers', () => {
+    // The sitting takes the points one after another, so anything absent here
+    // is a decision the conference never makes. These are the asks the
+    // submission makes outside its numbered prayers.
+    const titles = AGENDA_TEMPLATE.map((t) => t.title).join(' | ');
+    for (const ask of [
+      'Legal Unit',                       // paragraph 2 preliminary
+      'Costed attire schedule',           // paragraph 4 resource box, 14 days
+      'turnover interval',                // paragraph 5(f)
+      'two-source appraisal',             // paragraph 6 and Appendix C
+      'Appendix A',                       // the emergency location recording table
+      'decision-to-delivery',             // paragraph 7.2(d)
+      'Vulnerable Group Fund',            // paragraph 2(b)
+      'reported monthly',                 // paragraph 11(b), the ten measures
+      'Appendix B',                       // the establishment sought
+      'Provision within the application',  // paragraphs 6 and 8(f)
+      'implementation timetable',         // paragraph 12
+    ]) {
+      expect(titles).toContain(ask);
+    }
+  });
+
+  it('keeps the document order, with the phasing taken last', () => {
+    // The preliminary first because prayer 8b turns on it; the phasing last so
+    // the sitting settles what it is doing before it settles when.
+    expect(AGENDA_TEMPLATE[0].title).toContain('Preliminary');
+    expect(AGENDA_TEMPLATE[AGENDA_TEMPLATE.length - 1].title).toContain('implementation timetable');
+
+    const prayerAt = (n: string) =>
+      AGENDA_TEMPLATE.findIndex((t) => t.title.startsWith(`Prayer ${n} `));
+    const order = ['1', '2', '3', '4', '5', '6', '7'].map(prayerAt);
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Each consequential sits directly with the prayer it belongs to.
+    expect(AGENDA_TEMPLATE[prayerAt('2') + 1].title).toContain('Prayer 2, consequential');
   });
 
   it('brings no decision with it', () => {
-    // The proposal is stated because it is genuinely what was proposed. The
-    // column beside it stays empty until somebody in the room fills it in — a
-    // template arriving with the decisions made would be this system deciding
-    // the restructure.
+    // The prayers are stated because they are what was prayed for. The column
+    // beside each stays empty until somebody in the room fills it in.
     AGENDA_TEMPLATE.forEach((t) => {
       expect(t).not.toHaveProperty('decision');
       expect(t).not.toHaveProperty('outcome');

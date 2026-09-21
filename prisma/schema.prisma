@@ -4384,6 +4384,21 @@ enum ConferenceArea {
   RECORDS_AND_AUDIT
   INFRASTRUCTURE
   TRAINING
+  /// Attire and zoning, environmental services, and the infection prevention
+  /// and quality assurance function. Added for the Theatre Team's submission
+  /// of 8 September 2026, three of whose eleven prayers sit here.
+  INFECTION_PREVENTION
+  /// Blood transfusion, radiology, pharmacy and laboratory as parties to the
+  /// emergency pathway.
+  DIAGNOSTIC_AND_SUPPORT
+  /// Where a proposal turns on money: the charge, its timing, and the fund it
+  /// is met from. Kept apart from the clinical proposals because it is decided
+  /// with Finance and Legal in the room, not without them.
+  FINANCE_AND_REVENUE
+  /// The devices, the connectivity, and the people whose task the record is.
+  ICT_AND_DOCUMENTATION
+  /// How the restructuring is overseen and what is reported, to whom, monthly.
+  GOVERNANCE
   OTHER
 }
 

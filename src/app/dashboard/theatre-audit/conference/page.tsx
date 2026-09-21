@@ -64,11 +64,11 @@ export default function ConferenceListPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    title: 'Theatre structural review',
+    title: 'Theatre Restructuring Proposal \u2014 UNTH/THTR/TT/CMD/2026/09-02',
     sittingDate: new Date().toISOString().slice(0, 10),
     venue: '',
     chairName: '',
-    purpose: '',
+    purpose: 'To take decisions on the eleven prayers of the Theatre Team\u2019s submission to the Chief Medical Director of 8th September 2026.',
     useTemplate: true,
   });
 
@@ -202,16 +202,17 @@ export default function ConferenceListPage() {
             />
             <span className="text-sm">
                 <span className="font-semibold text-gray-900">
-                Start from the proposals already on the table
+                Start from the Theatre Team&rsquo;s submission
               </span>
               <span className="block text-gray-600">
-                The structural adjustments actually put to the department — booking as clerical
-                work, the readiness tick-lists, team availability, the CMD board, the holding
-                area, duplicate patients, post-operative notes, the Eye Theatre merge, awareness
-                training, the backup drill and the outstanding role assignments. Each says what
-                happens now, what is proposed, and whether it is already running. Every point can
-                be renamed, reordered or deleted, and none of them arrives with a decision.
-              </span>
+                Every ask in ref UNTH/THTR/TT/CMD/2026/09-02 of 8th September 2026, as
+                twenty-three points to be taken one after another &mdash; the eleven prayers in
+                order, each with the consequential decisions the submission attaches to it, the
+                preliminary on the Legal Unit&rsquo;s confirmation, the Appendix A recording table,
+                the Appendix B establishment, the undertakings given about this application, and
+                the phasing last. Each states what happens now and what is asked for, with the
+                paragraph lettering kept so a reader can turn to the submission. None arrives
+                with a decision.</span>
             </span>
           </label>
 
