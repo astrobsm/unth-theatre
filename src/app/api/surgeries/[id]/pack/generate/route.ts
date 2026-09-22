@@ -6,6 +6,7 @@ import { buildPackRequests } from '@/lib/packRequests';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { canEditPack } from '@/lib/theatreOps/packAmendment';
 import { fallbackPacks } from '@/lib/packs/fallback';
+import { toConsumableCategory, toDrugType } from '@/lib/packs/enums';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,11 +149,21 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         arr.findIndex((x: any) => String(x.name).trim().toLowerCase() === String(d.name).trim().toLowerCase()) === i);
 
     if (newConsumables.length) {
+      // Mapped field by field rather than spread. The standards library carries
+      // a richer vocabulary than these columns — dosage, route, its own
+      // category names — and spreading it handed Prisma fields and enum values
+      // the model does not have, which rejects the whole insert and returns a
+      // 500 rather than skipping the extra keys.
       await prisma.surgeryConsumableRequest.createMany({
         data: newConsumables.map((c: any) => ({
-          ...c,
           surgeryId: params.id,
           templateId: c.templateId ?? null,
+          name: String(c.name),
+          category: toConsumableCategory(c.category),
+          size: c.size ?? null,
+          unit: c.unit ?? 'piece',
+          quantity: Number(c.quantity) > 0 ? Math.round(Number(c.quantity)) : 1,
+          notes: c.notes ?? null,
           requestedById: userId,
           requestedByName: userName,
         })),
@@ -161,10 +172,16 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     if (newDrugs.length) {
       await prisma.surgeryDrugDressingRequest.createMany({
         data: newDrugs.map((d: any) => ({
-          ...d,
           surgeryId: params.id,
-          requestedById: userId,
-          requestedByName: userName,
+          templateId: d.templateId ?? null,
+          name: String(d.name),
+          // The column is `type`, and the standards call it drugType.
+          type: toDrugType(d.type ?? d.drugType ?? d.category),
+          dosage: d.dosage ?? null,
+          route: d.route ?? null,
+          unit: d.unit ?? 'vial',
+          quantity: Number(d.quantity) > 0 ? Math.round(Number(d.quantity)) : 1,
+          notes: d.notes ?? null,
         })),
       });
     }
