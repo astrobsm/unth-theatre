@@ -65,6 +65,14 @@ export interface ScribeInput {
   // Consent (scalars on Surgery)
   consentSignedElectronically?: boolean | null;
   consentFileData?: string | null;
+  /**
+   * Whether a consent file exists, answered without fetching it.
+   *
+   * consentFileData is a base64 scan, commonly several megabytes. Callers pass
+   * this instead so the analysis never needs the bytes to decide a boolean.
+   * consentFileData is still accepted for any caller that already holds it.
+   */
+  consentFilePresent?: boolean | null;
   consentCompletedAt?: Date | string | null;
   // Patient
   patient?: {
@@ -90,7 +98,9 @@ export function analyzePreopSafety(s: ScribeInput): ScribeResult {
   const isElective = (s.surgeryType ?? 'ELECTIVE') === 'ELECTIVE';
 
   // ── Consent ──
-  const consented = !!s.consentSignedElectronically || !!s.consentFileData || !!s.consentCompletedAt;
+  const consented = !!s.consentSignedElectronically
+    || !!s.consentFileData || s.consentFilePresent === true
+    || !!s.consentCompletedAt;
   if (!consented) {
     add('CRITICAL', 'Consent', 'Informed consent not documented',
       'No signed electronic consent or uploaded consent form is on record for this booking.',

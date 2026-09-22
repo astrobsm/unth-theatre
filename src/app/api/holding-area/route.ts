@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { hasConsentFile } from '@/lib/consentPresence';
 import { triggerRadio, speak3 } from '@/lib/radioEvents';
 import { MIN_OVERRIDE_REASON } from '@/lib/preopRequirements';
 import { jsonWithETag } from '@/lib/etag';
@@ -148,7 +149,8 @@ export async function POST(request: NextRequest) {
     const surgery = await prisma.surgery.findUnique({
       where: { id: surgeryId },
       select: {
-        consentFileData: true,
+        // Not consentFileData: it is a base64 scan of several megabytes and
+        // only its EXISTENCE is wanted, which is asked below without moving it.
         consentSignedElectronically: true,
         consentCompletedAt: true,
         patient: { select: { name: true } },
@@ -165,8 +167,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const consentFileOnFile = surgery ? await hasConsentFile(surgeryId) : false;
+
     const hasConsent = Boolean(
-      surgery?.consentFileData ||
+      consentFileOnFile ||
       surgery?.consentSignedElectronically ||
       surgery?.consentCompletedAt ||
       surgery?.preOperativeVisits?.[0]?.consentStatus === 'OBTAINED',
