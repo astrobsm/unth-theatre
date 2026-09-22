@@ -100,6 +100,7 @@ import {
   ChevronDown,
   ChevronRight,
   Scan,
+  Wifi,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -283,6 +284,7 @@ export default function DashboardLayout({
     { href: '/dashboard/theatre-readiness', icon: Gauge, label: 'Theatre Readiness' },
     { href: '/dashboard/theatre-ops/capture', icon: ClipboardCheck, label: 'Record Milestones', badge: 'NEW' },
     { href: '/dashboard/duty-flyers', icon: FileText, label: 'Duty Flyers', badge: 'NEW' },
+    { href: '/dashboard/theatre-wifi', icon: Wifi, label: 'Theatre Wi-Fi', badge: 'NEW' },
     { href: '/dashboard/theatre-ops', icon: ClipboardList, label: 'Theatre Operations', badge: 'NEW' },
     { href: '/dashboard/theatre-ops/check-in', icon: UserCheck, label: 'Team Check-in', badge: 'NEW' },
     { href: '/dashboard/theatre-ops/emergency-response', icon: Ambulance, label: 'Emergency Response', badge: 'NEW' },

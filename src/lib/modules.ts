@@ -131,6 +131,10 @@ export const MODULES: AppModule[] = [
   // Radiology sits in Pre-Op because that is when the great majority of these
   // are asked for, but the worklist itself spans the whole case — including the
   // intra-operative films, which are the ones that cannot wait.
+  // Everybody. A nurse who cannot get on the network cannot use any of the
+  // rest of this, so gating it by role would gate the thing people need
+  // precisely when they have nothing else.
+  { id: 'theatre-wifi', label: 'Theatre Wi-Fi', paths: ['/dashboard/theatre-wifi'], defaultRoles: ['*'], category: 'Overview' },
   { id: 'radiology', label: 'Radiology', paths: ['/dashboard/radiology'], defaultRoles: ['RADIOLOGIST', 'RADIOGRAPHER', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', ...ADMIN_VIEWERS], category: 'Pre-Op' },
   // Requesting laboratory investigations for a booked case. The API existed
   // from the beginning and nothing in the application called it, so nothing
