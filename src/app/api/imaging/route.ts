@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { captureOnDuty } from '@/lib/diagnostics/captureDuty';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/apiMiddleware';
 
@@ -120,7 +121,52 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(created, { status: 201 });
+    // Who was on duty in radiology at this moment, stored with the request and
+    // told about it. A request raised at 02:00 used to name nobody, and
+    // establishing afterwards who should have answered it meant reconstructing
+    // a roster from memory weeks later.
+    //
+    // Radiographers are told for everything, because they do the study;
+    // radiologists as well once it is urgent or an emergency, because the
+    // report is then wanted the same hour.
+    const urgentEnough = data.urgency === 'EMERGENCY'
+      || data.urgency === 'URGENT'
+      || data.urgency === 'INTRA_OPERATIVE';
+
+    const notify = {
+      title: urgentEnough
+        ? `${data.urgency === 'ROUTINE' ? '' : data.urgency.replace('_', '-')} imaging request`.trim()
+        : 'Imaging request',
+      message: `${data.modality} ${data.bodyRegion} — ${data.clinicalQuestion}`.slice(0, 400),
+      link: '/dashboard/radiology',
+    };
+
+    const captures = await Promise.all([
+      captureOnDuty({
+        kind: 'IMAGING_REQUEST', subjectId: created.id,
+        department: 'RADIOGRAPHERS', notify,
+      }).catch(() => null),
+      urgentEnough
+        ? captureOnDuty({
+            kind: 'IMAGING_REQUEST', subjectId: created.id,
+            department: 'RADIOLOGISTS', notify,
+          }).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    return NextResponse.json({
+      ...created,
+      // Said back to the requester, including when it is nobody. A surgeon
+      // told "the request has been sent" who then waits two hours for a
+      // department that had nobody on is worse served than one told at once.
+      onDuty: captures.filter(Boolean).map((c) => ({
+        department: c!.department,
+        summary: c!.summary,
+        count: c!.staff.length,
+        fallback: c!.fallback,
+        empty: c!.empty,
+      })),
+    }, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: e.errors[0]?.message ?? 'Invalid request.' }, { status: 400 });

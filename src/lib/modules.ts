@@ -93,7 +93,7 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-readiness', label: 'Theatre Readiness', paths: ['/dashboard/theatre-readiness'], defaultRoles: ['*'], category: 'Logistics' },
   // Theatre operations. Wide by default: recording a delay is the good
   // outcome, so anybody in the room must be able to do it.
-  { id: 'theatre-ops', label: 'Theatre Operations', paths: ['/dashboard/theatre-ops'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'THEATRE_STORE_KEEPER', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'PHARMACIST', 'BIOMEDICAL_ENGINEER', 'PORTER', 'CLEANER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'POWER_PLANT_OPERATOR', 'WORKS_SUPERVISOR', 'OXYGEN_UNIT_SUPERVISOR'], category: 'Logistics' },
+  { id: 'theatre-ops', label: 'Theatre Operations', paths: ['/dashboard/theatre-ops'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'THEATRE_STORE_KEEPER', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'PHARMACIST', 'BIOMEDICAL_ENGINEER', 'BIOMEDICAL_TECHNICIAN', 'PORTER', 'CLEANER', 'BLOODBANK_STAFF', 'LABORATORY_STAFF', 'POWER_PLANT_OPERATOR', 'WORKS_SUPERVISOR', 'ELECTRICAL_TECHNICIAN', 'OXYGEN_UNIT_SUPERVISOR'], category: 'Logistics' },
   // The theatre-ops board is for everyone who works a list; the two screens
   // below read across theatres and are narrowed to consultants + management.
   // Longest-prefix matching means these override the parent module above.
@@ -140,7 +140,11 @@ export const MODULES: AppModule[] = [
   { id: 'transfers', label: 'Patient Transfers', paths: ['/dashboard/transfers'], defaultRoles: ['PORTER', 'RECOVERY_ROOM_NURSE'], category: 'Post-Op' },
 
   // Lab
-  { id: 'emergency-lab-workup', label: 'Emergency Lab Workup', paths: ['/dashboard/emergency-lab-workup'], defaultRoles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'], category: 'Lab' },
+  { id: 'emergency-lab-workup', label: 'Emergency Lab Workup', paths: ['/dashboard/emergency-lab-workup'], defaultRoles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST', 'HAEMATOLOGY_SCIENTIST', 'CHEMICAL_PATHOLOGY_SCIENTIST', 'MICROBIOLOGY_SCIENTIST', 'LABORATORY_TECHNICIAN', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST'], category: 'Lab' },
+  // The laboratory's own worklist: results for patients going to theatre, by
+  // bench, elective and emergency alike. Surgeons and anaesthetists see it
+  // because the result is what they are waiting for.
+  { id: 'laboratory', label: 'Laboratory Results', paths: ['/dashboard/laboratory'], defaultRoles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST', 'HAEMATOLOGY_SCIENTIST', 'CHEMICAL_PATHOLOGY_SCIENTIST', 'MICROBIOLOGY_SCIENTIST', 'LABORATORY_TECHNICIAN', 'BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', ...ADMIN_VIEWERS], category: 'Lab' },
 
   // Facility & support services
   { id: 'plumbing-water-supply', label: 'Plumbing & Water', paths: ['/dashboard/plumbing-water-supply'], defaultRoles: ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR'], category: 'Facility' },
@@ -165,7 +169,7 @@ export const MODULES: AppModule[] = [
   { id: 'walkie-talkies', label: 'Walkie-Talkie Radios', paths: ['/dashboard/walkie-talkies'], defaultRoles: ['*'], category: 'Alerts' },
   // ANAESTHETIC_TECHNICIAN reports here as well as reads: they are the people
   // who find faulty anaesthetic equipment, and previously had no way to say so.
-  { id: 'fault-alerts', label: 'Fault Alerts', paths: ['/dashboard/fault-alerts'], defaultRoles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR', 'PLUMBER', 'ANAESTHETIC_TECHNICIAN'], category: 'Alerts' },
+  { id: 'fault-alerts', label: 'Fault Alerts', paths: ['/dashboard/fault-alerts'], defaultRoles: ['BIOMEDICAL_ENGINEER', 'BIOMEDICAL_TECHNICIAN', 'WORKS_SUPERVISOR', 'ELECTRICAL_TECHNICIAN', 'PLUMBER', 'ANAESTHETIC_TECHNICIAN'], category: 'Alerts' },
   { id: 'emergency-alerts', label: 'Emergency Alerts', paths: ['/dashboard/emergency-alerts'], defaultRoles: [...CLINICAL_CORE], category: 'Alerts' },
   { id: 'mortality', label: 'Mortality Registry', paths: ['/dashboard/mortality'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Alerts' },
   { id: 'anonymous-tips', label: 'Anonymous Tips (Submit)', paths: ['/dashboard/anonymous-tips'], defaultRoles: ['*'], category: 'Alerts' },

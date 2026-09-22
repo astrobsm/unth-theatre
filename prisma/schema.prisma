@@ -67,6 +67,20 @@ enum UserRole {
   RADIOLOGIST
   RADIOGRAPHER
   INFECTION_CONTROL_NURSE
+  /// The three laboratory disciplines that report on a surgical patient. Kept
+  /// apart rather than under one LABORATORY_STAFF because a haematology result
+  /// is verified by a haematology scientist, and a worklist that shows every
+  /// discipline to everybody is a worklist nobody owns.
+  HAEMATOLOGY_SCIENTIST
+  CHEMICAL_PATHOLOGY_SCIENTIST
+  MICROBIOLOGY_SCIENTIST
+  /// Collects and receives samples and runs the analysers; does not verify a
+  /// result for release.
+  LABORATORY_TECHNICIAN
+  /// Stationed in the Theatre Complex under the restructuring proposal of
+  /// 8th September 2026, paragraph 3, and rostered there.
+  ELECTRICAL_TECHNICIAN
+  BIOMEDICAL_TECHNICIAN
   BOOKING_OFFICER
 }
 
@@ -358,6 +372,16 @@ enum StaffCategory {
   ANAESTHETIC_TECHNICIANS
   PHARMACISTS
   RECOVERY_NURSES
+  /// Added so the departments a surgical case waits on can be rostered here
+  /// too. Until they were, a request could be raised at 02:00 against a
+  /// department whose duty staff the system had no way of naming, and the
+  /// chase fell to whoever was standing in the theatre.
+  LABORATORY_SCIENTISTS
+  LABORATORY_TECHNICIANS
+  RADIOLOGISTS
+  RADIOGRAPHERS
+  BIOMEDICAL_ENGINEERS
+  ELECTRICAL_TECHNICIANS
 }
 
 enum AllocationType {
@@ -9551,6 +9575,265 @@ model DocumentSequence {
   @@map("imprest_document_sequences")
 }
 
+// ============================================================================
+// LABORATORY RESULTS FOR A SURGICAL PATIENT
+// ----------------------------------------------------------------------------
+// Results already exist in two places and neither serves the laboratory.
+// PreoperativeInvestigation carries what an elective case was asked for;
+// EmergencyLabTest carries the emergency workup. Both are written from the
+// requesting side, and a scientist wanting to know "what am I to report on
+// today, for patients who are going to theatre" had nowhere to look.
+//
+// This is the result as the laboratory issues it: one report, by discipline,
+// against a patient and — where there is one — a booked case. It does not
+// replace either request model. It is the artefact the lab produces, and it
+// reads the same whether the case is elective or an emergency, because the
+// scientist's job is the same.
+// ============================================================================
+
+/// Which bench. The three the proposal names, plus the two that also report on
+/// surgical patients and would otherwise be filed under OTHER.
+enum LabDiscipline {
+  HAEMATOLOGY
+  CHEMICAL_PATHOLOGY
+  MICROBIOLOGY_IMMUNOLOGY
+  BLOOD_BANK
+  HISTOPATHOLOGY
+  OTHER
+}
+
+enum LabResultStatus {
+  /// Entered, not yet checked by anyone senior.
+  PROVISIONAL
+  /// Checked and released. Only a verified result should be acted upon.
+  VERIFIED
+  /// Withdrawn after release, with a reason. Never deleted: somebody may have
+  /// operated on the strength of it.
+  AMENDED
+}
+
+model LabResultReport {
+  id String @id @default(uuid())
+
+  /// Soft references, following the convention used for newer tables. A result
+  /// may exist for a patient with no booked case, and must not vanish if a
+  /// case is later cancelled.
+  patientId             String
+  surgeryId             String?
+  /// Set where the result was issued against an emergency workup, so the two
+  /// records can be read together.
+  emergencyLabRequestId String?
+
+  discipline LabDiscipline
+  /// "Full blood count", "Serum electrolytes, urea and creatinine".
+  testName   String
+  /// Whether the case this was issued for is an emergency. Stored rather than
+  /// derived, because the urgency at the moment of issue is what the lab was
+  /// working to, and a case can be rescheduled afterwards.
+  urgent     Boolean       @default(false)
+
+  /// The result as text: values, or the narrative for a microbiology report.
+  resultSummary  String
+  /// Structured values where the bench has them, as JSON text. The summary is
+  /// what a clinician reads; this is what can be counted later.
+  resultValues   String?
+  referenceRange String?
+
+  /// The uploaded report. A data URL or a stored path, with its own name so a
+  /// download has a filename a person recognises.
+  attachment     String?
+  attachmentName String?
+  attachmentType String?
+
+  abnormal          Boolean   @default(false)
+  /// A value that changes management today. Acknowledgement is recorded
+  /// because being in the system is not the same as somebody having read it.
+  critical          Boolean   @default(false)
+  criticalAckAt     DateTime?
+  criticalAckById   String?
+  criticalAckByName String?
+
+  status LabResultStatus @default(PROVISIONAL)
+
+  enteredById   String
+  enteredByName String
+  enteredAt     DateTime @default(now())
+
+  verifiedById   String?
+  verifiedByName String?
+  verifiedAt     DateTime?
+
+  /// For AMENDED. What was changed and why, kept with the report it replaces.
+  amendmentReason String?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([patientId])
+  @@index([surgeryId])
+  @@index([discipline, status, enteredAt])
+  @@index([critical, criticalAckAt])
+  @@map("lab_result_reports")
+}
+
+// ============================================================================
+// WHO WAS ON DUTY WHEN THE REQUEST WENT IN
+// ----------------------------------------------------------------------------
+// A request raised at 02:00 against radiology or the laboratory used to name
+// nobody. When it was not answered, establishing who should have answered it
+// meant reconstructing a roster afterwards from memory — which is exactly the
+// reconstruction a Panel of Inquiry has to do, weeks later, badly.
+//
+// So the roster is read AT THE MOMENT the request is made and the answer is
+// stored with it. A roster edited afterwards does not rewrite who was on when
+// the theatre called.
+// ============================================================================
+
+enum DutyCaptureKind {
+  IMAGING_REQUEST
+  LAB_REQUEST
+  LAB_RESULT
+  FAULT_REPORT
+}
+
+model DutyCapture {
+  id String @id @default(uuid())
+
+  kind      DutyCaptureKind
+  /// Soft reference to the row this was captured for.
+  subjectId String
+
+  /// The roster category read: RADIOLOGISTS, LABORATORY_SCIENTIST etc.
+  department String
+  /// MORNING | CALL | NIGHT, as resolved at the time.
+  shift      String
+  rosterDate DateTime @db.Date
+
+  /// Who was on, snapshotted as JSON text: id, name, role, phone. Snapshotted
+  /// rather than joined, because the point is what the roster said THEN.
+  staffOnDuty String
+  /// How many names that was. Zero is the finding that matters: it means the
+  /// request went to a department with nobody rostered.
+  staffCount  Int    @default(0)
+
+  capturedAt DateTime @default(now())
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([kind, subjectId])
+  @@index([rosterDate, department])
+  @@map("duty_captures")
+}
+
+// ============================================================================
+// PRESENCE DURING A DUTY PERIOD
+// ----------------------------------------------------------------------------
+// The availability board records what a person says they are. It cannot tell
+// whether they are in the building, so somebody could mark themselves present
+// at the start of a shift and leave, and the first anybody knew was when the
+// work did not happen.
+//
+// WHAT THIS RECORDS, AND WHAT IT DELIBERATELY DOES NOT. It records whether the
+// person is inside the facility perimeter, checked at intervals while they are
+// on duty. It is a presence record, not a movement trail: the question the
+// theatre needs answered is "is the on-call radiographer on site", and that is
+// answered by in or out. Coordinates are kept for the check that produced the
+// answer, because an unexplained "absent" that cannot be checked is worse than
+// no record, but nothing here maps where somebody went.
+//
+// It runs only while the person is on duty and only for statuses that already
+// permit a position. Recording presence in somebody's own time is not a
+// workforce measure, and no operational question needs the answer.
+// ============================================================================
+
+/// The perimeter. A row rather than a constant so the works department can set
+/// it once the boundary is actually surveyed, and adjust it when the estate
+/// changes, without a deployment.
+model FacilityGeofence {
+  id   String @id @default(uuid())
+  name String
+
+  latitude     Float
+  longitude    Float
+  /// Generous by default. A perimeter drawn too tightly reports the staff room
+  /// as off site, and a presence record that cries wolf is switched off within
+  /// a week.
+  radiusMetres Int   @default(400)
+
+  active Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([active])
+  @@map("facility_geofences")
+}
+
+enum PresenceSource {
+  /// The person opened the app and it reported a position.
+  APP_HEARTBEAT
+  /// They pressed the button themselves.
+  MANUAL
+  /// Recorded by a supervisor on their behalf, with a note.
+  SUPERVISOR
+}
+
+model StaffPresenceCheck {
+  id String @id @default(uuid())
+
+  userId   String
+  userName String
+  userRole String?
+
+  /// The duty this belongs to, so a check can be read against a shift rather
+  /// than floating in the day.
+  rosterDate DateTime @db.Date
+  shift      String?
+
+  at DateTime @default(now())
+
+  /// The answer. Null where the device would not give a position at all, which
+  /// is a different fact from being away and must not be shown as absence.
+  onSite     Boolean?
+  latitude   Float?
+  longitude  Float?
+  /// Metres from the geofence centre, and the accuracy the device claimed. A
+  /// fix accurate to 2 km cannot place anybody, and is recorded as unknown.
+  distanceM  Int?
+  accuracyM  Int?
+  geofenceId String?
+
+  source PresenceSource @default(APP_HEARTBEAT)
+  /// The availability status at the moment of the check, so an "off site" can
+  /// be read beside "Transporting patient", which explains it.
+  status String?
+  note   String?
+
+  createdAt DateTime @default(now())
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([userId, at])
+  @@index([rosterDate, onSite])
+  @@map("staff_presence_checks")
+}
+
 model OrganisationSetting {
   id String @id @default("singleton")
 
@@ -12140,6 +12423,13 @@ model ImagingRequest {
   reportedAt     DateTime?
   reportedById   String?
   reportedByName String?
+
+  /// The signed report as issued, and any images sent with it. Text alone was
+  /// all this carried, and a radiologist reporting a CT has a document to
+  /// hand over, not a paragraph to retype.
+  reportAttachment     String?
+  reportAttachmentName String?
+  reportAttachmentType String?
 
   /// A finding that changes management today. Acknowledgement is recorded
   /// because being in the report is not the same as somebody having read it.

@@ -732,15 +732,39 @@ export const DUTY_SHEETS: DutySheet[] = [
   {
     id: 'laboratory',
     title: 'Laboratory',
-    roles: ['LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST'],
+    roles: [
+      'LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST',
+      'HAEMATOLOGY_SCIENTIST', 'CHEMICAL_PATHOLOGY_SCIENTIST', 'MICROBIOLOGY_SCIENTIST',
+      'LABORATORY_TECHNICIAN',
+    ],
     headline: 'A result nobody can see has not been delivered.',
     duties: [
+      {
+        task: 'Work your own bench on the laboratory worklist',
+        when: 'Through the shift',
+        why: 'The worklist shows only the discipline you report on, and only patients who are going to theatre. A result sitting on the wrong bench is a case cancelled for want of something that was already done.',
+        where: 'Laboratory Results',
+        critical: true,
+      },
       {
         task: 'Enter results into the system, not only onto paper',
         when: 'As soon as they are available',
         why: 'The booking form and the readiness checks read the entered value. A paper result, however correct, cannot unblock a case.',
-        where: 'Emergency Lab Workup',
+        where: 'Laboratory Results',
         critical: true,
+      },
+      {
+        task: 'Mark a result critical if it changes what happens today',
+        when: 'At the moment you release it',
+        why: 'A critical result is not delivered by being in the system. Marking it puts it in front of the surgical team and records who acknowledged it — and until somebody does, it stays unacknowledged on the board.',
+        where: 'Laboratory Results',
+        critical: true,
+      },
+      {
+        task: 'Verify before a result is acted on',
+        when: 'Before release',
+        why: 'An entered result is provisional. Verification is the statement that it is fit to operate on, and it carries your name. A technician may enter; releasing belongs to a scientist.',
+        where: 'Laboratory Results',
       },
       {
         task: 'Treat an emergency workup as an emergency',
@@ -958,7 +982,12 @@ export const DUTY_SHEETS: DutySheet[] = [
   {
     id: 'engineering',
     title: 'Biomedical Engineering & Works',
-    roles: ['BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR'],
+    roles: [
+      'BIOMEDICAL_ENGINEER', 'WORKS_SUPERVISOR',
+      // Stationed in the Theatre Complex on every shift under the
+      // restructuring proposal of 8th September 2026, paragraph 3.
+      'BIOMEDICAL_TECHNICIAN', 'ELECTRICAL_TECHNICIAN',
+    ],
     headline: 'Equipment that is broken and unrecorded gets discovered by a surgeon, mid-case.',
     duties: [
       {

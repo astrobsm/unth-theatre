@@ -4,6 +4,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import PresenceReporter from '@/components/staff/PresenceReporter';
 import dynamic from 'next/dynamic';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import NexoraCredit from '@/components/NexoraCredit';
@@ -308,6 +309,7 @@ export default function DashboardLayout({
 
     // === EMERGENCY LAB & INVESTIGATIONS ===
     { href: '/dashboard/emergency-lab-workup', icon: FlaskConical, label: 'Emergency Lab Workup', badge: 'NEW' },
+    { href: '/dashboard/laboratory', icon: FlaskConical, label: 'Laboratory Results', badge: 'NEW' },
 
     // === FACILITY & SUPPORT SERVICES ===
     { href: '/dashboard/plumbing-water-supply', icon: Waves, label: 'Plumbing & Water', badge: 'NEW' },
@@ -693,6 +695,11 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Reports a position while the person is on duty, so the presence record
+          has something to read. Renders nothing; the SERVER decides whether to
+          store anything, because the rule that keeps this to duty hours must
+          hold however the request arrives. */}
+      <PresenceReporter />
       {/* Mobile backdrop — tap to close the sidebar. Only on < lg where the
           sidebar overlays the content instead of pushing it. */}
       {sidebarOpen && (

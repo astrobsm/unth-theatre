@@ -54,6 +54,14 @@ export default function RosterPage() {
     { value: 'ANAESTHETIC_TECHNICIANS', label: 'Anaesthetic Technicians' },
     { value: 'PHARMACISTS', label: 'Pharmacists' },
     { value: 'RECOVERY_NURSES', label: 'Nurse Anaesthetists' },
+    // The departments a surgical case waits on. A request raised at 02:00 used
+    // to reach a department whose duty staff the system could not name.
+    { value: 'LABORATORY_SCIENTISTS', label: 'Laboratory Scientists' },
+    { value: 'LABORATORY_TECHNICIANS', label: 'Laboratory Technicians' },
+    { value: 'RADIOLOGISTS', label: 'Radiologists' },
+    { value: 'RADIOGRAPHERS', label: 'Radiographers' },
+    { value: 'BIOMEDICAL_ENGINEERS', label: 'Biomedical Engineers' },
+    { value: 'ELECTRICAL_TECHNICIANS', label: 'Electrical Technicians' },
   ];
 
   useEffect(() => {
@@ -207,6 +215,12 @@ export default function RosterPage() {
       ANAESTHETIC_TECHNICIANS: 'bg-pink-100 text-pink-800',
       PHARMACISTS: 'bg-cyan-100 text-cyan-800',
       RECOVERY_NURSES: 'bg-purple-100 text-purple-800',
+      LABORATORY_SCIENTISTS: 'bg-teal-100 text-teal-800',
+      LABORATORY_TECHNICIANS: 'bg-teal-50 text-teal-700',
+      RADIOLOGISTS: 'bg-sky-100 text-sky-800',
+      RADIOGRAPHERS: 'bg-sky-50 text-sky-700',
+      BIOMEDICAL_ENGINEERS: 'bg-orange-100 text-orange-800',
+      ELECTRICAL_TECHNICIANS: 'bg-amber-100 text-amber-800',
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };

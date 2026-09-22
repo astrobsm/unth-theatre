@@ -14,6 +14,17 @@ const VALID_CATEGORIES = [
   "ANAESTHETIC_TECHNICIANS",
   "PHARMACISTS",
   "RECOVERY_NURSES",
+  // The departments a surgical case waits on. Until these were rosterable, a
+  // request raised at 02:00 went to a department whose duty staff the system
+  // had no way of naming.
+  "LABORATORY_SCIENTISTS",
+  "LABORATORY_TECHNICIANS",
+  "RADIOLOGISTS",
+  "RADIOGRAPHERS",
+  // Stationed in the Theatre Complex on every shift under the restructuring
+  // proposal of 8th September 2026, paragraph 3.
+  "BIOMEDICAL_ENGINEERS",
+  "ELECTRICAL_TECHNICIANS",
 ] as const;
 
 const entrySchema = z.object({

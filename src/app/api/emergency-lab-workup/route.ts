@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { captureOnDuty } from '@/lib/diagnostics/captureDuty';
 
 export const dynamic = 'force-dynamic';
 
@@ -217,9 +218,43 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Who was rostered in the laboratory at this moment, stored with the
+    // request. The voice alert above reaches whoever is holding a handset; this
+    // records who was SUPPOSED to be on, which is the question asked afterwards
+    // when nobody answered.
+    const onDuty = await Promise.all([
+      captureOnDuty({
+        kind: 'LAB_REQUEST', subjectId: labRequest.id, department: 'LABORATORY_SCIENTISTS',
+        notify: {
+          title: 'Emergency laboratory request',
+          message: `${data.patientName} — ${testNames}`.slice(0, 400),
+          link: '/dashboard/emergency-lab-workup',
+        },
+      }).catch(() => null),
+      captureOnDuty({
+        kind: 'LAB_REQUEST', subjectId: labRequest.id, department: 'LABORATORY_TECHNICIANS',
+        notify: {
+          title: 'Emergency samples to collect',
+          message: `${data.patientName} — ${testNames}`.slice(0, 400),
+          link: '/dashboard/emergency-lab-workup',
+        },
+      }).catch(() => null),
+    ]);
+
+    const rostered = onDuty.filter(Boolean);
+    const nobodyRostered = rostered.length > 0 && rostered.every((c) => c!.empty);
+
     return NextResponse.json({
       ...labRequest,
-      message: `Emergency lab workup created. ${labStaff.length} lab staff notified with voice alerts.`,
+      onDuty: rostered.map((c) => ({
+        department: c!.department, summary: c!.summary,
+        count: c!.staff.length, fallback: c!.fallback, empty: c!.empty,
+      })),
+      message: nobodyRostered
+        // Said plainly rather than reassuringly. Two hours waiting on a
+        // department that had nobody on is the failure this exists to stop.
+        ? `Request recorded, but nobody is rostered in the laboratory for this shift. ${labStaff.length} were alerted by voice — telephone the head of laboratory if there is no answer.`
+        : `Emergency lab workup created. ${labStaff.length} lab staff notified with voice alerts.`,
     }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

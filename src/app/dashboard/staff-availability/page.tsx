@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import PresenceBoard from '@/components/staff/PresenceBoard';
 import { ArrowLeft, Radar, Search, RefreshCw, Loader2, Phone, MapPin, Save, UserCog, LocateFixed, ShieldQuestion } from 'lucide-react';
 import { AVAILABILITY_STATUSES, availabilityMeta, capturesLocation } from '@/lib/staffAvailability';
 import {
@@ -384,6 +385,10 @@ export default function StaffAvailabilityBoard() {
           {staff.length === 0 && <p className="text-sm text-gray-400">No staff match the filters.</p>}
         </div>
       )}
+      {/* Whether the people who say they are on duty are actually in the
+          building. Renders nothing for anybody who is not a supervisor. */}
+      <PresenceBoard />
+
     </div>
   );
 }
