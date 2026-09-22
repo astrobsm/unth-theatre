@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { buildPackRequests } from '@/lib/packRequests';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { canEditPack } from '@/lib/theatreOps/packAmendment';
+import { fallbackPacks } from '@/lib/packs/fallback';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         additionalProcedures: true,
         magnitude: true,
         status: true,
+        // For the standard fallback: the family is read from the procedure and
+        // subspecialty, and no antibiotic dose is put on a child's pack.
+        subspecialty: true,
+        surgeryType: true,
+        patient: { select: { age: true, ageUnit: true } },
       },
     });
     if (!surgery) return NextResponse.json({ error: 'Surgery not found' }, { status: 404 });
@@ -86,6 +92,28 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       console.error('[pack/generate] mapping unavailable:', e);
     }
 
+    // A confirmed mapping is used where one exists. Where none does — which is
+    // most of the 588 catalogued procedures — the composed standard fills the
+    // gap, so a pharmacy pack is never silently empty. "Nothing requested" on a
+    // thoracotomy reads as "this operation needs no drugs", and it is not that.
+    const extra = fallbackPacks({
+      procedureName: surgery.procedureName,
+      subspecialty: surgery.subspecialty,
+      magnitude: surgery.magnitude,
+      surgeryType: surgery.surgeryType,
+      additionalProcedures: Array.isArray(surgery.additionalProcedures)
+        ? surgery.additionalProcedures.join('\n')
+        : (surgery.additionalProcedures as string | null) ?? null,
+      patientAge: surgery.patient?.age ?? null,
+      patientAgeUnit: surgery.patient?.ageUnit ?? null,
+      // Not inferred. Allergy is recorded on the pre-operative assessment, not
+      // on the patient, and guessing it from free text in either direction is
+      // worse than asking: the generator warns that it must be confirmed.
+      betaLactamAllergy: false,
+      haveConsumables: mapped.consumables.length,
+      haveDrugs: mapped.drugs.length,
+    });
+
     const basePack = resolveBasePack(surgery.magnitude).map((b) => ({
       name: b.name,
       category: b.category as never,
@@ -108,13 +136,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     const haveC = new Set(existingC.map((r) => r.name.trim().toLowerCase()));
     const haveD = new Set(existingD.map((r) => r.name.trim().toLowerCase()));
 
-    const newConsumables = [...basePack, ...mapped.consumables]
+    const newConsumables = [...basePack, ...mapped.consumables, ...extra.consumables]
       .filter((c: any) => c?.name && !haveC.has(String(c.name).trim().toLowerCase()))
       // The mapping and the base pack can name the same item; keep the first.
       .filter((c: any, i, arr) =>
         arr.findIndex((x: any) => String(x.name).trim().toLowerCase() === String(c.name).trim().toLowerCase()) === i);
 
-    const newDrugs = mapped.drugs
+    const newDrugs = [...mapped.drugs, ...extra.drugs]
       .filter((d: any) => d?.name && !haveD.has(String(d.name).trim().toLowerCase()))
       .filter((d: any, i, arr) =>
         arr.findIndex((x: any) => String(x.name).trim().toLowerCase() === String(d.name).trim().toLowerCase()) === i);
