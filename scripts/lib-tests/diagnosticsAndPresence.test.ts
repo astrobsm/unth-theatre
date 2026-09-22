@@ -34,6 +34,10 @@ import {
   evaluate, summarise, shouldRecord, distanceMetres, isOnDutyStatus,
   USELESS_ACCURACY_M, AWAY_CONCERN_MINUTES,
 } from '../../src/lib/staff/presence';
+import {
+  TEST_CATALOGUE, catalogueByDiscipline, categoryFor,
+} from '../../src/lib/diagnostics/testCatalogue';
+import { ROSTER_DEPARTMENTS } from '../../src/lib/rosterDepartments';
 
 // ── benches ─────────────────────────────────────────────────────────────────
 
@@ -351,5 +355,76 @@ describe('when a check may be recorded at all', () => {
 
   it('records nothing when no status has been set', () => {
     expect(shouldRecord({ status: null, onRoster: true }).record).toBe(false);
+  });
+});
+
+// ── what can be ordered, and where it is rostered ───────────────────────────
+
+describe('the test catalogue a theatre orders from', () => {
+  it('routes every listed test to the bench it says it belongs to', () => {
+    // The whole point of a catalogue is that the name and the bench agree. A
+    // test filed under one and matched to another is how a result appears on a
+    // worklist nobody is watching.
+    TEST_CATALOGUE.forEach((t) => {
+      expect(disciplineOf({ testName: t.name })).toBe(t.discipline);
+    });
+  });
+
+  it('covers the three benches by name and the blood bank', () => {
+    const benches = new Set(TEST_CATALOGUE.map((t) => t.discipline));
+    expect(benches.has('HAEMATOLOGY')).toBe(true);
+    expect(benches.has('CHEMICAL_PATHOLOGY')).toBe(true);
+    expect(benches.has('MICROBIOLOGY_IMMUNOLOGY')).toBe(true);
+    expect(benches.has('BLOOD_BANK')).toBe(true);
+  });
+
+  it('names no test twice', () => {
+    const names = TEST_CATALOGUE.map((t) => t.name.toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('groups for the picker without an empty heading', () => {
+    const groups = catalogueByDiscipline();
+    expect(groups.length).toBeGreaterThan(3);
+    groups.forEach((g) => expect(g.tests.length).toBeGreaterThan(0));
+  });
+
+  it('stores a category the discipline mapping reads back', () => {
+    // categoryFor writes the discipline itself, so an investigation requested
+    // today sorts onto the same bench as one recorded before the enum existed.
+    TEST_CATALOGUE.forEach((t) => {
+      expect(disciplineOf({ category: categoryFor(t) })).toBe(t.discipline);
+    });
+  });
+});
+
+describe('the departments that can be rostered', () => {
+  it('has a department for every roster category the duty capture reads', () => {
+    // A department the capture looks for and the roster cannot create is a
+    // department that is永 empty — every request against it would fall back to
+    // the register and report "nobody rostered" for ever.
+    const slugs = new Set(ROSTER_DEPARTMENTS.map((d) => d.category));
+    Object.keys(DEPARTMENT_ROLES).forEach((category) => {
+      expect(slugs.has(category)).toBe(true);
+    });
+  });
+
+  it('draws each new department from roles that exist in the schema', () => {
+    const wanted = Object.keys(DEPARTMENT_ROLES);
+    ROSTER_DEPARTMENTS.filter((d) => wanted.includes(d.category)).forEach((d) => {
+      expect(d.userRoles.length).toBeGreaterThan(0);
+      expect(d.managerRoles.length).toBeGreaterThan(0);
+      expect(d.slug).toMatch(/^[a-z-]+$/);
+    });
+  });
+
+  it('gives the laboratory benches as sub-roles, matching the worklist', () => {
+    // A scientist rostered to "haematology" and the haematology worklist must
+    // mean the same thing without anybody mapping between them.
+    const lab = ROSTER_DEPARTMENTS.find((d) => d.category === 'LABORATORY_SCIENTISTS')!;
+    expect(lab.subRoles).toContain('HAEMATOLOGY');
+    expect(lab.subRoles).toContain('CHEMICAL_PATHOLOGY');
+    expect(lab.subRoles).toContain('MICROBIOLOGY_IMMUNOLOGY');
+    lab.subRoles!.forEach((b) => expect(isDiscipline(b)).toBe(true));
   });
 });

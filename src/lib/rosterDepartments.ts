@@ -171,6 +171,64 @@ export const ROSTER_DEPARTMENTS: RosterDept[] = [
     userRoles: ['PHARMACIST'],
     managerRoles: [...ROSTER_ADMIN_ROLES, 'PHARMACIST'],
   },
+
+  // ── The departments a surgical case waits on ────────────────────────────
+  //
+  // An operation is not held up by the operation; it is held up by what must be
+  // obtained before it can begin. Until these were rosterable, a request raised
+  // at 02:00 went to a department whose duty staff the system had no way of
+  // naming, and the chase fell to whoever was already standing in the theatre.
+  //
+  // Each department manages its own roster — the head of laboratory publishes
+  // the scientists, radiology publishes its own — which is why the manager
+  // roles include the department's own senior staff and not only the theatre
+  // administrators.
+  {
+    slug: 'laboratory-scientists', label: 'Laboratory Scientists',
+    category: 'LABORATORY_SCIENTISTS',
+    // The bench a scientist is on for the shift. The laboratory worklist reads
+    // the same disciplines, so a scientist rostered to haematology and the
+    // haematology worklist agree without anybody mapping between them.
+    subRoles: ['HAEMATOLOGY', 'CHEMICAL_PATHOLOGY', 'MICROBIOLOGY_IMMUNOLOGY', 'BLOOD_BANK', 'HISTOPATHOLOGY'],
+    subRoleLabel: 'Bench',
+    userRoles: [
+      'HAEMATOLOGY_SCIENTIST', 'CHEMICAL_PATHOLOGY_SCIENTIST', 'MICROBIOLOGY_SCIENTIST',
+      'EMERGENCY_LAB_SCIENTIST', 'LABORATORY_STAFF',
+    ],
+    managerRoles: [...ROSTER_ADMIN_ROLES, 'LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST'],
+  },
+  {
+    slug: 'laboratory-technicians', label: 'Laboratory Technicians',
+    category: 'LABORATORY_TECHNICIANS',
+    userRoles: ['LABORATORY_TECHNICIAN'],
+    managerRoles: [...ROSTER_ADMIN_ROLES, 'LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST'],
+  },
+  {
+    slug: 'radiologists', label: 'Radiologists', category: 'RADIOLOGISTS',
+    userRoles: ['RADIOLOGIST'],
+    managerRoles: [...ROSTER_ADMIN_ROLES, 'RADIOLOGIST'],
+  },
+  {
+    slug: 'radiographers', label: 'Radiographers', category: 'RADIOGRAPHERS',
+    // Which room they are covering. A CT radiographer on nights is a different
+    // answer to "who can do this scan" from a plain-film radiographer.
+    subRoles: ['XRAY', 'ULTRASOUND', 'CT', 'MRI', 'FLUOROSCOPY'],
+    subRoleLabel: 'Modality',
+    userRoles: ['RADIOGRAPHER'],
+    managerRoles: [...ROSTER_ADMIN_ROLES, 'RADIOLOGIST', 'RADIOGRAPHER'],
+  },
+  {
+    slug: 'biomedical-engineers', label: 'Biomedical Engineers',
+    category: 'BIOMEDICAL_ENGINEERS',
+    userRoles: ['BIOMEDICAL_ENGINEER', 'BIOMEDICAL_TECHNICIAN'],
+    managerRoles: [...ROSTER_ADMIN_ROLES, 'BIOMEDICAL_ENGINEER'],
+  },
+  {
+    slug: 'electrical-technicians', label: 'Electrical & Works',
+    category: 'ELECTRICAL_TECHNICIANS',
+    userRoles: ['ELECTRICAL_TECHNICIAN', 'WORKS_SUPERVISOR', 'POWER_PLANT_OPERATOR'],
+    managerRoles: [...ROSTER_ADMIN_ROLES, 'WORKS_SUPERVISOR'],
+  },
 ];
 
 export const getRosterDept = (slug: string): RosterDept | undefined =>

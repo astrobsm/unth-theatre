@@ -99,6 +99,7 @@ import {
   Star,
   ChevronDown,
   ChevronRight,
+  Scan,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -310,6 +311,11 @@ export default function DashboardLayout({
     // === EMERGENCY LAB & INVESTIGATIONS ===
     { href: '/dashboard/emergency-lab-workup', icon: FlaskConical, label: 'Emergency Lab Workup', badge: 'NEW' },
     { href: '/dashboard/laboratory', icon: FlaskConical, label: 'Laboratory Results', badge: 'NEW' },
+    // Radiology had a page, a module and a duty sheet, and no way to reach
+    // it: there was no sidebar entry at all, so imaging could not be
+    // requested by anybody who did not know the URL.
+    { href: '/dashboard/radiology', icon: Scan, label: 'Radiology', badge: 'NEW' },
+    { href: '/dashboard/investigations', icon: ClipboardList, label: 'Request Investigations', badge: 'NEW' },
 
     // === FACILITY & SUPPORT SERVICES ===
     { href: '/dashboard/plumbing-water-supply', icon: Waves, label: 'Plumbing & Water', badge: 'NEW' },
@@ -483,6 +489,16 @@ export default function DashboardLayout({
     { type: 'single', href: '/dashboard/roster' },
     { type: 'single', href: '/dashboard/staff-availability' },
     { type: 'single', href: '/dashboard/emergency-booking' },
+    // Their own group. Left to the trailing "More" they were reachable but
+    // buried, which is a slower version of the problem that radiology had no
+    // entry at all.
+    { type: 'group', label: 'Laboratory & Radiology', icon: FlaskConical, hrefs: [
+      '/dashboard/investigations',
+      '/dashboard/laboratory',
+      '/dashboard/radiology',
+      '/dashboard/emergency-lab-workup',
+      '/dashboard/blood-bank',
+    ] },
     { type: 'group', label: 'Alerts', icon: AlertTriangle, hrefs: [
       '/dashboard/alerts',
       '/dashboard/emergency-alerts',

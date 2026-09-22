@@ -111,6 +111,12 @@ const CATEGORY_MAP: Record<string, LabDiscipline> = {
   RADIOLOGY: 'OTHER',
   ECG: 'OTHER',
   OTHER: 'OTHER',
+  // The discipline values themselves. A request made through the investigation
+  // screen stores the discipline as its category, and without these it would
+  // come straight back as OTHER — the bench would never see its own work.
+  CHEMICAL_PATHOLOGY: 'CHEMICAL_PATHOLOGY',
+  MICROBIOLOGY_IMMUNOLOGY: 'MICROBIOLOGY_IMMUNOLOGY',
+  BLOOD_BANK: 'BLOOD_BANK',
 };
 
 /**
@@ -123,8 +129,8 @@ const CATEGORY_MAP: Record<string, LabDiscipline> = {
  * orders, and everything else goes to OTHER where a person sorts it.
  */
 const NAME_HINTS: Array<{ re: RegExp; discipline: LabDiscipline }> = [
-  { re: /\b(fbc|full blood count|haemoglobin|hemoglobin|\bhb\b|platelet|wbc|pcv|haematocrit|esr|inr|\bpt\b|aptt|clotting|coagulation|sickling|genotype|blood film)(?:s|es)?\b/i, discipline: 'HAEMATOLOGY' },
-  { re: /\b(u&e|urea|creatinine|electrolyte|sodium|potassium|chloride|bicarbonate|calcium|magnesium|phosphate|glucose|lft|liver function|bilirubin|albumin|protein|amylase|lipase|\balt\b|\bast\b|\balp\b|blood gas|lactate|troponin|lipid|cholesterol|hba1c|thyroid|\btsh\b|\bpsa\b)(?:s|es)?\b/i, discipline: 'CHEMICAL_PATHOLOGY' },
+  { re: /\b(fbc|full blood count|packed cell volume|haemoglobin|hemoglobin|\bhb\b|platelet|wbc|pcv|haematocrit|erythrocyte sedimentation rate|esr|inr|\bpt\b|aptt|clotting|coagulation|sickling|genotype|blood film)(?:s|es)?\b/i, discipline: 'HAEMATOLOGY' },
+  { re: /\b(u&e|urea|creatinine|electrolyte|sodium|potassium|chloride|bicarbonate|calcium|magnesium|phosphate|glucose|lft|liver function|bilirubin|albumin|protein|amylase|lipase|\balt\b|\bast\b|\balp\b|arterial blood gas|blood gas|lactate|troponin|lipid|cholesterol|hba1c|thyroid|\btsh\b|\bpsa\b)(?:s|es)?\b/i, discipline: 'CHEMICAL_PATHOLOGY' },
   { re: /\b(culture|sensitivity|\bm\/c\/s\b|mcs|microscopy|gram stain|zn stain|afb|\bhiv\b|hbsag|\bhcv\b|hepatitis|vdrl|serology|antibody|antigen|immunoglobulin|malaria|widal|covid|swab|urinalysis \(micro\)|wound swab)(?:s|es)?\b/i, discipline: 'MICROBIOLOGY_IMMUNOLOGY' },
   { re: /\b(group and (save|screen)|cross ?match|grouping|blood group|coombs|transfusion)(?:s|es)?\b/i, discipline: 'BLOOD_BANK' },
   { re: /\b(histology|histopathology|biopsy|cytology|frozen section|specimen)(?:s|es)?\b/i, discipline: 'HISTOPATHOLOGY' },

@@ -132,6 +132,10 @@ export const MODULES: AppModule[] = [
   // are asked for, but the worklist itself spans the whole case — including the
   // intra-operative films, which are the ones that cannot wait.
   { id: 'radiology', label: 'Radiology', paths: ['/dashboard/radiology'], defaultRoles: ['RADIOLOGIST', 'RADIOGRAPHER', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', ...ADMIN_VIEWERS], category: 'Pre-Op' },
+  // Requesting laboratory investigations for a booked case. The API existed
+  // from the beginning and nothing in the application called it, so nothing
+  // ever reached the laboratory's worklist.
+  { id: 'investigations', label: 'Request Investigations', paths: ['/dashboard/investigations'], defaultRoles: ['SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'BOOKING_OFFICER', 'SCRUB_NURSE', 'LABORATORY_STAFF', 'EMERGENCY_LAB_SCIENTIST', ...ADMIN_VIEWERS], category: 'Pre-Op' },
 
   // Infection control is Post-Op because surveillance is: a wound is looked at
   // on day 3, day 7 and day 30, long after the list has moved on. The audits

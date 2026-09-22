@@ -156,6 +156,8 @@ const APP_SHELL_ROUTES = [
   '/dashboard/catalog-letter',
   '/dashboard/disciplinary-queries',
   '/dashboard/theatre-audit',
+  '/dashboard/radiology',
+  '/dashboard/investigations',
   '/dashboard/theatre-audit/conference',
   '/dashboard/users',
   '/dashboard/admin/access',
