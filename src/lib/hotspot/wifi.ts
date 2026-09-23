@@ -20,20 +20,61 @@
 // ============================================================
 
 /**
- * The networks this hospital runs for the theatre.
+ * The network. One name, everywhere in the theatre.
  *
- * Extenders that rebroadcast the same SSID need no entry — a phone treats them
- * as one network. Only an extender configured with a DIFFERENT name does, and
- * then its name has to be exact: a QR for a network that does not exist joins
- * nothing and tells the person nothing about why.
+ * Every extender rebroadcasts UNTH-THEATRE-ORM rather than a name of its own,
+ * which is the right way round: a phone treats them as a single network and
+ * roams between them without the person doing anything. It also means one code
+ * on the wall instead of one per corridor, and nobody standing in front of the
+ * wrong poster wondering why it will not join.
+ *
+ * Kept as a list because a hospital acquires a second network eventually — a
+ * recovery area, a new wing — and the page already handles more than one.
  */
 export const THEATRE_SSIDS = [
   'UNTH-THEATRE-ORM',
-  'UNTH-THEATRE-ORM-EXT',
-  'UNTH-THEATRE-ORM-EXT2',
 ] as const;
 
 export const PRIMARY_SSID = THEATRE_SSIDS[0];
+
+/**
+ * How the network is secured, and therefore what joining it involves.
+ *
+ * 'WPA'   — a password is required. The QR carries it, so it is still one tap,
+ *           and the radio traffic is encrypted.
+ * 'nopass' — an OPEN network. Tapping the name joins instantly and the captive
+ *           portal appears with no password step at all. This is how hotel and
+ *           airport Wi-Fi works and it is the least friction possible.
+ *
+ * WHY THIS IS STILL 'WPA'. On an open network nothing encrypts the radio, so
+ * whatever the browser sends in clear is readable by anyone in range. The
+ * theatre server has no TLS certificate yet, which means the ORM username and
+ * password typed into the captive portal cross the air unencrypted — and that
+ * is the password to a system holding patient records. WPA2 is currently the
+ * only thing protecting them. scripts/local-server/README.md says so in terms.
+ *
+ * TO MAKE IT OPEN, one of these has to come first:
+ *
+ *   Put TLS on the theatre server. Then the portal is HTTPS, credentials are
+ *   encrypted whatever the Wi-Fi does, and this can become 'nopass' safely.
+ *   That is also what restores offline caching, offline sign-in and the
+ *   presence geofence, all of which need a secure context and are degraded
+ *   without it — so it is worth doing regardless of the Wi-Fi.
+ *
+ *   Or switch the SSID to WPA3 Enhanced Open (OWE). No password to join AND
+ *   the radio is still encrypted. Supported by RouterOS and by most phones
+ *   since about 2020; run it in transition mode so older handsets still
+ *   connect. This gives exactly the behaviour wanted with none of the
+ *   exposure, and needs no certificate.
+ *
+ * Changing this constant changes the QR, the instructions and the poster
+ * together. Nothing else needs touching.
+ */
+export type WifiSecurity = 'WPA' | 'nopass';
+
+export const WIFI_SECURITY = 'WPA' as WifiSecurity;
+
+export const NETWORK_IS_OPEN: boolean = WIFI_SECURITY === 'nopass';
 
 /** Is this one of ours? Used to tell staff they are on the right network. */
 export function isTheatreNetwork(ssid: string | null | undefined): boolean {
@@ -88,6 +129,27 @@ export function wifiQrPayload(input: WifiQrInput): string {
  * by itself, and knowing that in advance is the difference between waiting and
  * opening it.
  */
+export const OPEN_NETWORK_STEPS: Array<{ step: string; detail: string }> = [
+  {
+    step: 'Tap UNTH-THEATRE-ORM in your Wi-Fi list',
+    detail: 'There is no network password. It joins straight away.',
+  },
+  {
+    step: 'The sign-in page opens by itself',
+    detail: 'If it does not after a few seconds, open a browser and go to unth-theatre.link.',
+  },
+  {
+    step: 'Sign in with your ORM username and password',
+    detail: 'This opens the network and signs you into the app at the same time — you are not '
+      + 'signing in twice.',
+  },
+  {
+    step: 'The app opens and stays open',
+    detail: 'It moves out of the small sign-in window into your normal browser, so it is still '
+      + 'there when you come back to it.',
+  },
+];
+
 export const JOIN_STEPS: Array<{ step: string; detail: string }> = [
   {
     step: 'Point the camera at the code',
@@ -128,3 +190,6 @@ export const COMMON_FAILURE = {
     + 'If the sign-in page still does not appear, tell the theatre manager which phone it is — '
     + 'do not keep re-entering the password.',
 };
+
+/** The steps for however the network is currently secured. */
+export const STEPS_FOR_NETWORK = NETWORK_IS_OPEN ? OPEN_NETWORK_STEPS : JOIN_STEPS;

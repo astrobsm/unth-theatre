@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import {
   wifiQrPayload, escapeWifiValue, isTheatreNetwork,
   THEATRE_SSIDS, PRIMARY_SSID, JOIN_STEPS, COMMON_FAILURE,
+  WIFI_SECURITY, NETWORK_IS_OPEN, STEPS_FOR_NETWORK, OPEN_NETWORK_STEPS,
 } from '../../src/lib/hotspot/wifi';
 
 describe('the payload a camera reads', () => {
@@ -72,6 +73,15 @@ describe('the theatre networks', () => {
     expect(isTheatreNetwork(null)).toBe(false);
   });
 
+  it('is one network, because every extender rebroadcasts the same name', () => {
+    // Deliberate, and worth a test: one name means the phone roams between
+    // extenders on its own, and one code goes on every wall instead of one per
+    // corridor. Adding a separate SSID here should be a decision somebody
+    // makes on purpose, not a default that drifts back.
+    expect(THEATRE_SSIDS).toHaveLength(1);
+    expect(THEATRE_SSIDS[0]).toBe('UNTH-THEATRE-ORM');
+  });
+
   it('names no network twice', () => {
     expect(new Set(THEATRE_SSIDS).size).toBe(THEATRE_SSIDS.length);
   });
@@ -100,5 +110,35 @@ describe('what people are told to do', () => {
     // Re-entering a password that is not the problem is the loop this breaks.
     expect(COMMON_FAILURE.fix).toMatch(/do not keep re-entering/i);
     expect(COMMON_FAILURE.fix).toMatch(/theatre manager/i);
+  });
+});
+
+describe('the switch between a password and an open network', () => {
+  it('agrees with itself', () => {
+    expect(NETWORK_IS_OPEN).toBe(WIFI_SECURITY === 'nopass');
+    expect(STEPS_FOR_NETWORK).toBe(NETWORK_IS_OPEN ? OPEN_NETWORK_STEPS : JOIN_STEPS);
+  });
+
+  it('is still WPA, because the theatre server has no TLS certificate', () => {
+    // Deliberate and load-bearing. On an open network nothing encrypts the
+    // radio, and the portal sends the ORM password in clear — the credentials
+    // to a system holding patient records. WPA2 is the only thing protecting
+    // them until the server is on HTTPS or the SSID moves to WPA3 OWE.
+    // scripts/local-server/README.md carries the full reasoning.
+    expect(WIFI_SECURITY).toBe('WPA');
+    expect(NETWORK_IS_OPEN).toBe(false);
+  });
+
+  it('tells people there is no password once it is opened', () => {
+    // The open-network steps must not still mention one.
+    const text = OPEN_NETWORK_STEPS.map((s) => `${s.step} ${s.detail}`).join(' ');
+    expect(text).toMatch(/no network password/i);
+    expect(text).not.toMatch(/tap the banner/i);
+    expect(text).toMatch(/not signing in twice/i);
+  });
+
+  it('drops the password from the payload when opened', () => {
+    expect(wifiQrPayload({ ssid: PRIMARY_SSID, password: 'x', security: 'nopass' }))
+      .not.toContain('P:');
   });
 });

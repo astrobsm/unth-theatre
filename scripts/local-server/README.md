@@ -190,12 +190,46 @@ Finally, upload `deploy/mikrotik/login.html` to the router's `hotspot` directory
 Watch it work: `sudo journalctl -u orm-radius -f` — each attempt logs ACCEPT or
 REJECT with the reason and the resolved account.
 
-### Keep WPA2 on the SSID
+### Keep WPA2 on the SSID — until one of two things is done
 
-Most captive portals sit on open Wi-Fi. This one must not. Because CHAP is
+Most captive portals sit on open Wi-Fi. This one must not, *yet*. Because CHAP is
 impossible, the portal password crosses the LAN in clear, and **WPA2 is what
 protects it** in the absence of a TLS certificate. Turn on client isolation too,
 so one phone cannot intercept another's traffic.
+
+#### Asked for: joining without a network password at all
+
+Staff find the password step the most frustrating part, and the request was to
+drop it — tap the network, get the ORM sign-in page, nothing else. That is the
+ordinary hotel and airport arrangement and it is the least friction possible.
+
+It is achievable, and it is the right end state. It is **not safe as things
+stand**: on an open network nothing encrypts the radio, so every staff member's
+ORM username and password — the credentials to a system holding patient records
+— would be readable by anyone within range of the theatre.
+
+Either of these makes it safe. The first is better; the second is quicker.
+
+**1. Put TLS on the theatre server, then open the SSID.**
+With HTTPS the portal credentials are encrypted whatever the Wi-Fi is doing, and
+the network can be fully open. Do this anyway: a secure context is also what
+restores the service worker (offline caching — the reason the local server
+exists), `crypto.subtle` (offline sign-in) and `navigator.geolocation` (the
+staff presence geofence). All three are currently degraded. See "HTTPS is not
+optional" in `docs/manuals/hybrid-deployment.md`.
+
+**2. Switch the SSID to WPA3 Enhanced Open (OWE).**
+No password to join, and the radio is still encrypted. RouterOS supports it; run
+it in **transition mode** so handsets too old for OWE still connect to the open
+BSS. This delivers precisely the behaviour asked for, needs no certificate, and
+is a security setting on one interface.
+
+#### When you have done one of them
+
+Set `WIFI_SECURITY` to `'nopass'` in `src/lib/hotspot/wifi.ts`. That single
+constant changes the QR code, the joining steps and the printed poster together;
+nothing else needs touching. Leave it as `'WPA'` until then — the page would
+otherwise tell staff there is no password while the router still demands one.
 
 ### Duplicate accounts limit phone-number sign-in
 

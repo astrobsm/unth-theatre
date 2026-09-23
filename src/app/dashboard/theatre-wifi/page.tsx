@@ -18,12 +18,13 @@
 // need this most are the ones who cannot get online to read it.
 // ============================================================
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle, Check, ClipboardCopy, Printer, Wifi,
 } from 'lucide-react';
 import {
-  JOIN_STEPS, COMMON_FAILURE, PRIMARY_SSID, THEATRE_SSIDS, wifiQrPayload,
+  STEPS_FOR_NETWORK, COMMON_FAILURE, PRIMARY_SSID, THEATRE_SSIDS,
+  WIFI_SECURITY, NETWORK_IS_OPEN, wifiQrPayload,
 } from '@/lib/hotspot/wifi';
 
 /**
@@ -40,9 +41,8 @@ export default function TheatreWifiPage() {
   const [ssid, setSsid] = useState<string>(PRIMARY_SSID);
   const [qr, setQr] = useState<string>('');
   const [qrError, setQrError] = useState<string | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const payload = wifiQrPayload({ ssid, password: WIFI_PASSWORD });
+  const payload = wifiQrPayload({ ssid, password: WIFI_PASSWORD, security: WIFI_SECURITY });
 
   const draw = useCallback(async () => {
     try {
@@ -118,24 +118,32 @@ export default function TheatreWifiPage() {
               {qrError ?? 'Drawing the code…'}
             </div>
           )}
-          <canvas ref={canvasRef} className="hidden" />
 
           <p className="mt-3 text-center">
             <span className="block text-xs uppercase tracking-wide text-gray-500">Network</span>
             <span className="block text-lg font-bold text-gray-900">{ssid}</span>
-          </p>
-          <p className="mt-1 text-center">
-            <span className="block text-xs uppercase tracking-wide text-gray-500">
-              Password, if you must type it
-            </span>
-            <span className="block font-mono text-lg font-bold tracking-widest text-gray-900">
-              {WIFI_PASSWORD}
+            <span className="block text-xs text-gray-500">
+              The same network everywhere in the theatre complex
             </span>
           </p>
+          {NETWORK_IS_OPEN ? (
+            <p className="mt-2 text-center text-sm font-semibold text-green-800">
+              No network password. Tap the name and it joins.
+            </p>
+          ) : (
+            <p className="mt-1 text-center">
+              <span className="block text-xs uppercase tracking-wide text-gray-500">
+                Password, if you must type it
+              </span>
+              <span className="block font-mono text-lg font-bold tracking-widest text-gray-900">
+                {WIFI_PASSWORD}
+              </span>
+            </p>
+          )}
         </div>
 
         <ol className="mx-auto mt-5 max-w-xl space-y-2">
-          {JOIN_STEPS.map((s, i) => (
+          {STEPS_FOR_NETWORK.map((s, i) => (
             <li key={s.step} className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-bold text-white">
                 {i + 1}
@@ -183,21 +191,23 @@ export default function TheatreWifiPage() {
               ))}
             </div>
             <p className="mt-1 text-xs text-gray-500">
-              Extenders that rebroadcast the same name need no separate code — the phone treats
-              them as one network.
+              Extenders rebroadcasting the same name need no separate code — the phone treats
+              them as one network and roams between them on its own.
             </p>
           </div>
         )}
 
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={copy}
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 ring-1 ring-gray-300 hover:bg-gray-50"
-          >
-            {copied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
-            {copied ? 'Password copied' : 'Copy the password'}
-          </button>
+          {!NETWORK_IS_OPEN && (
+            <button
+              type="button"
+              onClick={copy}
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 ring-1 ring-gray-300 hover:bg-gray-50"
+            >
+              {copied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
+              {copied ? 'Password copied' : 'Copy the password'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => window.print()}
