@@ -25,6 +25,7 @@
 import { PrismaClient } from '@prisma/client';
 import {
   BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge, isTooMuchWork,
+  isTransportFailure,
   fitToByteBudget, MAX_PUSH_BYTES, nextByteBudget,
   backoffMs, isRetryable, isTimeout, nextBatchSize,
   type JournalEntryWire, type PullResponse, type PushResponse,
@@ -247,7 +248,12 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     // The peer telling us the batch was more work than it could finish is the
     // same signal as our own request timing out: send less next time.
     const tooSlow = res.timedOut || isTimeout(res.error) || isTooMuchWork(res.status, res.error);
-    if (tooSlow || tooLarge) {
+    // The request that never reached the peer at all. On a lossy uplink this is
+    // the DOMINANT failure and it used to shrink nothing, so a batch too big to
+    // survive the link was retried at the identical size every cycle — for ever
+    // — while the same link answered a curl in two seconds.
+    const lost = isTransportFailure(res.status, res.timedOut);
+    if (tooSlow || tooLarge || lost) {
       const outcome = tooLarge ? 'too-large' : 'timeout';
       // Both limits move. Halving the row count alone does nothing once the
       // batch is bounded by bytes — the budget simply refills it to the same
@@ -256,7 +262,11 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
       const shrunkRows = nextBatchSize(pushBatchSize, outcome);
       const shrunkBytes = nextByteBudget(pushByteBudget, outcome);
       if (shrunkRows !== pushBatchSize || shrunkBytes !== pushByteBudget) {
-        const why = tooLarge ? 'was refused as too large' : 'timed out';
+        const why = tooLarge
+          ? 'was refused as too large'
+          : lost && !tooSlow
+            ? 'never reached the peer'
+            : 'timed out';
         console.warn(
           `[sync] push of ${entries.length} ${why} — rows ${pushBatchSize} -> ${shrunkRows}, `
           + `budget ${Math.round(pushByteBudget / 1000)} -> ${Math.round(shrunkBytes / 1000)} kB`);

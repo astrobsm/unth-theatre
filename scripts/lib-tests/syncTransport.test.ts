@@ -20,6 +20,7 @@ import {
   isTimeout,
   isTooLarge,
   isTooMuchWork,
+  isTransportFailure,
   fitToByteBudget,
   MAX_PUSH_BYTES,
   MIN_PUSH_BYTES,
@@ -400,5 +401,52 @@ describe('a peer that could not finish the batch', () => {
 
   it('503 stays retryable, so shrinking gets a chance to happen', () => {
     expect(isRetryable(503)).toBe(true);
+  });
+});
+
+describe('a request that never reached the peer', () => {
+  // The dominant failure on a lossy hospital uplink, and the one that used to
+  // shrink nothing. A push of 100 entries died mid-body with "fetch failed"
+  // every cycle while the same link answered a curl to the same host in two
+  // seconds, so the outbound queue sat at 264 with three days of theatre work
+  // in it.
+  it('is a transport failure when there is no status and no timeout', () => {
+    expect(isTransportFailure(null, false)).toBe(true);
+    expect(isTransportFailure(undefined, undefined)).toBe(true);
+  });
+
+  it('is NOT a transport failure when our own timeout fired', () => {
+    // Already handled as "too slow". Counting it here as well would say
+    // nothing new, and the distinction is what the log line reports.
+    expect(isTransportFailure(null, true)).toBe(false);
+  });
+
+  it('is NOT a transport failure when the peer answered', () => {
+    // A status means a round trip completed. Whatever went wrong happened at
+    // the far end, and the size of the body is not the explanation.
+    expect(isTransportFailure(503, false)).toBe(false);
+    expect(isTransportFailure(413, false)).toBe(false);
+    expect(isTransportFailure(200, false)).toBe(false);
+  });
+
+  it('shrinks and then recovers, so guessing wrong costs only a few cycles', () => {
+    // The safety argument for treating a network failure as "send less": if
+    // the peer was merely down rather than the batch too big for the link, the
+    // size walks back up as soon as anything succeeds.
+    let n = 100;
+    n = nextBatchSize(n, 'timeout');
+    expect(n).toBe(50);
+    n = nextBatchSize(n, 'timeout');
+    expect(n).toBe(25);
+    n = nextBatchSize(n, 'ok');
+    expect(n).toBeGreaterThan(25);
+  });
+
+  it('never shrinks below the floor', () => {
+    // A peer that is down fails every cycle; the batch must stop somewhere
+    // rather than walk to zero and stop sending anything at all.
+    let n = MIN_BATCH_SIZE;
+    for (let i = 0; i < 10; i += 1) n = nextBatchSize(n, 'timeout');
+    expect(n).toBe(MIN_BATCH_SIZE);
   });
 });

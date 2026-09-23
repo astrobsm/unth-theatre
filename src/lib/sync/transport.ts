@@ -275,6 +275,39 @@ export function isTooMuchWork(status: number | null | undefined, error?: string 
     || e.includes('TRANSACTION NOT FOUND');
 }
 
+/**
+ * Did the request die on the network, with no answer from the peer at all?
+ *
+ * Told apart by the SHAPE of the result rather than by matching a message:
+ * call() returns a status for anything the peer answered, and sets timedOut
+ * when our own AbortController fired. A null status with no timeout can only
+ * mean the request never completed a round trip — and undici reports that
+ * whole family as a bare "fetch failed", which carries nothing worth matching.
+ *
+ * WHY THIS COUNTS AS "SEND LESS". On 23 September the theatre server's uplink
+ * was losing packets — the NIC reported about 30 drops a minute — and every
+ * push of 100 entries died mid-body with "fetch failed". Shrinking was wired
+ * to timeouts and to 413s only, so a batch that could not survive the link was
+ * retried at exactly the same size every cycle while the same link carried a
+ * curl to the same host in two seconds. The outbound queue sat at 264 with
+ * three days of theatre work in it.
+ *
+ * A smaller body is likelier to cross a lossy link, which is the same remedy a
+ * timeout gets and for much the same reason.
+ *
+ * SAFE WHEN THE CAUSE IS NOT SIZE. If the peer is simply down, every cycle
+ * fails and the batch shrinks to MIN_BATCH_SIZE, then grows back by half again
+ * per success once the peer returns. The cost of guessing wrong is a few
+ * cycles of small batches. The cost of not guessing is a queue that never
+ * moves at all.
+ */
+export function isTransportFailure(
+  status: number | null | undefined,
+  timedOut: boolean | undefined
+): boolean {
+  return (status === null || status === undefined) && !timedOut;
+}
+
 export function isTooLarge(status: number | null | undefined, error?: string | null): boolean {
   if (status === 413) return true;
   const e = (error ?? '').toLowerCase();
