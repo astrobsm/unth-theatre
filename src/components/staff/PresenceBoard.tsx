@@ -23,8 +23,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import {
-  Crosshair, Loader2, MapPin, RefreshCw, ShieldQuestion, UserCheck, UserX,
+  Loader2, MapPin, RefreshCw, ShieldQuestion, UserCheck, UserX,
 } from 'lucide-react';
+import PerimeterEditor, { type Perimeter } from './PerimeterEditor';
 
 interface Person {
   userId: string;
@@ -55,9 +56,8 @@ export default function PresenceBoard() {
   const [warning, setWarning] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [settingFence, setSettingFence] = useState(false);
   const [canSet, setCanSet] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [perimeter, setPerimeter] = useState<Perimeter | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,47 +82,15 @@ export default function PresenceBoard() {
   useEffect(() => {
     fetch('/api/staff/presence/geofence')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setCanSet(!!d.canSet))
+      .then((d) => {
+        if (!d) return;
+        setCanSet(!!d.canSet);
+        // The full row, which the presence endpoint does not carry: the editor
+        // needs the coordinates to prefill, not just the name and radius.
+        setPerimeter(d.geofence ?? null);
+      })
       .catch(() => {});
   }, []);
-
-  /** Set the perimeter from where this device is standing. */
-  const setPerimeterHere = () => {
-    if (!navigator.geolocation) {
-      setMessage('This device cannot report a position, so the perimeter must be typed from a map.');
-      return;
-    }
-    setSettingFence(true);
-    setMessage(null);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const res = await fetch('/api/staff/presence/geofence', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              radiusMetres: 400,
-              name: 'Hospital perimeter',
-            }),
-          });
-          const d = await res.json().catch(() => ({}));
-          setMessage(res.ok
-            ? 'Perimeter set from this position, with a 400 m radius. Presence checks can now answer.'
-            : (d.error || 'The perimeter could not be set.'));
-          if (res.ok) await load();
-        } finally {
-          setSettingFence(false);
-        }
-      },
-      () => {
-        setSettingFence(false);
-        setMessage('The device would not give a position. Allow location for this site, or type the coordinates from a map.');
-      },
-      { enableHighAccuracy: true, timeout: 15_000 },
-    );
-  };
 
   // Not a supervisor: this section is simply not theirs to read.
   if (denied) return null;
@@ -153,25 +121,24 @@ export default function PresenceBoard() {
       {warning && (
         <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p>{warning}</p>
-          {canSet && (
-            <button
-              type="button"
-              onClick={setPerimeterHere}
-              disabled={settingFence}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {settingFence ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
-              Use where I am now as the perimeter
-            </button>
-          )}
         </div>
       )}
 
-      {message && (
-        <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">{message}</p>
+      {/* The perimeter itself. Shown to whoever may change it whether or not
+          one is set, because the old control lived inside the warning above and
+          so could be used exactly once — after which there was no way to move a
+          boundary drawn from the wrong spot. */}
+      {canSet && (
+        <PerimeterEditor
+          current={perimeter}
+          onSaved={(p) => {
+            setPerimeter(p);
+            void load();
+          }}
+        />
       )}
 
-      {fence && (
+      {fence && !canSet && (
         <p className="mt-2 text-xs text-gray-500">
           Measured against “{fence.name}”, {fence.radiusMetres} m radius.
         </p>
