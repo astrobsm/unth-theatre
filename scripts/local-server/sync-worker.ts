@@ -130,18 +130,27 @@ async function call<T>(path: string, body: unknown): Promise<
   }
 }
 
+/**
+ * Attempts after which a queued entry is backed off rather than retried every
+ * cycle. Ordinary entries clear in one to six attempts even across a bad link,
+ * so ten is well clear of transient failure and far short of the 11,171 that
+ * four poisoned entries reached while starving everything behind them.
+ */
+const PUSH_BACKOFF_AFTER_ATTEMPTS = 10;
+
 /** Send what the peer has not confirmed, oldest first. */
 async function push(node: string): Promise<{ sent: number; failed: boolean }> {
   const rows = await prisma.$queryRawUnsafe<Array<{
     id: string; table_name: string; row_id: string; op: string;
     base_version: number; new_version: number; hlc: string; origin_node: string;
     payload: Record<string, unknown> | null; changed_cols: string[] | null;
-    omitted_cols: string[] | null; omitted_digest: string | null;
+    omitted_cols: string[] | null; omitted_digest: string | null; attempts: number;
   }>>(
     `select id::text, table_name, row_id, op, base_version, new_version, hlc, origin_node,
-            payload, changed_cols, omitted_cols, omitted_digest
+            payload, changed_cols, omitted_cols, omitted_digest, attempts
        from sync_journal
       where ack_at is null and origin_node = $1
+        and (next_push_at is null or next_push_at <= now())
       order by hlc
       limit $2`, node, pushBatchSize);
 
@@ -172,9 +181,48 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
       + `(byte budget ${Math.round(pushByteBudget / 1000)} kB reached)`);
   }
 
+  // Stamp the attempt, and stand down anything that has stopped being a
+  // passing error.
+  //
+  // The push is ordered by hlc with no notion of "this one has had its turn",
+  // so an entry the peer will never accept sits at the oldest hlc and is in
+  // EVERY batch. Four such entries reached 11,171 attempts each while 306
+  // legitimate ones queued behind them — and they did not fail cheaply: each
+  // costs the receiving batch a savepoint and a rollback against a
+  // 110-second transaction budget, so the batch returned P2028 and the worker
+  // halved it, 200 to 100 to 50, which cannot help when the problem is in the
+  // first four rows.
+  //
+  // Backed off, never dropped. The entry stays queued, counted and visible; it
+  // is simply tried an hour apart rather than every cycle, because what it is
+  // waiting for is a person, not a network.
   await prisma.$executeRawUnsafe(
-    `update sync_journal set shipped_at = now(), attempts = attempts + 1 where id = any($1::uuid[])`,
-    entries.map((e) => e.id));
+    `update sync_journal
+        set shipped_at = now(),
+            attempts = attempts + 1,
+            next_push_at = case
+              when attempts + 1 >= $2
+                then now() + least(
+                       interval '1 minute' * power(2, least(attempts + 1 - $2, 6))::int,
+                       interval '1 hour')
+              else null end
+      where id = any($1::uuid[])`,
+    entries.map((e) => e.id), PUSH_BACKOFF_AFTER_ATTEMPTS);
+
+  // Name them, for the same reason the deferred queue names its own: a count
+  // that never changes is indistinguishable from a count that is fine.
+  for (const r of rows) {
+    const attempts = r.attempts ?? 0;
+    if (attempts < STUCK_AFTER_ATTEMPTS) continue;
+    const key = `${r.table_name}/${r.row_id}`;
+    const last = warnedStuck.get(key) ?? 0;
+    if (Date.now() - last < STUCK_WARN_INTERVAL_MS) continue;
+    warnedStuck.set(key, Date.now());
+    console.warn(
+      `[sync] STUCK OUTBOUND: ${key} has failed ${attempts} times and is now `
+      + 'retried hourly so it cannot starve the queue. The peer will not accept '
+      + 'it — most likely two records claiming one identity. A person has to settle it.');
+  }
 
   const res = await call<PushResponse>('/api/sync/push', {
     protocol: SYNC_PROTOCOL_VERSION, fromNode: node, entries,
