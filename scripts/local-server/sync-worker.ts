@@ -289,6 +289,22 @@ async function defer(e: JournalEntryWire, fromNode: string, err: unknown): Promi
  * Runs BEFORE the pull so a parent applied last cycle unblocks its children
  * this cycle, rather than a cycle later.
  */
+/**
+ * When a parked entry stops being "waiting for its parent" and starts being
+ * stuck. A child normally resolves within a cycle or two; anything that has
+ * failed this many times is failing on the data, not on the ordering.
+ */
+const STUCK_AFTER_ATTEMPTS = 50;
+
+/** How often the same stuck entry is worth repeating. Hourly, not per cycle. */
+const STUCK_WARN_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Last time each stuck entry was named. In memory deliberately: a restart
+ * re-announcing what is still stuck is the right behaviour, not a bug.
+ */
+const warnedStuck = new Map<string, number>();
+
 async function retryDeferred(node: string): Promise<void> {
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string; from_node: string; entry: JournalEntryWire; attempts: number }>>(
     `select id, from_node, entry, attempts from sync_deferred
@@ -314,6 +330,29 @@ async function retryDeferred(node: string): Promise<void> {
   }
   const stuck = rows.length - healed;
   console.log(`[sync] deferred queue: ${healed} applied, ${stuck} still waiting`);
+
+  // Name the ones that have stopped making progress.
+  //
+  // "0 applied, 2 still waiting" is what this printed once a minute for four
+  // days while two entries for an emergency booking failed 1,274 times each.
+  // It is indistinguishable from an ordinary parked child waiting for its
+  // parent, so nobody looked, and a patient's booking silently did not
+  // replicate. A count cannot carry that; a name can.
+  //
+  // Still not dropped, and still retried — the entry may yet resolve, and
+  // discarding a change is the one outcome worse than a stuck one. This only
+  // says out loud what sync_deferred already knew.
+  for (const r of rows) {
+    if (r.attempts < STUCK_AFTER_ATTEMPTS) continue;
+    const key = `${r.entry.table}/${r.entry.rowId}`;
+    const last = warnedStuck.get(key) ?? 0;
+    if (Date.now() - last < STUCK_WARN_INTERVAL_MS) continue;
+    warnedStuck.set(key, Date.now());
+    console.warn(
+      `[sync] STUCK: ${key} has failed ${r.attempts} times and will not apply by `
+      + 'itself. Two records are probably claiming one identity, or a constraint '
+      + 'needs a person. See sync_deferred.last_error.');
+  }
 }
 
 /** Fetch and apply what the peer originated and we have not seen. */
