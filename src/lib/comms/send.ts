@@ -12,7 +12,7 @@
 
 import prisma from '@/lib/prisma';
 import {
-  checkSendAllowed, renderTemplate, idempotencyKeyFor,
+  checkSendAllowed, renderTemplate, idempotencyKeyFor, isExternal,
   type CommChannel, type CommPriority, type CommSensitivity,
 } from './policy';
 
@@ -63,13 +63,30 @@ export interface QueueResult {
  * wanted.
  */
 async function killSwitch(): Promise<{ all: boolean; channels: CommChannel[] }> {
-  // Env first, so the switch works even if the database is the thing misbehaving.
+  // Env first, so the switch works even if the database is the thing misbehaving,
+  // and so that "off" set by an operator cannot be turned back on from a screen.
   if (process.env.COMMUNICATION_DISABLED === 'true') {
     return { all: true, channels: [] };
   }
-  const disabled = (process.env.COMMUNICATION_DISABLED_CHANNELS ?? '')
+  const fromEnv = (process.env.COMMUNICATION_DISABLED_CHANNELS ?? '')
     .split(',').map((c) => c.trim().toUpperCase()).filter(Boolean) as CommChannel[];
-  return { all: false, channels: disabled };
+
+  // Then the row, which is what an administrator can actually reach without a
+  // redeploy. Failure to read it is not failure to send: a database hiccup must
+  // not silently stop every reminder in the hospital, and the environment
+  // switch above is the line that is guaranteed to work.
+  try {
+    const row = await prisma.communicationSetting.findUnique({
+      where: { id: 'singleton' },
+      select: { allDisabled: true, disabledChannels: true },
+    });
+    if (row?.allDisabled) return { all: true, channels: [] };
+    const fromDb = (row?.disabledChannels ?? '')
+      .split(',').map((c) => c.trim().toUpperCase()).filter(Boolean) as CommChannel[];
+    return { all: false, channels: fromEnv.concat(fromDb) };
+  } catch {
+    return { all: false, channels: fromEnv };
+  }
 }
 
 /**
@@ -105,12 +122,23 @@ export async function queueMessage(input: QueueMessageInput): Promise<QueueResul
     let subject = input.subject ?? null;
     let sensitivity: CommSensitivity = input.sensitivity ?? 'OPERATIONAL';
     let providerApproved: boolean | undefined;
+    /**
+     * The template's variables in the order the provider approved them.
+     *
+     * Meta does not accept prose for a business-initiated message: it wants the
+     * approved template's name and its values POSITIONALLY, as {{1}}, {{2}}.
+     * The order lives on the template because that is what was submitted for
+     * approval, and it cannot be recovered from the finished sentence.
+     */
+    let declaredVariables: string[] = [];
 
     if (input.templateCode) {
       const tpl = await prisma.communicationTemplate.findFirst({
         where: { code: input.templateCode, channel: input.channel, isActive: true },
         orderBy: { version: 'desc' },
-        select: { body: true, subject: true, sensitivity: true, providerStatus: true },
+        select: {
+          body: true, subject: true, sensitivity: true, providerStatus: true, variables: true,
+        },
       });
       if (!tpl) {
         return { queued: false, reason: `No active ${input.channel} template "${input.templateCode}".` };
@@ -119,6 +147,9 @@ export async function queueMessage(input: QueueMessageInput): Promise<QueueResul
       subject = tpl.subject;
       sensitivity = tpl.sensitivity as CommSensitivity;
       providerApproved = tpl.providerStatus ? tpl.providerStatus === 'APPROVED' : undefined;
+      if (Array.isArray(tpl.variables)) {
+        declaredVariables = (tpl.variables as unknown[]).map((v) => String(v));
+      }
     }
 
     const rendered = renderTemplate(body, input.variables ?? {});
@@ -132,6 +163,17 @@ export async function queueMessage(input: QueueMessageInput): Promise<QueueResul
       };
     }
 
+    // Has this person asked not to be reached this way? Only worth a query for
+    // the external channels; nobody opts out of the in-app record.
+    let recipientOptedOut = false;
+    if (isExternal(input.channel) && input.recipientUserId) {
+      const u = await prisma.user.findUnique({
+        where: { id: input.recipientUserId },
+        select: { whatsappOptOut: true },
+      }).catch(() => null);
+      recipientOptedOut = input.channel === 'WHATSAPP' && Boolean(u?.whatsappOptOut);
+    }
+
     const decision = checkSendAllowed({
       channel: input.channel,
       sensitivity,
@@ -140,6 +182,7 @@ export async function queueMessage(input: QueueMessageInput): Promise<QueueResul
       recipientAddress: input.recipientAddress,
       killSwitch: await killSwitch(),
       providerApproved,
+      recipientOptedOut,
       expiresAt: input.expiresAt ?? null,
     });
 
@@ -161,6 +204,12 @@ export async function queueMessage(input: QueueMessageInput): Promise<QueueResul
         ruleId: input.ruleId ?? null,
         escalationLevel: input.escalationLevel ?? null,
         idempotencyKey,
+        // Frozen with the wording. The dispatcher cannot rebuild these from
+        // renderedBody, and re-rendering at send time would undo the deliberate
+        // decision that what was queued is what goes out.
+        providerParams: declaredVariables.length
+          ? declaredVariables.map((name) => String(input.variables?.[name] ?? ''))
+          : undefined,
         expiresAt: input.expiresAt ?? null,
         createdById: input.createdById ?? null,
         createdByName: input.createdByName ?? null,

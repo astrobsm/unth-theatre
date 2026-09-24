@@ -414,6 +414,13 @@ model User {
   role                  UserRole
   status                UserStatus           @default(PENDING)
   phoneNumber           String?
+  /// Set when this person asks not to receive WhatsApp. Defaults to false:
+  /// reminders about your own duty are workplace communication, and an opt-in
+  /// default would have reached nobody in the first month. The alternative to
+  /// offering this is staff blocking the hospital's number, which is permanent,
+  /// invisible to us, and takes the emergency messages with it.
+  whatsappOptOut        Boolean              @default(false)
+  whatsappOptOutAt      DateTime?
   extension             String? // Internal theatre extension / bleep for roster contact display
   department            String?
   staffCode             String?              @unique // Code for cleaners, porters, and other staff to log duties
@@ -11742,6 +11749,29 @@ enum CommSensitivity {
   CLINICAL
 }
 
+/// The switch a person can reach.
+///
+/// COMMUNICATION_DISABLED in the environment still wins, so the emergency brake
+/// cannot be released from a screen. This exists because changing an
+/// environment variable on a hosted deployment means a redeploy, and the moment
+/// a hospital needs automated messages to stop is not a moment to wait for a
+/// build.
+model CommunicationSetting {
+  id               String   @id @default("singleton")
+  allDisabled      Boolean  @default(false)
+  /// Comma-separated channel names, e.g. "WHATSAPP,SMS".
+  disabledChannels String?
+  /// Decided not to send, as opposed to unable to. Distinct from having no
+  /// credentials: this is the switch for the day the wording is under review.
+  dryRun           Boolean  @default(false)
+  note             String?
+  updatedAt        DateTime @updatedAt
+  updatedById      String?
+  updatedByName    String?
+
+  @@map("communication_settings")
+}
+
 model CommunicationTemplate {
   id      String      @id @default(uuid())
   /// Stable key the code refers to, e.g. "THEATRE_SETUP_OVERDUE".
@@ -11762,6 +11792,9 @@ model CommunicationTemplate {
   /// sent however correct it looks.
   providerTemplateId String?
   providerStatus     String?
+  /// Language the provider approved this template under. Meta keys a template
+  /// by name AND language and rejects a send whose language does not match.
+  providerLanguage   String?
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -11803,9 +11836,17 @@ model CommunicationMessage {
   idempotencyKey String @unique
 
   providerMessageId String?
+  /// Positional template variables for the provider, frozen at queue time in
+  /// the order the approved template declares them. Meta does not accept prose
+  /// for a business-initiated message, and the parameters cannot be recovered
+  /// from renderedBody once the sentence is assembled.
+  providerParams    Json?
   failureReason     String?
   attempts          Int       @default(0)
   queuedAt          DateTime  @default(now())
+  /// When the dispatcher claimed this row, so a run killed mid-send can be
+  /// rescued without requeueing a message that is still in flight.
+  sendingSince      DateTime?
   sentAt            DateTime?
   deliveredAt       DateTime?
   /// After this, sending is pointless. See CommStatus.EXPIRED.

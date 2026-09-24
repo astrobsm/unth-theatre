@@ -141,10 +141,43 @@ export async function sendTemplate(
   to: string,
   templateName: string,
   languageCode: string,
-  bodyParameters: string[]
+  bodyParameters: string[],
+  /**
+   * Path appended to the template's approved base URL, for a dynamic-suffix
+   * URL button — "dashboard/surgeries/abc123".
+   *
+   * This is how a reminder gets somebody INTO the app, which is the whole
+   * point of sending it: a message saying "three things are outstanding" that
+   * leaves them to go and find the case is a message that gets read and not
+   * acted on. Meta approves the base URL once; only the tail varies per send.
+   *
+   * Omitted for a template registered without a button — sending button
+   * parameters to a template that has none is rejected outright.
+   */
+  buttonSuffix?: string | null
 ): Promise<WhatsAppSendResult> {
   const number = toWhatsAppNumber(to);
   if (!number) return { ok: false, retryable: false, error: 'Not a usable phone number.' };
+
+  const components: unknown[] = [];
+  if (bodyParameters.length) {
+    components.push({
+      type: 'body',
+      // Positional, in the order Meta approved. The template body owns the
+      // wording; ORM supplies only the values.
+      parameters: bodyParameters.map((text) => ({ type: 'text', text })),
+    });
+  }
+  if (buttonSuffix) {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      // The first button on the template. Meta indexes from zero and every
+      // template here registers exactly one.
+      index: '0',
+      parameters: [{ type: 'text', text: buttonSuffix }],
+    });
+  }
 
   return post(cfg, {
     messaging_product: 'whatsapp',
@@ -153,16 +186,36 @@ export async function sendTemplate(
     template: {
       name: templateName,
       language: { code: languageCode },
-      components: bodyParameters.length
-        ? [{
-            type: 'body',
-            // Positional, in the order Meta approved. The template body owns the
-            // wording; ORM supplies only the values.
-            parameters: bodyParameters.map((text) => ({ type: 'text', text })),
-          }]
-        : [],
+      components,
     },
   });
+}
+
+/**
+ * Where the button should land for a message about this thing.
+ *
+ * Derived from the relatedType/relatedId the message already carries rather
+ * than stored a second time: a link that can disagree with the thing the
+ * message is about is a link that will eventually open the wrong patient.
+ *
+ * Null when there is nothing specific to open, and the caller then sends no
+ * button at all rather than dropping somebody on a dashboard to hunt.
+ */
+export function deepLinkSuffix(
+  relatedType: string | null | undefined,
+  relatedId: string | null | undefined
+): string | null {
+  if (!relatedType || !relatedId) return null;
+  switch (relatedType) {
+    case 'surgery':               return `dashboard/surgeries/${relatedId}`;
+    case 'emergency_booking':     return `dashboard/emergency/${relatedId}`;
+    case 'investigation_request': return `dashboard/investigations/${relatedId}`;
+    case 'blood_request':         return `dashboard/blood-bank/${relatedId}`;
+    case 'roster':                return `dashboard/roster?department=${encodeURIComponent(relatedId)}`;
+    case 'my_list':               return 'dashboard/my-list';
+    // A type nothing knows how to open gets no button rather than a guess.
+    default:                      return null;
+  }
 }
 
 /**

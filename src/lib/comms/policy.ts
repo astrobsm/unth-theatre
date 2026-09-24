@@ -35,6 +35,13 @@ export interface SendCheckInput {
   killSwitch?: { all?: boolean; channels?: CommChannel[] } | null;
   /** Template must be approved by the provider for WhatsApp. */
   providerApproved?: boolean;
+  /**
+   * This person has asked not to be reached on this channel.
+   *
+   * Only meaningful for the external channels — nobody may opt out of the
+   * in-app record, which is the hospital's own log of what it told whom.
+   */
+  recipientOptedOut?: boolean;
   /** When the message stops being worth sending. */
   expiresAt?: Date | null;
   now?: Date;
@@ -93,6 +100,19 @@ export function checkSendAllowed(input: SendCheckInput): SendCheckResult {
     return {
       allowed: false,
       reason: 'This template names a patient and the recipient is not staff.',
+    };
+  }
+
+  // Asked not to be reached this way. Refused on the external channels only:
+  // the in-app record is the hospital's own log of what it told whom, and that
+  // is not a thing anybody opts out of.
+  //
+  // Recorded rather than skipped, so "why did this consultant not get the
+  // 6 p.m. reminder" has an answer that is not a shrug.
+  if (isExternal(input.channel) && input.recipientOptedOut) {
+    return {
+      allowed: false,
+      reason: 'This person has opted out of messages on this channel. They still see it in ORM.',
     };
   }
 

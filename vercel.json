@@ -58,6 +58,18 @@
     {
       "path": "/api/emergency-escalation/run",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/comms/reminders?job=tomorrow",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/comms/reminders?job=emergency",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/comms/dispatch",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

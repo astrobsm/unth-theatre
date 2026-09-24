@@ -85,6 +85,7 @@ import {
   MonitorPlay,
   FlaskConical,
   Waves,
+  MessageSquare,
   MessageSquareWarning,
   ShieldAlert,
   Eye,
@@ -411,6 +412,10 @@ export default function DashboardLayout({
     // changing prices is an administrative act, not a clinical one, and the
     // API enforces the same list independently.
     menuItems.push({ href: '/dashboard/settings/price-master', icon: FileSpreadsheet, label: 'Price Master', badge: 'ADMIN' });
+    // The WhatsApp reminders. Administrative because it decides what the
+    // hospital sends to every member of staff, and because most of the setup it
+    // walks through happens at Meta rather than here.
+    menuItems.push({ href: '/dashboard/settings/whatsapp', icon: MessageSquare, label: 'WhatsApp Reminders', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/admin/procedure-packs', icon: FileSpreadsheet, label: 'Procedure Packs', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/estimates', icon: FileSpreadsheet, label: 'Cost Estimates' });
   } else if (['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'].includes(session.user.role)) {
@@ -563,6 +568,7 @@ export default function DashboardLayout({
       // What the hospital charges patients. Everything the surgery estimate
       // produces is derived from what is loaded here.
       '/dashboard/settings/price-master',
+      '/dashboard/settings/whatsapp',
       '/dashboard/admin/procedure-packs',
       '/dashboard/estimates',
       '/dashboard/announcements',

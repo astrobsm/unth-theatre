@@ -202,6 +202,12 @@ export const MODULES: AppModule[] = [
   // menu entry is convenience rather than the boundary.
   { id: 'price-master', label: 'Price Master', paths: ['/dashboard/settings/price-master'], defaultRoles: [], category: 'Admin' },
 
+  // Automatic reminders on WhatsApp. Empty defaultRoles, as with the other
+  // administrative screens: the full-access roles reach it by bypass and
+  // anybody else has to be granted it deliberately. Deciding what the hospital
+  // sends to every member of staff is not something to hand out by default.
+  { id: 'whatsapp-reminders', label: 'WhatsApp Reminders', paths: ['/dashboard/settings/whatsapp'], defaultRoles: [], category: 'Admin' },
+
   // Imprest Management and Retirement
   // ---------------------------------
   // `defaultRoles: []` on purpose: imprest access follows an assigned imprest
