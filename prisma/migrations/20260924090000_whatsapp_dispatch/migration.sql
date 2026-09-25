@@ -87,7 +87,7 @@ CREATE INDEX IF NOT EXISTS communication_messages_dispatch_idx
 CREATE TABLE IF NOT EXISTS communication_settings (
   id                text        PRIMARY KEY DEFAULT 'singleton',
   "allDisabled"     boolean     NOT NULL DEFAULT false,
-  /// Comma-separated channel names, e.g. 'WHATSAPP,SMS'.
+  -- Comma-separated channel names, e.g. 'WHATSAPP,SMS'.
   "disabledChannels" text,
   "dryRun"          boolean     NOT NULL DEFAULT false,
   note              text,
