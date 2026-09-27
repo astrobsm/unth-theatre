@@ -421,6 +421,13 @@ model User {
   /// invisible to us, and takes the emergency messages with it.
   whatsappOptOut        Boolean              @default(false)
   whatsappOptOutAt      DateTime?
+  /// The supplier this account belongs to, for CONSUMABLE_PACK_PROVIDER and
+  /// similar roles. Null for ordinary staff. Scopes which supply and pricing
+  /// the account may see: unscoped, every provider would see every other
+  /// provider's lines, which is commercially sensitive and not the hospital's
+  /// to disclose. @db.Uuid — matches Vendor.id, not the TEXT ids used here.
+  vendorId              String?              @db.Uuid
+  vendor                Vendor?              @relation("VendorStaff", fields: [vendorId], references: [id], onDelete: SetNull)
   extension             String? // Internal theatre extension / bleep for roster contact display
   department            String?
   staffCode             String?              @unique // Code for cleaners, porters, and other staff to log duties
@@ -8985,6 +8992,7 @@ model Vendor {
 
   invoiceLines    InvoiceLine[]    @relation("InvoiceLineVendor")
   revenueAccounts RevenueAccount[] @relation("RevenueAccountVendor")
+  staff           User[]           @relation("VendorStaff")
 
   @@unique([name, phone])
   @@index([name])
