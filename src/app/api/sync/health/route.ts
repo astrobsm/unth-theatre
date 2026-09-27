@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { bearerFrom, tokensMatch } from '@/lib/sync/serviceAuth';
+import { financialFootprint } from '@/lib/financial/authority';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +90,19 @@ export async function GET(req: NextRequest) {
                 max(attempts) filter (where resolved_at is null)       as worst_attempts
            from sync_deferred`);
 
+    // How much money this node is holding that the other node cannot see.
+    //
+    // The billing tables do not replicate, so these counts exist independently
+    // on each node. Run this on BOTH and compare: anything above zero on the
+    // theatre server is a bill or a receipt the cloud has never heard of, and
+    // is the evidence needed before the authority rule in
+    // lib/financial/authority.ts can move from reporting to enforcing.
+    //
+    // Counted here rather than in a new endpoint because this is already the
+    // page an administrator opens to ask "are the two nodes agreeing", and
+    // money is the part of that question nobody had a number for.
+    const financial = await financialFootprint();
+
     const peers = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `select peer_node, last_push_ok_at, last_pull_ok_at, consecutive_errors,
               next_attempt_at, last_error
@@ -158,6 +172,7 @@ export async function GET(req: NextRequest) {
         stuckHours: deferredStuckHours,
         worstAttempts: Number(deferred?.worst_attempts ?? 0),
       },
+      financial,
       peers,
       checkedAt: new Date().toISOString(),
     });

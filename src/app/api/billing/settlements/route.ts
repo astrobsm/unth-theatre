@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { requireStock } from '@/lib/stock/access';
+import { checkAuthority } from '@/lib/financial/authority';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,6 +98,25 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const guard = await requireStock('receive');
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+
+  // Which NODE, before which user.
+  //
+  // revenue_distributions does not replicate between the theatre server and
+  // the cloud, so a node settling a line cannot see what the other node has
+  // already settled. Two nodes can therefore pay the same supplier for the
+  // same work — and unlike almost everything else in this application, that is
+  // not recoverable by correcting a row. The money has left.
+  //
+  // Refused rather than merely recorded, because settlement is a rare
+  // administrative act and blocking it in the wrong place cannot interrupt a
+  // theatre list. See lib/financial/authority.ts for the whole rule.
+  const authority = await checkAuthority('SETTLE_DISTRIBUTION');
+  if (!authority.allowed) {
+    return NextResponse.json(
+      { error: authority.reason, code: 'WRONG_NODE', node: authority.node },
+      { status: 409 },
+    );
+  }
 
   let body: { accountId?: string; distributionIds?: string[]; reference?: string; settledAt?: string };
   try {
