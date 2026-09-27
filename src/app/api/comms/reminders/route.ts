@@ -20,6 +20,7 @@ import { authoriseCron } from '@/lib/cronAuth';
 import { apiError } from '@/lib/apiError';
 import { sendTomorrowDigest } from '@/lib/comms/tomorrowDigest';
 import { runEmergencyNudges } from '@/lib/comms/emergencyNudges';
+import { sendStockAlerts } from '@/lib/inventory/reorderAlerts';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -46,8 +47,11 @@ export async function POST(request: NextRequest) {
     if (job === 'emergency') {
       return NextResponse.json({ job, ...(await runEmergencyNudges()), ranBy: auth.who });
     }
+    if (job === 'stock') {
+      return NextResponse.json({ job, ...(await sendStockAlerts()), ranBy: auth.who });
+    }
     return NextResponse.json(
-      { error: 'Name the job: ?job=tomorrow or ?job=emergency.' },
+      { error: 'Name the job: ?job=tomorrow, ?job=emergency or ?job=stock.' },
       { status: 400 },
     );
   } catch (error) {

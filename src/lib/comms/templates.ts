@@ -200,6 +200,32 @@ export const WHATSAPP_TEMPLATES: TemplateSpec[] = [
   },
 
   {
+    code: 'STOCK_REORDER',
+    metaName: 'orm_stock_reorder',
+    category: 'UTILITY',
+    language: 'en',
+    when: 'Each morning, to the store keepers, procurement, pharmacy, consumable pack '
+      + 'providers and theatre management — but only on a day when something is actually '
+      + 'out, at its reorder level, approaching it, or expiring within 30 days.',
+    metaBody:
+      'Good morning {{1}}.\n\n'
+      + 'Theatre stock position for {{2}}: {{3}}.\n\n'
+      + 'The affected items and their quantities are listed in the Operative Resource '
+      + 'Manager. Please arrange resupply for anything already at or below its reorder '
+      + 'level, and use the items nearing expiry first.\n\n'
+      + 'Thank you.',
+    body:
+      'Good morning {{name}}.\n\n'
+      + 'Theatre stock position for {{date}}: {{summary}}.\n\n'
+      + 'The affected items and their quantities are listed in the Operative Resource '
+      + 'Manager. Please arrange resupply for anything already at or below its reorder '
+      + 'level, and use the items nearing expiry first.\n\n'
+      + 'Thank you.',
+    variables: ['name', 'date', 'summary'],
+    buttonLabel: 'Open the stock list',
+  },
+
+  {
     code: 'ROSTER_MISSING',
     metaName: 'orm_roster_missing',
     category: 'UTILITY',

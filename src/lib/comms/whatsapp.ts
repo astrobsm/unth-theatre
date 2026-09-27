@@ -213,6 +213,9 @@ export function deepLinkSuffix(
     case 'blood_request':         return `dashboard/blood-bank/${relatedId}`;
     case 'roster':                return `dashboard/roster?department=${encodeURIComponent(relatedId)}`;
     case 'my_list':               return 'dashboard/my-list';
+    // One destination rather than one per item: the alert is a daily position,
+    // and the list behind it is filterable.
+    case 'stock':                 return 'dashboard/inventory-desk';
     // A type nothing knows how to open gets no button rather than a guess.
     default:                      return null;
   }

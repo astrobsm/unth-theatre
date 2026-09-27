@@ -70,6 +70,10 @@
     {
       "path": "/api/comms/dispatch",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/comms/reminders?job=stock",
+      "schedule": "0 6 * * *"
     }
   ]
 }
