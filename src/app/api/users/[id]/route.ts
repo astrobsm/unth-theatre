@@ -27,6 +27,16 @@ const updateUserSchema = z.object({
   phoneNumber: z.string().trim().optional().nullable(),
   email: z.string().trim().email().optional().nullable(),
   department: z.string().trim().optional().nullable(),
+  // Which supplier a provider account belongs to.
+  //
+  // A COMMERCIAL ACCESS GRANT, not a profile field: it decides whose supply
+  // and pricing the account can see on a patient's consumption statement. So
+  // it is handled with role and username below — ADMIN only — rather than
+  // with phone and department, which a THEATRE_MANAGER may correct.
+  //
+  // Empty string is accepted and stored as null, because a select element
+  // cannot send null and "no supplier" has to be expressible.
+  vendorId: z.string().trim().uuid().or(z.literal('')).optional().nullable(),
 });
 
 export async function PATCH(
@@ -60,6 +70,16 @@ export async function PATCH(
           { status: 403 }
         );
       }
+    }
+
+    // Attaching an account to a supplier grants sight of that supplier's
+    // pricing and supply on every patient consumption statement. ADMIN only,
+    // for the same reason a role change is.
+    if (validatedData.vendorId !== undefined && session.user.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Only ADMIN can attach an account to a supplier.' },
+        { status: 403 }
+      );
     }
 
     // Changing a username changes how somebody signs in. It sits with the role
@@ -126,6 +146,7 @@ export async function PATCH(
       phoneNumber?: string | null;
       email?: string | null;
       department?: string | null;
+      vendorId?: string | null;
     } = {};
     if (validatedData.username !== undefined) data.username = validatedData.username;
     if (body.staffCode !== undefined) {
@@ -139,6 +160,9 @@ export async function PATCH(
     if (body.phoneNumber !== undefined) data.phoneNumber = validatedData.phoneNumber || null;
     if (body.email !== undefined) data.email = validatedData.email || null;
     if (body.department !== undefined) data.department = validatedData.department || null;
+    // Empty string means "no supplier" and is stored as null, so detaching an
+    // account is expressible from a select element.
+    if (body.vendorId !== undefined) data.vendorId = validatedData.vendorId || null;
 
     // Guard against email collisions with another user.
     if (data.email) {

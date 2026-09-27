@@ -105,6 +105,11 @@ export async function GET(request: NextRequest) {
             staffCode: true,
             phoneNumber: true,
             department: true,
+            // Which supplier a provider account belongs to, so the admin
+            // screen can show the current link rather than always offering a
+            // blank one — an editor that silently resets a field it did not
+            // display is how a working link gets cleared.
+            vendorId: true,
             rotationSpecialty: true,
             createdAt: true,
             approvedBy: true,

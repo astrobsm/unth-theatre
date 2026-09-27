@@ -67,6 +67,7 @@ import {
   BriefcaseMedical,
   TrendingUp,
   PackageCheck,
+  PackageSearch,
   AlertOctagon,
   Syringe,
   Droplet,
@@ -302,6 +303,7 @@ export default function DashboardLayout({
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
     { href: '/dashboard/consumable-pack-provider', icon: PackageCheck, label: 'Consumable Packs', badge: 'NEW' },
+    { href: '/dashboard/consumption', icon: PackageSearch, label: 'Items Used', badge: 'NEW' },
     { href: '/dashboard/medication-tracking', icon: Pill, label: 'Med Tracking', badge: 'NEW' },
 
     // === HANDOVER ===
@@ -624,6 +626,7 @@ export default function DashboardLayout({
     ] },
     { type: 'group', label: 'Consumable Packs', icon: PackageCheck, hrefs: [
       '/dashboard/consumable-pack-provider',
+      '/dashboard/consumption',
       '/dashboard/catalog-contribute',
     ] },
     { type: 'single', href: '/dashboard/feedback' },

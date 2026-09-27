@@ -115,6 +115,10 @@ export const MODULES: AppModule[] = [
   { id: 'equipment-checkout', label: 'Equipment Checkout', paths: ['/dashboard/equipment-checkout'], defaultRoles: ['THEATRE_STORE_KEEPER', 'SCRUB_NURSE', 'ANAESTHETIC_TECHNICIAN'], category: 'Intra-Op' },
   { id: 'medication-tracking', label: 'Med Tracking', paths: ['/dashboard/medication-tracking'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Intra-Op' },
   { id: 'consumable-pack-provider', label: 'Consumable Packs', paths: ['/dashboard/consumable-pack-provider'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER'], category: 'Intra-Op' },
+  // Items used for one patient, looked up by PT number. A supplier sees only
+  // their own lines — the API scopes it from the signed-in account, not from
+  // anything the page sends — and hospital supply staff see all of them.
+  { id: 'consumption', label: 'Items Used', paths: ['/dashboard/consumption'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER'], category: 'Logistics' },
   // Theatre Supply Unit. Wide by default on purpose: a surgeon who cannot see
   // the shelf books blind, which is the problem the module exists to solve.
   { id: 'theatre-supply', label: 'Theatre Supply Unit', paths: ['/dashboard/theatre-supply'], defaultRoles: [...CLINICAL_CORE, 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER', 'PHARMACIST', 'CSSD_STAFF', 'CSSD_SUPERVISOR', 'CONSUMABLE_PACK_PROVIDER', 'HOUSE_OFFICER'], category: 'Logistics' },

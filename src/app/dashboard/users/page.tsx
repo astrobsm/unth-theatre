@@ -122,7 +122,14 @@ export default function UsersPage() {
   const [userSearch, setUserSearch] = useState('');
   // Edit-profile modal state.
   const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ username: '', fullName: '', phoneNumber: '', email: '', department: '' });
+  const [editForm, setEditForm] = useState({ username: '', fullName: '', phoneNumber: '', email: '', department: '', vendorId: '' });
+  // The supplier register, for the account-to-supplier link below. Loaded once
+  // rather than per modal open: it is short, changes rarely, and fetching it
+  // every time would put a request between clicking Edit and seeing the form.
+  const [vendors, setVendors] = useState<Array<{ id: string; name: string }>>([]);
+  // The role of the account being edited, so the supplier field appears only
+  // where it means something.
+  const [editRole, setEditRole] = useState('');
   // What the username was when the modal opened. The PATCH only carries a
   // username when it has actually been edited — otherwise a THEATRE_MANAGER
   // correcting a phone number would trip the ADMIN-only credential check and be
@@ -140,6 +147,24 @@ export default function UsersPage() {
       return () => clearInterval(interval);
     }
   }, [session]);
+
+  /** Roles for which "which supplier?" is a meaningful question. */
+  const SUPPLIER_ROLES = ['CONSUMABLE_PACK_PROVIDER'];
+  const editIsSupplierRole = SUPPLIER_ROLES.includes(editRole.toUpperCase());
+  const isAdmin = (session?.user?.role ?? '').toUpperCase() === 'ADMIN';
+
+  // The supplier register, fetched once. Only an ADMIN can act on it, so only
+  // an ADMIN asks for it.
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch('/api/stock/vendors', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const list = Array.isArray(d?.vendors) ? d.vendors : Array.isArray(d) ? d : [];
+        setVendors(list.map((v: { id: string; name: string }) => ({ id: v.id, name: v.name })));
+      })
+      .catch(() => { /* the field simply offers no options */ });
+  }, [isAdmin]);
 
   const fetchUsers = async () => {
     try {
@@ -356,6 +381,10 @@ export default function UsersPage() {
           phoneNumber: editForm.phoneNumber.trim() || null,
           email: editForm.email.trim() || null,
           department: editForm.department.trim() || null,
+          // Sent only when the field was actually shown, so a THEATRE_MANAGER
+          // editing a phone number does not trip the ADMIN-only check on a
+          // field they never saw.
+          ...(editIsSupplierRole && isAdmin ? { vendorId: editForm.vendorId } : {}),
         }),
       });
       const data = await response.json();
@@ -1218,12 +1247,14 @@ export default function UsersPage() {
                       onClick={() => {
                         setEditUserId(user.id);
                         setOriginalUsername(user.username || '');
+                        setEditRole(user.role || '');
                         setEditForm({
                           username: user.username || '',
                           fullName: user.fullName || '',
                           phoneNumber: user.phoneNumber || '',
                           email: user.email || '',
                           department: user.department || '',
+                          vendorId: (user as { vendorId?: string | null }).vendorId || '',
                         });
                       }}
                       className="text-emerald-600 hover:text-emerald-900"
@@ -1362,6 +1393,37 @@ export default function UsersPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
               />
             </div>
+
+            {/* Supplier link.
+                Shown only for the roles it means anything for, and only to an
+                ADMIN — attaching an account to a supplier lets it see that
+                supplier's pricing and supply on every patient's consumption
+                statement, which is a commercial grant rather than a profile
+                detail. The API enforces the same rule independently. */}
+            {editIsSupplierRole && isAdmin && (
+              <div>
+                <label htmlFor="vendor-link" className="block text-sm font-medium text-gray-700 mb-1">
+                  Supplier this account belongs to
+                </label>
+                <select
+                  id="vendor-link"
+                  value={editForm.vendorId}
+                  onChange={(e) => setEditForm((f) => ({ ...f, vendorId: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="">Not a supplier account</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Decides whose items this account can see on a patient&rsquo;s consumption
+                  statement. Left unset, the account sees nothing — which is the safe
+                  default, but it does mean the Items Used page will be empty for them.
+                </p>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
