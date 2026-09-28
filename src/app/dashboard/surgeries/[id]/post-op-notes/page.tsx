@@ -105,6 +105,10 @@ export default function PostOperativeNotesPage() {
   const [rxNotes, setRxNotes] = useState('');
   const [hasDyspepsia, setHasDyspepsia] = useState(false);
   const [sendingRx, setSendingRx] = useState(false);
+  // Identifies THIS prescription across however many attempts it takes to get
+  // it through. A ref rather than state: changing it must never re-render, and
+  // it must survive the re-render a failed attempt causes.
+  const rxIdemKey = useRef<string | null>(null);
   const [drugDb, setDrugDb] = useState<{ name: string; type: string }[]>([]);
   const [sentRx, setSentRx] = useState<any[]>([]);
 
@@ -408,10 +412,25 @@ export default function PostOperativeNotesPage() {
     if (cleaned.length === 0) { alert('Add at least one medication before sending to pharmacy.'); return; }
     if (dyspepsiaWarning && !confirm('Patient has dyspepsia and an NSAID is prescribed without a PPI/antacid cover. Send anyway?')) return;
     setSendingRx(true);
+
+    // ONE key for this prescription, reused on every retry of it.
+    //
+    // The whole point of an idempotency key is that it survives the retry. A
+    // fresh uuid per fetch would mark each attempt as separate work, which is
+    // the behaviour being fixed rather than a fix for it. Cleared only after
+    // the send actually succeeds, so the next prescription gets a new one.
+    if (!rxIdemKey.current) {
+      rxIdemKey.current = (globalThis.crypto?.randomUUID?.()
+        ?? `rx-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    }
+
     try {
       const res = await fetch('/api/post-op-prescriptions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-idempotency-key': rxIdemKey.current,
+        },
         body: JSON.stringify({
           surgeryId: params.id,
           medications: cleaned.map((m) => ({
@@ -425,12 +444,28 @@ export default function PostOperativeNotesPage() {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to send prescription to pharmacy.'); return; }
-      alert('Prescription sent to pharmacy for dispensing.');
+
+      // The server may have recognised this as a repeat of one already waiting.
+      // Said plainly rather than hidden: a surgeon who retried deserves to know
+      // the original stands, or they will wonder which copy pharmacy will pack.
+      alert(data.duplicate
+        ? 'This prescription was already with the pharmacy — the earlier one stands, and '
+          + 'no duplicate has been added.'
+        : 'Prescription sent to pharmacy for dispensing.');
+
+      rxIdemKey.current = null;   // done; the next prescription is new work
       setRxMeds([emptyMed()]);
       setRxNotes('');
       fetchSentRx();
     } catch {
-      alert('Failed to send prescription to pharmacy.');
+      // Deliberately NOT "failed". The request may well have reached the server
+      // and been acted on — that is precisely how thirteen copies of one
+      // prescription got here. Telling a surgeon it failed is what made them
+      // send it again.
+      alert('The connection dropped before the pharmacy could confirm. It may already '
+        + 'have gone through — check "Sent to pharmacy" below before sending again. If you '
+        + 'do send again, it will not create a duplicate.');
+      fetchSentRx();
     } finally {
       setSendingRx(false);
     }

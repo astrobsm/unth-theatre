@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { triggerRadio } from "@/lib/radioEvents";
+import { findDuplicate, UNTOUCHED_STATUSES } from "@/lib/prescriptions/duplicateGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,43 @@ export async function POST(req: NextRequest) {
 
     const userId = (session.user as any).id;
     const userName = (session.user as any).fullName || (session.user as any).name || "Unknown";
+
+    // Has this already been sent, and simply not made it back?
+    //
+    // On this hospital's link a request routinely reaches the server, is acted
+    // on, and the response never returns. The page then tells the surgeon it
+    // failed, so they send it again — which is how one patient ended up with
+    // thirteen identical prescriptions across fifty-six minutes.
+    //
+    // The client cannot tell the difference and is right to retry, so the
+    // recognition has to happen here. See lib/prescriptions/duplicateGuard.
+    const waiting = await prisma.postOpPrescription.findMany({
+      where: { surgeryId: surgery.id, status: { in: UNTOUCHED_STATUSES as any } },
+      select: {
+        id: true, status: true, medications: true,
+        prescribedById: true, prescribedAt: true,
+      },
+      orderBy: { prescribedAt: "desc" },
+      take: 20,
+    });
+
+    const verdict = findDuplicate(
+      { medications: body.medications, prescribedById: userId },
+      waiting,
+    );
+
+    if (verdict.duplicateOf) {
+      const original = await prisma.postOpPrescription.findUnique({
+        where: { id: verdict.duplicateOf },
+      });
+      // 200, not an error. From the caller's point of view the prescription IS
+      // with the pharmacy, which is what they were trying to achieve. Reporting
+      // a failure would send them round the same loop again.
+      return NextResponse.json(
+        { prescription: original, duplicate: true, reason: verdict.reason },
+        { status: 200 },
+      );
+    }
 
     const created = await prisma.postOpPrescription.create({
       data: {
