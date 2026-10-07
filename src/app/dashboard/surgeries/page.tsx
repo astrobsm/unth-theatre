@@ -1642,6 +1642,7 @@ export default function SurgeriesPage() {
                           procedureName={surgery.procedureName}
                           status={surgery.status}
                           theatreId={surgery.theatreId}
+                          surgeonId={surgery.surgeon?.id}
                           anesthetistId={surgery.anaesthetist?.id}
                           theatreTechnicianId={surgery.theatreTechnician?.id}
                           duplicates={duplicatesOf(surgery)}

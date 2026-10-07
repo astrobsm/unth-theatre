@@ -83,7 +83,7 @@ export async function POST(
     const before = await prisma.surgery.findUnique({
       where: { id: params.id },
       select: {
-        id: true, status: true, theatreId: true, anesthetistId: true,
+        id: true, status: true, theatreId: true, surgeonId: true, anesthetistId: true,
         scrubNurseId: true, theatreTechnicianId: true, assistantSurgeonId: true,
         procedureName: true, completedAt: true, scheduledDate: true,
         patientId: true,

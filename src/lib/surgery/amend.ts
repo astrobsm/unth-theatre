@@ -53,6 +53,15 @@ export const CLOSED_STATUSES: string[] = ['COMPLETED', 'CANCELLED'];
 export interface AmendableFields {
   status?: string | null;
   theatreId?: string | null;
+  /**
+   * The operating surgeon.
+   *
+   * Amendable because it is got wrong in the same way everything else here
+   * is: a list booked quickly, against the wrong name. Changing it is
+   * consequential — it moves who is accountable for the case — which is an
+   * argument for recording the change with a reason, not for forbidding it.
+   */
+  surgeonId?: string | null;
   anesthetistId?: string | null;
   scrubNurseId?: string | null;
   theatreTechnicianId?: string | null;
@@ -61,7 +70,7 @@ export interface AmendableFields {
 
 /** The fields this path may touch. Anything else belongs to the ordinary PUT. */
 export const AMENDABLE_KEYS: Array<keyof AmendableFields> = [
-  'status', 'theatreId', 'anesthetistId', 'scrubNurseId',
+  'status', 'theatreId', 'surgeonId', 'anesthetistId', 'scrubNurseId',
   'theatreTechnicianId', 'assistantSurgeonId',
 ];
 

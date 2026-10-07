@@ -31,6 +31,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Check, Copy, Loader2, PencilLine, X } from 'lucide-react';
 
 /** Mirrors MIN_REASON_LENGTH on the server, so the two cannot disagree. */
@@ -54,6 +55,7 @@ interface Props {
   procedureName?: string | null;
   status: string;
   theatreId?: string | null;
+  surgeonId?: string | null;
   anesthetistId?: string | null;
   scrubNurseId?: string | null;
   theatreTechnicianId?: string | null;
@@ -70,6 +72,7 @@ export default function AmendCaseButton(props: Props) {
 
   const [status, setStatus] = useState(props.status);
   const [theatreId, setTheatreId] = useState(props.theatreId ?? '');
+  const [surgeonId, setSurgeonId] = useState(props.surgeonId ?? '');
   const [anesthetistId, setAnesthetistId] = useState(props.anesthetistId ?? '');
   const [scrubNurseId, setScrubNurseId] = useState(props.scrubNurseId ?? '');
   const [technicianId, setTechnicianId] = useState(props.theatreTechnicianId ?? '');
@@ -77,6 +80,7 @@ export default function AmendCaseButton(props: Props) {
   const [duplicateOf, setDuplicateOf] = useState('');
 
   const [theatres, setTheatres] = useState<Option[]>([]);
+  const [surgeons, setSurgeons] = useState<Option[]>([]);
   const [anaesthetists, setAnaesthetists] = useState<Option[]>([]);
   const [scrubNurses, setScrubNurses] = useState<Option[]>([]);
   const [technicians, setTechnicians] = useState<Option[]>([]);
@@ -96,13 +100,18 @@ export default function AmendCaseButton(props: Props) {
         return r.ok ? asOptions(await r.json()) : [];
       } catch { return []; }
     };
-    const [t, a, s, k] = await Promise.all([
+    const [t, a, s, k, g] = await Promise.all([
       get('/api/theatres'),
       get('/api/users?role=ANAESTHETIST&status=APPROVED'),
       get('/api/users?role=SCRUB_NURSE&status=APPROVED'),
       get('/api/users?role=ANAESTHETIC_TECHNICIAN&status=APPROVED'),
+      // Consultants and surgeons both operate, so the list is both, by name.
+      Promise.all([
+        get('/api/users?role=CONSULTANT_SURGEON&status=APPROVED'),
+        get('/api/users?role=SURGEON&status=APPROVED'),
+      ]).then(([c, sg]) => c.concat(sg).sort((x, y) => x.name.localeCompare(y.name))),
     ]);
-    setTheatres(t); setAnaesthetists(a); setScrubNurses(s); setTechnicians(k);
+    setTheatres(t); setAnaesthetists(a); setScrubNurses(s); setTechnicians(k); setSurgeons(g);
   }, []);
 
   useEffect(() => { if (open) void loadOptions(); }, [open, loadOptions]);
@@ -131,6 +140,7 @@ export default function AmendCaseButton(props: Props) {
             : {
                 status,
                 theatreId,
+                surgeonId,
                 anesthetistId,
                 scrubNurseId,
                 theatreTechnicianId: technicianId,
@@ -167,9 +177,20 @@ export default function AmendCaseButton(props: Props) {
 
   const removingDuplicate = Boolean(duplicateOf);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <div className="mt-10 w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+  // Rendered into <body>, not where the button sits.
+  //
+  // The button lives in the actions cell of the theatre list, and that cell is
+  // `whitespace-nowrap text-right`. A dialog rendered inside it inherits both:
+  // every paragraph refuses to wrap and runs straight out of the box, and
+  // every label aligns right. The table also scrolls horizontally, which clips
+  // a fixed child in some browsers.
+  //
+  // A portal escapes all of it — the dialog is no longer inside a table at
+  // all. The explicit text-left and whitespace-normal below are belt and
+  // braces for anything a future ancestor sets.
+  const dialog = (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 text-left [white-space:normal]">
+      <div className="mt-10 w-full max-w-lg rounded-2xl bg-white p-5 text-left shadow-xl [white-space:normal]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Correct this booking</h2>
@@ -200,20 +221,48 @@ export default function AmendCaseButton(props: Props) {
               fail. If this row is the repeat, withdraw it against the one it duplicates —
               it is cancelled and kept on record, never deleted.
             </p>
-            <label htmlFor="dup-of" className="mt-2 block text-xs font-semibold text-amber-900">
-              This booking repeats:
-            </label>
-            <select
-              id="dup-of"
-              value={duplicateOf}
-              onChange={(e) => setDuplicateOf(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">Not a duplicate — I am correcting it instead</option>
+            {/* Radios, not a dropdown.
+                A collapsed select showed only "Not a duplicate", so the one
+                action somebody opened this panel for was hidden behind a click
+                they had no reason to make. Every choice is visible now. */}
+            <fieldset className="mt-3">
+              <legend className="text-xs font-semibold text-amber-900">
+                Is this row the repeat?
+              </legend>
+
+              <label className="mt-1.5 flex cursor-pointer items-start gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-amber-200">
+                <input
+                  type="radio"
+                  name={`dup-${props.surgeryId}`}
+                  checked={duplicateOf === ''}
+                  onChange={() => setDuplicateOf('')}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span className="text-sm text-gray-800">
+                  <span className="font-semibold">No — keep it.</span> I am correcting its
+                  details instead.
+                </span>
+              </label>
+
               {props.duplicates!.map((d) => (
-                <option key={d.id} value={d.id}>{d.label}</option>
+                <label
+                  key={d.id}
+                  className="mt-1.5 flex cursor-pointer items-start gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-amber-200"
+                >
+                  <input
+                    type="radio"
+                    name={`dup-${props.surgeryId}`}
+                    checked={duplicateOf === d.id}
+                    onChange={() => setDuplicateOf(d.id)}
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                  />
+                  <span className="text-sm text-gray-800">
+                    <span className="font-semibold text-red-700">Yes — withdraw this row.</span>{' '}
+                    It repeats the booking at {d.label}, which stays.
+                  </span>
+                </label>
               ))}
-            </select>
+            </fieldset>
           </div>
         )}
 
@@ -241,6 +290,23 @@ export default function AmendCaseButton(props: Props) {
               >
                 <option value="">Not assigned</option>
                 {theatres.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </label>
+
+            <label className="block sm:col-span-2">
+              <span className="block text-xs font-semibold text-gray-700">
+                Surgeon
+                <span className="ml-1 font-normal text-gray-500">
+                  — changes who is accountable for the case
+                </span>
+              </span>
+              <select
+                value={surgeonId}
+                onChange={(e) => setSurgeonId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">Not assigned</option>
+                {surgeons.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </label>
 
@@ -336,4 +402,8 @@ export default function AmendCaseButton(props: Props) {
       </div>
     </div>
   );
+
+  // document is absent during the server render; the dialog only ever opens
+  // from a click, so there is nothing to show until the browser has it.
+  return typeof document === 'undefined' ? null : createPortal(dialog, document.body);
 }
