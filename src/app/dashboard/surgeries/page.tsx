@@ -19,6 +19,7 @@ import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/book
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import ReportBlockerButton from '@/components/ReportBlockerButton';
 import CasePacksButton from '@/components/CasePacksButton';
+import AmendCaseButton from '@/components/surgeries/AmendCaseButton';
 import { watInstantFrom } from '@/lib/watDay';
 
 interface Surgery {
@@ -206,6 +207,39 @@ export default function SurgeriesPage() {
   // reassign, reorder). It is unit-aware on purpose: the older version always
   // refetched the whole day, so completing one case in Neurosurgery would
   // quietly replace the open unit's list with every case in the hospital.
+  /**
+   * Other bookings that look like the same case on the same day.
+   *
+   * Computed from the rows already loaded rather than asked of the server:
+   * the comparison only has to cover what is on screen, because that is where
+   * somebody notices a patient listed twice.
+   *
+   * Advisory only. Two genuine operations on one patient in one day do happen
+   * — a staged procedure, a return to theatre — so this points and waits for
+   * a person rather than deciding anything.
+   */
+  const duplicatesOf = useCallback((s: Surgery) => {
+    const norm = (v: string) => v.trim().toLowerCase().replace(/\s+/g, ' ');
+    const day = (d: string | Date) => new Date(d).toISOString().slice(0, 10);
+    return surgeries
+      .filter((o) =>
+        o.id !== s.id
+        // Folder number rather than patient id: the id is optional on this
+        // view's type, and two rows both missing it would otherwise match
+        // every other row missing it.
+        && o.patient?.folderNumber === s.patient?.folderNumber
+        && norm(o.procedureName ?? '') === norm(s.procedureName ?? '')
+        && day(o.scheduledDate) === day(s.scheduledDate)
+        // A booking already withdrawn is not something to withdraw against.
+        && !['CANCELLED'].includes(String(o.status).toUpperCase()))
+      .map((o) => ({
+        id: o.id,
+        label: `${new Date(o.scheduledDate).toLocaleString('en-GB', {
+          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+        })} — ${String(o.status).replace(/_/g, ' ').toLowerCase()}`,
+      }));
+  }, [surgeries]);
+
   const fetchSurgeries = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -1593,6 +1627,25 @@ export default function SurgeriesPage() {
                           procedureName={surgery.procedureName}
                           patientName={surgery.patient?.name}
                           status={surgery.status}
+                        />
+
+                        {/* Correcting the row, from the row.
+                            A case marked COMPLETED the day before it was due
+                            cannot be touched by the ordinary edit path — right
+                            for a finished operation, useless for a mis-click.
+                            This asks for a reason, records who, and offers to
+                            withdraw a double booking against the one it
+                            repeats. */}
+                        <AmendCaseButton
+                          surgeryId={surgery.id}
+                          patientName={surgery.patient?.name}
+                          procedureName={surgery.procedureName}
+                          status={surgery.status}
+                          theatreId={surgery.theatreId}
+                          anesthetistId={surgery.anaesthetist?.id}
+                          theatreTechnicianId={surgery.theatreTechnician?.id}
+                          duplicates={duplicatesOf(surgery)}
+                          onAmended={fetchSurgeries}
                         />
 
                         {/* "I am here and I cannot start." Placed with the case
