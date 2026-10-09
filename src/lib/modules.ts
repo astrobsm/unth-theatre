@@ -196,6 +196,10 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-meals', label: 'Theatre Meals', paths: ['/dashboard/theatre-meals'], defaultRoles: ['THEATRE_CAFETERIA_MANAGER'], category: 'Reports' },
   { id: 'staff-effectiveness', label: 'Staff Effectiveness', paths: ['/dashboard/reports/staff-effectiveness'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'reports', label: 'Reports & Analytics', paths: ['/dashboard/reports'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
+  // Operative workload by size, month, subspecialty and unit. Same audience
+  // as the other reports: it is a management view of the whole hospital's
+  // theatre activity, not a clinical screen.
+  { id: 'case-mix', label: 'Case Mix', paths: ['/dashboard/case-mix'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'research', label: 'Research & Analytics', paths: ['/dashboard/research'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Reports' },
   { id: 'presentation', label: 'Presentation', paths: ['/dashboard/presentation'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'training', label: 'Staff Training', paths: ['/training'], defaultRoles: ['*'], category: 'Reports' },
