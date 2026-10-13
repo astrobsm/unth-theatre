@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { authenticateSync } from '@/lib/sync/serviceAuth';
 import { BATCH_SIZE, SYNC_PROTOCOL_VERSION, type JournalEntryWire } from '@/lib/sync/transport';
 import { isSynced } from '@/lib/sync/syncPolicy';
+import { parseLane, PRIORITY_TABLE_NAMES } from '@/lib/sync/lanes';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,10 @@ export const dynamic = 'force-dynamic';
  * the whole reason the protocol is pull-shaped.
  */
 export async function POST(req: NextRequest) {
-  let body: { protocol?: number; fromNode?: unknown; cursor?: unknown; limit?: unknown };
+  let body: {
+    protocol?: number; fromNode?: unknown; cursor?: unknown; limit?: unknown;
+    lane?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -38,6 +42,33 @@ export async function POST(req: NextRequest) {
     Number.isFinite(body.limit) ? Math.max(1, Number(body.limit)) : BATCH_SIZE,
     BATCH_SIZE);
 
+  // Which lane. Absent means the whole journal, which is what every caller
+  // asked for before lanes existed and what an older node still asks for —
+  // so the default has to stay "everything" or upgrading the cloud first
+  // would silently stop an un-upgraded theatre server receiving anything
+  // outside the priority set.
+  //
+  // An unrecognised value is REFUSED rather than quietly treated as bulk: a
+  // typo that disabled the priority lane would look exactly like the lane
+  // working, which is the worst way for this to fail.
+  const lane = body.lane === undefined ? null : parseLane(body.lane);
+  if (body.lane !== undefined && lane === null) {
+    return NextResponse.json(
+      { error: `Unknown lane "${String(body.lane)}". Use "priority" or "bulk".` },
+      { status: 400 });
+  }
+
+  // Built from a constant list, never from anything the caller sent. The
+  // table names are inlined because they come from PRIORITY_TABLE_NAMES in
+  // this repository and nowhere else; a caller-supplied table list here would
+  // be an injection point and, worse, would let a node decide for itself what
+  // counts as urgent.
+  const quoted = PRIORITY_TABLE_NAMES.map((t) => `'${t}'`).join(', ');
+  const laneFilter =
+    lane === 'priority' ? `and table_name in (${quoted})`
+    : lane === 'bulk'   ? `and table_name not in (${quoted})`
+    : '';
+
   const node = await prisma.$queryRawUnsafe<Array<{ node_id: string }>>(
     'select node_id from sync_node where id limit 1');
   const thisNode = node[0]?.node_id ?? 'unset';
@@ -53,14 +84,17 @@ export async function POST(req: NextRequest) {
     `select id::text, table_name, row_id, op, base_version, new_version, hlc, origin_node,
             payload, changed_cols, omitted_cols, omitted_digest
        from sync_journal
-      where origin_node = $1 and hlc > $2
+      where origin_node = $1 and hlc > $2 ${laneFilter}
       order by hlc
       limit $3`,
     thisNode, cursor, limit);
 
+  // Counted within the SAME lane, or the caller is told how much is left in a
+  // queue it is not reading — and a priority lane that reports the bulk
+  // backlog looks permanently behind however empty it is.
   const remaining = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
     `select count(*)::bigint as n from sync_journal
-      where origin_node = $1 and hlc > $2`,
+      where origin_node = $1 and hlc > $2 ${laneFilter}`,
     thisNode, rows.length ? rows[rows.length - 1].hlc : cursor);
 
   // A table declassified since the entry was written is skipped here rather
@@ -88,6 +122,7 @@ export async function POST(req: NextRequest) {
     entries,
     // Advance past everything READ, including entries filtered out above, or
     // the cursor would stick on a declassified row forever.
+    lane: lane ?? "all",
     nextCursor: rows.length ? rows[rows.length - 1].hlc : cursor,
     remaining: Number(remaining[0]?.n ?? 0),
   });

@@ -33,6 +33,7 @@ import {
   type JournalEntryWire, type PullResponse, type PushResponse,
 } from '../../src/lib/sync/transport';
 import { applyEntry, type TxRunner } from '../../src/lib/sync/applyEntry';
+import { PRIORITY_BATCH, BULK_BATCH, type Lane } from '../../src/lib/sync/lanes';
 
 const PEER_URL = (process.env.SYNC_PEER_URL ?? '').replace(/\/+$/, '');
 const TOKEN = process.env.SYNC_SERVICE_TOKEN ?? '';
@@ -438,14 +439,37 @@ async function retryDeferred(node: string): Promise<void> {
   }
 }
 
-/** Fetch and apply what the peer originated and we have not seen. */
-async function pull(node: string): Promise<number> {
-  const state = await prisma.$queryRawUnsafe<Array<{ pull_cursor: string }>>(
-    `select pull_cursor from sync_state where peer_node = 'cloud'`);
-  const cursor = state[0]?.pull_cursor ?? '';
+/**
+ * Fetch and apply what the peer originated and we have not seen.
+ *
+ * Runs once per LANE, each with its own cursor over the same journal. The
+ * priority lane carries the few tables a theatre needs to run the list in
+ * front of it; bulk carries everything else.
+ *
+ * Why that is needed at all: on 13 October this node returned after three
+ * weeks and had 4,787 entries to pull. Ten were that morning's cases, and
+ * because the journal is ordered strictly by clock they were at the very
+ * back — behind 2,319 consumable requests and 547 radio messages. A surgeon
+ * watched an empty list for twenty minutes while chatter was delivered first.
+ */
+async function pull(node: string, lane: Lane): Promise<number> {
+  const column = lane === 'priority' ? 'priority_cursor' : 'pull_cursor';
+
+  const state = await prisma.$queryRawUnsafe<Array<{ cursor: string | null }>>(
+    `select ${column} as cursor from sync_state where peer_node = 'cloud'`);
+  // A priority cursor that is null has never been set — the migration fills it
+  // from pull_cursor, so null here means a node that has not migrated yet.
+  // Falling back to the bulk cursor keeps it from replaying all of history.
+  let cursor = state[0]?.cursor ?? '';
+  if (lane === 'priority' && !cursor) {
+    const fallback = await prisma.$queryRawUnsafe<Array<{ pull_cursor: string | null }>>(
+      `select pull_cursor from sync_state where peer_node = 'cloud'`);
+    cursor = fallback[0]?.pull_cursor ?? '';
+  }
 
   const res = await call<PullResponse>('/api/sync/pull', {
-    protocol: SYNC_PROTOCOL_VERSION, fromNode: node, cursor, limit: BATCH_SIZE,
+    protocol: SYNC_PROTOCOL_VERSION, fromNode: node, cursor, lane,
+    limit: lane === 'priority' ? PRIORITY_BATCH : BULK_BATCH,
   });
   if (!res.ok) throw Object.assign(new Error(`pull failed: ${res.error}`), { status: res.status });
 
@@ -483,15 +507,21 @@ async function pull(node: string): Promise<number> {
   if (deferred) console.warn(`[sync] ${deferred} entr(y/ies) deferred; will retry next cycle`);
 
   // Safe now that a failure parks the entry rather than losing it.
+  //
+  // Each lane advances ONLY its own cursor. Moving the other one would skip
+  // every entry the other lane had not read yet — the fastest possible way to
+  // lose data, and silent.
   await prisma.$executeRawUnsafe(
-    `insert into sync_state (peer_node, pull_cursor, last_pull_at, last_pull_ok_at, consecutive_errors, last_error)
+    `insert into sync_state (peer_node, ${column}, last_pull_at, last_pull_ok_at, consecutive_errors, last_error)
      values ('cloud', $1, now(), now(), 0, null)
      on conflict (peer_node) do update set
-       pull_cursor = excluded.pull_cursor, last_pull_at = now(), last_pull_ok_at = now(),
+       ${column} = excluded.${column}, last_pull_at = now(), last_pull_ok_at = now(),
        consecutive_errors = 0, last_error = null, updated_at = now()`,
     res.data.nextCursor);
 
-  if (res.data.remaining > 0) console.log(`[sync] ${res.data.remaining} more waiting; will continue next cycle`);
+  if (res.data.remaining > 0) {
+    console.log(`[sync] ${lane}: ${res.data.remaining} more waiting; will continue next cycle`);
+  }
   return applied;
 }
 
@@ -590,7 +620,23 @@ async function cycle(): Promise<void> {
   // Before the pull: a parent applied last cycle unblocks its children now.
   await retryDeferred(node);
 
-  const pulled = await pull(node);
+  // PRIORITY FIRST, every cycle.
+  //
+  // In steady state this lane is empty and costs one cheap request. It only
+  // matters after an outage — which is precisely when a theatre is standing
+  // at a screen wondering where its list is.
+  //
+  // Failure here must not cost the bulk pull: the lesson already learnt when
+  // a failing push starved the pull for two and a half hours.
+  let pulledPriority = 0;
+  try {
+    pulledPriority = await pull(node, 'priority');
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.warn(`[sync] priority pull failed: ${m} — continuing to the bulk lane`);
+  }
+
+  const pulled = pulledPriority + await pull(node, 'bulk');
 
   // Say how we are, outward.
   //
