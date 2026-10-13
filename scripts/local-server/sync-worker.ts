@@ -148,9 +148,13 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     base_version: number; new_version: number; hlc: string; origin_node: string;
     payload: Record<string, unknown> | null; changed_cols: string[] | null;
     omitted_cols: string[] | null; omitted_digest: string | null; attempts: number;
+    // Carried so a stuck entry can say WHY it is stuck — a dropped link
+    // clears itself, a refusal needs a person, and the two look identical
+    // without this.
+    last_error: string | null;
   }>>(
     `select id::text, table_name, row_id, op, base_version, new_version, hlc, origin_node,
-            payload, changed_cols, omitted_cols, omitted_digest, attempts
+            payload, changed_cols, omitted_cols, omitted_digest, attempts, last_error
        from sync_journal
       where ack_at is null and origin_node = $1
         and (next_push_at is null or next_push_at <= now())
@@ -221,10 +225,29 @@ async function push(node: string): Promise<{ sent: number; failed: boolean }> {
     const last = warnedStuck.get(key) ?? 0;
     if (Date.now() - last < STUCK_WARN_INTERVAL_MS) continue;
     warnedStuck.set(key, Date.now());
+    // WHY it is stuck, not just that it is.
+    //
+    // The first version of this said "the peer will not accept it — most
+    // likely two records claiming one identity. A person has to settle it."
+    // On 13 October twenty-nine entries were held back with last_error
+    // "fetch failed" — a dropped connection, nothing to do with identity —
+    // and the message would have sent somebody hunting for a duplicate that
+    // did not exist.
+    //
+    // A link that keeps failing needs no decision from anybody and clears
+    // itself. A peer that keeps refusing needs a person. Telling them apart
+    // is the whole value of the line.
+    const err = r.last_error ?? '';
+    const transport = /fetch failed|ECONN|socket hang up|timed out|aborted|network/i.test(err);
     console.warn(
       `[sync] STUCK OUTBOUND: ${key} has failed ${attempts} times and is now `
-      + 'retried hourly so it cannot starve the queue. The peer will not accept '
-      + 'it — most likely two records claiming one identity. A person has to settle it.');
+      + 'retried hourly so it cannot starve the queue. '
+      + (transport
+        ? `The link keeps dropping ("${err.slice(0, 60)}"), so this is the connection `
+          + 'rather than the data. It will go through on its own once the link holds; '
+          + 'nobody needs to do anything.'
+        : `The peer refused it ("${err.slice(0, 80)}") — most likely two records `
+          + 'claiming one identity. This one needs a person.'));
   }
 
   const res = await call<PushResponse>('/api/sync/push', {
