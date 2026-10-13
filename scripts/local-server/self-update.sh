@@ -51,9 +51,21 @@ fi
 cd "$REPO" || { say "FAILED: cannot enter $REPO"; exit 1; }
 
 # Local edits are somebody's work. Refuse rather than discard.
-if ! git diff --quiet || ! git diff --cached --quiet; then
+#
+# EXCEPT package-lock.json, which this script dirties itself: `npm install`
+# below rewrites it, so checking it would mean the first run succeeds and
+# every run after it refuses — a script that blocks itself forever, which is
+# exactly what happened on the theatre server the first time this ran.
+#
+# It is generated rather than authored, so discarding it loses nothing: the
+# pull brings the version that matches package.json.
+git checkout -- package-lock.json 2>/dev/null || true
+
+if ! git diff --quiet -- . ':!package-lock.json' \
+   || ! git diff --cached --quiet -- . ':!package-lock.json'; then
   say "FAILED: the working tree has uncommitted changes. Someone edited this box."
-  say "        Resolve them, then run this again."
+  say "        Resolve them, then run this again. Changed files:"
+  git diff --name-only -- . ':!package-lock.json' | sed 's/^/          /' | tee -a "$LOG"
   exit 1
 fi
 
