@@ -103,6 +103,19 @@ export async function GET(req: NextRequest) {
     // money is the part of that question nobody had a number for.
     const financial = await financialFootprint();
 
+    // What the OTHER node last said about itself.
+    //
+    // The theatre server sits behind a hospital NAT on a relayed link with
+    // ssh currently shut, and has gone invisible three times — a stale build,
+    // a failed migration, a week unreachable while the app answered fine.
+    // Every diagnosis needed somebody to reach in. It now reports out with
+    // its sync traffic, and this is where that lands.
+    const nodes = await prisma.$queryRawUnsafe<Array<{
+      node_id: string; reported_at: Date; received_at: Date; payload: unknown;
+    }>>(
+      'select node_id, reported_at, received_at, payload from sync_node_reports order by node_id'
+    ).catch(() => []);
+
     const peers = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `select peer_node, last_push_ok_at, last_pull_ok_at, consecutive_errors,
               next_attempt_at, last_error
@@ -173,6 +186,16 @@ export async function GET(req: NextRequest) {
         worstAttempts: Number(deferred?.worst_attempts ?? 0),
       },
       financial,
+      // Each node's own last word about itself, with how stale it is. A
+      // report from four hours ago is itself the finding: the node has
+      // stopped syncing, whatever the report says.
+      nodes: nodes.map((n) => ({
+        node: n.node_id,
+        reportedAt: new Date(n.reported_at).toISOString(),
+        receivedAt: new Date(n.received_at).toISOString(),
+        staleMinutes: Math.round((Date.now() - new Date(n.received_at).getTime()) / 60_000),
+        ...(typeof n.payload === 'object' && n.payload ? n.payload : {}),
+      })),
       peers,
       checkedAt: new Date().toISOString(),
     });

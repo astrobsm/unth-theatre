@@ -22,6 +22,8 @@
  * not lose a single write.
  */
 
+import fs from 'fs';
+import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import {
   BATCH_SIZE, REQUEST_TIMEOUT_MS, SYNC_PROTOCOL_VERSION, isTooLarge, isTooMuchWork,
@@ -470,6 +472,71 @@ async function pull(node: string): Promise<number> {
   return applied;
 }
 
+/**
+ * Tell the cloud how this node is, so nobody has to come and look.
+ *
+ * Everything here is answerable locally and cheaply, and none of it is
+ * sensitive — a commit, a build time, some queue depths. That matters: a
+ * report containing nothing worth protecting needs no second access decision,
+ * and any administrator can read it.
+ *
+ * The build fields are the ones that would have caught all three incidents.
+ * "Which commit is this actually serving, and when was it built" was
+ * unanswerable from outside every time, and had to be inferred by probing
+ * routes to see which ones returned 404.
+ */
+/** The checkout this worker is running from — scripts/local-server/../.. */
+const REPO_ROOT = path.join(__dirname, '..', '..');
+
+async function reportHealth(node: string): Promise<void> {
+  let commit = 'unknown';
+  let builtAt: string | null = null;
+  try {
+    // The commit the working tree is on. Read from .git rather than by
+    // running git, so a missing binary or a slow disk cannot stall the cycle.
+    const head = fs.readFileSync(path.join(REPO_ROOT, '.git', 'HEAD'), 'utf8').trim();
+    const ref = head.startsWith('ref: ') ? head.slice(5).trim() : null;
+    commit = (ref
+      ? fs.readFileSync(path.join(REPO_ROOT, '.git', ref), 'utf8')
+      : head).trim().slice(0, 12);
+  } catch { /* not a git checkout, or unreadable; "unknown" is honest */ }
+
+  try {
+    // When .next was last built. This is the number that separates "the code
+    // is on the server" from "the server is running the code".
+    builtAt = fs.statSync(path.join(REPO_ROOT, '.next', 'BUILD_ID')).mtime.toISOString();
+  } catch { /* never built, or a different output dir */ }
+
+  const [row] = await prisma.$queryRawUnsafe<Array<{
+    unacked: bigint; oldest: Date | null; deferred: bigint; backed_off: bigint;
+  }>>(`
+    select (select count(*) from sync_journal where ack_at is null)::bigint           as unacked,
+           (select min(created_at) from sync_journal where ack_at is null)            as oldest,
+           (select count(*) from sync_deferred where resolved_at is null)::bigint     as deferred,
+           (select count(*) from sync_journal
+             where ack_at is null and next_push_at is not null)::bigint               as backed_off
+    // A failed count must not cost the whole report — the build fields are
+    // the ones that matter most and they are already in hand. ES5 target, so
+    // no bigint literals here.
+  `).catch(() => []);
+
+  const oldest = row?.oldest ? new Date(row.oldest) : null;
+
+  await call('/api/sync/node-report', {
+    fromNode: node,
+    at: new Date().toISOString(),
+    build: { commit, builtAt },
+    sync: {
+      unacknowledged: Number(row?.unacked ?? 0),
+      oldestUnacknowledged: oldest?.toISOString() ?? null,
+      behindMinutes: oldest ? Math.round((Date.now() - oldest.getTime()) / 60_000) : 0,
+      deferredWaiting: Number(row?.deferred ?? 0),
+      backedOff: Number(row?.backed_off ?? 0),
+    },
+    runtime: { node: process.version, uptimeSeconds: Math.round(process.uptime()) },
+  });
+}
+
 async function cycle(): Promise<void> {
   const node = await thisNode();
   if (node === 'unset') {
@@ -501,6 +568,18 @@ async function cycle(): Promise<void> {
   await retryDeferred(node);
 
   const pulled = await pull(node);
+
+  // Say how we are, outward.
+  //
+  // This server has gone invisible three times — a stale build, a failed
+  // migration, and ssh shut for a week while the app itself answered fine.
+  // Every diagnosis needed somebody to reach IN, through a hospital NAT on a
+  // relayed link, which is precisely the part that keeps failing.
+  //
+  // So it reports out, on the path that already works, with the token it
+  // already holds. Best effort and never allowed to affect the cycle: a
+  // beacon that could break the sync would be worse than no beacon.
+  void reportHealth(node).catch(() => { /* saying nothing is not a sync failure */ });
 
   // Only claim a good push when there actually was one. Stamping
   // last_push_ok_at after a failure is how a stalled queue reads as healthy.
