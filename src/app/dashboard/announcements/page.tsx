@@ -184,7 +184,13 @@ export default function AnnouncementsPage() {
     setTitle(a.title);
     setDescription(a.description || '');
     setAudioFile(null);
-    setAudioPreviewUrl(a.audioData || null);
+    // Fetched by URL when this one is opened, rather than carried in the list.
+    //
+    // The list used to arrive with every announcement's base64 MP3 attached —
+    // around 1.4 MB each — so opening this page downloaded all of them on the
+    // chance that one might be previewed. The audio endpoint already exists
+    // and serves exactly this, one at a time, when asked.
+    setAudioPreviewUrl(`/api/announcements/${a.id}/audio`);
     setAudioMode('upload');
     setTtsText('');
     setTtsError(null);

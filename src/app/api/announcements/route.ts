@@ -5,6 +5,44 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Every column of an announcement EXCEPT the audio.
+ *
+ * audioData is a base64 MP3 of roughly 1.4 MB. Both listings below used to
+ * return every column, so a page showing five announcements shipped seven
+ * megabytes of audio nobody had asked to hear — and the "due" listing did it
+ * on every poll, which is why the system laboured exactly when announcements
+ * came due and was fine the rest of the time.
+ *
+ * The bytes are served one at a time by /api/announcements/{id}/audio, which
+ * is what the player and the edit panel now use.
+ *
+ * This is the third performance fault this one column has caused: it wedged
+ * the sync queue for three days in September and slowed the Scribe before
+ * that. Naming the columns rather than taking them all is the habit that
+ * prevents the fourth.
+ */
+const LIST_FIELDS = {
+  id: true,
+  title: true,
+  description: true,
+  audioFileName: true,
+  audioMimeType: true,
+  audioDurationSec: true,
+  scheduledDate: true,
+  endDate: true,
+  frequency: true,
+  repeatDays: true,
+  customIntervalMin: true,
+  lastPlayedAt: true,
+  playCount: true,
+  status: true,
+  createdById: true,
+  createdByName: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 // GET - List announcements (all for admin, active/scheduled for playback)
 export async function GET(request: NextRequest) {
   try {
@@ -28,14 +66,17 @@ export async function GET(request: NextRequest) {
             { endDate: { gte: now } },
           ],
         },
+        select: LIST_FIELDS,
         orderBy: { scheduledDate: 'asc' },
       });
       return NextResponse.json(announcements);
     }
 
-    // Admin list — return all
+    // Admin list — every announcement, still without the audio. This was the
+    // worse of the two: opening the page downloaded every MP3 ever recorded.
     const announcements = await prisma.announcement.findMany({
-      include: {
+      select: {
+        ...LIST_FIELDS,
         createdBy: { select: { id: true, fullName: true } },
         _count: { select: { playbackLogs: true } },
       },

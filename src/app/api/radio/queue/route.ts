@@ -98,8 +98,41 @@ async function handleGET(_req: NextRequest) {
     const due = await prisma.announcement.findMany({
       where: {
         status: { in: ['SCHEDULED', 'ACTIVE'] },
+        // lte, not equals: an announcement whose time has passed stays due.
+        // A radio that was off, or a server that was restarting, must not
+        // mean the notice is simply never read out.
         scheduledDate: { lte: now },
         OR: [{ endDate: null }, { endDate: { gte: now } }],
+      },
+      // EVERY COLUMN EXCEPT THE AUDIO.
+      //
+      // This had no select at all, so each row arrived complete — including
+      // audioData, a base64 MP3 of about 1.4 MB. Twenty due announcements is
+      // roughly 28 MB loaded out of the database on EVERY poll of a queue
+      // that is polled constantly, only to be thrown away: what goes back to
+      // the player is audioUrl, a link to fetch the bytes separately.
+      //
+      // Which is why the system laboured exactly when announcements came due
+      // and was fine the rest of the time — the cost arrives with them.
+      //
+      // Third time this column has done this: it wedged the sync queue for
+      // three days in September and slowed the Scribe before that. Listing
+      // the columns rather than taking them all is the habit that prevents it.
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        audioFileName: true,
+        audioMimeType: true,
+        audioDurationSec: true,
+        scheduledDate: true,
+        endDate: true,
+        frequency: true,
+        repeatDays: true,
+        customIntervalMin: true,
+        lastPlayedAt: true,
+        playCount: true,
+        status: true,
       },
       take: 20,
     });
