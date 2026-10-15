@@ -656,6 +656,9 @@ model User {
   // Invitations to appear before the Theatre Audit Committee
   auditCommitteeInvitations AuditCommitteeInvitation[] @relation("AuditCommitteeInvitee")
 
+  // Summonses to the theatre audit: cancellations and missed preop reviews
+  auditSummonses AuditSummons[] @relation("AuditSummonsPerson")
+
   // Departmental roster supervision (per-user, per-department authority)
   rosterSupervision         RosterSupervisor[] @relation("RosterSupervisorUser")
   rosterSupervisorsAssigned RosterSupervisor[] @relation("RosterSupervisorAssignedBy")
@@ -1296,6 +1299,10 @@ model Surgery {
   teamMembers           SurgicalTeamMember[]
   transportLogs         PatientTransportLog[]
 
+  // Theatre audit: who was expected to review this, and who was summoned
+  reviewAssignment PreopReviewAssignment? @relation("SurgeryReviewAssignment")
+  auditSummonses   AuditSummons[]         @relation("SurgerySummonses")
+
   // New Relations for Enhanced Modules
   preOpReviews     PreOperativeAnestheticReview[] @relation("PreOpReviews")
   prescriptions    AnestheticPrescription[]       @relation("SurgeryPrescriptions")
@@ -1678,6 +1685,170 @@ model CaseCancellation {
   user    User    @relation(fields: [cancelledBy], references: [id])
 
   @@map("case_cancellations")
+}
+
+/// How the sitting is held. The chairman sets it; the summons has to say
+/// which, because "attend the theatre audit" without a room or a link is not
+/// a summons anybody can comply with.
+enum ConferenceMode {
+  PHYSICAL
+  VIRTUAL
+  HYBRID
+}
+
+/// Why somebody has been called to the theatre audit.
+///
+/// Kept as one mechanism across both sources — a case that did not hold and a
+/// case that reached the morning unreviewed — because a consultant who is
+/// summoned for both in one week should receive one notice naming both, not
+/// two notices from two subsystems that have never heard of each other.
+enum AuditSummonsCause {
+  /// A case that did not go ahead, pooled into the week's sitting.
+  CASE_CANCELLATION
+  /// Tomorrow's case was not reviewed by 9pm the evening before.
+  PREOP_REVIEW_LAPSE
+  /// An emergency that never started, escalated past the third rung.
+  EMERGENCY_DELAY
+}
+
+enum AuditSummonsStatus {
+  /// Raised, and waiting for the chairman to convene a sitting for it.
+  PENDING
+  /// Attached to a sitting and the person has been told.
+  NOTIFIED
+  /// They have said they will attend.
+  ACKNOWLEDGED
+  /// They were there.
+  ATTENDED
+  /// Excused by the chairman, with a reason.
+  EXCUSED
+  /// Summoned, not excused, did not come.
+  NO_SHOW
+  /// Raised in error, or the finding was answered before the sitting.
+  WITHDRAWN
+}
+
+/// One person called to answer for one case.
+///
+/// The person and the GROUND are both recorded, because the ground is what
+/// the meeting actually discusses and because a summons whose basis cannot be
+/// shown is one that gets argued about instead of answered. `reason` is the
+/// sentence that goes on the notice, written when the summons is raised and
+/// never regenerated — the rules behind it may be changed later, and a notice
+/// that silently rewords itself afterwards is not a record of anything.
+model AuditSummons {
+  id String @id @default(uuid())
+
+  cause  AuditSummonsCause
+  /// The machine-readable basis, from accountableFor() in reviewWatch.
+  /// Deliberately a string rather than an enum: the grounds are expected to
+  /// be refined as the committee uses this, and a migration per refinement
+  /// would discourage exactly that.
+  ground String
+
+  /// The sitting this was pooled into. Null until the chairman convenes one,
+  /// which is the normal state for anything raised mid-week.
+  conferenceId String?
+
+  userId     String
+  /// Snapshotted. Posts change, and the notice said what it said.
+  personName String
+  /// Their part in THIS case: Surgeon, Assigned anaesthetist, Booker.
+  roleOnCase String
+
+  surgeryId      String?
+  cancellationId String?
+
+  /// The sentence on the notice.
+  reason String @db.Text
+
+  status         AuditSummonsStatus @default(PENDING)
+  raisedAt       DateTime           @default(now())
+  raisedBy       String?
+  notifiedAt     DateTime?
+  acknowledgedAt DateTime?
+  /// Set when the chairman excuses somebody, with their reason beside it.
+  excusedAt      DateTime?
+  excusedReason  String?
+
+  conference TheatreAuditConference? @relation("SummonsSitting", fields: [conferenceId], references: [id], onDelete: SetNull)
+  user       User                    @relation("AuditSummonsPerson", fields: [userId], references: [id], onDelete: Cascade)
+  surgery    Surgery?                @relation("SurgerySummonses", fields: [surgeryId], references: [id], onDelete: SetNull)
+
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  /// One summons per person per case per cause. The watch job re-runs every
+  /// evening and the escalation runner every fifteen minutes; without this a
+  /// consultant would collect a fresh summons on every pass.
+  @@unique([cause, userId, surgeryId])
+  @@index([conferenceId])
+  @@index([status, raisedAt])
+  @@index([userId, status])
+  @@map("audit_summonses")
+}
+
+/// Who was supposed to review tomorrow's case, and what became of it.
+///
+/// Separate from PreOperativeAnestheticReview because this row exists for
+/// cases that have NO review — which is the entire point. Recording the
+/// expectation on the review itself would mean the cases that failed are the
+/// ones with nothing written down.
+model PreopReviewAssignment {
+  id          String   @id @default(uuid())
+  surgeryId   String   @unique
+  /// The operating day, as a plain date. The deadlines are derived from it in
+  /// WAT; storing them would freeze an answer that depends on a rule.
+  surgeryDate DateTime @db.Date
+
+  /// The anaesthetist the case names.
+  expectedReviewerId   String?
+  expectedReviewerName String?
+  /// How that name was arrived at: subspecialty | on-call | other-specialty |
+  /// unrostered | none, from classifyAnaesthetistAssignment. A fallback is
+  /// cover, not an assignment, and must not attract a summons.
+  assignmentSource     String?
+
+  /// "I cannot review this" — due before 7pm so the HOD can find somebody.
+  handedBackAt     DateTime?
+  handedBackById   String?
+  handedBackReason String?   @db.Text
+
+  /// The HOD naming a replacement.
+  reassignedToId   String?
+  reassignedToName String?
+  reassignedAt     DateTime?
+  reassignedById   String?
+
+  /// Copied across when the review appears, so the watch does not have to
+  /// join to find out whether anything happened.
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  /// Set when the 7pm pass told the HOD, so it is told once and not every
+  /// five minutes for two hours.
+  hodNotifiedAt DateTime?
+  /// Set by the 9pm pass. Its presence is what makes the case a finding.
+  lapsedAt      DateTime?
+  /// The ground recorded at lapse, kept so the audit list can be read without
+  /// re-deriving a judgement from data that has since moved on.
+  lapseGround   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  surgery Surgery @relation("SurgeryReviewAssignment", fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([surgeryDate, lapsedAt])
+  @@index([expectedReviewerId, surgeryDate])
+  @@map("preop_review_assignments")
 }
 
 model AuditLog {
@@ -4485,6 +4656,19 @@ model TheatreAuditConference {
 
   status ConferenceStatus @default(DRAFT)
 
+  /// Physical, virtual or both, set by the chairman. A summons has to be able
+  /// to say where to go or what to join.
+  mode        ConferenceMode @default(PHYSICAL)
+  /// The joining link, when there is one. Kept apart from `venue` so a hybrid
+  /// sitting can state a room AND a link without one overwriting the other.
+  meetingLink String?
+
+  /// The week whose cancellations this sitting reviews. Null on a conference
+  /// called for structural business, which is what this model was built for
+  /// and still does.
+  periodStart DateTime? @db.Date
+  periodEnd   DateTime? @db.Date
+
   /// Set when the chair adopts the resolution. From that moment the points and
   /// decisions stop being editable: a minute that can be changed after
   /// adoption is not a minute, it is a draft that people have acted on.
@@ -4503,6 +4687,7 @@ model TheatreAuditConference {
 
   issues    ConferenceIssue[]
   attendees ConferenceAttendee[]
+  summonses AuditSummons[]       @relation("SummonsSitting")
 
   /// Sync metadata, maintained by the capture trigger. Application code must
   /// never write these.
