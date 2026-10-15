@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { withApiError } from '@/lib/apiError';
 import { watClock, watDay, watDayOfWeek, watDayRange, watMinutesOfDay } from '@/lib/watDay';
 import { scheduledInstant } from '@/lib/theatreOps/clock';
+import { broadcastDue, minutesLate, CATCH_UP_MINUTES } from '@/lib/radio/broadcastDue';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,6 @@ async function handleGET(_req: NextRequest) {
    * lib/watDay states the offset explicitly and asks the host nothing.
    */
   const dow = watDayOfWeek(now); // 0..6, in WAT
-  const hhmm = watClock(now);    // "HH:MM", in WAT
   const nowMinutes = watMinutesOfDay(now);
   const todayWat = watDay(now);
 
@@ -49,26 +49,29 @@ async function handleGET(_req: NextRequest) {
     if (b.endDate && now > b.endDate) continue;
     if (!b.daysOfWeek.split(',').map((s) => s.trim()).includes(String(dow))) continue;
 
-    let shouldFire = false;
-
-    if (b.timeOfDay && b.timeOfDay === hhmm) {
-      // fire at exact minute, but not twice in the same minute
-      if (
-        !b.lastTriggered ||
-        now.getTime() - b.lastTriggered.getTime() > 60 * 1000
-      ) {
-        shouldFire = true;
-      }
-    } else if (b.intervalMins && b.intervalMins > 0) {
-      if (
-        !b.lastTriggered ||
-        now.getTime() - b.lastTriggered.getTime() >= b.intervalMins * 60 * 1000
-      ) {
-        shouldFire = true;
-      }
+    // A DUE TIME STAYS DUE. This was an exact-minute equality test — fire only if a
+    // poll lands inside the one minute the broadcast is due. The queue is
+    // polled by whichever browsers have the radio page open, so that minute
+    // is promised to nobody: close the last laptop at 17:58, open the next at
+    // 18:02, and the 18:00 broadcast did not fire late, it did not fire at
+    // all, and nothing recorded that it had been dropped.
+    //
+    // broadcastDue holds the rule and the two-hour catch-up limit, with
+    // tests. It also distinguishes 'missed' from 'done', which the old
+    // boolean could not, so a dropped broadcast can be seen rather than
+    // inferred from a silent corridor.
+    const verdict = broadcastDue(b, now);
+    if (verdict === 'missed') {
+      // Said once, where somebody reading the logs will find it. Not an
+      // error: skipping a morning call at ten at night is the right thing.
+      console.warn(
+        `[radio] broadcast "${b.title}" was due at ${b.timeOfDay} and is more than `
+        + `${CATCH_UP_MINUTES} minutes late; skipped rather than read out now.`,
+      );
     }
+    if (verdict !== 'due') continue;
 
-    if (!shouldFire) continue;
+    const late = minutesLate(b, now);
 
     await prisma.radioAnnouncement.create({
       data: {
@@ -82,6 +85,9 @@ async function handleGET(_req: NextRequest) {
         status: 'PENDING',
       },
     });
+    if (late && late > 1) {
+      console.warn(`[radio] broadcast "${b.title}" read out ${late} minutes after ${b.timeOfDay}.`);
+    }
     await prisma.radioBroadcast.update({
       where: { id: b.id },
       data: { lastTriggered: now },
