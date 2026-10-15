@@ -253,6 +253,9 @@ export default function DashboardLayout({
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
     { href: '/dashboard/surgeries/completed', icon: FileText, label: 'Completed Surgeries' },
     { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
+    // Everyone, not the admin block: anybody can be summoned, and the
+    // notification the watch sends links straight here.
+    { href: '/dashboard/theatre-audit/summonses', icon: Gavel, label: 'My Audit Summonses', badge: 'NEW' },
 
     // === PRE-OPERATIVE (Night Before & Morning Of) ===
     { href: '/dashboard/pre-operative-visit', icon: ClipboardPlus, label: 'Pre-Op Visit', badge: 'NEW' },
@@ -381,6 +384,7 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
+    menuItems.push({ href: '/dashboard/theatre-audit/pool', icon: Gavel, label: 'Weekly Audit Pool', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/anonymous-tips/view', icon: Eye, label: 'Review Tips', badge: 'ADMIN' });
     // Two entries, not one screen with tabs. They are read by different people
     // for different reasons, and the combined screen opened on the patient tab
@@ -519,6 +523,7 @@ export default function DashboardLayout({
       '/dashboard/surgeries',
       '/dashboard/estimates',
       '/dashboard/cancellations',
+      '/dashboard/theatre-audit/summonses',
       '/dashboard/surgeries/completed',
       '/dashboard/admin/surgical-catalog',
       '/dashboard/surgical-unit-calendar',
@@ -593,6 +598,7 @@ export default function DashboardLayout({
       '/dashboard/live-monitoring',
       '/dashboard/theatre-audit',
       '/dashboard/theatre-audit/conference',
+      '/dashboard/theatre-audit/pool',
       '/dashboard/users',
       '/role-guide',
     ] },
