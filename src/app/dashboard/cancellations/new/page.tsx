@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { XCircle, AlertCircle } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -23,6 +23,11 @@ interface Surgery {
 
 export default function NewCancellationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  /// Set when this page is opened from a case's own row on the surgery list,
+  /// which is now the normal way in. Arriving with no case named still works —
+  /// the search box is then how you find one.
+  const presetSurgeryId = searchParams.get('surgeryId') || '';
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
@@ -30,7 +35,7 @@ export default function NewCancellationPage() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
-    surgeryId: '',
+    surgeryId: presetSurgeryId,
     category: '',
     reason: '',
     detailedNotes: '',
@@ -59,9 +64,15 @@ export default function NewCancellationPage() {
       const response = await fetch('/api/surgeries');
       if (response.ok) {
         const data = await response.json();
-        // Only show scheduled surgeries that haven't been cancelled
+        // Only cases that could still go ahead are offered — except the one
+        // this page was opened for, which is kept whatever its status. Dropping
+        // it would show an empty picker on a form opened for a named patient,
+        // which reads as a broken link rather than as a rule.
         const scheduledSurgeries = data.filter(
-          (s: Surgery) => s.status === 'SCHEDULED' || s.status === 'IN_PROGRESS'
+          (s: Surgery) =>
+            s.status === 'SCHEDULED' ||
+            s.status === 'IN_PROGRESS' ||
+            s.id === presetSurgeryId
         );
         setSurgeries(scheduledSurgeries);
         setFilteredSurgeries(scheduledSurgeries);

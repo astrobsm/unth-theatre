@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
-import { Plus, Search, Calendar, ClipboardList, Package, AlertCircle, FileText, Activity, Calculator, Clock, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, Pencil, Pill, CheckCircle, FileSignature, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
+import { Plus, Search, Calendar, AlertCircle, Eye, RefreshCw, Wifi, WifiOff, Printer, Droplet, Zap as ZapIcon, CheckCircle, Building2, X, ChevronUp, ChevronDown, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
-import { AlertTriangle, Copy, MessageCircle } from 'lucide-react';
+import { AlertTriangle, MessageCircle } from 'lucide-react';
 import PhoneLink from '@/components/PhoneLink';
 import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -20,6 +20,7 @@ import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import ReportBlockerButton from '@/components/ReportBlockerButton';
 import CasePacksButton from '@/components/CasePacksButton';
 import AmendCaseButton from '@/components/surgeries/AmendCaseButton';
+import CaseActionsMenu from '@/components/surgeries/CaseActionsMenu';
 import { watInstantFrom } from '@/lib/watDay';
 
 interface Surgery {
@@ -1665,71 +1666,9 @@ export default function SurgeriesPage() {
                           onReported={() => void fetchSurgeries()}
                         />
 
-                        {/* Edit (re-schedule, change theatre/anaesthesia) - tracked in audit log */}
-                        {surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/edit`}
-                            className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-800"
-                            title="Edit case (date/time/location tracked)"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* Change / assign theatre (perioperative nurse + admin) */}
-                        {canReassignTheatre && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
-                          <button
-                            onClick={() => openReassign(surgery)}
-                            className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-800"
-                            title="Change / assign theatre"
-                          >
-                            <Building2 className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Reschedule to another day (surgeon + admin) */}
-                        {canReschedule && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
-                          <button
-                            onClick={() => openReschedule(surgery)}
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800"
-                            title="Reschedule to another day"
-                          >
-                            <Calendar className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Withdraw a case booked more than once. Never offered
-                            for a COMPLETED or in-progress case: that row is the
-                            operation that actually took place, and among copies
-                            of one booking it is the one that must survive. */}
-                        {canMarkDuplicate
-                          && surgery.status !== 'COMPLETED'
-                          && surgery.status !== 'IN_PROGRESS'
-                          && surgery.status !== 'CANCELLED' && (
-                          <button
-                            onClick={() => handleMarkDuplicate(surgery)}
-                            disabled={duplicateId === surgery.id}
-                            className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Withdraw as a duplicate booking"
-                            aria-label="Withdraw as a duplicate booking"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Mark Completed (surgeon closes the case → PACU can admit + post-op note) */}
-                        {canCompleteSurgery && surgery.status !== 'COMPLETED' && surgery.status !== 'CANCELLED' && (
-                          <button
-                            onClick={() => handleMarkCompleted(surgery.id)}
-                            disabled={completingId === surgery.id}
-                            className="inline-flex items-center gap-1 text-green-600 hover:text-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Mark surgery as completed"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Receive in Theatre (en-route patient has arrived) */}
+                        {/* Receive in Theatre stays out of the menu. The
+                            patient is at the door; this is not something to go
+                            looking for under a heading. */}
                         {canReceiveInTheatre &&
                           surgery.holdingAreaAssessment?.status === 'ENROUTE_TO_THEATRE' && (
                             <button
@@ -1743,93 +1682,136 @@ export default function SurgeriesPage() {
                             </button>
                           )}
 
-                        {/* Consent Form */}
-                        {canAccessConsent && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/consent`}
-                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900"
-                            title="Surgical Consent Form"
-                          >
-                            <FileSignature className="w-4 h-4" />
-                          </Link>
-                        )}
+                        {/* Everything else, by name. These were eleven bare
+                            icons with title attributes — a tooltip appears only
+                            if you hover and wait, which nobody does mid-list
+                            and nobody can do at all on a tablet. Surgeons were
+                            reading a row of small coloured shapes and guessing.
 
-                        {/* WHO Checklist */}
-                        {canAccessWHOChecklist && (
-                          <Link
-                            href={`/dashboard/checklists/${surgery.id}`}
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-900"
-                            title="WHO Checklist"
-                          >
-                            <ClipboardList className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* Anesthesia Monitoring */}
-                        {canAccessAnesthesia && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/anesthesia`}
-                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-900"
-                            title="Anesthesia Monitoring"
-                          >
-                            <Activity className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* Surgical Count */}
-                        {canAccessSurgicalCount && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/count`}
-                            className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-900"
-                            title="Surgical Count"
-                          >
-                            <Calculator className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* Timing */}
-                        {canAccessTiming && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/timing`}
-                            className="inline-flex items-center gap-1 text-green-600 hover:text-green-900"
-                            title="Surgical Timing"
-                          >
-                            <Clock className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* Consumables */}
-                        {canAccessConsumables && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/consumables`}
-                            className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-900"
-                            title="Track Consumables"
-                          >
-                            <Package className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* Post-Op Prescription (after surgery) */}
-                        {(surgery.status === 'COMPLETED' || surgery.status === 'IN_RECOVERY' || surgery.status === 'RECOVERY_COMPLETE') && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/post-op-prescription`}
-                            className="inline-flex items-center gap-1 text-pink-600 hover:text-pink-900"
-                            title="Send post-op prescription to pharmacy"
-                          >
-                            <Pill className="w-4 h-4" />
-                          </Link>
-                        )}
-
-                        {/* BOM */}
-                        {canAccessBOM && (
-                          <Link
-                            href={`/dashboard/surgeries/${surgery.id}/bom`}
-                            className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900"
-                            title="Bill of Materials"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Link>
-                        )}
+                            The buttons above keep their own place because they
+                            are already words and they are the ones used every
+                            day. The rest are written out in here. */}
+                        <CaseActionsMenu
+                          patientName={surgery.patient?.name}
+                          procedureName={surgery.procedureName}
+                          actions={[
+                            {
+                              group: 'Before surgery',
+                              label: 'Edit the case details',
+                              hint: 'Date, time, theatre, anaesthesia. Changes are logged.',
+                              href: `/dashboard/surgeries/${surgery.id}/edit`,
+                              hidden: surgery.status === 'COMPLETED' || surgery.status === 'CANCELLED',
+                            },
+                            {
+                              group: 'Before surgery',
+                              label: 'Change or assign the theatre',
+                              onClick: () => openReassign(surgery),
+                              hidden: !canReassignTheatre
+                                || surgery.status === 'COMPLETED'
+                                || surgery.status === 'CANCELLED',
+                            },
+                            {
+                              group: 'Before surgery',
+                              label: 'Move to another day',
+                              hint: 'Keeps the booking; only the date changes.',
+                              onClick: () => openReschedule(surgery),
+                              hidden: !canReschedule
+                                || surgery.status === 'COMPLETED'
+                                || surgery.status === 'CANCELLED',
+                            },
+                            {
+                              group: 'Before surgery',
+                              label: 'Consent form',
+                              href: `/dashboard/surgeries/${surgery.id}/consent`,
+                              hidden: !canAccessConsent,
+                            },
+                            {
+                              group: 'In theatre',
+                              label: 'WHO safety checklist',
+                              href: `/dashboard/checklists/${surgery.id}`,
+                              hidden: !canAccessWHOChecklist,
+                            },
+                            {
+                              group: 'In theatre',
+                              label: 'Anaesthesia monitoring chart',
+                              href: `/dashboard/surgeries/${surgery.id}/anesthesia`,
+                              hidden: !canAccessAnesthesia,
+                            },
+                            {
+                              group: 'In theatre',
+                              label: 'Swab and instrument count',
+                              href: `/dashboard/surgeries/${surgery.id}/count`,
+                              hidden: !canAccessSurgicalCount,
+                            },
+                            {
+                              group: 'In theatre',
+                              label: 'Start and finish times',
+                              href: `/dashboard/surgeries/${surgery.id}/timing`,
+                              hidden: !canAccessTiming,
+                            },
+                            {
+                              group: 'In theatre',
+                              label: 'Consumables used',
+                              hint: 'What was opened for this patient.',
+                              href: `/dashboard/surgeries/${surgery.id}/consumables`,
+                              hidden: !canAccessConsumables,
+                            },
+                            {
+                              group: 'After surgery',
+                              label: 'Mark the case completed',
+                              hint: 'Lets recovery admit the patient and the post-op note be written.',
+                              onClick: () => handleMarkCompleted(surgery.id),
+                              disabled: completingId === surgery.id,
+                              hidden: !canCompleteSurgery
+                                || surgery.status === 'COMPLETED'
+                                || surgery.status === 'CANCELLED',
+                            },
+                            {
+                              group: 'After surgery',
+                              label: 'Post-operative prescription',
+                              hint: 'Sends it to the pharmacy.',
+                              href: `/dashboard/surgeries/${surgery.id}/post-op-prescription`,
+                              hidden: surgery.status !== 'COMPLETED'
+                                && surgery.status !== 'IN_RECOVERY'
+                                && surgery.status !== 'RECOVERY_COMPLETE',
+                            },
+                            {
+                              group: 'Administration',
+                              label: 'Bill of materials',
+                              href: `/dashboard/surgeries/${surgery.id}/bom`,
+                              hidden: !canAccessBOM,
+                            },
+                            {
+                              // The one this menu was asked for. A case that
+                              // fell through was being closed by editing its
+                              // status, which recorded nothing about why — so
+                              // the weekly audit saw a list of cancelled cases
+                              // with no reasons attached to any of them.
+                              group: 'Administration',
+                              label: 'Cancel this case',
+                              hint: 'It did not hold. Opens the form that records why, for the weekly theatre audit.',
+                              href: `/dashboard/cancellations/new?surgeryId=${surgery.id}`,
+                              danger: true,
+                              hidden: surgery.status === 'COMPLETED' || surgery.status === 'CANCELLED',
+                            },
+                            {
+                              // Not the same thing as cancelling, and the names
+                              // have to say so: this one is for a case booked
+                              // twice, where nothing was cancelled because
+                              // there was only ever one operation.
+                              group: 'Administration',
+                              label: 'Withdraw as a duplicate booking',
+                              hint: 'Only for a case booked twice by mistake.',
+                              onClick: () => handleMarkDuplicate(surgery),
+                              disabled: duplicateId === surgery.id,
+                              danger: true,
+                              hidden: !canMarkDuplicate
+                                || surgery.status === 'COMPLETED'
+                                || surgery.status === 'IN_PROGRESS'
+                                || surgery.status === 'CANCELLED',
+                            },
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>
