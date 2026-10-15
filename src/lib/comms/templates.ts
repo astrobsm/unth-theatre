@@ -247,6 +247,56 @@ export const WHATSAPP_TEMPLATES: TemplateSpec[] = [
     variables: ['name', 'department', 'period'],
     buttonLabel: 'Upload the roster',
   },
+
+  {
+    code: 'PREOP_REVIEW_OVERDUE',
+    metaName: 'orm_preop_review_overdue',
+    category: 'UTILITY',
+    language: 'en',
+    when: 'At 7pm to the Head of Anaesthesia, listing tomorrow\u2019s cases that still have '
+      + 'no preoperative anaesthetic review. Sent at 7pm rather than 9pm so there is '
+      + 'still time to reassign: at 9pm it would be a reproach rather than a warning.',
+    metaBody:
+      'Dear {{1}},\n\n'
+      + '{{2}} case(s) on tomorrow\u2019s list for {{3}} have no preoperative anaesthetic '
+      + 'review, and the 7pm deadline for reassigning them has now passed.\n\n'
+      + 'The review deadline is 9pm. Cases still unreviewed after that are recorded for '
+      + 'the weekly theatre audit.\n\n'
+      + 'The cases are listed in the Operative Resource Manager. Thank you.',
+    body:
+      'Dear {{name}},\n\n'
+      + '{{count}} case(s) on tomorrow\u2019s list for {{date}} have no preoperative '
+      + 'anaesthetic review, and the 7pm deadline for reassigning them has now passed.\n\n'
+      + 'The review deadline is 9pm. Cases still unreviewed after that are recorded for '
+      + 'the weekly theatre audit.\n\n'
+      + 'The cases are listed in the Operative Resource Manager. Thank you.',
+    variables: ['name', 'count', 'date'],
+    buttonLabel: 'Open the review list',
+  },
+
+  {
+    code: 'AUDIT_SUMMONS',
+    metaName: 'orm_audit_summons',
+    category: 'UTILITY',
+    language: 'en',
+    when: 'When the theatre audit chairman convenes a sitting, to each person summoned. '
+      + 'Deliberately states the ground and the case, because a summons that does not '
+      + 'say what it is about cannot be prepared for and gets ignored.',
+    metaBody:
+      'Dear {{1}},\n\n'
+      + 'You are requested to attend the Theatre Audit meeting on {{2}}, {{3}}.\n\n'
+      + 'Matter: {{4}}\n\n'
+      + 'The full record is in the Operative Resource Manager. If you are unable to '
+      + 'attend, please inform the chairman beforehand. Thank you.',
+    body:
+      'Dear {{name}},\n\n'
+      + 'You are requested to attend the Theatre Audit meeting on {{when}}, {{where}}.\n\n'
+      + 'Matter: {{matter}}\n\n'
+      + 'The full record is in the Operative Resource Manager. If you are unable to '
+      + 'attend, please inform the chairman beforehand. Thank you.',
+    variables: ['name', 'when', 'where', 'matter'],
+    buttonLabel: 'Open the summons',
+  },
 ];
 
 export const templateByCode = (code: string): TemplateSpec | undefined =>
