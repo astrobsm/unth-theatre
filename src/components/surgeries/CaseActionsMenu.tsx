@@ -34,6 +34,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
+import { placeMenu, MENU_WIDTH, type Placement } from '@/lib/ui/menuPlacement';
+
 export interface CaseAction {
   /** What it is called, in the words a clinician would use. */
   label: string;
@@ -65,33 +67,64 @@ interface Props {
 
 export default function CaseActionsMenu({ actions, patientName, procedureName }: Props) {
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [anchor, setAnchor] = useState<Placement | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const place = useCallback(() => {
     const el = buttonRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const MENU_WIDTH = 300;
-    // Kept on screen: the actions column is at the right edge of a wide
-    // table, so a menu left-aligned to the button would open off the page.
-    const left = Math.max(12, Math.min(r.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 12));
-    setAnchor({ top: r.bottom + 6, left });
+    // THE HEIGHT IS MEASURED, not guessed at 70vh. Sixteen named actions in
+    // four groups is taller than most laptop windows, so a fixed 70vh ran the
+    // last group — the one holding "Cancel this case" — off the bottom of the
+    // screen. Reaching it meant scrolling, and scrolling closed the menu.
+    // The arithmetic lives in lib/ui/menuPlacement with the awkward cases
+    // written down as tests, because geometry looks right in a diff and is
+    // wrong on a 13-inch screen.
+    setAnchor(placeMenu(
+      { top: r.top, bottom: r.bottom, right: r.right },
+      { width: window.innerWidth, height: window.innerHeight },
+    ));
   }, []);
 
   useEffect(() => {
     if (!open) return;
     place();
-    // Closes on anything that would move it, rather than floating away from
-    // its row while the page scrolls underneath.
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
+
+    const onScroll = (event: Event) => {
+      // THE BUG. This listener is on the capture phase so it sees scrolling
+      // anywhere, INCLUDING inside the menu's own scrollable list — so the
+      // moment somebody scrolled the list to reach the lower actions, the
+      // thing they were scrolling closed under them.
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+
+      const el = buttonRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      // Its row has left the screen, so a menu anchored to it means nothing
+      // any more. This is the case the old close-on-any-scroll was for, and
+      // it is the only case that justifies closing.
+      if (r.bottom < 0 || r.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      // Otherwise follow the row rather than vanish. A menu that closes
+      // because the page moved two pixels is one you cannot use on a
+      // touchscreen at all.
+      place();
+    };
+
+    const onResize = () => place();
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
       window.removeEventListener('keydown', onKey);
     };
   }, [open, place]);
@@ -104,9 +137,17 @@ export default function CaseActionsMenu({ actions, patientName, procedureName }:
           this is a menu, not a dialog. */}
       <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
       <div
+        ref={menuRef}
         role="menu"
-        style={{ top: anchor.top, left: anchor.left, width: 300 }}
-        className="fixed z-50 max-h-[70vh] overflow-y-auto rounded-xl bg-white py-1 text-left shadow-xl ring-1 ring-black/10 [white-space:normal]"
+        style={{
+          top: anchor.top, left: anchor.left, width: MENU_WIDTH,
+          maxHeight: anchor.maxHeight,
+        }}
+        // overscroll-contain keeps a touch scroll inside the list instead of
+        // handing it to the page once the list hits its end — on a tablet that
+        // scrolled the table underneath and took the row out from under the
+        // menu, which is the same failure by a different route.
+        className="fixed z-50 overflow-y-auto overscroll-contain rounded-xl bg-white py-1 text-left shadow-xl ring-1 ring-black/10 [white-space:normal]"
       >
         {(patientName || procedureName) && (
           <div className="border-b border-gray-100 px-3 pb-2 pt-1.5">
