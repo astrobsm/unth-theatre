@@ -7,6 +7,7 @@ import { useMediaHub } from '@/components/MediaHub';
 import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
 import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
 import { isUrgentAnnouncement } from '@/lib/announcementUrgency';
+import { gatePlayback, type NowPlaying } from '@/lib/radio/playbackGate';
 import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 interface Announcement {
@@ -65,6 +66,28 @@ export default function RadioPlayer() {
   const dragOffsetRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playedRecentlyRef = useRef<Map<string, number>>(new Map());
+  /**
+   * What is sounding RIGHT NOW, or null.
+   *
+   * A ref, not state: the playback effect re-runs on every poll and reads
+   * this synchronously to decide whether it may speak. Held as state it
+   * would be a render behind, which is precisely long enough for a poll to
+   * start a second announcement over the first.
+   */
+  const playingRef = useRef<NowPlaying | null>(null);
+  /**
+   * Bumped whenever something stops sounding, so the effect re-runs at once
+   * and the next announcement goes out without waiting for the next poll.
+   */
+  const [finishedTick, setFinishedTick] = useState(0);
+
+  const endPlaying = useCallback((id: string) => {
+    // Guarded on the id: a stale onended from an announcement that was
+    // pre-empted must not clear the marker belonging to the one that
+    // replaced it, which would re-open the gate mid-emergency.
+    if (playingRef.current?.id === id) playingRef.current = null;
+    setFinishedTick((n) => n + 1);
+  }, []);
   // When the current item was last actually SPOKEN, and when it is next due.
   // The panel reads these so what is on screen matches what is being heard —
   // previously the banner appeared on the poll and the voice ran on its own
@@ -96,6 +119,11 @@ export default function RadioPlayer() {
       }
     } catch {}
     setSpeaking(false);
+    // Nothing is sounding any more, so the radio is free. Without this an
+    // acknowledged emergency left the marker set and the gate below kept the
+    // next announcement waiting until the stuck-playback ceiling expired —
+    // three minutes of silence bought by a fix for overlapping.
+    playingRef.current = null;
     // Resume background music after a hard stop / acknowledgement.
     if (typeof window !== 'undefined') {
       try { window.dispatchEvent(new CustomEvent('radio:idle')); } catch {}
@@ -629,12 +657,52 @@ export default function RadioPlayer() {
       // for the server to remove it from the queue.
       if (last > 0) return;
     }
+    // ONE VOICE AT A TIME.
+    //
+    // There was no check here at all. The effect re-runs on every poll, so an
+    // emergency arriving while a workflow announcement was being read out
+    // started the emergency without stopping the workflow message — and
+    // because a neural-voice announcement plays through an <audio> element
+    // while the fallback speaks through speechSynthesis, those are separate
+    // audio channels. They did not interrupt each other. They sounded
+    // together, two voices over one corridor speaker, neither intelligible.
+    //
+    // The rules live in lib/radio/playbackGate with the awkward cases tested:
+    // an emergency pre-empts routine traffic but not another emergency, and a
+    // wedged announcement cannot hold the radio for ever.
+    const decision = gatePlayback({
+      candidate: { id: top.id, urgent },
+      nowPlaying: playingRef.current,
+      now,
+    });
+
+    // Leave it in the queue, unstamped, and try again on the next poll or the
+    // moment the current one ends. Stamping here would suppress it for the
+    // rest of the session — the item would wait for its turn and then never
+    // take it.
+    if (decision === 'wait' || decision === 'already') return;
+
+    if (decision === 'pre-empt') {
+      const interrupted = playingRef.current;
+      // Silence the other channel BEFORE starting this one, or pre-empting
+      // produces exactly the overlap it exists to prevent.
+      hardStop();
+      if (interrupted) {
+        // The room did not hear that one, so it has not been delivered — the
+        // same principle onUnheard already follows below. Dropping its stamp
+        // puts it back in line to be read after this.
+        playedRecentlyRef.current.delete(interrupted.id);
+        playingRef.current = null;
+      }
+    }
+
     // Stamped BEFORE the attempt, so a re-render cannot fire the same
     // announcement twice while it is still speaking — and cleared again by
     // onUnheard below if nothing actually came out. Previously it was stamped
     // and never cleared, so a single failure (audio not yet unlocked, no voices
     // installed, a muted handset) suppressed that announcement for the rest of
     // the session: the alert stayed on screen and could never be spoken again.
+    playingRef.current = { id: top.id, urgent, startedAt: now };
     playedRecentlyRef.current.set(lastPlayedKey, now);
     setLastSpokenAt(now);
     setNextDueAt(top.repeatUntilAck ? now + (top.repeatEverySec || 30) * 1000 : null);
@@ -646,6 +714,8 @@ export default function RadioPlayer() {
     const text = `${prefix}${top.title}. ${top.message}${top.location ? '. Location: ' + top.location : ''}${top.specialty ? '. Specialty: ' + top.specialty : ''}.`;
 
     const onDone = () => {
+      // Releases the radio for whatever is waiting behind this.
+      endPlaying(top.id);
       // For non-ack items, tell the server we've played it so it stops
       // appearing in the queue (no endless loop).
       if (!top.repeatUntilAck) markPlayed(top.id);
@@ -655,6 +725,7 @@ export default function RadioPlayer() {
     // do NOT tell the server it was played — an announcement the room did not
     // hear has not been delivered, whatever the queue would prefer to believe.
     const onUnheard = () => {
+      endPlaying(top.id);
       playedRecentlyRef.current.delete(lastPlayedKey);
       setLastSpokenAt(null);
       // Arm the unlock prompt and the any-gesture listener.
@@ -674,7 +745,7 @@ export default function RadioPlayer() {
 
     if (top.audioUrl) playAudio(top.audioUrl, onDone, isEmergency, onUnheard);
     else speak(text, onDone, isEmergency ? 0 : 2500, isEmergency, onUnheard);
-  }, [queue, enabled, speak, playAudio, markPlayed]);
+  }, [queue, enabled, speak, playAudio, markPlayed, hardStop, endPlaying, finishedTick]);
 
   // Acknowledge in a single tap — no code prompt. In a theatre, silencing the
   // alarm must be instant; a confirmation step is friction at the worst possible
