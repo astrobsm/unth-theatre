@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { triggerRadio } from '@/lib/radioEvents';
 import { generateUniqueEmergencyAnaesthesiaCode } from '@/lib/surgeryCodes';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,9 @@ const createReviewSchema = z.object({
   anaestheticPlan: z.string().optional(),
   specialConsiderations: z.string().optional(),
   riskAssessment: z.string().optional(),
+  /// What must be put right before the patient goes to theatre. Announced on
+  /// the radio and on the surgeon's board the moment this is saved.
+  optimisationNeeded: z.string().optional(),
   consentObtained: z.boolean().default(false),
   consentNotes: z.string().optional(),
   
@@ -209,6 +213,7 @@ export async function POST(request: NextRequest) {
         anaestheticPlan: validated.anaestheticPlan,
         specialConsiderations: validated.specialConsiderations,
         riskAssessment: validated.riskAssessment,
+        optimisationNeeded: validated.optimisationNeeded,
         consentObtained: validated.consentObtained,
         consentNotes: validated.consentNotes,
         status: 'COMPLETED',
@@ -270,6 +275,97 @@ export async function POST(request: NextRequest) {
         // Non-critical
       }
     }
+
+    // ── Say that the review has happened ──────────────────────────────────
+    //
+    // Until now the only person who knew a patient had been reviewed was the
+    // anaesthetist who did it. The surgeon waiting to start found out by
+    // asking, or by the case simply beginning; a crossmatch the anaesthetist
+    // wanted reached nobody who could arrange it.
+    //
+    // So saving the review now says so in the two places people are actually
+    // looking: out loud in the theatre, and on the board of everybody on the
+    // case.
+    //
+    // Both are wrapped and swallowed on failure. A radio that is down, or a
+    // notification that cannot be written, must not lose a review that has
+    // already been saved — the announcement is how people hear about it, not
+    // the record of it.
+    const optimisation = (validated.optimisationNeeded ?? '').trim();
+    const reviewerName = session.user.name || 'the anaesthetist';
+    const sentToPharmacy = Boolean(prescription);
+
+    try {
+      await triggerRadio({
+        // WORKFLOW, not EMERGENCY: the booking itself already announced the
+        // emergency, and a second override that cancels the music to say a
+        // form was filled in would be the kind of announcement people learn
+        // to ignore.
+        category: 'WORKFLOW',
+        title: 'Pre-anaesthetic review complete',
+        message:
+          `${validated.patientName}, folder ${validated.folderNumber}, for `
+          + `${booking.procedureName}, has been reviewed by ${reviewerName}.`
+          + (sentToPharmacy ? ' The anaesthetic prescription has gone to Pharmacy.' : '')
+          + (optimisation ? ` Before surgery: ${optimisation}` : ''),
+        // Raised above routine traffic when something has to be done first:
+        // that is the half of the message somebody has to act on.
+        urgency: optimisation ? 'HIGH' : 'MEDIUM',
+        triggeredById: session.user.id,
+        metadata: { emergencyBookingId: validated.emergencyBookingId, reviewId: review.id },
+      });
+    } catch { /* the review is saved; the radio is not how it is recorded */ }
+
+    try {
+      // The operating surgeon first, then everyone else named on the case.
+      // Deduplicated, because a consultant who is also the booker should get
+      // one notice, not three.
+      const recipients = new Set<string>();
+      if (booking.surgeryId) {
+        const surgery = await prisma.surgery.findUnique({
+          where: { id: booking.surgeryId },
+          select: {
+            surgeonId: true, assistantSurgeonId: true, supervisingConsultantId: true,
+            bookedById: true, scrubNurseId: true, theatreTechnicianId: true,
+            teamMembers: { select: { userId: true } },
+          },
+        });
+        for (const id of [
+          surgery?.surgeonId, surgery?.assistantSurgeonId, surgery?.supervisingConsultantId,
+          surgery?.bookedById, surgery?.scrubNurseId, surgery?.theatreTechnicianId,
+          ...(surgery?.teamMembers ?? []).map((t) => t.userId),
+        ]) {
+          if (id) recipients.add(id);
+        }
+      }
+      // The emergency booking names its own surgeon, which is the one person
+      // who must hear this even when no Surgery row exists yet.
+      if (booking.surgeonId) recipients.add(booking.surgeonId);
+      // Not the anaesthetist who just wrote it — they know.
+      recipients.delete(session.user.id);
+
+      const body =
+        `${validated.patientName} (${validated.folderNumber}) has been reviewed for `
+        + `${booking.procedureName} by ${reviewerName}.`
+        + (sentToPharmacy ? ' The anaesthetic prescription has been sent to Pharmacy.' : '')
+        + (optimisation ? ` Before surgery: ${optimisation}` : '');
+
+      for (const userId of Array.from(recipients)) {
+        await prisma.notification.create({
+          data: {
+            userId,
+            type: 'PREOP_REVIEW_DONE',
+            title: optimisation
+              ? 'Patient reviewed — something is needed before surgery'
+              : 'Patient reviewed for surgery',
+            message: body,
+            link: booking.surgeryId
+              ? `/dashboard/surgeries/${booking.surgeryId}`
+              : '/dashboard/emergency-booking',
+          },
+        }).catch(() => undefined);
+      }
+    } catch { /* as above: the review stands whether or not the notice lands */ }
 
     // Audit log
     await prisma.auditLog.create({

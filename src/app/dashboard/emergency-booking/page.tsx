@@ -320,6 +320,16 @@ const EMERGENCY_TEAM_USER_ROLES = [
  * One long scrolling form buried the anaesthetic plan halfway down, which is the
  * field everything else depends on.
  *
+ * TWO STEPS NOW. Vitals and bloods went the same way as the prescription step
+ * on 20 October, at the department's request: blood pressure, pulse, SpO2,
+ * temperature, IV access, haemoglobin and crossmatch are no longer asked for
+ * here. The columns remain, and older reviews keep what they recorded.
+ *
+ * Worth saying because it is the obvious risk: crossMatchStatus and
+ * hemoglobinLevel are no longer captured at the review, and for an emergency
+ * caesarean those are the two numbers somebody asks for first. They are still
+ * recorded by the ward and the laboratory; they are no longer asked twice.
+ *
  * THREE STEPS, NOT FOUR. Prescription used to have its own, and it did not earn
  * one: applying a drug pack on the plan step already sends fifteen drugs to
  * pharmacy in a single tap, so for most emergencies the fourth step was a screen
@@ -333,8 +343,7 @@ const EMERGENCY_TEAM_USER_ROLES = [
  */
 const REVIEW_STEPS = [
   { n: 1, label: 'Assessment' },
-  { n: 2, label: 'Vitals & bloods' },
-  { n: 3, label: 'Plan, packs & drugs' },
+  { n: 2, label: 'Plan, packs & drugs' },
 ];
 
 /**
@@ -551,6 +560,7 @@ export default function EmergencyBookingPage() {
     hemoglobinLevel: '',
     crossMatchStatus: '', ivAccess: '', patientNPOStatus: '',
     anaestheticPlan: '', specialConsiderations: '', riskAssessment: '',
+    optimisationNeeded: '',
     consentObtained: false, consentNotes: '',
     medications: '', fluids: '', emergencyDrugs: '', specialInstructions: '',
   });
@@ -878,6 +888,7 @@ export default function EmergencyBookingPage() {
           hemoglobinLevel: '',
           crossMatchStatus: '', ivAccess: '', patientNPOStatus: '',
           anaestheticPlan: '', specialConsiderations: '', riskAssessment: '',
+    optimisationNeeded: '',
           consentObtained: false, consentNotes: '',
           medications: '', fluids: '', emergencyDrugs: '', specialInstructions: '',
         });
@@ -1821,69 +1832,35 @@ export default function EmergencyBookingPage() {
                   <option>Unknown</option>
                 </select>
               </div>
-              </>
-              )}
 
-              {/* ── Step 2: the numbers ────────────────────────────────── */}
-              {reviewStep === 2 && (
-              <>
-              {/* Vitals */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Blood Pressure</label>
-                <input type="text" placeholder="e.g. 120/80" value={reviewForm.bloodPressure}
-                  onChange={e => setReviewForm(f => ({ ...f, bloodPressure: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Heart Rate (bpm)</label>
-                <input type="number" placeholder="72" value={reviewForm.heartRate}
-                  onChange={e => setReviewForm(f => ({ ...f, heartRate: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SpO2 (%)</label>
-                <input type="number" placeholder="98" value={reviewForm.oxygenSaturation}
-                  onChange={e => setReviewForm(f => ({ ...f, oxygenSaturation: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Temperature (&deg;C)</label>
-                <input type="number" step="0.1" placeholder="36.5" value={reviewForm.temperature}
-                  onChange={e => setReviewForm(f => ({ ...f, temperature: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">IV Access</label>
-                <input type="text" placeholder="e.g. 18G right antecubital" value={reviewForm.ivAccess}
-                  onChange={e => setReviewForm(f => ({ ...f, ivAccess: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hemoglobin (g/dL)</label>
-                <input type="number" step="0.1" placeholder="12.0" value={reviewForm.hemoglobinLevel}
-                  onChange={e => setReviewForm(f => ({ ...f, hemoglobinLevel: e.target.value }))}
-                  className="w-full border rounded-lg p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cross-Match Status</label>
-                <select
-                  value={reviewForm.crossMatchStatus}
-                  onChange={e => setReviewForm(f => ({ ...f, crossMatchStatus: e.target.value }))}
+              {/* What somebody must DO before this case can start.
+                  Asked here, where the anaesthetist is already looking at the
+                  patient, and read out on the theatre radio and on the
+                  surgeon's board the moment the review is saved — which is
+                  the whole reason for recording it somewhere a machine can
+                  read, rather than in the free-text risk field where it read
+                  as context and was acted on by nobody. */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  What needs to be optimised before surgery
+                </label>
+                <textarea
+                  rows={3}
+                  value={reviewForm.optimisationNeeded}
+                  onChange={e => setReviewForm(f => ({ ...f, optimisationNeeded: e.target.value }))}
+                  placeholder="e.g. Two units crossmatched and in theatre; potassium corrected; catheterise before transfer"
                   className="w-full border rounded-lg p-2 text-sm"
-                  title="Cross-Match Status"
-                >
-                  <option value="">Select...</option>
-                  <option>Completed - Compatible</option>
-                  <option>Pending</option>
-                  <option>Type &amp; Screen done</option>
-                  <option>Not required</option>
-                </select>
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Announced on the theatre radio and shown to the operating surgeon as soon
+                  as this review is saved. Leave it empty if nothing is outstanding.
+                </p>
               </div>
               </>
               )}
 
-              {/* ── Step 3: plan, then the kit that plan implies ───────── */}
-              {reviewStep === 3 && (
+              {/* ── Step 2: plan, then the kit that plan implies ───────── */}
+              {reviewStep === 2 && (
               <>
               {/* Plan */}
               <div className="md:col-span-2">
@@ -1943,7 +1920,7 @@ export default function EmergencyBookingPage() {
                   ordinary emergency in one tap. Opens by itself once anything
                   has been prescribed, so a drug can never be hidden from the
                   person who wrote it. */}
-              {reviewStep === 3 && !showManualRx && prescribedMeds.length === 0 && (
+              {reviewStep === 2 && !showManualRx && prescribedMeds.length === 0 && (
                 <div className="md:col-span-2 border-t pt-4 mt-2">
                   <button
                     type="button"
@@ -1961,7 +1938,7 @@ export default function EmergencyBookingPage() {
               )}
 
               {/* ── Step 3: the drug-by-drug prescription ───────────────── */}
-              {reviewStep === 3 && (showManualRx || prescribedMeds.length > 0) && (
+              {reviewStep === 2 && (showManualRx || prescribedMeds.length > 0) && (
               <>
               {/* PRESCRIPTION SECTION */}
               <div className="md:col-span-2 border-t pt-4 mt-2">

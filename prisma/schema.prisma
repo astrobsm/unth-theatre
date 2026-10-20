@@ -6295,6 +6295,16 @@ model EmergencyPreAnaestheticReview {
   anaestheticPlan       String? // General, Regional, Combined, etc.
   specialConsiderations String?
   riskAssessment        String?
+
+  /// What has to be put right before this patient goes to theatre.
+  ///
+  /// Recorded on the assessment step, where the anaesthetist is already
+  /// looking at the patient, and read out on the radio and on the surgeon’s
+  /// board the moment the review is saved. Kept apart from riskAssessment:
+  /// a risk is something to be aware of during the case, this is a list of
+  /// things somebody must DO before it starts, and a reader cannot act on
+  /// the second if it is buried in the first.
+  optimisationNeeded String?
   consentObtained       Boolean @default(false)
   consentNotes          String?
 
