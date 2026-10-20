@@ -981,6 +981,23 @@ export default function NewSurgeryPage() {
       if (!selectedPatientId) essentials.push('the patient');
       if (!String(fd.get('procedureName') ?? '').trim()) essentials.push('the procedure');
       if (!String(fd.get('scheduledDate') ?? '').trim()) essentials.push('the date');
+      // THE SURGEON BELONGS HERE, and its absence is why two O&G Firm 3 cases
+      // booked on 18 October read "Not assigned" in the surgeon column.
+      //
+      // The select is marked required, but this button carries formNoValidate
+      // and goToStep does not validate either, so nothing stopped a booking
+      // with no surgeon at all. Theatre and unit were deliberately dropped
+      // from this list because neither is knowable when a case is booked. The
+      // surgeon is: a case belongs to somebody, and a clerk booking for a firm
+      // knows whose it is.
+      //
+      // It also cannot be left out the way a theatre can. The surgeon is who
+      // the unit card is for, who the blocker digest is addressed to, who the
+      // review watch names and who the audit summons calls. A case with no
+      // surgeon is invisible to every one of those.
+      if (!selectedSurgeonId && !String(fd.get('surgeonName') ?? '').trim()) {
+        essentials.push('the surgeon');
+      }
       if (essentials.length) {
         setLoading(false);
         const listed = essentials.length === 1

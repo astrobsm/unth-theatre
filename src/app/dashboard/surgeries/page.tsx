@@ -1474,7 +1474,20 @@ export default function SurgeriesPage() {
                       ) : surgery.surgeonName ? (
                         <ContactName type="user" name={surgery.surgeonName} />
                       ) : (
-                        'Not assigned'
+                        /* Amber and bold, like the anaesthetist row above it.
+                           This read as plain grey text, the same weight as a
+                           real name, so two O&G Firm 3 cases sat from the 18th
+                           to their operating day with nobody noticing they had
+                           no surgeon. A gap that looks like a value is worse
+                           than a gap that looks like a gap — and this is the
+                           name the card, the reminders, the review watch and
+                           the audit summons are all addressed to. */
+                        <span className="font-medium text-amber-700">
+                          Not assigned
+                          <span className="block text-xs font-normal text-amber-600">
+                            Use Amend to name the surgeon
+                          </span>
+                        </span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

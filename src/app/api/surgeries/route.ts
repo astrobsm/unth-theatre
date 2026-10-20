@@ -483,6 +483,32 @@ export async function POST(request: NextRequest) {
     const hbSampleAtSafe =
       hbSampleAt && !Number.isNaN(new Date(hbSampleAt).getTime()) ? hbSampleAt : null;
 
+    // A BOOKING WITH NO SURGEON IS REFUSED.
+    //
+    // surgeonName is z.string() with no minimum, so an empty one has always
+    // passed validation, and surgeonId is nullish. Two O&G Firm 3 cases booked
+    // on 18 October therefore reached the list with neither, and showed "Not
+    // assigned" to everybody who opened the unit.
+    //
+    // Checked here as well as on the form because the form's early-booking
+    // button bypasses browser validation by design, and because this route has
+    // other callers. A case with no surgeon is not merely incomplete: it is
+    // invisible to the unit card, the blocker digest, the preoperative review
+    // watch and the audit summons, all of which are addressed to the surgeon.
+    if (!surgeonId && !String(surgeonName ?? '').trim()) {
+      return NextResponse.json(
+        {
+          error: 'A booking needs its operating surgeon.',
+          code: 'NO_SURGEON',
+          detail:
+            'Pick the surgeon on the booking form. Unlike the theatre, which is '
+            + 'allocated later, the surgeon is who the unit card, the reminders and '
+            + 'the theatre audit are all addressed to.',
+        },
+        { status: 400 },
+      );
+    }
+
     // Resolve surgeon: if a user id was supplied, validate it and prefer the DB fullName.
     let resolvedSurgeonId: string | null = null;
     let resolvedSurgeonName = surgeonName;
