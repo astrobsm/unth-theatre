@@ -188,6 +188,17 @@ export default function NewSurgeryPage() {
   // in wrongly years ago — this turns it off.
   const [showAllSurgeons, setShowAllSurgeons] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  /**
+   * "This unit has no registrar / no senior registrar."
+   *
+   * A compulsory field with no way to say "there is nobody" is a field people
+   * defeat: several units genuinely have neither post filled, and without
+   * these the surgeon picks the nearest name to get past the form. The unit
+   * card would then name somebody who was never on the case — worse than a
+   * blank, because a blank is visibly missing and a wrong name is not.
+   */
+  const [noUnitRegistrar, setNoUnitRegistrar] = useState(false);
+  const [noUnitSeniorRegistrar, setNoUnitSeniorRegistrar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Codes shown to the surgeon after a successful booking, to hand to the patient.
@@ -1141,6 +1152,65 @@ ${pretty} — ${days} days from today.
       return;
     }
 
+    // ── The unit's own team ────────────────────────────────────────────────
+    //
+    // Checked here rather than with `required` on the inputs, because these
+    // are built from a picker whose hidden fields the browser cannot mark
+    // required — the same reason the procedure is checked above.
+    //
+    // Counted on a non-blank NAME, not on the number of rows: pressing "Add
+    // Registrar" and leaving the picker empty creates a row, and a check on
+    // row count would accept it and store a nameless team member.
+    const named = (role: string) =>
+      teamMembers.filter((tm) => tm.role === role && tm.name.trim() !== '').length;
+
+    const teamGaps: Array<{ field: string; label: string; message: string }> = [];
+    if (named('SENIOR_REGISTRAR') === 0 && !noUnitSeniorRegistrar) {
+      teamGaps.push({
+        field: 'noUnitSeniorRegistrar',
+        label: 'Senior registrar',
+        message: 'Name at least one, or tick \u201cThis unit has no senior registrar\u201d.',
+      });
+    }
+    if (named('REGISTRAR') === 0 && !noUnitRegistrar) {
+      teamGaps.push({
+        field: 'noUnitRegistrar',
+        label: 'Registrar',
+        message: 'Name at least one, or tick \u201cThis unit has no registrar\u201d.',
+      });
+    }
+    if (named('HOUSE_OFFICER') === 0) {
+      teamGaps.push({
+        field: 'houseOfficers',
+        label: 'House officer',
+        message: 'Name at least one house officer for this case.',
+      });
+    }
+
+    if (teamGaps.length > 0) {
+      setLoading(false);
+      setError(
+        `The unit's team is incomplete: ${teamGaps.map((g) => g.label.toLowerCase()).join(', ')}.`,
+      );
+      raiseBlock({
+        code: 'NO_UNIT_TEAM',
+        title: 'The unit\u2019s team is not complete',
+        why:
+          'The senior registrar, registrar and house officer are who the theatre rings '
+          + 'when a list is late and who the ward asks about a patient. They appear on '
+          + 'the unit card, which is the only place anybody can find a number at seven '
+          + 'in the morning. Where a post is genuinely vacant, say so instead \u2014 a blank '
+          + 'and \u201cthere is nobody\u201d are different answers and the card shows them '
+          + 'differently.',
+        fields: teamGaps.map((g) => ({ name: g.field, label: g.label, message: g.message })),
+        fixes: [
+          { kind: 'field', label: 'Take me to the surgical team', field: 'noUnitSeniorRegistrar' },
+          { kind: 'close', label: 'Close' },
+        ],
+      });
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
 
     const chosenSurgeon = surgeons.find((s) => s.id === selectedSurgeonId);
@@ -1208,6 +1278,8 @@ ${pretty} — ${days} days from today.
       otherComorbidities: otherComorbidities.trim() || null,
       currentMedicationsList: currentMedications,
       otherCurrentMedications: otherMedications.trim() || null,
+      noUnitRegistrar,
+      noUnitSeniorRegistrar,
       teamMembers: teamMembers
         .filter(tm => tm.name.trim() !== '')
         .map(tm => ({
@@ -2675,6 +2747,195 @@ ${pretty} — ${days} days from today.
           </div>
         </div>
 
+        {/* Surgical Team Members */}
+        {/* MOVED HERE FROM THE LAST STEP, which is why these were always
+            empty. A case becomes bookable at the end of this step, so anything
+            asked for after it is asked of the minority of bookings that carry
+            on to the end — and the unit team card showed the operating surgeon
+            and nothing else because of it. */}
+        <div className={`${stepClass(2)} card`}>
+          <div className="flex items-center gap-3 mb-4">
+            <Users className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Surgical Team</h2>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            The unit's team for this case. The senior registrar, registrar and
+            house officer are required: they are the people the theatre rings
+            at seven in the morning, and their names appear on the unit card.
+          </p>
+
+          <div className="space-y-4">
+            {/* Consultants */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">Consultants</label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('CONSULTANT')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Consultant
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'CONSULTANT').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No consultants added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'CONSULTANT' ? (
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        // Consultant surgeons first, but resident surgeons stay
+                        // searchable: everyone starts as SURGEON until an admin
+                        // promotes them, so restricting this to the consultant
+                        // role alone would empty the picker on day one.
+                        roles="CONSULTANT_SURGEON,SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search consultants by name or staff code…"
+                      />
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Senior Registrars */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">
+                  Senior Registrars <span className="text-red-600">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('SENIOR_REGISTRAR')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Senior Registrar
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'SENIOR_REGISTRAR').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No senior registrars added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'SENIOR_REGISTRAR' ? (
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search senior registrars by name or staff code…"
+                      />
+                    ) : null
+                  )}
+                </div>
+              )}
+              <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm ring-1 ring-gray-200">
+                <input
+                  type="checkbox"
+                  name="noUnitSeniorRegistrar"
+                  checked={noUnitSeniorRegistrar}
+                  onChange={(e) => setNoUnitSeniorRegistrar(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span>
+                  <span className="block font-medium text-gray-800">This unit has no senior registrar</span>
+                  <span className="block text-xs text-gray-500">Tick only if the post is genuinely vacant. It is shown on the unit card, so nobody goes looking for one.</span>
+                </span>
+              </label>
+            </div>
+
+            {/* Registrars */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">
+                  Registrars <span className="text-red-600">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('REGISTRAR')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Registrar
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'REGISTRAR').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No registrars added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'REGISTRAR' ? (
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search registrars by name or staff code…"
+                      />
+                    ) : null
+                  )}
+                </div>
+              )}
+              <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm ring-1 ring-gray-200">
+                <input
+                  type="checkbox"
+                  name="noUnitRegistrar"
+                  checked={noUnitRegistrar}
+                  onChange={(e) => setNoUnitRegistrar(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span>
+                  <span className="block font-medium text-gray-800">This unit has no registrar</span>
+                  <span className="block text-xs text-gray-500">Tick only if the post is genuinely vacant. It is shown on the unit card, so nobody goes looking for one.</span>
+                </span>
+              </label>
+            </div>
+
+            {/* House Officers */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label mb-0">
+                  House Officers <span className="text-red-600">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => addTeamMember('HOUSE_OFFICER')}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add House Officer
+                </button>
+              </div>
+              {teamMembers.filter(tm => tm.role === 'HOUSE_OFFICER').length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No house officers added</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => 
+                    member.role === 'HOUSE_OFFICER' ? (
+                      <SurgicalTeamMemberPicker
+                        key={index}
+                        roles="HOUSE_OFFICER,SURGEON"
+                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
+                        onChange={(next) => updateTeamMember(index, next)}
+                        onRemove={() => removeTeamMember(index)}
+                        placeholder="Search house officers by name or staff code…"
+                      />
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+
         {/*
           Signed consent, attachable HERE — in the third section, before the
           case is sent to theatre.
@@ -2999,155 +3260,6 @@ ${pretty} — ${days} days from today.
               </button>
             </div>
           )}
-        </div>
-
-        {/* Surgical Team Members */}
-        <div className={`${stepClass(5)} card`}>
-          <div className="flex items-center gap-3 mb-4">
-            <Users className="w-6 h-6 text-primary-600" />
-            <h2 className="text-xl font-semibold">Surgical Team</h2>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Add team members who will be involved in this surgical procedure
-          </p>
-
-          <div className="space-y-4">
-            {/* Consultants */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label mb-0">Consultants</label>
-                <button
-                  type="button"
-                  onClick={() => addTeamMember('CONSULTANT')}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Consultant
-                </button>
-              </div>
-              {teamMembers.filter(tm => tm.role === 'CONSULTANT').length === 0 ? (
-                <p className="text-sm text-gray-500 italic">No consultants added</p>
-              ) : (
-                <div className="space-y-2">
-                  {teamMembers.map((member, index) => 
-                    member.role === 'CONSULTANT' ? (
-                      <SurgicalTeamMemberPicker
-                        key={index}
-                        // Consultant surgeons first, but resident surgeons stay
-                        // searchable: everyone starts as SURGEON until an admin
-                        // promotes them, so restricting this to the consultant
-                        // role alone would empty the picker on day one.
-                        roles="CONSULTANT_SURGEON,SURGEON"
-                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
-                        onChange={(next) => updateTeamMember(index, next)}
-                        onRemove={() => removeTeamMember(index)}
-                        placeholder="Search consultants by name or staff code…"
-                      />
-                    ) : null
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Senior Registrars */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label mb-0">Senior Registrars</label>
-                <button
-                  type="button"
-                  onClick={() => addTeamMember('SENIOR_REGISTRAR')}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Senior Registrar
-                </button>
-              </div>
-              {teamMembers.filter(tm => tm.role === 'SENIOR_REGISTRAR').length === 0 ? (
-                <p className="text-sm text-gray-500 italic">No senior registrars added</p>
-              ) : (
-                <div className="space-y-2">
-                  {teamMembers.map((member, index) => 
-                    member.role === 'SENIOR_REGISTRAR' ? (
-                      <SurgicalTeamMemberPicker
-                        key={index}
-                        roles="SURGEON"
-                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
-                        onChange={(next) => updateTeamMember(index, next)}
-                        onRemove={() => removeTeamMember(index)}
-                        placeholder="Search senior registrars by name or staff code…"
-                      />
-                    ) : null
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Registrars */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label mb-0">Registrars</label>
-                <button
-                  type="button"
-                  onClick={() => addTeamMember('REGISTRAR')}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Registrar
-                </button>
-              </div>
-              {teamMembers.filter(tm => tm.role === 'REGISTRAR').length === 0 ? (
-                <p className="text-sm text-gray-500 italic">No registrars added</p>
-              ) : (
-                <div className="space-y-2">
-                  {teamMembers.map((member, index) => 
-                    member.role === 'REGISTRAR' ? (
-                      <SurgicalTeamMemberPicker
-                        key={index}
-                        roles="SURGEON"
-                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
-                        onChange={(next) => updateTeamMember(index, next)}
-                        onRemove={() => removeTeamMember(index)}
-                        placeholder="Search registrars by name or staff code…"
-                      />
-                    ) : null
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* House Officers */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label mb-0">House Officers</label>
-                <button
-                  type="button"
-                  onClick={() => addTeamMember('HOUSE_OFFICER')}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add House Officer
-                </button>
-              </div>
-              {teamMembers.filter(tm => tm.role === 'HOUSE_OFFICER').length === 0 ? (
-                <p className="text-sm text-gray-500 italic">No house officers added</p>
-              ) : (
-                <div className="space-y-2">
-                  {teamMembers.map((member, index) => 
-                    member.role === 'HOUSE_OFFICER' ? (
-                      <SurgicalTeamMemberPicker
-                        key={index}
-                        roles="HOUSE_OFFICER,SURGEON"
-                        value={{ userId: member.userId, name: member.name, staffCode: member.staffCode }}
-                        onChange={(next) => updateTeamMember(index, next)}
-                        onRemove={() => removeTeamMember(index)}
-                        placeholder="Search house officers by name or staff code…"
-                      />
-                    ) : null
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* ── Move between sections ─────────────────────────────────────────

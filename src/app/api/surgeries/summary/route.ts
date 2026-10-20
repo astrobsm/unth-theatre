@@ -10,8 +10,20 @@ type Contact = { name: string; phone: string | null } | null;
 /** Who a unit's cases belong to today, as the card needs to show it. */
 interface UnitTeam {
   theatre: string | null;
-  /** Distinct surgeons and supervising consultants on this unit's cases today. */
+  /**
+   * The unit's surgical team on today's cases: the operating surgeons and
+   * supervising consultants, and the senior registrars, registrars and house
+   * officers named on the booking.
+   */
   surgeons: Array<{ name: string; phone: string | null; role: string }>;
+  /**
+   * The unit declared, on the booking, that it has no registrar / no senior
+   * registrar. Kept apart from an empty list because "nobody was named" and
+   * "there is nobody" are different facts, and a card that shows them the
+   * same way sends somebody looking for a person who does not exist.
+   */
+  noRegistrar: boolean;
+  noSeniorRegistrar: boolean;
   anaesthetists: {
     consultant: Contact;
     seniorRegistrar: Contact;
@@ -188,12 +200,15 @@ export async function GET(req: NextRequest) {
     const dayCases = await prisma.surgery.findMany({
       where: { ...where, unit: { in: unitNames } },
       select: {
+        id: true,
         unit: true,
         theatreId: true,
         surgeonId: true,
         surgeonName: true,
         supervisingConsultantId: true,
         supervisingConsultantName: true,
+        noUnitRegistrar: true,
+        noUnitSeniorRegistrar: true,
       },
     });
 
@@ -248,6 +263,77 @@ export async function GET(req: NextRequest) {
       surgeonsByUnit.set(s.unit, list);
     }
 
+    // ── The rest of the surgical team, as named on each booking ─────────────
+    //
+    // These are the people a card is actually used to reach. The consultant is
+    // in theatre or in clinic; the registrar and the house officer are the
+    // ones who answer at seven in the morning and who know whether the patient
+    // has been sent for. They were collected by the booking form all along and
+    // shown nowhere.
+    //
+    // One query for every case on the page, not one per unit.
+    const teamRows = dayCases.length
+      ? await prisma.surgicalTeamMember.findMany({
+          where: {
+            surgeryId: { in: dayCases.map((c) => c.id) },
+            role: { in: ['SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER'] },
+          },
+          select: {
+            surgeryId: true, role: true, memberName: true,
+            user: { select: { fullName: true, phoneNumber: true } },
+          },
+        })
+      : [];
+
+    /** The words the card uses, matching the anaesthesia rows above it. */
+    const TEAM_ROLE_LABEL: Record<string, string> = {
+      SENIOR_REGISTRAR: 'Snr registrar',
+      REGISTRAR: 'Registrar',
+      HOUSE_OFFICER: 'House officer',
+    };
+
+    const unitOfSurgery = new Map(dayCases.map((c) => [c.id, c.unit]));
+    for (const t of teamRows) {
+      const unit = unitOfSurgery.get(t.surgeryId);
+      if (!unit) continue;
+      // The linked account's name wins over the typed one: it is the name the
+      // phone number belongs to, and a card with a name and no number is half
+      // an answer.
+      const name = t.user?.fullName ?? t.memberName;
+      if (!name) continue;
+      const list = surgeonsByUnit.get(unit) ?? [];
+      if (list.some((x) => x.name === name)) continue;
+      list.push({
+        name,
+        phone: t.user?.phoneNumber ?? null,
+        role: TEAM_ROLE_LABEL[t.role] ?? t.role,
+      });
+      surgeonsByUnit.set(unit, list);
+    }
+
+    // Read in the order somebody works down the card when a list is late.
+    const ROLE_ORDER = ['Surgeon', 'Consultant', 'Snr registrar', 'Registrar', 'House officer'];
+    for (const [unit, list] of Array.from(surgeonsByUnit.entries())) {
+      list.sort((a, b) => {
+        const ra = ROLE_ORDER.indexOf(a.role);
+        const rb = ROLE_ORDER.indexOf(b.role);
+        return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb);
+      });
+      surgeonsByUnit.set(unit, list);
+    }
+
+    // A unit's declaration holds when EVERY case on its list says so. One
+    // booking claiming no registrar while three name one is not a unit
+    // without a registrar — it is one booking that was filled in carelessly,
+    // and the card should show the registrar rather than hide them.
+    const declaredNoRegistrar = new Map<string, boolean>();
+    const declaredNoSenior = new Map<string, boolean>();
+    for (const unit of unitNames) {
+      const cases = dayCases.filter((c) => c.unit === unit);
+      declaredNoRegistrar.set(unit, cases.length > 0 && cases.every((c) => c.noUnitRegistrar));
+      declaredNoSenior.set(unit, cases.length > 0 && cases.every((c) => c.noUnitSeniorRegistrar));
+    }
+
     for (const unit of unitNames) {
       // Named on the allocation, in whichever of the hospital's three
       // spellings the person who made it happened to use.
@@ -275,6 +361,8 @@ export async function GET(req: NextRequest) {
       teamByUnit.set(unit, {
         theatre: alloc?.theatre?.name ?? null,
         surgeons: surgeonsByUnit.get(unit) ?? [],
+        noRegistrar: declaredNoRegistrar.get(unit) ?? false,
+        noSeniorRegistrar: declaredNoSenior.get(unit) ?? false,
         anaesthetists: {
           consultant:
             contact(alloc?.anaesthetistConsultant) ??

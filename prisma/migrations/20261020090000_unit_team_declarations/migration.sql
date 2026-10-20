@@ -1,0 +1,33 @@
+-- ============================================================
+-- "This unit has no registrar"
+-- ------------------------------------------------------------
+-- The booking form now requires the unit's senior registrar, registrar and
+-- house officer to be named. Those pickers already existed, but they sat on
+-- the last step of the form while a case becomes bookable at the end of step
+-- two — so in practice nobody ever reached them and the team card showed the
+-- operating surgeon and nothing else.
+--
+-- A COMPULSORY FIELD WITH NO WAY TO SAY "THERE IS NOBODY" IS A FIELD PEOPLE
+-- DEFEAT. Several units genuinely have no registrar or no senior registrar.
+-- Without these two flags the surgeon picks the nearest name to get past the
+-- form, and the card then names somebody who was never on the case — which is
+-- worse than a blank, because a blank is obviously missing and a wrong name
+-- is not.
+--
+-- So the two states are stored apart: a blank registrar means the question was
+-- not answered, a declared one means the unit has none. The card shows them
+-- differently for the same reason.
+--
+-- No flag for the house officer: every unit is expected to have one, and the
+-- form requires at least one to be named.
+--
+-- Additive, defaulted, and safe on a populated table — every existing booking
+-- reads as "not declared", which is what it is.
+-- ============================================================
+
+-- IF NOT EXISTS on both, which the generated form does not use. The theatre
+-- server has been left in a partially-applied state before, and a column that
+-- is already there must not abort the deploy and lock every later migration
+-- behind a P3009.
+ALTER TABLE "surgeries" ADD COLUMN IF NOT EXISTS "noUnitRegistrar" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "surgeries" ADD COLUMN IF NOT EXISTS "noUnitSeniorRegistrar" BOOLEAN NOT NULL DEFAULT false;

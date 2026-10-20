@@ -166,6 +166,9 @@ export default function SurgeriesPage() {
       emergencies: number;
       team?: {
         surgeons: { name: string; phone: string | null; role: string }[];
+        /// Declared on the booking: this unit has none. Distinct from "nobody named".
+        noRegistrar?: boolean;
+        noSeniorRegistrar?: boolean;
         theatre: string | null;
         anaesthetists: {
           consultant: UnitContact;
@@ -1146,11 +1149,21 @@ export default function SurgeriesPage() {
                             with a single holder. */}
                         <TeamGroup
                           label="Surgery"
-                          members={
-                            u.team.surgeons.length
+                          members={[
+                            ...(u.team.surgeons.length
                               ? u.team.surgeons.map((s) => [s.role, { name: s.name, phone: s.phone }] as [string, { name: string; phone: string | null }])
-                              : [['Surgeon', null]]
-                          }
+                              : ([['Surgeon', null]] as [string, { name: string; phone: string | null } | null][])),
+                            // Shown as a stated fact, not as an empty row. A
+                            // unit with no registrar and a unit whose booking
+                            // nobody filled in look identical otherwise, and
+                            // only one of them is worth chasing at 7am.
+                            ...(u.team.noSeniorRegistrar
+                              ? ([['Snr registrar', { name: 'Unit has no senior registrar', phone: null }]] as [string, { name: string; phone: string | null } | null][])
+                              : []),
+                            ...(u.team.noRegistrar
+                              ? ([['Registrar', { name: 'Unit has no registrar', phone: null }]] as [string, { name: string; phone: string | null } | null][])
+                              : []),
+                          ]}
                         />
                         <TeamGroup
                           label="Anaesthesia"

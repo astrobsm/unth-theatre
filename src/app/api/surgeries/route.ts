@@ -144,6 +144,13 @@ const surgerySchema = z.object({
     staffCode: z.string().nullish(),
   })).optional(),
 
+  /// "This unit has no registrar / no senior registrar." Recorded rather than
+  /// inferred from an empty team: a blank means the question was not answered
+  /// and a declaration means the post is vacant, and the unit card shows the
+  /// two differently.
+  noUnitRegistrar: z.boolean().optional(),
+  noUnitSeniorRegistrar: z.boolean().optional(),
+
   // ── Pre-pack plan: surgical consumables to be packed the night before ──
   consumableRequests: z.array(z.object({
     templateId: z.string().nullish(),

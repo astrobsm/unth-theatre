@@ -1278,6 +1278,17 @@ model Surgery {
   supervisingConsultantId   String?
   supervisingConsultantName String?
 
+  /// The unit declared it has no registrar / no senior registrar for this case.
+  ///
+  /// Both fields are compulsory on the booking form, and a compulsory field
+  /// with no way to say “there is nobody” is a field people defeat: they pick
+  /// the nearest name to get past it, and the team list on the card then names
+  /// somebody who was never on the case. These two say it explicitly, so a
+  /// blank registrar row means “not answered” and a declared one means “none
+  /// exists” — which are different facts and are shown differently.
+  noUnitRegistrar       Boolean @default(false)
+  noUnitSeniorRegistrar Boolean @default(false)
+
   // Relations
   patient               Patient                     @relation(fields: [patientId], references: [id])
   surgeon               User?                       @relation("SurgeonSurgeries", fields: [surgeonId], references: [id])
