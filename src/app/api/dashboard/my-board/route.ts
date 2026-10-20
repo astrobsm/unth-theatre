@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { buildPersonalBoard, boardSummary, QUERY_CUTOFF } from '@/lib/dashboard/personalBoard';
 import { personalCaseTasks } from '@/lib/dashboard/caseTasks';
+import { reviewBadge, isNoteworthy } from '@/lib/dashboard/reviewStatus';
 import { apiError } from '@/lib/apiError';
 
 export const dynamic = 'force-dynamic';
@@ -102,6 +103,29 @@ export async function GET(_req: NextRequest) {
             take: 1,
           },
           patient: { select: { name: true, folderNumber: true } },
+          // The anaesthetic review's verdict, for everybody on the case.
+          //
+          // Named columns, not the whole row: a PreOperativeAnestheticReview
+          // carries the consent text and a base64 signature, and this route is
+          // called on every dashboard load. Only the verdict is needed.
+          preOpReviews: {
+            select: {
+              reviewDate: true,
+              fitnessDecision: true,
+              anesthetistName: true,
+              // Counted, not listed. The board says how many are left; the
+              // case page is where somebody reads what they are.
+              _count: {
+                select: {
+                  optimisationRequirements: {
+                    where: { status: { in: ['OUTSTANDING', 'IN_PROGRESS'] } },
+                  },
+                },
+              },
+            },
+            orderBy: { reviewDate: 'desc' },
+            take: 1,
+          },
         },
         orderBy: { scheduledDate: 'asc' },
         take: 30,
@@ -152,6 +176,47 @@ export async function GET(_req: NextRequest) {
       now,
     );
 
+    // ── The anaesthetic review, on everybody's board ───────────────────────
+    //
+    // The verdict used to be visible only to anaesthetists. The surgeon found
+    // out their patient had been declared unfit when the list did not start,
+    // and the registrar chasing a crossmatch did not know a review had already
+    // asked for one.
+    //
+    // Every case in `surgeries` is one this person is on — the query above
+    // scopes by surgeon, consultant, anaesthetist, scrub nurse, technician,
+    // booker, theatre assignment AND teamMembers, which is how the registrars
+    // and house officers named on the booking get here. So no further
+    // filtering by role: if the case is on their board, the verdict is theirs
+    // to see.
+    //
+    // Only the states somebody can act on. FIT and "not yet due" are, on a
+    // six-case list, six lines saying nothing is wrong — and a board that is
+    // mostly reassurance stops being read.
+    const reviewWarnings = surgeries
+      .map((s) => {
+        const r = s.preOpReviews?.[0];
+        return reviewBadge({
+          surgeryId: s.id,
+          procedureName: s.procedureName,
+          patientName: s.patient?.name ?? null,
+          surgeryDate: s.scheduledDate,
+          status: s.status,
+          reviewedAt: r?.reviewDate ?? null,
+          reviewerName: r?.anesthetistName ?? null,
+          fitnessDecision: r?.fitnessDecision ?? null,
+          outstandingRequirements: r?._count?.optimisationRequirements ?? 0,
+        }, now);
+      })
+      .filter(isNoteworthy)
+      .map((b) => ({
+        id: `review:${b!.actionUrl}`,
+        title: b!.title,
+        detail: b!.detail,
+        actionUrl: b!.actionUrl,
+        severity: b!.severity,
+      }));
+
     // A notification marked HIGH or CRITICAL is a warning; the rest are noise
     // on a board whose value depends on being short.
     const warnings = notifications
@@ -179,7 +244,7 @@ export async function GET(_req: NextRequest) {
         recipientResponse: q.recipientResponse,
       })),
       tasks,
-      warnings,
+      warnings: [...reviewWarnings, ...warnings],
     });
 
     return NextResponse.json({

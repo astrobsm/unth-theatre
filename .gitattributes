@@ -3,6 +3,18 @@
 # unhelpful "bad interpreter: /usr/bin/env bash^M".
 *.sh text eol=lf
 
+# The Prisma schema and the migrations MUST keep LF endings too, for a
+# different reason: the guardrail suite in scripts/lib-tests parses both with
+# line-anchored regexes. A carriage return is a line terminator in a JS regex,
+# so `.` will not consume one and `$` will not match past one. On a Windows
+# checkout with core.autocrlf=true every line therefore ends in CR, the
+# parsers match nothing, and the sync capture / blob / ignored-column
+# guardrails all fail at once -- a red suite that looks like a broken repo
+# rather than a line-ending setting, which is how a safety net stops being
+# trusted.
+*.prisma text eol=lf
+*.sql    text eol=lf
+
 # Treat all binary asset formats as binary to prevent line-ending
 # conversion from corrupting them on Windows checkouts.
 *.pdf binary

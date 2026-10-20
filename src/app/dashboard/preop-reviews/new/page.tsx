@@ -323,18 +323,23 @@ export default function NewPreOpReviewPage() {
 
   // -- One section at a time ----------------------------------------------
   //
-  // Seven sections, ending in a prescription that Pharmacy and the pack
+  // Four sections, ending in a prescription that Pharmacy and the pack
   // provider work from. Presented as one scroll it was the longest form in the
   // application, and the anaesthetist filling it is standing at a bedside on a
   // phone. Each section is saved as it is left, so the walk back to the ward
   // costs nothing, and the review is only created at the end - which is the
   // point at which the prescription becomes real and goes to Pharmacy.
+  //
+  // THREE SECTIONS WERE REMOVED on 20 October at the department's request:
+  // anaesthesia consent, risk assessment, and ASA & Mallampati. The columns
+  // behind them are untouched and still nullable, so every review already
+  // recorded keeps its ASA class, its airway findings and its consent, and
+  // the screens that read them — the anaesthesia board, the PACU discharge
+  // summary, the scribe — go on showing them for those cases. New reviews
+  // simply leave them unset.
   const STEP_NAMES = [
     'Select surgery',
     'Fitness',
-    'Anaesthesia consent',
-    'Risk assessment',
-    'ASA & Mallampati',
     'Anaesthetic plan',
     'Prescription',
   ];
@@ -607,7 +612,11 @@ export default function NewPreOpReviewPage() {
       patientName,
       folderNumber,
       scheduledSurgeryDate: selectedSurgery.scheduledDate,
-      // ASA & Airway
+      // ASA, airway and risk are NO LONGER COLLECTED — their sections were
+      // removed from the wizard on 20 October. These reads stay because the
+      // columns stay: FormData has no such inputs now, so each resolves to
+      // null and the field is simply left unset. Restoring a section later
+      // means putting the inputs back and nothing else.
       asaClass: formData.get('asaClass'),
       airwayClass: formData.get('airwayClass'),
       neckMovement: formData.get('neckMovement'),
@@ -617,7 +626,7 @@ export default function NewPreOpReviewPage() {
       // findings in the assessment. Existing values on older reviews are left
       // untouched in the database.
       proposedAnesthesiaType: formData.get('proposedAnesthesiaType'),
-      // Risk Assessment
+      // Not collected — see above.
       riskLevel: formData.get('riskLevel'),
       riskFactors: formData.get('riskFactors'),
       // The decision the review now turns on, and what would change it.
@@ -634,7 +643,10 @@ export default function NewPreOpReviewPage() {
       // Ward presence at planned review time
       patientInWardAtReview: patientInWard,
       patientAbsenceNote: !patientInWard ? (patientAbsenceNote.trim() || null) : null,
-      // Anaesthesia consent (WHO-aligned)
+      // Anaesthesia consent (WHO-aligned). The section was removed, so
+      // consentSignature is never set and this is always undefined — which is
+      // the point: a consent recorded with its full text when nobody was shown
+      // it would be a false record, and worse than no record at all.
       anaesthesiaConsent: consentSignature
         ? {
             text: ANAESTHESIA_CONSENT_TEXT,
@@ -1060,200 +1072,8 @@ export default function NewPreOpReviewPage() {
               )}
             </div>
 
-            {/* Anaesthesia Consent (WHO-aligned) */}
-            <div ref={(el) => { sectionRefs.current[2] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(2)}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <Syringe className="w-6 h-6 text-indigo-600" />
-                <h2 className="text-xl font-semibold">{ANAESTHESIA_CONSENT_TITLE}</h2>
-              </div>
-              <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 text-xs text-gray-700 whitespace-pre-wrap mb-4">
-                {ANAESTHESIA_CONSENT_TEXT}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Signed by</label>
-                  <input
-                    type="text"
-                    value={consentSignedBy}
-                    onChange={(e) => setConsentSignedBy(e.target.value)}
-                    placeholder="Patient or representative name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Relationship to patient</label>
-                  <select
-                    value={consentRelation}
-                    onChange={(e) => setConsentRelation(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    aria-label="Relationship to patient"
-                  >
-                    <option value="Self">Self (patient)</option>
-                    <option value="Parent/Guardian">Parent / Guardian</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Next of kin">Next of kin</option>
-                    <option value="Legal representative">Legal representative</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-2 mb-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => { setConsentMethod('ELECTRONIC'); setConsentSignature(null); }}
-                  className={`px-3 py-1.5 rounded-lg border ${consentMethod === 'ELECTRONIC' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300'}`}
-                >
-                  Sign electronically
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setConsentMethod('UPLOADED'); setConsentSignature(null); }}
-                  className={`px-3 py-1.5 rounded-lg border ${consentMethod === 'UPLOADED' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300'}`}
-                >
-                  Upload signed form
-                </button>
-              </div>
-
-              {consentMethod === 'ELECTRONIC' ? (
-                <SignaturePad
-                  label="Patient / representative signature"
-                  value={consentSignature}
-                  onChange={setConsentSignature}
-                />
-              ) : (
-                <div>
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    aria-label="Upload signed anaesthesia consent"
-                    onChange={(e) => {
-                      setConsentError('');
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      if (file.size > 10 * 1024 * 1024) { setConsentError('File must be ≤ 10 MB.'); return; }
-                      const reader = new FileReader();
-                      reader.onload = () => setConsentSignature(reader.result as string);
-                      reader.onerror = () => setConsentError('Failed to read file.');
-                      reader.readAsDataURL(file);
-                    }}
-                    className="block text-sm"
-                  />
-                  {consentSignature && (
-                    <p className="text-xs text-green-600 mt-2">Signed consent attached.</p>
-                  )}
-                </div>
-              )}
-              {consentError && <p className="text-xs text-red-600 mt-2">{consentError}</p>}
-              <p className="text-xs text-gray-500 mt-2">
-                The patient (or their representative) should read the statement above before signing. Signing is optional to save the review but is required before anaesthesia proceeds.
-              </p>
-            </div>
-
-            {/* Risk Assessment */}
-            <div ref={(el) => { sectionRefs.current[3] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(3)}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <AlertCircle className="w-6 h-6 text-red-600" />
-                <h2 className="text-xl font-semibold">Risk Assessment</h2>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Risk Level
-                </label>
-                <select
-                  name="riskLevel"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Select risk level</option>
-                  <option value="LOW">Low Risk</option>
-                  <option value="MODERATE">Moderate Risk</option>
-                  <option value="HIGH">High Risk</option>
-                  <option value="VERY_HIGH">Very High Risk</option>
-                </select>
-              </div>
-              <SmartTextInput
-                label="Risk Factors"
-                value={riskFactors}
-                onChange={setRiskFactors}
-                placeholder="Specific risk factors identified"
-                rows={3}
-                enableSpeech={true}
-                enableOCR={true}
-                medicalMode={true}
-              />
-            </div>
-
-            {/* ASA Classification & Mallampati */}
-            <div ref={(el) => { sectionRefs.current[4] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(4)}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <Activity className="w-6 h-6 text-blue-600" />
-                <h2 className="text-xl font-semibold">ASA Classification & Mallampati</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ASA Classification *
-                  </label>
-                  <select
-                    name="asaClass"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    required
-                  >
-                    <option value="">Select ASA class</option>
-                    <option value="ASA_I">ASA I - Normal healthy patient</option>
-                    <option value="ASA_II">ASA II - Mild systemic disease</option>
-                    <option value="ASA_III">ASA III - Severe systemic disease</option>
-                    <option value="ASA_IV">ASA IV - Severe disease, constant threat to life</option>
-                    <option value="ASA_V">ASA V - Moribund patient</option>
-                    <option value="ASA_VI">ASA VI - Brain-dead organ donor</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mallampati Class *
-                  </label>
-                  <select
-                    name="airwayClass"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    required
-                  >
-                    <option value="">Select Mallampati class</option>
-                    <option value="CLASS_I">Class I - Soft palate, fauces, uvula, pillars visible</option>
-                    <option value="CLASS_II">Class II - Soft palate, fauces, uvula visible</option>
-                    <option value="CLASS_III">Class III - Soft palate, base of uvula visible</option>
-                    <option value="CLASS_IV">Class IV - Hard palate only visible</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Neck Movement
-                  </label>
-                  <select
-                    name="neckMovement"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select status</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="LIMITED">Limited</option>
-                    <option value="SEVERELY_LIMITED">Severely Limited</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dentition
-                  </label>
-                  <input
-                    type="text"
-                    name="dentition"
-                    placeholder="e.g., Good, Missing teeth, Dentures"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-            </div>
-
             {/* Anesthetic Plan */}
-            <div ref={(el) => { sectionRefs.current[5] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(5)}`}>
+            <div ref={(el) => { sectionRefs.current[2] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(2)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Syringe className="w-6 h-6 text-indigo-600" />
                 <h2 className="text-xl font-semibold">Anesthetic Plan</h2>
@@ -1292,7 +1112,7 @@ export default function NewPreOpReviewPage() {
             </div>
 
             {/* Anesthetic Prescription Section */}
-            <div ref={(el) => { sectionRefs.current[6] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(6)}`}>
+            <div ref={(el) => { sectionRefs.current[3] = el; }} className={`bg-white rounded-lg shadow-md p-6 ${stepClass(3)}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Pill className="w-6 h-6 text-purple-600" />
                 <div>
