@@ -532,7 +532,24 @@ async function handleGET(_req: NextRequest) {
     take: 20,
   });
 
-  return NextResponse.json({ queue, serverTime: now.toISOString() });
+  // Carried on the poll the player already makes, rather than on a second
+  // endpoint it would have to remember to call. Every open window therefore
+  // picks up a volume change within one cycle, and a window that is polling
+  // at all cannot be running on a stale one.
+  //
+  // Never fails the queue: a radio that stopped announcing because a settings
+  // row could not be read would be a far worse fault than one playing at the
+  // wrong volume.
+  const volumeSetting = await prisma.radioSetting
+    .findUnique({ where: { id: 'singleton' }, select: { volume: true, routineMuted: true } })
+    .catch(() => null);
+
+  return NextResponse.json({
+    queue,
+    serverTime: now.toISOString(),
+    volume: volumeSetting?.volume ?? 1,
+    routineMuted: volumeSetting?.routineMuted ?? false,
+  });
 }
 
 export const GET = withApiError('radio.queue', handleGET);

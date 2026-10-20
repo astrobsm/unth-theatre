@@ -8,6 +8,7 @@ import { speakAnnouncement, preloadKokoro } from '@/lib/radioTts';
 import { applyHumanVoice, primeHumanVoices } from '@/lib/humanVoice';
 import { isUrgentAnnouncement } from '@/lib/announcementUrgency';
 import { gatePlayback, type NowPlaying } from '@/lib/radio/playbackGate';
+import { effectiveVolume, type RadioVolumeSetting } from '@/lib/radio/volume';
 import { DockSlot, DOCK_ORDER } from '@/components/FloatingDock';
 
 interface Announcement {
@@ -75,6 +76,18 @@ export default function RadioPlayer() {
    * start a second announcement over the first.
    */
   const playingRef = useRef<NowPlaying | null>(null);
+  /**
+   * How loud to play, set centrally and refreshed on every queue poll.
+   *
+   * A ref rather than state for the same reason as playingRef: speak() and
+   * playAudio() are useCallbacks that would otherwise close over whatever the
+   * volume was when they were last rebuilt, and an announcement playing at
+   * yesterday's volume is the fault this feature exists to fix.
+   *
+   * The emergency floor is applied by effectiveVolume, not here — see
+   * lib/radio/volume for why it is not something this component decides.
+   */
+  const volumeRef = useRef<RadioVolumeSetting>({ volume: 1, routineMuted: false });
   /**
    * Bumped whenever something stops sounding, so the effect re-runs at once
    * and the next announcement goes out without waiting for the next poll.
@@ -351,13 +364,22 @@ export default function RadioPlayer() {
   // branch below used to do — retires an announcement nobody heard and leaves
   // an alert on screen in permanent silence.
   const speakBrowser = useCallback(
-    (text: string, onDone?: () => void, onUnheard?: () => void) => {
+    // `urgent` is threaded through because this is a SEPARATE audio path from
+    // the <audio> element, and it needs the emergency floor applied on its own
+    // account. Without it the radio would obey the volume until the neural
+    // voice failed and then revert to full — at the worst possible moment.
+    (text: string, onDone?: () => void, onUnheard?: () => void, urgent = false) => {
       try {
         const synth = window.speechSynthesis;
         if (!synth) { emitRadioIdle(); onUnheard?.(); return; }
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         applyHumanVoice(u);
+        // The fallback is a SEPARATE audio path from the <audio> element, so
+        // it needs the volume applied independently. Missing this would mean
+        // the radio obeyed the setting until the neural voice failed, and
+        // then went back to full volume at the worst possible moment.
+        u.volume = effectiveVolume(volumeRef.current, urgent);
         let started = false;
         u.onstart = () => { started = true; setSpeaking(true); emitRadioActive(); };
         u.onend = () => {
@@ -410,6 +432,9 @@ export default function RadioPlayer() {
       // silent, it was consumed.
       if (muted && !urgent) { onUnheard?.(); return; }
       if (!audioRef.current) audioRef.current = new Audio();
+      // The neural voice plays through this same element, so the volume is set
+      // on it before speakAnnouncement is handed the getter.
+      audioRef.current.volume = effectiveVolume(volumeRef.current, urgent);
       void speakAnnouncement(text, {
         getAudio: () => audioRef.current as HTMLAudioElement,
         warmupWaitMs,
@@ -424,11 +449,11 @@ export default function RadioPlayer() {
         // The neural voice failed — fall back to the offline browser voice, and
         // pass the unheard path through it so a failure at BOTH ends is
         // reported as unheard rather than quietly retired.
-        speakBrowser(text, onDone, onUnheard);
+        speakBrowser(text, onDone, onUnheard, urgent);
       }).catch(() => {
         // A rejected promise used to disappear entirely, taking the
         // announcement with it.
-        speakBrowser(text, onDone, onUnheard);
+        speakBrowser(text, onDone, onUnheard, urgent);
       });
     },
     [muted, emitRadioActive, emitRadioIdle, speakBrowser]
@@ -517,7 +542,7 @@ export default function RadioPlayer() {
         if (!audioRef.current) audioRef.current = new Audio();
         const a = audioRef.current;
         a.src = url;
-        a.volume = 1;
+        a.volume = effectiveVolume(volumeRef.current, urgent);
         a.onended = () => { emitRadioIdle(); onDone?.(); };
         // A file that will not decode was being reported as played.
         a.onerror = () => { emitRadioIdle(); onUnheard?.(); };
@@ -560,6 +585,12 @@ export default function RadioPlayer() {
       if (!r.ok) return;
       const data = await r.json();
       setQueue(data.queue ?? []);
+      // Carried on the queue response, so a volume change reaches every open
+      // window within one poll without a second request.
+      volumeRef.current = {
+        volume: typeof data.volume === 'number' ? data.volume : 1,
+        routineMuted: Boolean(data.routineMuted),
+      };
     } catch {
       /* offline ok */
     }

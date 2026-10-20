@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Radio, AlertOctagon, Plus, Trash2, Megaphone, History, CheckCircle2 } from 'lucide-react';
+import { Radio, AlertOctagon, Plus, Trash2, Megaphone, History, CheckCircle2,
+  Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { EMERGENCY_FLOOR } from '@/lib/radio/volume';
 
 interface Broadcast {
   id: string;
@@ -43,6 +45,15 @@ export default function RadioAdminPage() {
   const isAdmin = ADMIN_ROLES.includes(role);
 
   const [tab, setTab] = useState<'announce' | 'schedule' | 'audit'>('announce');
+
+  // ── How loud the theatre plays ──────────────────────────────────────────
+  // Set from here, applied by every open radio window on its next poll.
+  const [volume, setVolume] = useState(1);
+  const [routineMuted, setRoutineMuted] = useState(false);
+  const [volumeDesc, setVolumeDesc] = useState('');
+  const [volumeBy, setVolumeBy] = useState<string | null>(null);
+  const [volumeSaving, setVolumeSaving] = useState(false);
+  const [canSetVolume, setCanSetVolume] = useState(false);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [audit, setAudit] = useState<AnnouncementRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -170,6 +181,40 @@ export default function RadioAdminPage() {
     loadBroadcasts();
   };
 
+  const loadVolume = useCallback(async () => {
+    try {
+      const r = await fetch('/api/radio/volume', { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      setVolume(typeof d.volume === 'number' ? d.volume : 1);
+      setRoutineMuted(Boolean(d.routineMuted));
+      setVolumeDesc(d.describe ?? '');
+      setVolumeBy(d.updatedByName ?? null);
+      setCanSetVolume(Boolean(d.canSet));
+    } catch { /* the page still works; the control just will not save */ }
+  }, []);
+
+  useEffect(() => { void loadVolume(); }, [loadVolume]);
+
+  const saveVolume = useCallback(async (next: { volume?: number; routineMuted?: boolean }) => {
+    setVolumeSaving(true);
+    try {
+      const r = await fetch('/api/radio/volume', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setVolume(d.volume);
+        setRoutineMuted(d.routineMuted);
+        setVolumeDesc(d.describe ?? '');
+        setVolumeBy(d.updatedByName ?? null);
+      }
+    } catch { /* leave the control showing what the server last confirmed */ }
+    finally { setVolumeSaving(false); }
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -189,6 +234,81 @@ export default function RadioAdminPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Volume sits ABOVE the tabs, not inside one. It applies to every
+          announcement on every tab, and somebody reaching for it at two in
+          the morning should not have to work out which tab it lives under. */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+            {routineMuted || volume === 0
+              ? <VolumeX className="h-5 w-5 text-amber-600" />
+              : <Volume2 className="h-5 w-5 text-primary-600" />}
+            Theatre volume
+          </h2>
+          {volumeSaving && (
+            <span className="inline-flex items-center gap-1 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Saving&hellip;
+            </span>
+          )}
+        </div>
+
+        <p className="mt-1 text-sm text-gray-600">
+          Applies to every open radio window within about fifteen seconds. You do not
+          need to be in the theatre.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={Math.round(volume * 100)}
+            disabled={!canSetVolume || volumeSaving}
+            onChange={(e) => setVolume(Number(e.target.value) / 100)}
+            onMouseUp={(e) => void saveVolume({ volume: Number((e.target as HTMLInputElement).value) / 100 })}
+            onTouchEnd={(e) => void saveVolume({ volume: Number((e.target as HTMLInputElement).value) / 100 })}
+            onKeyUp={(e) => void saveVolume({ volume: Number((e.target as HTMLInputElement).value) / 100 })}
+            className="h-2 min-w-[220px] flex-1 cursor-pointer disabled:cursor-not-allowed"
+            aria-label="Theatre radio volume"
+          />
+          <span className="w-14 text-right text-lg font-semibold tabular-nums text-gray-900">
+            {Math.round(volume * 100)}%
+          </span>
+          <button
+            type="button"
+            disabled={!canSetVolume || volumeSaving}
+            onClick={() => void saveVolume({ routineMuted: !routineMuted })}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 disabled:opacity-50 ${
+              routineMuted
+                ? 'bg-amber-50 text-amber-800 ring-amber-300'
+                : 'bg-white text-gray-700 ring-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {routineMuted ? 'Routine announcements silenced' : 'Silence routine announcements'}
+          </button>
+        </div>
+
+        {/* The consequence, in words. A percentage tells somebody sitting at
+            home nothing about a corridor they cannot hear. */}
+        <p className="mt-3 text-sm text-gray-700">{volumeDesc}</p>
+
+        <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-900">
+          An emergency is never played below {Math.round(EMERGENCY_FLOOR * 100)}%, whatever
+          this is set to. A silenced emergency is not merely unheard: the radio marks it as
+          delivered and nobody in theatre ever hears it.
+        </p>
+
+        {volumeBy && (
+          <p className="mt-2 text-xs text-gray-500">Last changed by {volumeBy}.</p>
+        )}
+        {!canSetVolume && (
+          <p className="mt-2 text-xs text-gray-500">
+            You can see the setting. Changing it is done by theatre management.
+          </p>
+        )}
       </div>
 
       {tab === 'announce' && (

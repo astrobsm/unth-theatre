@@ -7967,6 +7967,43 @@ model SurgicalUnitSchedule {
 // ============================================================================
 
 // Scheduled or recurring broadcast definition (welcome msg, rules, music slot)
+/// How loud the theatre radio plays, set from anywhere.
+///
+/// A single row. Every open radio window reads it on its next queue poll and
+/// applies it, so a consultant at home can turn the corridor speaker down at
+/// two in the morning without anybody walking to the theatre.
+///
+/// WHY THERE IS A FLOOR FOR EMERGENCIES, enforced in lib/radio/volume rather
+/// than here. The player already refuses to let `muted` silence an emergency,
+/// for a reason written into that code: a muted emergency is not merely
+/// silent, it is consumed -- the queue retires it as delivered and nobody in
+/// the room ever hears it. A remote volume of zero would recreate exactly
+/// that, and worse, because the person who set it is not in the building and
+/// cannot hear that nothing happened.
+///
+/// Attributed on purpose. A radio turned down from home that later costs a
+/// missed emergency call is a decision somebody made, and the record should
+/// say who and when.
+model RadioSetting {
+  id String @id @default("singleton")
+
+  /// 0.0 to 1.0. Applied to routine announcements as given; an emergency is
+  /// raised to the floor in lib/radio/volume if this is below it.
+  volume Float @default(1)
+
+  /// Silences routine traffic hospital-wide. Emergencies still sound.
+  /// Distinct from the per-device mute, which stays on the device.
+  routineMuted Boolean @default(false)
+
+  updatedAt     DateTime @updatedAt
+  updatedById   String?
+  updatedByName String?
+  /// Why it was changed, where somebody gave a reason.
+  note          String?
+
+  @@map("radio_settings")
+}
+
 model RadioBroadcast {
   id            String    @id @default(uuid())
   title         String
