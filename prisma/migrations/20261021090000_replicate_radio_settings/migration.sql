@@ -1,0 +1,27 @@
+-- ============================================================
+-- Make the radio volume actually reach the theatre
+-- ------------------------------------------------------------
+-- radio_settings was created yesterday and never registered for replication,
+-- which quietly defeated the whole feature.
+--
+-- The radio players in the theatre are served by the THEATRE SERVER and read
+-- ITS radio_settings row. Setting the volume from home writes the CLOUD's
+-- row. With no capture on the table the two never meet: the slider moves, the
+-- cloud's own players obey it, and the corridor speaker the setting exists to
+-- turn down carries on at full volume — with nothing anywhere reporting a
+-- problem, because nothing failed.
+--
+-- LWW, because that is what a volume control means. Whoever adjusted it most
+-- recently wins, whichever side they did it from. There is no sense in which
+-- one node's opinion of "how loud is it in theatre" outranks the other's; the
+-- useful answer is simply the latest one.
+--
+-- The emergency floor is unaffected either way: it is enforced in
+-- lib/radio/volume on the player, not stored in this row, so no value that
+-- replicates here can silence an emergency.
+--
+-- sync_enable_table adds the three sync columns and the capture triggers, and
+-- is safe to re-run.
+-- ============================================================
+
+SELECT sync_enable_table('radio_settings');

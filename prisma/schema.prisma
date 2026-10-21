@@ -8001,6 +8001,12 @@ model RadioSetting {
   /// Why it was changed, where somebody gave a reason.
   note          String?
 
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
   @@map("radio_settings")
 }
 
