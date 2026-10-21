@@ -9,6 +9,7 @@
 // This makes natural speech work with no paid credits, while keeping graceful
 // degradation on old browsers / blocked model downloads.
 
+import { hasNigerianVoice } from '@/lib/humanVoice';
 import {
   speakViaKokoro,
   isKokoroAvailable,
@@ -115,14 +116,26 @@ export async function speakViaElevenLabs(text: string, hooks: SpeakHooks = {}): 
 
   return new Promise<boolean>((resolve) => {
     let settled = false;
+    let audio: HTMLAudioElement | null = null;
     const finish = (ok: boolean) => {
       if (settled) return;
       settled = true;
+      // SILENCE THIS ENGINE BEFORE ADMITTING FAILURE.
+      //
+      // Resolving false tells the caller to use the device voice instead, and
+      // it does so immediately. If this element is still playing, the room
+      // hears both at once -- which is exactly the "one male, one female,
+      // almost overlapping" that was reported: this engine's voice with the
+      // browser's on top of it. Returning false has to mean nothing is
+      // sounding, or the fallback is not a fallback, it is a duet.
+      if (!ok && audio) {
+        try { audio.pause(); audio.src = ''; } catch { /* already gone */ }
+      }
       hooks.onEnd?.();
       resolve(ok);
     };
     try {
-      const audio = hooks.getAudio?.() ?? new Audio();
+      audio = hooks.getAudio?.() ?? new Audio();
       audio.src = url;
       audio.volume = typeof hooks.volume === 'number' ? hooks.volume : 1;
       audio.onended = () => finish(true);
@@ -157,6 +170,19 @@ async function speakAnnouncementNow(
 ): Promise<boolean> {
   const clean = (text || '').trim();
   if (!clean || typeof window === 'undefined') return false;
+
+  // 0) A NIGERIAN VOICE BEATS A SMOOTHER FOREIGN ONE.
+  //
+  // Kokoro ships American and British voices only — its default is af_heart,
+  // an American female — so on a device that HAS en-NG (Edge and most
+  // Android builds do), the neural engine is the wrong choice however good
+  // it sounds. Staff at Ituku-Ozalla were being read their own theatre list
+  // in a Californian accent.
+  //
+  // Returning false hands the announcement to speechSynthesis, which
+  // lib/humanVoice then points at the Nigerian voice. Nothing has started
+  // playing at this point, so there is nothing to silence first.
+  if (hasNigerianVoice()) return false;
 
   // 1) Kokoro — free neural voice, but ONLY when the engine is already loaded.
   //

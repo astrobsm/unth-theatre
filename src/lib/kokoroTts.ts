@@ -461,14 +461,26 @@ export async function speakViaKokoro(
 
   return new Promise<boolean>((resolve) => {
     let settled = false;
+    let audio: HTMLAudioElement | null = null;
     const finish = (ok: boolean) => {
       if (settled) return;
       settled = true;
+      // SILENCE THIS ENGINE BEFORE ADMITTING FAILURE.
+      //
+      // Resolving false tells the caller to use the device voice instead, and
+      // it does so immediately. If this element is still playing, the room
+      // hears both at once -- which is exactly the "one male, one female,
+      // almost overlapping" that was reported: this engine's voice with the
+      // browser's on top of it. Returning false has to mean nothing is
+      // sounding, or the fallback is not a fallback, it is a duet.
+      if (!ok && audio) {
+        try { audio.pause(); audio.src = ''; } catch { /* already gone */ }
+      }
       hooks.onEnd?.();
       resolve(ok);
     };
     try {
-      const audio = hooks.getAudio?.() ?? new Audio();
+      audio = hooks.getAudio?.() ?? new Audio();
       audio.src = url;
       audio.volume = typeof hooks.volume === 'number' ? hooks.volume : 1;
       audio.onended = () => finish(true);

@@ -20,15 +20,39 @@
  * with six different rate/pitch settings.
  */
 
-/** Locale preference — UNTH is a Nigerian hospital, so a Nigerian English
- *  voice is the most natural for staff, then British, then generic English. */
+/**
+ * A Nigerian voice beats everything else, by a margin nothing can close.
+ *
+ * This used to be a 60-point nudge against a 100-point bonus for a vendor
+ * "Natural" or "Neural" voice, so a device holding both en-NG-EzinneNeural
+ * and an American natural voice chose the American one. Staff at Ituku-Ozalla
+ * were read their own theatre list in a Californian accent.
+ *
+ * The margin is deliberate rather than tuned: for this hospital a Nigerian
+ * voice is not one desirable property among several to be traded off against
+ * smoothness. It either exists on the device or it does not.
+ */
+export const NIGERIAN_LOCALE = /^en[-_]NG/i;
+const NIGERIAN_BONUS = 1000;
+
+/** After Nigerian: the Englishes closest to how staff here speak and listen. */
 const LOCALE_RANK: Array<[RegExp, number]> = [
-  [/^en[-_]NG/i, 60],
+  [NIGERIAN_LOCALE, NIGERIAN_BONUS],
   [/^en[-_]GB/i, 45],
   [/^en[-_]AU|^en[-_]IE|^en[-_]ZA/i, 35],
   [/^en[-_]US/i, 30],
   [/^en/i, 20],
 ];
+
+/**
+ * The Nigerian English voices Microsoft and Google ship, in a FIXED order.
+ *
+ * Order matters more than which one is first. Two devices picking different
+ * Nigerian voices give the room a male and a female reading the same notice,
+ * which is the complaint this change answers; one agreed order means every
+ * device that has these lands on the same one.
+ */
+const NIGERIAN_VOICE_ORDER: RegExp[] = [/\bezinne\b/i, /\babeo\b/i];
 
 /** Markers OS vendors use for their neural/high-quality voices. */
 const QUALITY_HINTS: Array<[RegExp, number]> = [
@@ -70,7 +94,31 @@ function scoreVoice(v: SpeechSynthesisVoice): number {
   if (v.localService === false) score += 15;
   if (v.default) score += 5;
 
+  // Among Nigerian voices, settle on ONE so two devices never read the same
+  // announcement in two different voices. Earlier in the list scores higher.
+  if (NIGERIAN_LOCALE.test(lang)) {
+    const i = NIGERIAN_VOICE_ORDER.findIndex((re) => re.test(name));
+    if (i >= 0) score += (NIGERIAN_VOICE_ORDER.length - i) * 20;
+  }
+
   return score;
+}
+
+/**
+ * Does this device have a Nigerian English voice at all?
+ *
+ * Asked before reaching for the neural engine: Kokoro's voices are American
+ * and British only, so on a device that HAS a Nigerian voice the neural
+ * engine is the wrong choice however smooth it sounds.
+ */
+export function hasNigerianVoice(): boolean {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  try {
+    return (window.speechSynthesis.getVoices() || [])
+      .some((v) => NIGERIAN_LOCALE.test(v.lang || ''));
+  } catch {
+    return false;
+  }
 }
 
 let cached: SpeechSynthesisVoice | null = null;
