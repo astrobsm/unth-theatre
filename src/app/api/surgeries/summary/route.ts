@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam';
 import { findByUnit } from '@/lib/unitMatch';
+import { dedupeTeam } from '@/lib/theatre/teamNames';
 
 type Contact = { name: string; phone: string | null } | null;
 
@@ -255,6 +256,9 @@ export async function GET(req: NextRequest) {
         if (!name) return;
         // De-duplicated by name: the same surgeon on three cases is one person
         // to ring, and a card repeating them three times is a worse card.
+        // Exact-match de-duplication let "Oko" and "oko" be two people, and a
+        // "Dr " prefix a third. dedupeTeam below does the real collapsing;
+        // this only avoids obvious repeats before it runs.
         if (list.some((x) => x.name === name)) return;
         list.push({ name, phone: id ? phoneOf.get(id) ?? null : null, role });
       };
@@ -313,7 +317,12 @@ export async function GET(req: NextRequest) {
 
     // Read in the order somebody works down the card when a list is late.
     const ROLE_ORDER = ['Surgeon', 'Consultant', 'Snr registrar', 'Registrar', 'House officer'];
-    for (const [unit, list] of Array.from(surgeonsByUnit.entries())) {
+    for (const [unit, raw] of Array.from(surgeonsByUnit.entries())) {
+      // ONE PERSON, ONE LINE. The free-text fallback on the team picker means
+      // the same person reaches this list once by account and once as typed
+      // text, in two spellings and often two roles — and the typed one has no
+      // phone number. dedupeTeam keeps whichever entry can actually be rung.
+      const list = dedupeTeam(raw, ROLE_ORDER);
       list.sort((a, b) => {
         const ra = ROLE_ORDER.indexOf(a.role);
         const rb = ROLE_ORDER.indexOf(b.role);
