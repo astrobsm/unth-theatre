@@ -57,13 +57,21 @@ describe('what the early booking insists on', () => {
     expect(essentials).toContain('the date');
   });
 
-  it('does not insist on the theatre or the unit', () => {
-    // Deliberately absent, and the distinction is the whole point: neither is
-    // knowable when a case is booked, and demanding them stopped a surgeon
-    // with a patient, a procedure and a date putting the case on the list.
-    // The surgeon is not like that — a case belongs to somebody.
+  it('insists on the unit', () => {
+    // ADDED 22 OCTOBER, after a plastic surgery case was booked with the unit
+    // blank and appeared under "Unassigned unit" with no team card at all —
+    // no surgeon number, no anaesthetist, no nurse, no porter.
+    expect(essentials).toContain('the unit');
+  });
+
+  it('does NOT insist on the theatre', () => {
+    // The distinction is the whole point. A room is allocated later and a
+    // case without one is merely undecided. A case without a unit belongs to
+    // nobody: the card, the blocker digest and the allocation are all built
+    // per unit, so it is on the list and invisible to everything the list is
+    // for. Demanding the theatre, by contrast, stopped a surgeon with a
+    // patient, a procedure and a date putting the case on the list at all.
     expect(essentials).not.toContain('the theatre');
-    expect(essentials).not.toContain('the unit');
   });
 
   it('checks the surgeon by id OR by typed name', () => {
@@ -85,6 +93,7 @@ describe('the server refuses one too', () => {
     // The form's early button bypasses browser validation by design, and this
     // route has other callers, so the rule cannot live only on the form.
     expect(api).toMatch(/NO_SURGEON/);
+    expect(api, 'a blank unit must be refused too').toMatch(/NO_UNIT/);
     expect(api).toMatch(/if \(!surgeonId && !String\(surgeonName \?\? ''\)\.trim\(\)\)/);
   });
 

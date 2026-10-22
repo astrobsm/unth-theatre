@@ -483,6 +483,32 @@ export async function POST(request: NextRequest) {
     const hbSampleAtSafe =
       hbSampleAt && !Number.isNaN(new Date(hbSampleAt).getTime()) ? hbSampleAt : null;
 
+    // A BOOKING WITH NO UNIT IS REFUSED.
+    //
+    // unit is NOT NULL on the table, so an empty STRING has always satisfied
+    // it. One did, on 21 October, and the case showed on the list under
+    // "Unassigned unit" with no team card at all.
+    //
+    // The unit is not the theatre. A room is allocated later and a case
+    // without one is merely undecided; a case without a unit belongs to
+    // nobody, and the card, the blocker digest and the theatre allocation are
+    // all built per unit. Refused here as well as on the form because the
+    // form's early-booking button bypasses browser validation by design.
+    if (!String(validatedData.unit ?? '').trim()) {
+      return NextResponse.json(
+        {
+          error: 'A booking needs its surgical unit.',
+          code: 'NO_UNIT',
+          detail:
+            'Pick the unit on the booking form, or type it if it is not in the list. '
+            + 'Unlike the theatre, which is allocated later, the unit is who the case '
+            + 'belongs to — without it the case appears under "Unassigned unit" with no '
+            + 'team against it.',
+        },
+        { status: 400 },
+      );
+    }
+
     // A BOOKING WITH NO SURGEON IS REFUSED.
     //
     // surgeonName is z.string() with no minimum, so an empty one has always

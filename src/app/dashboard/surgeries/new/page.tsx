@@ -970,17 +970,34 @@ export default function NewSurgeryPage() {
       // ONLY what makes this a case at all: who, what, when. A booking without
       // a patient or a procedure is not a record of anything.
       //
-      // The theatre and the unit used to be demanded here and are not any more.
-      // Neither is knowable at the moment a case is booked — the theatre is
-      // allocated later and can be changed from the list at any time, and the
-      // API has always accepted a booking without one (theatreId is nullish).
-      // Requiring them meant a surgeon with a patient, a procedure and a date
-      // could not put the case on the list at all, which is a worse outcome
-      // than a case whose room is still to be decided.
+      // THE THEATRE IS NOT DEMANDED HERE. IT IS NOT KNOWABLE AT BOOKING: the
+      // room is allocated later and changes from the list at any time, and
+      // the API has always accepted a booking without one. Requiring it meant
+      // a surgeon with a patient, a procedure and a date could not put the
+      // case on the list at all, which is worse than a case whose room is
+      // still to be decided.
+      //
+      // THE UNIT WAS DROPPED WITH IT, AND SHOULD NOT HAVE BEEN. On 21 October
+      // a plastic surgery case — Local flap reconstruction, a named surgeon,
+      // a subspecialty — was booked with the unit left empty and appeared on
+      // the list under "Unassigned unit" with NO TEAM CARD AT ALL: no
+      // surgeon's number, no anaesthetist, no scrub nurse, no porter.
+      //
+      // A case with no room still belongs to somebody and is still chased. A
+      // case with no unit belongs to nobody: the card is built per unit, the
+      // blocker digest is addressed per unit, and the theatre allocation
+      // names a unit. It is on the list and invisible to everything the list
+      // is for, which is worse than being absent, because absence gets
+      // noticed.
+      //
+      // Unlike the theatre, it IS knowable: whoever books a case knows whose
+      // firm it is, and the field takes free text when the registry has no
+      // matching entry.
       const essentials: string[] = [];
       if (!selectedPatientId) essentials.push('the patient');
       if (!String(fd.get('procedureName') ?? '').trim()) essentials.push('the procedure');
       if (!String(fd.get('scheduledDate') ?? '').trim()) essentials.push('the date');
+      if (!String(fd.get('unit') ?? '').trim()) essentials.push('the unit');
       // THE SURGEON BELONGS HERE, and its absence is why two O&G Firm 3 cases
       // booked on 18 October read "Not assigned" in the surgeon column.
       //
