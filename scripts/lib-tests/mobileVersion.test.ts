@@ -75,6 +75,18 @@ describe('the build script applies all of it', () => {
     expect(buildScript).toContain('shrink-splash.js');
   });
 
+  it('checks the APK size, because the last size regression was silent', () => {
+    // shrink-splash stopped resolving sharp when npm hoisted it; the step
+    // warned, the build carried on, and 2.3 MB of waste shipped.
+    expect(buildScript).toContain('THIS APK IS LARGER THAN EXPECTED');
+  });
+
+  it('does not pin sharp to one node_modules path', () => {
+    // npm hoists it as soon as anything else pulls a compatible copy.
+    const shrink = read('scripts', 'mobile', 'shrink-splash.js');
+    expect(shrink).toMatch(/\['sharp', '@capacitor\/assets\/node_modules\/sharp'\]/);
+  });
+
   it('still restores the Firebase client config', () => {
     expect(buildScript).toContain('mobile/google-services.json');
   });

@@ -142,6 +142,21 @@ fi
 
 say "built: $(cd "$REPO/android" && pwd)/$OUT"
 say "size:  $(du -h "$OUT" | cut -f1)"
+
+# A SIZE CHECK, because the last regression was silent. shrink-splash.js
+# stopped resolving sharp when npm hoisted it, the step warned and the build
+# carried on, and a 2.3 MB heavier APK shipped without anything failing. A
+# warning nobody scrolls back to read is not a warning.
+APK_BYTES=$(wc -c < "$OUT")
+BUDGET=7340032   # 7 MiB: comfortably above a healthy build, well under a bloated one
+if [ "$APK_BYTES" -gt "$BUDGET" ]; then
+  say ""
+  say "*** THIS APK IS LARGER THAN EXPECTED ***"
+  say "    $APK_BYTES bytes, budget $BUDGET."
+  say "    Usually means the splash images were not palette-encoded."
+  say "    Check that scripts/mobile/shrink-splash.js ran, and re-run this script."
+  say ""
+fi
 say ""
 say "To publish it for staff to install:"
 say "  cp android/$OUT public/downloads/orm-unth.apk"

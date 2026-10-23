@@ -828,6 +828,19 @@ export default function DashboardLayout({
                   await removeCachedData('session');
                   await removeCachedData('currentUser');
                 } catch { /* best-effort */ }
+                // Signing out must also un-enrol the fingerprint, and revoke
+                // it server-side. Otherwise "Sign Out" is cosmetic: the next
+                // cold start reads the credential still sitting in the
+                // Keystore and signs the same person straight back in.
+                try {
+                  await fetch('/api/device-credentials', { method: 'DELETE', credentials: 'include' });
+                } catch { /* revoke is best-effort; the local secret still goes */ }
+                try {
+                  const { forgetCredential } = await import('@/lib/native/biometric');
+                  await forgetCredential();
+                  sessionStorage.removeItem('orm.biometric.unlocked');
+                  localStorage.removeItem('orm.biometric.declined');
+                } catch { /* web, or nothing stored */ }
                 if (!navigator.onLine) {
                   window.location.href = '/auth/login';
                   return;

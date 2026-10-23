@@ -17,11 +17,33 @@
  */
 const fs = require('fs');
 const path = require('path');
-const sharp = require('@capacitor/assets/node_modules/sharp');
+// sharp moves. It arrives as a dependency of @capacitor/assets, but npm
+// hoists it to the top level as soon as anything else pulls a compatible
+// copy — which is exactly what installing the biometric plugin did, silently
+// breaking this script and re-inflating the APK by 2.3 MB without failing
+// the build. So try both, and say which is missing rather than printing a
+// module-resolution stack trace at whoever runs the build next.
+function loadSharp() {
+  for (const id of ['sharp', '@capacitor/assets/node_modules/sharp']) {
+    try {
+      return require(id);
+    } catch {
+      /* try the next */
+    }
+  }
+  return null;
+}
+const sharp = loadSharp();
 
 const RES = path.join(__dirname, '..', '..', 'android', 'app', 'src', 'main', 'res');
 
 async function main() {
+  if (!sharp) {
+    console.error('FAILED: sharp is not installed anywhere this script can reach.');
+    console.error('        It normally arrives with @capacitor/assets.');
+    process.exit(1);
+  }
+
   if (!fs.existsSync(RES)) {
     console.error(`FAILED: no generated resources at ${RES}`);
     console.error('        Run `npx capacitor-assets generate --android` first.');

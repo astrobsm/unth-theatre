@@ -46,6 +46,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@types/web-push": "^3.6.4",
     "bcryptjs": "^2.4.3",
+    "capacitor-native-biometric": "^4.2.2",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
