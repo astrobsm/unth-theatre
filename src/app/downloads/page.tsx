@@ -55,8 +55,14 @@ export default function DownloadsPage() {
                 Version {APK_VERSION} · {APK_SIZE} · Android 6.0 or newer
               </p>
 
+              {/* Served from a GitHub release, not from this deployment.
+                  A 4 MB binary in git history grows the repository by that
+                  much per release for ever, and pushing one over the
+                  hospital link times out — the attempt returned HTTP 408
+                  three times. The release holds the file; git holds the
+                  recipe that builds it. */}
               <a
-                href="/downloads/orm-unth.apk"
+                href="https://github.com/astrobsm/unth-theatre/releases/download/android-v1.0/orm-unth.apk"
                 download
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#0F7A6C] px-6 py-3 text-lg font-semibold text-white hover:bg-[#0C6558]"
               >
