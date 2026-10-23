@@ -108,9 +108,12 @@ export default function BiometricEnrolment() {
       // Verify BEFORE storing: if they walk away at the prompt, nothing is
       // left on the device.
       const verified = await promptFingerprint('Confirm your fingerprint to set this up');
-      if (!verified) {
+      if (!verified.ok) {
         setBusy(false);
-        setError('Fingerprint not confirmed. Nothing was saved.');
+        // Say WHY. "Not confirmed" covers a wet finger, a phone with no
+        // fingerprints saved, and a prompt that never opened — three things
+        // with three different fixes.
+        setError(`${verified.message} Nothing was saved.`);
         return;
       }
 

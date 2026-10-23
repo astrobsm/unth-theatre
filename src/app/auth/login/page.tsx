@@ -1,5 +1,6 @@
 'use client';
 
+import FingerprintSignIn from '@/components/FingerprintSignIn';
 import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -485,6 +486,12 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
+
+          {/* Shows itself only in the installed app, on a phone that has been
+              enrolled. Deliberately BELOW the password form and never in
+              front of it: this is an alternative to typing, not a gate in
+              front of the thing that always works. */}
+          <FingerprintSignIn />
           
           <div className="text-center space-y-2">
             {/* One entry point for both. Two separate links sent people who had

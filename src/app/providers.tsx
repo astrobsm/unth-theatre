@@ -17,10 +17,10 @@ const BackgroundMusicPlayer = dynamic(() => import("@/components/BackgroundMusic
 const MediaHubLauncher = dynamic(() => import("@/components/MediaHub").then((m) => m.MediaHubLauncher), { ssr: false });
 // Native push registration — no-op on web; only active inside the installed app.
 const PushNotificationRegistrar = dynamic(() => import("@/components/PushNotificationRegistrar"), { ssr: false });
-// Fingerprint sign-in (native only). The gate wraps the app and asks once per
-// cold start; the enrolment card offers to set it up after a password sign-in.
-// Both are no-ops on the web and on a handset with no biometrics enrolled.
-const BiometricGate = dynamic(() => import("@/components/BiometricGate"), { ssr: false });
+// Offers to set up fingerprint sign-in after a password sign-in (native only).
+// The signing-in half lives on the login page itself, not here: a full-screen
+// gate in front of the app put a dead screen between staff and a hospital
+// system on a handset whose fingerprint prompt never appeared.
 const BiometricEnrolment = dynamic(() => import("@/components/BiometricEnrolment"), { ssr: false });
 // Native offline-first warm-up — auto-caches the whole app on the device (native only).
 const NativeOfflineWarmup = dynamic(() => import("@/components/NativeOfflineWarmup"), { ssr: false });
@@ -93,11 +93,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           {/* Anchors for every floating widget. Mounted before them so the
               portals find their host on first paint. */}
           <FloatingDockRoot />
-          {/* The gate renders children unchanged on web, and on any phone
-              that is not enrolled. It is deliberately INSIDE SessionProvider
-              (it calls signIn) and OUTSIDE FloatingChrome, so a locked app
-              does not show the radio button over its own lock screen. */}
-          <BiometricGate>{children}</BiometricGate>
+          {children}
           {/* Media chrome (Theatre Radio, background music, launcher) is
               non-critical and only mounts once the page is idle, keeping the
               initial load fast. The radio still activates well within its

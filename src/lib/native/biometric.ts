@@ -26,7 +26,11 @@ const KEYCHAIN_SERVER = 'ng.edu.unth.orm.device';
 const KEYCHAIN_USER = 'device-credential';
 
 type NativeBiometric = {
-  isAvailable: (opts?: { useFallback?: boolean }) => Promise<{ isAvailable: boolean; biometryType?: number }>;
+  isAvailable: (opts?: { useFallback?: boolean }) => Promise<{
+    isAvailable: boolean;
+    biometryType?: number;
+    errorCode?: number;
+  }>;
   verifyIdentity: (opts: Record<string, unknown>) => Promise<void>;
   setCredentials: (opts: { username: string; password: string; server: string }) => Promise<void>;
   getCredentials: (opts: { server: string }) => Promise<{ username: string; password: string }>;
@@ -46,16 +50,54 @@ async function plugin(): Promise<NativeBiometric | null> {
   }
 }
 
-/** True only inside the installed app, on a handset with usable biometrics enrolled. */
-export async function biometricAvailable(): Promise<boolean> {
+/**
+ * What the plugin reports, as a sentence.
+ *
+ * The codes come from BiometricAuthError in capacitor-native-biometric. The
+ * earlier version of this file threw all of them away and returned a bare
+ * boolean, which is why two rounds of "it does not work" produced no
+ * information at all and had to be guessed at. Anything the handset is
+ * willing to tell us is worth putting on screen.
+ */
+const ERROR_REASONS: Record<number, string> = {
+  1: 'This phone does not have a usable fingerprint sensor.',
+  2: 'Too many failed attempts — fingerprint is locked until you unlock the phone with your PIN.',
+  3: 'No fingerprints are saved on this phone. Add one in Android Settings, under Security.',
+  4: 'Too many attempts. Wait about thirty seconds and try again.',
+  10: 'That fingerprint was not recognised.',
+  11: 'The fingerprint check was cancelled.',
+  13: 'The screen was off or the app was in the background.',
+  14: 'This phone has no screen lock set. Add a PIN or pattern first, in Android Settings.',
+  15: 'Android cancelled the fingerprint check.',
+  16: 'Cancelled.',
+  17: 'You chose to use your password instead.',
+};
+
+export interface BiometricStatus {
+  available: boolean;
+  /** Plain-language reason when unavailable; null when it is fine. */
+  reason: string | null;
+}
+
+export async function biometricStatus(): Promise<BiometricStatus> {
   const nb = await plugin();
-  if (!nb) return false;
+  if (!nb) return { available: false, reason: null }; // web: say nothing
   try {
     const r = await nb.isAvailable({ useFallback: false });
-    return !!r?.isAvailable;
+    if (r?.isAvailable) return { available: true, reason: null };
+    const code = typeof r?.errorCode === 'number' ? r.errorCode : 0;
+    return {
+      available: false,
+      reason: ERROR_REASONS[code] ?? 'Fingerprint sign-in is not available on this phone.',
+    };
   } catch {
-    return false;
+    return { available: false, reason: null };
   }
+}
+
+/** Kept for callers that only need the boolean. */
+export async function biometricAvailable(): Promise<boolean> {
+  return (await biometricStatus()).available;
 }
 
 /** Whether this phone has already been enrolled for its owner. */
@@ -92,24 +134,48 @@ export async function hasStoredCredential(): Promise<boolean> {
  */
 const PROMPT_TIMEOUT_MS = 20_000;
 
-export async function promptFingerprint(reason: string): Promise<boolean> {
+export interface PromptResult {
+  ok: boolean;
+  /** Shown to the person when ok is false. Never blank. */
+  message: string;
+}
+
+/**
+ * Show the system fingerprint prompt.
+ *
+ * Returns a REASON, not just false. An unexplained failure is what turned
+ * this into two rounds of guesswork: the screen said "that did not work"
+ * whether the sensor was wet, the phone had no fingerprints saved, or the
+ * prompt never appeared at all.
+ *
+ * It never throws, and it never hangs.
+ */
+export async function promptFingerprint(reason: string): Promise<PromptResult> {
   const nb = await plugin();
-  if (!nb) return false;
+  if (!nb) return { ok: false, message: 'Fingerprint sign-in is not available here.' };
+
+  // Ask first, so "no fingerprints saved on this phone" is reported as that
+  // rather than as a prompt that silently does nothing.
+  const status = await biometricStatus();
+  if (!status.available) {
+    return {
+      ok: false,
+      message: status.reason ?? 'Fingerprint sign-in is not available on this phone.',
+    };
+  }
+
   try {
     const verify = nb.verifyIdentity({
       reason,
       title: 'UNTH Theatre ORM',
       subtitle: reason,
-      // No "use PIN instead" fallback: the app's own password box is the
-      // fallback, and it authenticates the ACCOUNT. A device PIN only proves
-      // someone can unlock the handset, which on a shared bench is not the
-      // same question.
+      // No device-PIN fallback: the app's own password box is the fallback,
+      // and it authenticates the ACCOUNT. A device PIN only proves someone
+      // can unlock the handset, which is not the same question.
       useFallback: false,
       negativeButtonText: 'Use password',
     });
 
-    // Race it. A timeout counts as a refusal, which sends the caller to the
-    // password box — the one outcome that always works.
     const timedOut = Symbol('timeout');
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<typeof timedOut>((resolve) => {
@@ -117,21 +183,27 @@ export async function promptFingerprint(reason: string): Promise<boolean> {
     });
 
     try {
-      const result = await Promise.race([verify.then(() => 'ok' as const), deadline]);
-      if (result === timedOut) {
-        console.warn('[biometric] the system prompt did not respond; falling back to password');
-        return false;
+      const outcome = await Promise.race([verify.then(() => 'ok' as const), deadline]);
+      if (outcome === timedOut) {
+        console.warn('[biometric] the system prompt never responded');
+        return {
+          ok: false,
+          message:
+            'The fingerprint screen did not open on this phone. This can happen on some handsets.',
+        };
       }
-      return true;
+      return { ok: true, message: '' };
     } finally {
       if (timer) clearTimeout(timer);
-      // The abandoned verify promise may still reject later with nobody
-      // listening, which Node and some WebViews report as an unhandled
-      // rejection. Swallow it explicitly.
+      // The abandoned promise may still reject with nobody listening, which
+      // some WebViews report as an unhandled rejection.
       void verify.catch(() => undefined);
     }
-  } catch {
-    return false;
+  } catch (e) {
+    // The plugin rejects with a message and sometimes a numeric code.
+    const code = Number((e as { code?: unknown })?.code);
+    const mapped = Number.isFinite(code) ? ERROR_REASONS[code] : undefined;
+    return { ok: false, message: mapped ?? 'That fingerprint was not recognised.' };
   }
 }
 
