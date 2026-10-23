@@ -836,20 +836,37 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     self.registration.showNotification(data.title, options)
-      .then(() => {
-        // For emergencies, also notify all connected clients to trigger audio
-        if (isEmergency) {
-          return self.clients.matchAll({ type: 'window' }).then((clients) => {
-            clients.forEach((client) => {
-              client.postMessage({
-                type: 'EMERGENCY_PUSH',
-                priority: data.priority || 'HIGH',
-                timestamp: Date.now(),
-              });
+      .then(() => self.clients.matchAll({ type: 'window' }).then((clients) => {
+        if (!clients.length) return;
+        clients.forEach((client) => {
+          // The emergency cue, unchanged: emergency-display listens for it.
+          if (isEmergency) {
+            client.postMessage({
+              type: 'EMERGENCY_PUSH',
+              priority: data.priority || 'HIGH',
+              timestamp: Date.now(),
             });
+          }
+          // SPEAK THE MESSAGE, on every push, not only emergencies.
+          //
+          // A notification tone tells somebody that something happened and
+          // nothing about what, so they stop what they are doing and look.
+          // The words are already here; the page can read them out in the
+          // same voice the theatre radio uses.
+          //
+          // Only a PAGE can do this. A closed app has no process to run a
+          // voice in, which is why the tone still matters and why this is a
+          // best effort rather than the mechanism.
+          client.postMessage({
+            type: 'PUSH_SPEAK',
+            title: data.title || '',
+            body: data.body || '',
+            priority: data.priority || null,
+            tag: options.tag,
+            timestamp: Date.now(),
           });
-        }
-      })
+        });
+      }))
   );
 });
 

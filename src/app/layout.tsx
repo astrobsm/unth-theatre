@@ -6,6 +6,7 @@ import ToasterProvider from "@/components/ToasterProvider";
 import BlockerProvider from "@/components/blockers/BlockerProvider";
 import InstallAppButton from "@/components/InstallAppButton";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
+import SpokenPushAnnouncer from "@/components/SpokenPushAnnouncer";
 import ChunkErrorReloader from "@/components/ChunkErrorReloader";
 
 // SELF-HOSTED, not next/font/google.
@@ -86,6 +87,8 @@ export default function RootLayout({
             happen only inside the dashboard — never on the login screen, which
             is the one page an uninstalled visitor is guaranteed to see. */}
         <ServiceWorkerRegistrar />
+        {/* Reads an arriving push out loud, where a page is open to do it. */}
+        <SpokenPushAnnouncer />
         <Providers>{children}</Providers>
         <ToasterProvider />
         {/* Mounted ONCE, here, on purpose. The global fetch interceptor sees
