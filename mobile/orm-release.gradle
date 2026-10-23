@@ -1,0 +1,72 @@
+// ============================================================
+// Version and release signing for the Android app
+// ------------------------------------------------------------
+// APPLIED ON TOP of the build.gradle Capacitor generates, rather than edited
+// into it, because android/ is gitignored and regenerated: anything written
+// into the generated file is lost on the next `cap add android` and nobody
+// finds out until a release goes out unsigned, or with a versionCode Android
+// refuses to install over the copy already on the phone.
+//
+// scripts/mobile/patch-gradle.js copies this file and version.properties into
+// android/app/ and appends the one line that applies it.
+// ============================================================
+
+def versionPropsFile = file("version.properties")
+def versionProps = new Properties()
+if (versionPropsFile.exists()) {
+    versionProps.load(new FileInputStream(versionPropsFile))
+}
+
+// THE KEYSTORE LIVES OUTSIDE THE REPOSITORY and must never be committed:
+// anyone holding it can publish an update Android accepts as this app. It
+// must also never be LOST — every future release has to be signed with the
+// same key, or installed copies cannot be upgraded in place and every user
+// must uninstall first, losing anything held locally.
+def keystorePropsFile = file(System.getProperty("user.home") + "/ORM-signing/keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
+android {
+    defaultConfig {
+        if (versionProps["versionCode"]) {
+            versionCode versionProps["versionCode"].toString().toInteger()
+            versionName versionProps["versionName"].toString()
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProps["storeFile"]) {
+                storeFile file(keystoreProps["storeFile"])
+                storePassword keystoreProps["storePassword"]
+                keyAlias keystoreProps["keyAlias"]
+                keyPassword keystoreProps["keyPassword"]
+
+                // ALL FOUR SCHEMES, explicitly.
+                //
+                // The first release went out with v1 and v2 only and an Oppo
+                // handset refused it. The APK was aligned, correctly signed
+                // and byte-identical to the one downloaded, so the only thing
+                // left to rule out was that some OEM verifiers are stricter
+                // than stock Android about v3. Enabling them costs nothing.
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Falls back to an unsigned build when the keystore is absent, so
+            // a checkout on another machine still compiles rather than failing
+            // with a message about a file it was never given.
+            if (keystoreProps["storeFile"]) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}

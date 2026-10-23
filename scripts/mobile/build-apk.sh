@@ -18,6 +18,12 @@
 #       push plugin cannot register a device and native notifications never
 #       arrive.
 #
+#   mobile/orm-release.gradle + version.properties  ->  android/app/
+#       The app's versionCode/versionName and the release signing config,
+#       applied on top of the generated build.gradle. Without them a release
+#       builds UNSIGNED and keeps versionCode 1, which Android refuses to
+#       install over an existing copy.
+#
 #   android/local.properties
 #       The SDK path, with FORWARD SLASHES. A Java .properties file treats a
 #       backslash as an escape, so C:\Users\... silently becomes garbage and
@@ -68,6 +74,39 @@ else
   say "WARNING: mobile/google-services.json is missing."
   say "         The app will build, install and run, but it cannot register"
   say "         for push and native notifications will never arrive."
+fi
+
+# ── Version and release signing ─────────────────────────────────────
+# Both live in tracked files under mobile/ and are applied on top of the
+# generated build.gradle. See scripts/mobile/patch-gradle.js.
+node scripts/mobile/patch-gradle.js || { say "FAILED: could not apply mobile/orm-release.gradle"; exit 1; }
+
+# ── The launcher icon and splash, regenerated from assets/ ──────────────
+# android/ is gitignored, so a fresh clone has Capacitor's default icon until
+# this runs. assets/logo.png is the hospital mark; make-icons builds the
+# adaptive-icon foreground and background from it, capacitor-assets fans those
+# out into every density, and shrink-splash undoes the 4 MB of full-colour PNG
+# that step writes for what is a mark on a flat field.
+ASSET_COLOURS="--iconBackgroundColor #FBFBF8 --iconBackgroundColorDark #15323B"
+ASSET_COLOURS="$ASSET_COLOURS --splashBackgroundColor #FBFBF8"
+ASSET_COLOURS="$ASSET_COLOURS --splashBackgroundColorDark #15323B"
+
+if [ ! -f assets/logo.png ]; then
+  say "WARNING: no assets/logo.png — shipping Capacitor's default icon."
+else
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/mobile/make-icons.ps1
+  else
+    node scripts/mobile/make-icons.js   # needs sharp; the PowerShell one does not
+  fi
+  if [ $? -ne 0 ]; then say "WARNING: icon sources not rebuilt; using assets/ as-is"; fi
+
+  # shellcheck disable=SC2086  # ASSET_COLOURS is a flag list and must split
+  if npx --no-install capacitor-assets generate --android $ASSET_COLOURS; then
+    node scripts/mobile/shrink-splash.js || say "WARNING: splash not shrunk; APK will be ~2MB larger"
+  else
+    say "WARNING: capacitor-assets failed; the build will use the default icon"
+  fi
 fi
 
 # Forward slashes. See the header.

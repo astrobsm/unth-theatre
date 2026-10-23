@@ -25,8 +25,10 @@ export const metadata: Metadata = {
 };
 
 /** Bumped whenever a new APK is published, so the page never claims a stale one. */
-const APK_VERSION = '1.0';
-const APK_SIZE = '3.9 MB';
+const APK_VERSION = '1.1';
+const APK_SIZE = '5.7 MB';
+/** The release tag the file hangs off. Keep in step with APK_VERSION. */
+const APK_TAG = 'android-v1.1';
 /** From `apksigner verify --print-certs`. Lets a cautious person check the file. */
 const APK_SHA1 = 'ce:df:98:17:8f:64:f7:3c:18:83:bb:1e:b8:0a:b5:9f:87:6b:0d:18';
 
@@ -55,14 +57,13 @@ export default function DownloadsPage() {
                 Version {APK_VERSION} · {APK_SIZE} · Android 6.0 or newer
               </p>
 
-              {/* Served from a GitHub release, not from this deployment.
-                  A 4 MB binary in git history grows the repository by that
-                  much per release for ever, and pushing one over the
-                  hospital link times out — the attempt returned HTTP 408
-                  three times. The release holds the file; git holds the
-                  recipe that builds it. */}
+              {/* The hospital's own address, which redirects to the release
+                  holding the file — see ./android/route.ts. Staff should not
+                  be asked to tap a github.com URL to install a hospital
+                  system; an address nobody recognises is where a careful
+                  person stops. */}
               <a
-                href="https://github.com/astrobsm/unth-theatre/releases/download/android-v1.0/orm-unth.apk"
+                href="/downloads/android"
                 download
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#0F7A6C] px-6 py-3 text-lg font-semibold text-white hover:bg-[#0C6558]"
               >
@@ -73,20 +74,32 @@ export default function DownloadsPage() {
               <div className="mt-6 rounded-xl bg-[#FBF0E8] p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-[#B4531A]">
                   <ShieldCheck className="h-5 w-5" />
-                  Your phone will warn you. That is expected.
+                  Android will ask you twice. Both are normal.
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-[#7A4420]">
-                  This app is not on the Play Store, so Android will say it is from an
-                  unknown source. The warning is doing its job — it cannot tell a hospital
-                  app from anything else. You are allowing this one file, not switching the
-                  protection off.
+                  This is hospital software, distributed by the hospital rather than
+                  through the Play Store. Android cannot tell who wrote it, so it asks you
+                  to confirm &mdash; once before installing and sometimes again afterwards.
+                  Neither message means anything is wrong with the app, and you are
+                  allowing this one file, not turning your protection off.
                 </p>
                 <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-[#7A4420]">
                   <li>Tap <b>Download the app</b> above.</li>
                   <li>Open the downloaded file. Android asks about unknown sources.</li>
-                  <li>Tap <b>Settings</b> → turn on <b>Allow from this source</b> → go back.</li>
-                  <li>Tap <b>Install</b>, then <b>Open</b>.</li>
+                  <li>Tap <b>Settings</b> &rarr; turn on <b>Allow from this source</b> &rarr; go back.</li>
+                  <li>Tap <b>Install</b>.</li>
+                  <li>
+                    If a second box says <b>Unsafe app blocked</b> or offers to scan the
+                    app, choose <b>Install anyway</b> or <b>Send for scanning</b>. This is
+                    Google Play Protect, and it says this about every app not on the Play
+                    Store.
+                  </li>
+                  <li>Tap <b>Open</b>.</li>
                 </ol>
+                <p className="mt-3 text-sm text-[#7A4420]">
+                  If you would rather not do this yourself, bring your phone to the theatre
+                  manager and it will be installed for you.
+                </p>
               </div>
 
               <details className="mt-4">
@@ -119,7 +132,7 @@ export default function DownloadsPage() {
 
               <ol className="mt-4 list-decimal space-y-2 pl-5 text-[#3D5A63]">
                 <li>
-                  Open <b>unth-theatre-mai.vercel.app</b> in <b>Microsoft Edge</b> or{' '}
+                  Open <b>unth-theatre.link</b> in <b>Microsoft Edge</b> or{' '}
                   <b>Google Chrome</b>.
                 </li>
                 <li>
