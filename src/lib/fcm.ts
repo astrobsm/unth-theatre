@@ -195,15 +195,31 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload): 
   }
 }
 
-/** Push to every device whose owner has one of the given roles. */
+/**
+ * Push to every device whose owner CURRENTLY holds one of the given roles.
+ *
+ * Resolved through the users table, not through DeviceToken.userRole.
+ *
+ * That column is written when a device registers and never again, so it is a
+ * record of what somebody was the day they installed the app. A nurse
+ * promoted to theatre manager went on receiving nurse alerts and none of the
+ * managers’; a suspended account kept receiving everything, because the
+ * column also carries no status. Role-based alerts therefore reached a
+ * DIFFERENT SET OF PEOPLE on Android than on the web, where
+ * sendWebPushToRoles has always resolved through the users table.
+ *
+ * Both transports now answer “who holds this role” the same way, which is the
+ * only way a role-based notice can mean one thing.
+ */
 export async function sendPushToRoles(roles: string[], payload: PushPayload): Promise<void> {
   if (!isFcmConfigured() || roles.length === 0) return;
   try {
-    const rows = await prisma.deviceToken.findMany({
-      where: { userRole: { in: roles } },
-      select: { token: true },
+    const users = await prisma.user.findMany({
+      where: { role: { in: roles as never[] }, status: 'APPROVED' as never },
+      select: { id: true },
     });
-    await sendToTokens(rows.map((r) => r.token), payload);
+    if (users.length === 0) return;
+    await sendPushToUsers(users.map((u) => u.id), payload);
   } catch (err) {
     console.error('[fcm] sendPushToRoles error', err);
   }
