@@ -17,6 +17,7 @@
 // ============================================================
 
 import type { Metadata } from 'next';
+import DesktopInstallButton from '@/components/DesktopInstallButton';
 import { Smartphone, Monitor, ShieldCheck, Download, CircleHelp } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -126,24 +127,16 @@ export default function DownloadsPage() {
               <p className="mt-1 text-[#3D5A63]">Windows, Mac or Linux</p>
 
               <p className="mt-4 rounded-xl bg-[#E4F2EE] p-4 text-[#15323B]">
-                <b>There is no file to download.</b> The app installs itself from your
-                browser, in about five seconds, and updates itself from then on.
+                <b>There is no file to download, and that is deliberate.</b> An installer
+                downloaded from the web makes Windows warn you the same way your phone
+                does. Installing from the browser raises no warning at all, takes about
+                five seconds, and updates itself from then on.
               </p>
 
-              <ol className="mt-4 list-decimal space-y-2 pl-5 text-[#3D5A63]">
-                <li>
-                  Open <b>unth-theatre.link</b> in <b>Microsoft Edge</b> or{' '}
-                  <b>Google Chrome</b>.
-                </li>
-                <li>
-                  Look at the right-hand end of the address bar for a small{' '}
-                  <b>install icon</b> — a screen with a downward arrow.
-                </li>
-                <li>
-                  Click it, then <b>Install</b>. If you cannot see it, open the browser menu
-                  (<b>⋯</b>) and choose <b>Apps → Install this site as an app</b>.
-                </li>
-              </ol>
+              {/* A button rather than three steps, where the browser allows it.
+                  "Look for an icon in your address bar" is not an answer to
+                  "where is the desktop version" — it is a treasure hunt. */}
+              <DesktopInstallButton />
 
               <p className="mt-4 text-sm text-[#3D5A63]">
                 It then opens in its own window with its own icon, like any other program,
