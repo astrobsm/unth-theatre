@@ -4,11 +4,14 @@
  * PushNotificationRegistrar
  * -------------------------
  * Runs ONLY inside the installed native app (Capacitor). It:
- *   1. Requests notification permission.
- *   2. Registers the device with Firebase Cloud Messaging (FCM / APNs).
- *   3. Sends the device token to the server (/api/device-tokens) so the backend
+ *   1. Creates the Android notification channels the server sends to, at
+ *      MAX importance, so alerts behave like a messaging app rather than
+ *      sliding silently into the shade.
+ *   2. Requests notification permission.
+ *   3. Registers the device with Firebase Cloud Messaging (FCM / APNs).
+ *   4. Sends the device token to the server (/api/device-tokens) so the backend
  *      can deliver real-time push notifications even when the app is closed.
- *   4. Deep-links to the relevant page when a notification is tapped.
+ *   5. Deep-links to the relevant page when a notification is tapped.
  *
  * On the web (PWA/browser) this component is a no-op — the existing web-push /
  * in-app notification systems keep working there. Everything is loaded via
@@ -27,6 +30,38 @@ export default function PushNotificationRegistrar() {
         if (!Capacitor?.isNativePlatform?.()) return; // web → no-op
 
         const { PushNotifications } = await import('@capacitor/push-notifications');
+
+        // CHANNELS FIRST, before permission and before registering.
+        //
+        // The server sends to channelId 'orm_alerts'. On Android 8+ a
+        // notification aimed at a channel that does not exist is not shown as
+        // sent: Firebase falls back to its own "Miscellaneous" channel at
+        // DEFAULT importance, so it arrives silently in the shade with no
+        // banner and no sound. Creating the channels here, on every app
+        // start, is cheap and idempotent — Android ignores a create for a
+        // channel that already exists, and crucially it will NOT lower one
+        // the user has adjusted, so this never overrides their choice.
+        if (Capacitor.getPlatform() === 'android') {
+          const { ORM_CHANNELS } = await import('@/lib/push/channels');
+          for (const c of ORM_CHANNELS) {
+            try {
+              await PushNotifications.createChannel({
+                id: c.id,
+                name: c.name,
+                description: c.description,
+                importance: c.importance,
+                visibility: c.visibility,
+                vibration: c.vibration,
+                lights: c.lights,
+              });
+            } catch (e) {
+              // One bad channel must not stop the others being created, and
+              // must not stop registration: a silent notification is far
+              // better than none.
+              console.warn('[push] could not create channel', c.id, e);
+            }
+          }
+        }
 
         // Ask for permission (Android 13+ / iOS require an explicit prompt).
         let perm = await PushNotifications.checkPermissions();

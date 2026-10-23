@@ -292,6 +292,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'staff_presence_checks', cls: 'APPEND_ONLY', why: 'One observation at one moment. Two nodes recording different checks both happened.' },
   { table: 'theatre_audit_conferences', cls: 'LWW', why: 'One sitting\u2019s record. Sealed by adoption in the application, not by the merge rule.' },
   { table: 'conference_attendees', cls: 'LWW', why: 'Who was in the room, and whether they were present. The latest correction stands.' },
+  { table: 'device_credentials', cls: 'LWW', why: 'One phone’s permission to sign its owner back in by fingerprint. Registered on one node and used on the other, so it must cross; the row changes only when it is revoked or its lastUsedAt moves, and the newest of those is the true one. The secret itself is never here — only a hash — so replicating it moves no credential.' },
   { table: 'radio_settings', cls: 'LWW', why: 'How loud the theatre radio plays. A singleton set from either side; the most recent adjustment is the right one, whoever made it and wherever from.' },
   { table: 'audit_summonses', cls: 'LWW', why: 'A summons raised by a job, then edited by people — acknowledged, excused, marked attended. A later edit of a field is a correction of it.' },
   { table: 'preop_review_assignments', cls: 'LWW', why: 'Who was expected to review tomorrow’s case and what became of it. Handback, reassignment and lapse all overwrite the same row.' },

@@ -9,6 +9,11 @@ import {
   type CredentialDeps,
 } from "@/lib/staffCredentials";
 import { handoffMessage, handoffState, hashHandoffToken } from "@/lib/hotspot/handoff";
+import {
+  DEVICE_SIGN_IN_FAILED,
+  decideCredential,
+  parseDeviceCredential,
+} from "@/lib/auth/deviceCredential";
 
 // The database side of credential checking, kept here so staffCredentials.ts
 // stays free of Prisma and can be tested without one.
@@ -128,6 +133,73 @@ export const authOptions: NextAuthOptions = {
         if (!user || user.status !== 'APPROVED') {
           throw new Error('This account is not active. Please contact the administrator.');
         }
+
+        return {
+          id: user.id,
+          name: user.fullName,
+          email: user.email,
+          role: user.role,
+        };
+      },
+    }),
+
+    // A THIRD provider, and for the same reason the handoff one is separate
+    // from the password one: these three authenticate different things and
+    // merging them would eventually let one be offered where another is
+    // expected. A password proves who you are. A handoff token proves the
+    // server itself signed you in a few minutes ago. This proves a particular
+    // phone was enrolled by you and has just had your fingerprint presented
+    // to it — and the fingerprint check happens on the handset, inside
+    // Android's biometric prompt, which is the only place it can happen.
+    //
+    // See lib/auth/deviceCredential.ts for why the secret is split, why it is
+    // not rotated, and what the ninety days are for.
+    CredentialsProvider({
+      id: "device",
+      name: "This device",
+      credentials: {
+        credential: { label: "Device credential", type: "text" },
+      },
+      async authorize(credentials) {
+        const parsed = parseDeviceCredential(credentials?.credential);
+        if (!parsed) {
+          console.warn("[auth.device] refused: malformed");
+          throw new Error(DEVICE_SIGN_IN_FAILED);
+        }
+
+        const row = await prisma.deviceCredential.findUnique({
+          where: { selector: parsed.selector },
+          select: { id: true, userId: true, verifierHash: true, expiresAt: true, revokedAt: true },
+        });
+
+        const now = new Date();
+        const decision = decideCredential(row, parsed.verifier, now);
+        if (!decision.ok) {
+          // The reason goes to the log, never to the caller. The difference
+          // between "no such device" and "wrong secret" is exactly what
+          // someone probing selectors wants, and the person holding the phone
+          // cannot act on it either way.
+          console.warn(`[auth.device] refused: ${decision.reason}`);
+          throw new Error(DEVICE_SIGN_IN_FAILED);
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: row!.userId } });
+
+        // The account may have been suspended since the phone was enrolled.
+        // Ninety days is a long time for that to happen in, and a revoked
+        // account must not walk back in through a credential it was holding.
+        if (!user || user.status !== "APPROVED") {
+          console.warn("[auth.device] refused: account not active");
+          throw new Error("This account is not active. Please contact the administrator.");
+        }
+
+        // Record the use. Deliberately NOT awaited into the failure path: if
+        // this write fails the sign-in still stands, because refusing a valid
+        // surgeon because a timestamp could not be stored is the worse of the
+        // two outcomes.
+        prisma.deviceCredential
+          .update({ where: { id: row!.id }, data: { lastUsedAt: now } })
+          .catch((e) => console.warn("[auth.device] could not record lastUsedAt", e));
 
         return {
           id: user.id,

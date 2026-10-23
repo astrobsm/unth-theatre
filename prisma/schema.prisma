@@ -6305,8 +6305,8 @@ model EmergencyPreAnaestheticReview {
   /// things somebody must DO before it starts, and a reader cannot act on
   /// the second if it is buried in the first.
   optimisationNeeded String?
-  consentObtained       Boolean @default(false)
-  consentNotes          String?
+  consentObtained    Boolean @default(false)
+  consentNotes       String?
 
   // Approval (by a consultant)
   approvedById   String?
@@ -13319,4 +13319,52 @@ model PostOpHeldMedication {
 
   @@index([noteId])
   @@map("post_op_held_medications")
+}
+
+/// A phone that may sign its owner back in with a fingerprint instead of a
+/// password. One row per device per user.
+///
+/// THE SECRET IS NOT STORED HERE. The phone holds it, in Android Keystore-
+/// backed storage behind the fingerprint prompt; this table holds only a hash,
+/// so a dump of the database cannot sign in as anybody. Same reasoning as the
+/// Wi-Fi handoff token, and deliberately a separate table from it: a handoff
+/// token is single-use and lives for minutes, this lives for months, and
+/// merging them would eventually let one be offered where the other is
+/// expected.
+///
+/// DELIBERATELY NOT ROTATED on each use, which is the one place this differs
+/// from how a bank app would do it. This table replicates between the cloud
+/// and the theatre server under last-write-wins, and two nodes rotating the
+/// same credential independently would leave the phone holding a secret that
+/// matches neither — locking a surgeon out mid-list to defend against an
+/// attacker who already has their unlocked phone and their fingerprint.
+/// Expiry, revocation and the Keystore/biometric gate carry the weight
+/// instead, and lastUsedAt makes a credential in two places visible.
+model DeviceCredential {
+  id String @id @default(uuid())
+
+  /// Public half: looked up directly, never secret. Separating it from the
+  /// verifier means the lookup is an indexed equality match rather than a
+  /// scan that compares every hash in the table.
+  selector     String @unique
+  /// SHA-256 of the secret half. Never the secret itself.
+  verifierHash String
+  userId       String
+
+  /// Shown to the user when they revoke a device, so "sign out my old phone"
+  /// is a decision they can actually make.
+  deviceLabel String?
+  platform    String  @default("android")
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  /// Hard stop. A phone left in a drawer stops being a way in.
+  expiresAt  DateTime
+  /// Set when the user revokes it, or when a replay is detected. Kept rather
+  /// than deleted so the audit trail survives.
+  revokedAt  DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("device_credentials")
 }

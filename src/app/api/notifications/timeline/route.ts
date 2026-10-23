@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { apiError } from '@/lib/apiError';
+import { withRelevance } from '@/lib/notifications/relevance';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,17 +21,44 @@ export async function GET(request: NextRequest) {
     const next24Hours = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const next1Hour = new Date(Date.now() + 60 * 60 * 1000);
 
-    // 1. Upcoming surgeries (next 24 hours)
+    // 1. Upcoming surgeries (next 24 hours) — MINE, not the hospital's.
+    //
+    // This query had no user filter at all: it fetched every scheduled case
+    // and showed it to whoever was looking. A porter got the paediatric
+    // surgery list, a laundry supervisor got a laminectomy running late, and
+    // twenty-three items of other people's work taught everybody to ignore
+    // the bell. See lib/notifications/relevance.ts; theatre managers and
+    // booking officers are still shown all of it, because the whole board is
+    // their job.
+    // Read the department here rather than widening the session token: the
+    // JWT is already issued to everyone and adding a field to it would not
+    // reach anyone who is signed in until their session rolled over, which
+    // for a 30-day session means this fix would land at different times for
+    // different people.
+    const viewerRecord = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { department: true },
+    });
+
+    const viewer = {
+      id: userId,
+      role: userRole,
+      department: viewerRecord?.department ?? null,
+    };
+
     const upcomingSurgeries = await prisma.surgery.findMany({
-      where: {
-        scheduledDate: {
-          gte: now,
-          lte: next24Hours,
+      where: withRelevance(
+        {
+          scheduledDate: {
+            gte: now,
+            lte: next24Hours,
+          },
+          status: {
+            in: ['SCHEDULED', 'IN_HOLDING_AREA', 'READY_FOR_THEATRE'],
+          },
         },
-        status: {
-          in: ['SCHEDULED', 'IN_HOLDING_AREA', 'READY_FOR_THEATRE'],
-        },
-      },
+        viewer,
+      ) as never,
       include: {
         patient: { select: { name: true, folderNumber: true } },
       },
