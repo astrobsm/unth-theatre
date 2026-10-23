@@ -30,6 +30,14 @@ describe('the lock screen always has a way past it', () => {
     expect(gate).toMatch(/onClick=\{markOpen\}/);
   });
 
+  it('never disables the escape hatch', () => {
+    // Being left tapping a greyed-out button is how the first real handset
+    // got stuck: "Scanning..." with nothing behind it.
+    const at = gate.indexOf('Use password instead');
+    const start = gate.lastIndexOf('<button', at);
+    expect(gate.slice(start, at)).not.toContain('disabled');
+  });
+
   it('fails OPEN on an unexpected error, never closed', () => {
     // A plugin error must not lock the theatre out of its own system.
     expect(gate).toMatch(/catch[\s\S]{0,200}markOpen\(\)/);
@@ -102,6 +110,35 @@ describe('signing out actually signs you out', () => {
   });
 });
 
+describe('the prompt can never hang for ever', () => {
+  it('races the system prompt against a timeout', () => {
+    // verifyIdentity does not always settle — a back-gesture dismissal, or a
+    // prompt that never displays, left the lock screen saying "Scanning..."
+    // with no way forward. On a hospital system that is a locked door, not a
+    // hung promise. This happened on a real handset.
+    expect(lib).toContain('PROMPT_TIMEOUT_MS');
+    expect(lib).toMatch(/Promise\.race/);
+  });
+
+  it('treats a timeout as a refusal, so the caller reaches the password', () => {
+    const at = lib.indexOf('export async function promptFingerprint');
+    const next = lib.indexOf('export async function', at + 1);
+    const body = lib.slice(at, next === -1 ? undefined : next);
+    expect(body).toMatch(/timedOut[\s\S]{0,200}return false/);
+  });
+});
+
+describe('a handset where the prompt never works stops being gated', () => {
+  it('counts consecutive failures and gives up', () => {
+    expect(gate).toContain('MAX_STRIKES');
+    expect(gate).toMatch(/readStrikes\(\) >= MAX_STRIKES[\s\S]{0,250}markOpen\(\)/);
+  });
+
+  it('clears the count once a fingerprint actually works', () => {
+    expect(gate).toMatch(/markUnlocked[\s\S]{0,160}writeStrikes\(0\)/);
+  });
+});
+
 describe('the device wrapper never throws at its callers', () => {
   it('returns a value on every path instead of propagating plugin errors', () => {
     for (const fn of [
@@ -113,7 +150,11 @@ describe('the device wrapper never throws at its callers', () => {
     ]) {
       const at = lib.indexOf(`export async function ${fn}`);
       expect(at, `${fn} is missing`).toBeGreaterThan(-1);
-      const body = lib.slice(at, at + 900);
+      // Slice to the next export rather than a fixed window: these functions
+      // grow, and a window that silently falls short would pass for the
+      // wrong reason.
+      const next = lib.indexOf('export async function', at + 1);
+      const body = lib.slice(at, next === -1 ? undefined : next);
       expect(body, `${fn} has no catch`).toContain('catch');
     }
   });

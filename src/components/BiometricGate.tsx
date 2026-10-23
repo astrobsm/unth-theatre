@@ -43,6 +43,36 @@ import {
  */
 const UNLOCKED_KEY = 'orm.biometric.unlocked';
 
+/**
+ * Consecutive launches where the fingerprint got nowhere.
+ *
+ * Some handsets simply will not show the prompt, and on those the gate is
+ * pure obstruction: the person taps through a lock screen to a password box
+ * every single time. After three, stop gating this device. The enrolment is
+ * left intact, so nothing is lost and a later fix can start using it again.
+ *
+ * localStorage, not sessionStorage: the whole point is to remember across
+ * launches.
+ */
+const STRIKES_KEY = 'orm.biometric.strikes';
+const MAX_STRIKES = 3;
+
+const readStrikes = (): number => {
+  try {
+    return Number(localStorage.getItem(STRIKES_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+};
+
+const writeStrikes = (n: number) => {
+  try {
+    localStorage.setItem(STRIKES_KEY, String(n));
+  } catch {
+    /* storage unavailable; the gate just keeps trying */
+  }
+};
+
 type Phase = 'checking' | 'locked' | 'working' | 'open';
 
 export default function BiometricGate({ children }: { children: React.ReactNode }) {
@@ -58,12 +88,19 @@ export default function BiometricGate({ children }: { children: React.ReactNode 
     setPhase('open');
   }, []);
 
+  /** Reached the app by fingerprint: the device works, forget the strikes. */
+  const markUnlocked = useCallback(() => {
+    writeStrikes(0);
+    markOpen();
+  }, [markOpen]);
+
   const unlock = useCallback(async () => {
     setFailed(false);
     setPhase('working');
 
     const ok = await promptFingerprint('Sign in to UNTH Theatre ORM');
     if (!ok) {
+      writeStrikes(readStrikes() + 1);
       setFailed(true);
       setPhase('locked');
       return;
@@ -94,8 +131,8 @@ export default function BiometricGate({ children }: { children: React.ReactNode 
       return;
     }
 
-    markOpen();
-  }, [markOpen]);
+    markUnlocked();
+  }, [markOpen, markUnlocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +160,15 @@ export default function BiometricGate({ children }: { children: React.ReactNode 
         if (cancelled) return;
 
         if (!available || !enrolled) {
+          markOpen();
+          return;
+        }
+
+        // This handset has failed to produce a working prompt too many times.
+        // Gating it again only puts a lock screen between the person and the
+        // password box they are going to use anyway.
+        if (readStrikes() >= MAX_STRIKES) {
+          console.warn('[biometric] giving up on this device after repeated failures');
           markOpen();
           return;
         }
@@ -174,28 +220,40 @@ export default function BiometricGate({ children }: { children: React.ReactNode 
 
         <p className="mt-2 text-sm text-[#9FBCC2]">
           {failed
-            ? 'That did not work. Try again, or sign in with your password.'
-            : 'Touch the fingerprint sensor to continue.'}
+            ? 'That did not work. Sign in with your password, or try the sensor again.'
+            : phase === 'working'
+              ? 'Touch the fingerprint sensor. If nothing appears, use your password.'
+              : 'Touch the fingerprint sensor to continue.'}
         </p>
+
+        {/* ALWAYS PRESENT AND NEVER DISABLED. Someone who cannot use the
+            sensor right now must not have to fail first to find the way
+            past it — and must never be left tapping a greyed-out button.
+            After a failure it becomes the primary action, because by then
+            the password is what they actually want. */}
+        <button
+          type="button"
+          onClick={markOpen}
+          className={
+            failed
+              ? 'mt-7 w-full rounded-xl bg-[#0F7A6C] px-5 py-3 font-semibold text-white'
+              : 'mt-7 w-full rounded-xl border border-white/40 px-5 py-3 font-medium text-white'
+          }
+        >
+          Use password instead
+        </button>
 
         <button
           type="button"
           onClick={() => void unlock()}
           disabled={phase === 'working'}
-          className="mt-7 w-full rounded-xl bg-[#0F7A6C] px-5 py-3 font-semibold text-white disabled:opacity-60"
+          className={
+            failed
+              ? 'mt-3 w-full rounded-xl border border-white/25 px-5 py-3 font-medium text-white disabled:opacity-60'
+              : 'mt-3 w-full rounded-xl bg-[#0F7A6C] px-5 py-3 font-semibold text-white disabled:opacity-60'
+          }
         >
           {phase === 'working' ? 'Scanning…' : 'Try fingerprint again'}
-        </button>
-
-        {/* ALWAYS PRESENT, not revealed after a failure. Someone who cannot
-            use the sensor right now must not have to fail first to find the
-            way past it. */}
-        <button
-          type="button"
-          onClick={markOpen}
-          className="mt-3 w-full rounded-xl border border-white/25 px-5 py-3 font-medium text-white"
-        >
-          Use password instead
         </button>
       </div>
     </div>

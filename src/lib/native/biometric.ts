@@ -80,11 +80,23 @@ export async function hasStoredCredential(): Promise<boolean> {
  * them: there is nothing useful the person can do differently, and the one
  * thing they must always be offered is the same either way.
  */
+/**
+ * How long to wait for the system prompt before giving up on it.
+ *
+ * verifyIdentity DOES NOT ALWAYS SETTLE. Dismissing the sheet with a back
+ * gesture, or the prompt failing to display at all, can leave the promise
+ * pending for ever — and an await that never returns left the lock screen
+ * saying "Scanning..." with no way forward. On a hospital system that is not
+ * a hung promise, it is a locked door. Twenty seconds is far longer than a
+ * real scan and still short enough that nobody stands there wondering.
+ */
+const PROMPT_TIMEOUT_MS = 20_000;
+
 export async function promptFingerprint(reason: string): Promise<boolean> {
   const nb = await plugin();
   if (!nb) return false;
   try {
-    await nb.verifyIdentity({
+    const verify = nb.verifyIdentity({
       reason,
       title: 'UNTH Theatre ORM',
       subtitle: reason,
@@ -95,7 +107,29 @@ export async function promptFingerprint(reason: string): Promise<boolean> {
       useFallback: false,
       negativeButtonText: 'Use password',
     });
-    return true;
+
+    // Race it. A timeout counts as a refusal, which sends the caller to the
+    // password box — the one outcome that always works.
+    const timedOut = Symbol('timeout');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<typeof timedOut>((resolve) => {
+      timer = setTimeout(() => resolve(timedOut), PROMPT_TIMEOUT_MS);
+    });
+
+    try {
+      const result = await Promise.race([verify.then(() => 'ok' as const), deadline]);
+      if (result === timedOut) {
+        console.warn('[biometric] the system prompt did not respond; falling back to password');
+        return false;
+      }
+      return true;
+    } finally {
+      if (timer) clearTimeout(timer);
+      // The abandoned verify promise may still reject later with nobody
+      // listening, which Node and some WebViews report as an unhandled
+      // rejection. Swallow it explicitly.
+      void verify.catch(() => undefined);
+    }
   } catch {
     return false;
   }
