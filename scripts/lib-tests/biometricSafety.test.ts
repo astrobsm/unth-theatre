@@ -20,6 +20,8 @@ const enrol = read('src', 'components', 'BiometricEnrolment.tsx');
 const loginPage = read('src', 'app', 'auth', 'login', 'page.tsx');
 const providers = read('src', 'app', 'providers.tsx');
 const dashboardLayout = read('src', 'app', 'dashboard', 'layout.tsx');
+const setting = read('src', 'components', 'FingerprintSetting.tsx');
+const settingsPage = read('src', 'app', 'dashboard', 'settings', 'page.tsx');
 
 describe('nothing stands in front of the password box', () => {
   it('the blocking lock gate is gone, not merely unmounted', () => {
@@ -43,6 +45,58 @@ describe('nothing stands in front of the password box', () => {
   it('hides itself rather than offering a button that cannot work', () => {
     expect(signin).toMatch(/if \(!show\) return null/);
     expect(signin).toMatch(/status\.available && enrolled/);
+  });
+});
+
+describe('the feature can be found', () => {
+  // The bug report was "I cannot find the biometric sign-in", and it was
+  // right: the login button only appears once a phone is enrolled, and the
+  // only way to enrol was a card shown once that vanished for good when
+  // dismissed. Three dead ends and no door.
+  it('has a permanent home in Settings', () => {
+    expect(settingsPage).toContain('<FingerprintSetting />');
+    expect(settingsPage).toContain("from '@/components/FingerprintSetting'");
+  });
+
+  it('can turn it on AND off from there', () => {
+    expect(setting).toMatch(/Turn on fingerprint sign-in/);
+    expect(setting).toMatch(/Turn off fingerprint sign-in/);
+  });
+
+  it('explains itself rather than hiding when unavailable', () => {
+    // "No such setting" and "your phone has no fingerprints saved" look
+    // identical when the answer is a missing row, and only one of them is
+    // something the person can go and fix.
+    expect(setting).toContain('status.reason');
+    expect(setting).not.toMatch(/if \(!status\.available\) return null/);
+  });
+
+  it('does not grey out the button when the phone reports a problem', () => {
+    // A disabled button with no explanation is what sent somebody looking
+    // for a setting that was in front of them.
+    expect(setting).toMatch(/disabled=\{busy\}/);
+    expect(setting).not.toMatch(/disabled=\{busy \|\| !status/);
+  });
+
+  it('lets enabling here undo an earlier "Not now"', () => {
+    expect(setting).toMatch(/removeItem\(DECLINED_KEY\)/);
+  });
+
+  it('turning it off revokes server-side as well as locally', () => {
+    const at = setting.indexOf('const disable');
+    expect(at).toBeGreaterThan(-1);
+    const body = setting.slice(at, at + 900);
+    expect(body).toContain('DELETE');
+    expect(body).toContain('forgetCredential()');
+  });
+
+  it('proves the sensor works before enabling it', () => {
+    const at = setting.indexOf('const enable');
+    const body = setting.slice(at, setting.indexOf('const disable'));
+    const verifyAt = body.indexOf('promptFingerprint');
+    const storeAt = body.indexOf('storeCredential');
+    expect(verifyAt).toBeGreaterThan(-1);
+    expect(storeAt).toBeGreaterThan(verifyAt);
   });
 });
 

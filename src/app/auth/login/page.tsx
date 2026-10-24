@@ -20,6 +20,10 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // Default ON, because thirty days is what the app already did before there
+  // was a checkbox to describe it. Unticking is the new capability here, not
+  // ticking.
+  const [keepSignedIn, setKeepSignedIn] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -161,6 +165,17 @@ export default function LoginPage() {
           window.location.href = '/dashboard';
       }
       return;
+    }
+
+    // Record the choice BEFORE signing in, so the guard on the next cold
+    // start sees it even if the redirect happens immediately. Written on
+    // every sign-in, so changing your mind on a shared phone takes effect
+    // from that sign-in rather than from the first one ever made here.
+    try {
+      localStorage.setItem('orm.keepSignedIn', keepSignedIn ? '1' : '0');
+      sessionStorage.setItem('orm.sessionLaunchChecked', '1');
+    } catch {
+      /* storage unavailable: the default is to keep you signed in */
     }
 
     try {
@@ -475,6 +490,22 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <input
+              id="keepSignedIn"
+              type="checkbox"
+              checked={keepSignedIn}
+              onChange={(e) => setKeepSignedIn(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <label htmlFor="keepSignedIn" className="text-sm text-gray-700">
+              Keep me signed in on this device
+              <span className="block text-xs text-gray-500">
+                Untick on a phone or computer other people use.
+              </span>
+            </label>
           </div>
 
           <div>

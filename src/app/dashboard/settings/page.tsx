@@ -1,5 +1,6 @@
 'use client';
 
+import FingerprintSetting from '@/components/FingerprintSetting';
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useOfflineContext } from '@/components/OfflineProvider';
@@ -296,6 +297,13 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        {/* Fingerprint sign-in. FIRST, because the whole reason this card
+            exists is that the feature could not be found: the login-page
+            button only appears once a phone is enrolled, and the one-time
+            offer to enrol vanished for good once dismissed. Renders nothing
+            on a computer. */}
+        <FingerprintSetting />
+
         {/* App Update Section */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">

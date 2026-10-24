@@ -22,6 +22,9 @@ const PushNotificationRegistrar = dynamic(() => import("@/components/PushNotific
 // gate in front of the app put a dead screen between staff and a hospital
 // system on a handset whose fingerprint prompt never appeared.
 const BiometricEnrolment = dynamic(() => import("@/components/BiometricEnrolment"), { ssr: false });
+// Honours the "Keep me signed in" tick box. Does nothing unless it was
+// explicitly unticked, so it can never sign anybody out by accident.
+const SessionLifetimeGuard = dynamic(() => import("@/components/SessionLifetimeGuard"), { ssr: false });
 // Native offline-first warm-up — auto-caches the whole app on the device (native only).
 const NativeOfflineWarmup = dynamic(() => import("@/components/NativeOfflineWarmup"), { ssr: false });
 // Native shell auto-update check — prompts to install a newer APK (native only).
@@ -107,6 +110,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <DeferUntilIdle>
             <PushNotificationRegistrar />
             <BiometricEnrolment />
+            <SessionLifetimeGuard />
             <NativeOfflineWarmup />
             <NativeUpdateChecker />
             <AppUpdateChecker />

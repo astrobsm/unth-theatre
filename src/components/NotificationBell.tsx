@@ -209,9 +209,16 @@ export default function NotificationBell() {
         <span className={`absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-gray-300'}`} />
       </button>
 
-      {/* Dropdown Panel */}
+      {/* Dropdown Panel.
+          WIDTH IS CLAMPED TO THE VIEWPORT, not fixed at w-96. w-96 is 384px;
+          a theatre phone is around 360px wide, so the panel was wider than
+          the screen and, being anchored to the bell at the top right, it
+          overflowed the LEFT edge — every line of every alert lost its first
+          few words. It read as a styling quirk, but it meant nobody could
+          see which patient an alert was about. 24px of margin keeps it clear
+          of both edges; the 24rem cap leaves the desktop exactly as it was. */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 max-h-[80vh] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden">
+        <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-[24rem] max-h-[80vh] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white">
             <div className="flex items-center justify-between">
