@@ -18,7 +18,7 @@
 import { NextResponse } from 'next/server';
 
 /** Keep in step with APK_TAG in ../page.tsx. */
-const APK_TAG = 'android-v1.6';
+const APK_TAG = 'android-v1.7';
 
 export const dynamic = 'force-dynamic';
 

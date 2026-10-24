@@ -56,6 +56,43 @@ describe('no native call can hang', () => {
   });
 });
 
+describe('loading the plugin is itself a network call', () => {
+  it('bounds the dynamic imports', () => {
+    // THE BUG THAT KEPT COMING BACK. This app loads from server.url, so
+    // `await import('capacitor-native-biometric')` is a DOWNLOAD. Every
+    // guarded() call awaits plugin() first, so on a slow line nothing ever
+    // reached the guards — the lock screen and the settings card both
+    // stopped here, not in the plugin call that kept getting timeouts.
+    const at = lib.indexOf('async function plugin(');
+    expect(at).toBeGreaterThan(-1);
+    const body = lib.slice(at, lib.indexOf(String.fromCharCode(10) + '}', at));
+    expect(body, 'plugin() loads its modules unguarded').toContain('guarded');
+    expect(lib).toContain('MODULE_LOAD_TIMEOUT_MS');
+  });
+
+  it('gives the download longer than a local call', () => {
+    const local = Number(lib.match(/PLUGIN_TIMEOUT_MS = ([\d_]+)/)?.[1]?.replace(/_/g, ''));
+    const download = Number(lib.match(/MODULE_LOAD_TIMEOUT_MS = ([\d_]+)/)?.[1]?.replace(/_/g, ''));
+    expect(download).toBeGreaterThan(local);
+  });
+
+  it('does not cache a failure', () => {
+    // Caching null would condemn the phone for the rest of the session on
+    // the strength of one bad moment of signal.
+    expect(lib).toMatch(/if \(loaded\) cachedPlugin = loaded/);
+  });
+});
+
+describe('the settings button has a deadline of its own', () => {
+  it('clears itself even if an unanticipated await never returns', () => {
+    // Three separate hangs, three different unbounded awaits. The pattern is
+    // not "that one call", it is "an await nobody thought to bound".
+    expect(setting).toContain('OVERALL_DEADLINE_MS');
+    expect(setting).toMatch(/setTimeout\([\s\S]{0,200}setBusy\(false\)/);
+    expect(setting).toContain('clearTimeout(watchdog)');
+  });
+});
+
 describe('no network call can hang', () => {
   it.each([
     ['FingerprintSetting', setting],

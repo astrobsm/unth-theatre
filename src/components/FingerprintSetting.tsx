@@ -33,6 +33,21 @@ import {
 /** Cleared when fingerprint is enabled here, so the one-time card can return. */
 const DECLINED_KEY = 'orm.biometric.declined';
 
+/**
+ * A LAST-RESORT DEADLINE ON THE WHOLE OPERATION.
+ *
+ * Everything inside enable() is individually bounded now, but this button
+ * has been stuck on "Setting up..." three times, each time because of an
+ * await nobody had thought to bound — a plugin call, then a fetch, then a
+ * dynamic import that turned out to be a download. The pattern is not "that
+ * one call"; it is "an await I did not anticipate".
+ *
+ * So the state itself gets a deadline, independent of what it is waiting
+ * for. If this fires, something is still wrong and the message says so —
+ * but the person gets their button back and their password still works.
+ */
+const OVERALL_DEADLINE_MS = 45_000;
+
 export default function FingerprintSetting() {
   const [native, setNative] = useState(false);
   const [status, setStatus] = useState<BiometricStatus | null>(null);
@@ -62,6 +77,15 @@ export default function FingerprintSetting() {
     setBusy(true);
     setNote(null);
     setProblem(null);
+
+    const watchdog = setTimeout(() => {
+      setBusy(false);
+      setProblem(
+        'This is taking too long and has been stopped. Nothing was saved. '
+          + 'It is usually a slow connection — try again on a better signal.',
+      );
+    }, OVERALL_DEADLINE_MS);
+
     try {
       // THE NETWORK CALL NEEDS ITS OWN DEADLINE. This hung on "Setting up..."
       // for a phone on a very slow connection: fetch has no default timeout,
@@ -118,6 +142,7 @@ export default function FingerprintSetting() {
           : 'Something went wrong. Nothing was saved.',
       );
     } finally {
+      clearTimeout(watchdog);
       setBusy(false);
     }
   };

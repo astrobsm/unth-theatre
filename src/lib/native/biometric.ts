@@ -34,16 +34,28 @@
  */
 const PLUGIN_TIMEOUT_MS = 8_000;
 
-async function guarded<T>(label: string, work: () => Promise<T>, fallback: T): Promise<T> {
+/**
+ * Longer, because this one is a DOWNLOAD rather than local IPC — see
+ * plugin(). Eight seconds would fail a legitimately slow chunk fetch on
+ * theatre wifi and report "unavailable" to a phone that was merely slow.
+ */
+const MODULE_LOAD_TIMEOUT_MS = 25_000;
+
+async function guarded<T>(
+  label: string,
+  work: () => Promise<T>,
+  fallback: T,
+  ms: number = PLUGIN_TIMEOUT_MS,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       work(),
       new Promise<T>((resolve) => {
         timer = setTimeout(() => {
-          console.warn(`[biometric] ${label} did not respond within ${PLUGIN_TIMEOUT_MS}ms`);
+          console.warn(`[biometric] ${label} did not respond within ${ms}ms`);
           resolve(fallback);
-        }, PLUGIN_TIMEOUT_MS);
+        }, ms);
       }),
     ]);
   } catch {
@@ -71,17 +83,42 @@ type NativeBiometric = {
   deleteCredentials: (opts: { server: string }) => Promise<void>;
 };
 
+/**
+ * THE DYNAMIC IMPORTS ARE A NETWORK FETCH, AND THAT IS THE BUG THAT KEPT
+ * COMING BACK.
+ *
+ * This app loads from server.url, so its JavaScript is downloaded, not read
+ * off the device. `await import('capacitor-native-biometric')` therefore
+ * fetches a chunk — and on a phone managing a few hundred bytes a second it
+ * can hang effectively for ever. Every guarded() call awaits plugin() FIRST,
+ * so the guards below were never reached: the lock screen sat on "Scanning",
+ * and the settings card sat on "Setting up", both of them stopped here
+ * rather than in the plugin call I kept adding timeouts to.
+ *
+ * The module is cached after the first success, so this costs nothing on
+ * every later call.
+ */
+let cachedPlugin: NativeBiometric | null | undefined;
+
 async function plugin(): Promise<NativeBiometric | null> {
-  try {
-    const { Capacitor } = await import('@capacitor/core');
-    if (!Capacitor?.isNativePlatform?.()) return null;
-    const mod = await import('capacitor-native-biometric');
-    return (mod as unknown as { NativeBiometric: NativeBiometric }).NativeBiometric ?? null;
-  } catch {
-    // Not native, or the plugin is missing from this build. Either way the
-    // caller gets the password.
-    return null;
-  }
+  if (cachedPlugin !== undefined) return cachedPlugin;
+
+  const loaded = await guarded<NativeBiometric | null>(
+    'loading the biometric plugin',
+    async () => {
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor?.isNativePlatform?.()) return null;
+      const mod = await import('capacitor-native-biometric');
+      return (mod as unknown as { NativeBiometric: NativeBiometric }).NativeBiometric ?? null;
+    },
+    null,
+    MODULE_LOAD_TIMEOUT_MS,
+  );
+
+  // Only cache a success. A timeout on a bad connection must not condemn the
+  // phone for the rest of the session — the next attempt should try again.
+  if (loaded) cachedPlugin = loaded;
+  return loaded;
 }
 
 /**
