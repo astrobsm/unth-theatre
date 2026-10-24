@@ -25,27 +25,45 @@ const panel = (() => {
 })();
 
 describe('the alert panel fits the screen it is shown on', () => {
-  it('clamps its width to the viewport', () => {
-    expect(panel).toContain('w-[calc(100vw-1.5rem)]');
+  it('is positioned against the VIEWPORT on a phone, not against the bell', () => {
+    // THE ANCHOR WAS THE BUG, NOT THE WIDTH. `absolute right-0` pins the
+    // panel's right edge to the bell, and the bell sits mid-header with the
+    // role chip beside it — so the panel started off-screen to the left.
+    // Clamping the width could not fix that, and did not.
+    expect(panel).toContain('fixed');
+    expect(panel).toContain('left-3');
+    expect(panel).toContain('right-3');
   });
 
-  it('still caps at the old desktop width', () => {
-    // The fix must not make the panel enormous on a monitor.
-    expect(panel).toContain('max-w-[24rem]');
+  it('returns to an anchored dropdown on a wide screen', () => {
+    expect(panel).toContain('sm:absolute');
+    expect(panel).toContain('sm:right-0');
+    expect(panel).toContain('sm:w-96');
+    // Without this the mobile `left-3` keeps applying and the desktop panel
+    // stretches the full width of the monitor.
+    expect(panel).toContain('sm:left-auto');
   });
 
   it('has no unconditional fixed pixel width', () => {
-    // w-96 is what caused this. Any bare w-<n> on an edge-anchored panel
-    // reintroduces it on the next narrower handset.
+    // A bare w-<n> outside a breakpoint reintroduces the original fault on
+    // the next narrower handset.
     expect(panel).not.toMatch(/(^|\s)w-\d+(\s|$)/);
   });
 
-  it('is still anchored to the bell rather than floating', () => {
-    expect(panel).toContain('absolute');
-    expect(panel).toContain('right-0');
+  it('still limits its height, so a long list scrolls instead of growing', () => {
+    expect(panel).toMatch(/max-h-\[\d+vh\]/);
+  });
+});
+
+describe('the text is readable, not clipped', () => {
+  it('never truncates an alert', () => {
+    // A truncated line hid the patient's name — "...ee Amputation" instead
+    // of who it was for. Wrapping costs a line and saves the point of the
+    // alert.
+    expect(bell).not.toContain('truncate');
   });
 
-  it('still limits its height, so a long list scrolls instead of growing', () => {
-    expect(panel).toContain('max-h-[80vh]');
+  it('lets titles and messages wrap', () => {
+    expect(bell).toContain('break-words');
   });
 });

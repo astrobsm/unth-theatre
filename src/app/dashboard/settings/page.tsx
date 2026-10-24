@@ -156,6 +156,35 @@ export default function SettingsPage() {
   };
 
   // Check for App Updates
+  /**
+   * Pull the newest web build, which is where nearly every change lives.
+   *
+   * Returns whether something new was installed, so the caller can say so
+   * rather than reporting "up to date" over a stale app.
+   */
+  const refreshWebApp = async (): Promise<{ updated: boolean }> => {
+    if (!('serviceWorker' in navigator)) return { updated: false };
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.update();
+      if (!reg.waiting) return { updated: false };
+
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      // Drop cached pages so the reload genuinely fetches the new build
+      // rather than being served the old one again.
+      try {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      } catch {
+        /* cache API unavailable; the SW swap alone usually suffices */
+      }
+      setTimeout(() => window.location.reload(), 1200);
+      return { updated: true };
+    } catch {
+      return { updated: false };
+    }
+  };
+
   const handleCheckUpdate = async () => {
     setUpdating(true);
     setMessage(null);
@@ -184,31 +213,44 @@ export default function SettingsPage() {
           window.dispatchEvent(new CustomEvent('orm:native-update-check', { detail: { manual: true } }));
         });
 
+        // THE APK IS THE SHELL, NOT THE APP. It contains three stub files;
+        // everything else is loaded from the server, so almost every fix
+        // ships over the web and not in a release. This branch used to
+        // report the APK version and RETURN, leaving the web layer stale —
+        // so the card said "Android app is up to date. Installed version:
+        // 1.6." while the phone went on running weeks-old JavaScript, and
+        // somebody reasonably concluded they already had the fix they were
+        // waiting for. Check both, always, and say which is which.
+        const web = await refreshWebApp();
+
         if (result.status === 'available') {
           setMessage({
             type: 'success',
             text: `Android update ${result.latest} is ready. Tap the Android update button at the bottom of the screen to download it.`,
           });
         } else if (result.status === 'current') {
-          setMessage({ type: 'info', text: `Android app is up to date. Installed version: ${result.current}.` });
+          setMessage(
+            web.updated
+              ? { type: 'success', text: `App content updated — reloading now. (Android shell ${result.current}, already current.)` }
+              : { type: 'info', text: `Everything is up to date. Android shell ${result.current}, app content current.` },
+          );
         } else if (result.status === 'unavailable') {
-          setMessage({ type: 'error', text: result.message });
+          setMessage({
+            type: web.updated ? 'success' : 'error',
+            text: web.updated
+              ? 'App content updated — reloading now. (Could not reach the Android release server.)'
+              : result.message,
+          });
         }
         return;
       }
 
-      if ('serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.ready;
-        await reg.update();
-        // Check if there's a waiting worker
-        if (reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          setMessage({ type: 'success', text: 'App update found and installing! The page will reload shortly...' });
-          setTimeout(() => window.location.reload(), 2000);
-        } else {
-          setMessage({ type: 'info', text: 'App is up to date. No new version available.' });
-        }
-      }
+      const web = await refreshWebApp();
+      setMessage(
+        web.updated
+          ? { type: 'success', text: 'App update found and installing! The page will reload shortly...' }
+          : { type: 'info', text: 'App is up to date. No new version available.' },
+      );
     } catch (e) {
       setMessage({ type: 'error', text: 'Failed to check for updates.' });
     } finally {

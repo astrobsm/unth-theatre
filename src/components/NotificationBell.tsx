@@ -209,16 +209,19 @@ export default function NotificationBell() {
         <span className={`absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-gray-300'}`} />
       </button>
 
-      {/* Dropdown Panel.
-          WIDTH IS CLAMPED TO THE VIEWPORT, not fixed at w-96. w-96 is 384px;
-          a theatre phone is around 360px wide, so the panel was wider than
-          the screen and, being anchored to the bell at the top right, it
-          overflowed the LEFT edge — every line of every alert lost its first
-          few words. It read as a styling quirk, but it meant nobody could
-          see which patient an alert was about. 24px of margin keeps it clear
-          of both edges; the 24rem cap leaves the desktop exactly as it was. */}
+      {/* A SHEET ON A PHONE, A DROPDOWN ON A DESKTOP.
+          It was `absolute right-0 w-96`, which anchors the panel's right
+          edge to the BELL — and the bell sits mid-header with the role chip
+          beside it, not against the screen edge. So 384px starting from
+          roughly x=180 began at -156px and the whole left side was cut off.
+          Clamping the width did not help, because the anchor was the fault,
+          not the width.
+          Below sm it is therefore positioned against the VIEWPORT: a
+          full-width banner under the header, which is also what reads best
+          on a phone. From sm upwards it goes back to being an anchored
+          384px dropdown, where there is room for one. */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-[24rem] max-h-[80vh] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden">
+        <div className="fixed left-3 right-3 top-[4.5rem] max-h-[72vh] sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96 sm:max-h-[80vh] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white">
             <div className="flex items-center justify-between">
@@ -325,12 +328,12 @@ export default function NotificationBell() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm truncate">{notification.title}</span>
+                            <span className="text-sm break-words">{notification.title}</span>
                             {!notification.isRead && (
                               <span className="w-2 h-2 bg-primary-500 rounded-full flex-shrink-0" />
                             )}
                           </div>
-                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notification.message}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-3 break-words">{notification.message}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] text-gray-400">{getTimeAgo(notification.createdAt)}</span>
                             {notification.scheduledAt && (
@@ -387,11 +390,11 @@ export default function NotificationBell() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium truncate">{item.title}</span>
+                              <span className="text-sm font-medium break-words">{item.title}</span>
                               {getUrgencyBadge(item.urgency)}
                             </div>
                             {item.subtitle && (
-                              <p className="text-xs text-gray-500 mt-0.5 truncate">{item.subtitle}</p>
+                              <p className="text-xs text-gray-500 mt-0.5 break-words">{item.subtitle}</p>
                             )}
                             <div className="flex items-center gap-2 mt-1">
                               {item.time && (
