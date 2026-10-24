@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { apiError } from '@/lib/apiError';
-import { withRelevance } from '@/lib/notifications/relevance';
+import { withRelevance, relevantCaseFilter, seesConcern } from '@/lib/notifications/relevance';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,43 +78,58 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Equipment maintenance due
-    const maintenanceDue = await prisma.equipment.findMany({
-      where: {
-        nextServiceDue: {
-          lte: next24Hours,
-        },
-        status: { not: 'OUT_OF_SERVICE' },
-      },
-      orderBy: { nextServiceDue: 'asc' },
-      take: 10,
-    });
+    // 3. Equipment maintenance due — for the people who service it.
+    // A ventilator overdue for a check is not a surgeon's alert.
+    const maintenanceDue = seesConcern(userRole, 'equipmentService')
+      ? await prisma.equipment.findMany({
+          where: {
+            nextServiceDue: {
+              lte: next24Hours,
+            },
+            status: { not: 'OUT_OF_SERVICE' },
+          },
+          orderBy: { nextServiceDue: 'asc' },
+          take: 10,
+        })
+      : [];
 
-    // 4. Low stock alerts
-    const lowStockItems = await prisma.inventoryItem.findMany({
-      where: {
-        quantity: { lte: 5 },
-      },
-      orderBy: { quantity: 'asc' },
-      take: 10,
-    });
+    // 4. Low stock — for the people who reorder it.
+    const lowStockItems = seesConcern(userRole, 'lowStock')
+      ? await prisma.inventoryItem.findMany({
+          where: {
+            quantity: { lte: 5 },
+          },
+          orderBy: { quantity: 'asc' },
+          take: 10,
+        })
+      : [];
 
-    // 5. Active fault alerts
-    const activeFaults = await prisma.equipmentFaultAlert.findMany({
-      where: {
-        status: { in: ['REPORTED', 'ACKNOWLEDGED', 'IN_PROGRESS'] },
-      },
-      orderBy: [
-        { priority: 'asc' },
-        { alertTime: 'desc' },
-      ],
-      take: 10,
-    });
+    // 5. Active faults — for the people who repair them.
+    const activeFaults = seesConcern(userRole, 'faults')
+      ? await prisma.equipmentFaultAlert.findMany({
+          where: {
+            status: { in: ['REPORTED', 'ACKNOWLEDGED', 'IN_PROGRESS'] },
+          },
+          orderBy: [
+            { priority: 'asc' },
+            { alertTime: 'desc' },
+          ],
+          take: 10,
+        })
+      : [];
+
+    // 6 and 7 are about PATIENTS, so they follow the case, not a job title.
+    // caseFilter is null for oversight roles, which means "do not narrow" —
+    // spreading null would be a filter matching nothing and would empty the
+    // theatre manager's board at 7am.
+    const caseFilter = relevantCaseFilter(viewer);
+    const onMyCase = caseFilter ? { surgery: caseFilter as never } : {};
 
     // 6. Holding area patients waiting
     const holdingAreaPatients = await prisma.holdingAreaAssessment.findMany({
       where: {
         status: { in: ['ARRIVED', 'VERIFICATION_IN_PROGRESS', 'CLEARED_FOR_THEATRE'] },
+        ...onMyCase,
       },
       include: {
         patient: { select: { name: true } },
@@ -129,6 +144,7 @@ export async function GET(request: NextRequest) {
       where: {
         dischargeReadiness: 'READY_FOR_WARD',
         dischargeTime: null,
+        ...onMyCase,
       },
       include: {
         patient: { select: { name: true } },

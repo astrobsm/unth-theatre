@@ -19,6 +19,40 @@
 // that can reach the WebView and survives in plain text.
 // ============================================================
 
+/**
+ * NO CALL INTO THE NATIVE PLUGIN IS ALLOWED TO HANG.
+ *
+ * This was learned twice. First verifyIdentity never settled and left a lock
+ * screen saying "Scanning..."; a timeout was added around that one call. Then
+ * "Turn on fingerprint sign-in" hung on "Setting up..." — because isAvailable
+ * and getCredentials were still unguarded, and they run BEFORE the part that
+ * had the timeout. Guarding the call that bit you is not the same as guarding
+ * the class of fault.
+ *
+ * So every plugin call goes through here. Eight seconds is far longer than
+ * any of these should take; they are local IPC, not network.
+ */
+const PLUGIN_TIMEOUT_MS = 8_000;
+
+async function guarded<T>(label: string, work: () => Promise<T>, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`[biometric] ${label} did not respond within ${PLUGIN_TIMEOUT_MS}ms`);
+          resolve(fallback);
+        }, PLUGIN_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    return fallback;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Namespaces the Keystore entry. Changing it orphans every enrolled phone. */
 const KEYCHAIN_SERVER = 'ng.edu.unth.orm.device';
 
@@ -83,7 +117,10 @@ export async function biometricStatus(): Promise<BiometricStatus> {
   const nb = await plugin();
   if (!nb) return { available: false, reason: null }; // web: say nothing
   try {
-    const r = await nb.isAvailable({ useFallback: false });
+    const r = await guarded('isAvailable', () => nb.isAvailable({ useFallback: false }), {
+      isAvailable: false,
+      errorCode: 0,
+    });
     if (r?.isAvailable) return { available: true, reason: null };
     const code = typeof r?.errorCode === 'number' ? r.errorCode : 0;
     return {
@@ -105,7 +142,10 @@ export async function hasStoredCredential(): Promise<boolean> {
   const nb = await plugin();
   if (!nb) return false;
   try {
-    const c = await nb.getCredentials({ server: KEYCHAIN_SERVER });
+    const c = await guarded('getCredentials', () => nb.getCredentials({ server: KEYCHAIN_SERVER }), {
+      username: '',
+      password: '',
+    });
     return !!c?.password;
   } catch {
     // getCredentials throws when nothing is stored. That is the normal
@@ -212,12 +252,19 @@ export async function storeCredential(credential: string): Promise<boolean> {
   const nb = await plugin();
   if (!nb) return false;
   try {
-    await nb.setCredentials({
-      username: KEYCHAIN_USER,
-      password: credential,
-      server: KEYCHAIN_SERVER,
-    });
-    return true;
+    const done = await guarded(
+      'setCredentials',
+      async () => {
+        await nb.setCredentials({
+          username: KEYCHAIN_USER,
+          password: credential,
+          server: KEYCHAIN_SERVER,
+        });
+        return true;
+      },
+      false,
+    );
+    return done;
   } catch (e) {
     console.warn('[biometric] could not store credential', e);
     return false;
@@ -229,7 +276,10 @@ export async function readCredential(): Promise<string | null> {
   const nb = await plugin();
   if (!nb) return null;
   try {
-    const c = await nb.getCredentials({ server: KEYCHAIN_SERVER });
+    const c = await guarded('readCredential', () => nb.getCredentials({ server: KEYCHAIN_SERVER }), {
+      username: '',
+      password: '',
+    });
     return c?.password || null;
   } catch {
     return null;
@@ -248,7 +298,14 @@ export async function forgetCredential(): Promise<void> {
   const nb = await plugin();
   if (!nb) return;
   try {
-    await nb.deleteCredentials({ server: KEYCHAIN_SERVER });
+    await guarded(
+      'deleteCredentials',
+      async () => {
+        await nb.deleteCredentials({ server: KEYCHAIN_SERVER });
+        return true;
+      },
+      false,
+    );
   } catch {
     /* nothing stored, or already gone */
   }

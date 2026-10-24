@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
+import { relevantCaseFilter, broadcastFilter } from '@/lib/notifications/relevance';
 import { authOptions } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -22,11 +23,49 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where clause: user's own notifications + broadcasts
+    // Build where clause: this user's own notifications, plus the broadcasts
+    // that actually concern them.
+    //
+    // A broadcast with no owner reaches everybody, which is right for "the
+    // list is published" and wrong for anything naming one patient. Held to
+    // a recent window of the viewer's own cases — notifications are recent
+    // by nature, so a 45-day window either side keeps the id list small
+    // while covering everything the panel can show.
+    const viewerRecord = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { department: true },
+    });
+    const viewer = {
+      id: session.user.id,
+      role: (session.user as { role?: string }).role ?? null,
+      department: viewerRecord?.department ?? null,
+    };
+
+    const caseFilter = relevantCaseFilter(viewer);
+    let mySurgeryIds: string[] = [];
+    if (caseFilter) {
+      const window = 45 * 24 * 60 * 60 * 1000;
+      const mine = await prisma.surgery.findMany({
+        where: {
+          AND: [
+            {
+              scheduledDate: {
+                gte: new Date(Date.now() - window),
+                lte: new Date(Date.now() + window),
+              },
+            },
+            caseFilter as never,
+          ],
+        },
+        select: { id: true },
+      });
+      mySurgeryIds = mine.map((m) => m.id);
+    }
+
     const where: any = {
       OR: [
         { userId: session.user.id },
-        { userId: null }, // Broadcast notifications
+        broadcastFilter(viewer, mySurgeryIds),
       ],
     };
 

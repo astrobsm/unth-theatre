@@ -26,10 +26,10 @@ export const metadata: Metadata = {
 };
 
 /** Bumped whenever a new APK is published, so the page never claims a stale one. */
-const APK_VERSION = '1.5';
+const APK_VERSION = '1.6';
 const APK_SIZE = '6.7 MB';
 /** The release tag the file hangs off. Keep in step with APK_VERSION. */
-const APK_TAG = 'android-v1.5';
+const APK_TAG = 'android-v1.6';
 /** From `apksigner verify --print-certs`. Lets a cautious person check the file. */
 const APK_SHA1 = 'ce:df:98:17:8f:64:f7:3c:18:83:bb:1e:b8:0a:b5:9f:87:6b:0d:18';
 

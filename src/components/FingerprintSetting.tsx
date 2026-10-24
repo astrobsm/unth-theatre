@@ -63,10 +63,16 @@ export default function FingerprintSetting() {
     setNote(null);
     setProblem(null);
     try {
+      // THE NETWORK CALL NEEDS ITS OWN DEADLINE. This hung on "Setting up..."
+      // for a phone on a very slow connection: fetch has no default timeout,
+      // so the await simply never returned and the button stayed busy for
+      // ever. Twenty seconds is generous for a few hundred bytes on theatre
+      // wifi and still short enough that nobody is left wondering.
       const res = await fetch('/api/device-credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        signal: AbortSignal.timeout(20_000),
         body: JSON.stringify({ platform: 'android', deviceLabel: navigator.userAgent.slice(0, 80) }),
       });
       if (!res.ok) {
@@ -101,8 +107,16 @@ export default function FingerprintSetting() {
       }
       setEnrolled(true);
       setNote('Fingerprint sign-in is on. You will see it on the sign-in screen.');
-    } catch {
-      setProblem('Something went wrong. Nothing was saved.');
+    } catch (e) {
+      // AbortSignal.timeout rejects with a TimeoutError. Naming the network
+      // tells somebody on theatre wifi to move and try again, rather than
+      // leaving them to conclude the feature is broken.
+      const timedOut = (e as { name?: string })?.name === 'TimeoutError';
+      setProblem(
+        timedOut
+          ? 'The connection was too slow to set this up. Nothing was saved — please try again.'
+          : 'Something went wrong. Nothing was saved.',
+      );
     } finally {
       setBusy(false);
     }
@@ -115,9 +129,11 @@ export default function FingerprintSetting() {
     try {
       // Revoke server-side as well as locally. Forgetting only the phone's
       // copy would leave a credential the server still honours.
-      await fetch('/api/device-credentials', { method: 'DELETE', credentials: 'include' }).catch(
-        () => undefined,
-      );
+      await fetch('/api/device-credentials', {
+        method: 'DELETE',
+        credentials: 'include',
+        signal: AbortSignal.timeout(20_000),
+      }).catch(() => undefined);
       await forgetCredential();
       setEnrolled(false);
       setNote('Fingerprint sign-in is off. Your password still works as normal.');

@@ -86,6 +86,9 @@ export default function BiometricEnrolment() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        // fetch has no default timeout. Without this the card sits on
+        // "Setting up..." for ever on a slow connection.
+        signal: AbortSignal.timeout(20_000),
         body: JSON.stringify({
           platform: 'android',
           deviceLabel: navigator.userAgent.slice(0, 80),
