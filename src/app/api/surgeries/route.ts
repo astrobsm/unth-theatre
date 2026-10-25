@@ -40,6 +40,19 @@ const emptyToNull = <T extends z.ZodTypeAny>(inner: T) =>
 const surgerySchema = z.object({
   patientId: z.string(),
   surgeonId: z.string().nullish(),
+  /// Who is assisting. One column, so one person — see the booking form.
+  assistantSurgeonId: z.string().nullish(),
+  /// What the case needs by name, from the catalogue, plus whatever the
+  /// magnitude bundle added. Resolved to rows after the surgery is created.
+  specialNeeds: z
+    .array(
+      z.object({
+        itemId: z.string(),
+        quantity: z.number().int().positive().max(999),
+        fromBundle: z.boolean().optional(),
+      }),
+    )
+    .optional(),
   surgeonName: z.string(),
   unit: z.string(),
   subspecialty: z.string(),
@@ -456,6 +469,8 @@ export async function POST(request: NextRequest) {
       teamMembers,
       surgeryType,
       surgeonId,
+      assistantSurgeonId,
+      specialNeeds,
       surgeonName,
       comorbiditiesList,
       otherComorbidities,
@@ -871,6 +886,10 @@ export async function POST(request: NextRequest) {
         ...surgeryData,
         surgeonName: resolvedSurgeonName,
         surgeonId: resolvedSurgeonId,
+        // Accepted here because the form now sends it. Without this line the
+        // picker would look like it worked and record nobody — the same
+        // shape of fault as the missing surgeon in October.
+        assistantSurgeonId: assistantSurgeonId || null,
         consumablePackCode,
         pharmacyDrugCode,
         // Default the surgery anaesthetist to the on-duty anaesthetist for the chosen
@@ -968,6 +987,82 @@ export async function POST(request: NextRequest) {
         }
       }
     });
+
+    // What the surgeon asked for by name, plus whatever the magnitude
+    // bundle added.
+    //
+    // BEST EFFORT, DELIBERATELY. A case that is on the theatre list with no
+    // special-needs rows is a case the store has to be told about by hand;
+    // a case that failed to book at all because one catalogue id had gone
+    // stale is a patient not on the list. The first is recoverable in the
+    // morning, the second is not, so a failure here is logged and the
+    // booking stands.
+    if (Array.isArray(specialNeeds) && specialNeeds.length > 0) {
+      try {
+        const ids = specialNeeds.map((n) => n.itemId);
+        const known = await prisma.specialNeedItem.findMany({
+          where: { id: { in: ids } },
+          select: { id: true },
+        });
+        const knownIds = new Set(known.map((k) => k.id));
+
+        const rows = specialNeeds
+          .filter((n) => knownIds.has(n.itemId))
+          .map((n) => ({
+            surgeryId: surgery.id,
+            itemId: n.itemId,
+            quantity: n.quantity,
+            fromBundle: !!n.fromBundle,
+            requestedById: (session.user as any).id ?? null,
+            requestedByName:
+              (session.user as any).fullName || (session.user as any).name || null,
+          }));
+
+        if (rows.length !== specialNeeds.length) {
+          console.warn(
+            `[surgeries] ${specialNeeds.length - rows.length} special-need item(s) were not in the catalogue and were skipped for surgery ${surgery.id}`,
+          );
+        }
+        if (rows.length) {
+          await prisma.surgerySpecialNeed.createMany({ data: rows, skipDuplicates: true });
+        }
+      } catch (e) {
+        console.error('[surgeries] could not record special needs:', e);
+      }
+    }
+
+    // Price the case, once, at booking.
+    //
+    // SNAPSHOTTED RATHER THAN READ LIVE. A deposit the patient has already
+    // paid must not change because an administrator revised the tariff
+    // afterwards — the figure on the receipt and the figure in the record
+    // have to be the same one. A later change of magnitude leaves the
+    // stored magnitude visibly inconsistent, which is the point: it should
+    // be noticed, not silently repriced.
+    //
+    // Best effort for the same reason as the special needs: a case on the
+    // list with no price is fixable in the morning, a case that failed to
+    // book is not.
+    try {
+      const tariff = await prisma.theatreSetting.findUnique({ where: { id: 'singleton' } });
+      // Read off the created row rather than a local: magnitude stays
+      // inside surgeryData and is never destructured out.
+      const key = (surgery.magnitude ?? '').toLowerCase();
+      const pick = (suffix: 'ConsumableFee' | 'PharmacyFee') => {
+        if (key !== 'minor' && key !== 'intermediate' && key !== 'major') return null;
+        return (tariff as never as Record<string, unknown>)?.[`${key}${suffix}`] ?? null;
+      };
+      await prisma.caseDepositStatus.create({
+        data: {
+          surgeryId: surgery.id,
+          magnitude: surgery.magnitude ?? null,
+          consumableAmount: pick('ConsumableFee') as never,
+          pharmacyAmount: pick('PharmacyFee') as never,
+        },
+      });
+    } catch (e) {
+      console.error('[surgeries] could not record the deposit status:', e);
+    }
 
     // Persist booking-time pre-pack plan (consumables for pack provider, drugs for pharmacy).
     // The MANDATORY base pack is attached to every booking regardless of what the

@@ -1,5 +1,6 @@
 'use client';
 
+import TheatreFeeSettings from '@/components/TheatreFeeSettings';
 import FingerprintSetting from '@/components/FingerprintSetting';
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
@@ -345,6 +346,18 @@ export default function SettingsPage() {
             offer to enrol vanished for good once dismissed. Renders nothing
             on a computer. */}
         <FingerprintSetting />
+
+        {/* Deposits and the deposit notice. Visible to everyone so staff can
+            see what a patient will be asked for; editable only by the roles
+            the API also enforces. */}
+        <TheatreFeeSettings
+          canEdit={
+            !!session?.user?.role &&
+            ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(
+              session.user.role,
+            )
+          }
+        />
 
         {/* App Update Section */}
         <div className="bg-white rounded-lg shadow p-6">

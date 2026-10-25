@@ -1,9 +1,15 @@
 'use client';
 
+import DepositNotice from '@/components/DepositNotice';
+import SpecialNeedsPicker, {
+  type ChosenNeed,
+  type CatalogueItem,
+} from '@/components/SpecialNeedsPicker';
+import { bundleFor, needsLocalAnaestheticChoice } from '@/lib/specialNeeds/bundle';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ScheduleConflictDialog from '@/components/scheduling/ScheduleConflictDialog';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone, Camera } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -442,8 +448,25 @@ export default function NewSurgeryPage() {
   const [preopOverrideReason, setPreopOverrideReason] = useState('');
   const [needsOverride, setNeedsOverride] = useState(false);
   const [anesthesiaType, setAnesthesiaType] = useState<string>('');
+  /// Controlled now, because the consumable bundle is derived from them.
+  /// Left uncontrolled they would still submit correctly but nothing could
+  /// react to them, and the bundle is the whole point.
+  const [magnitude, setMagnitude] = useState<string>('');
+  const [needBloodTransfusion, setNeedBloodTransfusion] = useState(false);
+  /// Which local anaesthetic, when the anaesthesia is local. NEVER
+  /// defaulted: plain and with-adrenaline are not interchangeable.
+  const [localAnaestheticId, setLocalAnaestheticId] = useState<string>('');
+  const [specialNeeds, setSpecialNeeds] = useState<ChosenNeed[]>([]);
+  /// Bundle lines the surgeon took out. Held in a ref rather than state so
+  /// removing one does not itself re-run the effect that would restore it.
+  const removedBundleIdsRef = useRef<string[]>([]);
+  const [catalogueIndex, setCatalogueIndex] = useState<CatalogueItem[]>([]);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  /// Set when the form moved the start time off a slot that had been taken
+  /// while the surgeon was still typing. Shown once, so the change is never
+  /// silent — a time that moves without saying so is worse than a clash.
+  const [autoMovedTime, setAutoMovedTime] = useState<{ from: string; to: string } | null>(null);
   const [estimatedDuration, setEstimatedDuration] = useState('');
   // The day's list for the chosen theatre, so the form can offer the next
   // free start rather than leaving the surgeon to work it out.
@@ -465,6 +488,19 @@ export default function NewSurgeryPage() {
   const [selectedSurgeonId, setSelectedSurgeonId] = useState('');
   // One or more unit supervising consultants may be attached to a booking.
   const [supervisingConsultantIds, setSupervisingConsultantIds] = useState<string[]>([]);
+  /// Who is assisting. Drawn from a WIDER pool than the operating surgeon:
+  /// a case is commonly assisted by a registrar or by the house officer, and
+  /// restricting this to consultants would leave the field empty on most
+  /// lists and the assistant unrecorded.
+  ///
+  /// ONE, not a list, because Surgery.assistantSurgeonId is one column and
+  /// SurgicalTeamRole has no ASSISTANT value. A picker that accepted three
+  /// and stored one would lose two of them silently, which is worse than a
+  /// field that says what it can hold. Further assistants go in the unit
+  /// team below, under their actual grade.
+  const [assistantIds, setAssistantIds] = useState<string[]>([]);
+  const [assistantSearch, setAssistantSearch] = useState('');
+  const [assistantPool, setAssistantPool] = useState<Surgeon[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
@@ -507,6 +543,8 @@ export default function NewSurgeryPage() {
   useEffect(() => {
     fetchPatients();
     fetchSurgeons();
+    fetchAssistantPool();
+    fetchCatalogue();
     fetchTheatres();
     fetchLocations();
     fetchSurgicalUnits();
@@ -606,14 +644,79 @@ export default function NewSurgeryPage() {
         const data = await res.json();
         if (cancelled) return;
         setListPlan(data);
-        // Offer the next free slot only when nothing has been typed. Once the
-        // surgeon has chosen a time it is theirs — the whole point of the
-        // change is that the system stops overwriting it.
-        setScheduledTime((current) => current || data.suggestedStart);
+        // Take the next free slot when the field is empty, AND move off a
+        // time that is no longer free.
+        //
+        // The second half is the one that matters. A surgeon opens the form,
+        // the theatre is empty, 09:00 is offered and accepted — and by the
+        // time they finish filling in the patient, somebody else has taken
+        // 09:00. Leaving it as typed means booking a clash that the server
+        // then refuses, after all the work. Moving it forward is the only
+        // answer that is still true when they press Book.
+        //
+        // A time LATER than the suggestion is left alone: that is a surgeon
+        // deliberately booking an afternoon slot, and overwriting it would
+        // be the old behaviour everybody disliked.
+        setScheduledTime((current) => {
+          if (!current) return data.suggestedStart;
+          if (!data.suggestedStart) return current;
+          if (current < data.suggestedStart) {
+            setAutoMovedTime({ from: current, to: data.suggestedStart });
+            return data.suggestedStart;
+          }
+          return current;
+        });
       } catch { /* offline — the field simply stays as the surgeon left it */ }
     })();
     return () => { cancelled = true; };
   }, [scheduledDate, selectedTheatreId, unit]);
+
+  /**
+   * Apply the magnitude bundle whenever the inputs it depends on change.
+   *
+   * REPLACES ONLY THE BUNDLED LINES. Anything the surgeon chose themselves
+   * survives untouched — changing a case from intermediate to major must
+   * not quietly discard the mesh they picked five minutes ago.
+   *
+   * A line the surgeon REMOVED is not put back either, which is why
+   * removals are tracked rather than just absent: taking something out of a
+   * standard pack is a decision, and a bundle that restores it on the next
+   * keystroke is a bundle nobody can override.
+   */
+  useEffect(() => {
+    if (catalogueIndex.length === 0) return;
+
+    const lines = bundleFor({
+      magnitude,
+      transfusionAnticipated: needBloodTransfusion,
+      anaesthesiaType: anesthesiaType,
+      localAnaestheticName:
+        catalogueIndex.find((c) => c.id === localAnaestheticId)?.name ?? null,
+    });
+
+    const resolved: ChosenNeed[] = [];
+    for (const line of lines) {
+      const match = catalogueIndex.find(
+        (c) =>
+          c.category === line.category &&
+          c.name === line.name &&
+          (line.size === undefined || c.size === line.size),
+      );
+      // A bundle line with nothing behind it is silently skipped here and
+      // caught by specialNeedsBundle.test.ts, which checks every line
+      // against the catalogue. Blocking the booking over it would punish
+      // the surgeon for a seeding gap.
+      if (match) resolved.push({ itemId: match.id, quantity: line.quantity, fromBundle: true });
+    }
+
+    setSpecialNeeds((prev) => {
+      const removed = new Set(removedBundleIdsRef.current);
+      const keptManual = prev.filter((p) => !p.fromBundle);
+      const manualIds = new Set(keptManual.map((k) => k.itemId));
+      const bundled = resolved.filter((r) => !manualIds.has(r.itemId) && !removed.has(r.itemId));
+      return [...bundled, ...keptManual];
+    });
+  }, [magnitude, needBloodTransfusion, anesthesiaType, localAnaestheticId, catalogueIndex]);
 
   // Auto-fetch on-duty team when scheduledDate + scheduledTime are both set.
   useEffect(() => {
@@ -846,6 +949,26 @@ export default function NewSurgeryPage() {
     [surgeonsInSubspecialty, supervisingConsultantIds, consultantSearch],
   );
 
+  /**
+   * Who is still available to add as an assistant.
+   *
+   * Deliberately NOT narrowed by subspecialty, unlike the surgeon list: a
+   * house officer assists whoever is operating that day, and filtering them
+   * out by firm would empty the list for most cases.
+   */
+  const visibleAssistants = useMemo(
+    () =>
+      assistantPool
+        .filter((s) => !assistantIds.includes(s.id))
+        .filter((s) => s.id !== selectedSurgeonId)
+        .filter((s) =>
+          assistantSearch.trim()
+            ? (s.fullName || '').toLowerCase().includes(assistantSearch.trim().toLowerCase())
+            : true,
+        ),
+    [assistantPool, assistantIds, assistantSearch, selectedSurgeonId],
+  );
+
   const fetchSurgeons = async () => {
     try {
       // Only roles that exist in the UserRole enum can act as the operating surgeon.
@@ -862,6 +985,50 @@ export default function NewSurgeryPage() {
       }
     } catch (error) {
       console.error('Failed to fetch surgeons:', error);
+    }
+  };
+
+  /**
+   * The pool an assistant can be chosen from.
+   *
+   * Surgeons and consultant surgeons, plus HOUSE OFFICERS — who assist on
+   * most lists and whose name belongs on the case for the same reasons the
+   * surgeon's does: the unit card, the review watch and the audit summons
+   * all read the team.
+   */
+  /**
+   * The catalogue, loaded once so the bundle can be resolved to real ids.
+   *
+   * The picker loads its own copy for the dropdown; this one exists because
+   * bundleFor() returns category/name/size and the case needs itemIds.
+   */
+  const fetchCatalogue = async () => {
+    try {
+      const res = await fetch('/api/special-needs/catalogue', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setCatalogueIndex(data.items ?? []);
+    } catch {
+      /* offline: the bundle simply cannot be applied, and the surgeon adds
+         what they need by hand. Better than blocking the booking. */
+    }
+  };
+
+  const fetchAssistantPool = async () => {
+    try {
+      const response = await fetch(
+        '/api/users?roles=SURGEON,CONSULTANT_SURGEON,HOUSE_OFFICER&status=APPROVED&slim=1',
+      );
+      if (!response.ok) {
+        console.error('fetchAssistantPool HTTP', response.status);
+        return;
+      }
+      const data = await response.json();
+      const list: Surgeon[] = Array.isArray(data) ? data : (data?.users ?? []);
+      list.sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+      setAssistantPool(list);
+    } catch (error) {
+      console.error('Failed to fetch the assistant pool:', error);
     }
   };
 
@@ -1015,6 +1182,25 @@ export default function NewSurgeryPage() {
       if (!selectedSurgeonId && !String(fd.get('surgeonName') ?? '').trim()) {
         essentials.push('the surgeon');
       }
+      // CONSENT, and it belongs in this list for the same reason the surgeon
+      // does: the browser's `required` never fires on this button, so a
+      // field nobody checks here is a field nobody checks at all.
+      //
+      // It is also the one item that cannot be fixed later by whoever finds
+      // it missing. A pack can be made up in the morning and a prescription
+      // written at the bedside, but consent needs the patient, conscious,
+      // before premedication — and the holding area already refuses a
+      // patient without it. Booking a case that the holding area will turn
+      // away is not booking a case.
+      //
+      // This form books ELECTIVE cases only — emergencies have their own
+      // route, where an unconscious patient at two in the morning is dealt
+      // with by the deferred-requirements mechanism. So there is no
+      // exemption to make here: an elective case means a patient who is
+      // awake, expected, and able to sign.
+      if (!consentFile) {
+        essentials.push('the signed consent');
+      }
       if (essentials.length) {
         setLoading(false);
         const listed = essentials.length === 1
@@ -1033,6 +1219,7 @@ export default function NewSurgeryPage() {
             ...(selectedPatientId ? [] : [{ name: 'patientSearch', label: 'Patient', message: 'Search for the patient and select them.' }]),
             ...(String(fd.get('procedureName') ?? '').trim() ? [] : [{ name: 'procedureName', label: 'Procedure', message: 'Pick it from the list, or choose “Other” and name it.' }]),
             ...(String(fd.get('scheduledDate') ?? '').trim() ? [] : [{ name: 'scheduledDate', label: 'Date', message: 'The day theatre should expect the patient.' }]),
+            ...(consentFile ? [] : [{ name: 'consentUpload', label: 'Signed consent', message: 'Photograph the signed paper form and attach it. The holding area will not accept the patient without it.' }]),
           ],
           fixes: [
             { kind: 'field', label: 'Take me to the first one', field: !selectedPatientId ? 'patientSearch' : (!String(fd.get('procedureName') ?? '').trim() ? 'procedureName' : 'scheduledDate') },
@@ -1284,9 +1471,17 @@ ${pretty} — ${days} days from today.
       // against the case with its outstanding items. Withholding it now would
       // silently discard something a clinician had typed.
       preopOverrideReason: preopOverrideReason.trim() || null,
-      magnitude: (formData.get('magnitude') as string) || null,
+      assistantSurgeonId: assistantIds[0] ?? null,
+      magnitude: magnitude || null,
       anesthesiaType: anesthesiaType || null,
-      needBloodTransfusion: formData.get('needBloodTransfusion') === 'on',
+      needBloodTransfusion,
+      // What the case asked for by name, plus whatever the magnitude bundle
+      // added. Sent as ids and quantities; the server resolves the rest.
+      specialNeeds: specialNeeds.map((n) => ({
+        itemId: n.itemId,
+        quantity: n.quantity,
+        fromBundle: !!n.fromBundle,
+      })),
       needDiathermy: formData.get('needDiathermy') === 'on',
       needStereo: formData.get('needStereo') === 'on',
       needMontrellMattress: formData.get('needMontrellMattress') === 'on',
@@ -1624,6 +1819,46 @@ ${pretty} — ${days} days from today.
         <BookingCodesModal
           codes={bookedCodes}
           onClose={() => router.push('/dashboard/surgeries')}
+          onNextPatient={() => {
+            // WHAT BELONGS TO THE LIST STAYS. Unit, subspecialty, theatre,
+            // date, surgeon, assistant, supervising consultants and the
+            // unit team are properties of the LIST, not of the patient —
+            // a Wednesday plastics list is the same firm all morning.
+            //
+            // WHAT BELONGS TO THE PATIENT GOES, and all of it. A leftover
+            // consent photograph or a leftover procedure attached to the
+            // next patient is a clinical error, not an inconvenience, so
+            // this clears generously rather than cleverly: anything
+            // case-specific is reset even where re-entering it is a
+            // nuisance.
+            setBookedCodes(null);
+            setSelectedPatientId('');
+            setProcedureName('');
+            setEstimatedDuration('');
+            setOtherSpecialNeeds('');
+            setPostOpDestination('');
+            setIsDayCase(false);
+            setMagnitude('');
+            setAnesthesiaType('');
+            setLocalAnaestheticId('');
+            setConsentFile(null);
+            setConsentError('');
+            setNeedBloodTransfusion(false);
+            // The bundle is rebuilt from the next patient's magnitude, and
+            // the previous patient's removals must not carry over.
+            setSpecialNeeds([]);
+            removedBundleIdsRef.current = [];
+            // Back to the first step, and to the top — on a phone the form
+            // is several screens long and leaving it scrolled to the
+            // consent section looks like nothing happened.
+            setStep(0);
+            setError('');
+            try {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch {
+              /* older webview */
+            }
+          }}
         />
       )}
       {/* ── Resume what was interrupted ─────────────────────────────────── */}
@@ -1785,6 +2020,9 @@ ${pretty} — ${days} days from today.
           </p>
         </div>
       )}
+
+      {/* Read before anybody starts filling the form in, not after. */}
+      <DepositNotice />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Patient Selection */}
@@ -2213,6 +2451,76 @@ ${pretty} — ${days} days from today.
               <input type="hidden" name="surgeonName" value={surgeons.find((s) => s.id === selectedSurgeonId)?.fullName || ''} />
             </div>
 
+            {/* ASSISTANT(S). Same interaction as the consultants below —
+                search, add, remove as chips — because two pickers that do
+                the same job should not behave differently. The pool is
+                wider: registrars and house officers assist, and the whole
+                point of recording them is that the unit card and the review
+                watch name the people who were actually there. */}
+            <div>
+              <label className="label">Assistant(s)</label>
+
+              <input
+                type="text"
+                value={assistantSearch}
+                onChange={(e) => setAssistantSearch(e.target.value)}
+                placeholder="Search by name…"
+                className="input-field mb-2"
+                autoComplete="off"
+                title="Type part of an assistant's name to narrow the list"
+              />
+
+              <select
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  // Replaces rather than appends: one assistant is what the
+                  // case can record, so picking a second means changing
+                  // your mind, not adding somebody.
+                  if (id) setAssistantIds([id]);
+                  setAssistantSearch('');
+                }}
+                className="input-field"
+                title="Choose the assisting surgeon, registrar or house officer"
+              >
+                <option value="">— Add Assistant —</option>
+                {visibleAssistants.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}{s.role ? ` (${s.role.replace(/_/g, ' ')})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Surgeons, consultants and house officers. The operating surgeon is not listed
+                here. For a second assistant, add them to the unit team below under their grade.
+              </p>
+
+              {assistantIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {assistantIds.map((id) => {
+                    const a = assistantPool.find((s) => s.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-medium text-primary-800"
+                      >
+                        {a?.fullName || 'Unknown'}
+                        <button
+                          type="button"
+                          onClick={() => setAssistantIds((prev) => prev.filter((x) => x !== id))}
+                          className="text-primary-500 hover:text-red-600"
+                          title="Remove"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <input type="hidden" name="assistantSurgeonId" value={assistantIds[0] ?? ''} />
+            </div>
+
             <div>
               <label className="label">Unit Supervising Consultant(s)</label>
 
@@ -2371,6 +2679,44 @@ ${pretty} — ${days} days from today.
                   Local cases do not require pre-anaesthetic review by an anaesthetist.
                 </p>
               )}
+
+              {/* WHICH LOCAL ANAESTHETIC, and it has no default.
+                  Adrenaline must not go near a digit, the nose, an ear or
+                  the penis, so the two are not interchangeable and the form
+                  must not choose for anybody. Nothing is added to the
+                  pharmacy pack until this is answered. */}
+              {needsLocalAnaestheticChoice(anesthesiaType) && (
+                <div className="mt-3 rounded-lg border-2 border-sky-200 bg-sky-50 p-3">
+                  <label className="label" htmlFor="localAnaesthetic">
+                    Which local anaesthetic? *
+                  </label>
+                  <select
+                    id="localAnaesthetic"
+                    value={localAnaestheticId}
+                    onChange={(e) => setLocalAnaestheticId(e.target.value)}
+                    className="input-field"
+                  >
+                    <option value="">Select the agent…</option>
+                    {catalogueIndex
+                      .filter((c) => c.category === 'LOCAL_ANAESTHETIC')
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                          {c.size ? ` — ${c.size}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-xs text-sky-800">
+                    Added to the pharmacy pack for this case. Plain and with-adrenaline are
+                    dispensed exactly as chosen — never substituted.
+                  </p>
+                  {!localAnaestheticId && (
+                    <p className="mt-1 text-xs font-medium text-amber-700">
+                      Nothing is sent to pharmacy until an agent is chosen.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2446,6 +2792,12 @@ ${pretty} — ${days} days from today.
                   </p>
                 );
               })()}
+              {autoMovedTime && (
+                <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+                  Start time moved from {autoMovedTime.from} to {autoMovedTime.to} — another case
+                  took that slot while you were filling this in. Change it if you need to.
+                </p>
+              )}
               {listPlan && (
                 <p className="text-xs text-gray-600 mt-1">
                   {listPlan.cases.length === 0
@@ -2487,7 +2839,13 @@ ${pretty} — ${days} days from today.
 
             <div>
               <label className="label">Operative Magnitude *</label>
-              <select name="magnitude" required defaultValue="" className="input-field">
+              <select
+                name="magnitude"
+                required
+                value={magnitude}
+                onChange={(e) => setMagnitude(e.target.value)}
+                className="input-field"
+              >
                 <option value="" disabled>Select magnitude…</option>
                 <option value="MINOR">Minor</option>
                 <option value="INTERMEDIATE">Intermediate</option>
@@ -2694,6 +3052,8 @@ ${pretty} — ${days} days from today.
               <input
                 type="checkbox"
                 name="needBloodTransfusion"
+                checked={needBloodTransfusion}
+                onChange={(e) => setNeedBloodTransfusion(e.target.checked)}
                 className="w-5 h-5 text-primary-600 rounded"
               />
               <span className="text-gray-700">Blood Transfusion Required</span>
@@ -2993,14 +3353,41 @@ ${pretty} — ${days} days from today.
               </p>
             </div>
           </div>
-          <input
-            aria-label="Upload signed informed consent file"
-            title="Upload signed informed consent file"
-            type="file"
-            accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
-            onChange={handleConsentFileChange}
-            className="block text-sm"
-          />
+          {/* TWO WAYS IN, because the phone and the desktop are different
+              jobs. `capture="environment"` opens the camera directly on a
+              handset, which is what somebody standing at the bedside with
+              the signed paper actually wants; the plain picker is for a
+              computer, and for a scan that already exists. Both land in the
+              same place. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 sm:hidden">
+              <Camera className="h-4 w-4" />
+              Photograph the form
+              <input
+                aria-label="Photograph the signed informed consent form"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleConsentFileChange}
+                className="hidden"
+              />
+            </label>
+
+            <input
+              aria-label="Upload signed informed consent file"
+              title="Upload signed informed consent file"
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp,image/heic"
+              onChange={handleConsentFileChange}
+              className="block text-sm"
+            />
+          </div>
+
+          {!consentFile && (
+            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              Required. The case cannot be booked without the signed consent attached.
+            </p>
+          )}
           {consentError && <div className="mt-2 text-sm text-red-600">{consentError}</div>}
           {consentFile && (
             <div className="mt-3 flex items-center gap-3 text-sm">
@@ -3018,6 +3405,32 @@ ${pretty} — ${days} days from today.
               </button>
             </div>
           )}
+        </div>
+
+        {/* SPECIAL REQUIREMENTS, directly beneath the consent.
+
+            Placed here on purpose: by this point the magnitude and the
+            anaesthesia type have been answered, so the standard pack is
+            already filled in and the surgeon is adding to a list rather
+            than facing an empty one. */}
+        <div className={stepClass(2)}>
+          <SpecialNeedsPicker
+            value={specialNeeds}
+            onChange={(next) => {
+              // Remember which bundled lines were taken out, so the effect
+              // does not put them straight back on the next keystroke.
+              const goneBundled = specialNeeds
+                .filter((p) => p.fromBundle && !next.some((n) => n.itemId === p.itemId))
+                .map((p) => p.itemId);
+              if (goneBundled.length) {
+                removedBundleIdsRef.current = [
+                  ...removedBundleIdsRef.current,
+                  ...goneBundled,
+                ];
+              }
+              setSpecialNeeds(next);
+            }}
+          />
         </div>
 
         {/* Informed / Electronic Consent — UNTH consent form captured at booking */}
@@ -3511,9 +3924,12 @@ function AlreadyBookedModal({
 function BookingCodesModal({
   codes,
   onClose,
+  onNextPatient,
 }: {
   codes: { consumablePackCode?: string | null; pharmacyDrugCode?: string | null; patientName?: string | null; folderNumber?: string | null; surgeryId?: string | null; warnings?: string[]; outstanding?: string[] };
   onClose: () => void;
+  /** Keep the list's team and start the next patient. Omitted on pages where that makes no sense. */
+  onNextPatient?: () => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -3690,9 +4106,23 @@ function BookingCodesModal({
               Complete the outstanding items
             </Link>
           )}
+          {/* THE SAME TEAM BOOKS THE WHOLE LIST. Re-entering the unit, the
+              consultants, the registrars and the house officer for every
+              patient on a Wednesday list is the same twelve fields typed
+              six times, and it is where wrong team members come from —
+              somebody tires of it on the fourth patient. This keeps
+              everything that belongs to the LIST and clears everything that
+              belongs to the PATIENT. */}
+          {onNextPatient && (
+            <button onClick={onNextPatient} className="btn-primary">
+              Book the next patient on this list
+            </button>
+          )}
           <button
             onClick={onClose}
-            className={outstanding.length > 0 ? 'btn-secondary' : 'btn-primary'}
+            className={
+              outstanding.length > 0 || onNextPatient ? 'btn-secondary' : 'btn-primary'
+            }
           >
             {outstanding.length > 0 ? 'Later' : 'Done'}
           </button>

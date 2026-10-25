@@ -1316,6 +1316,8 @@ model Surgery {
 
   // New Relations for Enhanced Modules
   preOpReviews     PreOperativeAnestheticReview[] @relation("PreOpReviews")
+  specialNeeds     SurgerySpecialNeed[]
+  depositStatus    CaseDepositStatus?
   prescriptions    AnestheticPrescription[]       @relation("SurgeryPrescriptions")
   bloodRequests    BloodRequest[]                 @relation("SurgeryBloodRequests")
   emergencyAlerts  EmergencySurgeryAlert[]        @relation("EmergencyAlerts")
@@ -13367,4 +13369,222 @@ model DeviceCredential {
   @@index([userId])
   @@index([expiresAt])
   @@map("device_credentials")
+}
+
+// ============================================================
+// Special requirements for a case
+// ------------------------------------------------------------
+// What the surgeon asks for by name at booking — a 2/0 vicryl on a round
+// body, a size 16 silicone Foley, a redivac drain — as opposed to the
+// base pack, which follows from the operative magnitude and needs nobody to
+// choose it.
+//
+// A CATALOGUE, NOT FREE TEXT. "3/0 nylon" typed four ways is four items to
+// the store keeper and four lines to bill, and a pack picked against a typo
+// is a pack that is wrong in theatre. Anything genuinely new is added once,
+// through the OTHER path, and becomes catalogue for everybody after that.
+// ============================================================
+
+enum SpecialNeedCategory {
+  SUTURE
+  URETHRAL_CATHETER
+  DRAIN
+  HAEMOSTATIC_AGENT
+  TRACHEOSTOMY_TUBE
+  MESH
+  CHEST_TUBE
+  CHEST_DRAIN_BOTTLE
+  ANTIBIOTIC
+  // Things that go into the magnitude bundle rather than being chosen case
+  // by case, but which are still orderable items the store counts.
+  SYRINGE
+  IV_CANNULA
+  GIVING_SET
+  PLASTER
+  GLOVES
+  WATER_FOR_INJECTION
+  // Orthopaedic and dressing consumables, chosen per case.
+  BANDAGE
+  CASTING
+  // Drugs that are not antibiotics: local anaesthetic agents, and the
+  // adjuncts that must be on the trolley before blood is given.
+  LOCAL_ANAESTHETIC
+  TRANSFUSION_ADJUNCT
+  OTHER
+}
+
+/// One orderable thing. The catalogue the booking form offers.
+model SpecialNeedItem {
+  id       String              @id @default(uuid())
+  category SpecialNeedCategory
+
+  /// What it is called on the shelf, e.g. "Vicryl 2/0".
+  name String
+
+  /// The axes that matter clinically, kept as separate columns rather than
+  /// baked into the name, so the form can offer them as dropdowns and the
+  /// store can count by them.
+  size          String? // 2/0, 16Fr, 15x15cm
+  material      String? // polyglactin, silicone, polypropylene
+  needleType    String? // cutting, reverse cutting, round body, taper cut
+  needleSize    String? // 1/2 circle 26mm
+  absorbable    Boolean? // null where the distinction does not apply
+  brand         String?
+  specification String? // anything that does not fit the columns above
+
+  /// Items the hospital added itself through the OTHER path, as opposed to
+  /// the standard list seeded with the system. Kept so a sweep of locally
+  /// added entries is possible without guessing from the names.
+  isLocallyAdded Boolean @default(false)
+  isActive       Boolean @default(true)
+
+  /// Dispensed by pharmacy rather than by the consumable store. Antibiotics
+  /// are the obvious case; some haemostatics are too.
+  dispensedByPharmacy Boolean @default(false)
+
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  surgeryNeeds SurgerySpecialNeed[]
+
+  /// One row per real-world thing. The store keeper should never be choosing
+  /// between two spellings of the same suture.
+  @@unique([category, name, size, brand])
+  @@index([category, isActive])
+  @@map("special_need_items")
+}
+
+/// A catalogue item asked for on one case, with how many.
+model SurgerySpecialNeed {
+  id        String @id @default(uuid())
+  surgeryId String
+  itemId    String
+
+  quantity Int     @default(1)
+  unit     String  @default("piece")
+  /// Anything case-specific the surgeon added on top of the catalogue entry.
+  note     String?
+
+  /// Added automatically from the operative magnitude rather than chosen.
+  /// Shown differently, and a surgeon removing one is a decision worth
+  /// keeping rather than a correction.
+  fromBundle Boolean @default(false)
+
+  /// The store or pharmacy could not supply this one.
+  ///
+  /// Kept on the line rather than inferred from stock levels, because the
+  /// question is not "is there any left" but "was this case able to have
+  /// it" — stock can arrive an hour later and the decision has already
+  /// been made and printed.
+  outOfStock       Boolean   @default(false)
+  outOfStockAt     DateTime?
+  outOfStockByName String?
+
+  requestedById   String?
+  requestedByName String?
+  createdAt       DateTime @default(now())
+
+  surgery Surgery         @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+  item    SpecialNeedItem @relation(fields: [itemId], references: [id])
+
+  @@index([surgeryId])
+  @@index([itemId])
+  @@map("surgery_special_needs")
+}
+
+// ============================================================
+// Theatre-wide settings an administrator controls
+// ------------------------------------------------------------
+// A singleton, like radio_settings, and replicated the same way.
+// ============================================================
+model TheatreSetting {
+  id String @id @default("singleton")
+
+  /// THE DEPOSIT NOTICE IS OFF UNTIL SOMEBODY TURNS IT ON.
+  ///
+  /// It tells staff the hospital now supplies drugs and consumables and that
+  /// patients must not be handed paper prescriptions. Announcing that before
+  /// the supply actually works would send patients away empty-handed with
+  /// nothing to buy and nothing issued, so it ships switched off and the
+  /// administrator decides the day.
+  depositNoticeEnabled Boolean @default(false)
+  depositNoticeText    String  @default("PATIENT NOW PAYS DRUG AND CONSUMABLE DEPOSIT. THESE CONSUMABLES AND DRUGS WILL BE PROVIDED BY THE HOSPITAL — DO NOT GIVE PATIENT ANY PAPER PRESCRIPTIONS.")
+
+  /// Deposits by operative magnitude, in naira. Null means not yet set, which
+  /// the booking form must say plainly rather than showing zero — "no deposit"
+  /// and "nobody has set this" are different things to a cashier.
+  minorConsumableFee        Decimal? @db.Decimal(12, 2)
+  intermediateConsumableFee Decimal? @db.Decimal(12, 2)
+  majorConsumableFee        Decimal? @db.Decimal(12, 2)
+  minorPharmacyFee          Decimal? @db.Decimal(12, 2)
+  intermediatePharmacyFee   Decimal? @db.Decimal(12, 2)
+  majorPharmacyFee          Decimal? @db.Decimal(12, 2)
+
+  updatedAt     DateTime @updatedAt
+  updatedById   String?
+  updatedByName String?
+
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@map("theatre_settings")
+}
+
+/// Whether the patient has paid, and whether the goods are packed.
+///
+/// ONE ROW PER CASE, holding both sides — pharmacy and the consumable store
+/// — because the question every surgeon actually asks is "is my patient
+/// ready", and an answer split across two tables is two queries and two
+/// chances to show half of it.
+///
+/// The amounts are SNAPSHOTTED at booking rather than read live from
+/// theatre_settings. A deposit the patient already paid must not change
+/// because an administrator revised the tariff afterwards; the figure on
+/// the receipt and the figure in the record have to be the same one.
+model CaseDepositStatus {
+  id        String @id @default(uuid())
+  surgeryId String @unique
+
+  /// The magnitude the fees were taken from, kept so a later change of
+  /// magnitude is visibly inconsistent rather than silently repriced.
+  magnitude String?
+
+  consumableAmount       Decimal?      @db.Decimal(12, 2)
+  consumableStatus       DepositStatus @default(UNPAID)
+  consumablePaidAt       DateTime?
+  consumablePaidByName   String?
+  /// Set when the store has made the pack up and it is ready to collect.
+  consumablePackedAt     DateTime?
+  consumablePackedByName String?
+
+  pharmacyAmount       Decimal?      @db.Decimal(12, 2)
+  pharmacyStatus       DepositStatus @default(UNPAID)
+  pharmacyPaidAt       DateTime?
+  pharmacyPaidByName   String?
+  pharmacyPackedAt     DateTime?
+  pharmacyPackedByName String?
+
+  /// Why a deposit was waived. Required by the API when the status is
+  /// WAIVED: a waiver with no reason is indistinguishable from a mistake.
+  waiverReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  surgery Surgery @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  @@index([consumableStatus])
+  @@index([pharmacyStatus])
+  @@map("case_deposit_status")
+}
+
+enum DepositStatus {
+  UNPAID
+  PAID
+  WAIVED
 }
