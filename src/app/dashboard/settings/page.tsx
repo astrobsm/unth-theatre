@@ -1,5 +1,6 @@
 'use client';
 
+import CatalogueSeedSetting from '@/components/CatalogueSeedSetting';
 import TheatreFeeSettings from '@/components/TheatreFeeSettings';
 import FingerprintSetting from '@/components/FingerprintSetting';
 import { useState, useEffect, useCallback } from 'react';
@@ -350,6 +351,10 @@ export default function SettingsPage() {
         {/* Deposits and the deposit notice. Visible to everyone so staff can
             see what a patient will be asked for; editable only by the roles
             the API also enforces. */}
+        {/* Loads the standard catalogue. Hides itself for anyone who
+            cannot run it, so no one is shown a button that refuses. */}
+        <CatalogueSeedSetting />
+
         <TheatreFeeSettings
           canEdit={
             !!session?.user?.role &&
