@@ -1,6 +1,8 @@
 'use client';
 
 import DepositNotice from '@/components/DepositNotice';
+import { planUpload, compressionSummary } from '@/lib/consentCompression';
+import { compressConsentImage, readFileUnchanged } from '@/lib/consentCompressionBrowser';
 import SpecialNeedsPicker, {
   type ChosenNeed,
   type CatalogueItem,
@@ -9,7 +11,7 @@ import { bundleFor, needsLocalAnaestheticChoice } from '@/lib/specialNeeds/bundl
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ScheduleConflictDialog from '@/components/scheduling/ScheduleConflictDialog';
-import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone, Camera } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Stethoscope, AlertCircle, Users, Plus, Trash2, AlertTriangle, Zap, CheckCircle, Package, Pill, FileText, Copy, Check, X, UserPlus, FileSignature, Phone, Camera, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -534,6 +536,12 @@ export default function NewSurgeryPage() {
 
   // Informed Consent upload (file → base64 → posted with surgery)
   const [consentFile, setConsentFile] = useState<{ name: string; mimeType: string; base64: string; size: number } | null>(null);
+  /// Shown while the photograph is being re-encoded. On an older phone a
+  /// 12 MP image takes a second or two, and a button that does nothing for
+  /// two seconds gets pressed again.
+  const [consentCompressing, setConsentCompressing] = useState(false);
+  /// "4.8 MB -> 740 KB", so somebody can see it worked.
+  const [consentNote, setConsentNote] = useState('');
   const [consentError, setConsentError] = useState<string>('');
 
   const toggleListItem = (list: string[], setList: (v: string[]) => void, item: string) => {
@@ -604,21 +612,56 @@ export default function NewSurgeryPage() {
 
   async function handleConsentFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     setConsentError('');
+    setConsentNote('');
     const file = e.target.files?.[0];
     if (!file) { setConsentFile(null); return; }
-    if (file.size > 10 * 1024 * 1024) { setConsentError('Consent file must be ≤ 10 MB.'); return; }
-    if (!/^(application\/pdf|image\/(png|jpe?g|webp|heic))$/i.test(file.type)) {
-      setConsentError('Allowed formats: PDF, PNG, JPG, WEBP, HEIC.');
+
+    // COMPRESSED BEFORE IT IS READ, using the same policy as the structured
+    // consent page rather than a second one written here.
+    //
+    // A phone produces 4–12 MB per photograph, it is posted as base64 which
+    // costs a third on top, and theatre wifi has been measured in hundreds
+    // of bytes per second. This form previously read the file whole: it
+    // accepted up to 10 MB, which arrives as ~13 MB of JSON and simply does
+    // not finish. The booking is then abandoned halfway, which is how a
+    // case reaches the morning with no consent attached.
+    //
+    // planUpload decides; it leaves a PDF alone, passes an already-small
+    // photograph through untouched, and only re-encodes what needs it.
+    const plan = planUpload(file.size, file.type);
+
+    if (plan.action === 'REJECT') {
+      setConsentError(plan.reason);
+      setConsentFile(null);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const base64 = result.includes(',') ? result.split(',').pop() || '' : result;
-      setConsentFile({ name: file.name, mimeType: file.type, base64, size: file.size });
-    };
-    reader.onerror = () => setConsentError('Failed to read file.');
-    reader.readAsDataURL(file);
+
+    setConsentCompressing(true);
+    try {
+      const prepared =
+        plan.action === 'COMPRESS'
+          ? await compressConsentImage(file)
+          : await readFileUnchanged(file);
+
+      setConsentFile({
+        name: prepared.name,
+        mimeType: prepared.mimeType,
+        base64: prepared.base64,
+        size: prepared.size,
+      });
+
+      if (prepared.compressedFrom) {
+        setConsentNote(compressionSummary(prepared.compressedFrom, prepared.size));
+      }
+    } catch (err) {
+      // The message from compressConsentImage is written for the person
+      // holding the phone — take it again, closer, without shadow — so it
+      // is shown as it is rather than replaced with something generic.
+      setConsentError(err instanceof Error ? err.message : 'Failed to read file.');
+      setConsentFile(null);
+    } finally {
+      setConsentCompressing(false);
+    }
   }
 
   // Reload consumable catalog when subspecialty changes (so the picker can be specialty-filtered)
@@ -1198,7 +1241,14 @@ export default function NewSurgeryPage() {
       // with by the deferred-requirements mechanism. So there is no
       // exemption to make here: an elective case means a patient who is
       // awake, expected, and able to sign.
-      if (!consentFile) {
+      //
+      // EITHER ROUTE SATISFIES IT. A photograph of the signed paper and a
+      // consent signed on screen are the same undertaking by the same
+      // patient, and the app already treats the electronic one as consent
+      // everywhere else — the holding area, the pre-op assessment. Demanding
+      // the photograph as well would mean a ward that had gone paperless
+      // could not book a case at all.
+      if (!consentFile && !isConsentSigned(consentForm)) {
         essentials.push('the signed consent');
       }
       if (essentials.length) {
@@ -1219,7 +1269,7 @@ export default function NewSurgeryPage() {
             ...(selectedPatientId ? [] : [{ name: 'patientSearch', label: 'Patient', message: 'Search for the patient and select them.' }]),
             ...(String(fd.get('procedureName') ?? '').trim() ? [] : [{ name: 'procedureName', label: 'Procedure', message: 'Pick it from the list, or choose “Other” and name it.' }]),
             ...(String(fd.get('scheduledDate') ?? '').trim() ? [] : [{ name: 'scheduledDate', label: 'Date', message: 'The day theatre should expect the patient.' }]),
-            ...(consentFile ? [] : [{ name: 'consentUpload', label: 'Signed consent', message: 'Photograph the signed paper form and attach it. The holding area will not accept the patient without it.' }]),
+            ...(consentFile || isConsentSigned(consentForm) ? [] : [{ name: 'consentUpload', label: 'Signed consent', message: 'Either photograph the signed paper form, or sign it on screen in the Consent Form section. The holding area will not accept the patient without one of them.' }]),
           ],
           fixes: [
             { kind: 'field', label: 'Take me to the first one', field: !selectedPatientId ? 'patientSearch' : (!String(fd.get('procedureName') ?? '').trim() ? 'procedureName' : 'scheduledDate') },
@@ -3383,11 +3433,70 @@ ${pretty} — ${days} days from today.
             />
           </div>
 
-          {!consentFile && (
-            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-              Required. The case cannot be booked without the signed consent attached.
+          {/* A 12 MP photograph takes a second or two to re-encode on an
+              older phone, and a control that does nothing for two seconds
+              gets pressed again — which on a file input means picking the
+              photograph twice. */}
+          {consentCompressing && (
+            <p className="mt-2 flex items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-600 border-t-transparent" />
+              Shrinking the photograph so it will upload…
             </p>
           )}
+
+          {/* THE SECOND ROUTE, beside the first rather than buried three
+              sections below it. Signing on screen has been possible all
+              along, but the only sign of it was a Consent Form card further
+              down the page that nobody scrolled to with a camera already in
+              their hand. Two ways of doing the same thing should be offered
+              in the same place. */}
+          {!consentFile && !consentCompressing && !isConsentSigned(consentForm) && (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-sm font-medium text-emerald-900">
+                No paper form? Sign it on screen instead.
+              </p>
+              <p className="mt-1 text-xs text-emerald-800">
+                The patient signs on the device. It counts as consent everywhere the photograph
+                does — the holding area, the pre-operative assessment and the case record.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  goToStep(3);
+                  // The consent card is several sections down; land on it
+                  // rather than at the top of a step.
+                  setTimeout(() => {
+                    document
+                      .getElementById('consent-form-section')
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 60);
+                }}
+                className="mt-2 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                <PenLine className="h-4 w-4" />
+                Sign the consent on screen
+              </button>
+            </div>
+          )}
+
+          {isConsentSigned(consentForm) && !consentFile && (
+            <p className="mt-3 flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm font-medium text-green-800">
+              <CheckCircle className="h-4 w-4" />
+              Consent signed on screen. No photograph is needed.
+            </p>
+          )}
+
+          {!consentFile && !consentCompressing && !isConsentSigned(consentForm) && (
+            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              Required. The case cannot be booked until the consent is either photographed or
+              signed on screen.
+            </p>
+          )}
+
+          {consentNote && (
+            <p className="mt-2 text-sm text-green-700">{consentNote}</p>
+          )}
+
           {consentError && <div className="mt-2 text-sm text-red-600">{consentError}</div>}
           {consentFile && (
             <div className="mt-3 flex items-center gap-3 text-sm">
@@ -3434,7 +3543,7 @@ ${pretty} — ${days} days from today.
         </div>
 
         {/* Informed / Electronic Consent — UNTH consent form captured at booking */}
-        <div className={`${stepClass(3)} card`}>
+        <div id="consent-form-section" className={`${stepClass(3)} card`}>
           <div className="flex items-center gap-3 mb-2">
             <FileSignature className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-semibold">Consent Form</h2>
