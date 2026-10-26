@@ -3150,6 +3150,41 @@ ${pretty} — ${days} days from today.
             />
           </div>
 
+          {/* SPECIAL REQUIREMENTS — here, beside Special Needs.
+
+              This has now been in two wrong places. First on the Packs
+              step, because the wizard has a step called "Packs & sign-off"
+              and that reads like where consumables belong. It is not: the
+              case is BOOKED from this step, by the "Book now" button a few
+              inches below, and almost nobody walks to the end of a six-step
+              wizard first. A section on a step the surgeon never reaches is
+              a section that does not exist, which is exactly what was
+              reported — twice.
+
+              Beside Special Needs is where it belongs. "Blood transfusion,
+              diathermy, stirrups" and "2/0 vicryl, a 16Fr Foley, a redivac"
+              are the same question asked at two levels of detail. */}
+          <div className="mt-4">
+            <SpecialNeedsPicker
+              value={specialNeeds}
+              onChange={(next) => {
+                // Remember which bundled lines were taken out, so the
+                // effect does not put them straight back on the next
+                // keystroke.
+                const goneBundled = specialNeeds
+                  .filter((pv) => pv.fromBundle && !next.some((n) => n.itemId === pv.itemId))
+                  .map((pv) => pv.itemId);
+                if (goneBundled.length) {
+                  removedBundleIdsRef.current = [
+                    ...removedBundleIdsRef.current,
+                    ...goneBundled,
+                  ];
+                }
+                setSpecialNeeds(next);
+              }}
+            />
+          </div>
+
           {/* Post-operative disposition */}
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -3424,6 +3459,10 @@ ${pretty} — ${days} days from today.
             </label>
 
             <input
+              // Named so the blocking dialog's "Go to it" can actually find
+              // it. Without a name it reported "that field is not on this
+              // part of the form" and left the person with nowhere to go.
+              name="consentUpload"
               aria-label="Upload signed informed consent file"
               title="Upload signed informed consent file"
               type="file"
@@ -3534,110 +3573,19 @@ ${pretty} — ${days} days from today.
           <ConsentFormFields value={consentForm} onChange={setConsentForm} />
         </div>
 
-        {/* Clinical Summary — Comorbidities & Current Medications */}
-        <div className={`${stepClass(3)} card`}>
-          <div className="flex items-center gap-3 mb-2">
-            <Stethoscope className="w-6 h-6 text-primary-600" />
-            <h2 className="text-xl font-semibold">Clinical Summary</h2>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Tick all comorbidities and current medications that apply to the patient. The Pharmacist will see this summary
-            on the Pharmacy page when packing this prescription.
-          </p>
+        {/* CLINICAL SUMMARY REMOVED FROM BOOKING.
 
-          <div className="mb-4">
-            <h3 className="font-semibold text-gray-800 mb-2">Comorbidities (tick all that apply)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {COMORBIDITY_GROUPS.map((g) => (
-                <div key={g.category} className="border rounded-lg p-3 bg-gray-50">
-                  <div className="font-medium text-sm text-gray-700 mb-2">{g.category}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {g.items.map((item) => {
-                      const checked = comorbidities.includes(item);
-                      return (
-                        <label
-                          key={item}
-                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border cursor-pointer select-none ${
-                            checked
-                              ? 'bg-primary-100 border-primary-400 text-primary-800'
-                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleListItem(comorbidities, setComorbidities, item)}
-                            className="hidden"
-                          />
-                          {item}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3">
-              <label htmlFor="otherComorbidities" className="block text-sm font-medium text-gray-700 mb-1">
-                Other comorbidities / clinical notes
-              </label>
-              <textarea
-                id="otherComorbidities"
-                value={otherComorbidities}
-                onChange={(e) => setOtherComorbidities(e.target.value)}
-                rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="Any other relevant condition not listed above"
-              />
-            </div>
-          </div>
+            Comorbidities and current medications belong to the PATIENT,
+            not to one operation, and three places already collect them:
+            patient registration, the pre-operative visit, and the
+            anaesthetist's review. Asking a fourth time, at booking, on a
+            form that is already six steps long, is how a surgeon with a
+            list to run skips it — and a half-filled clinical summary is
+            worse than a blank one, because it reads as complete.
 
-          <div>
-            <h3 className="font-semibold text-gray-800 mb-2">Current Medications (tick all that apply)</h3>
-            <div className="flex flex-wrap gap-2">
-              {CURRENT_MEDICATION_OPTIONS.map((m) => {
-                const checked = currentMedications.includes(m);
-                return (
-                  <label
-                    key={m}
-                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border cursor-pointer select-none ${
-                      checked
-                        ? 'bg-emerald-100 border-emerald-400 text-emerald-800'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleListItem(currentMedications, setCurrentMedications, m)}
-                      className="hidden"
-                    />
-                    {m}
-                  </label>
-                );
-              })}
-            </div>
-            <div className="mt-3">
-              <label htmlFor="otherMedications" className="block text-sm font-medium text-gray-700 mb-1">
-                Other current medications (specify name, dose, frequency)
-              </label>
-              <textarea
-                id="otherMedications"
-                value={otherMedications}
-                onChange={(e) => setOtherMedications(e.target.value)}
-                rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="e.g. Metformin 500mg PO BD; Amlodipine 5mg PO daily"
-              />
-            </div>
-          </div>
-
-          {(comorbidities.length + currentMedications.length) > 0 && (
-            <div className="mt-3 text-xs text-gray-500">
-              Selected: {comorbidities.length} comorbidities, {currentMedications.length} current medications.
-            </div>
-          )}
-        </div>
+            The pharmacist is unaffected: the Pharmacy page reads
+            prescription.surgery.patient.comorbidities — the patient
+            record — so nothing it displays came from here. */}
 
         {/* Compulsory pre-operative safety labs & risk assessments */}
         {(() => {
@@ -3713,39 +3661,6 @@ ${pretty} — ${days} days from today.
         })()}
 
         {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
-        {/* SPECIAL REQUIREMENTS — on the PACKS step, beside "Apply a pack".
-
-            It was first put on the Team step, beneath the consent upload,
-            on the reasoning that magnitude and anaesthesia type are known
-            by then so the standard pack is already filled in. That was true
-            and beside the point: the wizard has a step called "Packs &
-            sign-off", and somebody looking for where to prescribe
-            consumables and drugs goes there. They did, and it was not
-            there.
-
-            Being one step later costs nothing — the bundle is recomputed
-            from magnitude whenever it changes, so arriving here finds it
-            already populated. */}
-        <div className={stepClass(5)}>
-          <SpecialNeedsPicker
-            value={specialNeeds}
-            onChange={(next) => {
-              // Remember which bundled lines were taken out, so the effect
-              // does not put them straight back on the next keystroke.
-              const goneBundled = specialNeeds
-                .filter((p) => p.fromBundle && !next.some((n) => n.itemId === p.itemId))
-                .map((p) => p.itemId);
-              if (goneBundled.length) {
-                removedBundleIdsRef.current = [
-                  ...removedBundleIdsRef.current,
-                  ...goneBundled,
-                ];
-              }
-              setSpecialNeeds(next);
-            }}
-          />
-        </div>
-
         <div className={`${stepClass(5)} card`}>
           <div className="flex items-center gap-3 mb-3">
             <Package className="w-6 h-6 text-primary-600" />
