@@ -183,7 +183,7 @@ export default function SpecialNeedsPicker({
       <div className="mb-3 flex items-center gap-3">
         <Package className="h-6 w-6 text-sky-600" />
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Special requirements</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Special consumables and drugs</h2>
           <p className="text-sm text-gray-500">
             What this case needs by name. The base pack for the operative magnitude is added
             automatically — this is everything on top of it.

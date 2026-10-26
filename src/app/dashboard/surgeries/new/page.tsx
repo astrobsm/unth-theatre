@@ -1,6 +1,13 @@
 'use client';
 
 import DepositNotice from '@/components/DepositNotice';
+import {
+  pick,
+  forServer,
+  isWorthResuming,
+  CONSENT_DRAFT_KEY,
+  type BookingDraft,
+} from '@/lib/booking/draftState';
 import { planUpload, compressionSummary } from '@/lib/consentCompression';
 import { compressConsentImage, readFileUnchanged } from '@/lib/consentCompressionBrowser';
 import SpecialNeedsPicker, {
@@ -278,7 +285,7 @@ export default function NewSurgeryPage() {
 
   const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
-  const [resumable, setResumable] = useState<{ step: string; patientName: string | null; updatedAt: string } | null>(null);
+  const [resumable, setResumable] = useState<{ step: string; patientName: string | null; updatedAt: string; data?: BookingDraft } | null>(null);
 
   const lastPayloadRef = useRef<Record<string, unknown> | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
@@ -643,12 +650,21 @@ export default function NewSurgeryPage() {
           ? await compressConsentImage(file)
           : await readFileUnchanged(file);
 
-      setConsentFile({
+      const kept = {
         name: prepared.name,
         mimeType: prepared.mimeType,
         base64: prepared.base64,
         size: prepared.size,
-      });
+      };
+      setConsentFile(kept);
+      // Held on the device so a refresh or a crash does not cost a trip
+      // back to the patient. It is deliberately not sent to the draft
+      // endpoint, which would truncate it — see lib/booking/draftState.
+      try {
+        localStorage.setItem(CONSENT_DRAFT_KEY, JSON.stringify(kept));
+      } catch {
+        /* storage full or blocked; the photograph simply is not kept */
+      }
 
       if (prepared.compressedFrom) {
         setConsentNote(compressionSummary(prepared.compressedFrom, prepared.size));
@@ -865,6 +881,9 @@ export default function NewSurgeryPage() {
             step: draft.step,
             patientName: draft.patientName ?? null,
             updatedAt: draft.updatedAt,
+            // CARRIED THROUGH. Without this the banner knew only which step
+            // to jump to, which is why resuming restored nothing.
+            data: (draft.data ?? undefined) as BookingDraft | undefined,
           });
         }
       } catch {
@@ -879,34 +898,216 @@ export default function NewSurgeryPage() {
   // The save is awaited but never blocks progress: if it fails the person
   // carries on with a warning rather than being stopped from booking a case
   // because the convenience that protects their typing is unavailable.
-  const goToStep = async (next: number) => {
-    if (next > step) {
-      setDraftSaving(true);
-      try {
-        const form = document.querySelector('form');
-        const fd = form ? new FormData(form as HTMLFormElement) : null;
-        // forEach rather than for..of: this project's TS target does not allow
-        // iterating a FormData directly, and a build flag is a heavy price for
-        // one loop.
-        const snapshot: Record<string, unknown> = {};
-        fd?.forEach((v, k) => { if (typeof v === 'string') snapshot[k] = v; });
+  /**
+   * Everything worth surviving a refresh, in one place.
+   *
+   * The old version snapshotted FormData alone, which is only native inputs
+   * carrying a name attribute — so the patient, the magnitude, the team, the
+   * consent photograph and the special consumables were all absent, because
+   * every one of them lives in React state.
+   */
+  const collectDraft = useCallback((): BookingDraft => {
+    const formEl = document.querySelector('form');
+    const fields: Record<string, string> = {};
+    // forEach rather than for..of: this project targets ES5, where
+    // iterating a FormData directly does not compile.
+    if (formEl) {
+      new FormData(formEl as HTMLFormElement).forEach((v, k) => {
+        if (typeof v === 'string') fields[k] = v;
+      });
+    }
 
+    return {
+      selectedPatientId,
+      procedureName,
+      extraProcedures,
+      unit,
+      subspecialty,
+      selectedTheatreId,
+      selectedSurgeonId,
+      supervisingConsultantIds,
+      assistantIds,
+      scheduledDate,
+      scheduledTime,
+      estimatedDuration,
+      magnitude,
+      anesthesiaType,
+      localAnaestheticId,
+      needBloodTransfusion,
+      otherSpecialNeeds,
+      postOpDestination,
+      isDayCase,
+      teamMembers,
+      noUnitRegistrar,
+      noUnitSeniorRegistrar,
+      specialNeeds,
+      removedBundleIds: removedBundleIdsRef.current,
+      selectedConsumables,
+      selectedDrugs,
+      consentFile,
+      consentForm,
+      preopOverrideReason,
+      fields,
+    } as BookingDraft;
+  }, [
+    selectedPatientId, procedureName, extraProcedures, unit, subspecialty,
+    selectedTheatreId, selectedSurgeonId, supervisingConsultantIds, assistantIds,
+    scheduledDate, scheduledTime, estimatedDuration, magnitude, anesthesiaType,
+    localAnaestheticId, needBloodTransfusion, otherSpecialNeeds, postOpDestination,
+    isDayCase, teamMembers, noUnitRegistrar, noUnitSeniorRegistrar, specialNeeds,
+    selectedConsumables, selectedDrugs, consentFile, consentForm, preopOverrideReason,
+  ]);
+
+  /** Put a saved draft back into the form. */
+  const applyDraft = useCallback((d: BookingDraft, atStep: number) => {
+    // pick() keeps a field at its current value when the draft does not
+    // mention it, so a draft written before a field existed cannot blank it.
+    setSelectedPatientId(pick(d.selectedPatientId, ''));
+    setProcedureName(pick(d.procedureName, ''));
+    if (d.extraProcedures !== undefined) setExtraProcedures(d.extraProcedures as never);
+    setUnit(pick(d.unit, ''));
+    setSubspecialty(pick(d.subspecialty, ''));
+    setSelectedTheatreId(pick(d.selectedTheatreId, ''));
+    setSelectedSurgeonId(pick(d.selectedSurgeonId, ''));
+    setSupervisingConsultantIds(pick(d.supervisingConsultantIds, []));
+    setAssistantIds(pick(d.assistantIds, []));
+    setScheduledDate(pick(d.scheduledDate, ''));
+    setScheduledTime(pick(d.scheduledTime, ''));
+    setEstimatedDuration(pick(d.estimatedDuration, ''));
+    setMagnitude(pick(d.magnitude, ''));
+    setAnesthesiaType(pick(d.anesthesiaType, ''));
+    setLocalAnaestheticId(pick(d.localAnaestheticId, ''));
+    setNeedBloodTransfusion(pick(d.needBloodTransfusion, false));
+    setOtherSpecialNeeds(pick(d.otherSpecialNeeds, ''));
+    setPostOpDestination(pick(d.postOpDestination, ''));
+    setIsDayCase(pick(d.isDayCase, false));
+    if (d.teamMembers !== undefined) setTeamMembers(d.teamMembers as never);
+    setNoUnitRegistrar(pick(d.noUnitRegistrar, false));
+    setNoUnitSeniorRegistrar(pick(d.noUnitSeniorRegistrar, false));
+    if (d.specialNeeds !== undefined) setSpecialNeeds(d.specialNeeds as never);
+    removedBundleIdsRef.current = pick(d.removedBundleIds, []);
+    if (d.selectedConsumables !== undefined) setSelectedConsumables(d.selectedConsumables as never);
+    if (d.selectedDrugs !== undefined) setSelectedDrugs(d.selectedDrugs as never);
+    // The photograph comes from the device, not from the draft.
+    try {
+      const stored = localStorage.getItem(CONSENT_DRAFT_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.base64) setConsentFile(parsed);
+      }
+    } catch {
+      /* nothing kept, or unreadable */
+    }
+    if (d.consentForm !== undefined) setConsentForm(d.consentForm as never);
+    setPreopOverrideReason(pick(d.preopOverrideReason, ''));
+
+    setStep(atStep);
+
+    // Native inputs with no React state behind them. Applied after a tick
+    // so the step has rendered and the elements exist. A file input cannot
+    // be assigned to and is skipped.
+    setTimeout(() => {
+      const el = document.querySelector('form');
+      if (!el || !d.fields) return;
+      Object.keys(d.fields).forEach((name) => {
+        const input = el.querySelector(`[name="${name}"]`) as HTMLInputElement | null;
+        if (input && input.type !== 'file' && !input.value) {
+          input.value = (d.fields as Record<string, string>)[name];
+        }
+      });
+    }, 80);
+  }, []);
+
+  /** Write the draft. Shared by the autosave, by navigation and by page exit. */
+  const saveDraft = useCallback(
+    async (draft: BookingDraft, atStep: number) => {
+      try {
         const res = await fetch('/api/surgeries/draft', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            step: ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'][next] ?? 'patient',
-            patientId: selectedPatientId || null,
-            patientName: patients.find((p) => p.id === selectedPatientId)?.name ?? null,
-            data: snapshot,
+            step: ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'][atStep] ?? 'patient',
+            patientId: draft.selectedPatientId || null,
+            patientName: patients.find((pt) => pt.id === draft.selectedPatientId)?.name ?? null,
+            data: draft,
           }),
         });
         if (res.ok) setDraftSavedAt(new Date());
       } catch {
-        /* saved nothing — the warning below says so */
-      } finally {
-        setDraftSaving(false);
+        /* offline — the banner says when it last saved */
       }
+    },
+    [patients],
+  );
+
+  /**
+   * Autosave, two seconds after the typing stops.
+   *
+   * Step changes alone were never enough: somebody who fills in half a step
+   * and then loses the connection, closes the tab or has the phone kill the
+   * app has crossed no step boundary and so had saved nothing at all.
+   *
+   * The consent photograph is dropped from a BACKGROUND save once the
+   * payload is heavy — a megabyte every few seconds on theatre wifi is the
+   * same mistake as the uncompressed upload was. It still goes with every
+   * step change and with the exit save below, so it is never at risk for
+   * long.
+   */
+  useEffect(() => {
+    // Nothing to save yet, and no draft to overwrite with emptiness.
+    const draft = collectDraft();
+    if (!isWorthResuming(draft)) return;
+
+    const t = setTimeout(() => {
+      void saveDraft(forServer(draft), step);
+    }, 2000);
+    return () => clearTimeout(t);
+  });
+
+  /**
+   * One last save on the way out.
+   *
+   * visibilitychange rather than beforeunload: a phone backgrounding the
+   * browser frequently never fires beforeunload at all, and that is exactly
+   * the case where the typing is about to be lost.
+   */
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState !== 'hidden') return;
+      const draft = collectDraft();
+      if (!isWorthResuming(draft)) return;
+      // keepalive so the request survives the page going away.
+      try {
+        navigator.sendBeacon?.(
+          '/api/surgeries/draft',
+          new Blob(
+            [
+              JSON.stringify({
+                step: ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'][step] ?? 'patient',
+                patientId: draft.selectedPatientId || null,
+                data: forServer(draft),
+              }),
+            ],
+            { type: 'application/json' },
+          ),
+        );
+      } catch {
+        /* sendBeacon unavailable; the two-second autosave is the fallback */
+      }
+    };
+    document.addEventListener('visibilitychange', flush);
+    return () => document.removeEventListener('visibilitychange', flush);
+  }, [collectDraft, step]);
+
+  const goToStep = async (next: number) => {
+    // SAVES IN BOTH DIRECTIONS. It used to save only when moving forward,
+    // so pressing Back discarded everything typed on the step being left —
+    // the one thing somebody pressing Back is certain not to want.
+    setDraftSaving(true);
+    try {
+      await saveDraft(forServer(collectDraft()), next);
+    } finally {
+      setDraftSaving(false);
     }
     setStep(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1893,6 +2094,9 @@ ${pretty} — ${days} days from today.
             setLocalAnaestheticId('');
             setConsentFile(null);
             setConsentError('');
+            // Also clear the copy held on the device, or the next patient
+            // inherits the last one's signed consent.
+            try { localStorage.removeItem(CONSENT_DRAFT_KEY); } catch { /* nothing kept */ }
             setNeedBloodTransfusion(false);
             // The bundle is rebuilt from the next patient's magnitude, and
             // the previous patient's removals must not carry over.
@@ -1927,8 +2131,17 @@ ${pretty} — ${days} days from today.
             <button
               type="button"
               onClick={() => {
+                // IT USED TO DO ONLY THE LINE BELOW: jump to the step and
+                // restore nothing, so "continue where I stopped" landed on
+                // step 3 with every field empty. The saved data was being
+                // written and never read.
                 const i = ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'].indexOf(resumable.step);
-                setStep(i >= 0 ? i : 0);
+                const atStep = i >= 0 ? i : 0;
+                if (resumable.data) {
+                  applyDraft(resumable.data, atStep);
+                } else {
+                  setStep(atStep);
+                }
                 setResumable(null);
               }}
               className="rounded-lg bg-indigo-600 text-white font-medium px-4 py-2 hover:bg-indigo-700"
@@ -1939,6 +2152,10 @@ ${pretty} — ${days} days from today.
               type="button"
               onClick={async () => {
                 await fetch('/api/surgeries/draft', { method: 'DELETE' }).catch(() => {});
+                // The photograph lives on the device, so discarding the
+                // draft has to clear it too — otherwise "Start fresh"
+                // leaves the previous patient's consent attached.
+                try { localStorage.removeItem(CONSENT_DRAFT_KEY); } catch { /* nothing kept */ }
                 setResumable(null);
               }}
               className="rounded-lg border border-indigo-300 text-indigo-800 px-4 py-2 hover:bg-indigo-100"

@@ -39,6 +39,17 @@ export async function GET() {
   return NextResponse.json({ draft: draft ?? null }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
+/**
+ * Identical to PUT, for navigator.sendBeacon.
+ *
+ * A beacon can only POST. It exists so the last few seconds of typing
+ * survive the page being closed or the phone backgrounding the browser,
+ * which is exactly when beforeunload does not fire and the work is lost.
+ */
+export async function POST(req: NextRequest) {
+  return PUT(req);
+}
+
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as { id?: string } | undefined)?.id;
