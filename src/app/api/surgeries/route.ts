@@ -20,6 +20,7 @@ import { checkPreopRequirements } from '@/lib/preopRequirements';
 import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
 import { buildPackRequests } from '@/lib/packRequests';
 import { apiError } from '@/lib/apiError';
+import { quoteFor, koboToNaira, isMagnitude } from '@/lib/specialNeeds/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -1031,6 +1032,40 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // THE BUNDLE, IF THE APP DID NOT SEND IT.
+    //
+    // The booking form resolves the magnitude bundle on the device and
+    // sends it as fromBundle lines. The Android app is a shell that loads
+    // its code over the web, so a phone running a cached older build sends
+    // none — and the case would then be priced for the surgeon's extras
+    // only and deposit far too little. Adding it here costs one query and
+    // closes that gap: the store also needs the rows to pick against.
+    try {
+      const sentBundle = (specialNeeds ?? []).some((n) => n.fromBundle);
+      if (!sentBundle && isMagnitude(surgery.magnitude)) {
+        const bundle = await prisma.magnitudeBundleItem.findMany({
+          where: { magnitude: surgery.magnitude },
+          select: { itemId: true, quantity: true },
+        });
+        const alreadyChosen = new Set((specialNeeds ?? []).map((n) => n.itemId));
+        const add = bundle.filter((b) => !alreadyChosen.has(b.itemId));
+        if (add.length > 0) {
+          await prisma.surgerySpecialNeed.createMany({
+            data: add.map((b) => ({
+              surgeryId: surgery.id,
+              itemId: b.itemId,
+              quantity: b.quantity,
+              fromBundle: true,
+              requestedByName: 'Automatic (operation size)',
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[surgeries] could not attach the magnitude bundle:', e);
+    }
+
     // Price the case, once, at booking.
     //
     // SNAPSHOTTED RATHER THAN READ LIVE. A deposit the patient has already
@@ -1044,22 +1079,57 @@ export async function POST(request: NextRequest) {
     // list with no price is fixable in the morning, a case that failed to
     // book is not.
     try {
-      const tariff = await prisma.theatreSetting.findUnique({ where: { id: 'singleton' } });
-      // Read off the created row rather than a local: magnitude stays
-      // inside surgeryData and is never destructured out.
-      const key = (surgery.magnitude ?? '').toLowerCase();
-      const pick = (suffix: 'ConsumableFee' | 'PharmacyFee') => {
-        if (key !== 'minor' && key !== 'intermediate' && key !== 'major') return null;
-        return (tariff as never as Record<string, unknown>)?.[`${key}${suffix}`] ?? null;
-      };
+      // PRICED FROM THE CASE'S OWN LINES, not from a flat fee per
+      // magnitude. Two major cases are not the same case: one needs a mesh
+      // and a chest drain, the other needs neither, and charging both the
+      // same overcharges one family and undercharges the hospital on the
+      // other. Read back from the rows actually recorded above, so the
+      // bundle and the surgeon's extras are both counted exactly once.
+      const needRows = await prisma.surgerySpecialNeed.findMany({
+        where: { surgeryId: surgery.id },
+        select: {
+          quantity: true,
+          item: {
+            select: { name: true, size: true, unitPrice: true, dispensedByPharmacy: true },
+          },
+        },
+      });
+
+      const quote = quoteFor(
+        needRows.map((n) => ({
+          unitPrice: n.item.unitPrice == null ? null : String(n.item.unitPrice),
+          quantity: n.quantity,
+          dispensedByPharmacy: n.item.dispensedByPharmacy,
+          name: `${n.item.name}${n.item.size ? ` ${n.item.size}` : ''}`,
+        })),
+      );
+
+      // The contingency is part of what the patient is asked for, so it
+      // belongs in consumableAmount — the figure the cashier collects —
+      // while the subtotal is kept beside it so a receipt can show the
+      // two apart. unpricedLineCount is stored rather than recomputed:
+      // whether this deposit was complete is a fact about the moment it
+      // was taken, and prices set afterwards must not rewrite it.
       await prisma.caseDepositStatus.create({
         data: {
           surgeryId: surgery.id,
           magnitude: surgery.magnitude ?? null,
-          consumableAmount: pick('ConsumableFee') as never,
-          pharmacyAmount: pick('PharmacyFee') as never,
+          consumableSubtotal: koboToNaira(quote.consumableSubtotalKobo),
+          consumableContingency: koboToNaira(quote.consumableContingencyKobo),
+          consumableAmount: koboToNaira(
+            quote.consumableSubtotalKobo + quote.consumableContingencyKobo,
+          ),
+          pharmacySubtotal: koboToNaira(quote.pharmacySubtotalKobo),
+          pharmacyAmount: koboToNaira(quote.pharmacySubtotalKobo),
+          unpricedLineCount: quote.unpricedLines.length,
         },
       });
+
+      if (!quote.complete) {
+        console.warn(
+          `[surgeries] case ${surgery.id} priced with ${quote.unpricedLines.length} unpriced line(s): ${quote.unpricedLines.join(', ')}`,
+        );
+      }
     } catch (e) {
       console.error('[surgeries] could not record the deposit status:', e);
     }

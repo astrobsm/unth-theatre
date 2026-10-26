@@ -293,6 +293,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'theatre_audit_conferences', cls: 'LWW', why: 'One sitting\u2019s record. Sealed by adoption in the application, not by the merge rule.' },
   { table: 'conference_attendees', cls: 'LWW', why: 'Who was in the room, and whether they were present. The latest correction stands.' },
   { table: 'case_deposit_status', cls: 'LWW', why: 'Whether the patient has paid their deposit and whether the pack is made up. Pharmacy and the store record it on the theatre server; the surgeon reads it from wherever they are, and the later word on a line is the true one.' },
+  { table: 'magnitude_bundle_items', cls: 'LWW', why: 'What a case of each size is given automatically. Edited by an administrator or the store from either node; the later edit of a line is a correction of the same line.' },
   { table: 'special_need_items', cls: 'LWW', why: 'The catalogue of sutures, catheters, drains and the rest. Added to from either side — a surgeon books from outside and the store keeper curates on the theatre server — and an entry edited later is a correction of the same item.' },
   { table: 'surgery_special_needs', cls: 'LWW', why: 'What one case asked for. Chosen by the surgeon at booking and adjusted by the store when they pack; the later word on a line is the true one.' },
   { table: 'theatre_settings', cls: 'LWW', why: 'Deposit notice and the fees by magnitude. A singleton set by an administrator from either side; the most recent change is the policy in force.' },

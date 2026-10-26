@@ -1,6 +1,7 @@
 'use client';
 
 import DepositNotice from '@/components/DepositNotice';
+import CaseDepositQuote from '@/components/CaseDepositQuote';
 import {
   pick,
   forServer,
@@ -3400,6 +3401,11 @@ ${pretty} — ${days} days from today.
                 setSpecialNeeds(next);
               }}
             />
+
+            {/* The running cost, while the choice is still open. This is
+                the only moment a cheaper equivalent can be picked or the
+                family warned early. */}
+            <CaseDepositQuote chosen={specialNeeds} catalogue={catalogueIndex} />
           </div>
 
           {/* Post-operative disposition */}

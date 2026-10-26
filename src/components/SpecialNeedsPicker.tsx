@@ -33,6 +33,8 @@ export type CatalogueItem = {
   brand: string | null;
   absorbable: boolean | null;
   dispensedByPharmacy: boolean;
+  /// Naira. Null means nobody has priced it — never treated as free.
+  unitPrice?: string | null;
 };
 
 export type ChosenNeed = {

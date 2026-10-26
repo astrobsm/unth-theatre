@@ -1,6 +1,8 @@
 'use client';
 
+import MagnitudeBundleSettings from '@/components/MagnitudeBundleSettings';
 import CatalogueSeedSetting from '@/components/CatalogueSeedSetting';
+import PriceListImport from '@/components/PriceListImport';
 import TheatreFeeSettings from '@/components/TheatreFeeSettings';
 import FingerprintSetting from '@/components/FingerprintSetting';
 import { useState, useEffect, useCallback } from 'react';
@@ -354,6 +356,15 @@ export default function SettingsPage() {
         {/* Loads the standard catalogue. Hides itself for anyone who
             cannot run it, so no one is shown a button that refuses. */}
         <CatalogueSeedSetting />
+
+        {/* The hospital's own price list, with its prices. Placed before the
+            bundle editor because the bundle's running total is meaningless
+            until the items in it have prices. */}
+        <PriceListImport />
+
+        {/* What each size of case is given automatically, and what that
+            costs. Hides itself from anyone who cannot edit it. */}
+        <MagnitudeBundleSettings />
 
         <TheatreFeeSettings
           canEdit={

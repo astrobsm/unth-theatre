@@ -13439,8 +13439,34 @@ model SpecialNeedItem {
   isActive       Boolean @default(true)
 
   /// Dispensed by pharmacy rather than by the consumable store. Antibiotics
-  /// are the obvious case; some haemostatics are too.
+  /// are the obvious case; some haemostatics are too. Also decides WHICH
+  /// deposit a line is counted into: pharmacy or consumables.
   dispensedByPharmacy Boolean @default(false)
+
+  /// How the store issues it: piece, pair, vial, set, litre.
+  ///
+  /// Kept on the item so the pick list and the out-of-stock prescription
+  /// say "2 vials" rather than "2 pieces". A nurse reading "2 pieces" of
+  /// ceftriaxone has to guess.
+  unit String @default("piece")
+
+  /// The hospital's own code for this line on its price list.
+  ///
+  /// Nullable because the standard catalogue predates the price list and
+  /// has no codes. It exists so that when the hospital reissues the list,
+  /// a row can be matched exactly rather than by a name somebody has
+  /// since corrected a spelling in.
+  sourceCode String?
+
+  /// Unit price in naira.
+  ///
+  /// NULL MEANS NOBODY HAS PRICED IT, which is not the same as free. A case
+  /// carrying unpriced lines produces a deposit that is knowingly
+  /// incomplete, and the booking says so rather than quietly undercharging
+  /// a patient who will be asked for the difference later.
+  unitPrice    Decimal?  @db.Decimal(12, 2)
+  pricedAt     DateTime?
+  pricedByName String?
 
   createdById   String?
   createdByName String?
@@ -13448,10 +13474,12 @@ model SpecialNeedItem {
   updatedAt     DateTime @updatedAt
 
   surgeryNeeds SurgerySpecialNeed[]
+  bundledIn    MagnitudeBundleItem[] @relation("BundleMembership")
 
   /// One row per real-world thing. The store keeper should never be choosing
   /// between two spellings of the same suture.
   @@unique([category, name, size, brand])
+  @@unique([sourceCode])
   @@index([category, isActive])
   @@map("special_need_items")
 }
@@ -13554,6 +13582,30 @@ model CaseDepositStatus {
   /// magnitude is visibly inconsistent rather than silently repriced.
   magnitude String?
 
+  /// WHAT THE PATIENT IS ACTUALLY ASKED FOR, itemised at booking.
+  ///
+  /// Not a flat tariff by magnitude any more: the deposit is the sum of the
+  /// bundle for that magnitude plus whatever the surgeon added, priced line
+  /// by line. Two major cases needing different meshes cost different
+  /// amounts, and a flat figure makes one patient subsidise the other.
+  consumableSubtotal Decimal? @db.Decimal(12, 2)
+  pharmacySubtotal   Decimal? @db.Decimal(12, 2)
+
+  /// Ten per cent on the CONSUMABLE side only, refundable.
+  ///
+  /// Theatre asks for things mid-case that nobody could have listed at
+  /// booking — another suture, a second drain. Without a float the patient's
+  /// relative is sent to a cashier while the abdomen is open. It is refunded
+  /// if unused, which is why it is held as its own figure rather than
+  /// folded into the subtotal: a refund nobody can compute is a refund that
+  /// never happens.
+  consumableContingency Decimal? @db.Decimal(12, 2)
+
+  /// How many lines had no price when the deposit was worked out. A deposit
+  /// computed over unpriced items is incomplete, and saying so beats
+  /// presenting a confident wrong number.
+  unpricedLineCount Int @default(0)
+
   consumableAmount       Decimal?      @db.Decimal(12, 2)
   consumableStatus       DepositStatus @default(UNPAID)
   consumablePaidAt       DateTime?
@@ -13587,4 +13639,31 @@ enum DepositStatus {
   UNPAID
   PAID
   WAIVED
+}
+
+/// What a case of a given size gets automatically.
+///
+/// REPLACES THE HARD-CODED LADDER in lib/specialNeeds/bundle.ts. That list
+/// was written from what a case of each size usually needs, which is a
+/// clinical judgement belonging to this hospital rather than to the code —
+/// and changing it meant a deployment. The code keeps the hard-coded set
+/// only as the fallback for a magnitude nobody has configured yet.
+model MagnitudeBundleItem {
+  id        String @id @default(uuid())
+  /// MINOR | INTERMEDIATE | MAJOR | SUPER_MAJOR
+  magnitude String
+  itemId    String
+  quantity  Int    @default(1)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  updatedByName String?
+
+  item SpecialNeedItem @relation("BundleMembership", fields: [itemId], references: [id], onDelete: Cascade)
+
+  /// One line per item per magnitude: two rows for the same glove would be
+  /// two picks in the store and two charges on the deposit.
+  @@unique([magnitude, itemId])
+  @@index([magnitude])
+  @@map("magnitude_bundle_items")
 }
