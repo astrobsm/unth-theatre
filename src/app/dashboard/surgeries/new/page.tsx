@@ -3516,32 +3516,6 @@ ${pretty} — ${days} days from today.
           )}
         </div>
 
-        {/* SPECIAL REQUIREMENTS, directly beneath the consent.
-
-            Placed here on purpose: by this point the magnitude and the
-            anaesthesia type have been answered, so the standard pack is
-            already filled in and the surgeon is adding to a list rather
-            than facing an empty one. */}
-        <div className={stepClass(2)}>
-          <SpecialNeedsPicker
-            value={specialNeeds}
-            onChange={(next) => {
-              // Remember which bundled lines were taken out, so the effect
-              // does not put them straight back on the next keystroke.
-              const goneBundled = specialNeeds
-                .filter((p) => p.fromBundle && !next.some((n) => n.itemId === p.itemId))
-                .map((p) => p.itemId);
-              if (goneBundled.length) {
-                removedBundleIdsRef.current = [
-                  ...removedBundleIdsRef.current,
-                  ...goneBundled,
-                ];
-              }
-              setSpecialNeeds(next);
-            }}
-          />
-        </div>
-
         {/* Informed / Electronic Consent — UNTH consent form captured at booking */}
         <div id="consent-form-section" className={`${stepClass(3)} card`}>
           <div className="flex items-center gap-3 mb-2">
@@ -3739,6 +3713,39 @@ ${pretty} — ${days} days from today.
         })()}
 
         {/* Named packs — apply a whole consumable/pharmacy pack in one tap */}
+        {/* SPECIAL REQUIREMENTS — on the PACKS step, beside "Apply a pack".
+
+            It was first put on the Team step, beneath the consent upload,
+            on the reasoning that magnitude and anaesthesia type are known
+            by then so the standard pack is already filled in. That was true
+            and beside the point: the wizard has a step called "Packs &
+            sign-off", and somebody looking for where to prescribe
+            consumables and drugs goes there. They did, and it was not
+            there.
+
+            Being one step later costs nothing — the bundle is recomputed
+            from magnitude whenever it changes, so arriving here finds it
+            already populated. */}
+        <div className={stepClass(5)}>
+          <SpecialNeedsPicker
+            value={specialNeeds}
+            onChange={(next) => {
+              // Remember which bundled lines were taken out, so the effect
+              // does not put them straight back on the next keystroke.
+              const goneBundled = specialNeeds
+                .filter((p) => p.fromBundle && !next.some((n) => n.itemId === p.itemId))
+                .map((p) => p.itemId);
+              if (goneBundled.length) {
+                removedBundleIdsRef.current = [
+                  ...removedBundleIdsRef.current,
+                  ...goneBundled,
+                ];
+              }
+              setSpecialNeeds(next);
+            }}
+          />
+        </div>
+
         <div className={`${stepClass(5)} card`}>
           <div className="flex items-center gap-3 mb-3">
             <Package className="w-6 h-6 text-primary-600" />

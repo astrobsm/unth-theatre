@@ -191,6 +191,23 @@ export default function SpecialNeedsPicker({
         </div>
       </div>
 
+      {/* AN EMPTY CATALOGUE LOOKS EXACTLY LIKE A BROKEN ONE. The dropdown
+          renders, it just has nothing in it, and somebody reasonably
+          concludes the feature is missing rather than unloaded — which is
+          what happened on the first real booking. Say which it is, and say
+          where to fix it. */}
+      {!loadError && catalogue.length === 0 && (
+        <p className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>The catalogue has not been loaded yet</strong>, so there is nothing to
+            choose from. An administrator loads it once, in{' '}
+            <strong>Settings &rarr; Special requirements catalogue</strong>. You can still book
+            this case — tell the store what is needed by hand.
+          </span>
+        </p>
+      )}
+
       {loadError && (
         <p className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
