@@ -93,6 +93,10 @@ export default function SpecialNeedsPicker({
   const [newSize, setNewSize] = useState('');
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  /// Items the catalogue is holding back because nobody has priced them.
+  const [withheld, setWithheld] = useState(0);
+  /// Set when the OTHER path created something with no price yet.
+  const [addedUnpriced, setAddedUnpriced] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -103,6 +107,7 @@ export default function SpecialNeedsPicker({
       }
       const data = await res.json();
       setCatalogue(data.items ?? []);
+      setWithheld(Number(data.withheldUnpriced ?? 0));
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -171,6 +176,16 @@ export default function SpecialNeedsPicker({
       const item: CatalogueItem = data.item;
       setCatalogue((prev) => (prev.some((p) => p.id === item.id) ? prev : [...prev, item]));
       add(item.id);
+      // STILL PUT ON THE CASE, even with no price.
+      //
+      // The list above hides unpriced items because nobody should be
+      // choosing one by accident. Something a surgeon has just typed in by
+      // name is not an accident — they are standing at a booking form
+      // because the case needs it. Refusing it here would mean the theatre
+      // does not know, which is worse than a deposit that says it is
+      // short. The store is told, and it says so below.
+      const unpriced = (item as unknown as { unitPrice?: string | null }).unitPrice == null;
+      setAddedUnpriced(unpriced ? `${item.name}${item.size ? ` ${item.size}` : ''}` : null);
       setNewName('');
       setNewSize('');
     } catch {
@@ -262,6 +277,22 @@ export default function SpecialNeedsPicker({
           </option>
         ))}
       </select>
+
+      {withheld > 0 && (
+        <p className="mt-2 text-xs text-gray-500">
+          {withheld} item{withheld === 1 ? ' is' : 's are'} not listed because{' '}
+          {withheld === 1 ? 'it has' : 'they have'} no price yet. {withheld === 1 ? 'It' : 'They'}{' '}
+          appear here automatically once the store or pharmacy prices{' '}
+          {withheld === 1 ? 'it' : 'them'} in Settings.
+        </p>
+      )}
+
+      {addedUnpriced && (
+        <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+          <strong>{addedUnpriced}</strong> is on this case, but it has no price yet, so the
+          deposit below will not include it. It is now in the store&apos;s pricing queue.
+        </p>
+      )}
 
       {/* ── The OTHER path ───────────────────────────────────────────── */}
       <details className="mt-3">

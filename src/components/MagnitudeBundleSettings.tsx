@@ -250,8 +250,11 @@ export default function MagnitudeBundleSettings() {
                       </span>
                     )}
                     {l.unitPrice == null && (
-                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                        no price set
+                      <span
+                        className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+                        title="Not issued to a case until it has a price"
+                      >
+                        no price &mdash; not issued
                       </span>
                     )}
                   </span>
@@ -341,9 +344,13 @@ export default function MagnitudeBundleSettings() {
               <p className="mt-3 flex items-start gap-2 rounded-lg bg-amber-100 p-2 text-xs text-amber-900">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  <strong>{current.quote.unpricedLines.length} item(s) have no price</strong>, so
-                  this total is lower than the real cost. Set their prices in the consumable
-                  store or pharmacy pricing page.
+                  <strong>
+                    {current.quote.unpricedLines.length} item(s) have no price, so they are NOT
+                    being added to cases at all.
+                  </strong>{' '}
+                  A {MAGNITUDE_LABELS[current.magnitude].toLowerCase()} case currently carries
+                  only the priced lines above. Price them in &ldquo;Items waiting for a
+                  price&rdquo; and they start being issued again straight away.
                 </span>
               </p>
             )}

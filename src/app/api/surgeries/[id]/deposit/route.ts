@@ -30,6 +30,12 @@ function serialise(row: Record<string, unknown> | null) {
     ...row,
     consumableAmount: dec(row.consumableAmount),
     pharmacyAmount: dec(row.pharmacyAmount),
+    // The breakdown, so a receipt can show the contingency apart from the
+    // consumables it is held against rather than one lump the patient
+    // cannot question.
+    consumableSubtotal: dec(row.consumableSubtotal),
+    consumableContingency: dec(row.consumableContingency),
+    pharmacySubtotal: dec(row.pharmacySubtotal),
   };
 }
 

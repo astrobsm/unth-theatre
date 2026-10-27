@@ -12,6 +12,7 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import ItemPricingTable from '@/components/ItemPricingTable';
+import UnpricedItemsQueue from '@/components/UnpricedItemsQueue';
 
 export default function ConsumablePricingPage() {
   return (
@@ -23,6 +24,12 @@ export default function ConsumablePricingPage() {
         <ArrowLeft className="h-4 w-4" />
         Back to consumable packs
       </Link>
+      {/* First, because these are the items a surgeon cannot
+          order at all until somebody here prices them. */}
+      <div className="mb-6">
+        <UnpricedItemsQueue />
+      </div>
+
 
       <ItemPricingTable side="consumables" title="Consumable prices" />
     </div>

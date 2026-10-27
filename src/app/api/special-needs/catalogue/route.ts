@@ -49,9 +49,23 @@ export async function GET(request: NextRequest) {
 
   try {
     const category = request.nextUrl.searchParams.get('category');
+
+    // UNPRICED ITEMS ARE NOT OFFERED AT BOOKING.
+    //
+    // An item with no price cannot be deposited for, so putting it on a
+    // case produces a figure the patient is told is incomplete and a
+    // difference somebody asks them for at the theatre door. They are held
+    // in the pricing queue in Settings instead, and the moment the store or
+    // pharmacy prices one it reappears here on its own — nothing has to be
+    // re-added, because this filter is the only thing keeping it out.
+    //
+    // includeUnpriced=1 is for the screens whose whole job is to find them.
+    const includeUnpriced = request.nextUrl.searchParams.get('includeUnpriced') === '1';
+
     const items = await prisma.specialNeedItem.findMany({
       where: {
         isActive: true,
+        ...(includeUnpriced ? {} : { unitPrice: { not: null } }),
         ...(category && (CATEGORIES as readonly string[]).includes(category)
           ? { category: category as never }
           : {}),
@@ -59,7 +73,22 @@ export async function GET(request: NextRequest) {
       orderBy: [{ category: 'asc' }, { name: 'asc' }, { size: 'asc' }],
     });
 
-    return NextResponse.json({ items });
+    return NextResponse.json({
+      items,
+      // So a caller can say "12 more are waiting to be priced" rather than
+      // leaving a surgeon wondering where an item they know exists has gone.
+      withheldUnpriced: includeUnpriced
+        ? 0
+        : await prisma.specialNeedItem.count({
+            where: {
+              isActive: true,
+              unitPrice: null,
+              ...(category && (CATEGORIES as readonly string[]).includes(category)
+                ? { category: category as never }
+                : {}),
+            },
+          }),
+    });
   } catch (err) {
     console.error('[special-needs/catalogue] list failed:', err);
     return NextResponse.json({ error: 'Could not load the catalogue' }, { status: 500 });

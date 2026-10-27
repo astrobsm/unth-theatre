@@ -3,6 +3,7 @@
 import MagnitudeBundleSettings from '@/components/MagnitudeBundleSettings';
 import CatalogueSeedSetting from '@/components/CatalogueSeedSetting';
 import PriceListImport from '@/components/PriceListImport';
+import UnpricedItemsQueue from '@/components/UnpricedItemsQueue';
 import TheatreFeeSettings from '@/components/TheatreFeeSettings';
 import FingerprintSetting from '@/components/FingerprintSetting';
 import { useState, useEffect, useCallback } from 'react';
@@ -361,6 +362,11 @@ export default function SettingsPage() {
             bundle editor because the bundle's running total is meaningless
             until the items in it have prices. */}
         <PriceListImport />
+
+        {/* Where items with no price are held. They are kept out of the
+            booking list, so this is the queue that decides what a surgeon
+            can actually order. Hides itself from anyone who cannot price. */}
+        <UnpricedItemsQueue />
 
         {/* What each size of case is given automatically, and what that
             costs. Hides itself from anyone who cannot edit it. */}

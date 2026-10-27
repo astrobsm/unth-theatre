@@ -1044,7 +1044,11 @@ export async function POST(request: NextRequest) {
       const sentBundle = (specialNeeds ?? []).some((n) => n.fromBundle);
       if (!sentBundle && isMagnitude(surgery.magnitude)) {
         const bundle = await prisma.magnitudeBundleItem.findMany({
-          where: { magnitude: surgery.magnitude },
+          // Priced lines only, matching what the booking form offers. An
+          // unpriced line attached here would reappear as "this is not the
+          // full amount" on a deposit the patient is about to be given,
+          // for an item nobody has decided the cost of.
+          where: { magnitude: surgery.magnitude, item: { unitPrice: { not: null } } },
           select: { itemId: true, quantity: true },
         });
         const alreadyChosen = new Set((specialNeeds ?? []).map((n) => n.itemId));

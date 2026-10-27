@@ -1,7 +1,7 @@
 'use client';
 
 import DepositNotice from '@/components/DepositNotice';
-import CaseDepositQuote from '@/components/CaseDepositQuote';
+import SavedCaseDeposit from '@/components/SavedCaseDeposit';
 import {
   pick,
   forServer,
@@ -517,6 +517,11 @@ export default function NewSurgeryPage() {
   const [assistantSearch, setAssistantSearch] = useState('');
   const [assistantPool, setAssistantPool] = useState<Surgeon[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
+  /// What this form last filled in for the patient, so a correction made by
+  /// hand is never overwritten by a later re-fill. Comparing against the
+  /// last value written is the only way to tell "still as we left it" from
+  /// "somebody changed it on purpose".
+  const autoConsentRef = useRef({ patientName: '', procedureText: '', surgeonName: '' });
   const [theatres, setTheatres] = useState<Theatre[]>([]);
   const [selectedTheatreId, setSelectedTheatreId] = useState('');
   const [locations, setLocations] = useState<string[]>([]);
@@ -748,6 +753,62 @@ export default function NewSurgeryPage() {
    * standard pack is a decision, and a bundle that restores it on the next
    * keystroke is a bundle nobody can override.
    */
+  /**
+   * Carry what the booking already knows into the consent form.
+   *
+   * The patient's name, the procedure and the operating surgeon are on
+   * this screen already. Making somebody retype them into the consent is
+   * how a consent ends up naming a different operation from the one on
+   * the list — and a consent that disagrees with the theatre list is the
+   * one thing that stops a case at the holding area.
+   *
+   * ONLY WHILE IT IS STILL WHAT WE PUT THERE. If the field has been
+   * edited by hand it is left alone, because a surgeon writing the full
+   * procedure out in longhand for the consent is doing exactly what the
+   * form asks ("no abbreviations") and must not have it overwritten when
+   * they later change the surgeon on the list.
+   *
+   * THE DOCTOR'S NAME BESIDE THE SIGNATURE IS DELIBERATELY NOT FILLED.
+   * Whoever signs must type their own name. Pre-printing a name next to a
+   * signature box attributes a signature to a person who may not be the
+   * one taking the consent.
+   */
+  useEffect(() => {
+    const patientName = patients.find((p) => p.id === selectedPatientId)?.name ?? '';
+    const surgeonName = surgeons.find((x) => x.id === selectedSurgeonId)?.fullName ?? '';
+    const procedureText = [procedureName, ...extraProcedures]
+      .map((t) => (t ?? '').trim())
+      .filter(Boolean)
+      .join(' + ');
+
+    setConsentForm((prev) => {
+      const last = autoConsentRef.current;
+      const keep = (current: string, previousAuto: string, next: string) =>
+        // Blank, or untouched since we filled it: ours to update.
+        current.trim() === '' || current === previousAuto ? next : current;
+
+      const updated: ConsentForm = {
+        ...prev,
+        patientName: keep(prev.patientName, last.patientName, patientName),
+        procedureText: keep(prev.procedureText, last.procedureText, procedureText),
+        surgeonName: keep(prev.surgeonName, last.surgeonName, surgeonName),
+      };
+
+      autoConsentRef.current = { patientName, procedureText, surgeonName };
+
+      // Returning prev unchanged where nothing moved keeps this from
+      // re-rendering the signature pads, which would clear them.
+      if (
+        updated.patientName === prev.patientName &&
+        updated.procedureText === prev.procedureText &&
+        updated.surgeonName === prev.surgeonName
+      ) {
+        return prev;
+      }
+      return updated;
+    });
+  }, [selectedPatientId, patients, selectedSurgeonId, surgeons, procedureName, extraProcedures]);
+
   // Fetch what the theatre has configured. Once, on mount: a bundle
   // changed mid-booking should not rewrite a form somebody is typing into.
   useEffect(() => {
@@ -3478,10 +3539,15 @@ ${pretty} — ${days} days from today.
               }}
             />
 
-            {/* The running cost, while the choice is still open. This is
-                the only moment a cheaper equivalent can be picked or the
-                family warned early. */}
-            <CaseDepositQuote chosen={specialNeeds} catalogue={catalogueIndex} />
+            {/* The deposit is NOT shown here.
+                It used to be, on the argument that booking is the only
+                moment a cheaper equivalent can be picked. In practice it
+                put a money figure in front of a surgeon mid-clinical
+                decision, and it moved on every keystroke while the case
+                was still being built — so it was a number that was wrong
+                more often than right. It is shown once on the
+                confirmation, computed by the server from the case as it
+                was actually saved. */}
           </div>
 
           {/* Post-operative disposition */}
@@ -4372,6 +4438,12 @@ function BookingCodesModal({
               to pay for your items before the surgery.
             </p>
           </div>
+
+          {/* The amount, directly under the instruction to go and pay it.
+              Read back from the server, so this is the figure the cashier
+              will ask for rather than one the browser worked out. */}
+          {codes.surgeryId && <SavedCaseDeposit surgeryId={codes.surgeryId} />}
+
           {rows.map((r) => (
             <div key={r.label} className="rounded-lg border border-gray-200 p-3">
               <div className="text-xs font-semibold text-gray-500">{r.label}</div>
