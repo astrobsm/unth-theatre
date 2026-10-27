@@ -61,6 +61,15 @@ export function fromMagnitude(magnitude: string | null | undefined): Band | null
     case 'MINOR':        return 'Minor';
     case 'INTERMEDIATE': return 'Intermediate';
     case 'MAJOR':        return 'Major';
+    // SUPER_MAJOR became bookable so that the biggest cases carry the
+    // right consumables. It still bands as Major, NOT Supermajor: the
+    // rule above is about where the authority comes from, and a booking
+    // is a prediction while Supermajor is a measurement of what the
+    // operation turned out to be. Banding it Major is what a booking is
+    // entitled to assert; the assessed class promotes it afterwards if
+    // the case earns it. Returning null instead would drop the hospital's
+    // heaviest work out of the case mix altogether.
+    case 'SUPER_MAJOR':  return 'Major';
     default:             return null;
   }
 }

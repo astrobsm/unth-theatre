@@ -22,7 +22,7 @@
 //   pharmacy or a pack provider on its own.
 // ============================================================
 
-import { resolveBasePack, type SurgeryMagnitude } from '@/lib/baseConsumablePack';
+import { resolveBasePack, toPackMagnitude, type SurgeryMagnitude } from '@/lib/baseConsumablePack';
 import {
   APPROACH_ITEMS, FAMILY_ITEMS, FAMILY_LABEL, PROPHYLAXIS, THEATRE_PHARMACY,
   approachOf, familyOf, suturesFor,
@@ -115,10 +115,9 @@ export interface GenerateInput {
  * skin graft is one trip to theatre and one set of drapes, not two.
  */
 export function generatePacks(input: GenerateInput): GeneratedPacks {
-  const magnitude: SurgeryMagnitude =
-    input.magnitude === 'MINOR' || input.magnitude === 'INTERMEDIATE' || input.magnitude === 'MAJOR'
-      ? input.magnitude
-      : 'INTERMEDIATE';
+  // Via toPackMagnitude, which maps SUPER_MAJOR up to MAJOR. The old
+  // fallback to INTERMEDIATE quietly under-packed the biggest cases.
+  const magnitude: SurgeryMagnitude = toPackMagnitude(input.magnitude);
 
   const family = familyOf(input.procedureName, input.subspecialty);
   const approach = approachOf(input.procedureName, family);

@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Layers, Plus, X, AlertTriangle } from 'lucide-react';
+import { Layers, Plus, X, AlertTriangle, Download } from 'lucide-react';
 import {
   MAGNITUDE_LABELS,
   formatNaira,
@@ -55,6 +55,8 @@ export default function MagnitudeBundleSettings() {
   const [open, setOpen] = useState<Magnitude>('MINOR');
   const [adding, setAdding] = useState('');
   const [busy, setBusy] = useState(false);
+  const [seedNote, setSeedNote] = useState<string | null>(null);
+  const [unresolved, setUnresolved] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -116,6 +118,37 @@ export default function MagnitudeBundleSettings() {
     }
   };
 
+  const seedStandard = async () => {
+    setBusy(true);
+    setSeedNote(null);
+    try {
+      const res = await fetch('/api/special-needs/bundles', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSeedNote(data?.error ?? 'Could not load the standard bundles.');
+        return;
+      }
+      const total = Object.values(data.added ?? {}).reduce(
+        (a: number, b) => a + Number(b ?? 0),
+        0,
+      );
+      setSeedNote(
+        `${total} line(s) added. ${data.alreadyPresent ?? 0} were already set and were left alone.`,
+      );
+      setUnresolved(data.unresolved ?? []);
+      await load();
+    } catch {
+      setSeedNote('Could not reach the server.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const totalLines = bundles.reduce((a, b) => a + b.lines.length, 0);
+
   const chosen = new Set(current?.lines.map((l) => l.itemId) ?? []);
   const available = catalogue.filter((c) => !chosen.has(c.id));
 
@@ -130,6 +163,54 @@ export default function MagnitudeBundleSettings() {
         What every case of each size is given without the surgeon asking. They add anything else
         on top at booking, and the deposit is the two added together.
       </p>
+
+      {totalLines === 0 && (
+        <div className="mb-4 rounded-lg bg-blue-50 p-4">
+          <p className="text-sm text-blue-900">
+            <strong>Nothing is bundled yet, so cases carry nothing automatically.</strong> Load
+            the standard bundles to start from the built-in lists — gloves, syringes, cannulae,
+            giving sets, plaster and water for injection, scaled by the size of the case — then
+            change them here to suit this theatre.
+          </p>
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void seedStandard()}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 ${
+            totalLines === 0
+              ? 'bg-blue-600 text-white'
+              : 'border border-gray-300 bg-white text-gray-700'
+          }`}
+        >
+          <Download className="h-4 w-4" />
+          {totalLines === 0 ? 'Load the standard bundles' : 'Add any missing standard lines'}
+        </button>
+        {seedNote && <span className="text-sm text-gray-600">{seedNote}</span>}
+      </div>
+
+      {unresolved.length > 0 && (
+        <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <strong>
+                {unresolved.length} standard line(s) are not in the catalogue and were skipped.
+              </strong>{' '}
+              A case will not carry them and no deposit will include them. Load the standard
+              catalogue and the price list above, then press this again.
+            </span>
+          </p>
+          <ul className="mt-2 list-disc pl-8 text-xs">
+            {unresolved.slice(0, 12).map((u) => (
+              <li key={u}>{u}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-2">
         {bundles.map((b) => (

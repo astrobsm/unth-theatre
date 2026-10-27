@@ -14,8 +14,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireRole } from '@/lib/apiMiddleware';
+import { requireAuth, requireRole } from '@/lib/apiMiddleware';
 import { MAGNITUDES, quoteFor, type Magnitude } from '@/lib/specialNeeds/pricing';
+import { seedMagnitudeBundles } from '@/lib/specialNeeds/seedBundles';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +29,15 @@ const EDIT_ROLES = [
   'HEAD_OF_PHARMACY',
 ] as const;
 
+// READABLE BY ANYONE WHO CAN BOOK, not just by those who can edit.
+//
+// The booking form resolves what a case carries from this, so a surgeon
+// has to be able to read it. Gating the read to administrators is what
+// made the editor cosmetic: the form could not see the table, so it fell
+// back to the built-in list and every edit made here changed nothing.
+// Editing stays restricted below.
 export async function GET() {
-  const { error } = await requireRole(EDIT_ROLES as never);
+  const { error } = await requireAuth();
   if (error) return error;
 
   try {
@@ -125,5 +133,31 @@ export async function DELETE(request: NextRequest) {
   } catch (err) {
     console.error('[bundles] delete failed:', err);
     return NextResponse.json({ error: 'Could not remove that line' }, { status: 500 });
+  }
+}
+
+// ============================================================
+// POST — copy the built-in standard bundles into this table.
+//
+// Separate from PUT because it is a different act: PUT is one line being
+// changed by a person, this is four bundles arriving at once. Adds only
+// what is absent, so pressing it after the theatre has edited a bundle
+// does not undo the edit, and a line somebody deliberately removed stays
+// removed.
+// ============================================================
+export async function POST() {
+  const { error, session } = await requireRole(EDIT_ROLES as never);
+  if (error) return error;
+
+  try {
+    const name = (session!.user as { name?: string | null }).name ?? null;
+    const result = await seedMagnitudeBundles(name ? `${name} (standard bundles)` : null);
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error('[bundles] seeding failed:', err);
+    return NextResponse.json(
+      { error: 'Could not load the standard bundles. Nothing already set was changed.' },
+      { status: 500 },
+    );
   }
 }

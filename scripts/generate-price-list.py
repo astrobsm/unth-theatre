@@ -188,11 +188,15 @@ def expand_syringe(code: str, price):
     m = re.search(r"(\d+)\s*ML", code.upper())
     if not m:
         return None
+    # "5ml", not "5 ml": the standard catalogue already seeds Syringe 2ml
+    # through 50ml and the magnitude bundles ask for them by that exact
+    # spelling. A space here makes a SECOND, unpriced row, the bundle keeps
+    # pointing at it, and every deposit quotes a syringe at nothing.
     return [
         dict(
             category="SYRINGE",
             name="Syringe",
-            size=f"{m.group(1)} ml",
+            size=f"{m.group(1)}ml",
             material=None,
             needleType=None,
             absorbable=None,

@@ -471,6 +471,11 @@ export default function NewSurgeryPage() {
   /// removing one does not itself re-run the effect that would restore it.
   const removedBundleIdsRef = useRef<string[]>([]);
   const [catalogueIndex, setCatalogueIndex] = useState<CatalogueItem[]>([]);
+  /// What the theatre has configured for each size of case, from Settings.
+  /// Null until it has been fetched, which is different from "configured
+  /// as empty": applying an empty bundle before the answer arrives would
+  /// strip the lines a moment after showing them.
+  const [dbBundles, setDbBundles] = useState<Record<string, { itemId: string; quantity: number }[]> | null>(null);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   /// Set when the form moved the start time off a slot that had been taken
@@ -743,19 +748,86 @@ export default function NewSurgeryPage() {
    * standard pack is a decision, and a bundle that restores it on the next
    * keystroke is a bundle nobody can override.
    */
+  // Fetch what the theatre has configured. Once, on mount: a bundle
+  // changed mid-booking should not rewrite a form somebody is typing into.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/special-needs/bundles', { credentials: 'include' });
+        if (!res.ok) {
+          if (!cancelled) setDbBundles({});
+          return;
+        }
+        const data = await res.json();
+        const byMagnitude: Record<string, { itemId: string; quantity: number }[]> = {};
+        (data.bundles ?? []).forEach((b: { magnitude: string; lines: { itemId: string; quantity: number }[] }) => {
+          if (b.lines?.length) {
+            byMagnitude[b.magnitude] = b.lines.map((l) => ({
+              itemId: l.itemId,
+              quantity: l.quantity,
+            }));
+          }
+        });
+        if (!cancelled) setDbBundles(byMagnitude);
+      } catch {
+        // Offline, or the endpoint is unreachable. Fall back to the
+        // built-in lists rather than booking a case that carries nothing.
+        if (!cancelled) setDbBundles({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (catalogueIndex.length === 0) return;
+    // Wait for the answer. Applying the built-in list first and the
+    // configured one a moment later makes the lines visibly jump.
+    if (dbBundles === null) return;
 
+    const resolved: ChosenNeed[] = [];
+
+    // WHAT THE THEATRE CONFIGURED WINS. These rows are what an
+    // administrator set in Settings, and until this existed those edits
+    // changed nothing at all — the form read the built-in list instead.
+    const configured = dbBundles[magnitude];
+    if (configured?.length) {
+      const known = new Set(catalogueIndex.map((c) => c.id));
+      configured.forEach((l) => {
+        if (known.has(l.itemId)) {
+          resolved.push({ itemId: l.itemId, quantity: l.quantity, fromBundle: true });
+        }
+      });
+    }
+
+    // The built-in list is the fallback for a magnitude nobody has
+    // configured, so a case never silently carries nothing.
     const lines = bundleFor({
       magnitude,
+      // Already covered by the configured rows, if there are any.
       transfusionAnticipated: needBloodTransfusion,
       anaesthesiaType: anesthesiaType,
       localAnaestheticName:
         catalogueIndex.find((c) => c.id === localAnaestheticId)?.name ?? null,
     });
 
-    const resolved: ChosenNeed[] = [];
+    const alreadyResolved = new Set(resolved.map((r) => r.itemId));
     for (const line of lines) {
+      // When the theatre has configured this magnitude, only the two
+      // CONDITIONAL groups come from the built-in list — transfusion
+      // adjuncts and the named local anaesthetic. Those follow decisions
+      // on this form rather than the size of the case, so they are not in
+      // the table and must still be added on top.
+      if (
+        configured?.length &&
+        line.category !== 'TRANSFUSION_ADJUNCT' &&
+        line.category !== 'LOCAL_ANAESTHETIC' &&
+        !(line.category === 'GIVING_SET' && /blood/i.test(line.name))
+      ) {
+        continue;
+      }
       const match = catalogueIndex.find(
         (c) =>
           c.category === line.category &&
@@ -766,7 +838,10 @@ export default function NewSurgeryPage() {
       // caught by specialNeedsBundle.test.ts, which checks every line
       // against the catalogue. Blocking the booking over it would punish
       // the surgeon for a seeding gap.
-      if (match) resolved.push({ itemId: match.id, quantity: line.quantity, fromBundle: true });
+      if (match && !alreadyResolved.has(match.id)) {
+        resolved.push({ itemId: match.id, quantity: line.quantity, fromBundle: true });
+        alreadyResolved.add(match.id);
+      }
     }
 
     setSpecialNeeds((prev) => {
@@ -776,7 +851,7 @@ export default function NewSurgeryPage() {
       const bundled = resolved.filter((r) => !manualIds.has(r.itemId) && !removed.has(r.itemId));
       return [...bundled, ...keptManual];
     });
-  }, [magnitude, needBloodTransfusion, anesthesiaType, localAnaestheticId, catalogueIndex]);
+  }, [magnitude, needBloodTransfusion, anesthesiaType, localAnaestheticId, catalogueIndex, dbBundles]);
 
   // Auto-fetch on-duty team when scheduledDate + scheduledTime are both set.
   useEffect(() => {
@@ -3118,6 +3193,7 @@ ${pretty} — ${days} days from today.
                 <option value="MINOR">Minor</option>
                 <option value="INTERMEDIATE">Intermediate</option>
                 <option value="MAJOR">Major</option>
+                <option value="SUPER_MAJOR">Super major</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Determines the mandatory base pack sent to the consumable providers — gauze bundle,

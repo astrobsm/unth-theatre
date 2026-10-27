@@ -20,6 +20,28 @@ export function isSurgeryMagnitude(v: unknown): v is SurgeryMagnitude {
   return v === 'MAJOR' || v === 'INTERMEDIATE' || v === 'MINOR';
 }
 
+/**
+ * Collapse a booking magnitude onto the three the packs are sized for.
+ *
+ * SUPER_MAJOR is bookable and drives its own special-needs bundle, but the
+ * pack standards here are defined at three sizes. It maps to MAJOR, the
+ * largest — never downwards.
+ *
+ * THIS EXISTS BECAUSE THE FALLTHROUGHS WERE WRONG. Several call sites read
+ * `magnitude === 'MAJOR' ? 1 : magnitude === 'INTERMEDIATE' ? 0.7 : 0.5`,
+ * which silently handed a super-major case the MINOR pack — the largest
+ * operation in the theatre getting the smallest set of sutures. Routing
+ * every one of them through this makes the next value anybody adds fail
+ * upwards instead.
+ */
+export function toPackMagnitude(v: string | null | undefined): SurgeryMagnitude {
+  if (isSurgeryMagnitude(v)) return v;
+  if (v === 'SUPER_MAJOR') return 'MAJOR';
+  // Unknown or missing: MAJOR, because under-supplying a theatre is worse
+  // than over-supplying it.
+  return 'MAJOR';
+}
+
 // A base-pack line. `qty` is [minor, intermediate, major].
 interface BasePackLine {
   name: string;

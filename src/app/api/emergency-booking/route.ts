@@ -40,7 +40,7 @@ const createEmergencyBookingSchema = z.object({
   theatreName: z.string().optional(),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM']).default('CRITICAL'),
   classification: z.string().optional(),
-  magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR']).nullish(),
+  magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR', 'SUPER_MAJOR']).nullish(),
   bloodRequired: z.boolean().default(false),
   bloodType: z.string().optional(),
   bloodUnits: z.number().optional(),

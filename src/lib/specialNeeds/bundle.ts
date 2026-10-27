@@ -22,7 +22,7 @@
 //   nobody has time to send to pharmacy for them.
 // ============================================================
 
-export type Magnitude = 'MINOR' | 'INTERMEDIATE' | 'MAJOR';
+export type Magnitude = 'MINOR' | 'INTERMEDIATE' | 'MAJOR' | 'SUPER_MAJOR';
 
 /** One line of a bundle: what to look up in the catalogue, and how many. */
 export type BundleLine = {
@@ -82,10 +82,40 @@ const MAJOR: BundleLine[] = [
   { category: 'WATER_FOR_INJECTION', name: 'Water for injection', size: '20ml', quantity: 4 },
 ];
 
+/**
+ * Super major: quantities scaled up from MAJOR, and nothing else.
+ *
+ * DELIBERATELY NOT A LONGER CLINICAL LIST. A case over four hours with
+ * heavy blood loss plausibly wants a urinary catheter and central access
+ * as standard, but that is this hospital's judgement to record, not mine
+ * to invent — the same reason the standard catalogue seeds no brands. The
+ * editor in Settings exists so the theatre can add them and have it stick.
+ *
+ * What IS justified without asking anyone is more of what a major case
+ * already carries: a longer operation uses more gloves, more syringes and
+ * more fluid, and a third large-bore cannula is access that survives
+ * losing two.
+ */
+const SUPER_MAJOR: BundleLine[] = [
+  { category: 'GLOVES', name: 'Surgical glove, sterile', size: '7.5', quantity: 10 },
+  { category: 'GLOVES', name: 'Procedure glove, latex', size: 'Medium', quantity: 16 },
+  { category: 'SYRINGE', name: 'Syringe', size: '5ml', quantity: 10 },
+  { category: 'SYRINGE', name: 'Syringe', size: '10ml', quantity: 6 },
+  { category: 'SYRINGE', name: 'Syringe', size: '20ml', quantity: 4 },
+  { category: 'SYRINGE', name: 'Syringe', size: '50ml', quantity: 2 },
+  { category: 'IV_CANNULA', name: 'IV cannula, grey', size: '16G', quantity: 3 },
+  { category: 'IV_CANNULA', name: 'IV cannula, green', size: '18G', quantity: 2 },
+  { category: 'GIVING_SET', name: 'IV giving set', quantity: 3 },
+  { category: 'PLASTER', name: 'Adhesive plaster, large', quantity: 2 },
+  { category: 'PLASTER', name: 'Micropore tape', quantity: 3 },
+  { category: 'WATER_FOR_INJECTION', name: 'Water for injection', size: '20ml', quantity: 6 },
+];
+
 const BY_MAGNITUDE: Record<Magnitude, BundleLine[]> = {
   MINOR,
   INTERMEDIATE,
   MAJOR,
+  SUPER_MAJOR,
 };
 
 /** Given with blood, so they are ordered with the giving set, not after it. */

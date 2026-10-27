@@ -28,7 +28,7 @@
 // without a named person sending it.
 // ============================================================
 
-import type { SurgeryMagnitude } from '@/lib/baseConsumablePack';
+import { toPackMagnitude, type SurgeryMagnitude } from '@/lib/baseConsumablePack';
 
 // ── Families ────────────────────────────────────────────────────────────────
 
@@ -479,7 +479,10 @@ export function suturesFor(
   family: ProcedureFamily,
   magnitude: SurgeryMagnitude,
 ): Array<{ line: SutureLine; quantity: number }> {
-  const scale = magnitude === 'MAJOR' ? 1 : magnitude === 'INTERMEDIATE' ? 0.7 : 0.5;
+  // Normalised first: a bare ternary chain gave SUPER_MAJOR the 0.5 MINOR
+  // scale, so the longest operation got the fewest sutures.
+  const m = toPackMagnitude(magnitude);
+  const scale = m === 'MAJOR' ? 1 : m === 'INTERMEDIATE' ? 0.7 : 0.5;
   return (SUTURE_SETS[family] ?? SUTURE_SETS.GENERAL).map(([key, atMajor]) => ({
     line: ETHICON[key],
     // Never below one: a pack that lists a suture and asks for none of it is

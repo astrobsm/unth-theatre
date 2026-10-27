@@ -84,7 +84,7 @@ const surgerySchema = z.object({
     .min(5, 'A case takes at least 5 minutes')
     .max(24 * 60, 'That is longer than a day'),
   surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
-  magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR']).nullish(),
+  magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR', 'SUPER_MAJOR']).nullish(),
   anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
   needBloodTransfusion: z.boolean().default(false),
   needDiathermy: z.boolean().default(false),

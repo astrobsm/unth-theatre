@@ -51,7 +51,46 @@ export interface PriceListImportResult {
   differences: PriceDifference[];
   /** Existing rows that were adopted and stamped with the list's code. */
   codesStamped: number;
+  /** Sized variants priced from an undifferentiated list price. */
+  pricedByEquivalence: number;
 }
+
+/**
+ * One price on the list, several rows in the catalogue.
+ *
+ * The hospital prices "Sterile gloves" at one figure per pair and "IV
+ * cannula" at one figure per piece, with no size or gauge. The catalogue
+ * carries the sizes and gauges separately, because a scrub nurse orders a
+ * 7.5 and an anaesthetist orders a grey 16G — and the magnitude bundles
+ * ask for them that way.
+ *
+ * Without this, every glove and cannula in every bundle stays unpriced and
+ * each deposit is reported incomplete for items the hospital HAS priced.
+ *
+ * THIS IS AN INFERENCE, AND A NARROW ONE. It says only that a pair of
+ * sterile gloves costs the same whatever the hand size, which is what a
+ * single undifferentiated price on the list means. It is listed here in
+ * the open so it can be read and disagreed with, it fills blanks only like
+ * every other price here, and anyone can override any one of these rows on
+ * the pricing screen afterwards.
+ */
+const PRICE_EQUIVALENCES: { code: string; appliesTo: { category: string; name: string }[] }[] = [
+  {
+    code: 'STERILE-GLOVES',
+    appliesTo: [{ category: 'GLOVES', name: 'Surgical glove, sterile' }],
+  },
+  {
+    code: 'IV-CANNULA',
+    appliesTo: [
+      { category: 'IV_CANNULA', name: 'IV cannula, orange' },
+      { category: 'IV_CANNULA', name: 'IV cannula, grey' },
+      { category: 'IV_CANNULA', name: 'IV cannula, green' },
+      { category: 'IV_CANNULA', name: 'IV cannula, pink' },
+      { category: 'IV_CANNULA', name: 'IV cannula, blue' },
+      { category: 'IV_CANNULA', name: 'IV cannula, yellow' },
+    ],
+  },
+];
 
 /** The tuple the unique index uses, with null spelled consistently. */
 function naturalKey(category: string, name: string, size?: string | null, brand?: string | null) {
@@ -106,6 +145,7 @@ export async function importPriceList(
     unpricedOnList: 0,
     differences: [],
     codesStamped: 0,
+    pricedByEquivalence: 0,
   };
 
   const missing: PricedSeedItem[] = [];
@@ -231,6 +271,30 @@ export async function importPriceList(
         where: { id: plan.row.id },
         data: { unit: plan.item.unit },
       });
+    }
+  }
+
+  // ── Pass three: the one-to-many prices ───────────────────────────────
+  for (const rule of PRICE_EQUIVALENCES) {
+    const listed = UNTH_PRICE_LIST.find((i) => i.code === rule.code);
+    if (!listed?.unitPrice) continue;
+
+    for (const target of rule.appliesTo) {
+      // Fills blanks only, and never touches a row somebody has priced —
+      // an inference must not outrank a person.
+      const where = overwrite
+        ? { category: target.category as never, name: target.name }
+        : { category: target.category as never, name: target.name, unitPrice: null };
+
+      const touched = await prisma.specialNeedItem.updateMany({
+        where,
+        data: {
+          unitPrice: listed.unitPrice,
+          pricedAt: new Date(),
+          pricedByName: `${by} (same price for every size)`,
+        },
+      });
+      result.pricedByEquivalence += touched.count;
     }
   }
 

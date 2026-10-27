@@ -39,14 +39,22 @@ describe('the four syringe sizes keep their four different prices', () => {
   const syringes = UNTH_PRICE_LIST.filter((i) => i.category === 'SYRINGE' && i.name === 'Syringe');
 
   it('lists them separately by size', () => {
-    expect(syringes.map((s) => s.size).sort()).toEqual(['10 ml', '2 ml', '20 ml', '5 ml']);
+    expect(syringes.map((s) => s.size).sort()).toEqual(['10ml', '20ml', '2ml', '5ml']);
+  });
+
+  // "5ml", not "5 ml". The standard catalogue seeds Syringe 2ml..50ml and
+  // the magnitude bundles ask for that exact spelling, so a space here
+  // creates a second unpriced row, leaves the bundle pointing at it, and
+  // every deposit quotes a syringe at nothing.
+  it('spells the size the way the catalogue and the bundles do', () => {
+    syringes.forEach((s) => expect(s.size).toMatch(/^\d+ml$/));
   });
 
   it('prices the 20 ml well above the 2 ml', () => {
     const at = (size: string) => toKobo(syringes.find((s) => s.size === size)?.unitPrice ?? null);
-    expect(at('2 ml')).toBe(7000);
-    expect(at('20 ml')).toBe(32500);
-    expect(at('20 ml')!).toBeGreaterThan(at('2 ml')!);
+    expect(at('2ml')).toBe(7000);
+    expect(at('20ml')).toBe(32500);
+    expect(at('20ml')!).toBeGreaterThan(at('2ml')!);
   });
 });
 
