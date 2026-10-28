@@ -22,6 +22,16 @@
 //   nobody has time to send to pharmacy for them.
 // ============================================================
 
+import {
+  SYRINGES,
+  IV_CANNULAE,
+  GIVING_SETS,
+  PLASTERS,
+  GLOVES,
+  WATER_FOR_INJECTION,
+  TRANSFUSION_ADJUNCTS,
+} from './standardCatalogue';
+
 export type Magnitude = 'MINOR' | 'INTERMEDIATE' | 'MAJOR' | 'SUPER_MAJOR';
 
 /** One line of a bundle: what to look up in the catalogue, and how many. */
@@ -41,91 +51,107 @@ export type BundleLine = {
  * the patient, and items opened then wasted. A surgeon who needs a second
  * one adds it; one that was never ordered cannot be conjured mid-case.
  */
-const MINOR: BundleLine[] = [
-  { category: 'GLOVES', name: 'Surgical glove, sterile', size: '7.5', quantity: 2 },
-  { category: 'GLOVES', name: 'Procedure glove, latex', size: 'Medium', quantity: 4 },
-  { category: 'SYRINGE', name: 'Syringe', size: '5ml', quantity: 2 },
-  { category: 'SYRINGE', name: 'Syringe', size: '10ml', quantity: 1 },
-  { category: 'IV_CANNULA', name: 'IV cannula, pink', size: '20G', quantity: 1 },
-  { category: 'GIVING_SET', name: 'IV giving set', quantity: 1 },
-  { category: 'PLASTER', name: 'Adhesive plaster, small', quantity: 1 },
-  { category: 'WATER_FOR_INJECTION', name: 'Water for injection', size: '10ml', quantity: 2 },
-];
+/**
+ * How many of each size is carried as standard.
+ *
+ * Two, of every size, for everything in BUNDLED_CATEGORIES. Not one,
+ * because the second is what a dropped or contaminated item is replaced
+ * from without sending out of theatre; not more, because every one of
+ * these is stock off the shelf and naira on the family's deposit.
+ */
+export const STANDARD_QUANTITY = 2;
 
-const INTERMEDIATE: BundleLine[] = [
-  { category: 'GLOVES', name: 'Surgical glove, sterile', size: '7.5', quantity: 4 },
-  { category: 'GLOVES', name: 'Procedure glove, latex', size: 'Medium', quantity: 6 },
-  { category: 'SYRINGE', name: 'Syringe', size: '5ml', quantity: 4 },
-  { category: 'SYRINGE', name: 'Syringe', size: '10ml', quantity: 2 },
-  { category: 'SYRINGE', name: 'Syringe', size: '20ml', quantity: 1 },
-  { category: 'IV_CANNULA', name: 'IV cannula, green', size: '18G', quantity: 2 },
-  { category: 'GIVING_SET', name: 'IV giving set', quantity: 2 },
-  { category: 'PLASTER', name: 'Adhesive plaster, medium', quantity: 1 },
-  { category: 'PLASTER', name: 'Micropore tape', quantity: 1 },
-  { category: 'WATER_FOR_INJECTION', name: 'Water for injection', size: '10ml', quantity: 4 },
-];
+/**
+ * The categories a case carries automatically, and which are therefore
+ * NOT offered in "Special consumables and drugs".
+ *
+ * These are the things every operation needs in a range of sizes, and the
+ * theatre cannot know in advance which size the scrub nurse will reach
+ * for. Asking a surgeon to tick six glove sizes at a booking form is how
+ * the wrong one gets ordered; carrying two of each removes the question.
+ *
+ * Because they always arrive, offering them in the picker as well is a
+ * way of ordering them twice.
+ */
+export const BUNDLED_CATEGORIES = [
+  'SYRINGE',
+  'IV_CANNULA',
+  'GIVING_SET',
+  'PLASTER',
+  'GLOVES',
+  'WATER_FOR_INJECTION',
+] as const;
 
-const MAJOR: BundleLine[] = [
-  { category: 'GLOVES', name: 'Surgical glove, sterile', size: '7.5', quantity: 6 },
-  { category: 'GLOVES', name: 'Procedure glove, latex', size: 'Medium', quantity: 10 },
-  { category: 'SYRINGE', name: 'Syringe', size: '5ml', quantity: 6 },
-  { category: 'SYRINGE', name: 'Syringe', size: '10ml', quantity: 4 },
-  { category: 'SYRINGE', name: 'Syringe', size: '20ml', quantity: 2 },
-  { category: 'SYRINGE', name: 'Syringe', size: '50ml', quantity: 1 },
-  // Two large-bore cannulae as standard for a major case: one is access,
-  // two is access that survives losing one.
-  { category: 'IV_CANNULA', name: 'IV cannula, grey', size: '16G', quantity: 2 },
-  { category: 'IV_CANNULA', name: 'IV cannula, green', size: '18G', quantity: 2 },
-  { category: 'GIVING_SET', name: 'IV giving set', quantity: 2 },
-  { category: 'PLASTER', name: 'Adhesive plaster, large', quantity: 1 },
-  { category: 'PLASTER', name: 'Micropore tape', quantity: 2 },
-  { category: 'WATER_FOR_INJECTION', name: 'Water for injection', size: '20ml', quantity: 4 },
+/**
+ * Bundled too, but only on a decision made elsewhere on the form, so they
+ * are kept out of the picker for the same reason and added by rule.
+ *
+ *   TRANSFUSION_ADJUNCT — only when transfusion is anticipated.
+ *   LOCAL_ANAESTHETIC — only when the anaesthesia type is local, and only
+ *   the agent the surgeon names. Plain and with-adrenaline are not
+ *   interchangeable and must never be defaulted or inferred.
+ */
+export const CONDITIONALLY_BUNDLED_CATEGORIES = ['TRANSFUSION_ADJUNCT'] as const;
+
+/** Everything the picker must not offer. */
+export const NOT_IN_PICKER: readonly string[] = [
+  ...BUNDLED_CATEGORIES,
+  ...CONDITIONALLY_BUNDLED_CATEGORIES,
 ];
 
 /**
- * Super major: quantities scaled up from MAJOR, and nothing else.
+ * Built from the standard catalogue rather than retyped.
  *
- * DELIBERATELY NOT A LONGER CLINICAL LIST. A case over four hours with
- * heavy blood loss plausibly wants a urinary catheter and central access
- * as standard, but that is this hospital's judgement to record, not mine
- * to invent — the same reason the standard catalogue seeds no brands. The
- * editor in Settings exists so the theatre can add them and have it stick.
- *
- * What IS justified without asking anyone is more of what a major case
- * already carries: a longer operation uses more gloves, more syringes and
- * more fluid, and a third large-bore cannula is access that survives
- * losing two.
+ * A size added to the catalogue is a size the theatre stocks, and it
+ * should start arriving in the pack without anybody remembering to edit a
+ * second list here. Retyping these was how the old bundle came to ask for
+ * "Syringe 5ml" while the catalogue called it something else.
  */
-const SUPER_MAJOR: BundleLine[] = [
-  { category: 'GLOVES', name: 'Surgical glove, sterile', size: '7.5', quantity: 10 },
-  { category: 'GLOVES', name: 'Procedure glove, latex', size: 'Medium', quantity: 16 },
-  { category: 'SYRINGE', name: 'Syringe', size: '5ml', quantity: 10 },
-  { category: 'SYRINGE', name: 'Syringe', size: '10ml', quantity: 6 },
-  { category: 'SYRINGE', name: 'Syringe', size: '20ml', quantity: 4 },
-  { category: 'SYRINGE', name: 'Syringe', size: '50ml', quantity: 2 },
-  { category: 'IV_CANNULA', name: 'IV cannula, grey', size: '16G', quantity: 3 },
-  { category: 'IV_CANNULA', name: 'IV cannula, green', size: '18G', quantity: 2 },
-  { category: 'GIVING_SET', name: 'IV giving set', quantity: 3 },
-  { category: 'PLASTER', name: 'Adhesive plaster, large', quantity: 2 },
-  { category: 'PLASTER', name: 'Micropore tape', quantity: 3 },
-  { category: 'WATER_FOR_INJECTION', name: 'Water for injection', size: '20ml', quantity: 6 },
-];
+function twoOfEach(items: { category: string; name: string; size?: string }[]): BundleLine[] {
+  return items.map((i) => ({
+    category: i.category,
+    name: i.name,
+    ...(i.size === undefined ? {} : { size: i.size }),
+    quantity: STANDARD_QUANTITY,
+  }));
+}
+
+/**
+ * The same for every size of case.
+ *
+ * Magnitude scales the base theatre pack — gowns, drapes, gauze — which is
+ * where the difference between a minor and a major case actually shows. It
+ * does NOT scale these: a minor case still needs the range of cannula
+ * gauges on the trolley, because which one goes in depends on the patient's
+ * veins and not on the size of the operation.
+ *
+ * Per-magnitude differences are still possible; they are set in Settings,
+ * against the theatre's own judgement rather than mine.
+ */
+const STANDARD_BUNDLE: BundleLine[] = twoOfEach([
+  ...SYRINGES,
+  ...IV_CANNULAE,
+  // The blood giving set is deliberately not here — it belongs with the
+  // transfusion set below, which arrives only when blood is anticipated.
+  ...GIVING_SETS.filter((g) => !/blood/i.test(g.name)),
+  ...PLASTERS,
+  ...GLOVES,
+  ...WATER_FOR_INJECTION,
+]);
 
 const BY_MAGNITUDE: Record<Magnitude, BundleLine[]> = {
-  MINOR,
-  INTERMEDIATE,
-  MAJOR,
-  SUPER_MAJOR,
+  MINOR: STANDARD_BUNDLE,
+  INTERMEDIATE: STANDARD_BUNDLE,
+  MAJOR: STANDARD_BUNDLE,
+  SUPER_MAJOR: STANDARD_BUNDLE,
 };
 
+
 /** Given with blood, so they are ordered with the giving set, not after it. */
-const TRANSFUSION_SET: BundleLine[] = [
-  { category: 'GIVING_SET', name: 'Blood giving set (with filter)', quantity: 2 },
-  { category: 'TRANSFUSION_ADJUNCT', name: 'Hydrocortisone injection 100mg', quantity: 1 },
-  { category: 'TRANSFUSION_ADJUNCT', name: 'Calcium gluconate 10% injection', size: '10ml', quantity: 1 },
-  { category: 'TRANSFUSION_ADJUNCT', name: 'Promethazine injection 25mg', quantity: 1 },
-  { category: 'TRANSFUSION_ADJUNCT', name: 'Frusemide injection 40mg', quantity: 1 },
-];
+const TRANSFUSION_SET: BundleLine[] = twoOfEach([
+  ...GIVING_SETS.filter((g) => /blood/i.test(g.name)),
+  ...TRANSFUSION_ADJUNCTS,
+]);
 
 export interface BundleInput {
   magnitude: string | null | undefined;

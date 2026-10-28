@@ -22,6 +22,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { NOT_IN_PICKER } from '@/lib/specialNeeds/bundle';
+import { CATEGORY_LABELS } from '@/lib/specialNeeds/categories';
 import { Plus, X, Package, AlertTriangle } from 'lucide-react';
 
 export type CatalogueItem = {
@@ -46,28 +48,7 @@ export type ChosenNeed = {
 };
 
 /** Order matters: this is the order a surgeon thinks in. */
-export const CATEGORY_LABELS: { key: string; label: string }[] = [
-  { key: 'SUTURE', label: 'Sutures' },
-  { key: 'GLOVES', label: 'Gloves' },
-  { key: 'URETHRAL_CATHETER', label: 'Urethral catheters' },
-  { key: 'DRAIN', label: 'Drains' },
-  { key: 'CHEST_TUBE', label: 'Chest tubes' },
-  { key: 'CHEST_DRAIN_BOTTLE', label: 'Chest drain bottles' },
-  { key: 'MESH', label: 'Mesh' },
-  { key: 'TRACHEOSTOMY_TUBE', label: 'Tracheostomy tubes' },
-  { key: 'HAEMOSTATIC_AGENT', label: 'Haemostatic agents' },
-  { key: 'BANDAGE', label: 'Bandages' },
-  { key: 'CASTING', label: 'Casting (POP, Scotchcast)' },
-  { key: 'SYRINGE', label: 'Syringes' },
-  { key: 'IV_CANNULA', label: 'IV cannulae' },
-  { key: 'GIVING_SET', label: 'Giving sets' },
-  { key: 'PLASTER', label: 'Plaster and tape' },
-  { key: 'WATER_FOR_INJECTION', label: 'Water for injection' },
-  { key: 'ANTIBIOTIC', label: 'Antibiotics' },
-  { key: 'LOCAL_ANAESTHETIC', label: 'Local anaesthetic' },
-  { key: 'TRANSFUSION_ADJUNCT', label: 'Transfusion adjuncts' },
-  { key: 'OTHER', label: 'Other' },
-];
+export { CATEGORY_LABELS } from '@/lib/specialNeeds/categories';
 
 export function describeItem(i: CatalogueItem): string {
   const bits = [i.name];
@@ -129,6 +110,10 @@ export default function SpecialNeedsPicker({
   const options = useMemo(
     () =>
       catalogue
+        // Belt as well as braces. The category selector no longer offers
+        // these, but a bundled item reaching this list would be ordered
+        // twice and charged twice, so it is excluded by name too.
+        .filter((c) => !NOT_IN_PICKER.includes(c.category))
         .filter((c) => c.category === category)
         .filter((c) => !chosenIds.has(c.id))
         .filter((c) =>

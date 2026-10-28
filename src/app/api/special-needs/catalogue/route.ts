@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/apiMiddleware';
 import { findDuplicate, isUsableName } from '@/lib/specialNeeds/normalise';
+import { NOT_IN_PICKER } from '@/lib/specialNeeds/bundle';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,12 +78,17 @@ export async function GET(request: NextRequest) {
       items,
       // So a caller can say "12 more are waiting to be priced" rather than
       // leaving a surgeon wondering where an item they know exists has gone.
+      // Counts only what the PICKER would otherwise have shown. Bundled
+      // categories are not offered there whether they are priced or not,
+      // so counting them would tell a surgeon that items are missing from
+      // a list they were never going to appear in.
       withheldUnpriced: includeUnpriced
         ? 0
         : await prisma.specialNeedItem.count({
             where: {
               isActive: true,
               unitPrice: null,
+              category: { notIn: NOT_IN_PICKER as never },
               ...(category && (CATEGORIES as readonly string[]).includes(category)
                 ? { category: category as never }
                 : {}),

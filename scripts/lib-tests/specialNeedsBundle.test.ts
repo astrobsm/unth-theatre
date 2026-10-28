@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { bundleFor, mergeLines, needsLocalAnaestheticChoice } from '../../src/lib/specialNeeds/bundle';
+import {
+  bundleFor,
+  mergeLines,
+  needsLocalAnaestheticChoice,
+  NOT_IN_PICKER,
+} from '../../src/lib/specialNeeds/bundle';
+import { CATEGORY_LABELS } from '../../src/lib/specialNeeds/categories';
 import { standardCatalogue } from '../../src/lib/specialNeeds/standardCatalogue';
 
 // What this guards: a pack that is wrong in theatre. Every line the bundle
@@ -44,10 +50,49 @@ describe('the staples a case cannot run without', () => {
     }
   });
 
-  it('scales with the size of the case', () => {
+  // Magnitude deliberately does NOT scale these any more.
+  //
+  // It scales the base theatre pack — gowns, drapes, gauze — which is where
+  // the difference between a minor and a major case actually shows. A minor
+  // case still needs the range of cannula gauges on the trolley, because
+  // which one goes in depends on the patient's veins and not on the size of
+  // the operation. Two of every size, every time; the theatre tunes it per
+  // magnitude in Settings if it disagrees.
+  it('carries the same standard consumables whatever the size of the case', () => {
     const total = (m: string) => bundleFor({ magnitude: m }).reduce((n, l) => n + l.quantity, 0);
-    expect(total('MINOR')).toBeLessThan(total('INTERMEDIATE'));
-    expect(total('INTERMEDIATE')).toBeLessThan(total('MAJOR'));
+    expect(total('MINOR')).toBe(total('INTERMEDIATE'));
+    expect(total('INTERMEDIATE')).toBe(total('MAJOR'));
+    expect(total('MAJOR')).toBe(total('SUPER_MAJOR'));
+  });
+
+  it('carries two of every size, not one', () => {
+    // One of something is no spare. The second is what a dropped or
+    // contaminated item is replaced from without leaving theatre.
+    const lines = bundleFor({ magnitude: 'MAJOR' });
+    expect(lines.length).toBeGreaterThan(0);
+    lines.forEach((l) => expect(l.quantity).toBe(2));
+  });
+
+  it('offers every glove size and every cannula gauge the catalogue stocks', () => {
+    const lines = bundleFor({ magnitude: 'MINOR' });
+    const sizesIn = (category: string) =>
+      new Set(lines.filter((l) => l.category === category).map((l) => l.size));
+
+    // The scrub nurse's hand size is not known at booking, so all of them.
+    expect(sizesIn('GLOVES')).toContain('7.5');
+    expect(sizesIn('GLOVES').size).toBeGreaterThanOrEqual(6);
+    // Which gauge goes in depends on the patient's veins.
+    expect(sizesIn('IV_CANNULA')).toContain('16G');
+    expect(sizesIn('IV_CANNULA').size).toBeGreaterThanOrEqual(6);
+  });
+
+  it('keeps the blood giving set out until blood is anticipated', () => {
+    const plain = bundleFor({ magnitude: 'MAJOR' });
+    expect(plain.some((l) => /blood/i.test(l.name))).toBe(false);
+
+    const withBlood = bundleFor({ magnitude: 'MAJOR', transfusionAnticipated: true });
+    expect(withBlood.some((l) => /blood giving set/i.test(l.name))).toBe(true);
+    expect(withBlood.some((l) => l.category === 'TRANSFUSION_ADJUNCT')).toBe(true);
   });
 
   it('gives a major case two large-bore cannulae', () => {
@@ -182,5 +227,39 @@ describe('duplicate lines are merged, not listed twice', () => {
     const input = [{ category: 'SYRINGE', name: 'Syringe', size: '5ml', quantity: 1 }];
     mergeLines([...input, ...input]);
     expect(input[0].quantity).toBe(1);
+  });
+});
+
+describe('what the case carries automatically is not also offered to pick', () => {
+  it('keeps every bundled category out of the picker', () => {
+    // Offering these in "Special consumables and drugs" as well as
+    // bundling them is a way of ordering them twice and charging the
+    // patient twice — once in the pack, once on top.
+    const offered = new Set(CATEGORY_LABELS.map((c) => c.key));
+    NOT_IN_PICKER.forEach((c) =>
+      expect(offered.has(c), `${c} is both bundled and offered in the picker`).toBe(false),
+    );
+  });
+
+  it('still offers the things that genuinely vary with the operation', () => {
+    const offered = new Set(CATEGORY_LABELS.map((c) => c.key));
+    ['SUTURE', 'MESH', 'DRAIN', 'URETHRAL_CATHETER', 'ANTIBIOTIC'].forEach((c) =>
+      expect(offered.has(c), `${c} should still be pickable`).toBe(true),
+    );
+  });
+
+  it('bundles every category it withholds from the picker', () => {
+    // The dangerous direction: a category removed from the picker but not
+    // actually bundled is one a case silently never gets.
+    const bundled = new Set(bundleFor({ magnitude: 'MAJOR' }).map((l) => l.category));
+    const conditional = new Set(
+      bundleFor({ magnitude: 'MAJOR', transfusionAnticipated: true }).map((l) => l.category),
+    );
+    NOT_IN_PICKER.forEach((c) =>
+      expect(
+        bundled.has(c) || conditional.has(c),
+        `${c} is hidden from the picker but never bundled`,
+      ).toBe(true),
+    );
   });
 });
