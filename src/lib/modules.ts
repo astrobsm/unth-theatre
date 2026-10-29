@@ -232,6 +232,7 @@ export const MODULES: AppModule[] = [
   { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },
   { id: 'surgical-packs', label: 'Surgical Packs', paths: ['/dashboard/admin/surgical-packs'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },
   { id: 'disciplinary-queries', label: 'Disciplinary Queries', paths: ['/dashboard/disciplinary-queries'], defaultRoles: [], category: 'Admin' },
+  { id: 'late-bookings', label: 'Late Bookings', paths: ['/dashboard/late-bookings'], defaultRoles: [], category: 'Admin' },
   { id: 'anonymous-tips-review', label: 'Review Anonymous Tips', paths: ['/dashboard/anonymous-tips/view'], defaultRoles: [], category: 'Admin' },
   { id: 'security-reports-review', label: 'Review Security Reports', paths: ['/dashboard/security-reports/view'], defaultRoles: [], category: 'Admin' },
   { id: 'theatre-audit', label: 'Theatre Audit', paths: ['/dashboard/theatre-audit'], defaultRoles: [...ADMIN_VIEWERS], category: 'Admin' },

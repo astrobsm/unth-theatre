@@ -383,6 +383,7 @@ export default function DashboardLayout({
   if (adminRoles.includes(session.user.role)) {
     menuItems.push({ href: '/dashboard/users', icon: Settings, label: 'User Management' });
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
+    menuItems.push({ href: '/dashboard/late-bookings', icon: CalendarClock, label: 'Late Bookings', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit/pool', icon: Gavel, label: 'Weekly Audit Pool', badge: 'NEW' });

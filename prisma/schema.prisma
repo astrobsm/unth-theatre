@@ -6137,6 +6137,67 @@ enum DisciplinaryQueryType {
   OTHER
 }
 
+/// One recorded late elective booking, and what it earned.
+///
+/// ONE ROW PER CASE, enforced by a unique index on surgeryId. The escalation
+/// ladder counts rows, so a second row for the same case would push somebody
+/// a rung further up for an offence they committed once — and the rung after
+/// the second is a formal query. Pressing "chase" twice must be harmless.
+///
+/// The offence number is STORED, not recomputed. What a person was told at
+/// the time is a fact about that moment; recomputing it later would rewrite
+/// the history of a warning already sent if an earlier case were corrected
+/// or deleted.
+model LateBookingOffence {
+  id        String @id @default(uuid())
+  surgeryId String @unique
+
+  /// Whoever booked the case — the person the ladder counts against.
+  /// Nullable because a case can reach here with no booker recorded, and
+  /// that is itself worth reporting rather than discarding.
+  personId   String?
+  personName String
+
+  unit         String
+  subspecialty String
+
+  /// 1, 2, 3… for this person since counting began.
+  offenceNumber Int
+  /// FIRST_WARNING | SECOND_WARNING | QUERY
+  level         String
+
+  /// How late, in hours past the cut-off, as judged when recorded.
+  hoursLate Float?
+
+  /// The unit consultant who was told.
+  consultantId   String?
+  consultantName String?
+
+  /// Set when this offence raised a formal query.
+  disciplinaryQueryId String?
+
+  /// Whether the chase actually went out, so a silent failure is visible.
+  whatsappQueued  Boolean @default(false)
+  whatsappSkipped String?
+
+  recordedById   String?
+  recordedByName String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns
+  /// as drift. Application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([personId])
+  @@index([unit])
+  @@index([createdAt])
+  @@map("late_booking_offences")
+}
+
 model DisciplinaryQuery {
   id                String                  @id @default(uuid())
   referenceNumber   String                  @unique
