@@ -2495,6 +2495,17 @@ ${pretty} — ${days} days from today.
                 {filteredPatients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
                     {patient.name} - {patient.folderNumber} ({formatAge(patient.age, patient.ageUnit)}, {patient.gender})
+                    {/*
+                      A patient registered on this device that the server has
+                      not acknowledged yet still carries its local `offline-`
+                      id, and until now looked exactly like any other row in
+                      this list. Booking against one is where the "saved,
+                      usually within a minute" cases went: the booking had
+                      nothing on the server to attach to and waited behind a
+                      registration that, if it had been refused, was never
+                      coming. Say so here, where the choice is made.
+                    */}
+                    {patient.id.startsWith('offline-') ? ' — NOT YET SYNCED' : ''}
                   </option>
                 ))}
               </select>

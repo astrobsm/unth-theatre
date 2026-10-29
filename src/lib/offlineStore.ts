@@ -5,7 +5,8 @@
 
 import {
   extractServerId,
-  hasUnresolvedClientId,
+  collectUnresolvedClientIds,
+  classifyUnresolvedParent,
   remapClientIds,
   remapUrl,
   type PendingRecord,
@@ -651,6 +652,16 @@ async function safeErr(response: Response): Promise<string> {
 /** Persisted map of local ids -> the server ids they became. */
 const ID_MAP_KEY = 'clientIdMap';
 
+/**
+ * How long an item may wait behind a parent before it is dead-lettered.
+ *
+ * A day, not an hour. A device left off over a weekend must still drain its
+ * chain of work on Monday; but something still waiting after a full day is
+ * waiting on something that is not coming, and it is better seen on the
+ * failed list than held silently for ever.
+ */
+const HELD_ITEM_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 async function loadIdMap(): Promise<Record<string, string>> {
   return (await getSyncMeta<Record<string, string>>(ID_MAP_KEY)) ?? {};
 }
@@ -687,11 +698,40 @@ export async function processOfflineQueue(): Promise<{ synced: number; failed: n
   // The queue is FIFO, so a parent is always attempted before its children.
   const idMap = await loadIdMap();
 
+  // Needed to tell a parent that is still coming from one that never will.
+  const pendingRecords = await getPendingRecords().catch(() => [] as PendingRecord[]);
+
   for (const rawItem of queue) {
     // Hold back anything still pointing at a local id we have not resolved —
     // its parent has not synced yet. Sending it would guarantee a rejection and
     // dead-letter real clinical work.
-    if (hasUnresolvedClientId(rawItem.url, rawItem.body, idMap)) {
+    //
+    // BUT A HOLD HAS TO END. Until now this branch was unconditional, so an
+    // item waiting on a parent the server had refused — or on one this device
+    // no longer had any record of — was held on every drain, for ever, while
+    // the surgeon who booked it had been told in green that it was saved and
+    // would go through within a minute. It counted as "failed" and showed up
+    // nowhere a human would look. Work that cannot be sent must become
+    // visible, not invisible.
+    const unresolved = collectUnresolvedClientIds(rawItem.url, rawItem.body, idMap);
+    if (unresolved.length) {
+      const hopeless = unresolved.filter(
+        (id) => classifyUnresolvedParent(id, pendingRecords) !== 'in-flight',
+      );
+      const stale = Date.now() - (rawItem.timestamp ?? 0) > HELD_ITEM_MAX_AGE_MS;
+
+      if (hopeless.length || stale) {
+        await addFailedMutation(
+          rawItem,
+          hopeless.length
+            ? 'This is attached to a record that never reached the server, so it cannot be sent. '
+              + 'Re-enter it against the record as it now stands, then dismiss this.'
+            : 'This has been waiting more than a day for a record it depends on, which has still not '
+              + 'reached the server. Re-enter it, then dismiss this.',
+        );
+        await removeFromOfflineQueue(rawItem.id!);
+        await markPendingFailed(rawItem.headers?.['X-Idempotency-Key']);
+      }
       failed++;
       continue;
     }

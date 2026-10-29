@@ -23,6 +23,8 @@ import {
   remapClientIds,
   remapUrl,
   hasUnresolvedClientId,
+  collectUnresolvedClientIds,
+  classifyUnresolvedParent,
   type PendingRecord,
   type PendingOp,
 } from './offlineMerge';
@@ -719,7 +721,27 @@ async function handleMutationFetch(
 
   if (mentionsLocalId) {
     const idMap = await loadClientIdMap();
-    if (hasUnresolvedClientId(url, body, idMap)) {
+    const unresolved = collectUnresolvedClientIds(url, body, idMap);
+    if (unresolved.length) {
+      // Waiting is only honest when there is something to wait FOR.
+      //
+      // A record whose create is still queued will resolve, and queueing
+      // behind it is right. A record whose create the server REFUSED, or that
+      // this device has no pending create for at all, will never resolve —
+      // and queueing behind it put the work somewhere it would sit for ever
+      // while the surgeon was shown a green "saved, usually within a minute"
+      // and told not to enter it again. The case never reached the list, and
+      // nothing on any screen ever said so.
+      //
+      // So the stuck case is refused here, out loud, with the one instruction
+      // that actually recovers it.
+      const pending = await getPendingRecords().catch(() => [] as PendingRecord[]);
+      const stuck = unresolved.filter(
+        (id) => classifyUnresolvedParent(id, pending) !== 'in-flight',
+      );
+      if (stuck.length) {
+        return blockedByUnsyncedParent(url, stuck, pending);
+      }
       // Deliberately not sent: the parent has not reached the server yet, so
       // this would be rejected and dead-lettered. Queueing keeps the work and
       // it goes out behind its parent.
@@ -800,6 +822,63 @@ async function announceBlocked(
   } catch {
     /* explaining a failure must never become one */
   }
+}
+
+/**
+ * Refuse a mutation that is waiting for a record which will never arrive.
+ *
+ * AN ERROR, NOT A QUEUED SUCCESS. Everything about this situation argues for
+ * telling the truth: the network is fine, the work has not been saved
+ * anywhere the server will ever see, and the person is standing in front of
+ * the form that can still fix it. A green confirmation here does not soften
+ * a bad outcome, it causes one — the surgeon walks away believing the case is
+ * booked.
+ *
+ * The instruction is the point of the message. "Something went wrong" leaves
+ * them pressing the same button; "search for the patient again and re-select
+ * them" is a thing they can do in ten seconds, because the patient is almost
+ * always on the server already under a proper id.
+ */
+function blockedByUnsyncedParent(
+  url: string,
+  stuckIds: string[],
+  pending: PendingRecord[],
+): Response {
+  const refused = stuckIds.some(
+    (id) => classifyUnresolvedParent(id, pending) === 'refused',
+  );
+  const names = stuckIds
+    .map((id) => pending.find((p) => p.clientId === id))
+    .filter(Boolean)
+    .map((p) => {
+      const b = (p as PendingRecord).body as Record<string, unknown> | null;
+      const n = b && typeof b.name === 'string' ? b.name : null;
+      return n ?? (p as PendingRecord).entityType;
+    });
+  const who = names.length ? ` (${names.join(', ')})` : '';
+
+  const error = refused
+    ? `This could not be saved. The patient record it is attached to${who} was refused by the server `
+      + `when it tried to sync, so nothing can be filed against it. Please search for the patient again `
+      + `and re-select them — they are usually already on the server — then submit this once more. `
+      + `Nothing has been saved, so you are not creating a duplicate.`
+    : `This could not be saved. The patient record it is attached to${who} is not on the server and this `
+      + `device has no record of it waiting to sync, so there is nothing for it to attach to. Please `
+      + `search for the patient again and re-select them, then submit this once more. Nothing has been `
+      + `saved, so you are not creating a duplicate.`;
+
+  console.warn('[FetchInterceptor] Refused — unresolvable parent:', url, stuckIds);
+
+  return new Response(
+    JSON.stringify({ error, code: 'UNRESOLVED_PARENT', unresolved: stuckIds }),
+    {
+      // 409: this is a state conflict on the client's side, not a malformed
+      // request, and it is not something a retry of the same body will fix.
+      status: 409,
+      statusText: 'Unresolved parent record',
+      headers: { 'Content-Type': 'application/json', 'X-Offline-Unresolved-Parent': 'true' },
+    },
+  );
 }
 
 /**

@@ -408,23 +408,73 @@ export function remapUrl(url: string, map: Record<string, string>): string {
 }
 
 /**
+ * Every local id in this mutation that we cannot resolve to a server id.
+ *
+ * The ids themselves, not just a yes/no, because the answer decides what the
+ * person is told. A booking waiting behind a patient registration that is
+ * still in the queue is a one-minute wait. One waiting behind a registration
+ * the server REFUSED is waiting for ever, and the only way to tell those
+ * apart is to know which record it is waiting for and go and look.
+ */
+export function collectUnresolvedClientIds(
+  url: string,
+  body: unknown,
+  map: Record<string, string>,
+): string[] {
+  const out: string[] = [];
+  const note = (v: string) => {
+    if (isClientId(v) && !map[v] && out.indexOf(v) === -1) out.push(v);
+  };
+
+  url.split(/[/?=&]/).forEach(note);
+
+  const walk = (v: unknown) => {
+    if (typeof v === 'string') { note(v); return; }
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (v && typeof v === 'object') Object.values(v as Record<string, unknown>).forEach(walk);
+  };
+  walk(body);
+
+  return out;
+}
+
+/**
+ * What is actually happening to the record this mutation is waiting for.
+ *
+ *   in-flight — its create is still queued and has not been refused. Waiting
+ *               is correct and it really will go through shortly.
+ *   refused   — the server rejected its create. It will NEVER resolve. The
+ *               row is still on screen, badged, and still selectable, so the
+ *               person picks it again and waits again for something that is
+ *               never coming.
+ *   unknown   — this device has no pending create for that id at all. Either
+ *               the create landed and the reply was unusable, so the mapping
+ *               was never learned, or local storage was cleared. Either way
+ *               nothing on this device will ever resolve it.
+ *
+ * ONLY THE FIRST IS WORTH WAITING FOR. The other two are the reason a surgeon
+ * can press Submit, be told in green that the case is saved and will go
+ * through "usually within a minute", and find no case on the list an hour
+ * later — having been told not to enter it again.
+ */
+export type UnresolvedParentState = 'in-flight' | 'refused' | 'unknown';
+
+export function classifyUnresolvedParent(
+  clientId: string,
+  pending: PendingRecord[],
+): UnresolvedParentState {
+  const record = pending.find((p) => p.op === 'create' && p.clientId === clientId);
+  if (!record) return 'unknown';
+  return record.failed ? 'refused' : 'in-flight';
+}
+
+/**
  * Does this queued mutation still point at a local id we cannot resolve? Such
  * an item must NOT be sent — the server would reject it and the work would be
  * dead-lettered even though its parent may simply not have synced yet.
  */
 export function hasUnresolvedClientId(url: string, body: unknown, map: Record<string, string>): boolean {
-  const unresolved = (v: string) => isClientId(v) && !map[v];
-  if (url.split(/[/?=&]/).some(unresolved)) return true;
-
-  let found = false;
-  const walk = (v: unknown) => {
-    if (found) return;
-    if (typeof v === 'string') { if (unresolved(v)) found = true; return; }
-    if (Array.isArray(v)) { v.forEach(walk); return; }
-    if (v && typeof v === 'object') Object.values(v as Record<string, unknown>).forEach(walk);
-  };
-  walk(body);
-  return found;
+  return collectUnresolvedClientIds(url, body, map).length > 0;
 }
 
 /**
