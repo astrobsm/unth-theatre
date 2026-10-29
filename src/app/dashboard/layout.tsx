@@ -99,6 +99,7 @@ import {
   Shirt,
   MessageCircle,
   Star,
+  Award,
   ChevronDown,
   ChevronRight,
   Scan,
@@ -384,6 +385,10 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/users', icon: Settings, label: 'User Management' });
     menuItems.push({ href: '/dashboard/disciplinary-queries', icon: FileWarning, label: 'Disciplinary Queries', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/late-bookings', icon: CalendarClock, label: 'Late Bookings', badge: 'NEW' });
+    // Beside it on purpose. The two boards are the same figures read from
+    // opposite ends, and a recognition board filed somewhere else is a
+    // recognition board nobody opens.
+    menuItems.push({ href: '/dashboard/booking-performance', icon: Award, label: 'Booking Performance', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit/pool', icon: Gavel, label: 'Weekly Audit Pool', badge: 'NEW' });
@@ -598,6 +603,7 @@ export default function DashboardLayout({
       '/training/downloads.html',
       '/dashboard/disciplinary-queries',
       '/dashboard/late-bookings',
+      '/dashboard/booking-performance',
       '/hod-letter',
       '/dashboard/live-monitoring',
       '/dashboard/theatre-audit',

@@ -132,6 +132,67 @@ describe('what the person actually receives', () => {
     expect(n.message).toContain('number 2');
   });
 
+  it('asks, rather than only telling', () => {
+    // Theatre management asked for the chase to read as an appeal. The
+    // outcome wanted is an earlier booking tomorrow, and a message that
+    // reads as an attack produces a defensive colleague instead.
+    const msg = buildChaseMessage({ ...base, decision: escalationFor(0) });
+    expect(msg).toMatch(/barest minimum/i);
+    expect(msg).toMatch(/appeal|asking|pleading/i);
+    // And it still says what was done, because a plea that hides the
+    // consequence leaves somebody surprised by a query nobody warned them
+    // about.
+    expect(msg).toMatch(/first warning/i);
+  });
+
+  it('quotes their own rate back to them when it is known', () => {
+    const msg = buildChaseMessage({
+      ...base,
+      decision: escalationFor(0),
+      standing: {
+        electiveTotal: 10,
+        late: 4,
+        lateRate: 0.4,
+        periodLabel: 'the last 90 days',
+      },
+    });
+    expect(msg).toContain('4 of your 10');
+    expect(msg).toContain('40%');
+    expect(msg).toContain('the last 90 days');
+  });
+
+  it('invents no percentage when the record is not known', () => {
+    // A figure a clinician can dispute undoes the whole appeal. Better to
+    // ask without one than to quote one that was estimated.
+    const msg = buildChaseMessage({ ...base, decision: escalationFor(0) });
+    expect(msg).not.toMatch(/\d+%/);
+    expect(msg).toMatch(/barest minimum/i);
+  });
+
+  it('pleads harder with a heavy offender than with a near-miss', () => {
+    const heavy = buildChaseMessage({
+      ...base,
+      decision: escalationFor(0),
+      standing: { electiveTotal: 10, late: 8, lateRate: 0.8, periodLabel: 'the last 90 days' },
+    });
+    const light = buildChaseMessage({
+      ...base,
+      decision: escalationFor(0),
+      standing: { electiveTotal: 10, late: 1, lateRate: 0.1, periodLabel: 'the last 90 days' },
+    });
+    expect(heavy).not.toBe(light);
+    // Somebody already booking most cases on time should be told so, not
+    // addressed as though they were the worst in the hospital.
+    expect(light).toMatch(/most of your cases on time/i);
+    expect(heavy).not.toMatch(/most of your cases on time/i);
+  });
+
+  it('still appeals at the query rung rather than only condemning', () => {
+    const msg = buildChaseMessage({ ...base, decision: escalationFor(2) });
+    expect(msg).toMatch(/has been copied to your head of department/i);
+    expect(msg).toMatch(/bring the figure down/i);
+  });
+
   it('labels every level in words a non-technical reader understands', () => {
     expect(ESCALATION_LABELS.FIRST_WARNING).toBe('First warning');
     expect(ESCALATION_LABELS.SECOND_WARNING).toBe('Second warning');

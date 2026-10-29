@@ -74,7 +74,7 @@ export function escalationFor(priorOffences: number): EscalationDecision {
       copyToHeadOfDepartment: false,
       raisesQuery: false,
       summary:
-        'First warning. This is the first elective case you have booked after the 15:00 deadline since tracking began.',
+        'This is the first elective case you have booked after the 15:00 deadline since tracking began.',
     };
   }
 
@@ -85,7 +85,7 @@ export function escalationFor(priorOffences: number): EscalationDecision {
       copyToHeadOfDepartment: false,
       raisesQuery: false,
       summary:
-        'Second warning. A third late booking will result in a formal query copied to your head of department.',
+        'This is your second since tracking began. A third late booking will result in a formal query copied to your head of department.',
     };
   }
 
@@ -98,7 +98,7 @@ export function escalationFor(priorOffences: number): EscalationDecision {
     offenceNumber,
     copyToHeadOfDepartment: true,
     raisesQuery: true,
-    summary: `Formal query. This is late booking number ${offenceNumber} since tracking began, and a written response is required.`,
+    summary: `This is late booking number ${offenceNumber} since tracking began, and a written response is required.`,
   };
 }
 
@@ -121,12 +121,38 @@ export function countsTowardsEscalation(
 }
 
 /**
+ * The booker's own record, quoted back to them in the chase.
+ *
+ * Optional because a chase must still be sendable when the figures cannot be
+ * computed. An absent record means the appeal is made without a percentage,
+ * never with a guessed one.
+ */
+export interface BookerStanding {
+  electiveTotal: number;
+  late: number;
+  /** late / electiveTotal, 0–1. */
+  lateRate: number | null;
+  /** "the last 90 days" — what the figures above cover. */
+  periodLabel: string;
+}
+
+/**
  * The WhatsApp chase sent to whoever booked the case.
  *
- * WRITTEN TO BE READ BY A TIRED REGISTRAR ON A PHONE. It states the case, the
- * rule, what happens next and who to talk to — in that order, because the
- * first line is all some people will read. It does not scold: the purpose is
- * a booking made on time tomorrow, not a person who feels got at.
+ * WRITTEN AS AN APPEAL, NOT A REPRIMAND. Theatre management asked for this
+ * deliberately: the outcome wanted is a booking made on time tomorrow, and a
+ * message that reads as an attack produces a defensive colleague rather than
+ * an earlier booking. So it asks — plainly, by name, with their own figure in
+ * front of them — for the rate to come down to the barest minimum.
+ *
+ * THE FACTS ARE NOT SOFTENED, only the framing. The level on the ladder, the
+ * copy to the head of department and the enforcement date all remain stated
+ * in full. A plea that conceals the consequence is a plea that leaves somebody
+ * surprised by a query they were never warned about, and that is a worse
+ * unkindness than saying it plainly.
+ *
+ * WRITTEN TO BE READ BY A TIRED REGISTRAR ON A PHONE. The ask is in the first
+ * two lines, because the first two lines are all some people will read.
  */
 export function buildChaseMessage(input: {
   personName: string;
@@ -136,40 +162,68 @@ export function buildChaseMessage(input: {
   bookedAtLabel: string;
   decision: EscalationDecision;
   unit: string;
+  /** Their record so far, when it is known. */
+  standing?: BookerStanding | null;
 }): string {
-  const { decision } = input;
+  const { decision, standing } = input;
 
   const lines = [
-    `UNTH Theatre — late elective booking`,
+    `UNTH Theatre — a request about your elective bookings`,
     ``,
     `Dear ${input.personName},`,
     ``,
-    `This case was booked after the 15:00 deadline:`,
+    `We are writing to ask for your help in bringing your late elective bookings down to the barest minimum. This is an appeal, not an accusation — we need your cooperation more than we need a record of the breach.`,
+    ``,
+    `The case concerned:`,
     `• Patient: ${input.patientLabel}`,
     `• Procedure: ${input.procedureName}`,
     `• Scheduled for: ${input.scheduledFor}`,
     `• Booked: ${input.bookedAtLabel}`,
     `• Unit: ${input.unit}`,
-    ``,
-    `Elective cases must be booked before 15:00 on the day before surgery. After that the list is planned, CSSD has begun setting up, and pharmacy and the consumable store have already drawn their packs — a case arriving later displaces work that is finished.`,
-    ``,
-    `${ESCALATION_LABELS[decision.level].toUpperCase()}: ${decision.summary}`,
   ];
 
-  if (decision.copyToHeadOfDepartment) {
+  // Their own figure, where we have it. A percentage somebody recognises as
+  // theirs is the single most persuasive line in the message; a percentage
+  // they can dispute would undo the whole appeal, which is why it is
+  // computed from the record and never estimated.
+  if (standing && standing.electiveTotal > 0 && standing.lateRate != null) {
+    const pct = Math.round(standing.lateRate * 100);
     lines.push(
       ``,
-      `This query has been copied to your head of department. Please submit a written response.`,
+      `Where you presently stand: ${standing.late} of your ${standing.electiveTotal} elective bookings in ${standing.periodLabel} were made after the deadline — ${pct}%.`,
+      ``,
+      pct >= 50
+        ? `We are pleading with you to work this figure down. Every booking you move before 15:00 is one fewer list disrupted, and a colleague booking at your volume can change this percentage within a fortnight.`
+        : `We are asking you to work this figure down further, towards nil. You are already booking most of your cases on time, and the few that slip are the ones that cost the theatre a nurse and a set.`,
+    );
+  } else {
+    lines.push(
+      ``,
+      `We are pleading with you to keep your late bookings at the barest minimum — ideally nil.`,
     );
   }
 
   lines.push(
     ``,
-    `From 1 November 2026, elective cases booked after the deadline will not have a nurse or a theatre assigned.`,
+    `Why we are asking. Elective cases must be booked before 15:00 on the day before surgery. By that hour the list has been planned, CSSD has begun sterilising, pharmacy and the consumable pack providers have drawn their packs, and the nursing officer has assigned staff to each theatre. A case arriving after that point does not join a queue — it displaces preparation already finished for another patient, and the patient who gets moved is rarely the one booked late.`,
     ``,
-    `If something genuinely prevents you booking before 15:00, tell the Theatre Manager or the Theatre Chairman before 12 noon on the day before. A difficulty raised in advance is always accommodated; one raised afterwards cannot be.`,
+    `For the record, this is logged as a ${ESCALATION_LABELS[decision.level].toLowerCase()}. ${decision.summary}`,
+  );
+
+  if (decision.copyToHeadOfDepartment) {
+    lines.push(
+      ``,
+      `This query has been copied to your head of department, and a written response is required. We would far rather have reached you with an appeal than with this, and we are still asking for the same thing: bring the figure down.`,
+    );
+  }
+
+  lines.push(
     ``,
-    `Thank you.`,
+    `From 1 November 2026, elective cases booked after the deadline will not have a nurse or a theatre assigned. This is not aimed at anyone; it is the only way the theatre can protect the patients already prepared for.`,
+    ``,
+    `If something genuinely prevents you booking before 15:00 — a clinic that overruns, a result that arrives late, a patient travelling a long way — please tell the Theatre Manager or the Theatre Chairman before 12 noon on the day before. A difficulty raised in advance is always accommodated; one raised afterwards cannot be, because the work has already been done.`,
+    ``,
+    `Thank you for your cooperation, and for the cases you do book on time.`,
     `Theatre Management, UNTH Ituku-Ozalla`,
   );
 

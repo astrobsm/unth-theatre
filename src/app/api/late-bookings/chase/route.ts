@@ -21,6 +21,7 @@ import prisma from '@/lib/prisma';
 import { requireRole } from '@/lib/apiMiddleware';
 import { bookingLateness, formatBookedAt } from '@/lib/bookingLateness';
 import { queueMessage } from '@/lib/comms/send';
+import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 import {
   escalationFor,
   countsTowardsEscalation,
@@ -29,6 +30,7 @@ import {
   ESCALATION_LABELS,
   DEFAULT_COUNTING_FROM,
 } from '@/lib/lateBooking/escalation';
+import { standingFor, PERFORMANCE_WINDOW_DAYS } from '@/lib/lateBooking/punctuality';
 
 export const dynamic = 'force-dynamic';
 
@@ -145,6 +147,33 @@ export async function POST(request: NextRequest) {
     const decision = escalationFor(prior);
 
     const personName = (surgery.bookedByName ?? '').trim() || 'Not recorded';
+
+    // ── Where they presently stand ────────────────────────────────────
+    // The chase is an appeal, and the appeal is to a figure: "X of your Y
+    // bookings were late." That figure is computed here from the record
+    // rather than taken from the report the operator was looking at, so the
+    // number quoted to a named clinician is one the server can defend.
+    const windowStart = new Date(Date.now() - PERFORMANCE_WINDOW_DAYS * 24 * 3_600_000);
+    const standingRows = await prisma.surgery.findMany({
+      where: {
+        scheduledDate: { gte: windowStart },
+        surgeryType: 'ELECTIVE' as never,
+        ...(surgery.bookedById
+          ? { bookedById: surgery.bookedById }
+          : { bookedByName: surgery.bookedByName ?? '__none__' }),
+      },
+      select: { scheduledDate: true, createdAt: true, surgeryType: true },
+    });
+    const standing = {
+      ...standingFor(
+        standingRows.map((r) => ({
+          scheduledDate: r.scheduledDate,
+          createdAt: r.createdAt,
+          surgeryType: r.surgeryType as unknown as string,
+        })),
+      ),
+      periodLabel: `the last ${PERFORMANCE_WINDOW_DAYS} days`,
+    };
     const patientLabel = surgery.patient?.folderNumber
       ? `${surgery.patient.name} (${surgery.patient.folderNumber})`
       : (surgery.patient?.name ?? 'Patient');
@@ -239,17 +268,29 @@ export async function POST(request: NextRequest) {
       bookedAtLabel: formatBookedAt(surgery.createdAt),
       decision,
       unit,
+      standing,
     });
 
     let whatsappQueued = false;
     let whatsappSkipped: string | null = null;
 
     if (surgery.bookedById) {
+      // The number has to be resolved HERE. The send policy refuses an
+      // external channel with no address, so a chase queued without one is
+      // recorded as cancelled and the booker is never actually reached — a
+      // warning nobody receives, which is the one failure mode this feature
+      // cannot have.
+      const bookerContact = await prisma.user
+        .findUnique({ where: { id: surgery.bookedById }, select: { phoneNumber: true } })
+        .catch(() => null);
+      const wa = bookerContact?.phoneNumber ? toWhatsAppNumber(bookerContact.phoneNumber) : null;
+
       const q = await queueMessage({
         channel: 'WHATSAPP' as never,
         priority: 'NORMAL' as never,
         recipientUserId: surgery.bookedById,
         recipientName: personName,
+        recipientAddress: wa,
         recipientIsStaff: true,
         body: chase,
         relatedType: 'SURGERY',
@@ -320,7 +361,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ offence, decision, whatsappQueued, whatsappSkipped, queryId });
+    return NextResponse.json({
+      offence,
+      decision,
+      whatsappQueued,
+      whatsappSkipped,
+      queryId,
+      standing,
+    });
   } catch (err) {
     console.error('[late-bookings/chase] failed:', err);
     return NextResponse.json({ error: 'Could not record this one' }, { status: 500 });
