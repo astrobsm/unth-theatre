@@ -146,6 +146,11 @@ export async function POST(request: NextRequest) {
       rankLabel,
     });
 
+    // The number and the text, handed back so the operator's own WhatsApp can
+    // carry it now. The queued row waits on a provider that is not configured
+    // here, and a letter of appreciation nobody receives is not one.
+    const wa = person.phoneNumber ? toWhatsAppNumber(person.phoneNumber) : null;
+
     const queued = await queueMessage({
       channel: 'WHATSAPP' as never,
       priority: 'LOW' as never,
@@ -154,7 +159,7 @@ export async function POST(request: NextRequest) {
       // Resolved here: the send policy refuses an external channel with no
       // address, and a thank-you that silently goes nowhere is worse than
       // none at all, because the board would show it as sent.
-      recipientAddress: person.phoneNumber ? toWhatsAppNumber(person.phoneNumber) : null,
+      recipientAddress: wa,
       recipientIsStaff: true,
       body: text,
       relatedType: 'USER',
@@ -182,7 +187,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       sent: true,
       whatsappQueued: queued.queued === true,
-      whatsappSkipped: queued.queued ? null : (queued.reason ?? 'Not queued'),
+      whatsappSkipped: wa
+        ? (queued.queued ? null : (queued.reason ?? 'Not queued'))
+        : `${person.fullName} has no phone number on file.`,
+      whatsapp: wa ? { number: wa, text } : null,
       performance: {
         onTime: performance.onTime,
         electiveTotal: performance.electiveTotal,

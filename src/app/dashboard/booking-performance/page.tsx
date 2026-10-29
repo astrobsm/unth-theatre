@@ -27,7 +27,9 @@ import {
   Send,
   Star,
   Clock,
+  MessageCircle,
 } from 'lucide-react';
+import { whatsappLink } from '@/lib/whatsapp';
 import {
   formatNotice,
   MIN_CASES_TO_RANK,
@@ -49,6 +51,15 @@ export default function BookingPerformancePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /**
+   * The WhatsApp hand-off for the last letter sent.
+   *
+   * KEPT ON SCREEN rather than only opened. The window is opened for the
+   * common case, but a blocked pop-up must not turn into a commendation
+   * nobody received — so the link stays until the next action, where it can
+   * be tapped deliberately.
+   */
+  const [handoff, setHandoff] = useState<{ href: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,10 +91,11 @@ export default function BookingPerformancePage() {
     void load();
   }, [load]);
 
-  const commend = async (personId: string) => {
+  const commend = async (personId: string, personName: string) => {
     setBusy(personId);
     setProblem(null);
     setNote(null);
+    setHandoff(null);
     try {
       const res = await fetch('/api/booking-performance/commend', {
         method: 'POST',
@@ -99,11 +111,22 @@ export default function BookingPerformancePage() {
       if (data.alreadySent) {
         setNote(data.message);
       } else {
+        const href = data.whatsapp
+          ? whatsappLink(data.whatsapp.number, data.whatsapp.text)
+          : null;
+        if (href) {
+          setHandoff({ href, name: personName });
+          // Opened straight away so the ordinary case is a single press. The
+          // record is written on the server first, so a blocked pop-up cannot
+          // leave a letter sent and unrecorded — only unsent, with the link
+          // still on screen.
+          window.open(href, '_blank', 'noopener');
+        }
         setNote(
-          'Letter of appreciation sent.' +
-            (data.whatsappQueued
-              ? ' WhatsApp queued.'
-              : ` WhatsApp not sent: ${data.whatsappSkipped} — it is in their ORM notifications.`),
+          `Letter of appreciation recorded for ${personName}.` +
+            (href
+              ? ' WhatsApp is opening with the message — press send there.'
+              : ` No WhatsApp: ${data.whatsappSkipped ?? 'no number on file'}. It is in their ORM notifications.`),
         );
       }
       await load();
@@ -190,7 +213,22 @@ export default function BookingPerformancePage() {
         {problem && (
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{problem}</p>
         )}
-        {note && <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">{note}</p>}
+        {note && (
+          <div className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+            <p>{note}</p>
+            {handoff && (
+              <a
+                href={handoff.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Open WhatsApp to {handoff.name}
+              </a>
+            )}
+          </div>
+        )}
 
         {report && (
           <dl className="mt-4 grid gap-3 sm:grid-cols-4">
@@ -272,7 +310,7 @@ export default function BookingPerformancePage() {
                     <button
                       type="button"
                       disabled={busy === b.personId}
-                      onClick={() => void commend(b.personId!)}
+                      onClick={() => void commend(b.personId!, b.name)}
                       className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
                     >
                       {busy === b.personId ? (

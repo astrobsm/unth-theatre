@@ -273,6 +273,15 @@ export async function POST(request: NextRequest) {
 
     let whatsappQueued = false;
     let whatsappSkipped: string | null = null;
+    // The number and the text, handed back so the operator's own WhatsApp can
+    // carry the message immediately.
+    //
+    // THE QUEUE IS NOT A DELIVERY. A queued WHATSAPP row waits for a provider
+    // that is not configured here, so until it is, "WhatsApp chase queued"
+    // meant the booker heard nothing at all. A wa.me hand-off is what actually
+    // reaches them today, and it reaches them from a person rather than from a
+    // system — which suits a message that is asking for cooperation.
+    let whatsapp: { number: string; text: string } | null = null;
 
     if (surgery.bookedById) {
       // The number has to be resolved HERE. The send policy refuses an
@@ -303,6 +312,8 @@ export async function POST(request: NextRequest) {
       });
       whatsappQueued = q.queued === true;
       if (!q.queued) whatsappSkipped = q.reason ?? 'Not queued';
+      if (wa) whatsapp = { number: wa, text: chase };
+      else whatsappSkipped = `${personName} has no phone number on file.`;
 
       // In-app as well as WhatsApp. A staff member who has opted out of
       // WhatsApp, or has no number on file, must still be told — a warning
@@ -368,6 +379,7 @@ export async function POST(request: NextRequest) {
       whatsappSkipped,
       queryId,
       standing,
+      whatsapp,
     });
   } catch (err) {
     console.error('[late-bookings/chase] failed:', err);

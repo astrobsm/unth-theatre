@@ -24,7 +24,9 @@ import {
   Printer,
   CalendarClock,
   ShieldAlert,
+  MessageCircle,
 } from 'lucide-react';
+import { whatsappLink } from '@/lib/whatsapp';
 import { formatRate, type LateBookingReport } from '@/lib/lateBooking/report';
 import { ESCALATION_LABELS, ENFORCEMENT_FROM } from '@/lib/lateBooking/escalation';
 
@@ -48,6 +50,15 @@ export default function LateBookingsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /**
+   * The WhatsApp hand-off for the chase just recorded.
+   *
+   * KEPT ON SCREEN rather than only opened. The offence is recorded on the
+   * server before this, so a blocked pop-up cannot leave a warning recorded
+   * and unsent without a way to send it — the link stays until the next
+   * action.
+   */
+  const [handoff, setHandoff] = useState<{ href: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,10 +91,11 @@ export default function LateBookingsPage() {
     void load();
   }, [load]);
 
-  const chase = async (surgeryId: string) => {
+  const chase = async (surgeryId: string, personName: string) => {
     setBusy(surgeryId);
     setProblem(null);
     setNote(null);
+    setHandoff(null);
     try {
       const res = await fetch('/api/late-bookings/chase', {
         method: 'POST',
@@ -99,11 +111,20 @@ export default function LateBookingsPage() {
       if (data.alreadyRecorded) {
         setNote(data.message);
       } else {
+        const href = data.whatsapp
+          ? whatsappLink(data.whatsapp.number, data.whatsapp.text)
+          : null;
+        if (href) {
+          setHandoff({ href, name: personName });
+          // Opened straight away so the ordinary case is a single press. A
+          // blocked pop-up leaves the link below, not a silent warning.
+          window.open(href, '_blank', 'noopener');
+        }
         setNote(
           `${ESCALATION_LABELS[data.decision.level as keyof typeof ESCALATION_LABELS]} recorded.` +
-            (data.whatsappQueued
-              ? ' WhatsApp chase queued.'
-              : ` WhatsApp not sent: ${data.whatsappSkipped}`) +
+            (href
+              ? ' WhatsApp is opening with the message — press send there.'
+              : ` No WhatsApp: ${data.whatsappSkipped ?? 'no number on file'}. It is in their ORM notifications.`) +
             (data.queryId ? ' Formal query issued and the head of department copied.' : ''),
         );
       }
@@ -189,7 +210,22 @@ export default function LateBookingsPage() {
         {problem && (
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{problem}</p>
         )}
-        {note && <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">{note}</p>}
+        {note && (
+          <div className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+            <p>{note}</p>
+            {handoff && (
+              <a
+                href={handoff.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Open WhatsApp to {handoff.name}
+              </a>
+            )}
+          </div>
+        )}
 
         {report && (
           <dl className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -295,7 +331,7 @@ export default function LateBookingsPage() {
                           <button
                             type="button"
                             disabled={busy === c.id}
-                            onClick={() => void chase(c.id)}
+                            onClick={() => void chase(c.id, c.bookedByName)}
                             className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-blue-600 px-2 py-1 text-xs font-semibold text-blue-700 disabled:opacity-50"
                           >
                             {busy === c.id ? (
