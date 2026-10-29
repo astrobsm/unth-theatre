@@ -597,6 +597,7 @@ export default function DashboardLayout({
       '/training/',
       '/training/downloads.html',
       '/dashboard/disciplinary-queries',
+      '/dashboard/late-bookings',
       '/hod-letter',
       '/dashboard/live-monitoring',
       '/dashboard/theatre-audit',
