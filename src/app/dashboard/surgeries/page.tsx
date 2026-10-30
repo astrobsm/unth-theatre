@@ -182,6 +182,7 @@ export default function SurgeriesPage() {
         cleaner: UnitContact;
         porter: UnitContact;
         nursingSource?: 'unit' | 'theatre' | null;
+        technicianSource?: 'allocated' | 'specialty' | 'day-call' | null;
       } | null;
     }[] | null
   >(null);
@@ -1194,6 +1195,13 @@ export default function SurgeriesPage() {
                         />
                         <TeamGroup
                           label="Technician"
+                          note={
+                            u.team.technicianSource === 'day-call'
+                              ? 'on day call — nobody rostered to this specialty'
+                              : u.team.technicianSource === 'specialty'
+                                ? 'from the roster, not allocated to a theatre'
+                                : null
+                          }
                           members={[['Anaes. tech', u.team.anaestheticTechnician]]}
                         />
                         {/* Shown only when somebody was actually allocated. A

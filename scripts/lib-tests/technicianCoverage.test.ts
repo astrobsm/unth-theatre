@@ -4,6 +4,7 @@ import {
   specialtyKey,
   coversSpecialty,
   bucketTechnicianRoster,
+  technicianForSpecialty,
   type TechRosterRow,
 } from '../../src/lib/technicianCoverage';
 
@@ -106,5 +107,67 @@ describe('bucketing a day of roster rows', () => {
     expect(b.nightCall.map((t) => t.userId)).toEqual(['e']);
     expect(b.icu.map((t) => t.userId)).toEqual(['f']);
     expect(b.bySpecialty.size).toBe(2); // Neurosurgery, Orthopaedics
+  });
+});
+
+// ── The name the unit card shows ───────────────────────────────────────
+//
+// The card read TheatreAllocation and nothing else, so a published
+// Anaesthetic Technicians Roster changed nothing and every unit said
+// "Technician — Not yet assigned" however carefully the week was rostered.
+// The roster was being kept and then ignored.
+
+describe('which technician a unit card should name', () => {
+  const tech = (userId: string) => ({ userId, name: userId.toUpperCase(), phone: null });
+  const build = (rows: TechRosterRow[]) => bucketTechnicianRoster(rows, (r) => tech(r.userId));
+
+  it('names the technician rostered to the list’s specialty', () => {
+    const b = build([
+      row({ userId: 'a', subRole: 'Neurosurgery' }),
+      row({ userId: 'b', subRole: 'Orthopaedics' }),
+    ]);
+    const got = technicianForSpecialty(b, 'Neurosurgery');
+    expect(got?.technician.userId).toBe('a');
+    expect(got?.source).toBe('specialty');
+  });
+
+  it('reconciles the spellings a booking actually uses', () => {
+    // The roster dropdown says "Orthopaedics"; the unit is "Ortho Unit III".
+    // specialtyKey already exists to settle this, and the card must use the
+    // same reconciliation as the coverage board or the two will disagree.
+    const b = build([row({ userId: 'a', subRole: 'Orthopaedics' })]);
+    expect(technicianForSpecialty(b, 'Orthopaedics')?.technician.userId).toBe('a');
+  });
+
+  it('falls back to day call, and says that is what it did', () => {
+    // Somebody has to be rung. But cover and an assignment are different
+    // facts, and a card that shows them identically sends a person to chase
+    // the wrong technician at 7am.
+    const b = build([
+      row({ userId: 'oncall', shift: 'CALL', subRole: 'DAY CALL' }),
+      row({ userId: 'other', subRole: 'Neurosurgery' }),
+    ]);
+    const got = technicianForSpecialty(b, 'Urology');
+    expect(got?.technician.userId).toBe('oncall');
+    expect(got?.source).toBe('day-call');
+  });
+
+  it('never offers the night technician for a daytime list', () => {
+    // An elective card naming the night technician sends a 9am call to
+    // somebody who has just gone to bed.
+    const b = build([row({ userId: 'night', shift: 'NIGHT', subRole: 'NIGHT CALL' })]);
+    expect(technicianForSpecialty(b, 'Urology')).toBeNull();
+  });
+
+  it('says nothing rather than guessing when nobody is rostered', () => {
+    expect(technicianForSpecialty(build([]), 'Urology')).toBeNull();
+  });
+
+  it('does not match a unit whose specialty was never stated', () => {
+    // A blank specialty is "not stated", never a wildcard. Treating it as one
+    // would report a list as covered because a field was left empty.
+    const b = build([row({ userId: 'a', subRole: 'Neurosurgery' })]);
+    expect(technicianForSpecialty(b, null)).toBeNull();
+    expect(technicianForSpecialty(b, '')).toBeNull();
   });
 });

@@ -173,6 +173,39 @@ export default function DepartmentRosterPage() {
 
   const addRow = async () => {
     if (!fStaff || !fDate) { setMsg('Pick staff and a day.'); return; }
+
+    /**
+     * Stop a double-booking being made, rather than only reporting it after.
+     *
+     * The conflicts banner counts them honestly — 38 in one week on the
+     * technicians' roster — but it only ever said so AFTER the rows existed,
+     * so the person filling the rota found out at the end and had to unpick
+     * it. One technician cannot cover two specialties in one shift, and the
+     * moment to say so is while the name is still in the box.
+     *
+     * A CONFIRMATION, NOT A REFUSAL. Somebody genuinely covering two short
+     * lists is a real thing the rota has to be able to express; what it must
+     * not do is let it happen by accident.
+     */
+    const clash = (data?.rows ?? []).filter(
+      (r) => r.userId === fStaff && r.date === fDate && r.shift === fShift && !r.pendingRemoval,
+    );
+    if (clash.length > 0) {
+      const already = clash
+        .map((r) => r.subRole || shiftLabel(r.shift))
+        .join(', ');
+      const who = clash[0].staffName;
+      if (!confirm(
+        `${who} is already on this roster for ${fDate} ${shiftLabel(fShift)} — ${already}.
+
+`
+        + `Adding this makes it ${clash.length + 1} assignments in the same shift, and they will be `
+        + `flagged as a double-booking.
+
+Add it anyway?`,
+      )) return;
+    }
+
     setMsg('');
     const res = await fetch(`/api/roster/departments/${dept}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

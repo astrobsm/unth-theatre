@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam';
+import { bucketTechnicianRoster, technicianForSpecialty } from '@/lib/technicianCoverage';
 import { findByUnit } from '@/lib/unitMatch';
 import { dedupeTeam } from '@/lib/theatre/teamNames';
 
@@ -45,6 +46,8 @@ interface UnitTeam {
    * at 7 a.m. is the one who has to know the difference.
    */
   nursingSource: 'unit' | 'theatre' | null;
+  /** 'allocated' | 'specialty' (rostered to this list) | 'day-call' (cover). */
+  technicianSource: 'allocated' | 'specialty' | 'day-call' | null;
 }
 
 export const dynamic = 'force-dynamic';
@@ -148,7 +151,7 @@ export async function GET(req: NextRequest) {
 
     const pick = { select: { id: true, fullName: true, phoneNumber: true } };
 
-    const [allocations, rosterTeams] = await Promise.all([
+    const [allocations, rosterTeams, technicianRows] = await Promise.all([
       // Every allocation for the day, NOT only those whose surgicalUnit string
       // equals a unit name on the page.
       //
@@ -174,7 +177,44 @@ export async function GET(req: NextRequest) {
         orderBy: { startTime: 'asc' },
       }),
       getAnaesthetistTeamsForDate(dayStart).catch(() => null),
+      // The published anaesthetic technicians' roster for the day.
+      //
+      // Read for the same reason the anaesthetists' roster is: the card had
+      // only TheatreAllocation to go on, so publishing a technicians' roster
+      // changed nothing on it and every unit read "Technician — Not yet
+      // assigned" however carefully the week had been rostered.
+      prisma.roster
+        .findMany({
+          where: {
+            staffCategory: 'ANAESTHETIC_TECHNICIANS' as never,
+            date: { gte: dayStart, lte: dayEnd },
+            status: 'PUBLISHED',
+          },
+          select: {
+            userId: true,
+            shift: true,
+            subRole: true,
+            staffName: true,
+            user: { select: { id: true, fullName: true, phoneNumber: true } },
+          },
+        })
+        .catch(() => []),
     ]);
+
+    // Bucketed by specialty / day call, using the same reconciliation the
+    // technician coverage board uses — so the card and the board cannot
+    // disagree about who is covering a list.
+    const technicianBuckets = bucketTechnicianRoster(
+      technicianRows.map((r) => ({ userId: r.userId, shift: String(r.shift), subRole: r.subRole })),
+      (row) => {
+        const match = technicianRows.find((r) => r.userId === row.userId);
+        return {
+          userId: row.userId,
+          name: match?.user?.fullName ?? match?.staffName ?? 'Unnamed',
+          phone: match?.user?.phoneNumber ?? null,
+        };
+      },
+    );
 
     // Unit -> subspecialty, resolved once for every unit on the list rather
     // than one lookup at a time.
@@ -366,6 +406,7 @@ export async function GET(req: NextRequest) {
 
       const alloc = byUnit ?? byTheatre;
       const roster = rosterTeams ? selectTeam(rosterTeams, subspecialtyOf.get(unit)) : null;
+      const rosterTech = technicianForSpecialty(technicianBuckets, subspecialtyOf.get(unit));
 
       teamByUnit.set(unit, {
         theatre: alloc?.theatre?.name ?? null,
@@ -389,7 +430,18 @@ export async function GET(req: NextRequest) {
         },
         scrubNurse: contact(alloc?.scrubNurse),
         circulatingNurse: contact(alloc?.circulatingNurse),
-        anaestheticTechnician: contact(alloc?.anaestheticTechnician),
+        // Allocation first, then the published roster — the same two-source
+        // rule the anaesthetists above already follow.
+        anaestheticTechnician:
+          contact(alloc?.anaestheticTechnician) ??
+          (rosterTech ? { name: rosterTech.technician.name, phone: rosterTech.technician.phone } : null),
+        // Where that name came from, so "rostered to this specialty" and
+        // "whoever is on day call" are not shown as the same thing. A card
+        // that cannot tell them apart sends somebody to chase the wrong
+        // person at 7am.
+        technicianSource: alloc?.anaestheticTechnicianId
+          ? 'allocated'
+          : rosterTech?.source ?? null,
         cleaner: contact(alloc?.cleaner),
         porter: contact(alloc?.porter),
         nursingSource:

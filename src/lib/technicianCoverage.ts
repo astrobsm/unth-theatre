@@ -128,3 +128,37 @@ export function bucketTechnicianRoster<T extends { userId: string }>(
 
   return out;
 }
+
+/**
+ * The technician a unit's list should expect, from the published roster.
+ *
+ * WHY THIS EXISTS. The unit cards on the surgeries page read their
+ * anaesthetists from the allocation AND, failing that, from the published
+ * anaesthetists' roster. The technician row had only the first half: it read
+ * TheatreAllocation and nothing else. So a published Anaesthetic Technicians
+ * Roster changed nothing on the card, and every unit read "Technician — Not
+ * yet assigned" however carefully the week had been rostered. The roster was
+ * being kept and then ignored.
+ *
+ * SPECIALTY FIRST, THEN DAY CALL. A technician rostered to the case's
+ * specialty is the answer. Day call is cover, not an assignment, so it is
+ * offered — somebody has to be rung — but reported as what it is. Night call
+ * is deliberately NOT used here: these are elective daytime lists, and naming
+ * the night technician on a 9am card would send a 9am call to somebody asleep.
+ */
+export function technicianForSpecialty<T>(
+  buckets: TechBuckets<T>,
+  subspecialty: string | null | undefined,
+): { technician: T; source: 'specialty' | 'day-call' } | null {
+  const key = specialtyKey(subspecialty);
+  if (key) {
+    const bucket = buckets.bySpecialty.get(key);
+    if (bucket && bucket.technicians.length > 0) {
+      return { technician: bucket.technicians[0], source: 'specialty' };
+    }
+  }
+  if (buckets.dayCall.length > 0) {
+    return { technician: buckets.dayCall[0], source: 'day-call' };
+  }
+  return null;
+}
