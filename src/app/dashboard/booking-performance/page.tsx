@@ -28,6 +28,7 @@ import {
   Star,
   Clock,
   MessageCircle,
+  FileText,
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import {
@@ -60,6 +61,41 @@ export default function BookingPerformancePage() {
    * be tapped deliberately.
    */
   const [handoff, setHandoff] = useState<{ href: string; name: string } | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  /** "1 October to 31 October 2026", for the document's letterhead. */
+  const periodLabel = (() => {
+    const fmt = (iso: string) => {
+      const [y, m, d] = iso.split('-').map((n) => parseInt(n, 10));
+      const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      return `${d} ${months[(m || 1) - 1]} ${y}`;
+    };
+    return `${fmt(from)} to ${fmt(to)}`;
+  })();
+
+  const downloadPdf = async () => {
+    if (!report) return;
+    setPdfBusy(true);
+    setProblem(null);
+    try {
+      // Imported on demand: jsPDF and autoTable are large, and a theatre
+      // phone should not carry them on every page load.
+      const { buildBookingPerformancePdf, bookingPdfFilename } =
+        await import('@/lib/lateBooking/punctualityPdf');
+      const blob = await buildBookingPerformancePdf(report, { periodLabel });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = bookingPdfFilename(report);
+      a.click();
+      URL.revokeObjectURL(url);
+      setNote('PDF saved. It names only the colleagues being commended, so it is safe to share.');
+    } catch {
+      setProblem('Could not build the PDF.');
+    }
+    finally { setPdfBusy(false); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,14 +203,25 @@ export default function BookingPerformancePage() {
               have been booked ahead.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium print:hidden"
-          >
-            <Printer className="h-4 w-4" />
-            Print
-          </button>
+          <div className="flex gap-2 print:hidden">
+            <button
+              type="button"
+              onClick={() => void downloadPdf()}
+              disabled={pdfBusy || !report}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              {pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              Download PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium"
+            >
+              <Printer className="h-4 w-4" />
+              Print
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-3 print:hidden">

@@ -11,6 +11,7 @@ import {
 import { buildDutyChase, buildDutyCommendation } from '../../src/lib/dutyPerformance/messages';
 import { buildWhatsAppSummary, buildCsv, periodLabel } from '../../src/lib/dutyPerformance/export';
 import { DUTIES, DUTY_KEYS, isDutyKey, type DutyEvent } from '../../src/lib/dutyPerformance/types';
+import { namesInDocument, dutyPdfFilename } from '../../src/lib/dutyPerformance/pdf';
 
 // This board decides who is thanked in a departmental WhatsApp group and who
 // receives a message about falling short. Every way of being wrong lands on a
@@ -304,5 +305,50 @@ describe('what gets pasted into the group', () => {
     const lines = csv.split('\n');
     expect(lines.length).toBe(2);
     expect(lines[1]).toContain('"Smith, John (PT1) — Repair"');
+  });
+});
+
+// ── Who the PDF names ──────────────────────────────────────────────────
+//
+// The decision that can actually harm somebody. A PDF is forwarded, pinned to
+// a notice board and photographed; a name printed under "falling short"
+// travels a great deal further than whoever printed it intended, and long
+// after the conversation is over.
+
+describe('who the printed document names', () => {
+  const report = () => buildDutyReport('PHARMACY_PACKING', [
+    ...many(10, { personId: 'good', personName: 'Mrs Good' }),
+    ...many(2, { personId: 'bad', personName: 'Mr Behind' }),
+    ...many(8, { personId: 'bad', personName: 'Mr Behind', doneAt: null }),
+  ], WINDOW);
+
+  it('names the commended by default', () => {
+    // A thank-you to "the pharmacy team" thanks nobody.
+    const named = namesInDocument(report());
+    expect(named.commended).toContain('Mrs Good');
+  });
+
+  it('names nobody as falling short unless the annexe was asked for', () => {
+    const named = namesInDocument(report());
+    expect(named.shortfall).toEqual([]);
+    expect(named.commended).not.toContain('Mr Behind');
+  });
+
+  it('names them only when the annexe is deliberately requested', () => {
+    const named = namesInDocument(report(), { includeShortfallAnnexe: true });
+    expect(named.shortfall).toEqual(['Mr Behind']);
+  });
+
+  it('treats an absent option as off, never as on', () => {
+    // The dangerous default is the one that prints names. Any falsy value
+    // must land on the safe side.
+    expect(namesInDocument(report(), {}).shortfall).toEqual([]);
+    expect(namesInDocument(report(), { includeShortfallAnnexe: false }).shortfall).toEqual([]);
+    expect(namesInDocument(report(), { includeShortfallAnnexe: undefined }).shortfall).toEqual([]);
+  });
+
+  it('names a file so two periods cannot overwrite each other', () => {
+    const r = report();
+    expect(dutyPdfFilename(r)).toBe('duty-pharmacy-packing-2026-10-01-to-2026-10-31.pdf');
   });
 });

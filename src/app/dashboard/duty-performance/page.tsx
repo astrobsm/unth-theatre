@@ -27,6 +27,7 @@ import {
   Clock,
   Copy,
   Download,
+  FileText,
   Loader2,
   MessageCircle,
   Printer,
@@ -72,6 +73,15 @@ export default function DutyPerformancePage() {
       blocked pop-up never turns into a message nobody received. */
   const [handoff, setHandoff] = useState<{ href: string; name: string } | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  /**
+   * Whether the PDF names the colleagues falling short.
+   *
+   * Off by default and a deliberate tick. A PDF gets forwarded, pinned to a
+   * notice board and photographed, and a list of names under "falling short"
+   * travels a great deal further than whoever printed it intended.
+   */
+  const [annexe, setAnnexe] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,6 +154,37 @@ export default function DutyPerformancePage() {
       setNote('Summary copied. Paste it into the WhatsApp group.');
     } catch {
       setProblem('Could not copy — select the text below and copy it by hand.');
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (!report) return;
+    setPdfBusy(true);
+    setProblem(null);
+    try {
+      // Imported on demand: jsPDF and autoTable are large, and a theatre
+      // phone should not carry them on every page load.
+      const { buildDutyPerformancePdf, dutyPdfFilename } =
+        await import('@/lib/dutyPerformance/pdf');
+      const blob = await buildDutyPerformancePdf(report, {
+        periodLabel: period,
+        includeShortfallAnnexe: annexe,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = dutyPdfFilename(report);
+      a.click();
+      URL.revokeObjectURL(url);
+      setNote(
+        annexe
+          ? 'PDF saved, including the confidential annexe. It names individuals — do not circulate it.'
+          : 'PDF saved. It names only the colleagues being commended, so it is safe to share.',
+      );
+    } catch {
+      setProblem('Could not build the PDF.');
+    } finally {
+      setPdfBusy(false);
     }
   };
 
@@ -304,7 +345,26 @@ export default function DutyPerformancePage() {
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium">
               <Download className="h-4 w-4" /> Download the detail (CSV)
             </button>
+            <button type="button" onClick={() => void downloadPdf()} disabled={pdfBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-50">
+              {pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              Download PDF
+            </button>
           </div>
+          <label className="mt-3 flex items-start gap-2 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={annexe}
+              onChange={(e) => setAnnexe(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Include a confidential annexe naming the {report.chaseable.length} colleague
+              {report.chaseable.length === 1 ? '' : 's'} falling short. Off by default: the PDF
+              is otherwise safe to share, and a document that names them can be forwarded and
+              pinned up long after the conversation is over.
+            </span>
+          </label>
         </div>
       )}
 
