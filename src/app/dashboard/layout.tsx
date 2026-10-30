@@ -389,6 +389,7 @@ export default function DashboardLayout({
     // opposite ends, and a recognition board filed somewhere else is a
     // recognition board nobody opens.
     menuItems.push({ href: '/dashboard/booking-performance', icon: Award, label: 'Booking Performance', badge: 'NEW' });
+    menuItems.push({ href: '/dashboard/duty-performance', icon: ClipboardCheck, label: 'Duty Performance', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit/pool', icon: Gavel, label: 'Weekly Audit Pool', badge: 'NEW' });
@@ -604,6 +605,7 @@ export default function DashboardLayout({
       '/dashboard/disciplinary-queries',
       '/dashboard/late-bookings',
       '/dashboard/booking-performance',
+      '/dashboard/duty-performance',
       '/hod-letter',
       '/dashboard/live-monitoring',
       '/dashboard/theatre-audit',
