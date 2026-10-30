@@ -13,7 +13,7 @@
  * the field it is telling them about.
  */
 
-import { AlertTriangle, UserRound, Loader2, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, UserRound, Loader2, CheckCircle2, RefreshCw, ArrowRight } from 'lucide-react';
 import { readableStatus, type GateState, type PriorCase } from '@/lib/bookingGate';
 
 interface Props {
@@ -23,18 +23,34 @@ interface Props {
   /** The case currently being closed, if any. */
   completing?: string | null;
   error?: string | null;
+  /** Ask the server again after a failed lookup. */
+  onRetry?: () => void;
+  /** Carry on without the check, deliberately, after it keeps failing. */
+  onProceedAnyway?: () => void;
+  /** A retry is in flight. */
+  retrying?: boolean;
 }
 
 const when = (d: string | Date) =>
   new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export default function BookingGateNotice({ gate, onComplete, completing, error }: Props) {
+export default function BookingGateNotice({
+  gate,
+  onComplete,
+  completing,
+  error,
+  onRetry,
+  onProceedAnyway,
+  retrying,
+}: Props) {
   if (gate.state === 'OPEN') return null;
 
   const tone =
     gate.state === 'NEEDS_CLOSING'
       ? 'border-amber-300 bg-amber-50 text-amber-900'
-      : 'border-blue-300 bg-blue-50 text-blue-900';
+      : gate.state === 'CHECK_FAILED'
+        ? 'border-red-300 bg-red-50 text-red-900'
+        : 'border-blue-300 bg-blue-50 text-blue-900';
 
   return (
     <div
@@ -46,6 +62,8 @@ export default function BookingGateNotice({ gate, onComplete, completing, error 
         <div className="flex items-start gap-2 px-4 py-3">
           {gate.state === 'CHECKING' ? (
             <Loader2 className="mt-0.5 h-5 w-5 flex-shrink-0 animate-spin" />
+          ) : gate.state === 'CHECK_FAILED' ? (
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
           ) : gate.state === 'NEEDS_PATIENT' ? (
             <UserRound className="mt-0.5 h-5 w-5 flex-shrink-0" />
           ) : (
@@ -53,6 +71,45 @@ export default function BookingGateNotice({ gate, onComplete, completing, error 
           )}
           <p className="text-sm font-medium">{gate.message}</p>
         </div>
+
+        {/*
+          A failed lookup has to offer a way forward. Until now it offered
+          nothing: the notice showed a spinner, the error text was rendered
+          only inside the NEEDS_CLOSING branch and so was never seen, and the
+          form stayed disabled with no button anywhere that could change that.
+        */}
+        {gate.state === 'CHECK_FAILED' && (
+          <div className="border-t border-red-200 px-4 py-3">
+            {error && <p className="mb-2 text-xs font-medium text-red-800">{error}</p>}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retrying}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {retrying
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RefreshCw className="h-3.5 w-3.5" />}
+                Try the check again
+              </button>
+              <button
+                type="button"
+                onClick={onProceedAnyway}
+                disabled={retrying}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-400 bg-white px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50"
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                Book without the check
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-red-800">
+              The check only looks for an earlier operation that was never marked completed. If you
+              carry on, look this patient up on the theatre list afterwards and close any older case
+              you find — otherwise they appear on the list twice.
+            </p>
+          </div>
+        )}
 
         {gate.state === 'NEEDS_CLOSING' && (
           <div className="border-t border-amber-200 px-4 py-2">

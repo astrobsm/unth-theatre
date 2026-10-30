@@ -49,6 +49,17 @@ export type GateState =
   | { state: 'NEEDS_CLOSING'; message: string; cases: PriorCase[] }
   /** Still finding out; the form stays inert rather than flickering open. */
   | { state: 'CHECKING'; message: string }
+  /**
+   * The lookup failed and no answer is coming.
+   *
+   * SEPARATE FROM CHECKING, which is the whole point. A failed lookup used to
+   * leave the gate in CHECKING for ever: the form stayed dead, a spinner said
+   * "Checking this patient…" indefinitely, and the error text was never shown
+   * anywhere. A surgeon on 29 October sat through three server errors with no
+   * way forward and no way to know why. "Still checking" and "this is not
+   * going to answer" need different words and different buttons.
+   */
+  | { state: 'CHECK_FAILED'; message: string }
   /** Nothing in the way. */
   | { state: 'OPEN' };
 
@@ -57,6 +68,17 @@ export interface GateInput {
   /** null while the check is still running. */
   priorCases: readonly PriorCase[] | null;
   patientName?: string | null;
+  /** The lookup failed and was not going to succeed on its own. */
+  lookupFailed?: boolean;
+  /**
+   * The booker has deliberately chosen to carry on without the check.
+   *
+   * ONLY HONOURED WHEN THE LOOKUP FAILED. It is an escape from a broken
+   * endpoint, not an escape from a real finding: a patient with an operation
+   * that was genuinely never closed still cannot be booked again, however
+   * many times this is set.
+   */
+  proceedAnyway?: boolean;
 }
 
 /**
@@ -75,6 +97,21 @@ export function bookingGate(input: GateInput): GateState {
   }
 
   if (input.priorCases === null) {
+    if (input.lookupFailed) {
+      // A theatre cannot stop booking because one lookup endpoint is
+      // unwell. Keeping the form shut is right while an answer may still
+      // arrive; keeping it shut for ever, with no reason given and no way
+      // out, simply moves the harm from a possible duplicate case to a
+      // certain unbooked one.
+      if (input.proceedAnyway) return { state: 'OPEN' };
+      return {
+        state: 'CHECK_FAILED',
+        message:
+          'Could not check whether this patient has an operation that was never finished — '
+          + 'the server did not answer. Try again, or carry on and check the patient on the '
+          + 'theatre list afterwards.',
+      };
+    }
     return { state: 'CHECKING', message: 'Checking this patient for an unfinished operation…' };
   }
 

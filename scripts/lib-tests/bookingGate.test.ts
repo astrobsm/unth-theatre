@@ -145,3 +145,69 @@ describe('the form is gated by the browser, not by hope', () => {
     expect(src).toContain('/api/patients/${patientId}/open-surgeries');
   });
 });
+
+// ── A lookup that fails, rather than one that is slow ──────────────────
+//
+// On 29 October a surgeon selected a patient, the check returned 500 three
+// times, and the form stayed dead behind a spinner reading "Checking this
+// patient for an unfinished operation…". There was no retry, no reason shown
+// and no way forward: a failed lookup was indistinguishable from a slow one,
+// so the gate waited for an answer that was never coming.
+
+describe('when the check cannot be run at all', () => {
+  const PATIENT = { patientId: 'p1', priorCases: null, patientName: 'Mr A' };
+
+  it('still says CHECKING while an answer may yet arrive', () => {
+    expect(bookingGate(PATIENT).state).toBe('CHECKING');
+  });
+
+  it('says so once the lookup has given up', () => {
+    const g = bookingGate({ ...PATIENT, lookupFailed: true });
+    expect(g.state).toBe('CHECK_FAILED');
+    // The reason has to be in the message. A spinner that never stops tells
+    // somebody nothing they can act on.
+    expect(g.state === 'CHECK_FAILED' && g.message).toMatch(/did not answer|could not check/i);
+  });
+
+  it('keeps the form shut until somebody decides otherwise', () => {
+    expect(isFormUsable(bookingGate({ ...PATIENT, lookupFailed: true }))).toBe(false);
+  });
+
+  it('lets the booker carry on deliberately', () => {
+    // A theatre cannot stop booking because one endpoint is unwell. The harm
+    // of a possible duplicate is smaller than the harm of a certain
+    // unbooked case, and this way somebody chose it.
+    const g = bookingGate({ ...PATIENT, lookupFailed: true, proceedAnyway: true });
+    expect(g.state).toBe('OPEN');
+    expect(isFormUsable(g)).toBe(true);
+  });
+
+  it('will not let the override skip a real unfinished case', () => {
+    // THE IMPORTANT ONE. The escape is from a broken endpoint, never from a
+    // finding. An answer that arrived and said "this patient has an open
+    // case" must block regardless of what was pressed earlier.
+    const g = bookingGate({
+      patientId: 'p1',
+      patientName: 'Mr A',
+      priorCases: [
+        { id: 's1', procedureName: 'Laparotomy', status: 'SCHEDULED', scheduledDate: '2026-10-01' },
+      ],
+      lookupFailed: true,
+      proceedAnyway: true,
+    });
+    expect(g.state).toBe('NEEDS_CLOSING');
+    expect(isFormUsable(g)).toBe(false);
+  });
+
+  it('will not let the override stand in for choosing a patient', () => {
+    const g = bookingGate({ patientId: '', priorCases: null, lookupFailed: true, proceedAnyway: true });
+    expect(g.state).toBe('NEEDS_PATIENT');
+  });
+
+  it('ignores the override when nothing failed', () => {
+    // Set without a failure it must do nothing at all, so it cannot become a
+    // quiet way of turning the gate off.
+    const g = bookingGate({ ...PATIENT, proceedAnyway: true });
+    expect(g.state).toBe('CHECKING');
+  });
+});

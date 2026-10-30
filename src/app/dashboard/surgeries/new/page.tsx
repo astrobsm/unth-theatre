@@ -309,27 +309,77 @@ export default function NewSurgeryPage() {
   const [priorCases, setPriorCases] = useState<PriorCase[] | null>(null);
   const [completingCase, setCompletingCase] = useState<string | null>(null);
   const [gateError, setGateError] = useState<string | null>(null);
+  /**
+   * The lookup failed and is not going to answer on its own.
+   *
+   * Kept apart from `priorCases === null`. The two used to be the same thing,
+   * which left the form dead behind a spinner that said "Checking this
+   * patient…" for ever and an error message the notice never rendered. A
+   * surgeon lost twenty minutes to that on 29 October.
+   */
+  const [gateFailed, setGateFailed] = useState(false);
+  const [gateRetrying, setGateRetrying] = useState(false);
+  /** Deliberately carrying on without the check. Cleared on a new patient. */
+  const [gateOverride, setGateOverride] = useState(false);
 
-  /** Ask whether this patient has an operation that was never finished. */
-  const checkPriorCases = useCallback(async (patientId: string) => {
-    if (!patientId) { setPriorCases(null); return; }
-    setPriorCases(null);
-    setGateError(null);
+  /**
+   * Ask whether this patient has an operation that was never finished.
+   *
+   * Retried a couple of times before giving up, because the failure this is
+   * built for is a momentary one — a server under load, a connection pool at
+   * its limit — and the surgeon should not have to press anything for a fault
+   * that clears itself in two seconds.
+   */
+  const checkPriorCases = useCallback(async (patientId: string, attempt = 0) => {
+    if (!patientId) { setPriorCases(null); setGateFailed(false); return; }
+    if (attempt === 0) {
+      setPriorCases(null);
+      setGateError(null);
+      setGateFailed(false);
+    }
+
+    const giveUp = (why: string) => {
+      if (attempt < 2) {
+        // 600ms, then 1800ms. Long enough for a pool to free a connection,
+        // short enough that nobody reaches for the button first.
+        const wait = 600 * Math.pow(3, attempt);
+        window.setTimeout(() => { void checkPriorCases(patientId, attempt + 1); }, wait);
+        return;
+      }
+      setGateError(why);
+      setGateFailed(true);
+    };
+
     try {
       const r = await fetch(`/api/patients/${patientId}/open-surgeries`, { cache: 'no-store' });
       if (!r.ok) {
-        // A failed lookup leaves the gate CHECKING, which keeps the form shut.
-        // Opening it because a lookup failed is the one outcome worth avoiding.
-        setGateError('Could not check this patient for unfinished operations. Try again.');
+        giveUp(
+          r.status >= 500
+            ? `The server could not answer the check (HTTP ${r.status}). This is usually momentary.`
+            : `The check was refused (HTTP ${r.status}).`,
+        );
         return;
       }
       const d = await r.json();
       setPriorCases(Array.isArray(d.cases) ? d.cases : []);
       setPrevious(d.previous ?? null);
+      setGateError(null);
+      setGateFailed(false);
     } catch {
-      setGateError('Could not check this patient for unfinished operations. Try again.');
+      giveUp('Could not reach the server to run the check.');
     }
   }, []);
+
+  /** The surgeon pressing "Try the check again". */
+  const retryPriorCases = useCallback(async () => {
+    if (!selectedPatientId) return;
+    setGateRetrying(true);
+    try {
+      await checkPriorCases(selectedPatientId);
+    } finally {
+      setGateRetrying(false);
+    }
+  }, [selectedPatientId, checkPriorCases]);
 
   // ---- Details that go stale between admissions -------------------------
   //
@@ -350,7 +400,13 @@ export default function NewSurgeryPage() {
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsMsg, setDetailsMsg] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
-  useEffect(() => { void checkPriorCases(selectedPatientId); }, [selectedPatientId, checkPriorCases]);
+  useEffect(() => {
+    // The override belongs to the patient it was granted for. Carrying it to
+    // the next patient would silently skip the check for somebody nobody ever
+    // decided to skip it for.
+    setGateOverride(false);
+    void checkPriorCases(selectedPatientId);
+  }, [selectedPatientId, checkPriorCases]);
 
   // Load the chosen patient's details into the editor, and close it again when
   // the patient changes — a half-typed ward must never carry to another person.
@@ -427,6 +483,8 @@ export default function NewSurgeryPage() {
     patientId: selectedPatientId,
     priorCases,
     patientName: patients.find((p) => p.id === selectedPatientId)?.name ?? null,
+    lookupFailed: gateFailed,
+    proceedAnyway: gateOverride,
   });
   const formUsable = isFormUsable(gate);
   const [otherSpecialNeeds, setOtherSpecialNeeds] = useState('');
@@ -4218,6 +4276,9 @@ ${pretty} — ${days} days from today.
         onComplete={completePriorCase}
         completing={completingCase}
         error={gateError}
+        onRetry={() => void retryPriorCases()}
+        onProceedAnyway={() => setGateOverride(true)}
+        retrying={gateRetrying}
       />
     </div>
   );
