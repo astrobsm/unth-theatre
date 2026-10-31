@@ -33,6 +33,7 @@ import {
   Printer,
   Send,
   ShieldAlert,
+  Users,
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import {
@@ -50,6 +51,22 @@ import {
   type DutyDefinition,
   type DutyPerformance,
 } from '@/lib/dutyPerformance/types';
+
+/** One row of the duty team — see the `team` state below. */
+interface TeamMember {
+  userId: string;
+  name: string;
+  role: string | null;
+  phone: string | null;
+  days: string[];
+  shifts: string[];
+  eves: number;
+  source: 'roster' | 'role';
+  performance: DutyPerformance | null;
+}
+
+const prettyRole = (role: string | null) =>
+  (role ?? '').split('_').map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
 
 export default function DutyPerformancePage() {
   const [duty, setDuty] = useState<DutyKey>('PREOP_REVIEW');
@@ -83,8 +100,33 @@ export default function DutyPerformancePage() {
    */
   const [annexe, setAnnexe] = useState(false);
 
+  /**
+   * The people who carry this duty, whether or not they appear in the ranking.
+   *
+   * THE RANKING CANNOT REACH THE PEOPLE WHO NEED REACHING. It only knows
+   * somebody once they have done the work: a pack nobody made carries no
+   * packer, an alert nobody answered carries no responder. So the chase list
+   * reached the colleagues already doing the job and nobody else. This list is
+   * built from the roles that perform the duty and the published roster, and
+   * it is the only place on the page from which somebody with no record at all
+   * can be written to.
+   */
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [briefed, setBriefed] = useState<string[]>([]);
+  const [showTeam, setShowTeam] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
+    // Cleared BEFORE the new board arrives. These three describe the last
+    // message sent, and leaving them up while a different duty or a different
+    // month loads underneath puts "Request recorded for <name>" on a board
+    // that person has nothing to do with — complete with a live "Open
+    // WhatsApp to" button that would then send them the wrong message
+    // entirely. That is how a pharmacy board came to be offering to write to
+    // an anaesthetist.
+    setNote(null);
+    setHandoff(null);
+    setProblem(null);
     try {
       const res = await fetch(`/api/duty-performance?duty=${duty}&from=${from}&to=${to}`, {
         credentials: 'include',
@@ -108,7 +150,22 @@ export default function DutyPerformancePage() {
     }
   }, [duty, from, to]);
 
+  const loadTeam = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/duty-performance/team?duty=${duty}&from=${from}&to=${to}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) { setTeam([]); return; }
+      const data = await res.json();
+      setTeam(data.members ?? []);
+      setBriefed(data.briefedUserIds ?? []);
+    } catch {
+      setTeam([]);
+    }
+  }, [duty, from, to]);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadTeam(); }, [loadTeam]);
 
   const send = async (personId: string, personName: string, kind: 'chase' | 'commend') => {
     setBusy(personId);
@@ -141,6 +198,42 @@ export default function DutyPerformancePage() {
           : ` No WhatsApp: ${data.whatsappSkipped ?? 'no number on file'}. It is in their ORM notifications.`),
       );
       await load();
+    } catch {
+      setProblem('Could not reach the server.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** The appeal to somebody who carries the duty, record or no record. */
+  const sendBrief = async (personId: string, personName: string) => {
+    setBusy(personId);
+    setProblem(null);
+    setNote(null);
+    setHandoff(null);
+    try {
+      const res = await fetch('/api/duty-performance/team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ duty, personId, from, to }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setProblem(data?.error ?? 'Could not send it.'); return; }
+      if (data.alreadySent) { setNote(data.message); return; }
+
+      const href = data.whatsapp ? whatsappLink(data.whatsapp.number, data.whatsapp.text) : null;
+      if (href) {
+        setHandoff({ href, name: personName });
+        window.open(href, '_blank', 'noopener');
+      }
+      setNote(
+        `Request recorded for ${personName}.`
+        + (href
+          ? ' WhatsApp is opening with the message — press send there.'
+          : ` No WhatsApp: ${data.whatsappSkipped ?? 'no number on file'}. It is in their ORM notifications.`),
+      );
+      await loadTeam();
     } catch {
       setProblem('Could not reach the server.');
     } finally {
@@ -462,6 +555,86 @@ export default function DutyPerformancePage() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* ── The people who carry this duty ───────────────────────────── */}
+      {team.length > 0 && (
+        <div className="rounded-lg border-2 border-blue-300 bg-white p-6 shadow print:hidden">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+            <Users className="h-5 w-5 text-blue-600" /> Who carries {def.label.toLowerCase()}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            {def.owner} — the published roster for the period and everybody holding the role.
+            The ranking above can only name somebody once they have done the work, so this is
+            the list to use when the problem is that nothing is reaching the ORM at all.
+          </p>
+          <p className="mt-2 rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
+            The message is an appeal, not a reprimand. It gives the department&rsquo;s figures and
+            theirs, says why it matters, and then walks through how the job is done on the ORM —
+            step by step, naming the screen ({def.where}) — because far more often than not the
+            work was done and the person could not find where to record it.
+          </p>
+
+          <ul className="mt-4 divide-y divide-gray-100">
+            {(showTeam ? team : team.slice(0, 8)).map((m) => {
+              const p = m.performance;
+              const share = p && p.total > 0 ? (p.done - p.late) / p.total : null;
+              return (
+                <li key={m.userId} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900">
+                      {m.name}
+                      {m.source === 'roster' && (
+                        <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">
+                          On the roster
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {prettyRole(m.role) || 'Role not set'}
+                      {m.days.length > 0 && ` · ${m.days.length} day${m.days.length === 1 ? '' : 's'} on duty`}
+                      {m.eves > 0 && ` (${m.eves} the day before work was due)`}
+                      {p
+                        ? ` · ${p.done - p.late} of ${p.total} on time (${formatRate(share)})`
+                        : ' · nothing recorded in this period'}
+                      {!m.phone && ' · no phone on file'}
+                    </p>
+                  </div>
+                  <div>
+                    {briefed.indexOf(m.userId) !== -1 ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                        <Check className="h-3.5 w-3.5 text-green-600" /> Written to
+                      </span>
+                    ) : (
+                      <button type="button" disabled={busy === m.userId}
+                        onClick={() => void sendBrief(m.userId, m.name)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-blue-600 px-3 py-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50">
+                        {busy === m.userId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        Send the appeal
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {team.length > 8 && (
+            <button type="button" onClick={() => setShowTeam((v) => !v)}
+              className="mt-3 text-sm font-medium text-blue-700">
+              {showTeam ? 'Show fewer' : `Show all ${team.length}`}
+            </button>
+          )}
+
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm font-medium text-gray-700">
+              What the message tells them to do
+            </summary>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-600">
+              {def.steps.map((s) => <li key={s}>{s}</li>)}
+            </ol>
+          </details>
         </div>
       )}
 

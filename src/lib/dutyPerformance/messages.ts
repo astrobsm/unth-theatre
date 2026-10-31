@@ -78,10 +78,22 @@ export function buildDutyChase(input: {
     ``,
     `Why it matters. ${d.why}`,
     ``,
-    `If something is genuinely preventing this — a list you are not told about, a system that `
-      + `will not accept the entry, cover you do not have — please tell the Theatre Manager or `
-      + `the Theatre Chairman. A difficulty raised is one we can solve; one we never hear about `
-      + `simply repeats.`,
+    // The steps go in EVERY chase, not only where we suspect a navigation
+    // problem. Far more of these figures are somebody who did the work and
+    // could not find where to record it than are somebody refusing to do it,
+    // and quoting a percentage at the first kind of person without telling
+    // them where the screen is guarantees the same figure next month.
+    `How it is done — ${d.where}:`,
+    ...d.steps.map((s, i) => `${i + 1}. ${s}`),
+    ``,
+    `If you cannot find the screen, or your login will not reach it, say so and somebody will `
+      + `walk you through it — that is a five-minute problem and we would far rather solve it `
+      + `than keep reporting it.`,
+    ``,
+    `And if something else is genuinely preventing this — a list you are not told about, a `
+      + `system that will not accept the entry, cover you do not have — please tell the Theatre `
+      + `Manager or the Theatre Chairman. A difficulty raised is one we can solve; one we never `
+      + `hear about simply repeats.`,
     ``,
     `Thank you for your cooperation, and for the ones you do get done on time.`,
     `Theatre Management, UNTH Ituku-Ozalla`,

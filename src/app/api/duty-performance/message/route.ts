@@ -60,9 +60,18 @@ export async function POST(request: NextRequest) {
 
     const person = await prisma.user.findUnique({
       where: { id: personId },
-      select: { id: true, fullName: true, phoneNumber: true },
+      select: { id: true, fullName: true, phoneNumber: true, role: true },
     });
     if (!person) return NextResponse.json({ error: 'No such colleague' }, { status: 404 });
+
+    // Checked before anything is computed, so the refusal names the real
+    // objection rather than reporting an empty record. A colleague who holds
+    // a role for the duty is a legitimate recipient; so is one with work
+    // recorded against them, whatever their role, because they demonstrably
+    // did it. Nobody else is — an anaesthetist must never receive a pharmacy
+    // chase, and that is the whole reason this guard exists.
+    const holdsRole =
+      !!person.role && DUTIES[duty].roles.indexOf(String(person.role)) !== -1;
 
     const type = kind === 'commend' ? 'DUTY_COMMENDATION' : 'DUTY_CHASE';
     const link = `${linkFor(duty, from, to)}&kind=${kind}`;
@@ -96,7 +105,13 @@ export async function POST(request: NextRequest) {
 
     if (!performance) {
       return NextResponse.json(
-        { error: `${person.fullName} had no ${DUTIES[duty].label.toLowerCase()} in this period.` },
+        {
+          error: holdsRole
+            ? `${person.fullName} had no ${DUTIES[duty].label.toLowerCase()} in this period.`
+            : `${person.fullName} does not carry ${DUTIES[duty].label.toLowerCase()} — that `
+              + `duty belongs to ${DUTIES[duty].owner.toLowerCase()} — and nothing is recorded `
+              + `against them for it. Use the duty team list to write to the people who do.`,
+        },
         { status: 400 },
       );
     }

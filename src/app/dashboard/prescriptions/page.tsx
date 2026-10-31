@@ -19,7 +19,9 @@ import {
   FileDown,
   Printer,
   MessageCircle,
-  ShieldAlert
+  ShieldAlert,
+  ShoppingBag,
+  ClipboardCheck
 } from 'lucide-react';
 import { isNarcotic } from '@/lib/narcotics';
 import { whatsappLink, whatsappChatLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
@@ -29,11 +31,21 @@ import PostOpPrescriptionsPanel from '@/components/PostOpPrescriptionsPanel';
 import {
   buildRegisterPdf,
   buildPatientPrescriptionPdf,
+  buildPatientPurchasePdf,
   downloadPdf,
   printPdf,
   type ReportPrescription,
   type ReportMedication,
 } from '@/lib/prescription-pdf';
+import {
+  outOfStockNames,
+  parseChecks,
+  rejectReason,
+  summariseVerification,
+  describeVerification,
+  type PurchaseCheck,
+  type PurchaseOutcome,
+} from '@/lib/pharmacy/purchaseVerification';
 
 function todayInputValue() {
   const now = new Date();
@@ -61,6 +73,19 @@ interface MedicationPackingItem {
   pharmacistNote: string;
 }
 
+/** One row of the verification modal: an item the patient went out to buy. */
+interface PurchaseRow {
+  drugName: string;
+  dose: string;
+  outcome: PurchaseOutcome;
+  brand: string;
+  expiry: string;
+  quantity: string;
+  note: string;
+  /** Whether the patient actually brought this one back yet. */
+  checked: boolean;
+}
+
 interface Prescription {
   id: string;
   patientName: string;
@@ -77,6 +102,11 @@ interface Prescription {
   hasOutOfStockItems?: boolean;
   outOfStockItems?: string;
   medicationPackingStatus?: string;
+  /** Medicines the patient had to buy: the list going out, the check coming back. */
+  purchaseListPrintedAt?: string | null;
+  purchaseVerifiedAt?: string | null;
+  purchaseVerifiedByName?: string | null;
+  purchaseVerification?: string | null;
   prescribedBy: { fullName: string; phoneNumber?: string | null };
   approvedBy?: { fullName: string; phoneNumber?: string | null };
   packedBy?: { fullName: string };
@@ -134,6 +164,12 @@ export default function PrescriptionsPage() {
   });
   const [exportTo, setExportTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [exporting, setExporting] = useState(false);
+
+  // Checking in the medicines a patient was sent out to buy.
+  const [purchaseRx, setPurchaseRx] = useState<Prescription | null>(null);
+  const [purchaseRows, setPurchaseRows] = useState<PurchaseRow[]>([]);
+  const [purchaseBusy, setPurchaseBusy] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPrescriptions();
@@ -395,6 +431,125 @@ export default function PrescriptionsPage() {
       downloadPdf(doc, `prescription_${p.patientName.replace(/\s+/g, '_')}_${p.id.slice(0, 6)}.pdf`);
     } else {
       printPdf(doc);
+    }
+  };
+
+  // ── Medicines the patient had to buy ──────────────────────────────────
+  //
+  // Pharmacy cannot always supply. The patient is handed a list, buys the
+  // items outside, and brings them back — and until now the check at the
+  // counter was recorded nowhere, so a drug bought in a shop reached an
+  // anaesthetic trolley with nothing saying anybody had confirmed the drug,
+  // the strength or the expiry.
+
+  /** The medications on this prescription that pharmacy could not supply. */
+  const outOfStockMeds = (p: Prescription): Medication[] => {
+    const names = outOfStockNames(p.outOfStockItems ?? null);
+    if (names.length === 0) return [];
+    const meds = parseMedications(p.medications);
+    const lower = names.map((n) => n.toLowerCase());
+    const matched = meds.filter((m) => lower.indexOf((m.name || '').toLowerCase()) !== -1);
+    // A name with no matching medication still has to reach the patient's
+    // list. Dropping it would hand somebody a sheet that is missing the very
+    // drug they were sent out to buy.
+    const matchedNames = matched.map((m) => (m.name || '').toLowerCase());
+    const orphans = names
+      .filter((n) => matchedNames.indexOf(n.toLowerCase()) === -1)
+      .map((n) => ({ name: n, dose: '', route: '' } as Medication));
+    return matched.concat(orphans);
+  };
+
+  const handlePurchaseList = async (p: Prescription, mode: 'download' | 'print') => {
+    const items = outOfStockMeds(p);
+    if (items.length === 0) {
+      alert('Nothing on this prescription is marked out of stock.');
+      return;
+    }
+    const doc = await buildPatientPurchasePdf(
+      toReportPrescription(p),
+      items.map((m) => ({
+        name: m.name,
+        dose: m.dose,
+        route: m.route,
+        notes: m.notes,
+      })),
+    );
+    if (mode === 'download') {
+      downloadPdf(doc, `to_buy_${p.patientName.replace(/\s+/g, '_')}_${p.id.slice(0, 6)}.pdf`);
+    } else {
+      printPdf(doc);
+    }
+    // Stamped after the document exists, so a failed render never records a
+    // list as issued that the patient never received.
+    try {
+      await fetch(`/api/prescriptions/${p.id}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'PRINTED' }),
+      });
+      fetchPrescriptions();
+    } catch { /* the sheet is printed; the stamp can wait for the next one */ }
+  };
+
+  const openPurchaseModal = (p: Prescription) => {
+    const existing = parseChecks(p.purchaseVerification ?? null);
+    const byName = new Map(existing.map((c) => [c.drugName.toLowerCase(), c]));
+    setPurchaseRx(p);
+    setPurchaseError(null);
+    setPurchaseRows(
+      outOfStockMeds(p).map((m) => {
+        const prior = byName.get((m.name || '').toLowerCase());
+        return {
+          drugName: m.name,
+          dose: m.dose || '',
+          outcome: (prior?.outcome ?? 'ACCEPTED') as PurchaseOutcome,
+          brand: prior?.brand ?? '',
+          expiry: prior?.expiry ?? '',
+          quantity: prior?.quantity ?? '',
+          note: prior?.note ?? '',
+          checked: !!prior,
+        };
+      }),
+    );
+  };
+
+  const submitPurchase = async () => {
+    if (!purchaseRx) return;
+    const rows = purchaseRows.filter((r) => r.checked);
+    if (rows.length === 0) {
+      setPurchaseError('Tick the items the patient actually brought back.');
+      return;
+    }
+    const checks: PurchaseCheck[] = rows.map((r) => ({
+      drugName: r.drugName,
+      outcome: r.outcome,
+      brand: r.brand || null,
+      expiry: r.expiry || null,
+      quantity: r.quantity || null,
+      note: r.note || null,
+    }));
+    // Checked here as well as on the server so the pharmacist is told at the
+    // counter, not after a round trip with the patient already walking away.
+    const refusal = rejectReason(checks);
+    if (refusal) { setPurchaseError(refusal); return; }
+
+    setPurchaseBusy(true);
+    setPurchaseError(null);
+    try {
+      const res = await fetch(`/api/prescriptions/${purchaseRx.id}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'VERIFIED', items: checks }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPurchaseError(data?.error ?? 'Could not record it.'); return; }
+      setPurchaseRx(null);
+      setPurchaseRows([]);
+      fetchPrescriptions();
+    } catch {
+      setPurchaseError('Could not reach the server.');
+    } finally {
+      setPurchaseBusy(false);
     }
   };
 
@@ -918,8 +1073,68 @@ export default function PrescriptionsPage() {
                           <MessageCircle className="h-3 w-3" /> WhatsApp
                         </button>
                       )}
+                      {prescription.hasOutOfStockItems && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void handlePurchaseList(prescription, 'print')}
+                            className="inline-flex items-center gap-1 text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 rounded"
+                            title="Print the list of out-of-stock items for the patient to buy"
+                          >
+                            <ShoppingBag className="h-3 w-3" /> List to buy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openPurchaseModal(prescription)}
+                            className="inline-flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded"
+                            title="Check the medicines the patient bought and record it"
+                          >
+                            <ClipboardCheck className="h-3 w-3" /> Verify purchase
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
+
+                  {/* Medicines the patient had to buy — where that stands */}
+                  {prescription.hasOutOfStockItems && (() => {
+                    const expected = outOfStockNames(prescription.outOfStockItems ?? null);
+                    const summary = summariseVerification(
+                      expected,
+                      parseChecks(prescription.purchaseVerification ?? null),
+                    );
+                    const tone = summary.complete
+                      ? 'border-green-200 bg-green-50 text-green-900'
+                      : summary.rejected.length > 0
+                        ? 'border-red-200 bg-red-50 text-red-900'
+                        : 'border-amber-200 bg-amber-50 text-amber-900';
+                    return (
+                      <div className={`rounded-lg border p-3 mb-4 text-xs ${tone}`}>
+                        <p className="font-semibold text-sm">
+                          {summary.complete
+                            ? 'Patient-bought medicines verified'
+                            : 'Patient has to buy: ' + expected.join(', ')}
+                        </p>
+                        <p className="mt-1">
+                          {prescription.purchaseVerifiedAt
+                            ? `${describeVerification(summary)} — checked by `
+                              + `${prescription.purchaseVerifiedByName || 'pharmacy'} on `
+                              + `${new Date(prescription.purchaseVerifiedAt).toLocaleString()}.`
+                            : prescription.purchaseListPrintedAt
+                              ? `List printed ${new Date(prescription.purchaseListPrintedAt).toLocaleString()}. `
+                                + 'Nothing has been checked back in yet — press Verify purchase when '
+                                + 'the patient returns with the medicines.'
+                              : 'No list has been printed yet. Press “List to buy” to give the '
+                                + 'patient a sheet, then verify what they bring back.'}
+                        </p>
+                        {summary.rejected.length > 0 && (
+                          <p className="mt-1 font-medium">
+                            Sent back: {summary.rejected.join(', ')}. The case is still short of these.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Clinical Summary (from Schedule Surgery -> Patient record) */}
                   {(prescription.surgery?.patient?.comorbidities ||
@@ -1060,6 +1275,154 @@ export default function PrescriptionsPage() {
             );
           })
           )}
+        </div>
+      )}
+
+      {/* Checking in the medicines a patient was sent out to buy */}
+      {purchaseRx && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-1">Verify what the patient bought</h3>
+            <p className="text-gray-600 mb-4 text-sm">
+              Patient: <strong>{purchaseRx.patientName}</strong> · {purchaseRx.surgery?.procedureName}
+            </p>
+            <p className="mb-4 rounded-lg bg-indigo-50 p-3 text-xs text-indigo-900">
+              Check each pack against the prescription — the drug, the strength, the preparation
+              and the expiry date. Tick only the items actually in front of you; anything the
+              patient has not brought back yet stays unticked, and the case stays flagged as
+              short of it.
+            </p>
+
+            {purchaseRows.length === 0 ? (
+              <p className="text-sm text-gray-600">
+                Nothing on this prescription is marked out of stock.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {purchaseRows.map((row, idx) => (
+                  <div
+                    key={row.drugName + idx}
+                    className={`rounded-lg border p-3 ${
+                      !row.checked
+                        ? 'border-gray-200'
+                        : row.outcome === 'REJECTED'
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-green-300 bg-green-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <label className="flex items-start gap-2 text-sm font-medium text-gray-900">
+                        <input
+                          type="checkbox"
+                          checked={row.checked}
+                          onChange={(e) => setPurchaseRows((prev) => prev.map((r, i) =>
+                            i === idx ? { ...r, checked: e.target.checked } : r))}
+                          className="mt-1"
+                        />
+                        <span>
+                          {row.drugName}
+                          {row.dose && <span className="text-gray-500"> — {row.dose}</span>}
+                        </span>
+                      </label>
+                      {row.checked && (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPurchaseRows((prev) => prev.map((r, i) =>
+                              i === idx ? { ...r, outcome: 'ACCEPTED' } : r))}
+                            className={`px-3 py-1 rounded text-xs font-medium ${
+                              row.outcome === 'ACCEPTED'
+                                ? 'bg-green-600 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-green-100'
+                            }`}
+                          >
+                            ✓ Accepted
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPurchaseRows((prev) => prev.map((r, i) =>
+                              i === idx ? { ...r, outcome: 'REJECTED' } : r))}
+                            className={`px-3 py-1 rounded text-xs font-medium ${
+                              row.outcome === 'REJECTED'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-red-100'
+                            }`}
+                          >
+                            ✗ Sent back
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {row.checked && (
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <input
+                          type="text"
+                          value={row.brand}
+                          onChange={(e) => setPurchaseRows((prev) => prev.map((r, i) =>
+                            i === idx ? { ...r, brand: e.target.value } : r))}
+                          placeholder="Brand supplied"
+                          className="rounded border border-gray-300 px-2 py-1 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={row.expiry}
+                          onChange={(e) => setPurchaseRows((prev) => prev.map((r, i) =>
+                            i === idx ? { ...r, expiry: e.target.value } : r))}
+                          placeholder="Expiry on the pack"
+                          className="rounded border border-gray-300 px-2 py-1 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={row.quantity}
+                          onChange={(e) => setPurchaseRows((prev) => prev.map((r, i) =>
+                            i === idx ? { ...r, quantity: e.target.value } : r))}
+                          placeholder="Quantity brought"
+                          className="rounded border border-gray-300 px-2 py-1 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={row.note}
+                          onChange={(e) => setPurchaseRows((prev) => prev.map((r, i) =>
+                            i === idx ? { ...r, note: e.target.value } : r))}
+                          placeholder={row.outcome === 'REJECTED'
+                            ? 'What was wrong with it? (required)'
+                            : 'Note (optional)'}
+                          className={`sm:col-span-3 rounded border px-2 py-1 text-sm ${
+                            row.outcome === 'REJECTED' && !row.note.trim()
+                              ? 'border-red-400'
+                              : 'border-gray-300'
+                          }`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {purchaseError && (
+              <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{purchaseError}</p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setPurchaseRx(null); setPurchaseRows([]); setPurchaseError(null); }}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={purchaseBusy || purchaseRows.length === 0}
+                onClick={() => void submitPurchase()}
+                className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white disabled:opacity-50"
+              >
+                {purchaseBusy ? 'Recording…' : 'Record the check'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

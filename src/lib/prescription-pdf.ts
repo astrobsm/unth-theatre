@@ -372,6 +372,123 @@ export async function buildPatientPrescriptionPdf(rx: ReportPrescription) {
   return doc;
 }
 
+/**
+ * The list a patient takes out of the hospital to buy what pharmacy cannot
+ * supply.
+ *
+ * A DIFFERENT DOCUMENT FROM THE PRESCRIPTION PRINT, not a filtered copy of it.
+ * It is read at a counter by somebody who is not a clinician, often a relative
+ * rather than the patient — so it carries only the items they actually have to
+ * buy, states the strength in full, and ends with the one instruction the
+ * whole workflow depends on: bring them back here first. A patient who buys
+ * the right drug and carries it straight to the ward has not completed this;
+ * the medicines still have to be checked.
+ *
+ * It deliberately carries no prices and no shop names. The hospital does not
+ * direct patients to a vendor, and a figure printed on a hospital document is
+ * read as a hospital charge.
+ */
+export async function buildPatientPurchasePdf(
+  rx: ReportPrescription,
+  items: ReportMedication[],
+) {
+  const { JsPDF } = await loadPdfLibs();
+  const doc = new JsPDF({ unit: "mm", format: "a4" });
+  installPdfTextGuard(doc);
+  header(
+    doc,
+    `Medicines to be purchased — ${rx.patientName}${rx.folderNumber ? " (" + rx.folderNumber + ")" : ""}`,
+    `Surgery: ${rx.procedureName || "—"} • Scheduled ${fmt(rx.scheduledSurgeryDate)}`,
+  );
+
+  let y = 40;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  const intro = doc.splitTextToSize(
+    "The items below are not available in the hospital pharmacy at present and must be "
+    + "purchased. Please buy exactly what is listed — the same drug, the same strength and "
+    + "the same quantity. If you cannot find an item, come back and ask before buying "
+    + "something different.",
+    182,
+  ) as string[];
+  intro.forEach((line: string) => { doc.text(line, 14, y); y += 5; });
+  y += 2;
+
+  autoTable(doc, {
+    startY: y,
+    head: [["#", "Drug", "Strength / dose", "Form & route", "Quantity", "Bought (tick)"]],
+    body: items.map((m, i) => [
+      String(i + 1),
+      m.name,
+      m.dose || "",
+      m.route || "",
+      m.notes || "",
+      "",
+    ]),
+    styles: { fontSize: 10, cellPadding: 3, valign: "top", minCellHeight: 10 },
+    theme: "grid",
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: "bold" },
+    columnStyles: {
+      0: { cellWidth: 8 },
+      1: { cellWidth: 55 },
+      2: { cellWidth: 32 },
+      3: { cellWidth: 32 },
+      4: { cellWidth: 25 },
+      5: { cellWidth: 30 },
+    },
+  });
+
+  let lastY = (doc as any).lastAutoTable?.finalY ?? y + 20;
+
+  // The instruction the whole workflow turns on, boxed so it is not skimmed.
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.5);
+  doc.rect(14, lastY + 6, 182, 22, "D");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("BRING THE MEDICINES BACK TO THE THEATRE PHARMACY", 18, lastY + 14);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  const back = doc.splitTextToSize(
+    "Do not take them to the ward or to theatre yourself. A pharmacist must check each one "
+    + "against the prescription before the operation. Keep the packs sealed and keep any "
+    + "receipt.",
+    174,
+  ) as string[];
+  let by = lastY + 19;
+  back.forEach((line: string) => { doc.text(line, 18, by); by += 4.5; });
+  lastY += 30;
+
+  // Filled in at the counter when the patient returns, then entered on the ORM.
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text("For pharmacy use — on return", 14, lastY + 8);
+  autoTable(doc, {
+    startY: lastY + 12,
+    head: [["Drug", "Brand supplied", "Expiry", "Accepted / sent back", "Checked by (sign)"]],
+    body: items.map((m) => [m.name, "", "", "", ""]),
+    styles: { fontSize: 9, cellPadding: 3, minCellHeight: 11 },
+    theme: "grid",
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineColor: [120, 120, 120], lineWidth: 0.1, fontStyle: "bold" },
+  });
+
+  const endY = (doc as any).lastAutoTable?.finalY ?? lastY + 40;
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(8);
+  doc.setTextColor(100);
+  doc.text(
+    "Record the check on the ORM as well — Dashboard → Pharmacy → Verify purchase. "
+    + "This sheet is the counter copy, not the record.",
+    14,
+    endY + 6,
+    { maxWidth: 182 },
+  );
+  doc.setTextColor(0);
+
+  footer(doc);
+  return doc;
+}
+
 export function downloadPdf(doc: jsPDF, filename: string) {
   doc.save(filename);
 }

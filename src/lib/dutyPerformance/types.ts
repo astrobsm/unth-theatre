@@ -67,6 +67,37 @@ export interface DutyDefinition {
   /** Why it matters — printed on the report and quoted in chases. */
   why: string;
   /**
+   * The duty broken into the steps somebody actually performs, in order,
+   * naming the screen each one happens on.
+   *
+   * EVERY DUTY HAS THESE AND THEY ARE NOT OPTIONAL. A message that says only
+   * "please do this on time" assumes the reader knows where the button is.
+   * Repeatedly, they did not: the work was being done and simply never
+   * recorded, which the board then read as work never done. Telling somebody
+   * their figure is poor without telling them where the screen is produces a
+   * worse figure and a resentful colleague.
+   */
+  steps: string[];
+  /** Where in the ORM the work is recorded: "Dashboard → Pharmacy". */
+  where: string;
+  /**
+   * The user roles that actually perform this duty.
+   *
+   * THE REASON THIS FIELD EXISTS. A chase about pharmacy packing once had no
+   * legitimate recipient at all, because nothing in the data named one. The
+   * roles are how the board finds the right people before it writes to
+   * anybody — an anaesthetist must never receive a pharmacy chase.
+   */
+  roles: string[];
+  /**
+   * The published roster category that names who was on, where one exists.
+   *
+   * Null where the duty is not rostered a week ahead. Perioperative nursing
+   * is deliberately not a department roster (scrub nurses are allocated to
+   * theatres day by day), so those duties fall back to role alone.
+   */
+  rosterCategory: string | null;
+  /**
    * How long after the deadline still counts as on time.
    *
    * Not a kindness: it is the difference between a measure people accept and
@@ -89,6 +120,19 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'of surgery finds the problems too late to act on them, and the case is either '
       + 'delayed on the table or done without the optimisation it needed.',
     graceMinutes: 0,
+    where: 'Dashboard → Pre-op Reviews',
+    roles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
+    rosterCategory: 'ANAESTHETISTS',
+    steps: [
+      'Open Dashboard → Pre-op Reviews. The cases assigned to you are listed '
+      + 'with the soonest first.',
+      'Review the patient before the end of the day before surgery.',
+      'Complete the review on that screen and press Submit. A review left as a '
+      + 'draft has not reached theatre and is counted as not done.',
+      'If you cannot take one you were assigned, hand it back on the same screen '
+      + 'rather than leaving it. A handback in time is not held against you — '
+      + 'it is how the case reaches somebody who can do it.',
+    ],
   },
   PHARMACY_PACKING: {
     key: 'PHARMACY_PACKING',
@@ -101,6 +145,21 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'waits, the next case slides, and somebody is sent out of a running theatre to find '
       + 'what should already have been on the trolley.',
     graceMinutes: 30,
+    where: 'Dashboard → Pharmacy',
+    roles: ['PHARMACIST', 'HEAD_OF_PHARMACY'],
+    rosterCategory: 'PHARMACISTS',
+    steps: [
+      'Open Dashboard → Pharmacy and read the prescriptions for the next '
+      + 'day’s lists.',
+      'Pack the drugs the night before — not on the morning of the list.',
+      'Press Pack Drugs and tick each medicine as packed. Until that is done '
+      + 'theatre cannot tell a packed trolley from one nobody has started.',
+      'Where an item is out of stock, mark it Out of Stock and press '
+      + '“List to buy” to print it for the patient to take out and purchase.',
+      'When the patient returns with the medicines, press “Verify purchase”, '
+      + 'check each one against the prescription and record it. A drug nobody '
+      + 'checked is a drug of unknown origin on an anaesthetic trolley.',
+    ],
   },
   CONSUMABLE_PACKING: {
     key: 'CONSUMABLE_PACKING',
@@ -113,6 +172,19 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'sterile and counted the day before for exactly this reason, and a late pack undoes '
       + 'that work for every case behind it.',
     graceMinutes: 30,
+    where: 'Dashboard → Consumable Packs',
+    roles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER'],
+    rosterCategory: null,
+    steps: [
+      'Open Dashboard → Consumable Packs. The next day’s cases are listed '
+      + 'with everything each one needs.',
+      'Draw and pack the consumables the day before the list.',
+      'Mark each item packed on that screen, so theatre can see the pack is '
+      + 'ready without sending somebody to look for it.',
+      'Anything you cannot supply: mark it and say what is short. A surgeon who '
+      + 'learns the evening before can change the plan; one who learns on the '
+      + 'table cannot.',
+    ],
   },
   EMERGENCY_ACK: {
     key: 'EMERGENCY_ACK',
@@ -125,6 +197,18 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'acknowledgement is how the theatre knows a named person has taken it — until it '
       + 'arrives, the surgeon is assuming cover that may not exist.',
     graceMinutes: 5,
+    where: 'the red ACKNOWLEDGE banner on your dashboard, or Dashboard → '
+      + 'Emergency Booking',
+    roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
+    rosterCategory: 'NURSES',
+    steps: [
+      'When an emergency alert arrives, open it from the red ACKNOWLEDGE banner '
+      + 'at the top of your dashboard, or from Dashboard → Emergency Booking.',
+      'Press ACKNOWLEDGE within 15 minutes — even while you are still arranging '
+      + 'cover. The acknowledgement is only saying a named person has seen it.',
+      'If you cannot take it, acknowledge it and say so, so it moves on to '
+      + 'somebody who can. An alert left unanswered does not move anywhere.',
+    ],
   },
   SURGERY_TIMING: {
     key: 'SURGERY_TIMING',
@@ -137,6 +221,17 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'every case-duration figure the hospital plans with are built from these two '
       + 'timestamps, and a missing pair is a case that silently never happened.',
     graceMinutes: 0,
+    where: 'the case → Timing (Dashboard → Theatre Operations)',
+    roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN'],
+    rosterCategory: 'NURSES',
+    steps: [
+      'Open the case from Dashboard → Theatre Operations and choose Timing.',
+      'Record the time of incision when the surgeon begins.',
+      'Record the end of procedure when the operation finishes.',
+      'Both must be in before the end of the day. One without the other records '
+      + 'nothing — the pair is what makes the case countable, and a time not '
+      + 'entered on the day cannot be recovered afterwards.',
+    ],
   },
 };
 

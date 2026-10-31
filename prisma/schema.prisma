@@ -4359,6 +4359,25 @@ model AnestheticPrescription {
   hasOutOfStockItems   Boolean   @default(false)
   outOfStockNotifiedAt DateTime?
 
+  /// ── Medicines the patient had to buy ────────────────────────────────────
+  /// When pharmacy cannot supply an item the patient is handed a printed list,
+  /// buys it outside the hospital and brings it back. Until somebody has
+  /// checked what came back, the theatre has a drug of unknown provenance on
+  /// an anaesthetic trolley: wrong strength, wrong preparation, or expired.
+  /// That check was being done at the counter and recorded nowhere, so these
+  /// columns make it part of the record rather than part of the conversation.
+  purchaseListPrintedAt   DateTime?
+  purchaseListPrintedById String?
+  purchaseVerifiedAt      DateTime?
+  purchaseVerifiedById    String?
+  purchaseVerifiedByName  String?
+  /// JSON: [{ drugName, outcome: 'ACCEPTED' | 'REJECTED', brand, expiry,
+  /// quantity, note }] — one entry per item the patient was asked to buy.
+  /// A rejection is kept rather than overwritten: "they brought the wrong
+  /// strength and were sent back" is exactly the history a later query turns
+  /// on.
+  purchaseVerification    String?   @db.Text
+
   // Individual medication packing status
   medicationPackingStatus String? // JSON: per-medication packed/not-packed/out-of-stock
 

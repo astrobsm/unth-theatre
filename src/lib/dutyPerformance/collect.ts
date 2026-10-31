@@ -29,6 +29,12 @@
 // records the expected reviewer BEFORE the review happens. That is the model
 // the other two would need to measure completion per person, and it is a
 // change to how the work is handed out, not to this file.
+//
+// There is now a second route to the same people that does not require
+// inventing an owner: every duty names the roles that perform it and, where
+// the department publishes one, the roster that says who was on. ./dutyTeam.ts
+// writes to all of them about the team's duty rather than picking one to
+// blame, so a duty with no attributable owner still reaches the right people.
 // ============================================================
 
 import prisma from '@/lib/prisma';
@@ -208,6 +214,71 @@ async function collectPacking(
   return events;
 }
 
+/**
+ * The anaesthetic prescriptions pharmacy had to pack.
+ *
+ * COUNTED ALONGSIDE THE DRUG/DRESSING REQUESTS, not instead of them, because
+ * pharmacy's packing duty is discharged across two screens and a board that
+ * read only one of them told the department it had done nothing all month.
+ * That figure is not merely unflattering, it is wrong — and a wrong figure in
+ * a chase message is the fastest way to lose a department's cooperation.
+ *
+ * Only prescriptions that reached pharmacy are counted. A draft, one still
+ * awaiting a consultant's approval, one rejected, withdrawn or superseded was
+ * never pharmacy's to pack, and counting it would report them for work that
+ * never arrived.
+ */
+async function collectPrescriptionPacking(from: string, to: string): Promise<DutyEvent[]> {
+  const { start, end } = windowBounds(from, to);
+
+  const rows = await prisma.anestheticPrescription.findMany({
+    where: {
+      scheduledSurgeryDate: { gte: start, lt: end },
+      status: {
+        notIn: ['DRAFT', 'PENDING_APPROVAL', 'REJECTED', 'CANCELLED', 'SUPERSEDED'] as never,
+      },
+    },
+    select: {
+      id: true,
+      patientName: true,
+      scheduledSurgeryDate: true,
+      packedById: true,
+      packedByName: true,
+      packedAt: true,
+      surgery: {
+        select: {
+          unit: true,
+          scheduledDate: true,
+          scheduledTime: true,
+          procedureName: true,
+          patient: { select: { name: true, folderNumber: true } },
+        },
+      },
+    },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    personId: r.packedById,
+    personName: r.packedByName,
+    unit: r.surgery?.unit ?? null,
+    label:
+      'Anaesthetic prescription — '
+      + caseLabel(
+        r.surgery?.patient ?? { name: r.patientName, folderNumber: null },
+        r.surgery?.procedureName ?? null,
+      ),
+    // The surgery's own time where there is one; the prescription's copy of
+    // the date otherwise, so a prescription whose surgery row has moved on is
+    // still measured against a real list start rather than dropped.
+    dueAt: listStart(
+      r.surgery?.scheduledDate ?? r.scheduledSurgeryDate,
+      r.surgery?.scheduledTime ?? null,
+    ),
+    doneAt: r.packedAt,
+  }));
+}
+
 // ── 4. Nurses acknowledging an emergency ────────────────────────────────────
 async function collectEmergencyAck(from: string, to: string): Promise<DutyEvent[]> {
   const { start, end } = windowBounds(from, to);
@@ -324,7 +395,13 @@ export async function collectDutyEvents(
 ): Promise<DutyEvent[]> {
   switch (duty) {
     case 'PREOP_REVIEW': return collectPreopReview(from, to);
-    case 'PHARMACY_PACKING': return collectPacking('PHARMACY_PACKING', from, to);
+    case 'PHARMACY_PACKING': {
+      const [requests, prescriptions] = await Promise.all([
+        collectPacking('PHARMACY_PACKING', from, to),
+        collectPrescriptionPacking(from, to),
+      ]);
+      return requests.concat(prescriptions);
+    }
     case 'CONSUMABLE_PACKING': return collectPacking('CONSUMABLE_PACKING', from, to);
     case 'EMERGENCY_ACK': return collectEmergencyAck(from, to);
     case 'SURGERY_TIMING': return collectSurgeryTiming(from, to);
