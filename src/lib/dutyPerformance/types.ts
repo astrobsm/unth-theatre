@@ -98,6 +98,27 @@ export interface DutyDefinition {
    */
   rosterCategory: string | null;
   /**
+   * For a duty that is routinely DONE by juniors and OWED by a senior.
+   *
+   * The pre-op review is the clear case: the registrars and senior registrars
+   * working with a consultant see most of the patients, which is how a
+   * teaching hospital is supposed to work. Writing to the consultant as though
+   * they personally failed to review two patients is both wrong and easy to
+   * dismiss — and dismissed is the one outcome that guarantees the next month
+   * reads the same.
+   *
+   * So where this is set the appeal changes shape: it asks the senior to make
+   * sure the person who saw the patient enters it, and it says plainly why a
+   * figure against their own name may understate the work. Null wherever
+   * whoever does the job is also whoever records it.
+   */
+  delegation: {
+    /** What the senior is actually being asked to do about it. */
+    appeal: string;
+    /** Why the figure against their own name may not be the whole story. */
+    attribution: string;
+  } | null;
+  /**
    * How long after the deadline still counts as on time.
    *
    * Not a kindness: it is the difference between a measure people accept and
@@ -116,22 +137,46 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     verb: 'reviewed',
     deadline: 'before the end of the day before surgery',
     why:
-      'An unreviewed patient cannot be safely anaesthetised. A review done on the morning '
-      + 'of surgery finds the problems too late to act on them, and the case is either '
-      + 'delayed on the table or done without the optimisation it needed.',
+      'An unreviewed patient cannot be safely anaesthetised — and a review nobody else can '
+      + 'see is the same thing to everybody preparing the case. The entry on the ORM is how '
+      + 'the surgeon, the scrub nurse, pharmacy and the theatre coordinator learn that the '
+      + 'patient has been seen, what plan was agreed, and what still has to be sorted before '
+      + 'morning. A review that exists only in the ward notes reaches none of them, and a '
+      + 'review done on the morning of surgery finds the problems too late to act on: the '
+      + 'case is either delayed on the table or done without the optimisation it needed.',
     graceMinutes: 0,
     where: 'Dashboard → Pre-op Reviews',
     roles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
     rosterCategory: 'ANAESTHETISTS',
+    delegation: {
+      appeal:
+        'Most of these patients are seen by the residents working with you, and that is '
+        + 'exactly as it should be — nobody is asking a consultant to review every patient '
+        + 'personally. What we are asking for is narrower: that the doctor who saw the '
+        + 'patient enters the review on the ORM the same day, and that you ask your '
+        + 'residents for it the way you would ask for the case notes. One question on the '
+        + 'round — “is it on the ORM?” — is what closes this gap.',
+      attribution:
+        'These are the cases the ORM holds against your name. Where a resident saw the '
+        + 'patient and entered the review under their own login, it counts to them and not '
+        + 'to you — so a figure like this usually means the review was never entered by '
+        + 'anybody, rather than that the patient was never seen.',
+    },
     steps: [
-      'Open Dashboard → Pre-op Reviews. The cases assigned to you are listed '
-      + 'with the soonest first.',
-      'Review the patient before the end of the day before surgery.',
-      'Complete the review on that screen and press Submit. A review left as a '
+      'Open Dashboard → Pre-op Reviews. The cases assigned to you, and to the '
+      + 'residents working with you, are listed with the soonest first.',
+      'See the patient — or have the resident see the patient — before the end '
+      + 'of the day before surgery.',
+      'Whoever saw the patient enters the review on that screen, under their '
+      + 'own login, on the same day, and presses Submit. A review left as a '
       + 'draft has not reached theatre and is counted as not done.',
-      'If you cannot take one you were assigned, hand it back on the same screen '
-      + 'rather than leaving it. A handback in time is not held against you — '
-      + 'it is how the case reaches somebody who can do it.',
+      'Ask your residents for it on the round. The entry is what tells the '
+      + 'surgeon, the nurses and pharmacy that the patient is reviewed and what '
+      + 'was agreed — until it is in, the rest of the team is preparing a case '
+      + 'nobody has confirmed is fit.',
+      'If a case cannot be taken, hand it back on the same screen rather than '
+      + 'leaving it. A handback in time is not held against anybody — it is '
+      + 'how the case reaches somebody who can do it.',
     ],
   },
   PHARMACY_PACKING: {
@@ -148,6 +193,8 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     where: 'Dashboard → Pharmacy',
     roles: ['PHARMACIST', 'HEAD_OF_PHARMACY'],
     rosterCategory: 'PHARMACISTS',
+    // The pharmacist who packs the trolley is the pharmacist who ticks it.
+    delegation: null,
     steps: [
       'Open Dashboard → Pharmacy and read the prescriptions for the next '
       + 'day’s lists.',
@@ -175,6 +222,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     where: 'Dashboard → Consumable Packs',
     roles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER'],
     rosterCategory: null,
+    delegation: null,
     steps: [
       'Open Dashboard → Consumable Packs. The next day’s cases are listed '
       + 'with everything each one needs.',
@@ -201,6 +249,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'Emergency Booking',
     roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
     rosterCategory: 'NURSES',
+    delegation: null,
     steps: [
       'When an emergency alert arrives, open it from the red ACKNOWLEDGE banner '
       + 'at the top of your dashboard, or from Dashboard → Emergency Booking.',
@@ -224,6 +273,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     where: 'the case → Timing (Dashboard → Theatre Operations)',
     roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN'],
     rosterCategory: 'NURSES',
+    delegation: null,
     steps: [
       'Open the case from Dashboard → Theatre Operations and choose Timing.',
       'Record the time of incision when the surgeon begins.',

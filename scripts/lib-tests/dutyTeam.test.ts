@@ -199,6 +199,49 @@ describe('the appeal somebody is sent', () => {
     expect(msg).toContain('If you cannot find the screen');
   });
 
+  // The pre-op review is not done by the person who owes it: the residents see
+  // the patients and the consultant answers for the firm. A message that tells
+  // a consultant they personally reviewed none of their patients is both wrong
+  // and trivially dismissed, and a dismissed appeal buys nothing at all. What
+  // is being asked for is that whoever saw the patient enters it, so the rest
+  // of the theatre team can see that the case has been reviewed.
+  describe('a duty the seniors owe and the juniors do', () => {
+    const preop = { ...base, duty: 'PREOP_REVIEW' as const };
+
+    it('asks the senior to get their residents to record it', () => {
+      const msg = buildDutyBrief(preop);
+      expect(msg).toContain('residents working with you');
+      expect(msg).toContain('is it on the ORM?');
+    });
+
+    it('does not claim the consultant failed to see the patients', () => {
+      const msg = buildDutyBrief({ ...preop, own: PERF({ total: 2, done: 0, late: 0, outstanding: 2 }) });
+      expect(msg).toContain('Against your name');
+      expect(msg).toContain('counts to them and not to you');
+      // The accusation we are specifically avoiding.
+      expect(msg).not.toContain('not done at all');
+    });
+
+    it('says why the entry matters to people other than the anaesthetist', () => {
+      const msg = buildDutyBrief(preop);
+      expect(msg).toContain('scrub nurse');
+    });
+
+    it('offers to teach the whole firm, not only the person written to', () => {
+      expect(buildDutyBrief(preop)).toContain('covers your residents too');
+    });
+
+    // Every other duty is discharged and recorded by the same hands, and
+    // inviting a pharmacist to chase "their residents" would read as a form
+    // letter sent to the wrong department.
+    it('says none of that to a duty nobody delegates', () => {
+      const msg = buildDutyBrief({ ...base, own: PERF({ total: 2, done: 0, late: 0, outstanding: 2 }) });
+      expect(msg).not.toContain('residents');
+      expect(msg).toContain('Your own record');
+      expect(msg).toContain('2 not recorded at all');
+    });
+  });
+
   it('works for every duty', () => {
     DUTY_KEYS.forEach((duty) => {
       const msg = buildDutyBrief({ ...base, duty });

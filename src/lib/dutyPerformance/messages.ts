@@ -58,23 +58,42 @@ export function buildDutyChase(input: {
     `We are writing to ask for your help in getting ${d.label.toLowerCase()} done on time — `
       + `${d.deadline}. This is an appeal, not an accusation: we need your cooperation far `
       + `more than we need a record of the shortfall.`,
+  ];
+
+  // Ahead of the figures, for the same reason as in the duty brief: a
+  // consultant who reads "0 of 2 reviewed" before reading this has already
+  // filed the message as somebody else's misunderstanding of how a firm
+  // works, and nothing after it gets read.
+  if (d.delegation) lines.push(``, d.delegation.appeal);
+
+  lines.push(
     ``,
     `Where you presently stand for ${input.periodLabel}:`,
     `• ${standingLine(p, input.duty)}`,
     `• Done on time: ${pct(onTimeShare)}`,
-  ];
+  );
 
   if (p.medianMarginMinutes !== null) {
     lines.push(`• Typically ${formatMargin(p.medianMarginMinutes)}`);
   }
 
+  if (d.delegation) lines.push(``, d.delegation.attribution);
+
   lines.push(
     ``,
-    p.outstanding > 0
-      ? `The ${p.outstanding} not done at all are the ones we are asking you to look at first. `
-        + `A task not done is invisible until the moment it is needed, which is the worst `
-        + `possible moment to discover it.`
-      : `You are doing the work — we are asking you to bring it inside the deadline.`,
+    d.delegation
+      ? p.outstanding > 0
+        ? `The ${p.outstanding} with nothing recorded are the ones we are asking you to raise `
+          + `with your team first. A review that was never entered is invisible to everybody `
+          + `else preparing the case, which is the worst possible way for it to be missing.`
+        : `The work is being done and entered — we are asking you to help bring it inside the `
+          + `deadline, so the rest of the team has it the evening before rather than on the `
+          + `morning of surgery.`
+      : p.outstanding > 0
+        ? `The ${p.outstanding} not done at all are the ones we are asking you to look at first. `
+          + `A task not done is invisible until the moment it is needed, which is the worst `
+          + `possible moment to discover it.`
+        : `You are doing the work — we are asking you to bring it inside the deadline.`,
     ``,
     `Why it matters. ${d.why}`,
     ``,
@@ -88,7 +107,11 @@ export function buildDutyChase(input: {
     ``,
     `If you cannot find the screen, or your login will not reach it, say so and somebody will `
       + `walk you through it — that is a five-minute problem and we would far rather solve it `
-      + `than keep reporting it.`,
+      + `than keep reporting it.`
+      + (d.delegation
+        ? ` That offer covers your residents too: send us their names and we will show the `
+          + `whole firm together, or come to your unit meeting and do it once for everybody.`
+        : ``),
     ``,
     `And if something else is genuinely preventing this — a list you are not told about, a `
       + `system that will not accept the entry, cover you do not have — please tell the Theatre `

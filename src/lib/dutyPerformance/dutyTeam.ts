@@ -217,6 +217,12 @@ export function buildDutyBrief(input: DutyBriefInput): string {
     + 'the shortfall.',
   ];
 
+  // For a duty the senior owes and the juniors do, this paragraph goes BEFORE
+  // the figures. Read in the other order, the numbers land as an allegation
+  // about work the consultant was never going to do personally, and the
+  // explanation afterwards reads as a retraction.
+  if (d.delegation) lines.push('', d.delegation.appeal);
+
   if (input.daysOnDuty > 0) {
     lines.push(
       '',
@@ -242,19 +248,26 @@ export function buildDutyBrief(input: DutyBriefInput): string {
     const onTime = p.done - p.late;
     lines.push(
       '',
-      'Your own record:',
+      d.delegation ? 'Against your name:' : 'Your own record:',
       `• ${p.done} of ${p.total} ${d.verb}`
-      + (p.outstanding > 0 ? `, ${p.outstanding} not done at all` : '')
+      + (p.outstanding > 0 ? `, ${p.outstanding} not recorded at all` : '')
       + (p.late > 0 ? `, ${p.late} done late` : ''),
       `• Done on time: ${onTime} of ${p.total} (${pct(onTime, p.total)})`,
     );
+    if (d.delegation) lines.push('', d.delegation.attribution);
   } else if (input.daysOnDuty > 0) {
     lines.push(
       '',
-      'Nothing at all is recorded in your name for this period. We are not '
-      + 'assuming the work was not done — far more often it was done and never '
-      + 'entered. But the ORM is what theatre reads, and what it cannot see it '
-      + 'treats as not done.',
+      d.delegation
+        ? 'Nothing is recorded under your name or your residents’ for this '
+          + 'period. We are not assuming the patients were not seen — far more '
+          + 'often they were seen and the review was never entered. But the ORM '
+          + 'is what the rest of the team reads, and what it cannot see it '
+          + 'treats as not done.'
+        : 'Nothing at all is recorded in your name for this period. We are not '
+          + 'assuming the work was not done — far more often it was done and '
+          + 'never entered. But the ORM is what theatre reads, and what it '
+          + 'cannot see it treats as not done.',
     );
   }
 
@@ -277,7 +290,12 @@ export function buildDutyBrief(input: DutyBriefInput): string {
     '',
     'If you cannot find the screen, or your login will not reach it, say so and '
     + 'somebody will walk you through it on the ward — that is a five-minute '
-    + 'problem and we would far rather solve it than keep reporting it.',
+    + 'problem and we would far rather solve it than keep reporting it.'
+    + (d.delegation
+      ? ' That offer covers your residents too: send us their names and we will '
+        + 'show the whole firm together, or come to your unit meeting and do it '
+        + 'once for everybody.'
+      : ''),
     '',
     'And if something else is genuinely in the way — work you are never told '
     + 'about, a form that will not save, cover you do not have — please tell '
