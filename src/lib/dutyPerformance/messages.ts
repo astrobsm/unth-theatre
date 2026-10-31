@@ -36,18 +36,21 @@ function standingLine(p: DutyPerformance, duty: DutyKey): string {
 }
 
 /**
- * The WhatsApp chase for somebody falling short on a duty.
+ * The chase for somebody whose ranked record is falling short.
  *
- * SHORT, BECAUSE IT IS READ ON A PHONE BETWEEN CASES. The first version
- * explained the duty at length, which is what a message does when it has
- * nothing specific to say. Where the caller can supply the person's own cases
- * it names them instead, and the explaining is unnecessary.
+ * Addressed by role, about their own cases, and it thanks them for what they
+ * did do before it asks about what is missing — in that order, because the
+ * other order is a reprimand with a courtesy attached and reads as one. It
+ * also asks them to see that their own staff record their work, which is the
+ * half of this a figure cannot do on its own.
  */
 export function buildDutyChase(input: {
   personName: string;
   duty: DutyKey;
   performance: DutyPerformance;
   periodLabel: string;
+  /** Their role, in words: "Consultant Anaesthetist". */
+  roleLabel?: string | null;
   /** Their own cases, where the caller worked them out. Named, not summarised. */
   caseload?: MemberCaseload | null;
 }): string {
@@ -55,23 +58,42 @@ export function buildDutyChase(input: {
   const p = input.performance;
   const c = input.caseload ?? null;
   const onTimeShare = p.total > 0 ? (p.done - p.late) / p.total : null;
+  const role = (input.roleLabel || '').trim().toLowerCase() || d.owner.toLowerCase();
+  const article = /^[aeiou]/.test(role) ? 'an' : 'a';
 
   const lines = [
     `UNTH Theatre — ${d.label.toLowerCase()}`,
+    input.periodLabel,
     ``,
     `Dear ${input.personName},`,
     ``,
-    `We are asking for your help getting ${d.label.toLowerCase()} done ${d.deadline}.`,
+    `As ${article} ${role}, ${d.label.toLowerCase()} is yours to see to and to record on `
+      + `the ORM — ${d.deadline}. We are writing to ask for your help with it. This is an `
+      + `appeal, not an accusation: your cooperation is worth far more to the theatre than `
+      + `a record of the shortfall.`,
     ``,
-    `Your record for ${input.periodLabel}: ${standingLine(p, input.duty)}.`,
-    `Done on time: ${pct(onTimeShare)}.`,
+    `Where you stand for ${input.periodLabel}:`,
+    `• ${standingLine(p, input.duty)}`,
+    `• Done on time: ${pct(onTimeShare)}`,
   ];
+
+  if (p.medianMarginMinutes !== null) {
+    lines.push(`• Typically ${formatMargin(p.medianMarginMinutes)}`);
+  }
+
+  if (p.done > 0) {
+    lines.push(
+      ``,
+      `Thank you for the ${p.done} you did ${d.verb} — that part of the work is reaching `
+        + `the theatre as it should.`,
+    );
+  }
 
   // The cases themselves, where the caller knows them. A named patient on a
   // named day is the difference between a figure somebody argues with and one
   // they go and look up.
   if (c && c.missing.length > 0) {
-    lines.push(``, `Nothing recorded for:`);
+    lines.push(``, `Still with nothing recorded:`);
     c.missing.forEach((m) => {
       const day = m.dutyDay ? `${shortDay(m.dutyDay)} — ` : '';
       lines.push(`• ${day}${trimLabel(m.label)}`);
@@ -80,19 +102,45 @@ export function buildDutyChase(input: {
     if (rest > 0) lines.push(`…and ${rest} more.`);
   }
 
+  lines.push(
+    ``,
+    p.outstanding > 0
+      ? `The ${p.outstanding} with nothing recorded are the ones we are asking you to look `
+        + `at first. Where the work was in fact done it needs only to be entered; a task `
+        + `not done is invisible until the moment it is needed, which is the worst `
+        + `possible moment to discover it.`
+      : `You are doing the work — we are asking you to bring it inside the deadline.`,
+  );
+
   if (d.delegation) lines.push(``, d.delegation.short);
 
   lines.push(
     ``,
-    `Please: ${d.ask}`,
+    // The steps go in EVERY chase, not only where we suspect a navigation
+    // problem. Far more of these figures are somebody who did the work and
+    // could not find where to record it than are somebody refusing to do it,
+    // and quoting a percentage at the first kind of person without telling
+    // them where the screen is guarantees the same figure next month.
+    `How it is done — ${d.where}:`,
+    ...d.steps.map((s, i) => `${i + 1}. ${s}`),
     ``,
-    `Why: ${d.whyShort}`,
+    `Please also see that ${d.subordinates} do the same, and enter it under their own `
+      + `login. A duty performed and never recorded on the ORM is, to everybody else `
+      + `preparing the case, a duty not done — and it is supervision, not reminders, that `
+      + `closes that gap.`,
     ``,
-    `This is an appeal, not an accusation. If you did the work and could not record it, `
-      + `say so and somebody will show you the screen. If something else is in the way — a `
-      + `list you are not told about, a form that will not save — tell the Theatre Manager `
-      + `or the Theatre Chairman.`,
+    `Why it matters. ${d.why}`,
     ``,
+    `If the screen cannot be found, or a login will not reach it, say so and somebody will `
+      + `come and show you or your team — that is a five-minute problem and we would far `
+      + `rather solve it than keep reporting it.`,
+    ``,
+    `And if something else is genuinely preventing this — a list you are not told about, a `
+      + `system that will not accept the entry, cover you do not have — please tell the `
+      + `Theatre Manager or the Theatre Chairman. A difficulty raised is one we can solve; `
+      + `one we never hear about simply repeats.`,
+    ``,
+    `Thank you for your cooperation, and for the ones you do get done on time.`,
     `Theatre Management, UNTH Ituku-Ozalla`,
   );
 
@@ -132,6 +180,14 @@ export function buildDutyCommendation(input: {
   lines.push(
     ``,
     `That is not a small thing. ${d.why}`,
+    ``,
+    // Asked for alongside the commendation, and right: the colleague who does
+    // this properly is the one whose team will listen about it. A thank-you
+    // that asks nothing of the best people wastes the one letter they read
+    // twice.
+    `One thing we would ask: please help ${d.subordinates} to the same standard, and see `
+      + `that they record their own work on the ORM under their own login. Work that is `
+      + `done and never entered reaches nobody who is preparing the case.`,
     ``,
     `Because you do this when you are meant to, none of that happens on your cases — and the `
       + `people who never notice are the proof it is working.`,

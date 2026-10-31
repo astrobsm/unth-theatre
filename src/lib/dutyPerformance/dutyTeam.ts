@@ -63,6 +63,19 @@ export interface DutyTeamMember {
 
 const SHIFT_ORDER = ['MORNING', 'CALL', 'NIGHT'];
 
+/**
+ * A role as a person would say it: CONSULTANT_ANAESTHETIST -> "Consultant
+ * Anaesthetist". Letters are addressed by role, so the enum must never reach
+ * one: "Dear Dr X, as a CONSULTANT_ANAESTHETIST" is a letter from a database.
+ */
+export function roleWords(role: string | null | undefined): string {
+  return (role || '')
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 /** The WAT calendar day before `iso`, as yyyy-mm-dd. */
 export function dayBefore(iso: string): string {
   const [y, m, d] = iso.split('-').map((n) => parseInt(n, 10));
@@ -180,6 +193,8 @@ export interface DutyBriefInput {
   duty: DutyKey;
   /** Who it is addressed to. */
   personName: string;
+  /** Their role, written as a person would say it: "Consultant Anaesthetist". */
+  roleLabel?: string | null;
   periodLabel: string;
   /** What was actually theirs: their own cases, from the roster and the record. */
   caseload?: MemberCaseload | null;
@@ -200,15 +215,38 @@ export interface DutyBriefInput {
   own?: DutyPerformance | null;
 }
 
+/** Which letter this is, decided by their own record and nothing else. */
+export type DutyBriefTone = 'commend' | 'appeal' | 'roster-gap' | 'nothing-due';
+
+export function dutyBriefTone(
+  c: MemberCaseload | null | undefined,
+  daysOnDuty: number,
+): DutyBriefTone {
+  if (!c || c.total === 0) return daysOnDuty > 0 ? 'nothing-due' : 'roster-gap';
+  // Everything done, nothing late: this is a thank-you, and a thank-you that
+  // mentions what happens if you slip is not one.
+  if (c.outstanding === 0 && c.late === 0) return 'commend';
+  return 'appeal';
+}
+
 /**
- * The appeal sent to somebody who performs a duty.
+ * The letter sent to somebody who performs a duty.
  *
- * SHORT, AND ABOUT THEIR OWN CASES. Both of those were asked for, and they
- * turn out to be the same instruction: the long version was long because it
- * had nothing specific to say, so it explained the duty instead. Given the
- * cases that were genuinely theirs — the nights the roster had them on, the
- * patients nobody packed for — there is nothing left to pad with. It fits on
- * one phone screen: what was yours, what is missing, where to press, why.
+ * A PROFESSIONAL APPEAL, ADDRESSED BY ROLE, ABOUT THEIR OWN CASES. Three
+ * things have to be true at once, and each was learned by getting it wrong:
+ *
+ *   it quotes the cases that are genuinely theirs, because staff read the
+ *   department's figure in a letter addressed to them and said, correctly,
+ *   that it was not their duty;
+ *
+ *   it thanks the people who are doing the work, because a board that writes
+ *   only to the people who are behind is a board nobody wants to hear from,
+ *   and the ones doing it properly are the ones worth keeping;
+ *
+ *   and it asks the senior to see that their own staff record it too, because
+ *   a duty performed and never communicated is, to everybody else preparing
+ *   the case, a duty not done — and supervision, not reminders, is what
+ *   closes that.
  *
  * ONE MESSAGE, FIVE DUTIES still. A hospital that writes to pharmacy in one
  * tone and to the nurses in another gets an argument about tone instead of a
@@ -221,81 +259,160 @@ export function buildDutyBrief(input: DutyBriefInput): string {
   const nights = input.daysOnDuty ?? rosterDays.length;
   // Packing is night work; a review the day before surgery is not. Calling a
   // consultant's clinic day a "night on duty" is the kind of small wrongness
-  // that tells a reader the message was written by a machine about somebody
-  // else.
-  const shift = input.duty === 'PHARMACY_PACKING' || input.duty === 'CONSUMABLE_PACKING'
-    ? 'nights'
-    : 'days';
+  // that tells a reader the letter was written about somebody else.
+  const isNight = input.duty === 'PHARMACY_PACKING' || input.duty === 'CONSUMABLE_PACKING';
+  const shift = isNight ? 'nights' : 'days';
+  const one = isNight ? 'night' : 'day';
+  // Addressed by role where we know it. Where we do not, "one of the
+  // colleagues who carry this" — never d.owner, which is a department ("As a
+  // pharmacy on duty..."), and a letter that cannot name your job correctly
+  // has already told you it is not really about you.
+  const roleWord = (input.roleLabel || '').trim().toLowerCase();
+  // "the head of pharmacy", "the theatre manager" — there is one of each, and
+  // "a head of pharmacy" tells the reader a machine wrote it.
+  const definite = /^(head|chief|director|theatre manager|theatre chairman)/.test(roleWord);
+  const asWho = roleWord
+    ? `${definite ? 'the' : (/^[aeiou]/.test(roleWord) ? 'an' : 'a')} ${roleWord}`
+    : `one of the colleagues who carry ${d.label.toLowerCase()}`;
+  const tone = dutyBriefTone(c, nights);
 
   const lines: string[] = [
     `UNTH Theatre — ${d.label.toLowerCase()}`,
+    input.periodLabel,
     '',
     `Dear ${input.personName},`,
     '',
   ];
 
-  // ── What was yours ────────────────────────────────────────────────────
-  if (nights > 0) {
-    lines.push(
-      `On duty ${nights} ${nights === 1 ? shift.replace(/s$/, '') : shift} in `
-      + `${input.periodLabel}${rosterDays.length ? `: ${listDays(rosterDays)}` : ''}.`,
-    );
-  }
+  // ── Who they are, and what was therefore theirs ───────────────────────
+  const asRole = nights > 0
+    ? `As ${asWho}, on duty ${nights} ${nights === 1 ? one : shift} in this period`
+      + (rosterDays.length ? ` (${listDays(rosterDays)})` : '')
+    : `As ${asWho}`;
 
-  if (c && c.total > 0) {
+  if (tone === 'roster-gap') {
     lines.push(
-      `${c.total} ${c.total === 1 ? 'case was' : 'cases were'} yours. `
-      + `${c.done} recorded as ${d.verb}`
-      + (c.late > 0 ? `, ${c.late} of them late` : '')
-      + '.',
-    );
-  } else if (c && nights > 0) {
-    // Nothing fell to them. Saying so is the point: it is the difference
-    // between a board that knows the roster and one that writes to everybody.
-    lines.push(
-      `No case on those ${shift} needed ${d.label.toLowerCase()}, so nothing is `
-      + 'outstanding for you. This is for your information only.',
-    );
-  } else {
-    lines.push(
-      `The published roster has you on no ${shift.replace(/s$/, '')} in this period, and no `
-      + 'case is recorded against you.'
+      `${asRole}, ${d.label.toLowerCase()} is one of the duties recorded in your name.`,
+      '',
+      `The published roster has you on no ${one} in ${input.periodLabel}, and no case is `
+      + 'recorded against your name.'
       + (input.departmentTotal
-        ? ` The department had ${input.departmentTotal} due and `
+        ? ` Across the department, ${input.departmentTotal} were due and `
           + `${input.departmentDone ?? 0} recorded.`
         : ''),
       '',
-      'If you were on duty and the roster does not show it, please tell us — these '
-      + 'messages are built from the published roster, so correcting it corrects them.',
+      'We are not reporting a shortfall against you — we cannot see one. We are asking '
+      + 'you to check two things: that your department’s roster is published on the ORM, '
+      + 'and that your name is on it for the days you worked. These letters, and every '
+      + 'figure on the duty board, are built from that roster.',
+    );
+  } else if (tone === 'nothing-due') {
+    lines.push(
+      `${asRole}, nothing fell to you for ${d.label.toLowerCase()}: no case on `
+      + `${rosterDays.length ? `those ${shift}` : `your duty ${shift}`} required it.`,
+      '',
+      'Nothing is outstanding, and nothing is being asked of you. We are writing so that '
+      + 'you know the ORM shows your duty correctly — if you did work that is not '
+      + 'reflected here, please tell us, because that is a gap we would want to close.',
+    );
+  } else {
+    lines.push(
+      `${asRole}, ${c!.total === 1 ? 'one case was' : `${c!.total} cases were`} yours to see `
+      + `to and to record on the ORM.`,
+      '',
+      tone === 'commend'
+        ? 'We are writing to thank you for how that has gone.'
+        : 'This is a professional appeal, not a reprimand: your cooperation is worth far '
+          + 'more to the theatre than a record of what was missed.',
     );
   }
 
-  // ── Which ones ────────────────────────────────────────────────────────
+  // ── Where they stand ──────────────────────────────────────────────────
+  if (c && c.total > 0) {
+    lines.push(
+      '',
+      'Where you stand:',
+      `• ${c.total} ${c.total === 1 ? 'case was' : 'cases were'} yours`,
+      `• ${c.done} ${d.verb} and recorded on the ORM`
+      + (c.late > 0 ? ` (${c.late} after the deadline)` : ''),
+      `• ${c.outstanding} with nothing recorded`,
+    );
+  }
+
+  // ── What was done well. This half is not optional: a board that only ever
+  //    reports shortfalls teaches people to ignore it.
+  if (c && c.done > 0) {
+    lines.push(
+      '',
+      tone === 'commend'
+        ? `Every one of them was ${d.verb} on time. That is not a small thing — the `
+          + 'colleagues who never have to chase you are the proof it is working, and they '
+          + 'are usually the last to say so.'
+        : `Thank you for the ${c.done} you did record. That part of the work is reaching `
+          + 'the theatre exactly as it should.',
+    );
+  }
+
+  // ── Which ones are missing ────────────────────────────────────────────
   if (c && c.missing.length > 0) {
-    lines.push('', 'Nothing recorded for:');
+    lines.push('', 'Still with nothing recorded:');
     c.missing.forEach((m) => {
       const day = m.dutyDay ? `${shortDay(m.dutyDay)} — ` : '';
       lines.push(`• ${day}${trimLabel(m.label)}`);
     });
     const rest = c.outstanding - c.missing.length;
     if (rest > 0) lines.push(`…and ${rest} more.`);
+    lines.push(
+      '',
+      'Please would you check each of these. Where the work was in fact done, it needs '
+      + 'only to be entered; where it was not, that is the first thing we are asking for.',
+    );
   }
 
-  // ── What to do ────────────────────────────────────────────────────────
-  if (!c || c.total > 0) {
+  // ── How, and who else has to do it ────────────────────────────────────
+  if (tone === 'appeal' || tone === 'commend') {
     if (d.delegation) lines.push('', d.delegation.short);
-    lines.push('', `Please: ${d.ask}`, '', `Why: ${d.whyShort}`);
+
+    // The steps go to the person being asked for something, not to the person
+    // being thanked: somebody with a complete record has demonstrated they can
+    // find the screen, and instructing them anyway turns a thank-you into a
+    // circular.
+    if (tone === 'appeal') {
+      lines.push('', `How it is done — ${d.where}:`);
+      d.steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    }
+
+    // The supervision ask, in BOTH tones. The person doing the job properly is
+    // exactly the person whose team should be doing it properly, and leaving
+    // this out of the thank-you would waste the one letter they will read
+    // twice.
+    lines.push(
+      '',
+      `Please also see that ${d.subordinates} do the same, and enter it under their own `
+      + 'login. A duty performed and never recorded on the ORM is, to everybody else '
+      + 'preparing the case, a duty not done — and it is supervision, not reminders, that '
+      + 'closes that gap.',
+      '',
+      `Why it matters. ${d.why}`,
+    );
   }
 
+  // ── The way out ───────────────────────────────────────────────────────
   lines.push(
     '',
-    c && c.total > 0 && c.outstanding > 0
-      ? 'If you did the work and could not record it, say so and somebody will show you '
-        + 'the screen — five minutes. If something else is in the way, tell the Theatre '
-        + 'Manager.'
-      : 'Anything in the way of this, tell the Theatre Manager — a difficulty raised is '
-        + 'one we can solve.',
+    tone === 'commend'
+      ? 'Theatre Management is grateful, and we wanted to say so rather than write only to '
+        + 'colleagues who are falling behind.'
+      : 'If the screen cannot be found, or a login will not reach it, say so and somebody '
+        + 'will come and show you or your team — that is a five-minute problem and we would '
+        + 'far rather solve it than keep reporting it. And if something else is in the way '
+        + '— a list you are never told about, a form that will not save, cover you do not '
+        + 'have — please tell the Theatre Manager or the Theatre Chairman. A difficulty '
+        + 'raised is one we can solve; one we never hear about simply repeats.',
     '',
+    tone === 'commend'
+      ? 'With appreciation,'
+      : 'Thank you for the work, and for taking the time to record it.',
     'Theatre Management, UNTH Ituku-Ozalla',
   );
 

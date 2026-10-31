@@ -581,11 +581,13 @@ export default function DutyPerformancePage() {
             the list to use when the problem is that nothing is reaching the ORM at all.
           </p>
           <p className="mt-2 rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
-            The message is short, and it is about <strong>their own cases</strong> — the days the
-            published roster had them on duty, and the cases the ORM names them on. It lists the
-            ones with nothing recorded, says where the screen is ({def.where}), and offers to show
-            them. Nobody is sent the department&rsquo;s total in place of their own: that is what
-            staff were right to object to.
+            A letter addressed <strong>by role</strong>, about <strong>their own cases</strong> —
+            the days the published roster had them on duty, and the cases the ORM names them on.
+            It thanks them for what they did record, lists what is still missing by patient and
+            day, walks through the screen ({def.where}), and asks them to see that their own staff
+            record their work too. Where somebody&rsquo;s record is complete and on time it
+            becomes a commendation instead of an appeal. Nobody is sent the department&rsquo;s
+            total in place of their own.
           </p>
 
           <ul className="mt-4 divide-y divide-gray-100">

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDutyBrief,
+  dutyBriefTone,
+  roleWords,
   dayBefore,
   foldRoster,
   isEveDuty,
@@ -194,12 +196,51 @@ describe('the appeal somebody is sent', () => {
     departmentOnTime: 0,
   };
 
-  it('names the person, their nights and their own cases', () => {
-    const msg = buildDutyBrief(base);
+  it('names the person, their role, their nights and their own cases', () => {
+    const msg = buildDutyBrief({ ...base, roleLabel: 'Pharmacist' });
+    expect(msg).toContain('As a pharmacist, on duty 2 nights');
     expect(msg).toContain('Dear Pharm A');
     expect(msg).toContain('7 Oct');
     expect(msg).toContain('14 Oct');
     expect(msg).toContain('4 cases were yours');
+  });
+
+  // The enum must never reach a letter: "as a CONSULTANT_ANAESTHETIST" is a
+  // letter from a database, and it undoes the register the message is for.
+  it('writes the role in words, never as the enum', () => {
+    const msg = buildDutyBrief({ ...base, roleLabel: roleWords('HEAD_OF_PHARMACY') });
+    // "the head of pharmacy" — there is one of them, and "a head of pharmacy"
+    // is the other way a letter admits a machine wrote it.
+    expect(msg).toContain('As the head of pharmacy,');
+    expect(msg).not.toContain('HEAD_OF_PHARMACY');
+  });
+
+  it('reads as an appeal, not a reprimand', () => {
+    expect(buildDutyBrief(base)).toContain('professional appeal, not a reprimand');
+  });
+
+  // Asked for explicitly, and the half a figure cannot deliver on its own:
+  // the senior is the one who can make their team record the work.
+  it('asks them to supervise their own staff and have them record it', () => {
+    const msg = buildDutyBrief(base);
+    expect(msg).toContain(DUTIES.PHARMACY_PACKING.subordinates);
+    expect(msg).toContain('under their own login');
+    expect(msg).toContain('supervision, not reminders');
+  });
+
+  it('thanks them for what they did record before asking about the rest', () => {
+    const some = memberCaseload({
+      duty: 'PHARMACY_PACKING',
+      userId: 'pharm1',
+      rosteredDays: rosterDays,
+      events: events.map((e, i) => (i === 0
+        ? { ...e, personId: 'pharm1', doneAt: new Date('2026-10-07T20:00:00Z') }
+        : e)),
+    });
+    const msg = buildDutyBrief({ ...base, caseload: some });
+    expect(msg).toContain('Thank you for the 1 you did record');
+    expect(msg.indexOf('Thank you for the 1'))
+      .toBeLessThan(msg.indexOf('Still with nothing recorded'));
   });
 
   // THE WHOLE POINT OF THE REWRITE. Staff objected that the figures were not
@@ -212,7 +253,7 @@ describe('the appeal somebody is sent', () => {
 
   it('lists the cases with nothing recorded, by day and by patient', () => {
     const msg = buildDutyBrief(base);
-    expect(msg).toContain('Nothing recorded for:');
+    expect(msg).toContain('Still with nothing recorded:');
     expect(msg).toContain('Mrs A');
     expect(msg).toContain('…and 1 more.');
   });
@@ -221,30 +262,91 @@ describe('the appeal somebody is sent', () => {
     expect(buildDutyBrief(base)).not.toContain('5 cases');
   });
 
-  it('says where the screen is and what to press, in one line', () => {
+  it('walks through how the job is done, naming the screen', () => {
     const msg = buildDutyBrief(base);
-    expect(msg).toContain(DUTIES.PHARMACY_PACKING.ask);
-    expect(msg).toContain(DUTIES.PHARMACY_PACKING.whyShort);
+    expect(msg).toContain(DUTIES.PHARMACY_PACKING.where);
+    DUTIES.PHARMACY_PACKING.steps.forEach((step) => expect(msg).toContain(step));
   });
 
-  it('offers to show them the screen rather than only reporting them', () => {
-    expect(buildDutyBrief(base)).toContain('could not record it');
+  it('offers to show them, or their team, the screen', () => {
+    const msg = buildDutyBrief(base);
+    expect(msg).toContain('show you or your team');
+    expect(msg).toMatch(/Theatre Manager|Theatre Chairman/);
   });
 
   // Short enough to read on a phone between cases. The old one ran past
   // twenty lines and was, by its own account, mostly explanation.
-  it('fits on a phone screen', () => {
+  // A letter, not a leaflet. There is no hard rule about length, but the
+  // first version of this ran to a page and a half of explanation and the
+  // reply we got was that nobody read it, so a ceiling is worth keeping.
+  it('stays the length of a letter', () => {
     const msg = buildDutyBrief(base);
-    expect(msg.split('\n').length).toBeLessThan(26);
-    expect(msg.length).toBeLessThan(1000);
+    expect(msg.length).toBeLessThan(3000);
   });
 
   it('works for every duty', () => {
     DUTY_KEYS.forEach((duty) => {
       const msg = buildDutyBrief({ ...base, duty });
       expect(msg).toContain(DUTIES[duty].label.toLowerCase());
-      expect(msg).toContain(DUTIES[duty].ask);
+      expect(msg).toContain(DUTIES[duty].where);
+      expect(msg).toContain(DUTIES[duty].subordinates);
       expect(msg).toContain('Theatre Management, UNTH Ituku-Ozalla');
+    });
+  });
+
+  // THE OTHER HALF OF THE BOARD. One that only ever writes to the people who
+  // are behind is one nobody wants to hear from, and the colleagues keeping
+  // the lists running are the last to be told so.
+  describe('when the record is a good one', () => {
+    // Packed on the evening of the duty day, for a list that starts the next
+    // morning. Each event needs its own deadline or the fixtures call a pack
+    // done a week early "late".
+    const allDone = events
+      .filter((e) => e.id !== 'e5')
+      .map((e) => {
+        const day = String(e.dutyDay);
+        const next = new Date(day + 'T00:00:00Z');
+        next.setUTCDate(next.getUTCDate() + 1);
+        return {
+          ...e,
+          personId: 'pharm1',
+          dueAt: new Date(next.toISOString().slice(0, 10) + 'T07:00:00Z'),
+          doneAt: new Date(day + 'T20:00:00Z'),
+        };
+      });
+    const perfect = memberCaseload({
+      duty: 'PHARMACY_PACKING', userId: 'pharm1', rosteredDays: rosterDays, events: allDone,
+    });
+
+    it('thanks them instead of chasing them', () => {
+      const msg = buildDutyBrief({ ...base, caseload: perfect });
+      expect(msg).toContain('thank you');
+      expect(msg).toContain('With appreciation');
+      expect(msg).not.toContain('Still with nothing recorded');
+      expect(msg).not.toContain('professional appeal');
+    });
+
+    it('carries no threat in the thank-you', () => {
+      const msg = buildDutyBrief({ ...base, caseload: perfect });
+      expect(msg).not.toMatch(/warning|query|sanction|disciplin|falling short/i);
+    });
+
+    // The one ask that belongs in a commendation: this is the colleague whose
+    // team will actually listen about it.
+    it('still asks them to hold their own staff to it', () => {
+      const msg = buildDutyBrief({ ...base, caseload: perfect });
+      expect(msg).toContain(DUTIES.PHARMACY_PACKING.subordinates);
+    });
+
+    it('does not thank somebody who did it all late', () => {
+      const late = memberCaseload({
+        duty: 'PHARMACY_PACKING',
+        userId: 'pharm1',
+        rosteredDays: rosterDays,
+        events: allDone.map((e) => ({ ...e, doneAt: new Date('2026-10-30T20:00:00Z') })),
+      });
+      expect(dutyBriefTone(late, 2)).toBe('appeal');
+      expect(dutyBriefTone(perfect, 2)).toBe('commend');
     });
   });
 
@@ -260,9 +362,9 @@ describe('the appeal somebody is sent', () => {
       const msg = buildDutyBrief({
         ...base, caseload: none, rosterDays: [], daysOnDuty: 0, eves: 0,
       });
-      expect(msg).toContain('no night in this period');
-      expect(msg).toContain('the roster does not show it');
-      expect(msg).not.toContain('Nothing recorded for:');
+      expect(msg).toContain('no night in 1–31 October 2026');
+      expect(msg).toContain('roster is published on the ORM');
+      expect(msg).not.toContain('Still with nothing recorded');
     });
 
     it('does not chase somebody whose rostered nights carried no cases', () => {
@@ -272,8 +374,9 @@ describe('the appeal somebody is sent', () => {
       const msg = buildDutyBrief({
         ...base, caseload: quiet, rosterDays: ['2026-10-21'], daysOnDuty: 1, eves: 1,
       });
-      expect(msg).toContain('nothing is outstanding for you');
-      expect(msg).not.toContain('Nothing recorded for:');
+      expect(msg).toContain('nothing fell to you');
+      expect(msg).toContain('Nothing is outstanding');
+      expect(msg).not.toContain('Still with nothing recorded');
     });
   });
 
@@ -283,7 +386,7 @@ describe('the appeal somebody is sent', () => {
     it('asks the senior to get their residents to record it', () => {
       const msg = buildDutyBrief(preop);
       expect(msg).toContain('ask them to enter the review on the ORM');
-      expect(msg).toContain('under their own login');
+      expect(msg).toContain(DUTIES.PREOP_REVIEW.subordinates);
     });
 
     it('says none of that to a duty nobody delegates', () => {

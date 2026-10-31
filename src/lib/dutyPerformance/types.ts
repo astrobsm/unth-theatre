@@ -89,6 +89,17 @@ export interface DutyDefinition {
   /** The one instruction: where to go and what to press. */
   ask: string;
   /**
+   * The staff whoever holds this duty is senior to, named the way they are
+   * named on the ward.
+   *
+   * EVERY ONE OF THESE DUTIES IS SUPERVISED, and that is the half of the
+   * appeal a figure cannot make. A consultant can see that their registrars
+   * enter the review; a pharmacist can see that the intern on the shift ticks
+   * the pack. Asking somebody to look after their own cases and saying
+   * nothing about the people working under them asks for half the job.
+   */
+  subordinates: string;
+  /**
    * The duty broken into the steps somebody actually performs, in order,
    * naming the screen each one happens on.
    *
@@ -170,6 +181,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'case is either delayed on the table or done without the optimisation it needed.',
     graceMinutes: 0,
     where: 'Dashboard → Pre-op Reviews',
+    subordinates: 'the residents and registrars working with you',
     whyShort:
       'Until the review is on the ORM, the rest of the team is preparing a case nobody '
       + 'has confirmed is fit.',
@@ -225,6 +237,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'what should already have been on the trolley.',
     graceMinutes: 30,
     where: 'Dashboard → Pharmacy',
+    subordinates: 'the pharmacy staff and interns on your shift',
     whyShort: 'Theatre cannot tell a packed trolley from one nobody has started.',
     ask:
       'Dashboard → Pharmacy → Pack Drugs: pack the night before and tick each medicine '
@@ -258,6 +271,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'that work for every case behind it.',
     graceMinutes: 30,
     where: 'Dashboard → Consumable Packs',
+    subordinates: 'the store staff working with you',
     whyShort: 'A pack drawn after the list has started is a case that cannot begin.',
     ask:
       'Dashboard → Consumable Packs: pack the day before and mark each item packed.',
@@ -288,6 +302,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     graceMinutes: 5,
     where: 'the red ACKNOWLEDGE banner on your dashboard, or Dashboard → '
       + 'Emergency Booking',
+    subordinates: 'the nurses on your shift',
     whyShort:
       'Until somebody acknowledges, the surgeon is assuming cover that may not exist.',
     ask:
@@ -317,6 +332,7 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'timestamps, and a missing pair is a case that silently never happened.',
     graceMinutes: 0,
     where: 'the case → Timing (Dashboard → Theatre Operations)',
+    subordinates: 'the nurses and anaesthetic technicians on your team',
     whyShort:
       'A time not entered on the day cannot be recovered, and the case becomes '
       + 'uncountable.',

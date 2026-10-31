@@ -22,6 +22,7 @@ import { buildDutyReport, MIN_EVENTS_TO_RANK, COMMENDATION_RATE, CHASE_RATE, for
 import { buildDutyChase, buildDutyCommendation } from '@/lib/dutyPerformance/messages';
 import { periodLabel } from '@/lib/dutyPerformance/export';
 import { memberCaseload } from '@/lib/dutyPerformance/caseload';
+import { roleWords } from '@/lib/dutyPerformance/dutyTeam';
 import { DUTIES, isDutyKey } from '@/lib/dutyPerformance/types';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
@@ -169,6 +170,7 @@ export async function POST(request: NextRequest) {
           duty,
           performance,
           periodLabel: label,
+          roleLabel: roleWords(person.role ? String(person.role) : null),
           // Their own outstanding cases, named. The roster is not read here:
           // this route only ever writes to somebody the report already names,
           // so their cases are the ones the record attributes to them.

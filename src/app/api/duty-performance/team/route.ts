@@ -24,7 +24,7 @@ import { collectDutyEvents } from '@/lib/dutyPerformance/collect';
 import { buildDutyReport } from '@/lib/dutyPerformance/report';
 import { periodLabel } from '@/lib/dutyPerformance/export';
 import {
-  buildDutyBrief, foldRoster, isEveDuty, rosterWindowFor, sortTeam, dayBefore,
+  buildDutyBrief, foldRoster, isEveDuty, roleWords, rosterWindowFor, sortTeam, dayBefore,
   type DutyTeamMember,
 } from '@/lib/dutyPerformance/dutyTeam';
 import { memberCaseload } from '@/lib/dutyPerformance/caseload';
@@ -293,6 +293,7 @@ export async function POST(request: NextRequest) {
     const text = buildDutyBrief({
       duty,
       personName: person.fullName,
+      roleLabel: roleWords(person.role ? String(person.role) : null),
       periodLabel: label,
       caseload: member.caseload,
       rosterDays: member.days,
