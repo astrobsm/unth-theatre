@@ -27,7 +27,10 @@ import {
   buildDutyBrief, foldRoster, isEveDuty, rosterWindowFor, sortTeam, dayBefore,
   type DutyTeamMember,
 } from '@/lib/dutyPerformance/dutyTeam';
-import { DUTIES, isDutyKey, type DutyKey, type DutyReport } from '@/lib/dutyPerformance/types';
+import { memberCaseload } from '@/lib/dutyPerformance/caseload';
+import {
+  DUTIES, isDutyKey, type DutyEvent, type DutyKey, type DutyReport,
+} from '@/lib/dutyPerformance/types';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 
@@ -77,6 +80,7 @@ async function buildTeam(
   to: string,
   report: DutyReport,
   dueDays: string[],
+  events: DutyEvent[],
 ): Promise<DutyTeamMember[]> {
   const def = DUTIES[duty];
 
@@ -146,6 +150,16 @@ async function buildTeam(
       eves: r?.eves ?? 0,
       source: r ? 'roster' : 'role',
       performance: performers.get(u.id) ?? null,
+      // THE FIGURE THE MESSAGE QUOTES. Built from the days this person was
+      // actually on and the cases the record actually names them on — because
+      // staff read the department's total in a message addressed to them and
+      // said, correctly, that it was not their duty.
+      caseload: memberCaseload({
+        duty,
+        userId: u.id,
+        rosteredDays: r?.days ?? [],
+        events,
+      }),
     };
   });
 
@@ -178,7 +192,7 @@ export async function GET(request: NextRequest) {
       if (dueDays.indexOf(key) === -1) dueDays.push(key);
     });
 
-    const members = await buildTeam(duty, from, to, report, dueDays);
+    const members = await buildTeam(duty, from, to, report, dueDays, events);
 
     const base = linkFor(duty, from, to);
     const briefed = await prisma.notification.findMany({
@@ -242,7 +256,7 @@ export async function POST(request: NextRequest) {
       if (dueDays.indexOf(key) === -1) dueDays.push(key);
     });
 
-    const team = await buildTeam(duty, from, to, report, dueDays);
+    const team = await buildTeam(duty, from, to, report, dueDays, events);
     const member = team.find((m) => m.userId === person.id) ?? null;
 
     // THE GUARD THE WHOLE ROUTE IS FOR. Nobody is written to about a duty they
@@ -280,11 +294,13 @@ export async function POST(request: NextRequest) {
       duty,
       personName: person.fullName,
       periodLabel: label,
+      caseload: member.caseload,
+      rosterDays: member.days,
+      daysOnDuty: member.days.length,
+      eves: member.eves,
       departmentTotal: report.total,
       departmentDone: report.done,
       departmentOnTime: report.onTime,
-      daysOnDuty: member.days.length,
-      eves: member.eves,
       own: member.performance,
     });
 

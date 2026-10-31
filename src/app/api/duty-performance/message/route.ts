@@ -21,6 +21,7 @@ import { collectDutyEvents } from '@/lib/dutyPerformance/collect';
 import { buildDutyReport, MIN_EVENTS_TO_RANK, COMMENDATION_RATE, CHASE_RATE, formatRate } from '@/lib/dutyPerformance/report';
 import { buildDutyChase, buildDutyCommendation } from '@/lib/dutyPerformance/messages';
 import { periodLabel } from '@/lib/dutyPerformance/export';
+import { memberCaseload } from '@/lib/dutyPerformance/caseload';
 import { DUTIES, isDutyKey } from '@/lib/dutyPerformance/types';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
@@ -163,7 +164,16 @@ export async function POST(request: NextRequest) {
     const text =
       kind === 'commend'
         ? buildDutyCommendation({ personName: person.fullName, duty, performance, periodLabel: label, rankLabel })
-        : buildDutyChase({ personName: person.fullName, duty, performance, periodLabel: label });
+        : buildDutyChase({
+          personName: person.fullName,
+          duty,
+          performance,
+          periodLabel: label,
+          // Their own outstanding cases, named. The roster is not read here:
+          // this route only ever writes to somebody the report already names,
+          // so their cases are the ones the record attributes to them.
+          caseload: memberCaseload({ duty, userId: person.id, events }),
+        });
 
     const wa = person.phoneNumber ? toWhatsAppNumber(person.phoneNumber) : null;
 

@@ -52,6 +52,20 @@ export interface DutyEvent {
   dueAt: Date | string | null;
   /** When it was done. Null means outstanding. */
   doneAt: Date | string | null;
+  /**
+   * The WAT calendar day on which the person had to ACT — not the day of
+   * surgery. For a pack or a review done the evening before, that is the day
+   * before the list; for an alert or a set of theatre times, the day itself.
+   *
+   * THIS IS WHAT MAKES A MESSAGE PERSONAL. A roster row says somebody was on
+   * the night of the 7th; only this field can say which cases that night
+   * actually carried. Without it the board could quote the department's figure
+   * to everybody and nothing else, which is precisely what staff objected to:
+   * "that is not my duty". Optional because report.ts has never needed it, and
+   * an event that cannot say which day it fell on is matched to no roster
+   * line rather than to a guessed one.
+   */
+  dutyDay?: string | null;
 }
 
 export interface DutyDefinition {
@@ -64,8 +78,16 @@ export interface DutyDefinition {
   verb: string;
   /** What the deadline means, in the words staff use. */
   deadline: string;
-  /** Why it matters — printed on the report and quoted in chases. */
+  /** Why it matters — printed on the report. */
   why: string;
+  /**
+   * The same thing in one sentence, for a message read on a phone between
+   * cases. The long `why` stays for the report and the PDF; a chase that
+   * opens with a paragraph is a chase that is scrolled past.
+   */
+  whyShort: string;
+  /** The one instruction: where to go and what to press. */
+  ask: string;
   /**
    * The duty broken into the steps somebody actually performs, in order,
    * naming the screen each one happens on.
@@ -115,6 +137,8 @@ export interface DutyDefinition {
   delegation: {
     /** What the senior is actually being asked to do about it. */
     appeal: string;
+    /** The same ask in one sentence, for the short message. */
+    short: string;
     /** Why the figure against their own name may not be the whole story. */
     attribution: string;
   } | null;
@@ -146,6 +170,12 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'case is either delayed on the table or done without the optimisation it needed.',
     graceMinutes: 0,
     where: 'Dashboard → Pre-op Reviews',
+    whyShort:
+      'Until the review is on the ORM, the rest of the team is preparing a case nobody '
+      + 'has confirmed is fit.',
+    ask:
+      'Dashboard → Pre-op Reviews: open the case, complete it and press Submit — the '
+      + 'day before surgery, under the login of whoever saw the patient.',
     roles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
     rosterCategory: 'ANAESTHETISTS',
     delegation: {
@@ -156,6 +186,10 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
         + 'patient enters the review on the ORM the same day, and that you ask your '
         + 'residents for it the way you would ask for the case notes. One question on the '
         + 'round — “is it on the ORM?” — is what closes this gap.',
+      short:
+        'Most of these are seen by your residents. Please ask them to enter the review '
+        + 'on the ORM the same day — whoever saw the patient enters it under their own '
+        + 'login.',
       attribution:
         'These are the cases the ORM holds against your name. Where a resident saw the '
         + 'patient and entered the review under their own login, it counts to them and not '
@@ -191,6 +225,10 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'what should already have been on the trolley.',
     graceMinutes: 30,
     where: 'Dashboard → Pharmacy',
+    whyShort: 'Theatre cannot tell a packed trolley from one nobody has started.',
+    ask:
+      'Dashboard → Pharmacy → Pack Drugs: pack the night before and tick each medicine '
+      + 'as packed.',
     roles: ['PHARMACIST', 'HEAD_OF_PHARMACY'],
     rosterCategory: 'PHARMACISTS',
     // The pharmacist who packs the trolley is the pharmacist who ticks it.
@@ -220,6 +258,9 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'that work for every case behind it.',
     graceMinutes: 30,
     where: 'Dashboard → Consumable Packs',
+    whyShort: 'A pack drawn after the list has started is a case that cannot begin.',
+    ask:
+      'Dashboard → Consumable Packs: pack the day before and mark each item packed.',
     roles: ['CONSUMABLE_PACK_PROVIDER', 'THEATRE_STORE_KEEPER'],
     rosterCategory: null,
     delegation: null,
@@ -247,6 +288,11 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     graceMinutes: 5,
     where: 'the red ACKNOWLEDGE banner on your dashboard, or Dashboard → '
       + 'Emergency Booking',
+    whyShort:
+      'Until somebody acknowledges, the surgeon is assuming cover that may not exist.',
+    ask:
+      'Press ACKNOWLEDGE on the red banner on your dashboard within 15 minutes — even '
+      + 'while you are still arranging cover.',
     roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'],
     rosterCategory: 'NURSES',
     delegation: null,
@@ -271,6 +317,12 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'timestamps, and a missing pair is a case that silently never happened.',
     graceMinutes: 0,
     where: 'the case → Timing (Dashboard → Theatre Operations)',
+    whyShort:
+      'A time not entered on the day cannot be recovered, and the case becomes '
+      + 'uncountable.',
+    ask:
+      'Dashboard → Theatre Operations → the case → Timing: enter the incision time and '
+      + 'the end of procedure the same day.',
     roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN'],
     rosterCategory: 'NURSES',
     delegation: null,

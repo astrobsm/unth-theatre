@@ -19,6 +19,7 @@
 // ============================================================
 
 import { DUTIES, type DutyKey, type DutyPerformance } from './types';
+import { shortDay, trimLabel, type MemberCaseload } from './caseload';
 import { formatRate, formatMargin } from './report';
 
 const pct = (r: number | null) => formatRate(r);
@@ -37,88 +38,61 @@ function standingLine(p: DutyPerformance, duty: DutyKey): string {
 /**
  * The WhatsApp chase for somebody falling short on a duty.
  *
- * Written to be read by a tired colleague on a phone: the ask is in the first
- * two lines, because the first two lines are all some people will read.
+ * SHORT, BECAUSE IT IS READ ON A PHONE BETWEEN CASES. The first version
+ * explained the duty at length, which is what a message does when it has
+ * nothing specific to say. Where the caller can supply the person's own cases
+ * it names them instead, and the explaining is unnecessary.
  */
 export function buildDutyChase(input: {
   personName: string;
   duty: DutyKey;
   performance: DutyPerformance;
   periodLabel: string;
+  /** Their own cases, where the caller worked them out. Named, not summarised. */
+  caseload?: MemberCaseload | null;
 }): string {
   const d = DUTIES[input.duty];
   const p = input.performance;
+  const c = input.caseload ?? null;
   const onTimeShare = p.total > 0 ? (p.done - p.late) / p.total : null;
 
   const lines = [
-    `UNTH Theatre — a request about ${d.label.toLowerCase()}`,
+    `UNTH Theatre — ${d.label.toLowerCase()}`,
     ``,
     `Dear ${input.personName},`,
     ``,
-    `We are writing to ask for your help in getting ${d.label.toLowerCase()} done on time — `
-      + `${d.deadline}. This is an appeal, not an accusation: we need your cooperation far `
-      + `more than we need a record of the shortfall.`,
+    `We are asking for your help getting ${d.label.toLowerCase()} done ${d.deadline}.`,
+    ``,
+    `Your record for ${input.periodLabel}: ${standingLine(p, input.duty)}.`,
+    `Done on time: ${pct(onTimeShare)}.`,
   ];
 
-  // Ahead of the figures, for the same reason as in the duty brief: a
-  // consultant who reads "0 of 2 reviewed" before reading this has already
-  // filed the message as somebody else's misunderstanding of how a firm
-  // works, and nothing after it gets read.
-  if (d.delegation) lines.push(``, d.delegation.appeal);
-
-  lines.push(
-    ``,
-    `Where you presently stand for ${input.periodLabel}:`,
-    `• ${standingLine(p, input.duty)}`,
-    `• Done on time: ${pct(onTimeShare)}`,
-  );
-
-  if (p.medianMarginMinutes !== null) {
-    lines.push(`• Typically ${formatMargin(p.medianMarginMinutes)}`);
+  // The cases themselves, where the caller knows them. A named patient on a
+  // named day is the difference between a figure somebody argues with and one
+  // they go and look up.
+  if (c && c.missing.length > 0) {
+    lines.push(``, `Nothing recorded for:`);
+    c.missing.forEach((m) => {
+      const day = m.dutyDay ? `${shortDay(m.dutyDay)} — ` : '';
+      lines.push(`• ${day}${trimLabel(m.label)}`);
+    });
+    const rest = c.outstanding - c.missing.length;
+    if (rest > 0) lines.push(`…and ${rest} more.`);
   }
 
-  if (d.delegation) lines.push(``, d.delegation.attribution);
+  if (d.delegation) lines.push(``, d.delegation.short);
 
   lines.push(
     ``,
-    d.delegation
-      ? p.outstanding > 0
-        ? `The ${p.outstanding} with nothing recorded are the ones we are asking you to raise `
-          + `with your team first. A review that was never entered is invisible to everybody `
-          + `else preparing the case, which is the worst possible way for it to be missing.`
-        : `The work is being done and entered — we are asking you to help bring it inside the `
-          + `deadline, so the rest of the team has it the evening before rather than on the `
-          + `morning of surgery.`
-      : p.outstanding > 0
-        ? `The ${p.outstanding} not done at all are the ones we are asking you to look at first. `
-          + `A task not done is invisible until the moment it is needed, which is the worst `
-          + `possible moment to discover it.`
-        : `You are doing the work — we are asking you to bring it inside the deadline.`,
+    `Please: ${d.ask}`,
     ``,
-    `Why it matters. ${d.why}`,
+    `Why: ${d.whyShort}`,
     ``,
-    // The steps go in EVERY chase, not only where we suspect a navigation
-    // problem. Far more of these figures are somebody who did the work and
-    // could not find where to record it than are somebody refusing to do it,
-    // and quoting a percentage at the first kind of person without telling
-    // them where the screen is guarantees the same figure next month.
-    `How it is done — ${d.where}:`,
-    ...d.steps.map((s, i) => `${i + 1}. ${s}`),
+    `This is an appeal, not an accusation. If you did the work and could not record it, `
+      + `say so and somebody will show you the screen. If something else is in the way — a `
+      + `list you are not told about, a form that will not save — tell the Theatre Manager `
+      + `or the Theatre Chairman.`,
     ``,
-    `If you cannot find the screen, or your login will not reach it, say so and somebody will `
-      + `walk you through it — that is a five-minute problem and we would far rather solve it `
-      + `than keep reporting it.`
-      + (d.delegation
-        ? ` That offer covers your residents too: send us their names and we will show the `
-          + `whole firm together, or come to your unit meeting and do it once for everybody.`
-        : ``),
-    ``,
-    `And if something else is genuinely preventing this — a list you are not told about, a `
-      + `system that will not accept the entry, cover you do not have — please tell the Theatre `
-      + `Manager or the Theatre Chairman. A difficulty raised is one we can solve; one we never `
-      + `hear about simply repeats.`,
-    ``,
-    `Thank you for your cooperation, and for the ones you do get done on time.`,
     `Theatre Management, UNTH Ituku-Ozalla`,
   );
 

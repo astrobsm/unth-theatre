@@ -82,6 +82,26 @@ function endOfDay(scheduledDate: Date): Date {
   );
 }
 
+/** The WAT calendar day an instant falls in. Nigeria is UTC+1 all year. */
+function watDay(d: Date): string {
+  return new Date(d.getTime() + 60 * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * The day the person had to act, which is what a roster row can be matched to.
+ *
+ * `eve` for the duties discharged the evening before a list: the pack and the
+ * review for Tuesday's theatre are Monday's work, and Monday is whose shift
+ * owns them. Matching the roster on the day of SURGERY instead would hand
+ * every case to the wrong shift, which is a worse error than quoting the
+ * department's figure, because it is specific and wrong.
+ */
+function dutyDayFor(serviceDate: Date, eve: boolean): string {
+  const t = new Date(serviceDate.getTime() + 60 * 60_000);
+  if (eve) t.setUTCDate(t.getUTCDate() - 1);
+  return t.toISOString().slice(0, 10);
+}
+
 const caseLabel = (
   patient: { name: string | null; folderNumber: string | null } | null | undefined,
   procedure: string | null,
@@ -148,6 +168,7 @@ async function collectPreopReview(from: string, to: string): Promise<DutyEvent[]
       label: caseLabel(r.surgery?.patient, r.surgery?.procedureName ?? null),
       dueAt: reviewDeadline(r.surgeryDate),
       doneAt: r.reviewedAt,
+      dutyDay: dutyDayFor(r.surgeryDate, true),
     });
   });
   return events;
@@ -208,6 +229,7 @@ async function collectPacking(
       label: `${r.name} — ${caseLabel(r.surgery.patient, r.surgery.procedureName)}`,
       dueAt: listStart(r.surgery.scheduledDate, r.surgery.scheduledTime),
       doneAt: r.packedAt,
+      dutyDay: dutyDayFor(r.surgery.scheduledDate, true),
     });
   });
 
@@ -276,6 +298,7 @@ async function collectPrescriptionPacking(from: string, to: string): Promise<Dut
       r.surgery?.scheduledTime ?? null,
     ),
     doneAt: r.packedAt,
+    dutyDay: dutyDayFor(r.surgery?.scheduledDate ?? r.scheduledSurgeryDate, true),
   }));
 }
 
@@ -323,6 +346,9 @@ async function collectEmergencyAck(from: string, to: string): Promise<DutyEvent[
       ? new Date(r.emergencyBooking.requestedAt.getTime() + 15 * 60_000)
       : null,
     doneAt: r.respondedAt,
+    // The day of the alert. Nobody is rostered for an emergency the night
+    // before it happens.
+    dutyDay: r.emergencyBooking ? watDay(r.emergencyBooking.requestedAt) : null,
   }));
 }
 
@@ -383,6 +409,7 @@ async function collectSurgeryTiming(from: string, to: string): Promise<DutyEvent
       // The end time is the moment the pair became complete; updatedAt is when
       // it was actually typed in, which is what punctuality is about.
       doneAt: complete ? (t?.updatedAt ?? t?.procedureEndTime ?? null) : null,
+      dutyDay: dutyDayFor(r.scheduledDate, false),
     };
   });
 }

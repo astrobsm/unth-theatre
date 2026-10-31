@@ -25,6 +25,7 @@
 // ============================================================
 
 import { DUTIES, type DutyKey, type DutyPerformance } from './types';
+import { listDays, shortDay, trimLabel, type MemberCaseload } from './caseload';
 
 /** One published roster row, as the brief needs it. */
 export interface DutyShiftRow {
@@ -52,6 +53,12 @@ export interface DutyTeamMember {
   source: 'roster' | 'role';
   /** Their own record for the window, where anything is recorded against them. */
   performance: DutyPerformance | null;
+  /**
+   * The cases that were actually theirs — the nights the roster had them on,
+   * plus anything the record names them on. This, not the department's figure,
+   * is what the message quotes.
+   */
+  caseload: MemberCaseload | null;
 }
 
 const SHIFT_ORDER = ['MORNING', 'CALL', 'NIGHT'];
@@ -174,135 +181,121 @@ export interface DutyBriefInput {
   /** Who it is addressed to. */
   personName: string;
   periodLabel: string;
-  /** What the department as a whole did, from the same report the board shows. */
-  departmentTotal: number;
-  departmentDone: number;
-  departmentOnTime: number;
-  /** Their shifts, where the roster knows them. */
-  daysOnDuty: number;
-  eves: number;
-  /** Their own record, where anything is recorded against them. */
+  /** What was actually theirs: their own cases, from the roster and the record. */
+  caseload?: MemberCaseload | null;
+  /** The published roster days that were theirs, for the opening line. */
+  rosterDays?: readonly string[];
+  daysOnDuty?: number;
+  eves?: number;
+  /**
+   * The department's figures. Quoted ONLY where nothing is this person's, to
+   * explain why they are being written to at all — a colleague who is shown
+   * the department's shortfall in place of their own has been told, correctly,
+   * that the board does not know what they were asked to do.
+   */
+  departmentTotal?: number;
+  departmentDone?: number;
+  departmentOnTime?: number;
+  /** Their ranked record, where the report has one. A fallback, not the source. */
   own?: DutyPerformance | null;
 }
-
-const pct = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : '—');
 
 /**
  * The appeal sent to somebody who performs a duty.
  *
- * ONE MESSAGE, FIVE DUTIES, and deliberately so: a hospital that writes to
- * pharmacy in one tone and to the nurses in another gets an argument about
- * tone instead of a packed trolley. It is an appeal, not an accusation, for
- * the same reason the late-booking chase is — the outcome wanted is the duty
- * done tomorrow, and a message that reads as an attack produces a defensive
- * colleague and nothing else.
+ * SHORT, AND ABOUT THEIR OWN CASES. Both of those were asked for, and they
+ * turn out to be the same instruction: the long version was long because it
+ * had nothing specific to say, so it explained the duty instead. Given the
+ * cases that were genuinely theirs — the nights the roster had them on, the
+ * patients nobody packed for — there is nothing left to pad with. It fits on
+ * one phone screen: what was yours, what is missing, where to press, why.
  *
- * IT ENDS WITH THE STEPS, INCLUDING WHERE THE SCREEN IS. The commonest cause
- * of a bad figure on this board is not refusal, it is somebody who did the
- * work and could not find where to record it. Telling them their percentage
- * without telling them that would be asking for the same month again.
+ * ONE MESSAGE, FIVE DUTIES still. A hospital that writes to pharmacy in one
+ * tone and to the nurses in another gets an argument about tone instead of a
+ * packed trolley.
  */
 export function buildDutyBrief(input: DutyBriefInput): string {
   const d = DUTIES[input.duty];
-  const p = input.own;
+  const c = input.caseload ?? null;
+  const rosterDays = input.rosterDays ?? [];
+  const nights = input.daysOnDuty ?? rosterDays.length;
+  // Packing is night work; a review the day before surgery is not. Calling a
+  // consultant's clinic day a "night on duty" is the kind of small wrongness
+  // that tells a reader the message was written by a machine about somebody
+  // else.
+  const shift = input.duty === 'PHARMACY_PACKING' || input.duty === 'CONSUMABLE_PACKING'
+    ? 'nights'
+    : 'days';
 
   const lines: string[] = [
     `UNTH Theatre — ${d.label.toLowerCase()}`,
     '',
     `Dear ${input.personName},`,
     '',
-    `We are writing to everybody who carries ${d.label.toLowerCase()} about how it `
-    + 'is going, and to ask for your help with it. This is an appeal, not an '
-    + 'accusation: we need your cooperation far more than we need a record of '
-    + 'the shortfall.',
   ];
 
-  // For a duty the senior owes and the juniors do, this paragraph goes BEFORE
-  // the figures. Read in the other order, the numbers land as an allegation
-  // about work the consultant was never going to do personally, and the
-  // explanation afterwards reads as a retraction.
-  if (d.delegation) lines.push('', d.delegation.appeal);
-
-  if (input.daysOnDuty > 0) {
+  // ── What was yours ────────────────────────────────────────────────────
+  if (nights > 0) {
     lines.push(
-      '',
-      `Your duty for ${input.periodLabel}: ${input.daysOnDuty} day`
-      + `${input.daysOnDuty === 1 ? '' : 's'} on the published roster`
-      + (input.eves > 0
-        ? `, of which ${input.eves} ${input.eves === 1 ? 'was' : 'were'} the day before `
-          + 'work was due.'
-        : '.'),
+      `On duty ${nights} ${nights === 1 ? shift.replace(/s$/, '') : shift} in `
+      + `${input.periodLabel}${rosterDays.length ? `: ${listDays(rosterDays)}` : ''}.`,
     );
+  }
+
+  if (c && c.total > 0) {
+    lines.push(
+      `${c.total} ${c.total === 1 ? 'case was' : 'cases were'} yours. `
+      + `${c.done} recorded as ${d.verb}`
+      + (c.late > 0 ? `, ${c.late} of them late` : '')
+      + '.',
+    );
+  } else if (c && nights > 0) {
+    // Nothing fell to them. Saying so is the point: it is the difference
+    // between a board that knows the roster and one that writes to everybody.
+    lines.push(
+      `No case on those ${shift} needed ${d.label.toLowerCase()}, so nothing is `
+      + 'outstanding for you. This is for your information only.',
+    );
+  } else {
+    lines.push(
+      `The published roster has you on no ${shift.replace(/s$/, '')} in this period, and no `
+      + 'case is recorded against you.'
+      + (input.departmentTotal
+        ? ` The department had ${input.departmentTotal} due and `
+          + `${input.departmentDone ?? 0} recorded.`
+        : ''),
+      '',
+      'If you were on duty and the roster does not show it, please tell us — these '
+      + 'messages are built from the published roster, so correcting it corrects them.',
+    );
+  }
+
+  // ── Which ones ────────────────────────────────────────────────────────
+  if (c && c.missing.length > 0) {
+    lines.push('', 'Nothing recorded for:');
+    c.missing.forEach((m) => {
+      const day = m.dutyDay ? `${shortDay(m.dutyDay)} — ` : '';
+      lines.push(`• ${day}${trimLabel(m.label)}`);
+    });
+    const rest = c.outstanding - c.missing.length;
+    if (rest > 0) lines.push(`…and ${rest} more.`);
+  }
+
+  // ── What to do ────────────────────────────────────────────────────────
+  if (!c || c.total > 0) {
+    if (d.delegation) lines.push('', d.delegation.short);
+    lines.push('', `Please: ${d.ask}`, '', `Why: ${d.whyShort}`);
   }
 
   lines.push(
     '',
-    `Where the department stands for ${input.periodLabel}:`,
-    `• ${input.departmentTotal} were due`,
-    `• ${input.departmentDone} were ${d.verb} and recorded `
-    + `(${pct(input.departmentDone, input.departmentTotal)})`,
-    `• ${input.departmentOnTime} of those were ${d.verb} ${d.deadline}`,
-  );
-
-  if (p && p.total > 0) {
-    const onTime = p.done - p.late;
-    lines.push(
-      '',
-      d.delegation ? 'Against your name:' : 'Your own record:',
-      `• ${p.done} of ${p.total} ${d.verb}`
-      + (p.outstanding > 0 ? `, ${p.outstanding} not recorded at all` : '')
-      + (p.late > 0 ? `, ${p.late} done late` : ''),
-      `• Done on time: ${onTime} of ${p.total} (${pct(onTime, p.total)})`,
-    );
-    if (d.delegation) lines.push('', d.delegation.attribution);
-  } else if (input.daysOnDuty > 0) {
-    lines.push(
-      '',
-      d.delegation
-        ? 'Nothing is recorded under your name or your residents’ for this '
-          + 'period. We are not assuming the patients were not seen — far more '
-          + 'often they were seen and the review was never entered. But the ORM '
-          + 'is what the rest of the team reads, and what it cannot see it '
-          + 'treats as not done.'
-        : 'Nothing at all is recorded in your name for this period. We are not '
-          + 'assuming the work was not done — far more often it was done and '
-          + 'never entered. But the ORM is what theatre reads, and what it '
-          + 'cannot see it treats as not done.',
-    );
-  }
-
-  if (input.departmentDone === 0 && input.departmentTotal > 0) {
-    lines.push(
-      '',
-      'Nothing at all was recorded across the whole department in this period. '
-      + 'That is almost certainly a recording problem rather than a working one '
-      + '— which matters more than it sounds, because the theatre plans the '
-      + 'day from these entries.',
-    );
-  }
-
-  lines.push('', `Why it matters. ${d.why}`);
-
-  lines.push('', `How it is done — ${d.where}:`);
-  d.steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-
-  lines.push(
+    c && c.total > 0 && c.outstanding > 0
+      ? 'If you did the work and could not record it, say so and somebody will show you '
+        + 'the screen — five minutes. If something else is in the way, tell the Theatre '
+        + 'Manager.'
+      : 'Anything in the way of this, tell the Theatre Manager — a difficulty raised is '
+        + 'one we can solve.',
     '',
-    'If you cannot find the screen, or your login will not reach it, say so and '
-    + 'somebody will walk you through it on the ward — that is a five-minute '
-    + 'problem and we would far rather solve it than keep reporting it.'
-    + (d.delegation
-      ? ' That offer covers your residents too: send us their names and we will '
-        + 'show the whole firm together, or come to your unit meeting and do it '
-        + 'once for everybody.'
-      : ''),
-    '',
-    'And if something else is genuinely in the way — work you are never told '
-    + 'about, a form that will not save, cover you do not have — please tell '
-    + 'the Theatre Manager or the Theatre Chairman. A difficulty raised is one we '
-    + 'can solve; one we never hear about simply repeats.',
-    '',
-    'Thank you for the work, and for taking the time to record it.',
     'Theatre Management, UNTH Ituku-Ozalla',
   );
 

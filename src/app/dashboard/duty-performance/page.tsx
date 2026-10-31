@@ -63,6 +63,17 @@ interface TeamMember {
   eves: number;
   source: 'roster' | 'role';
   performance: DutyPerformance | null;
+  caseload: {
+    total: number;
+    done: number;
+    onTime: number;
+    late: number;
+    outstanding: number;
+    named: number;
+    onRoster: number;
+    days: string[];
+    basis: 'named' | 'roster' | 'both' | 'none';
+  } | null;
 }
 
 const prettyRole = (role: string | null) =>
@@ -570,10 +581,11 @@ export default function DutyPerformancePage() {
             the list to use when the problem is that nothing is reaching the ORM at all.
           </p>
           <p className="mt-2 rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
-            The message is an appeal, not a reprimand. It gives the department&rsquo;s figures and
-            theirs, says why it matters, and then walks through how the job is done on the ORM —
-            step by step, naming the screen ({def.where}) — because far more often than not the
-            work was done and the person could not find where to record it.
+            The message is short, and it is about <strong>their own cases</strong> — the days the
+            published roster had them on duty, and the cases the ORM names them on. It lists the
+            ones with nothing recorded, says where the screen is ({def.where}), and offers to show
+            them. Nobody is sent the department&rsquo;s total in place of their own: that is what
+            staff were right to object to.
           </p>
 
           <ul className="mt-4 divide-y divide-gray-100">
@@ -594,11 +606,24 @@ export default function DutyPerformancePage() {
                     <p className="mt-0.5 text-xs text-gray-500">
                       {prettyRole(m.role) || 'Role not set'}
                       {m.days.length > 0 && ` · ${m.days.length} day${m.days.length === 1 ? '' : 's'} on duty`}
-                      {m.eves > 0 && ` (${m.eves} the day before work was due)`}
                       {p
                         ? ` · ${p.done - p.late} of ${p.total} on time (${formatRate(share)})`
                         : ' · nothing recorded in this period'}
                       {!m.phone && ' · no phone on file'}
+                    </p>
+                    {/* What the message will actually say. Shown here so whoever
+                        presses Send can see it is about this person's own work
+                        before it goes out, rather than discovering afterwards
+                        that it quoted the department at somebody. */}
+                    <p className="mt-0.5 text-xs font-medium text-gray-700">
+                      {!m.caseload || m.caseload.total === 0
+                        ? (m.days.length > 0
+                          ? 'No case fell to them in this period — nothing to chase'
+                          : 'Not on the published roster, no case recorded — the message will say so')
+                        : `${m.caseload.total} case${m.caseload.total === 1 ? '' : 's'} theirs`
+                          + ` · ${m.caseload.done} recorded`
+                          + (m.caseload.outstanding > 0 ? ` · ${m.caseload.outstanding} with nothing recorded` : '')
+                          + (m.caseload.basis === 'roster' ? ' (from the roster)' : '')}
                     </p>
                   </div>
                   <div>

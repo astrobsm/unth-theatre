@@ -8,7 +8,8 @@ import {
   sortTeam,
   type DutyTeamMember,
 } from '../../src/lib/dutyPerformance/dutyTeam';
-import { DUTIES, DUTY_KEYS, type DutyPerformance } from '../../src/lib/dutyPerformance/types';
+import { memberCaseload } from '../../src/lib/dutyPerformance/caseload';
+import { DUTIES, DUTY_KEYS, type DutyEvent, type DutyPerformance } from '../../src/lib/dutyPerformance/types';
 
 // This module decides WHO receives a message about a duty. The failure that
 // prompted it was real and visible to a department head: a chase about
@@ -151,103 +152,142 @@ describe('the order people are written to in', () => {
 });
 
 describe('the appeal somebody is sent', () => {
+  // A pharmacist on three nights, with the cases from those nights unpacked.
+  // This is the shape of the real complaint: the old message quoted 39 cases
+  // at somebody who was on duty for eleven of them.
+  const EV = (over: Partial<DutyEvent> = {}): DutyEvent => ({
+    id: 'e1',
+    personId: null,
+    personName: null,
+    unit: 'General Surgery',
+    label: 'Propofol — Mrs A (12345) — laparotomy',
+    dueAt: new Date('2026-10-08T07:00:00Z'),
+    doneAt: null,
+    dutyDay: '2026-10-07',
+    ...over,
+  });
+
+  const events = [
+    EV(),
+    EV({ id: 'e2', label: 'Atracurium — Mr B (23456) — hernia repair' }),
+    EV({ id: 'e3', dutyDay: '2026-10-14', label: 'Suxamethonium — Mrs C — caesarean' }),
+    EV({ id: 'e4', dutyDay: '2026-10-14', label: 'Ketamine — Mr D — debridement' }),
+    // Another night's work, somebody else's.
+    EV({ id: 'e5', dutyDay: '2026-10-28', personId: 'other' }),
+  ];
+
+  const rosterDays = ['2026-10-07', '2026-10-14'];
+  const caseload = memberCaseload({
+    duty: 'PHARMACY_PACKING', userId: 'pharm1', rosteredDays: rosterDays, events,
+  });
+
   const base = {
     duty: 'PHARMACY_PACKING' as const,
     personName: 'Pharm A',
     periodLabel: '1–31 October 2026',
+    caseload,
+    rosterDays,
+    daysOnDuty: rosterDays.length,
+    eves: 2,
     departmentTotal: 39,
     departmentDone: 0,
     departmentOnTime: 0,
-    daysOnDuty: 6,
-    eves: 4,
   };
 
-  it('names the person and the period, and asks rather than accuses', () => {
+  it('names the person, their nights and their own cases', () => {
     const msg = buildDutyBrief(base);
     expect(msg).toContain('Dear Pharm A');
-    expect(msg).toContain('1–31 October 2026');
-    expect(msg).toContain('appeal, not an accusation');
+    expect(msg).toContain('7 Oct');
+    expect(msg).toContain('14 Oct');
+    expect(msg).toContain('4 cases were yours');
   });
 
-  it('ends with the steps, naming the screen', () => {
+  // THE WHOLE POINT OF THE REWRITE. Staff objected that the figures were not
+  // theirs, and they were not: the department's total was being quoted to
+  // everybody who held the role.
+  it('does not quote the department’s total at somebody with cases of their own', () => {
     const msg = buildDutyBrief(base);
-    expect(msg).toContain(DUTIES.PHARMACY_PACKING.where);
-    DUTIES.PHARMACY_PACKING.steps.forEach((s) => expect(msg).toContain(s));
+    expect(msg).not.toContain('39');
   });
 
-  // The figure that prompted all of this: 39 due, 0 recorded. Reading that as
-  // "pharmacy did nothing" would be wrong and everybody receiving it knows it
-  // is wrong, which is how a board loses a department.
-  it('reads a department-wide zero as a recording problem, not a working one', () => {
+  it('lists the cases with nothing recorded, by day and by patient', () => {
     const msg = buildDutyBrief(base);
-    expect(msg).toContain('recording problem rather than a working one');
+    expect(msg).toContain('Nothing recorded for:');
+    expect(msg).toContain('Mrs A');
+    expect(msg).toContain('…and 1 more.');
   });
 
-  it('quotes the person’s own record when there is one', () => {
-    const msg = buildDutyBrief({ ...base, own: PERF({ total: 12, done: 9, late: 2 }) });
-    expect(msg).toContain('9 of 12');
-    expect(msg).toContain('Your own record');
+  it('never claims a case a colleague handled on another night', () => {
+    expect(buildDutyBrief(base)).not.toContain('5 cases');
   });
 
-  it('does not accuse somebody with no record of having done nothing', () => {
+  it('says where the screen is and what to press, in one line', () => {
     const msg = buildDutyBrief(base);
-    expect(msg).toContain('not assuming the work was not done');
+    expect(msg).toContain(DUTIES.PHARMACY_PACKING.ask);
+    expect(msg).toContain(DUTIES.PHARMACY_PACKING.whyShort);
   });
 
-  it('offers to walk them through the screen', () => {
+  it('offers to show them the screen rather than only reporting them', () => {
+    expect(buildDutyBrief(base)).toContain('could not record it');
+  });
+
+  // Short enough to read on a phone between cases. The old one ran past
+  // twenty lines and was, by its own account, mostly explanation.
+  it('fits on a phone screen', () => {
     const msg = buildDutyBrief(base);
-    expect(msg).toContain('If you cannot find the screen');
-  });
-
-  // The pre-op review is not done by the person who owes it: the residents see
-  // the patients and the consultant answers for the firm. A message that tells
-  // a consultant they personally reviewed none of their patients is both wrong
-  // and trivially dismissed, and a dismissed appeal buys nothing at all. What
-  // is being asked for is that whoever saw the patient enters it, so the rest
-  // of the theatre team can see that the case has been reviewed.
-  describe('a duty the seniors owe and the juniors do', () => {
-    const preop = { ...base, duty: 'PREOP_REVIEW' as const };
-
-    it('asks the senior to get their residents to record it', () => {
-      const msg = buildDutyBrief(preop);
-      expect(msg).toContain('residents working with you');
-      expect(msg).toContain('is it on the ORM?');
-    });
-
-    it('does not claim the consultant failed to see the patients', () => {
-      const msg = buildDutyBrief({ ...preop, own: PERF({ total: 2, done: 0, late: 0, outstanding: 2 }) });
-      expect(msg).toContain('Against your name');
-      expect(msg).toContain('counts to them and not to you');
-      // The accusation we are specifically avoiding.
-      expect(msg).not.toContain('not done at all');
-    });
-
-    it('says why the entry matters to people other than the anaesthetist', () => {
-      const msg = buildDutyBrief(preop);
-      expect(msg).toContain('scrub nurse');
-    });
-
-    it('offers to teach the whole firm, not only the person written to', () => {
-      expect(buildDutyBrief(preop)).toContain('covers your residents too');
-    });
-
-    // Every other duty is discharged and recorded by the same hands, and
-    // inviting a pharmacist to chase "their residents" would read as a form
-    // letter sent to the wrong department.
-    it('says none of that to a duty nobody delegates', () => {
-      const msg = buildDutyBrief({ ...base, own: PERF({ total: 2, done: 0, late: 0, outstanding: 2 }) });
-      expect(msg).not.toContain('residents');
-      expect(msg).toContain('Your own record');
-      expect(msg).toContain('2 not recorded at all');
-    });
+    expect(msg.split('\n').length).toBeLessThan(26);
+    expect(msg.length).toBeLessThan(1000);
   });
 
   it('works for every duty', () => {
     DUTY_KEYS.forEach((duty) => {
       const msg = buildDutyBrief({ ...base, duty });
       expect(msg).toContain(DUTIES[duty].label.toLowerCase());
-      expect(msg).toContain(DUTIES[duty].where);
+      expect(msg).toContain(DUTIES[duty].ask);
       expect(msg).toContain('Theatre Management, UNTH Ituku-Ozalla');
+    });
+  });
+
+  describe('when nothing was theirs', () => {
+    const none = memberCaseload({
+      duty: 'PHARMACY_PACKING', userId: 'nobody', rosteredDays: [], events,
+    });
+
+    // The honest answer to the complaint. If the roster does not have them,
+    // the message says the roster does not have them — which is a fact
+    // somebody can go and correct, unlike a shortfall they do not recognise.
+    it('says the roster shows them nowhere, and asks them to correct it', () => {
+      const msg = buildDutyBrief({
+        ...base, caseload: none, rosterDays: [], daysOnDuty: 0, eves: 0,
+      });
+      expect(msg).toContain('no night in this period');
+      expect(msg).toContain('the roster does not show it');
+      expect(msg).not.toContain('Nothing recorded for:');
+    });
+
+    it('does not chase somebody whose rostered nights carried no cases', () => {
+      const quiet = memberCaseload({
+        duty: 'PHARMACY_PACKING', userId: 'pharm2', rosteredDays: ['2026-10-21'], events,
+      });
+      const msg = buildDutyBrief({
+        ...base, caseload: quiet, rosterDays: ['2026-10-21'], daysOnDuty: 1, eves: 1,
+      });
+      expect(msg).toContain('nothing is outstanding for you');
+      expect(msg).not.toContain('Nothing recorded for:');
+    });
+  });
+
+  describe('a duty the seniors owe and the juniors do', () => {
+    const preop = { ...base, duty: 'PREOP_REVIEW' as const };
+
+    it('asks the senior to get their residents to record it', () => {
+      const msg = buildDutyBrief(preop);
+      expect(msg).toContain('ask them to enter the review on the ORM');
+      expect(msg).toContain('under their own login');
+    });
+
+    it('says none of that to a duty nobody delegates', () => {
+      expect(buildDutyBrief(base)).not.toContain('residents');
     });
   });
 });
