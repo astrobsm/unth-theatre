@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
               title: '🚨 EMERGENCY Prescription',
               message: `Emergency prescription for ${data.patientName} (${data.folderNumber}) requires IMMEDIATE dispensing. Review and pack medications now.`,
               type: 'EMERGENCY',
-              link: `/dashboard/pharmacy/emergency?bookingId=${data.emergencyBookingId}`,
+              link: `/dashboard/prescriptions?bookingId=${data.emergencyBookingId}`,
             })),
           });
         }

@@ -171,10 +171,10 @@ export default function WorksSupervisorDashboardPage() {
         <h3 className="text-lg font-semibold mb-4">Quick Access</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[
-            { label: 'Power Status', href: '/dashboard/power', icon: Zap },
+            { label: 'Power Status', href: '/dashboard/power-house/status', icon: Zap },
             { label: 'Fault Alerts', href: '/dashboard/fault-alerts', icon: AlertTriangle },
-            { label: 'Maintenance', href: '/dashboard/maintenance', icon: Wrench },
-            { label: 'Equipment', href: '/dashboard/equipment', icon: Settings },
+            { label: 'Maintenance', href: '/dashboard/power-house/maintenance', icon: Wrench },
+            { label: 'Equipment', href: '/dashboard/equipment-checkout', icon: Settings },
             { label: 'Theatre Readiness', href: '/dashboard/theatre-readiness', icon: CheckCircle },
             { label: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
           ].map((link) => (

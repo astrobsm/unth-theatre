@@ -231,7 +231,8 @@ export async function PATCH(
               type: 'EMERGENCY_LAB_RESULT',
               title: `${urgencyEmoji} Lab Result: ${data.resultValue ? resultStatus : 'Ready'}`,
               message: `Lab result for ${labReq?.patientName} (${labReq?.folderNumber}): ${data.testName || 'Test'} = ${data.resultValue} ${data.resultUnit || ''}. ${data.criticalResult ? 'CRITICAL VALUE - IMMEDIATE ACTION REQUIRED' : ''}`,
-              link: `/dashboard/emergency-lab-workup/${params.id}`,
+              // There is no per-request page; the board is where a result is read.
+              link: '/dashboard/emergency-lab-workup',
             },
           })
         );

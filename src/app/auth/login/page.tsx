@@ -255,7 +255,10 @@ export default function LoginPage() {
             router.push('/dashboard/pacu');
             break;
           case 'PHARMACIST':
-            router.push('/dashboard/pharmacy');
+            // /dashboard/pharmacy has never existed; the pharmacy screen is
+            // /dashboard/prescriptions (catalogued as the "Pharmacy" module).
+            // Every pharmacist's first screen after signing in was a 404.
+            router.push('/dashboard/prescriptions');
             break;
           case 'CHIEF_MEDICAL_DIRECTOR':
             router.push('/dashboard/cmd');

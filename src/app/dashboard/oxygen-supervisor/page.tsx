@@ -159,7 +159,7 @@ export default function OxygenSupervisorDashboardPage() {
         <h3 className="text-lg font-semibold mb-4">Quick Access</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[
-            { label: 'Oxygen Control', href: '/dashboard/oxygen', icon: Wind },
+            { label: 'Oxygen Control', href: '/dashboard/oxygen-control', icon: Wind },
             { label: 'Theatre Readiness', href: '/dashboard/theatre-readiness', icon: CheckCircle },
             { label: 'Alerts', href: '/dashboard/alerts', icon: AlertTriangle },
             { label: 'Reports', href: '/dashboard/reports', icon: BarChart3 },

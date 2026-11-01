@@ -424,7 +424,9 @@ export function getRoleDashboard(role: UserRole): string {
     THEATRE_CAFETERIA_MANAGER: '/dashboard/theatre-meals',
     LAUNDRY_STAFF: '/dashboard/laundry',
     SCRUB_CARE_PROVIDER: '/dashboard/scrub-management',
-    PLUMBER: '/dashboard/water-supply',
+    // The page is /dashboard/plumbing-water-supply; a plumber signing in
+    // landed on a 404.
+    PLUMBER: '/dashboard/plumbing-water-supply',
     LABORATORY_STAFF: '/dashboard/emergency-lab-workup',
     CONSUMABLE_PACK_PROVIDER: '/dashboard/consumable-pack-provider',
   };

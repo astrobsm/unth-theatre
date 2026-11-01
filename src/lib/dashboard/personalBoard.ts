@@ -72,10 +72,23 @@ export interface RoleDuty {
  * the way, and an anaesthetic given without its drugs charted leaves the next
  * anaesthetist guessing.
  */
+/**
+ * Every actionUrl below must be a page that exists, and every role must be a
+ * real UserRole. Both were wrong here, and both failed silently.
+ *
+ * The anaesthetists' two compulsory cards, the ones they are shown every
+ * single morning, both pointed into a /dashboard/anaesthesia tree that has
+ * never existed, so both led to a 404. And NURSE_ANAESTHETIST, PACU_NURSE,
+ * THEATRE_NURSE, NURSE and REGISTRAR are not roles in this system — which meant the recovery-escort duty, whose entire audience was
+ * spelled with those names, was shown to nobody at all.
+ *
+ * scripts/lib-tests/dashboardLinks.test.ts now checks both directions against
+ * the filesystem and the enum, so neither can drift again.
+ */
 export const ROLE_DUTIES: RoleDuty[] = [
   {
     id: 'scrub-reception',
-    roles: ['SCRUB_NURSE', 'THEATRE_NURSE', 'NURSE'],
+    roles: ['SCRUB_NURSE'],
     title: 'Receive patients through Theatre Reception',
     detail: 'Every patient must be received in the Theatre Reception module, and the '
       + 'transporting porter recorded. A patient with no recorded porter cannot be traced.',
@@ -85,7 +98,7 @@ export const ROLE_DUTIES: RoleDuty[] = [
   },
   {
     id: 'recovery-escort',
-    roles: ['RECOVERY_NURSE', 'NURSE_ANAESTHETIST', 'PACU_NURSE'],
+    roles: ['RECOVERY_ROOM_NURSE'],
     title: 'Record the ward escort log',
     detail: 'Every patient leaving recovery needs the escort log completed and the '
       + 'transporting porter recorded before they go.',
@@ -99,23 +112,24 @@ export const ROLE_DUTIES: RoleDuty[] = [
     title: 'Review your patients on the app',
     detail: 'Pre-operative review, prescriptions including consumables, and anaesthesia '
       + 'monitoring all belong on the app. A chart on paper is not in the record.',
-    actionUrl: '/dashboard/anaesthesia',
-    actionLabel: 'Open Anaesthesia',
+    actionUrl: '/dashboard/anaesthetist-board',
+    actionLabel: 'Open Review Board',
     compulsory: true,
   },
   {
     id: 'anaesthetist-charting',
-    roles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'NURSE_ANAESTHETIST'],
+    roles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'],
     title: 'Start monitoring and chart medications',
     detail: 'Initialise anaesthesia monitoring at induction and chart every drug as it is '
-      + 'given. Charting afterwards from memory is how doses get lost.',
-    actionUrl: '/dashboard/anaesthesia/monitoring',
-    actionLabel: 'Open Monitoring',
+      + 'given, on the case’s Anaesthesia tab. Charting afterwards from memory is how '
+      + 'doses get lost.',
+    actionUrl: '/dashboard/surgeries',
+    actionLabel: 'Open Today’s Cases',
     compulsory: true,
   },
   {
     id: 'surgeon-notes',
-    roles: ['SURGEON', 'CONSULTANT_SURGEON', 'REGISTRAR'],
+    roles: ['SURGEON', 'CONSULTANT_SURGEON'],
     title: 'Write your operative notes on the app',
     detail: 'Operative notes recorded on the app are available to the ward, to recovery '
       + 'and to whoever sees the patient next.',

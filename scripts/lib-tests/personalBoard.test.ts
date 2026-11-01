@@ -81,7 +81,10 @@ describe('standing duties by role', () => {
   });
 
   it('reminds recovery about the ward escort log and the porter', () => {
-    const duty = dutiesForRole('RECOVERY_NURSE').find((d) => d.id === 'recovery-escort');
+    // RECOVERY_ROOM_NURSE is the role in the enum. The duty was written for
+    // 'RECOVERY_NURSE', so it reached nobody, and this test agreed with it.
+    const duty = dutiesForRole('RECOVERY_ROOM_NURSE').find((d) => d.id === 'recovery-escort');
+    expect(duty).toBeTruthy();
     expect(duty?.detail).toMatch(/escort log/i);
     expect(duty?.detail).toMatch(/porter/i);
   });
