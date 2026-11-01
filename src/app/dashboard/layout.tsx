@@ -31,6 +31,11 @@ const PerfBeacon = dynamic(() => import('@/components/PerfBeacon'), { ssr: false
 // again. Client-only: it renders nothing for everybody else.
 const SurgeonGradePrompt = dynamic(() => import('@/components/SurgeonGradePrompt'), { ssr: false });
 
+// Asks everybody, once, which of their own days they would like marked. Same
+// shape as the grade prompt above and for the same reason: there is no record
+// of this anywhere, so the only source is the person.
+const CelebrationPrompt = dynamic(() => import('@/components/CelebrationPrompt'), { ssr: false });
+
 // Availability for today's cases, for whoever is on a team today.
 const TeamCheckInCard = dynamic(() => import('@/components/TeamCheckInCard'), { ssr: false });
 import {
@@ -38,6 +43,9 @@ import {
   Package,
   Calendar,
   CalendarDays,
+  Cake,
+  PartyPopper,
+  FileClock,
   ClipboardList,
   FileText,
   Users,
@@ -376,6 +384,7 @@ export default function DashboardLayout({
     { href: '/training/', icon: GraduationCap, label: 'Staff Training', badge: 'NEW', external: true },
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
     { href: '/role-guide', icon: GraduationCap, label: 'Role Guide', badge: 'GUIDE', external: true },
+    { href: '/dashboard/my-celebrations', icon: Cake, label: 'My Special Days', badge: 'NEW' },
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
@@ -390,6 +399,11 @@ export default function DashboardLayout({
     // recognition board nobody opens.
     menuItems.push({ href: '/dashboard/booking-performance', icon: Award, label: 'Booking Performance', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/duty-performance', icon: ClipboardCheck, label: 'Duty Performance', badge: 'NEW' });
+    menuItems.push({ href: '/dashboard/celebrations', icon: PartyPopper, label: 'Celebrations', badge: 'NEW' });
+    // Beside Late Bookings on purpose: the same question asked of a case
+    // rather than of a booking time, and the two are read together.
+    menuItems.push({ href: '/dashboard/case-chase', icon: ClipboardCheck, label: 'Cases Awaiting Paperwork', badge: 'NEW' });
+    menuItems.push({ href: '/dashboard/roster-chase', icon: FileClock, label: 'Roster Submissions', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit/pool', icon: Gavel, label: 'Weekly Audit Pool', badge: 'NEW' });
@@ -606,6 +620,9 @@ export default function DashboardLayout({
       '/dashboard/late-bookings',
       '/dashboard/booking-performance',
       '/dashboard/duty-performance',
+      '/dashboard/celebrations',
+      '/dashboard/case-chase',
+      '/dashboard/roster-chase',
       '/hod-letter',
       '/dashboard/live-monitoring',
       '/dashboard/theatre-audit',
@@ -959,6 +976,7 @@ export default function DashboardLayout({
           prompt mounted on /dashboard would never be seen by the people it is
           for. It asks once and then returns null forever. */}
       <SurgeonGradePrompt />
+      <CelebrationPrompt />
     </div>
   );
 }
