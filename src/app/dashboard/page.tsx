@@ -32,6 +32,7 @@ import TeamAvailabilityCard from '@/components/theatre/TeamAvailabilityCard';
 // role, and nothing on a day with nothing to mark — so it costs the rest of
 // the hospital no space, and on the morning it appears somebody notices.
 import TodaysCelebrationsCard from '@/components/TodaysCelebrationsCard';
+import MyAnaesthesiaCasesCard from '@/components/anaesthesia/MyCasesCard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -190,6 +191,12 @@ export default function DashboardPage() {
           deadline and a compulsory duty are worth more of the fold than a
           navigation card. */}
       <DeadlineAttentions />
+
+      {/* Directly under the deadlines, because it carries one: a prescription
+          approved after 6 PM the day before surgery is flagged late, and
+          pharmacy cannot pack until it is approved at all. Renders nothing
+          for anybody who is not an anaesthetist with cases of their own. */}
+      <MyAnaesthesiaCasesCard />
 
       {/* Above the personal board on purpose. On the morning of a list the
           first question anybody has is whether the rest of the team is

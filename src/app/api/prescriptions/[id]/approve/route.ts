@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { triggerRadio } from '@/lib/radioEvents';
+import { approveAnaestheticPrescription } from '@/lib/anaesthesia/approvePrescription';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +18,7 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -35,127 +34,24 @@ export async function POST(
     const body = await request.json();
     const validatedData = approvePrescriptionSchema.parse(body);
 
-    // Check if prescription exists
-    const existingPrescription = await prisma.anestheticPrescription.findUnique({
-      where: { id: params.id },
-      include: {
-        prescribedBy: true,
-      },
+    // The work itself lives in lib/anaesthesia/approvePrescription, so that the
+    // consultant's dashboard card approves by the same path as this screen:
+    // same late-arrival rule, same audit row, same radio call to pharmacy.
+    const result = await approveAnaestheticPrescription({
+      prescriptionId: params.id,
+      approved: validatedData.approved,
+      approvalNotes: validatedData.approvalNotes,
+      rejectionReason: validatedData.rejectionReason,
+      actor: { id: session.user.id, name: session.user.name },
     });
 
-    if (!existingPrescription) {
-      return NextResponse.json(
-        { error: 'Prescription not found' },
-        { status: 404 }
-      );
+    if (!result.ok) {
+      return result.reason === 'NOT_FOUND'
+        ? NextResponse.json({ error: 'Prescription not found' }, { status: 404 })
+        : NextResponse.json({ error: 'Prescription is already approved' }, { status: 400 });
     }
 
-    if (existingPrescription.status === 'APPROVED') {
-      return NextResponse.json(
-        { error: 'Prescription is already approved' },
-        { status: 400 }
-      );
-    }
-
-    // Check late arrival: if approved after 6 PM the day before surgery
-    let isLateArrival = false;
-    if (validatedData.approved && existingPrescription.scheduledSurgeryDate) {
-      const surgeryDate = new Date(existingPrescription.scheduledSurgeryDate);
-      const deadline = new Date(surgeryDate);
-      deadline.setDate(deadline.getDate() - 1);
-      deadline.setHours(18, 0, 0, 0); // 6 PM day before
-      
-      if (new Date() > deadline) {
-        isLateArrival = true;
-      }
-    }
-
-    // Update prescription with approval
-    const updatedPrescription = await prisma.anestheticPrescription.update({
-      where: { id: params.id },
-      data: {
-        status: validatedData.approved ? 'APPROVED' : 'REJECTED',
-        approvedById: validatedData.approved ? session.user.id : null,
-        approvedByName: validatedData.approved ? session.user.name : null,
-        approvedAt: validatedData.approved ? new Date() : null,
-        rejectionReason: validatedData.approved ? null : validatedData.rejectionReason,
-        isLateArrival: isLateArrival,
-        lateArrivalFlaggedAt: isLateArrival ? new Date() : null,
-        approvalDeadline: existingPrescription.scheduledSurgeryDate ? (() => {
-          const d = new Date(existingPrescription.scheduledSurgeryDate);
-          d.setDate(d.getDate() - 1);
-          d.setHours(18, 0, 0, 0);
-          return d;
-        })() : null,
-      },
-      include: {
-        surgery: true,
-        patient: true,
-        prescribedBy: {
-          select: {
-            id: true,
-            fullName: true,
-            role: true,
-          },
-        },
-        approvedBy: {
-          select: {
-            id: true,
-            fullName: true,
-            role: true,
-          },
-        },
-      },
-    });
-
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: validatedData.approved ? 'APPROVE' : 'REJECT',
-        tableName: 'AnestheticPrescription',
-        recordId: updatedPrescription.id,
-        changes: JSON.stringify({
-          approved: validatedData.approved,
-          notes: validatedData.approvalNotes || validatedData.rejectionReason,
-        }),
-      },
-    });
-
-    // Theatre Radio: announce prescription review outcome
-    {
-      const patientName =
-        (updatedPrescription as any).patient?.fullName ||
-        (updatedPrescription as any).patientName ||
-        'patient';
-      const theatreName =
-        (updatedPrescription as any).surgery?.theatreName ||
-        (updatedPrescription as any).surgery?.theatre ||
-        null;
-      if (validatedData.approved) {
-        await triggerRadio({
-          category: 'CONFIRMATION',
-          title: 'Anaesthetic prescription approved',
-          message: `Anaesthetic prescription for ${patientName} has been reviewed and approved by ${session.user.name ?? 'the consultant anaesthetist'}.${isLateArrival ? ' Note: late arrival flagged.' : ''} Pharmacy please proceed to pack the drugs.`,
-          location: theatreName,
-          priority: 60,
-          triggeredById: session.user.id,
-          metadata: { prescriptionId: updatedPrescription.id, isLateArrival },
-        });
-      } else {
-        await triggerRadio({
-          category: 'WORKFLOW',
-          title: 'Anaesthetic prescription rejected',
-          message: `Anaesthetic prescription for ${patientName} was rejected by ${session.user.name ?? 'the consultant anaesthetist'}. Reason: ${validatedData.rejectionReason ?? 'see prescription notes'}.`,
-          location: theatreName,
-          priority: 65,
-          triggeredById: session.user.id,
-          metadata: { prescriptionId: updatedPrescription.id },
-        });
-      }
-    }
-
-    return NextResponse.json(updatedPrescription);
+    return NextResponse.json(result.prescription);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
