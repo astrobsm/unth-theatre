@@ -28,6 +28,10 @@ import PerioperativeTracker from '@/components/PerioperativeTracker';
 // Who is coming to today's cases. Renders nothing on a day with no list, so
 // it costs anybody not operating today no space at all.
 import TeamAvailabilityCard from '@/components/theatre/TeamAvailabilityCard';
+// What there is to celebrate today. Renders nothing for anybody without the
+// role, and nothing on a day with nothing to mark — so it costs the rest of
+// the hospital no space, and on the morning it appears somebody notices.
+import TodaysCelebrationsCard from '@/components/TodaysCelebrationsCard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -191,6 +195,10 @@ export default function DashboardPage() {
           first question anybody has is whether the rest of the team is
           coming, and until now that was answered by telephone. */}
       <TeamAvailabilityCard />
+
+      {/* Beneath the operational cards, above the navigation. A birthday is
+          not more urgent than a list, and it is more important than a link. */}
+      <TodaysCelebrationsCard />
 
       <PersonalBoard />
 

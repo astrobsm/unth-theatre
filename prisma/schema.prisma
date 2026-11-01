@@ -468,6 +468,11 @@ model User {
   // schedule could not tell who was supervising whom. Null means "not asked
   // yet" and is what makes the sign-in prompt appear exactly once.
   surgeonGradeConfirmedAt DateTime?
+  /// When this person last told us which days they want celebrated — or told
+  /// us they would rather not be. Null means never asked, which is what makes
+  /// the sign-in prompt appear exactly once. Set even when they decline, so
+  /// that declining is respected rather than re-asked every morning.
+  celebrationPrefsSetAt  DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
   approvedBy              String?
@@ -522,6 +527,7 @@ model User {
   surgeonEmergencyAlerts     EmergencySurgeryAlert[] @relation("SurgeonEmergencyAlerts")
   anesthetistEmergencyAlerts EmergencySurgeryAlert[] @relation("AnesthetistEmergencyAlerts")
   notifications              Notification[]
+  celebrations               StaffCelebration[]
 
   // Emergency Booking Relations
   emergencyBookingsAsSurgeon     EmergencySurgeryBooking[] @relation("EmergencyBookingSurgeon")
@@ -5133,6 +5139,63 @@ model Notification {
 }
 
 // TV Alert Display Log (for tracking what alerts were shown)
+// ========================
+// Celebrations
+// ========================
+
+/// A day one member of staff asked to be celebrated on.
+///
+/// Self-service, and that is the only way it could work: nobody in theatre
+/// management knows when the porters' birthdays are, and an HR extract would
+/// not cover the two thirds of these days that are not birthdays at all.
+model StaffCelebration {
+  id     String @id @default(uuid())
+  userId String
+
+  /// BIRTHDAY | WEDDING_ANNIVERSARY | WORK_ANNIVERSARY | OTHER
+  kind String
+
+  /// What the person calls it, for OTHER. Null for the three known kinds,
+  /// which name themselves.
+  label String?
+
+  /// The day in the year. Stored as month and day rather than as a date
+  /// because that is what the thing IS — it recurs, and a DATE column would
+  /// force a meaningless year to be invented and then compared against.
+  month Int
+  day   Int
+
+  /// The year it began, where the person chose to give it: what makes "ten
+  /// years today" possible. Never requested for a birthday — a birth year
+  /// is an age, an age is not the hospital's business, and a greeting does
+  /// not need one.
+  sinceYear Int?
+
+  /// Switched off rather than deleted, so a colleague who turns a day off
+  /// does not have it offered back to them by an import or a stale screen.
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns
+  /// as drift. Application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  /// One of each kind per day per person. Stops the same birthday being
+  /// entered twice by somebody who pressed save twice, which would send two
+  /// identical greetings.
+  @@unique([userId, kind, month, day])
+  @@index([month, day])
+  @@index([userId])
+  @@map("staff_celebrations")
+}
+
 model TvAlertDisplayLog {
   id String @id @default(uuid())
 
