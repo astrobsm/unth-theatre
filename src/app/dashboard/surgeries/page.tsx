@@ -1194,7 +1194,8 @@ export default function SurgeriesPage() {
                           ]}
                         />
                         <TeamGroup
-                          label="Technician"
+                          // No heading: the row below says "Anaes. tech".
+                          label={null}
                           note={
                             u.team.technicianSource === 'day-call'
                               ? 'on day call — nobody rostered to this specialty'
@@ -2013,17 +2014,32 @@ function TeamGroup({
   members,
   note,
 }: {
-  label: string;
+  /**
+   * The heading above the rows. Null when the rows name themselves.
+   *
+   * A group of one whose single row is already labelled "Anaes. tech" does
+   * not need "TECHNICIAN" written above it; that is the same word twice on a
+   * card people read at a glance before a list. The note still appears,
+   * because "from the roster, not allocated to a theatre" is the part of this
+   * group that changes what somebody does.
+   */
+  label?: string | null;
   members: Array<[string, { name: string; phone: string | null } | null]>;
   note?: string | null;
 }) {
   const anyFilled = members.some(([, m]) => m);
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-        {label}
-        {note && <span className="ml-1 normal-case font-normal text-amber-700">· {note}</span>}
-      </p>
+      {(label || note) && (
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+          {label}
+          {note && (
+            <span className="ml-1 normal-case font-normal text-amber-700">
+              {label ? '· ' : ''}{note}
+            </span>
+          )}
+        </p>
+      )}
       {!anyFilled ? (
         <p className="text-xs text-gray-400 italic">Not yet assigned</p>
       ) : (
