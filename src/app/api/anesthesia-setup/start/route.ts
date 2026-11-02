@@ -13,12 +13,20 @@ const startSetupSchema = z.object({
   assignedTheatreId: z.string().optional(),
   assignedTheatreName: z.string().optional(),
   theatreChangeReason: z.string().optional(),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  locationName: z.string().min(1, 'Location name is required'),
-  locationAddress: z.string().optional(),
-  locationAccuracy: z.number().optional(),
-  distanceFromFacility: z.number().optional(),
+  // A position is evidence, not a precondition. These were required, and a
+  // handset that reported no fix therefore could not log a setup at all --
+  // the theatre was ready and the board said nobody had been near it. What
+  // the server owes the record is honesty about which of the two happened,
+  // which is what locationUnavailableReason carries.
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  locationName: z.string().min(1).nullable().optional(),
+  locationAddress: z.string().nullable().optional(),
+  locationAccuracy: z.number().nullable().optional(),
+  distanceFromFacility: z.number().nullable().optional(),
+  /// Only read when no position arrived. Trimmed hard: it is a browser string
+  /// being stored verbatim, and it is shown back to coordinators.
+  locationUnavailableReason: z.string().max(200).nullable().optional(),
   setupDate: z.string(), // ISO date string
 });
 
@@ -108,11 +116,17 @@ export async function POST(request: NextRequest) {
         theatreChanged,
         theatreChangeReason: theatreChanged ? changeReason : null,
         setupDate: new Date(validatedData.setupDate),
-        latitude: validatedData.latitude,
-        longitude: validatedData.longitude,
-        locationName: validatedData.locationName,
-        locationAddress: validatedData.locationAddress,
-        locationAccuracy: validatedData.locationAccuracy,
+        latitude: validatedData.latitude ?? null,
+        longitude: validatedData.longitude ?? null,
+        locationName: validatedData.locationName ?? null,
+        locationAddress: validatedData.locationAddress ?? null,
+        locationAccuracy: validatedData.locationAccuracy ?? null,
+        // Recorded only when there is no position to record. Writing both
+        // would invite a reader to believe the reason applies to the fix.
+        locationUnavailableReason:
+          validatedData.latitude == null || validatedData.longitude == null
+            ? (validatedData.locationUnavailableReason || 'The handset gave no position').slice(0, 200)
+            : null,
         // Computed HERE, not taken from the browser.
         //
         // The client used to send this and it was stored verbatim. When the
@@ -158,7 +172,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        message: 'Anesthesia setup started successfully',
+        // Say which of the two happened, here, rather than letting the
+        // technician discover weeks later that the record carries no
+        // position. Nothing is being withheld from them about their own row.
+        message:
+          setupLog.latitude == null
+            ? 'Setup started. Your phone gave no location, so the record says "position not confirmed".'
+            : 'Anesthesia setup started successfully',
         setupLog,
       },
       { status: 201 }

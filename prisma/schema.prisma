@@ -3837,13 +3837,32 @@ model AnesthesiaSetupLog {
   status  SetupStatus @default(IN_PROGRESS)
   isReady Boolean     @default(false)
 
-  // Geolocation (Mandatory)
-  latitude             Float
-  longitude            Float
-  locationName         String // Reverse geocoded place name
+  // Geolocation - RECORDED, NOT REQUIRED.
+  //
+  // These were NOT NULL and the setup could not be logged without them. A
+  // technician standing in a windowless theatre whose handset reported no fix,
+  // or who had declined the location prompt once months ago, could not record
+  // that the theatre was ready - so the theatre was ready and the board said
+  // nobody had touched it. The position is evidence about a claim; refusing
+  // the claim for want of evidence loses both.
+  //
+  // This is the rule src/lib/theatreOps/geofence.ts already states for
+  // check-ins: "A verdict of 'position not confirmed' is information;
+  // refusing her check-in would be an obstruction, and she would work around
+  // it by not checking in at all." The readiness board renders NO_FIX
+  // correctly already; only this table and its form disagreed.
+  latitude             Float?
+  longitude            Float?
+  locationName         String? // Reverse geocoded place name
   locationAddress      String? // Full address
   locationAccuracy     Float? // GPS accuracy in meters
   distanceFromFacility Float? // Distance from UNTH in km
+
+  /// Why the handset supplied no position, in the browser's own words.
+  /// Null when a position WAS captured. Stored so "no location" reads as
+  /// "this phone refused the prompt" rather than as a technician cutting a
+  /// corner - the difference matters when someone is appraised on it.
+  locationUnavailableReason String?
 
   // Readiness Checklist
   gasSupplyChecked         Boolean @default(false)

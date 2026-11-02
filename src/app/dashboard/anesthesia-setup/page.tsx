@@ -8,6 +8,18 @@ import { assessFix } from '@/lib/theatreOps/geofence';
 import TheatreSetupDeclaration from '@/components/TheatreSetupDeclaration';
 import { outstandingChecks } from '@/lib/theatreOps/setupCertification';
 
+/**
+ * The longest the technician waits for a position before the setup is logged
+ * without one.
+ *
+ * Longer than the browser's own 15 s timeout would be pointless; shorter than
+ * the 12 s refinement window would throw away a fix that was about to arrive.
+ * This is a backstop for the case the Geolocation API has no answer for: a
+ * watch that neither resolves nor errors, which leaves the button spinning
+ * forever and looks exactly like a broken app.
+ */
+const LOCATION_WAIT_MS = 18000;
+
 interface Theatre {
   id: string;
   name: string;
@@ -130,7 +142,15 @@ export default function AnesthesiaSetupPage() {
   const requestLocation = (): Promise<{ latitude: number; longitude: number; locationName: string; locationAddress: string; accuracy: number; distanceFromFacility: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by your browser'));
+        reject(new Error('This browser has no location service'));
+        return;
+      }
+      // Over plain HTTP, Chrome reports PERMISSION_DENIED with no prompt and
+      // no way for the user to grant it. Staff on the theatre server reached
+      // by IP therefore see "permission denied" forever and conclude they
+      // have broken something. Name the real cause.
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        reject(new Error('Location is blocked because this page is not on a secure (https) address'));
         return;
       }
 
@@ -142,7 +162,7 @@ export default function AnesthesiaSetupPage() {
       const finalize = async (watchId: number) => {
         navigator.geolocation.clearWatch(watchId);
         if (!bestPosition) {
-          reject(new Error('Could not obtain GPS location. Please enable location services and try again.'));
+          reject(new Error('No GPS fix (the theatre may be shielded)'));
           return;
         }
 
@@ -203,11 +223,14 @@ export default function AnesthesiaSetupPage() {
         (error) => {
           if (!bestPosition) {
             navigator.geolocation.clearWatch(watchId);
+            // Facts, not instructions. These strings are STORED on the row
+            // and shown to coordinators, so each one has to read sensibly
+            // beside a technician's name on a board weeks later.
             const msg = error.code === 1
-              ? 'Location permission denied. Location is required to log setup.'
+              ? 'Location permission denied on this phone'
               : error.code === 2
-                ? 'Location unavailable. Please check your GPS/location settings.'
-                : 'Location request timed out. Please try again.';
+                ? 'Location unavailable on this phone'
+                : 'Location request timed out';
             reject(new Error(msg));
           }
         },
@@ -244,22 +267,52 @@ export default function AnesthesiaSetupPage() {
     setLoading(true);
     setMessage('Requesting location...');
 
+    // A position is attached when the handset can give one, and the setup is
+    // logged either way.
+    //
+    // This used to throw and abort. Reported from a phone: an anaesthetic
+    // technician who had declined the location prompt saw "Location
+    // permission denied. Location is required to log setup." above a dead
+    // button, and had no way to record a theatre he had just set up. The
+    // theatre was ready, the board said untouched, and the chase board then
+    // counted that against him. Three wrong answers out of one missing fix.
+    //
+    // geofence.ts has said all along that this check is not a gate.
+    let location: Awaited<ReturnType<typeof requestLocation>> | null = null;
+    let noLocationReason: string | null = null;
     try {
-      const location = await requestLocation();
+      // Bounded here as well as in the browser. watchPosition can sit on a
+      // handset that neither fixes nor errors, and a button that never comes
+      // back is indistinguishable from a broken app.
+      location = await Promise.race([
+        requestLocation(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCATION_WAIT_MS)),
+      ]);
+      if (!location) noLocationReason = 'Location took too long on this phone';
+    } catch (locationError: any) {
+      noLocationReason = locationError?.message || 'The handset gave no position';
+    }
+
+    try {
       // Same verdict the boards use, so the technician is told what everyone
       // else will be shown. "0.02km from UNTH" is technically true and reads
       // like a fault; "In the hospital" is what it means.
-      const siteFix = assessFix({
+      // assessFix already answers NO_FIX for a missing position, with the
+      // label the readiness board prints. One verdict and one wording,
+      // whether the fix arrived or not.
+      const siteFix = assessFix(location && {
         latitude: location.latitude,
         longitude: location.longitude,
         accuracyM: location.accuracy,
       });
       setMessage(
-        siteFix.verdict === 'ON_SITE'
-          ? `📍 In the hospital — ${location.locationName} (±${location.accuracy}m)`
-          : siteFix.verdict === 'IMPRECISE'
-            ? `📍 ${location.locationName} — your phone could not place you precisely (±${location.accuracy}m). Setup will still be logged.`
-            : `📍 ${location.locationName} (±${location.accuracy}m, ${location.distanceFromFacility}km from UNTH)`,
+        !location
+          ? `📍 ${noLocationReason}. Logging the setup anyway — the board will show "position not confirmed".`
+          : siteFix.verdict === 'ON_SITE'
+            ? `📍 In the hospital — ${location.locationName} (±${location.accuracy}m)`
+            : siteFix.verdict === 'IMPRECISE'
+              ? `📍 ${location.locationName} — your phone could not place you precisely (±${location.accuracy}m). Setup will still be logged.`
+              : `📍 ${location.locationName} (±${location.accuracy}m, ${location.distanceFromFacility}km from UNTH)`,
       );
 
       const response = await fetch('/api/anesthesia-setup/start', {
@@ -271,12 +324,13 @@ export default function AnesthesiaSetupPage() {
           assignedTheatreId: assignedTheatreId || undefined,
           assignedTheatreName: assignedTheatreName || undefined,
           theatreChangeReason: theatreChanged ? theatreChangeReason.trim() : undefined,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          locationName: location.locationName,
-          locationAddress: location.locationAddress,
-          locationAccuracy: location.accuracy,
-          distanceFromFacility: location.distanceFromFacility,
+          latitude: location?.latitude ?? null,
+          longitude: location?.longitude ?? null,
+          locationName: location?.locationName ?? null,
+          locationAddress: location?.locationAddress ?? null,
+          locationAccuracy: location?.accuracy ?? null,
+          distanceFromFacility: location?.distanceFromFacility ?? null,
+          locationUnavailableReason: location ? undefined : noLocationReason,
           setupDate: new Date().toISOString().split('T')[0],
         }),
       });
@@ -290,7 +344,10 @@ export default function AnesthesiaSetupPage() {
         setMessage(`✗ ${data.error}`);
       }
     } catch (error: any) {
-      setMessage(`✗ ${error.message || 'Failed to start setup. Please allow location access.'}`);
+      // Location cannot land here any more: it is handled above and never
+      // rethrown. Whatever is caught now is the SAVE failing, so the message
+      // must not send the technician off to their location settings.
+      setMessage(`✗ ${error.message || 'Could not save the setup. Please try again.'}`);
     } finally {
       setLoading(false);
     }
@@ -488,11 +545,14 @@ export default function AnesthesiaSetupPage() {
               disabled={loading || !selectedTheatre || (theatreChanged && theatreChangeReason.trim().length < 5)}
               className="btn-primary disabled:opacity-50"
             >
-              {loading ? 'Starting...' : '📍 Start Setup (Location Required)'}
+              {loading ? 'Starting...' : '📍 Start Setup'}
             </button>
 
             <p className="text-sm text-gray-600">
-              ⚠️ You must allow location access to log setup. The system will capture your exact location name.
+              Your phone is asked where it is, and the answer is recorded with the setup.
+              If it cannot say — no signal in the theatre, or the prompt was declined —
+              the setup is still logged, and the board shows {'"'}position not confirmed{'"'}
+              against it rather than nothing at all.
             </p>
           </div>
         </div>

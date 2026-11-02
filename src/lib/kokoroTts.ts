@@ -1,5 +1,7 @@
 'use client';
 
+import { KIOSK_OVERRIDE_KEY, mayAutoLoadVoiceModel } from '@/lib/voice/deviceCapability';
+
 /**
  * Kokoro TTS — in-browser neural speech engine.
  * ---------------------------------------------
@@ -300,26 +302,29 @@ export function preloadKokoro(): void {
 /**
  * Whether it is reasonable to pull the model down automatically.
  *
- * This gate was written when synthesis ran on the main thread, and it refused
- * any handset reporting under 4 GB — which is most mid-range Android in this
- * hospital. The effect was that the devices staff actually carry never got the
- * natural voice at all.
- *
- * Now that the model runs in a worker, jank is no longer the reason to refuse
- * it. What remains is real: ~86 MB of download on a metered link costs the
- * user money, and a genuinely small device may have the tab killed for holding
- * the model. So the data checks stay and the memory floor drops to the point
- * where it is about survival rather than smoothness.
+ * The rule itself is in src/lib/voice/deviceCapability.ts, pure and tested
+ * against real handset user agents. This function only reads the browser.
  */
 function shouldAutoLoadModel(): boolean {
   if (typeof navigator === 'undefined') return false;
   const conn = (navigator as any).connection;
-  // Data saver on, or a genuinely slow link: the download is not a kindness.
-  if (conn?.saveData) return false;
-  if (typeof conn?.effectiveType === 'string' && /(^|[^3])2g/.test(conn.effectiveType)) return false;
-  const memGb = (navigator as any).deviceMemory;
-  if (typeof memGb === 'number' && memGb > 0 && memGb < 2) return false;
-  return true;
+  return mayAutoLoadVoiceModel({
+    userAgent: navigator.userAgent,
+    hasTouch: typeof document !== 'undefined' && 'ontouchend' in document,
+    saveData: !!conn?.saveData,
+    effectiveType: conn?.effectiveType,
+    deviceMemoryGb: (navigator as any).deviceMemory,
+    forced: kioskOverrideOn(),
+  });
+}
+
+/** Reads the per-device escape hatch. See KIOSK_OVERRIDE_KEY. */
+function kioskOverrideOn(): boolean {
+  try {
+    return window.localStorage.getItem(KIOSK_OVERRIDE_KEY) === 'on';
+  } catch {
+    return false;
+  }
 }
 
 export function isKokoroAvailable(): boolean {
