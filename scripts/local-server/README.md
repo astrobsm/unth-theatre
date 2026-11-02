@@ -209,20 +209,33 @@ it is a per-profile setting, offering a *choice* means two profiles:
 The RADIUS bridge names one of them in `Mikrotik-Group` on every Access-Accept,
 reading the `hotspot_devices` row the portal wrote a second earlier.
 
-```bash
-# 1. Give the router the two profiles.
-./scripts/local-server/deploy-mikrotik-portal.sh
-#    Confirm before going further:
-#    /ip hotspot user profile print where name~"orm-"
+One command does both halves, in the order that matters, and refuses the
+second if the first did not take:
 
-# 2. Only then let the bridge name them.
-sudo RADIUS_HOTSPOT_PROFILES=1 ./scripts/local-server/install-radius-bridge.sh --nas 192.168.88.1
+```bash
+./scripts/local-server/enable-wifi-remember.sh
 ```
 
-**Do not reverse those two steps.** A group name the router does not have is
-not an ignored attribute — it is a **rejected login**. Turning the bridge on
-first takes the whole theatre off the Wi-Fi at once. Unset, the bridge sends no
-group at all and every session behaves exactly as it did before.
+It asks for the router password, then for sudo on this server. It reads the
+profiles back off the router before it touches the bridge, restarts
+`orm-radius`, checks it came back up, and prints the rollback.
+
+**The order is not a preference.** A `Mikrotik-Group` naming a profile the
+router does not have is not an ignored attribute — RouterOS **refuses the
+login**. Switching the bridge on first takes the whole theatre off the Wi-Fi at
+once, staff already working included, and the symptom ("wrong password" for
+everybody) points nowhere near the cause. Unset, the bridge names no profile
+and every session behaves exactly as it did before.
+
+To undo it, one line:
+
+```bash
+sudo sed -i 's/^RADIUS_HOTSPOT_PROFILES=.*/RADIUS_HOTSPOT_PROFILES=0/' /etc/orm-radius.env
+sudo systemctl restart orm-radius
+```
+
+The two profiles can stay on the router harmlessly — with the flag off nothing
+is ever sent to them.
 
 The enrolment lasts 90 days and **every sign-in pushes it forward**, so a phone
 in daily use is never asked again; one that stopped coming a term ago is a

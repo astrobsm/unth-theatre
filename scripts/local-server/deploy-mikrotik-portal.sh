@@ -140,14 +140,21 @@ fi
 grep -q 'use-radius=yes' <<<"$PROFILE" && ok "use-radius=yes" \
   || echo "  ${R}wrong${N} use-radius is not enabled"
 
-# mac-cookie is the difference between roaming and logging in again, and its
+# The cookie is the difference between roaming and logging in again, and its
 # absence is invisible: everything works, staff simply re-authenticate all day.
-# Checked here because a silent omission looks exactly like a working portal.
-if grep -q 'login-by=.*mac-cookie' <<<"$PROFILE"; then
-  ok "login-by includes mac-cookie (device re-association will not re-prompt)"
+#
+# THE VALUE IS `cookie`, NOT `mac-cookie`. This check used to grep for
+# mac-cookie, which is not a login-by value at all — so it printed a red
+# "missing" against a router that was configured correctly, every single run.
+# A verification that cries wolf is worse than none: it is the reason nobody
+# reads the rest of this output. What makes the cookie MAC-based is
+# add-mac-cookie on the user profile, checked below.
+if grep -qE 'login-by=[^ ]*(^|,)cookie' <<<"$PROFILE"; then
+  ok "login-by includes cookie (device re-association will not re-prompt)"
 else
-  echo "  ${R}missing${N} mac-cookie — staff will be asked to log in again when they"
-  echo "         move between access points, however long the session lasts"
+  echo "  ${R}missing${N} cookie in login-by — staff will be asked to log in again when"
+  echo "         they move between access points, however long the session lasts"
+  echo "         $PROFILE"
 fi
 
 # The cookie and the session must both outlast a working day, or the roaming fix
@@ -156,6 +163,42 @@ UPROF="$(RUN_SSH '/ip hotspot user profile print terse where default=yes' 2>/dev
 grep -qE 'mac-cookie-timeout=(1d|23h|24h|1w)' <<<"$UPROF" \
   && ok "mac-cookie lasts a full day" \
   || { echo "  ${R}check${N} mac-cookie-timeout is not a day:"; echo "         $UPROF"; }
+grep -q 'add-mac-cookie=yes' <<<"$UPROF" \
+  && ok "add-mac-cookie=yes (the cookie is bound to the device)" \
+  || { echo "  ${R}missing${N} add-mac-cookie on the default profile — the router"; \
+       echo "         accepts cookies but never mints one, so nothing is remembered"; }
+
+# --- "Keep this phone signed in to the Wi-Fi" -------------------------------
+# The two profiles the RADIUS bridge names in Mikrotik-Group. Verified LOUDLY,
+# because the failure is not a feature quietly not working: a group name the
+# router does not have is a REJECTED LOGIN. If these are missing, the bridge
+# must stay on its old behaviour.
+PROFILES="$(RUN_SSH '/ip hotspot user profile print terse where name~"orm-"' 2>/dev/null || true)"
+REMEMBER_READY=1
+if grep -q 'name=orm-remembered' <<<"$PROFILES"; then
+  ok "orm-remembered profile present"
+  # Its own line only, so an add-mac-cookie belonging to the other profile
+  # cannot answer for this one.
+  grep 'name=orm-remembered' <<<"$PROFILES" | grep -q 'add-mac-cookie=yes' \
+    || warn "orm-remembered exists but add-mac-cookie is not yes — check it"
+else
+  REMEMBER_READY=0
+  echo "  ${R}missing${N} orm-remembered profile"
+fi
+if grep -q 'name=orm-one-visit' <<<"$PROFILES"; then
+  ok "orm-one-visit profile present"
+else
+  REMEMBER_READY=0
+  echo "  ${R}missing${N} orm-one-visit profile"
+fi
+
+if [[ "$REMEMBER_READY" == "1" ]]; then
+  ok "the router is ready for RADIUS_HOTSPOT_PROFILES=1"
+else
+  echo "  ${Y}note${N} \"Keep this phone signed in\" cannot be switched on yet."
+  echo "         Leave RADIUS_HOTSPOT_PROFILES unset in /etc/orm-radius.env until"
+  echo "         both profiles are listed above, or every login will be refused."
+fi
 
 WG="$(RUN_SSH '/ip hotspot walled-garden ip print terse' 2>/dev/null || true)"
 grep -q '192.168.88.252' <<<"$WG" && ok "walled-garden IP rule present (needed for HTTPS)" \
