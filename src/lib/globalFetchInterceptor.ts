@@ -13,6 +13,7 @@ import {
   removePendingRecord,
   loadClientIdMap,
 } from './offlineStore';
+import { isAuthEndpoint } from './blockers/catalogue';
 import {
   parseApiPath,
   mergePendingIntoList,
@@ -133,6 +134,35 @@ export function installFetchInterceptor(): void {
     // Handle auth/session separately — always try network, fallback to cache
     if (url.includes('/api/auth/session')) {
       return handleSessionFetch(input, init);
+    }
+
+    // ---- Signing in goes straight to the server, untouched ---------------
+    //
+    // Everything below this line is built for the application's own data:
+    // cache a read, queue a write, replay it when the network returns, and
+    // explain a refusal in a dialog. Applied to the sign-in POST, all four are
+    // wrong, and together they are why people could not log in:
+    //
+    //   - A rejected password comes back 401, and the refusal dialog read that
+    //     as an expired session. "You have been signed out" covered the login
+    //     form and offered to send the person to the login screen they were
+    //     already looking at.
+    //   - On a slow link the mutation deadline fired and the sign-in was put
+    //     in the offline queue. That queue is durable: the username and
+    //     PASSWORD were written to IndexedDB on the device, to be replayed
+    //     later — a credential sitting in storage, and a session that could
+    //     open itself at some unrelated moment.
+    //   - The queue then answers with its own synthetic 200 and a stand-in
+    //     record. NextAuth looks in that for a redirect URL, finds none, and
+    //     throws, so the screen said "An error occurred during login" while
+    //     nothing had been attempted at all.
+    //
+    // There is no offline version of proving who you are: the server holds the
+    // password hash, so an unreachable server means a failed sign-in and must
+    // be reported as one. (Offline sign-in exists and is separate — it unlocks
+    // a session already enrolled on this device, and never comes through here.)
+    if (isAuthEndpoint(url)) {
+      return originalFetch(input, init);
     }
 
     // Handle mutations (POST/PUT/DELETE) — queue offline if needed

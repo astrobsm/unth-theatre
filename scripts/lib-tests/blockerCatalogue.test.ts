@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  describeBlocker, readFieldProblems, humaniseField, HANDLED_ELSEWHERE,
+  describeBlocker, readFieldProblems, humaniseField, HANDLED_ELSEWHERE, isAuthEndpoint,
 } from '../../src/lib/blockers/catalogue';
 
 const refuse = (over: Partial<Parameters<typeof describeBlocker>[0]> = {}) => ({
@@ -156,6 +156,54 @@ describe('who you are, and what you may do', () => {
     expect(b.code).toBe('SIGNED_OUT');
     expect(b.why).toMatch(/Nothing was saved/);
     expect(b.fixes[0].href).toBe('/auth/login');
+  });
+
+  // The bug this half exists to stop people hitting again.
+  //
+  // NextAuth answers a wrong password with 401, which read as an expired
+  // session: staff who mistyped were shown "You have been signed out" across
+  // the login form, with a button offering the login screen they were already
+  // on. The form's own "Incorrect password." was underneath it, unread, and
+  // there was no way to type your way out.
+  describe('a refusal from the sign-in machinery', () => {
+    it('says nothing, and leaves the login form to say it', () => {
+      expect(describeBlocker(refuse({
+        status: 401,
+        url: '/api/auth/callback/credentials',
+        body: { url: 'https://unth-theatre.link/api/auth/error?error=Incorrect+password.' },
+      }))).toBeNull();
+    });
+
+    it('is silent for every auth route, not only the sign-in one', () => {
+      for (const url of [
+        '/api/auth/callback/credentials',
+        '/api/auth/register',
+        '/api/auth/otp/verify',
+        '/api/auth/reset-password/confirm',
+        '/api/auth/change-password-first-login',
+      ]) {
+        expect(describeBlocker(refuse({ status: 401, url, body: { error: 'Unauthorized' } })))
+          .toBeNull();
+      }
+    });
+
+    it('still explains a genuine sign-out everywhere else', () => {
+      // The guard must be narrow. A session that expires mid-booking is the
+      // case the dialog was written for, and it has to keep working.
+      const b = describeBlocker(refuse({ status: 401, url: '/api/surgeries' }))!;
+      expect(b.code).toBe('SIGNED_OUT');
+    });
+
+    it('is not fooled by an auth-looking query string on another route', () => {
+      expect(isAuthEndpoint('/api/surgeries?next=/api/auth/callback')).toBe(false);
+      expect(isAuthEndpoint('/api/auth/callback/credentials')).toBe(true);
+      expect(isAuthEndpoint('/api/authorisations/pending')).toBe(false);
+    });
+
+    it('reads an absolute URL, which is what the interceptor passes', () => {
+      expect(isAuthEndpoint('https://unth-theatre.link/api/auth/callback/credentials')).toBe(true);
+      expect(isAuthEndpoint('https://unth-theatre.link/api/surgeries')).toBe(false);
+    });
   });
 
   it('says whose permission is needed, and that it takes a minute', () => {

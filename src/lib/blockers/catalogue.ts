@@ -199,6 +199,34 @@ function serverMessage(body: unknown): string {
   return '';
 }
 
+/**
+ * Is this the sign-in machinery itself?
+ *
+ * THIS IS THE DIFFERENCE BETWEEN "wrong password" AND "you have been signed
+ * out", and getting it wrong shut people out of the application entirely.
+ *
+ * NextAuth answers a rejected username or password with 401. Read as an
+ * ordinary refusal, that is indistinguishable from a session that has expired
+ * mid-work — so a nurse who mistyped her password was shown a full-screen
+ * "You have been signed out", over the login form, offering to send her to the
+ * login screen she was already on. The form's own "wrong username or password"
+ * was underneath it, unread. Nobody can mistype their way out of that.
+ *
+ * Every /api/auth/ route is the same case: signing in, registering, resetting
+ * a password, verifying a code. A 401 from any of them is an answer about the
+ * credentials just offered, never a statement about an existing session.
+ */
+export function isAuthEndpoint(url: string): boolean {
+  try {
+    const base = typeof window === 'undefined'
+      ? 'http://localhost' : window.location.origin;
+    return new URL(url, base).pathname.startsWith('/api/auth/');
+  } catch {
+    // Not parseable: fall back to the literal prefix rather than guessing.
+    return url.indexOf('/api/auth/') === 0;
+  }
+}
+
 /** Which module a URL belongs to, for wording and for where to send people. */
 function moduleOf(url: string): string {
   const m = /\/api\/([^/?]+)/.exec(url);
@@ -238,6 +266,9 @@ export function describeBlocker(refusal: Refusal): Blocker | null {
 
   // ---- Signed out --------------------------------------------------------
   if (status === 401) {
+    // Except from the sign-in machinery, where 401 means "those credentials
+    // were refused" and the form already says so, far better than this could.
+    if (isAuthEndpoint(url)) return null;
     return {
       code: 'SIGNED_OUT',
       title: 'You have been signed out',
