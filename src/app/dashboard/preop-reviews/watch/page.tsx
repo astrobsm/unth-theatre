@@ -21,8 +21,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, CheckCircle2, Clock, Loader2, UserCheck, UserX,
+  AlertTriangle, CheckCircle2, Clock, Loader2, MessageCircle, UserCheck, UserX,
 } from 'lucide-react';
+import { whatsappLink } from '@/lib/whatsapp';
+import { GRADE_LABEL, REVIEWER_SOURCE_LABEL, type ReviewerGrade, type ReviewerSource } from '@/lib/anaesthesia/expectedReviewers';
 
 interface Case {
   surgeryId: string;
@@ -33,6 +35,9 @@ interface Case {
   patient: { name: string; folderNumber: string; ward: string | null } | null;
   surgeonName: string | null;
   expectedReviewer: { id: string; fullName: string } | null;
+  /// The registrar and senior registrar rostered to this case's specialty.
+  expectedReviewers?: { id: string; fullName: string; phone: string | null; grade: string }[];
+  reviewerSource?: string;
   assignmentSource: string;
   reviewedAt: string | null;
   reviewedByName: string | null;
@@ -53,6 +58,7 @@ interface Board {
   reviewBy: string;
   rosterPublished: boolean;
   canReassign: boolean;
+  canChase?: boolean;
   cases: Case[];
 }
 
@@ -85,6 +91,13 @@ export default function PreopWatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [anaesthetists, setAnaesthetists] = useState<{ id: string; fullName: string }[]>([]);
+  // The WhatsApp hand-off from the last chase. Kept on screen rather than
+  // fired and forgotten: a browser blocks every pop-up but the first, so
+  // chasing two reviewers at once would silently send one message and lose
+  // the other. The buttons stay until the next chase replaces them.
+  const [handoff, setHandoff] = useState<
+    { surgeryId: string; who: { name: string; href: string | null }[] } | null
+  >(null);
 
   const load = useCallback(async (d: string) => {
     setLoading(true);
@@ -113,6 +126,46 @@ export default function PreopWatchPage() {
         : []))
       .catch(() => undefined);
   }, [board?.canReassign]);
+
+  /**
+   * Chase the people who were expected to review and did not.
+   *
+   * The server writes the dashboard message and the audit row BEFORE this
+   * sees a link, so a blocked pop-up leaves a chase recorded-but-unsent,
+   * never sent-but-unrecorded.
+   */
+  const chase = async (c: Case) => {
+    setBusy(c.surgeryId);
+    setError(null);
+    setNote(null);
+    setHandoff(null);
+    try {
+      const r = await fetch('/api/preop-reviews/watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surgeryId: c.surgeryId, action: 'chase' }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setError(j.error ?? 'Could not send that.'); return; }
+
+      const who = (j.whatsapp ?? []).map(
+        (w: { name: string; number: string | null; text: string }) => ({
+          name: w.name,
+          href: whatsappLink(w.number, w.text),
+        }),
+      );
+      setHandoff({ surgeryId: c.surgeryId, who });
+      setNote(j.message ?? 'Chased.');
+
+      const first = who.find((w: { href: string | null }) => w.href);
+      if (first?.href) window.open(first.href, '_blank', 'noopener,noreferrer');
+      await load(day);
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const post = async (surgeryId: string, payload: Record<string, unknown>) => {
     setBusy(surgeryId);
@@ -258,13 +311,40 @@ export default function PreopWatchPage() {
                         {c.surgeonName ? ` · ${c.surgeonName}` : ''}
                       </p>
 
+                      {/* The registrar and senior registrar rostered to this
+                          specialty -- the grades who actually do the
+                          assessment. Both are shown when both are rostered:
+                          the list is shared between them and either may take
+                          any case, so naming one would make the other
+                          invisible on a board about accountability. */}
                       <div className="mt-1.5 text-sm">
-                        <span className="text-gray-600">Expected reviewer: </span>
-                        <span className="font-medium text-gray-900">
-                          {c.expectedReviewer?.fullName ?? 'nobody'}
+                        <span className="text-gray-600">
+                          Expected reviewer{(c.expectedReviewers?.length ?? 0) > 1 ? 's' : ''}:{' '}
                         </span>
-                        {/* The column that matters. */}
-                        <span className={`ml-2 text-xs ${src.cls}`}>{src.label}</span>
+                        {(c.expectedReviewers?.length ?? 0) === 0 ? (
+                          <span className="font-medium text-gray-900">nobody</span>
+                        ) : (
+                          c.expectedReviewers!.map((r, i) => (
+                            <span key={r.id}>
+                              {i > 0 && <span className="text-gray-400">, </span>}
+                              <span className="font-medium text-gray-900">{r.fullName}</span>
+                              {GRADE_LABEL[r.grade as ReviewerGrade] && (
+                                <span className="ml-1 text-xs text-gray-500">
+                                  ({GRADE_LABEL[r.grade as ReviewerGrade].toLowerCase()})
+                                </span>
+                              )}
+                              {!r.phone && (
+                                <span className="ml-1 text-xs text-gray-400">no number</span>
+                              )}
+                            </span>
+                          ))
+                        )}
+                        {/* How the name was arrived at: the column that matters. */}
+                        <span className={`ml-2 text-xs ${src.cls}`}>
+                          {c.reviewerSource
+                            ? REVIEWER_SOURCE_LABEL[c.reviewerSource as ReviewerSource] ?? src.label
+                            : src.label}
+                        </span>
                       </div>
 
                       {c.reassignedToName && (
@@ -283,6 +363,41 @@ export default function PreopWatchPage() {
                           Reviewed {clock(c.reviewedAt)}
                           {c.reviewedByName ? ` by ${c.reviewedByName}` : ''}
                         </p>
+                      )}
+
+                      {/* The hand-off, kept on screen rather than fired once.
+                          A browser blocks every pop-up but the first, so a
+                          case with two reviewers would otherwise send one
+                          message and silently lose the other. Every message
+                          is already recorded on their dashboards; these
+                          buttons only decide whether WhatsApp carries it
+                          too. */}
+                      {handoff?.surgeryId === c.surgeryId && handoff.who.length > 0 && (
+                        <div className="mt-2 rounded-lg bg-green-50 p-2 ring-1 ring-green-200">
+                          <p className="text-xs text-green-900">
+                            Recorded on their dashboards. Send the WhatsApp message:
+                          </p>
+                          <div className="mt-1.5 flex flex-wrap gap-2">
+                            {handoff.who.map((w) => (
+                              w.href ? (
+                                <a
+                                  key={w.name}
+                                  href={w.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                                >
+                                  <MessageCircle className="h-3.5 w-3.5" />
+                                  {w.name}
+                                </a>
+                              ) : (
+                                <span key={w.name} className="text-xs text-gray-500">
+                                  {w.name} — no phone number on file
+                                </span>
+                              )
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
 
@@ -308,6 +423,28 @@ export default function PreopWatchPage() {
                           I cannot review this
                         </button>
                       )}
+                      {/* Only a case that has actually defaulted. Writing to
+                          somebody who is still within their window is how a
+                          chase comes to be deleted unread -- so the button is
+                          not merely disabled, it is absent. */}
+                      {board.canChase && !c.reviewedAt
+                        && (c.state === 'LAPSED' || c.state === 'HANDBACK_WINDOW_CLOSED') && (
+                        <button
+                          type="button"
+                          disabled={busy === c.surgeryId}
+                          onClick={() => void chase(c)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                          title={c.state === 'LAPSED'
+                            ? 'Write to the reviewer about the missed 9pm deadline'
+                            : 'Remind the reviewer before the 9pm deadline'}
+                        >
+                          {busy === c.surgeryId
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <MessageCircle className="h-4 w-4" />}
+                          {c.state === 'LAPSED' ? 'Chase on WhatsApp' : 'Remind on WhatsApp'}
+                        </button>
+                      )}
+
                       {board.canReassign && !c.reviewedAt && (
                         <select
                           disabled={busy === c.surgeryId}

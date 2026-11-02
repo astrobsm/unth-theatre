@@ -26,6 +26,9 @@ import prisma from '@/lib/prisma';
 import { watDay, watDayRange } from '@/lib/watDay';
 import { pushToUsers } from '@/lib/pushAll';
 import { classifyAnaesthetistAssignment, type RosterRow } from '@/lib/anaesthetistAssignment';
+import { getAnaesthetistTeamsForDate, subspecialtyForUnit } from '@/lib/anaesthetistTeam';
+import { expectedReviewersFor } from '@/lib/anaesthesia/expectedReviewers';
+import { buildReviewChaseMessage, registerForState } from '@/lib/anaesthesia/reviewChaseMessage';
 import {
   reviewWatchState, handbackDeadline, reviewDeadline, bookedTooLateToReview,
   type ReviewWatchInput,
@@ -38,7 +41,23 @@ const MAY_REASSIGN = [
   'HEAD_OF_ANAESTHESIA', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
 ];
 
+/**
+ * Who may write to a defaulting reviewer.
+ *
+ * The same people who may reassign, plus the head of surgery -- the surgical
+ * team is the party left exposed by a missing review, and the message says so
+ * on their behalf. Deliberately not every anaesthetist: a chase that any
+ * colleague can fire is a chase nobody reads.
+ */
+const MAY_CHASE = [
+  'HEAD_OF_ANAESTHESIA', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
+  'THEATRE_CHAIRMAN',
+];
+
 const WATCHED = ['SCHEDULED', 'IN_HOLDING_AREA', 'READY_FOR_THEATRE'] as const;
+
+/** A unit name that names no unit. Saves a pointless lookup per case. */
+const s0 = (v: string) => !v.trim() || /^unassigned/i.test(v.trim());
 
 /** Tomorrow, in WAT. What the board opens on. */
 function tomorrow(): string {
@@ -67,7 +86,7 @@ export async function GET(request: NextRequest) {
         createdAt: true, status: true, unit: true, subspecialty: true,
         anesthetistId: true,
         patient: { select: { name: true, folderNumber: true, ward: true } },
-        anesthetist: { select: { id: true, fullName: true } },
+        anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
         surgeon: { select: { fullName: true } },
         preOpReviews: {
           select: { id: true, reviewDate: true, anesthetistId: true, anesthetistName: true, status: true },
@@ -85,6 +104,26 @@ export async function GET(request: NextRequest) {
       },
       select: { userId: true, shift: true, subRole: true },
     })).map((r) => ({ userId: r.userId, shift: String(r.shift), subRole: r.subRole }));
+
+    // WHO IS EXPECTED TO REVIEW. The registrar and senior registrar rostered
+    // to the case's specialty that day -- not the consultant.
+    //
+    // This board used to name whoever was on the booking, which is usually
+    // the consultant, because that is who the booking route fills in. So it
+    // asked the wrong person for the review and then recorded the wrong
+    // person as having missed it. The consultant approves; the registrar and
+    // senior registrar do the pre-operative assessment.
+    const teams = await getAnaesthetistTeamsForDate(new Date(`${day}T12:00:00.000Z`));
+
+    // One lookup per distinct unit, not per case: a list of eleven cases in
+    // four units is four queries, not eleven.
+    const unitNames = Array.from(new Set(
+      surgeries.map((s) => s.unit).filter((u): u is string => !!u && !s0(u)),
+    ));
+    const subForUnit = new Map<string, string | null>();
+    for (let i = 0; i < unitNames.length; i += 1) {
+      subForUnit.set(unitNames[i], await subspecialtyForUnit(unitNames[i]));
+    }
 
     const cases = surgeries.map((s) => {
       const review = s.preOpReviews[0] ?? null;
@@ -104,6 +143,14 @@ export async function GET(request: NextRequest) {
         handedBackAt: a?.handedBackAt ?? null,
         reassignedToId: a?.reassignedToId ?? null,
       };
+      const reviewers = expectedReviewersFor({
+        subspecialty: s.subspecialty || subForUnit.get(s.unit || '') || s.unit || null,
+        teams,
+        namedOnCase: s.anesthetist
+          ? { userId: s.anesthetist.id, name: s.anesthetist.fullName, phone: s.anesthetist.phoneNumber, seniority: null, role: null }
+          : null,
+      });
+
       return {
         surgeryId: s.id,
         procedureName: s.procedureName,
@@ -112,7 +159,15 @@ export async function GET(request: NextRequest) {
         subspecialty: s.subspecialty,
         patient: s.patient,
         surgeonName: s.surgeon?.fullName ?? null,
-        expectedReviewer: s.anesthetist,
+        // Kept so nothing reading the old shape breaks; it is now the first
+        // of the people below rather than the consultant on the booking.
+        expectedReviewer: reviewers.reviewers[0]
+          ? { id: reviewers.reviewers[0].userId, fullName: reviewers.reviewers[0].name }
+          : null,
+        expectedReviewers: reviewers.reviewers.map((r) => ({
+          id: r.userId, fullName: r.name, phone: r.phone, grade: r.grade,
+        })),
+        reviewerSource: reviewers.source,
         assignmentSource,
         reviewedAt: review?.reviewDate ?? null,
         reviewedByName: review?.anesthetistName ?? null,
@@ -124,7 +179,10 @@ export async function GET(request: NextRequest) {
         lapseGround: a?.lapseGround ?? null,
         state: reviewWatchState(input, now),
         bookedTooLate: bookedTooLateToReview(input),
-        mine: s.anesthetistId === session.user.id || a?.reassignedToId === session.user.id,
+        // "Mine" now follows the people who are actually expected to do it.
+        mine: reviewers.reviewers.some((r) => r.userId === session.user.id)
+          || s.anesthetistId === session.user.id
+          || a?.reassignedToId === session.user.id,
       };
     });
 
@@ -134,6 +192,7 @@ export async function GET(request: NextRequest) {
       reviewBy: reviewDeadline(`${day}T00:00:00.000Z`),
       rosterPublished: rosterRows.length > 0,
       canReassign: MAY_REASSIGN.includes(session.user.role),
+      canChase: MAY_CHASE.includes(session.user.role),
       cases,
     });
   } catch (error) {
@@ -293,6 +352,154 @@ export async function POST(request: NextRequest) {
     }).catch(() => undefined);
 
     return NextResponse.json({ ok: true, message: `${to.fullName} has been asked to review it.` });
+  }
+
+  // ------------------------------------------------------------------
+  // chase -- write to the people who were expected to review and did not
+  // ------------------------------------------------------------------
+  //
+  // THE RECORD IS WRITTEN BEFORE THE LINK IS HANDED BACK. A blocked pop-up
+  // can then only leave the message unsent; it can never leave it sent and
+  // unrecorded. This is the same order the roster chase uses and for the same
+  // reason -- the half that matters is the one that survives in the system.
+  //
+  // WHATSAPP RATHER THAN A QUEUED MESSAGE. A queued WHATSAPP row waits on a
+  // provider this installation does not have configured, so "chased" would
+  // mean the registrar heard nothing. wa.me reaches them, and it arrives from
+  // a person rather than from a system, which for an appeal is the point.
+  if (action === 'chase') {
+    if (!MAY_CHASE.includes(session.user.role)) {
+      return NextResponse.json(
+        { error: 'Only the HOD, theatre management or an administrator can chase a review.' },
+        { status: 403 },
+      );
+    }
+
+    const day2 = watDay(surgery.scheduledDate);
+    const teams = await getAnaesthetistTeamsForDate(new Date(`${day2}T12:00:00.000Z`));
+    const full = await prisma.surgery.findUnique({
+      where: { id: surgeryId },
+      select: {
+        unit: true, subspecialty: true, scheduledTime: true, status: true, createdAt: true,
+        anesthetistId: true,
+        anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
+        surgeon: { select: { fullName: true } },
+        preOpReviews: { select: { reviewDate: true }, take: 1 },
+        reviewAssignment: true,
+      },
+    });
+    if (!full) return NextResponse.json({ error: 'No such case.' }, { status: 404 });
+
+    // The state is recomputed here from the database rather than taken from
+    // the request. A client that could name the state could chase a colleague
+    // who is not late, which is how a chase stops being read.
+    const state = reviewWatchState({
+      surgeryDate: surgery.scheduledDate,
+      bookedAt: full.createdAt,
+      status: full.status,
+      expectedReviewerId: full.anesthetistId,
+      assignmentSource: 'unrostered',
+      reviewedAt: full.preOpReviews[0]?.reviewDate ?? null,
+      handedBackAt: full.reviewAssignment?.handedBackAt ?? null,
+      reassignedToId: full.reviewAssignment?.reassignedToId ?? null,
+    }, now);
+
+    const register = registerForState(state);
+    if (!register) {
+      return NextResponse.json({
+        error: state === 'REVIEWED'
+          ? 'This case has already been reviewed.'
+          : 'This case is not late yet. Chasing somebody who is still within time is how a chase stops being read.',
+      }, { status: 400 });
+    }
+
+    const resolved = expectedReviewersFor({
+      subspecialty: full.subspecialty || (full.unit ? await subspecialtyForUnit(full.unit) : null) || full.unit || null,
+      teams,
+      namedOnCase: full.anesthetist
+        ? { userId: full.anesthetist.id, name: full.anesthetist.fullName, phone: full.anesthetist.phoneNumber, seniority: null, role: null }
+        : null,
+    });
+
+    if (resolved.reviewers.length === 0) {
+      return NextResponse.json({
+        error: 'Nobody is named to review this case, so there is nobody to chase. '
+          + 'Reassign it instead.',
+      }, { status: 400 });
+    }
+
+    const longDay = new Date(`${day2}T12:00:00.000Z`).toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos',
+    });
+
+    const whatsapp: { id: string; name: string; number: string | null; text: string }[] = [];
+
+    for (let i = 0; i < resolved.reviewers.length; i += 1) {
+      const r = resolved.reviewers[i];
+      const text = buildReviewChaseMessage({
+        reviewerName: r.name,
+        patientName: surgery.patient?.name ?? null,
+        folderNumber: surgery.patient?.folderNumber ?? null,
+        procedureName: surgery.procedureName,
+        surgeryDay: longDay,
+        scheduledTime: full.scheduledTime,
+        unit: full.unit,
+        surgeonName: full.surgeon?.fullName ?? null,
+        register,
+        fromName: session.user.name ?? null,
+        fromRole: 'Theatre Management',
+      });
+
+      // In-app first, so the chase exists whether or not WhatsApp opens.
+      await prisma.notification.create({
+        data: {
+          userId: r.userId,
+          type: 'PREOP_REVIEW_CHASE',
+          title: register === 'MISSED'
+            ? 'A pre-operative review has missed the 9pm deadline'
+            : 'A pre-operative review is overdue',
+          message: text,
+          link: `/dashboard/preop-reviews/new?surgeryId=${surgeryId}`,
+        },
+      }).catch(() => undefined);
+
+      await pushToUsers([r.userId], {
+        title: register === 'MISSED' ? 'Review missed the 9pm deadline' : 'Review overdue',
+        body: `${surgery.patient?.name ?? 'A patient'} — ${surgery.procedureName}`,
+        url: `/dashboard/preop-reviews/new?surgeryId=${surgeryId}`,
+      }).catch(() => undefined);
+
+      whatsapp.push({ id: r.userId, name: r.name, number: r.phone, text });
+    }
+
+    // Who chased whom, and when. A chase that leaves no trace cannot be shown
+    // to have happened, which is exactly the failure the message complains of.
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'PREOP_REVIEW_CHASED',
+        tableName: 'preop_review_assignments',
+        recordId: surgeryId,
+        changes: JSON.stringify({
+          register,
+          state,
+          surgeryDay: day2,
+          reviewers: resolved.reviewers.map((r) => ({ id: r.userId, name: r.name, grade: r.grade })),
+          reviewerSource: resolved.source,
+        }),
+      },
+    }).catch(() => undefined);
+
+    const reachable = whatsapp.filter((w) => w.number).length;
+    return NextResponse.json({
+      ok: true,
+      whatsapp,
+      message: reachable === whatsapp.length
+        ? `Written to ${whatsapp.length === 1 ? whatsapp[0].name : `${whatsapp.length} reviewers`}. Opening WhatsApp.`
+        : reachable === 0
+          ? 'Recorded on their dashboards. None of them has a phone number on file, so there is nothing to open.'
+          : `Recorded for all ${whatsapp.length}. Only ${reachable} has a phone number on file.`,
+    });
   }
 
   return NextResponse.json({ error: `Unknown action "${action}".` }, { status: 400 });
