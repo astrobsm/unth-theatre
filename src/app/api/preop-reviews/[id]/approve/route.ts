@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
+import { caseAccessForSurgery } from '@/lib/anaesthesia/caseAccess.server';
+import { refusalMessage } from '@/lib/anaesthesia/caseAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +75,23 @@ export async function POST(
       return NextResponse.json(
         { error: 'Review is already approved' },
         { status: 400 }
+      );
+    }
+
+    // WHOSE CASE IS IT. The role check at the top of this handler says only
+    // that the caller is an anaesthetist, which was all that stood between
+    // any anaesthetist and approving any review in the hospital. The review
+    // itself has recorded its intended approver all along, in
+    // consultantAnesthetistId -- "Consultant who will approve".
+    const access = await caseAccessForSurgery({
+      surgeryId: existingReview.surgeryId,
+      userId: session.user.id,
+      role: session.user.role,
+    });
+    if (!access || !access.mayApprove) {
+      return NextResponse.json(
+        { error: access ? refusalMessage(access) : 'Case not found' },
+        { status: access ? 403 : 404 },
       );
     }
 

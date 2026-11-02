@@ -61,6 +61,10 @@ interface BoardCase {
 interface BoardResponse {
   date: string;
   canApprove: boolean;
+  /// True when the server showed only this anaesthetist's own cases.
+  scopedToOwnCases?: boolean;
+  /// How many of the day's cases belong to other anaesthetists.
+  hiddenFromYou?: number;
   cases: BoardCase[];
   summary: {
     total: number; unassigned: number; notReviewed: number; reviewInProgress: number;
@@ -175,7 +179,9 @@ export default function AnaesthetistBoardPage() {
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <Stethoscope className="w-6 h-6 text-blue-600" />
-        <h1 className="text-2xl font-bold text-gray-900 flex-1">Anaesthetist Board</h1>
+        <h1 className="text-2xl font-bold text-gray-900 flex-1">
+          {data?.scopedToOwnCases ? 'My Cases' : 'Anaesthetist Board'}
+        </h1>
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-gray-500" />
           <input
@@ -203,11 +209,34 @@ export default function AnaesthetistBoardPage() {
         </div>
       )}
 
+      {/* Say what this list is.
+
+          A board that silently shows a subset is worse than one that shows
+          everything: a consultant who cannot find a case he knows was booked
+          will conclude the booking is missing and book it again. So the page
+          states the scope and the number it is not showing. */}
+      {data?.scopedToOwnCases && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          Cases assigned to you, cases you reviewed or prescribed for, and cases
+          with no anaesthetist named yet.
+          {typeof data.hiddenFromYou === 'number' && data.hiddenFromYou > 0 && (
+            <>
+              {' '}
+              <span className="font-semibold">
+                {data.hiddenFromYou} other case{data.hiddenFromYou === 1 ? '' : 's'}
+              </span>{' '}
+              booked today {data.hiddenFromYou === 1 ? 'belongs' : 'belong'} to other
+              anaesthetists and {data.hiddenFromYou === 1 ? 'is' : 'are'} not shown.
+            </>
+          )}
+        </div>
+      )}
+
       {/* The counts a consultant acts on, not a count of everything. */}
       {s && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
           {[
-            { n: s.total, l: 'Cases booked', t: 'none' as const },
+            { n: s.total, l: data?.scopedToOwnCases ? 'Your cases' : 'Cases booked', t: 'none' as const },
             { n: s.rxAwaitingApproval, l: 'Awaiting your approval', t: s.rxAwaitingApproval ? 'wait' as const : 'ok' as const },
             { n: s.notReviewed + s.reviewInProgress, l: 'Not yet reviewed', t: (s.notReviewed + s.reviewInProgress) ? 'wait' as const : 'ok' as const },
             { n: s.notFit, l: 'Assessed NOT FIT', t: s.notFit ? 'bad' as const : 'ok' as const },

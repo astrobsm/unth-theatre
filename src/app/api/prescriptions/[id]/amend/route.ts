@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { caseAccessForSurgery } from '@/lib/anaesthesia/caseAccess.server';
+import { refusalMessage } from '@/lib/anaesthesia/caseAccess';
 import { z } from 'zod';
 import {
   checkAmendment,
@@ -61,6 +63,22 @@ export async function POST(
 
     const role = (session.user as { role?: string }).role ?? null;
     const userId = (session.user as { id?: string }).id ?? null;
+
+    // Same rule as approving: an anaesthetist acts on their own cases.
+    // checkAmendment answers "may this GRADE amend at all", which is a
+    // different question from "is this case yours", and only the first was
+    // being asked.
+    const access = await caseAccessForSurgery({
+      surgeryId: previous.surgeryId,
+      userId: userId ?? '',
+      role,
+    });
+    if (!access || !access.mayApprove) {
+      return NextResponse.json(
+        { error: access ? refusalMessage(access) : 'Case not found' },
+        { status: access ? 403 : 404 },
+      );
+    }
 
     const verdict = checkAmendment({
       currentStatus: previous.status as PrescriptionStatusValue,

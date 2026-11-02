@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { z } from 'zod';
 import { approveAnaestheticPrescription } from '@/lib/anaesthesia/approvePrescription';
+import { prisma } from '@/lib/prisma';
+import { caseAccessForSurgery } from '@/lib/anaesthesia/caseAccess.server';
+import { refusalMessage } from '@/lib/anaesthesia/caseAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +34,34 @@ export async function POST(
       );
     }
 
+    // WHOSE CASE IS IT. The role check above is not an answer to that. Until
+    // this was added, any anaesthetist could approve any prescription in the
+    // hospital -- a registrar in Theatre 2 could sign off the drugs for a
+    // neurosurgical case he had never seen. The bulk endpoint at
+    // /api/anaesthesia/my-cases/approve has always recomputed the caller's own
+    // cases before acting; this single-case route trusted the id.
+    const rx = await prisma.anestheticPrescription.findUnique({
+      where: { id: params.id },
+      select: { surgeryId: true },
+    });
+    if (!rx) {
+      return NextResponse.json({ error: 'Prescription not found' }, { status: 404 });
+    }
+
+    const access = await caseAccessForSurgery({
+      surgeryId: rx.surgeryId,
+      userId: session.user.id,
+      role: session.user.role,
+    });
+    // The surgery behind a prescription that exists cannot be missing, but a
+    // null here must not read as permission.
+    if (!access || !access.mayApprove) {
+      return NextResponse.json(
+        { error: access ? refusalMessage(access) : 'Case not found' },
+        { status: access ? 403 : 404 },
+      );
+    }
+
     const body = await request.json();
     const validatedData = approvePrescriptionSchema.parse(body);
 
@@ -40,7 +71,14 @@ export async function POST(
     const result = await approveAnaestheticPrescription({
       prescriptionId: params.id,
       approved: validatedData.approved,
-      approvalNotes: validatedData.approvalNotes,
+      // An unclaimed case approved by a consultant who is not named on it is
+      // a legitimate thing to do and an unusual one. The audit row should say
+      // so by itself, rather than leaving a reader to work it out from the
+      // absence of a name on the booking.
+      approvalNotes: access.reason === 'UNCLAIMED'
+        ? [validatedData.approvalNotes, 'Approved by a consultant not named on this case (no anaesthetist was assigned).']
+            .filter(Boolean).join(' ')
+        : validatedData.approvalNotes,
       rejectionReason: validatedData.rejectionReason,
       actor: { id: session.user.id, name: session.user.name },
     });

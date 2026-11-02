@@ -3,12 +3,18 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { summariseAnaesthesiaCase, type BoardCase } from '@/lib/anaesthesia/board';
+import { decideCaseAccess, ANAESTHETIST_ROLES } from '@/lib/anaesthesia/caseAccess';
 
 export const dynamic = 'force-dynamic';
 
-// Who may look. The consultant is the intended reader, but a registrar seeing
-// the same board is what lets them notice their own case is still unreviewed
-// before the consultant does.
+// Who may look. An anaesthetist sees their OWN cases and the ones nobody is
+// named on; the oversight roles below see the whole day.
+//
+// It used to show every anaesthetist every case booked that day. That was
+// written for the consultant running the list, and for him it was right, but
+// it also put eleven units of other people's patients in front of a
+// registrar who had two. Scoped here rather than in the page, because a
+// filter in the browser is a presentation choice and this is an access rule.
 const BOARD_ROLES = [
   'CONSULTANT_ANAESTHETIST',
   'ANAESTHETIST',
@@ -81,6 +87,9 @@ export async function GET(req: NextRequest) {
           select: {
             id: true, surgeryId: true, status: true, reviewDate: true,
             anesthetistName: true, consultantName: true,
+            // Read by the access rule, not shown: who wrote it and who is
+            // recorded as the consultant who will approve it.
+            anesthetistId: true, consultantAnesthetistId: true,
             fitnessDecision: true, fitnessDecidedAt: true,
             approvedAt: true, approvedBy: true,
             asaClass: true,
@@ -92,6 +101,7 @@ export async function GET(req: NextRequest) {
           where: { surgeryId: { in: ids } },
           select: {
             id: true, surgeryId: true, status: true, version: true,
+            prescribedById: true,
             prescribedByName: true, approvedByName: true, approvedAt: true,
             createdAt: true, supersededById: true,
             _count: { select: { prescriptionItems: true } },
@@ -113,7 +123,27 @@ export async function GET(req: NextRequest) {
     rxBySurgery.set(p.surgeryId, arr);
   }
 
-  const cases: BoardCase[] = surgeries.map((s) =>
+  // One anaesthetist's view of the day: their cases, plus the ones with
+  // nobody's name on them. The unclaimed stay in deliberately -- a case no
+  // anaesthetist can see is a case that reaches theatre unreviewed, and the
+  // page marks them so they are picked up rather than assumed covered.
+  const scopeToOwn = ANAESTHETIST_ROLES.indexOf(role ?? '') !== -1;
+  const userId = (session.user as { id?: string }).id ?? '';
+  const visible = scopeToOwn
+    ? surgeries.filter((s) =>
+        decideCaseAccess({
+          userId,
+          role,
+          parties: {
+            anesthetistId: s.anesthetist?.id ?? null,
+            reviews: reviews.filter((r) => r.surgeryId === s.id),
+            prescriptions: prescriptions.filter((p) => p.surgeryId === s.id),
+          },
+        }).mayView,
+      )
+    : surgeries;
+
+  const cases: BoardCase[] = visible.map((s) =>
     summariseAnaesthesiaCase({
       surgery: {
         id: s.id,
@@ -143,6 +173,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     date: start.toISOString().slice(0, 10),
+    // So the page can say "your cases" rather than implying this is the whole
+    // list, and can tell a consultant why a case he expected is not here.
+    scopedToOwnCases: scopeToOwn,
+    hiddenFromYou: scopeToOwn ? surgeries.length - visible.length : 0,
     canApprove: role === 'CONSULTANT_ANAESTHETIST' || role === 'ADMIN' || role === 'SYSTEM_ADMINISTRATOR',
     cases,
     summary: {
