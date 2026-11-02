@@ -3,10 +3,10 @@
 /**
  * Duty performance: who is doing the job, and on time.
  *
- * FIVE DUTIES ON ONE PAGE, not five pages. They are owned by five different
+ * EVERY DUTY ON ONE PAGE, not a page each. They are owned by different
  * departments, but the question is identical and so is the answer's shape —
- * and a hospital with five separate boards gets five different arguments about
- * whose figures are right.
+ * and a hospital with a board per department gets an argument per department
+ * about whose figures are right.
  *
  * TWO RATES SHOWN SEPARATELY. Not doing the work and doing it late are
  * different failures needing different conversations, and a single blended

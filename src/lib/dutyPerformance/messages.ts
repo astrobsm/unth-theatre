@@ -53,6 +53,15 @@ export function buildDutyChase(input: {
   roleLabel?: string | null;
   /** Their own cases, where the caller worked them out. Named, not summarised. */
   caseload?: MemberCaseload | null;
+  /**
+   * Where they stand among colleagues doing the same duty: "9th of 12".
+   *
+   * WITHHELD RATHER THAN GUESSED. The caller passes null wherever a position
+   * would not be a ranking — too few colleagues ranked to compare against —
+   * because "2nd of 2" is being told you are last with the arithmetic hidden,
+   * and a chase is already a hard message to receive.
+   */
+  rankLabel?: string | null;
 }): string {
   const d = DUTIES[input.duty];
   const p = input.performance;
@@ -79,6 +88,15 @@ export function buildDutyChase(input: {
 
   if (p.medianMarginMinutes !== null) {
     lines.push(`• Typically ${formatMargin(p.medianMarginMinutes)}`);
+  }
+
+  // The position, beside the figure rather than instead of it. A percentage on
+  // its own does not tell anybody whether it is good: 78% is a decent record
+  // in a theatre averaging 60% and a poor one in a theatre averaging 95%, and
+  // without that a colleague either despairs at a respectable figure or
+  // relaxes at a bad one.
+  if (input.rankLabel) {
+    lines.push(`• Among colleagues on this duty: ${input.rankLabel}`);
   }
 
   if (p.done > 0) {

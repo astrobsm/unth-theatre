@@ -1,10 +1,10 @@
 // ============================================================
-// Five queries, one shape
+// Ten queries, one shape
 // ------------------------------------------------------------
 // Each collector turns one duty's records into DutyEvent[]. Nothing here
 // decides anything: no ranking, no grace, no judgement about who is doing
-// well. All of that lives in report.ts, so the five duties cannot drift apart
-// into five different ideas of what "late" means.
+// well. All of that lives in report.ts, so the duties cannot drift apart
+// into ten different ideas of what "late" means.
 //
 // WHAT EACH COLLECTOR OWES ITS CALLER is the honest answer to three questions
 // — who was responsible, when was it due, when was it done — and NULL where it
@@ -414,6 +414,486 @@ async function collectSurgeryTiming(from: string, to: string): Promise<DutyEvent
   });
 }
 
+// ── 6. The technician's statement that a theatre is ready ───────────────────
+//
+// Counted per THEATRE-DAY, not per case. One confirmation covers a theatre for
+// a day however many cases run in it, which is also what the unique
+// constraint on theatre_readiness_confirmations says, so a technician must not
+// be charged a duty per case for a statement they are only asked to make once.
+//
+// A theatre-day exists to be confirmed when a list was actually booked into
+// that theatre. Theatres with nothing booked are not a duty anybody missed.
+async function collectTheatreReadiness(from: string, to: string): Promise<DutyEvent[]> {
+  const { start, end } = windowBounds(from, to);
+
+  const surgeries = await prisma.surgery.findMany({
+    where: {
+      scheduledDate: { gte: start, lt: end },
+      status: { notIn: ['CANCELLED'] as never },
+      theatreId: { not: null },
+    },
+    select: {
+      id: true,
+      unit: true,
+      theatreId: true,
+      scheduledDate: true,
+      scheduledTime: true,
+      theatreTechnicianId: true,
+    },
+  });
+  if (surgeries.length === 0) return [];
+
+  // One bucket per theatre and WAT day.
+  interface Bucket {
+    theatreId: string;
+    day: string;
+    cases: number;
+    earliest: Date;
+    units: string[];
+    technicianIds: string[];
+  }
+  const buckets: Record<string, Bucket> = {};
+  surgeries.forEach((s) => {
+    if (!s.theatreId) return;
+    const day = watDay(s.scheduledDate);
+    const key = `${s.theatreId}|${day}`;
+    const at = listStart(s.scheduledDate, s.scheduledTime);
+    const b = buckets[key];
+    if (!b) {
+      buckets[key] = {
+        theatreId: s.theatreId,
+        day,
+        cases: 1,
+        earliest: at,
+        units: s.unit ? [s.unit] : [],
+        technicianIds: s.theatreTechnicianId ? [s.theatreTechnicianId] : [],
+      };
+      return;
+    }
+    b.cases += 1;
+    if (at.getTime() < b.earliest.getTime()) b.earliest = at;
+    if (s.unit && b.units.indexOf(s.unit) === -1) b.units.push(s.unit);
+    if (s.theatreTechnicianId && b.technicianIds.indexOf(s.theatreTechnicianId) === -1) {
+      b.technicianIds.push(s.theatreTechnicianId);
+    }
+  });
+
+  const keys = Object.keys(buckets);
+  const theatreIds: string[] = [];
+  keys.forEach((k) => {
+    const id = buckets[k].theatreId;
+    if (theatreIds.indexOf(id) === -1) theatreIds.push(id);
+  });
+
+  const [confirmations, theatres] = await Promise.all([
+    prisma.theatreReadinessConfirmation.findMany({
+      where: {
+        role: 'THEATRE_TECHNICIAN' as never,
+        theatreId: { in: theatreIds },
+        readyDate: { gte: start, lt: end },
+      },
+      select: {
+        theatreId: true,
+        readyDate: true,
+        confirmedById: true,
+        confirmedByName: true,
+        complete: true,
+        completedAt: true,
+        theatreName: true,
+      },
+    }),
+    prisma.theatreSuite.findMany({
+      where: { id: { in: theatreIds } },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const theatreName: Record<string, string> = {};
+  theatres.forEach((t) => { theatreName[t.id] = t.name; });
+
+  const confirmed: Record<string, typeof confirmations[number]> = {};
+  confirmations.forEach((c) => {
+    // readyDate is a DATE column: midnight UTC of the day it names, so it is
+    // sliced rather than shifted into WAT, which would move it to the day
+    // before.
+    confirmed[`${c.theatreId}|${c.readyDate.toISOString().slice(0, 10)}`] = c;
+  });
+
+  // Technician names, for the theatre-days nobody confirmed. Without this a
+  // missed confirmation would be attributable to a bare id and therefore to
+  // nobody, and the person actually rostered to that theatre would never see
+  // it against their name.
+  const techIds: string[] = [];
+  keys.forEach((k) => {
+    buckets[k].technicianIds.forEach((id) => {
+      if (techIds.indexOf(id) === -1) techIds.push(id);
+    });
+  });
+  const techs = techIds.length
+    ? await prisma.user.findMany({
+      where: { id: { in: techIds } },
+      select: { id: true, fullName: true },
+    })
+    : [];
+  const techName: Record<string, string> = {};
+  techs.forEach((u) => { techName[u.id] = u.fullName; });
+
+  return keys.map((key) => {
+    const b = buckets[key];
+    const c = confirmed[key] ?? null;
+    // Whoever confirmed it owns it. Where nobody did, the technician assigned
+    // to the cases in that theatre does — and where the booking named none,
+    // null: the theatre-day stays counted in the totals and against the unit,
+    // but it is laid at nobody's door, which is the rule this whole module
+    // keeps.
+    const assigned = b.technicianIds.length === 1 ? b.technicianIds[0] : null;
+    const personId = c?.confirmedById ?? assigned;
+    const personName = c?.confirmedByName
+      ?? (assigned ? techName[assigned] ?? null : null);
+    const name = theatreName[b.theatreId] ?? c?.theatreName ?? 'Theatre';
+    return {
+      id: key,
+      personId: personId ?? null,
+      personName: personName ?? null,
+      // A theatre running two units' cases belongs to neither for this duty.
+      unit: b.units.length === 1 ? b.units[0] : null,
+      label: `${name} — ${b.cases} ${b.cases === 1 ? 'case' : 'cases'}, ${b.day}`,
+      dueAt: b.earliest,
+      // Only a COMPLETE confirmation is the duty done. A record with half the
+      // checks ticked is a theatre nobody has said is ready.
+      doneAt: c && c.complete ? (c.completedAt ?? null) : null,
+      dutyDay: b.day,
+    };
+  });
+}
+
+// ── 7. The nurse receiving the patient into theatre ─────────────────────────
+//
+// Only cases that actually reached a theatre. A case still SCHEDULED may be
+// one that has not started yet rather than one nobody received, and charging
+// a nurse for a patient who never came is how a board gets dismissed.
+async function collectPatientReception(from: string, to: string): Promise<DutyEvent[]> {
+  const { start, end } = windowBounds(from, to);
+
+  const rows = await prisma.surgery.findMany({
+    where: {
+      scheduledDate: { gte: start, lt: end },
+      status: { in: ['IN_PROGRESS', 'COMPLETED'] as never },
+    },
+    select: {
+      id: true,
+      unit: true,
+      scheduledDate: true,
+      procedureName: true,
+      scrubNurseId: true,
+      patient: { select: { name: true, folderNumber: true } },
+      caseFlow: {
+        select: { patientReceived: true, patientReceivedAt: true, receivedById: true },
+      },
+    },
+  });
+
+  const ids: string[] = [];
+  rows.forEach((r) => {
+    const by = r.caseFlow?.receivedById;
+    if (by && ids.indexOf(by) === -1) ids.push(by);
+    if (r.scrubNurseId && ids.indexOf(r.scrubNurseId) === -1) ids.push(r.scrubNurseId);
+  });
+  const users = ids.length
+    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } })
+    : [];
+  const nameOf: Record<string, string> = {};
+  users.forEach((u) => { nameOf[u.id] = u.fullName; });
+
+  return rows.map((r) => {
+    const f = r.caseFlow;
+    // Whoever pressed Receive owns it; failing that the scrub nurse on the
+    // case, who is the person the duty belongs to when nobody pressed
+    // anything at all. The same rule as the surgery times, for the same
+    // reason.
+    const personId = f?.receivedById ?? r.scrubNurseId ?? null;
+    return {
+      id: r.id,
+      personId,
+      personName: personId ? nameOf[personId] ?? null : null,
+      unit: r.unit,
+      label: caseLabel(r.patient, r.procedureName),
+      // The day, not the scheduled minute. A list of six cases shares one
+      // scheduled time, so timing reception against it would report the
+      // fourth patient of the morning as three hours late for arriving when
+      // the theatre was ready for them.
+      dueAt: endOfDay(r.scheduledDate),
+      doneAt: f?.patientReceived ? (f.patientReceivedAt ?? null) : null,
+      dutyDay: dutyDayFor(r.scheduledDate, false),
+    };
+  });
+}
+
+// ── 8. The recovery nurse receiving the patient into recovery ───────────────
+async function collectPacuAdmission(from: string, to: string): Promise<DutyEvent[]> {
+  const { start, end } = windowBounds(from, to);
+
+  const rows = await prisma.surgery.findMany({
+    where: {
+      scheduledDate: { gte: start, lt: end },
+      status: { in: ['COMPLETED'] as never },
+    },
+    select: {
+      id: true,
+      unit: true,
+      scheduledDate: true,
+      scheduledTime: true,
+      procedureName: true,
+      actualEndTime: true,
+      completedAt: true,
+      patient: { select: { name: true, folderNumber: true } },
+      pacuAssessment: {
+        select: { receivedBy: true, admissionTime: true, createdAt: true },
+      },
+    },
+  });
+  if (rows.length === 0) return [];
+
+  const ids: string[] = [];
+  rows.forEach((r) => {
+    const by = r.pacuAssessment?.receivedBy;
+    if (by && ids.indexOf(by) === -1) ids.push(by);
+  });
+  const users = ids.length
+    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } })
+    : [];
+  const nameOf: Record<string, string> = {};
+  users.forEach((u) => { nameOf[u.id] = u.fullName; });
+
+  return rows.map((r) => {
+    const a = r.pacuAssessment;
+    // Half an hour from the patient leaving theatre. Where no end time was
+    // recorded there is no finer deadline to use, so the end of the operating
+    // day stands in rather than the case being dropped: a patient still had
+    // to be received.
+    const left = r.actualEndTime ?? r.completedAt ?? null;
+    const dueAt = left
+      ? new Date(left.getTime() + 30 * 60_000)
+      : endOfDay(r.scheduledDate);
+    return {
+      id: r.id,
+      personId: a?.receivedBy ?? null,
+      personName: a?.receivedBy ? nameOf[a.receivedBy] ?? null : null,
+      unit: r.unit,
+      label: caseLabel(r.patient, r.procedureName),
+      dueAt,
+      // createdAt, not admissionTime: admissionTime is the hour the nurse
+      // says the patient arrived, which a record opened at the end of the
+      // shift can still be truthful about. Punctuality is about when the
+      // record was opened, and only createdAt knows that.
+      doneAt: a?.createdAt ?? null,
+      dutyDay: watDay(left ?? r.scheduledDate),
+    };
+  });
+}
+
+// ── 9. The recovery nurse recording the discharge ───────────────────────────
+//
+// READ THE DEADLINE HERE BEFORE CHANGING IT. It is the end of the WAT day the
+// patient was ADMITTED to recovery, and it is deliberately not "admission plus
+// two hours" or anything else derived from how long the patient stayed.
+//
+// A deadline measured from the length of stay would reward discharging
+// patients sooner. Recovery is the one place in this hospital where the right
+// answer is routinely "keep them longer", and a performance board that scores
+// a three-hour stay worse than a forty-minute one would be pressure in
+// exactly the wrong direction, applied to the nurse standing over the
+// patient. What is being measured is whether the discharge was WRITTEN DOWN.
+// A long stay entered properly is a good record; a short stay nobody entered
+// is not.
+async function collectPacuDischarge(from: string, to: string): Promise<DutyEvent[]> {
+  const { start, end } = windowBounds(from, to);
+
+  const rows = await prisma.pACUAssessment.findMany({
+    where: { admissionTime: { gte: start, lt: end } },
+    select: {
+      id: true,
+      surgeryId: true,
+      admissionTime: true,
+      dischargeTime: true,
+      receivedBy: true,
+      surgery: {
+        select: {
+          unit: true,
+          procedureName: true,
+          patient: { select: { name: true, folderNumber: true } },
+        },
+      },
+    },
+  });
+  if (rows.length === 0) return [];
+
+  // Who actually discharged them. The assessment records who RECEIVED the
+  // patient and nothing about who sent them on, so the attribution comes from
+  // the movement row the discharge writes. Where there is none — an older
+  // record, or a discharge that never happened — it falls back to the nurse
+  // who holds the record, because an open record is that nurse's to close.
+  const surgeryIds = rows.map((r) => r.surgeryId);
+  const movements = await prisma.patientMovement.findMany({
+    where: { surgeryId: { in: surgeryIds }, phase: 'RETURNED_TO_WARD' as never },
+    select: { surgeryId: true, recordedBy: true, timestamp: true },
+    orderBy: { timestamp: 'asc' },
+  });
+  const dischargedBy: Record<string, string> = {};
+  movements.forEach((m) => {
+    if (m.recordedBy && !dischargedBy[m.surgeryId]) dischargedBy[m.surgeryId] = m.recordedBy;
+  });
+
+  const ids: string[] = [];
+  rows.forEach((r) => {
+    const by = dischargedBy[r.surgeryId] ?? r.receivedBy;
+    if (by && ids.indexOf(by) === -1) ids.push(by);
+  });
+  const users = ids.length
+    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } })
+    : [];
+  const nameOf: Record<string, string> = {};
+  users.forEach((u) => { nameOf[u.id] = u.fullName; });
+
+  return rows.map((r) => {
+    const personId = dischargedBy[r.surgeryId] ?? r.receivedBy ?? null;
+    return {
+      id: r.id,
+      personId,
+      personName: personId ? nameOf[personId] ?? null : null,
+      unit: r.surgery?.unit ?? null,
+      label: caseLabel(r.surgery?.patient, r.surgery?.procedureName ?? null),
+      dueAt: endOfDay(r.admissionTime),
+      doneAt: r.dischargeTime,
+      dutyDay: watDay(r.admissionTime),
+    };
+  });
+}
+
+// ── 10. Every team member saying whether they are coming ────────────────────
+//
+// The one duty in this file with no attribution problem at all: the team is
+// named on the case before anybody answers, so an unanswered case has a person
+// against it the same way an answered one does. That is the model the comment
+// at the top of this file says the other duties would need.
+//
+// ONLY CASES WHOSE LIST HAS ALREADY STARTED. Nobody has failed to answer for
+// a case that has not come up yet, and without this filter a window that
+// included tomorrow would report the whole theatre as silent.
+async function collectCaseAvailability(from: string, to: string): Promise<DutyEvent[]> {
+  const { start, end } = windowBounds(from, to);
+  const now = new Date();
+
+  const surgeries = await prisma.surgery.findMany({
+    where: {
+      scheduledDate: { gte: start, lt: end },
+      status: { notIn: ['CANCELLED'] as never },
+    },
+    select: {
+      id: true,
+      unit: true,
+      scheduledDate: true,
+      scheduledTime: true,
+      procedureName: true,
+      surgeonId: true,
+      supervisingConsultantId: true,
+      assistantSurgeonId: true,
+      anesthetistId: true,
+      scrubNurseId: true,
+      theatreTechnicianId: true,
+      patient: { select: { name: true, folderNumber: true } },
+    },
+  });
+  if (surgeries.length === 0) return [];
+
+  const due: Record<string, Date> = {};
+  const live = surgeries.filter((s) => {
+    const at = listStart(s.scheduledDate, s.scheduledTime);
+    due[s.id] = at;
+    return at.getTime() <= now.getTime();
+  });
+  if (live.length === 0) return [];
+
+  const ids = live.map((s) => s.id);
+
+  const [assignments, booked, answers] = await Promise.all([
+    prisma.theatreTeamAssignment.findMany({
+      where: { surgeryId: { in: ids }, removedAt: null },
+      select: { surgeryId: true, userId: true, userName: true },
+    }),
+    prisma.surgicalTeamMember.findMany({
+      where: { surgeryId: { in: ids }, userId: { not: null } },
+      select: { surgeryId: true, userId: true, memberName: true },
+    }),
+    prisma.caseTeamAvailability.findMany({
+      where: { surgeryId: { in: ids } },
+      select: { surgeryId: true, userId: true, userName: true, respondedAt: true },
+    }),
+  ]);
+
+  // Who was on each case, from all three sources, de-duplicated.
+  const team: Record<string, Record<string, string | null>> = {};
+  const put = (surgeryId: string, userId: string | null | undefined, name: string | null) => {
+    if (!userId) return;
+    const t = team[surgeryId] ?? (team[surgeryId] = {});
+    if (!(userId in t) || (!t[userId] && name)) t[userId] = name;
+  };
+  live.forEach((s) => {
+    put(s.id, s.surgeonId, null);
+    put(s.id, s.supervisingConsultantId, null);
+    put(s.id, s.assistantSurgeonId, null);
+    put(s.id, s.anesthetistId, null);
+    put(s.id, s.scrubNurseId, null);
+    put(s.id, s.theatreTechnicianId, null);
+  });
+  assignments.forEach((a) => put(a.surgeryId, a.userId, a.userName ?? null));
+  booked.forEach((b) => put(b.surgeryId, b.userId, b.memberName ?? null));
+
+  const answered: Record<string, Date> = {};
+  answers.forEach((a) => {
+    // An answer from somebody not otherwise on the team still counts: they
+    // were evidently asked, and a duty they discharged must not be invisible.
+    put(a.surgeryId, a.userId, a.userName ?? null);
+    answered[`${a.surgeryId}|${a.userId}`] = a.respondedAt;
+  });
+
+  // Names for the ids the Surgery columns gave us bare.
+  const need: string[] = [];
+  Object.keys(team).forEach((sid) => {
+    Object.keys(team[sid]).forEach((uid) => {
+      if (!team[sid][uid] && need.indexOf(uid) === -1) need.push(uid);
+    });
+  });
+  const users = need.length
+    ? await prisma.user.findMany({ where: { id: { in: need } }, select: { id: true, fullName: true } })
+    : [];
+  const nameOf: Record<string, string> = {};
+  users.forEach((u) => { nameOf[u.id] = u.fullName; });
+
+  const byId: Record<string, typeof live[number]> = {};
+  live.forEach((s) => { byId[s.id] = s; });
+
+  const events: DutyEvent[] = [];
+  Object.keys(team).forEach((surgeryId) => {
+    const s = byId[surgeryId];
+    if (!s) return;
+    Object.keys(team[surgeryId]).forEach((userId) => {
+      events.push({
+        // One duty per person per case, so the id must carry both.
+        id: `${surgeryId}|${userId}`,
+        personId: userId,
+        personName: team[surgeryId][userId] ?? nameOf[userId] ?? null,
+        unit: s.unit,
+        label: caseLabel(s.patient, s.procedureName),
+        dueAt: due[surgeryId],
+        doneAt: answered[`${surgeryId}|${userId}`] ?? null,
+        dutyDay: dutyDayFor(s.scheduledDate, false),
+      });
+    });
+  });
+  return events;
+}
+
 /** Every duty's events for a window, by key. */
 export async function collectDutyEvents(
   duty: DutyKey,
@@ -432,6 +912,11 @@ export async function collectDutyEvents(
     case 'CONSUMABLE_PACKING': return collectPacking('CONSUMABLE_PACKING', from, to);
     case 'EMERGENCY_ACK': return collectEmergencyAck(from, to);
     case 'SURGERY_TIMING': return collectSurgeryTiming(from, to);
+    case 'THEATRE_READINESS': return collectTheatreReadiness(from, to);
+    case 'PATIENT_RECEPTION': return collectPatientReception(from, to);
+    case 'PACU_ADMISSION': return collectPacuAdmission(from, to);
+    case 'PACU_DISCHARGE': return collectPacuDischarge(from, to);
+    case 'CASE_AVAILABILITY': return collectCaseAvailability(from, to);
     default: return [];
   }
 }

@@ -33,6 +33,7 @@ import TeamAvailabilityCard from '@/components/theatre/TeamAvailabilityCard';
 // the hospital no space, and on the morning it appears somebody notices.
 import TodaysCelebrationsCard from '@/components/TodaysCelebrationsCard';
 import MyAnaesthesiaCasesCard from '@/components/anaesthesia/MyCasesCard';
+import MyDutyRecordCard from '@/components/duty/MyDutyRecordCard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -202,6 +203,14 @@ export default function DashboardPage() {
           first question anybody has is whether the rest of the team is
           coming, and until now that was answered by telephone. */}
       <TeamAvailabilityCard />
+
+      {/* After the cards about today, because this one is about the month
+          behind. It is here so that a colleague learns their own record from
+          their own dashboard rather than from a chase message — somebody
+          shown two unrecorded discharges on the Tuesday enters them on the
+          Tuesday, and then there is nothing to chase. Renders nothing for
+          anybody who carries none of these duties. */}
+      <MyDutyRecordCard />
 
       {/* Beneath the operational cards, above the navigation. A birthday is
           not more urgent than a list, and it is more important than a link. */}

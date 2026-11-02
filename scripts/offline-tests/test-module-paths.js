@@ -48,7 +48,18 @@ function loadModules() {
   m.require = (id) => {
     // roleGroups only matters for access resolution, not for the path lists.
     if (id.includes('roleGroups')) return { effectiveRoles: (r) => [r] };
+    // Nor does the audit committee's membership. Stubbed by name rather than
+    // left to fall through: a relative import that reaches the node_modules
+    // branch below throws MODULE_NOT_FOUND, which is how this check silently
+    // stopped running at all once modules.ts took a second local import.
+    if (id.includes('emergencyEscalation')) return { AUDIT_COMMITTEE_ROLES: [] };
     if (Module.builtinModules.includes(id)) return require(id);
+    if (id.startsWith('.')) {
+      throw new Error(
+        `test-module-paths: src/lib/modules.ts imports ${id}, which this harness `
+        + 'does not stub. Add a stub above rather than letting the check die.',
+      );
+    }
     return require(path.join(ROOT, 'node_modules', id));
   };
   m._compile(js, file);

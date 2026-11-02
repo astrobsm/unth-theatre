@@ -39,7 +39,7 @@ const many = (n: number, over: Partial<DutyEvent> = {}) =>
 
 const WINDOW = { from: '2026-10-01', to: '2026-10-31' };
 
-describe('the five duties are declared once', () => {
+describe('every duty is declared once', () => {
   it('has a definition for every key, and no orphans', () => {
     DUTY_KEYS.forEach((k) => {
       expect(DUTIES[k]).toBeDefined();

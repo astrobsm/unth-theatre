@@ -1,5 +1,5 @@
 // ============================================================
-// Five duties, one measure
+// Ten duties, one measure
 // ------------------------------------------------------------
 // The anaesthetist's pre-op review, pharmacy's drug packing, the consumable
 // provider's packing, the nurses' acknowledgement of an emergency, and the
@@ -29,7 +29,12 @@ export type DutyKey =
   | 'PHARMACY_PACKING'
   | 'CONSUMABLE_PACKING'
   | 'EMERGENCY_ACK'
-  | 'SURGERY_TIMING';
+  | 'SURGERY_TIMING'
+  | 'THEATRE_READINESS'
+  | 'PACU_ADMISSION'
+  | 'PACU_DISCHARGE'
+  | 'PATIENT_RECEPTION'
+  | 'CASE_AVAILABILITY';
 
 /**
  * One instance of a duty: a thing that somebody had to do.
@@ -351,6 +356,212 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       + 'entered on the day cannot be recovered afterwards.',
     ],
   },
+  THEATRE_READINESS: {
+    key: 'THEATRE_READINESS',
+    label: 'Theatre readiness confirmation',
+    owner: 'Anaesthetic technicians',
+    verb: 'confirmed',
+    deadline: 'before the first patient of the list is sent for',
+    why:
+      'The technician is the only person who can say that the anaesthetic machine has been '
+      + 'checked, that the gases and the suction are on, that the monitors work and that the '
+      + 'airway trolley is in the room. Nobody else can answer for any of it. Until that '
+      + 'confirmation is on the ORM the theatre coordinator does not know whether the room '
+      + 'can take a patient, so one of two things happens: the list waits for somebody to '
+      + 'walk round and ask, or a patient is sent for and arrives at a theatre that is not '
+      + 'ready and waits on the trolley outside it. The check is almost always done — it is '
+      + 'the saying so that is missing, and the saying so is what the rest of the morning '
+      + 'is built on.',
+    graceMinutes: 15,
+    where: 'Dashboard → Theatre Readiness',
+    subordinates: 'the technicians working with you',
+    whyShort:
+      'Until it is confirmed, nobody outside your theatre knows whether the room can take '
+      + 'a patient.',
+    ask:
+      'Dashboard → Theatre Readiness: pick your theatre, tick the checks as you do them '
+      + 'and press Confirm — before the first patient is sent for.',
+    roles: ['ANAESTHETIC_TECHNICIAN'],
+    rosterCategory: 'ANAESTHETIC_TECHNICIANS',
+    delegation: null,
+    steps: [
+      'Open Dashboard → Theatre Readiness and choose the theatre you are working in.',
+      'Work down your list as you actually do the checks — machine, gases and suction, '
+      + 'monitors, airway trolley, drugs drawn up. It is your list, not the scrub '
+      + 'nurse’s; she has her own and cannot answer for your side of the room.',
+      'Where something is short or faulty, write it in the note rather than leaving the '
+      + 'tick empty. A note is read out with the readiness announcement and reaches the '
+      + 'coordinator; an untouched tick reaches nobody.',
+      'Press Confirm before the first patient is sent for. One confirmation per theatre '
+      + 'per day — if something changes later, open the same record and change it.',
+    ],
+  },
+  PATIENT_RECEPTION: {
+    key: 'PATIENT_RECEPTION',
+    label: 'Receiving the patient into theatre',
+    owner: 'Theatre nurses',
+    verb: 'received',
+    deadline: 'on the day of surgery',
+    why:
+      'The reception entry is the handover: it records that the patient arrived in this '
+      + 'theatre, that the nurse took them from the porters, and when. It is what the '
+      + 'holding area reads to know the patient was delivered, what the next case on the '
+      + 'list is timed from, and the only record that the handover happened at all. Where '
+      + 'it is missing, a patient who has been in theatre for an hour still shows as '
+      + 'waiting, the porters are chased for a patient they already brought, and nobody '
+      + 'can afterwards say who received them.',
+    graceMinutes: 0,
+    where: 'Dashboard → Theatre Reception',
+    subordinates: 'the nurses working with you in your theatre',
+    whyShort:
+      'Until the patient is received on the ORM, the board still shows them waiting and '
+      + 'the porters get chased for a patient already in theatre.',
+    ask:
+      'Dashboard → Theatre Reception: find the case, press Receive Patient and name the '
+      + 'porters who brought them — on the day, not afterwards.',
+    roles: ['SCRUB_NURSE'],
+    rosterCategory: 'NURSES',
+    delegation: null,
+    steps: [
+      'Open Dashboard → Theatre Reception. Your theatre’s cases for the day are listed.',
+      'When the porters bring the patient, press Receive Patient on that case.',
+      'Name the porters who brought them. That is how their own work is credited — a '
+      + 'reception with no porters named leaves them with nothing recorded for the trip.',
+      'Do it as it happens, or at the latest before the end of the day. A reception '
+      + 'entered the next morning cannot be distinguished from one that never happened, '
+      + 'and the times it feeds are already wrong by then.',
+    ],
+  },
+  PACU_ADMISSION: {
+    key: 'PACU_ADMISSION',
+    label: 'Receiving a patient into recovery',
+    owner: 'Recovery room nurses',
+    verb: 'admitted',
+    deadline: 'within half an hour of the patient leaving theatre',
+    why:
+      'The admission assessment is the baseline everything afterwards is read against. The '
+      + 'Aldrete score, the airway, the first set of observations and the handover from '
+      + 'theatre are what later readings are compared with, and what any deterioration is '
+      + 'measured from. Entered an hour late it is no longer a baseline, it is a second '
+      + 'reading of a patient whose arrival nobody recorded. And until the admission is in, '
+      + 'the recovery board shows an empty bay: the theatre coordinator believes recovery '
+      + 'is free, the surgeon believes the patient is still in theatre, and a patient in a '
+      + 'bay nobody has opened a record for is a patient nobody is counting.',
+    graceMinutes: 15,
+    where: 'Dashboard → PACU',
+    subordinates: 'the recovery nurses on your shift',
+    whyShort:
+      'Until the admission is entered, the board shows an empty bay and the patient in it '
+      + 'is being counted by nobody.',
+    ask:
+      'Dashboard → PACU → Admit Patient: open the record as the patient arrives, with the '
+      + 'first Aldrete score and the handover from theatre.',
+    roles: ['RECOVERY_ROOM_NURSE'],
+    rosterCategory: 'RECOVERY_NURSES',
+    delegation: null,
+    steps: [
+      'Open Dashboard → PACU. The cases that have finished in theatre and have no '
+      + 'recovery record are listed as eligible to admit.',
+      'Press Admit Patient as the patient arrives in the bay — not at the end of the '
+      + 'shift. The record takes the handover from the theatre nurse and the '
+      + 'anaesthetist, which is why it is opened while they are still standing there.',
+      'Enter the first Aldrete score, the airway and the admission observations. That is '
+      + 'the baseline every later reading is judged against.',
+      'Where the patient went straight to ICU and never came through recovery, record '
+      + 'the transfer rather than leaving the case open. A case with no entry at all is '
+      + 'counted here as a patient nobody received, because from the outside it cannot be '
+      + 'told apart from one.',
+    ],
+  },
+  PACU_DISCHARGE: {
+    key: 'PACU_DISCHARGE',
+    label: 'Recording a discharge from recovery',
+    owner: 'Recovery room nurses',
+    verb: 'discharged',
+    deadline: 'before the end of the day the patient came into recovery',
+    why:
+      'This measures whether the discharge was written down, and nothing else. A recovery '
+      + 'record left open after the patient has gone back to the ward holds a bay that is '
+      + 'actually empty, so the coordinator sees no room in recovery and holds the list; it '
+      + 'leaves the ward with no handover note and no discharge criteria recorded; and it '
+      + 'leaves the patient, on paper, still under recovery observation hours after '
+      + 'somebody stopped observing them. Nothing here asks anybody to discharge a patient '
+      + 'sooner. A patient stays in recovery until they meet the criteria, for as long as '
+      + 'that takes, and a long stay properly recorded is a good record on this duty.',
+    graceMinutes: 60,
+    where: 'Dashboard → PACU',
+    subordinates: 'the recovery nurses on your shift',
+    whyShort:
+      'A recovery record left open holds a bay that is empty and leaves the ward with no '
+      + 'handover. It is the entry that is being asked for, never a quicker discharge.',
+    ask:
+      'Dashboard → PACU → the patient → Discharge: tick the discharge criteria, say where '
+      + 'they went and who received them — when they actually leave the bay.',
+    roles: ['RECOVERY_ROOM_NURSE'],
+    rosterCategory: 'RECOVERY_NURSES',
+    delegation: null,
+    steps: [
+      'Keep the patient in recovery until they meet the discharge criteria. That '
+      + 'judgement is yours and this board does not touch it — a patient who needs three '
+      + 'hours gets three hours.',
+      'When they do leave the bay, open the record on Dashboard → PACU and press '
+      + 'Discharge.',
+      'Tick the criteria as you check them, say which ward or unit the patient went to, '
+      + 'and name the nurse who received them.',
+      'Do it as they leave, or at the latest before the end of the day. What is counted '
+      + 'here is the record, not the clock: a long stay entered properly counts as done '
+      + 'on time, and a short stay nobody entered counts as not done.',
+    ],
+  },
+  CASE_AVAILABILITY: {
+    key: 'CASE_AVAILABILITY',
+    label: 'Saying whether you are coming to a case',
+    owner: 'Everyone named on a theatre team',
+    verb: 'answered',
+    deadline: 'before the list starts',
+    why:
+      'A case is assembled from six or seven people, and the coordinator cannot tell the '
+      + 'difference between a colleague who has not answered and one who is not coming. So '
+      + 'silence is treated as the worst case: cover is arranged that was not needed, or — '
+      + 'far more often — nothing is arranged at all, and the gap is discovered at eight in '
+      + 'the morning with a patient already starved and on the trolley. One tap the evening '
+      + 'before is the whole of the duty. It takes a few seconds and it is the only thing '
+      + 'that lets a missing anaesthetist or scrub nurse be replaced the day before instead '
+      + 'of the case being cancelled on the morning.',
+    graceMinutes: 0,
+    where: 'your dashboard, or Dashboard → the case → Team',
+    subordinates: 'the colleagues on your team who are rostered with you',
+    whyShort:
+      'Silence and “not coming” look identical to the coordinator, so an unanswered case '
+      + 'gets no cover arranged for it.',
+    ask:
+      'Open the case on your dashboard and press Available, Delayed or Unavailable — '
+      + 'before the list starts, and change it freely if your day changes.',
+    roles: [
+      'SURGEON',
+      'CONSULTANT_SURGEON',
+      'ANAESTHETIST',
+      'CONSULTANT_ANAESTHETIST',
+      'SCRUB_NURSE',
+      'RECOVERY_ROOM_NURSE',
+      'ANAESTHETIC_TECHNICIAN',
+    ],
+    rosterCategory: null,
+    delegation: null,
+    steps: [
+      'The cases you are named on appear on your own dashboard. You do not have to go '
+      + 'looking for them.',
+      'Answer each one before its list starts: Available, Delayed with how many minutes, '
+      + 'or Unavailable.',
+      'Delayed is not a failure and is not counted as one. A colleague twenty minutes '
+      + 'away is a case that runs twenty minutes late; a colleague who says nothing is a '
+      + 'case that may not run at all. Say the number.',
+      'Change your answer whenever your day changes. Changing your mind costs nothing '
+      + 'here and is far better than an answer that has quietly stopped being true.',
+      'Unavailable in good time is a help, not an offence. It is what lets the '
+      + 'coordinator find somebody else while there is still a day to do it in.',
+    ],
+  },
 };
 
 export const DUTY_KEYS: DutyKey[] = [
@@ -359,6 +570,11 @@ export const DUTY_KEYS: DutyKey[] = [
   'CONSUMABLE_PACKING',
   'EMERGENCY_ACK',
   'SURGERY_TIMING',
+  'THEATRE_READINESS',
+  'PATIENT_RECEPTION',
+  'PACU_ADMISSION',
+  'PACU_DISCHARGE',
+  'CASE_AVAILABILITY',
 ];
 
 export function isDutyKey(v: unknown): v is DutyKey {

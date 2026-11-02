@@ -24,6 +24,7 @@ import { periodLabel } from '@/lib/dutyPerformance/export';
 import { memberCaseload } from '@/lib/dutyPerformance/caseload';
 import { roleWords } from '@/lib/dutyPerformance/dutyTeam';
 import { DUTIES, isDutyKey } from '@/lib/dutyPerformance/types';
+import { MIN_RANKED_FOR_RANK, rankLabel as rankWords } from '@/lib/dutyPerformance/myRecord';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 
@@ -157,10 +158,21 @@ export async function POST(request: NextRequest) {
     }
 
     const label = periodLabel(from, to);
+    // Where they stand, in both directions. The same rule the colleague's own
+    // dashboard card uses, and for the same reason: below MIN_RANKED_FOR_RANK
+    // a position is a comparison with one or two named people rather than a
+    // ranking, and "2nd of 2" tells somebody they are last while pretending to
+    // be a statistic.
+    const position = index >= 0 && report.people.length >= MIN_RANKED_FOR_RANK
+      ? rankWords(index + 1, report.people.length)
+      : null;
+
     const rankLabel =
       kind === 'commend' && index === 0
         ? `That is the best record in the hospital for this duty over the period.`
-        : null;
+        : (kind === 'commend' && position
+          ? `Among colleagues on this duty over the period, that places you ${position}.`
+          : null);
 
     const text =
       kind === 'commend'
@@ -170,6 +182,7 @@ export async function POST(request: NextRequest) {
           duty,
           performance,
           periodLabel: label,
+          rankLabel: position,
           roleLabel: roleWords(person.role ? String(person.role) : null),
           // Their own outstanding cases, named. The roster is not read here:
           // this route only ever writes to somebody the report already names,
