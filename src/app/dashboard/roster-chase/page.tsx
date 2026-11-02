@@ -17,8 +17,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, CalendarClock, Check, Eye, FileClock, Loader2, Send, UserPlus,
+  AlertTriangle, CalendarClock, Check, Eye, FileClock, Loader2, MessageCircle, Send,
+  UserPlus,
 } from 'lucide-react';
+import { whatsappLink } from '@/lib/whatsapp';
 
 interface Recipient {
   id: string;
@@ -82,6 +84,18 @@ export default function RosterChasePage() {
   const [note, setNote] = useState('');
   const [preview, setPreview] = useState<{ text: string; headline: string; to: string[] } | null>(null);
 
+  /**
+   * The WhatsApp messages waiting to be opened.
+   *
+   * KEPT ON SCREEN AFTER THE FIRST IS OPENED AUTOMATICALLY, for the two cases
+   * that would otherwise lose the message: a browser that blocked the pop-up,
+   * and a department whose roster is owned by two people — one wa.me link can
+   * only address one of them, so the second needs a button of its own.
+   */
+  const [handoff, setHandoff] = useState<
+    { name: string; href: string | null; alreadySent: boolean }[]
+  >([]);
+
   const load = useCallback(async (m?: string) => {
     setLoading(true);
     setError('');
@@ -107,6 +121,7 @@ export default function RosterChasePage() {
     setBusy(`${dept.slug}-${asPreview ? 'p' : 's'}-${personId ?? 'all'}`);
     setError('');
     setResult('');
+    setHandoff([]);
     try {
       const res = await fetch('/api/roster-chase/send', {
         method: 'POST',
@@ -131,6 +146,28 @@ export default function RosterChasePage() {
           .map((s: { name: string; reason: string }) => `${s.name} (${s.reason})`)
           .join('; ')}.`);
       }
+
+      // Hand the letter to WhatsApp.
+      //
+      // The in-app notification is already written by this point — the server
+      // does that before it answers — so a blocked pop-up can only leave the
+      // message unsent, never sent and unrecorded. It is also why the list
+      // below stays on screen: the manager can open it by hand afterwards.
+      const outgoing: { name: string; href: string | null; alreadySent: boolean }[] =
+        (d.whatsapp ?? []).map((w: {
+          name: string; number: string | null; text: string; alreadySent: boolean;
+        }) => ({
+          name: w.name,
+          href: w.number ? whatsappLink(w.number, w.text) : null,
+          alreadySent: w.alreadySent,
+        }));
+      setHandoff(outgoing);
+
+      // Opened straight away so the ordinary case — one head of department —
+      // is a single press, which is what the button has always promised.
+      const first = outgoing.find((o) => o.href);
+      if (first?.href) window.open(first.href, '_blank', 'noopener,noreferrer');
+
       await load(month);
     } catch {
       setError('Could not do that.');
@@ -300,6 +337,50 @@ export default function RosterChasePage() {
         the month was on time — measuring the most recent version would report the
         departments that maintain their rosters properly as the worst offenders.
       </p>
+
+      {/*
+        WHY THE LINKS STAY HERE after WhatsApp has been opened.
+
+        Three things go wrong with a pop-up that nothing else recovers from: a
+        browser blocks it silently, the manager closes WhatsApp before pressing
+        send, or the roster has two owners and one wa.me link can only address
+        one of them. In all three the letter is already on the colleague's ORM
+        dashboard and only the WhatsApp copy is missing — so the way back to it
+        has to be visible, not a matter of pressing the green button again.
+      */}
+      {handoff.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold text-green-900">
+            <MessageCircle className="h-4 w-4" />
+            Send on WhatsApp
+          </p>
+          <p className="mt-0.5 text-xs text-green-800">
+            Everybody below already has this on their ORM dashboard. WhatsApp opens
+            with the same wording — you press send.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {handoff.map((h) => (h.href ? (
+              <a
+                key={h.name}
+                href={h.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-xl bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                {h.name}
+              </a>
+            ) : (
+              <span
+                key={h.name}
+                className="flex items-center gap-1.5 rounded-xl border border-green-300 bg-white px-3 py-2 text-xs font-medium text-gray-600"
+              >
+                {h.name} — no phone number on file
+              </span>
+            )))}
+          </div>
+        </div>
+      )}
 
       {preview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

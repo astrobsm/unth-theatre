@@ -132,24 +132,32 @@ export async function POST(request: NextRequest) {
     const skipped: { name: string; reason: string }[] = [];
     let whatsappQueued = 0;
 
+    // The number and the wording for each head of department, handed back so
+    // the manager's own WhatsApp carries the message straight away.
+    //
+    // THE QUEUE IS NOT A DELIVERY. A queued WHATSAPP row waits for a provider
+    // that is not configured on this installation, so "WhatsApp chase queued"
+    // has meant the head of department heard nothing at all on WhatsApp — the
+    // letter existed only in their ORM notifications, which is the screen a
+    // late roster already suggests they are not reading. The same gap was
+    // found and closed on the late-booking chase; this is the rest of it.
+    //
+    // A hand-off also arrives FROM A PERSON rather than from a system, which
+    // suits a letter asking a colleague for cooperation rather better than an
+    // automated template would.
+    const whatsapp: {
+      id: string;
+      name: string;
+      number: string | null;
+      text: string;
+      alreadySent: boolean;
+    }[] = [];
+
     for (let i = 0; i < chosen.length; i += 1) {
       const r = chosen[i];
 
       if (!r.active) {
         skipped.push({ name: r.fullName, reason: 'account not active' });
-        continue;
-      }
-
-      // Already written to about this department and month? Not again.
-      const already = await prisma.notification.findFirst({
-        where: { userId: r.id, type: ROSTER_CHASE_TYPE, link },
-        select: { createdAt: true },
-      });
-      if (already) {
-        skipped.push({
-          name: r.fullName,
-          reason: `already written to on ${already.createdAt.toISOString().slice(0, 10)}`,
-        });
         continue;
       }
 
@@ -169,6 +177,27 @@ export async function POST(request: NextRequest) {
           .catch(() => null)
         : null;
 
+      // Already written to about this department and month? The record is not
+      // written twice — but the hand-off still is.
+      //
+      // A manager whose browser blocked the pop-up, or who closed WhatsApp
+      // before pressing send, otherwise had no way back to the message: the
+      // button answered "already written to" and offered nothing. What must
+      // not happen twice is the notification and the audit row, not the
+      // opening of WhatsApp.
+      const already = await prisma.notification.findFirst({
+        where: { userId: r.id, type: ROSTER_CHASE_TYPE, link },
+        select: { createdAt: true },
+      });
+      if (already) {
+        skipped.push({
+          name: r.fullName,
+          reason: `already written to on ${already.createdAt.toISOString().slice(0, 10)}`,
+        });
+        whatsapp.push({ id: r.id, name: r.fullName, number: wa, text, alreadySent: true });
+        continue;
+      }
+
       const queued = await queueMessage({
         channel: 'WHATSAPP' as never,
         priority: 'NORMAL' as never,
@@ -186,6 +215,9 @@ export async function POST(request: NextRequest) {
       });
       if (queued.queued) whatsappQueued += 1;
 
+      // THE IN-APP MESSAGE IS WRITTEN FIRST, before anything is handed back to
+      // be opened. A blocked pop-up can then only leave the message unsent,
+      // never sent and unrecorded.
       await prisma.notification.create({
         data: {
           userId: r.id,
@@ -197,22 +229,31 @@ export async function POST(request: NextRequest) {
       });
 
       sentTo.push(r.fullName);
+      whatsapp.push({ id: r.id, name: r.fullName, number: wa, text, alreadySent: false });
       if (!wa) {
         skipped.push({ name: r.fullName, reason: 'no phone number on file — sent in the app only' });
       }
     }
+
+    const reachable = whatsapp.filter((w) => w.number).length;
 
     return NextResponse.json({
       sent: sentTo.length > 0,
       sentTo,
       skipped,
       whatsappQueued,
+      whatsapp,
       headline: rosterHeadline({
         deptLabel: dept.label, period: standings.period, assessment: dept.assessment,
       }),
       message: sentTo.length
-        ? `Sent to ${sentTo.join(', ')}.`
-        : 'Nothing was sent — everybody who owns this roster had already been written to.',
+        ? `${sentTo.join(', ')} now ${sentTo.length === 1 ? 'has' : 'have'} this on `
+          + `${sentTo.length === 1 ? 'their' : 'their'} ORM dashboard.`
+          + (reachable
+            ? ' WhatsApp is opening with the same message — press send there.'
+            : ' No WhatsApp: there is no phone number on file, so it is in the app only.')
+        : 'Already written to this month, so nothing was recorded again. WhatsApp is opening '
+          + 'with the same message if you need to send it.',
     });
   } catch (err) {
     console.error('[roster-chase/send] failed:', err);
