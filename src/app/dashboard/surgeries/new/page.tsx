@@ -73,6 +73,23 @@ interface TeamMember {
   staffCode?: string | null;
 }
 
+/**
+ * Another unit joining this case, and the surgeon coming from it.
+ *
+ * surgeonId may be null and the booking still stands: a visiting surgeon from
+ * another hospital has no account here and is exactly the case joint booking
+ * exists for. A null costs the dashboard entry, never the name on the list —
+ * which is why the form says so rather than refusing the row.
+ */
+interface ParticipatingUnit {
+  unit: string;
+  surgeonName: string;
+  surgeonId: string | null;
+  staffCode?: string | null;
+  /** What this unit is being asked for: "vascular control", "flap cover". */
+  role: string;
+}
+
 type OnDutyMember = {
   userId: string;
   name: string;
@@ -204,6 +221,16 @@ export default function NewSurgeryPage() {
   // in wrongly years ago — this turns it off.
   const [showAllSurgeons, setShowAllSurgeons] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  /**
+   * A case two or more units operate on together.
+   *
+   * Kept as its own flag rather than inferred from the list being non-empty,
+   * so "booked as a joint case, other units not named yet" can be told apart
+   * from a finished single-unit case. The first is a booking somebody has to
+   * come back to; the second is done.
+   */
+  const [isMultidisciplinary, setIsMultidisciplinary] = useState(false);
+  const [participatingUnits, setParticipatingUnits] = useState<ParticipatingUnit[]>([]);
   /**
    * "This unit has no registrar / no senior registrar."
    *
@@ -1133,6 +1160,8 @@ export default function NewSurgeryPage() {
       postOpDestination,
       isDayCase,
       teamMembers,
+      isMultidisciplinary,
+      participatingUnits,
       noUnitRegistrar,
       noUnitSeniorRegistrar,
       specialNeeds,
@@ -1177,6 +1206,8 @@ export default function NewSurgeryPage() {
     setPostOpDestination(pick(d.postOpDestination, ''));
     setIsDayCase(pick(d.isDayCase, false));
     if (d.teamMembers !== undefined) setTeamMembers(d.teamMembers as never);
+    if (d.isMultidisciplinary !== undefined) setIsMultidisciplinary(!!d.isMultidisciplinary);
+    if (d.participatingUnits !== undefined) setParticipatingUnits(d.participatingUnits as never);
     setNoUnitRegistrar(pick(d.noUnitRegistrar, false));
     setNoUnitSeniorRegistrar(pick(d.noUnitSeniorRegistrar, false));
     if (d.specialNeeds !== undefined) setSpecialNeeds(d.specialNeeds as never);
@@ -1955,6 +1986,19 @@ ${pretty} — ${days} days from today.
       otherCurrentMedications: otherMedications.trim() || null,
       noUnitRegistrar,
       noUnitSeniorRegistrar,
+      // A joint case, and the other units on it. Only rows carrying BOTH a
+      // unit and a surgeon are sent: a half-filled row is a booking somebody
+      // has not finished, not an invitation, and the form says so on screen
+      // rather than the server guessing.
+      isMultidisciplinary,
+      participatingUnits: isMultidisciplinary
+        ? completeParticipatingUnits.map((u) => ({
+          unit: u.unit.trim(),
+          surgeonName: u.surgeonName.trim(),
+          surgeonId: u.surgeonId || null,
+          role: u.role.trim() || null,
+        }))
+        : [],
       teamMembers: teamMembers
         .filter(tm => tm.name.trim() !== '')
         .map(tm => ({
@@ -2156,6 +2200,49 @@ ${pretty} — ${days} days from today.
       setLoading(false);
     }
   };
+
+  // ── The other units on a joint case ───────────────────────────────────
+  const addParticipatingUnit = () => {
+    setParticipatingUnits((prev) => [
+      ...prev,
+      { unit: '', surgeonName: '', surgeonId: null, staffCode: null, role: '' },
+    ]);
+  };
+
+  const removeParticipatingUnit = (index: number) => {
+    setParticipatingUnits((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateParticipatingUnit = (index: number, patch: Partial<ParticipatingUnit>) => {
+    setParticipatingUnits((prev) => prev.map((u, i) => (i === index ? { ...u, ...patch } : u)));
+  };
+
+  /**
+   * Rows that are actually an invitation: a unit AND a named surgeon.
+   *
+   * A half-filled row is not refused and does not block the booking — the
+   * surgeon may be waiting to hear who is coming. It simply is not sent, and
+   * the form says so rather than silently dropping it.
+   */
+  const completeParticipatingUnits = participatingUnits.filter(
+    (u) => u.unit.trim() !== '' && u.surgeonName.trim() !== '',
+  );
+
+  /**
+   * The same unit named twice.
+   *
+   * The database holds one row per unit per case, so a duplicate would either
+   * be silently collapsed or reject the whole booking. It is shown here as a
+   * warning instead, where somebody can fix it in the right place.
+   */
+  const duplicateUnits = (() => {
+    const seen: Record<string, number> = {};
+    completeParticipatingUnits.forEach((u) => {
+      const k = u.unit.trim();
+      seen[k] = (seen[k] ?? 0) + 1;
+    });
+    return Object.keys(seen).filter((k) => seen[k] > 1);
+  })();
 
   const addTeamMember = (role: 'CONSULTANT' | 'SENIOR_REGISTRAR' | 'REGISTRAR' | 'HOUSE_OFFICER') => {
     setTeamMembers([...teamMembers, { name: '', role, userId: null, staffCode: null }]);
@@ -3847,6 +3934,200 @@ ${pretty} — ${days} days from today.
             </div>
           </div>
         </div>
+
+        {/*
+          A case two or more units operate on together.
+
+          It sits in the Team section and not with the procedure, because that
+          is what it is: more team. And it is in the section that makes a case
+          bookable, so the invited units are named while the booking surgeon
+          is still here — not in a later section most bookings never reach,
+          which is exactly how the surgical team list came to be empty on
+          every case until it was moved.
+
+          WHAT IT REPLACES is a line of free text in the booking notes. The
+          second unit's surgeon found out they were operating when somebody
+          telephoned them on the morning, and the honest version is that
+          sometimes nobody did. A named colleague here is a notification now
+          and a card on their own dashboard from today until the case runs.
+        */}
+        <div className={`${stepClass(2)} card`}>
+          <div className="flex items-center gap-3 mb-3">
+            <Users className="w-6 h-6 text-primary-600" />
+            <h2 className="text-xl font-semibold">Multidisciplinary case</h2>
+          </div>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="isMultidisciplinary"
+              checked={isMultidisciplinary}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setIsMultidisciplinary(on);
+                // Opening the section with one empty row saves a press, and
+                // the press that is saved is the one people forget.
+                if (on && participatingUnits.length === 0) addParticipatingUnit();
+              }}
+              className="mt-1 h-4 w-4"
+            />
+            <span>
+              <span className="font-medium text-gray-900">
+                More than one surgical unit is operating on this patient
+              </span>
+              <span className="block text-sm text-gray-600">
+                Tick this if another unit is joining the case — a second team
+                scrubbing, not a colleague you are consulting. You will name
+                each unit and the surgeon coming from it.
+              </span>
+            </span>
+          </label>
+
+          {isMultidisciplinary && (
+            <div className="mt-4 space-y-4">
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-900">
+                Each surgeon you name here is told now, and the case appears on
+                their own dashboard from today until the day it runs — so they
+                know before the morning rather than when somebody rings them.
+              </div>
+
+              {participatingUnits.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">
+                  No other units named yet.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {participatingUnits.map((pu, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">
+                          Unit {index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeParticipatingUnit(index)}
+                          className="text-sm text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="label">
+                            Unit <span className="text-red-600">*</span>
+                          </label>
+                          <select
+                            value={pu.unit}
+                            onChange={(e) => updateParticipatingUnit(index, { unit: e.target.value })}
+                            className="input"
+                          >
+                            <option value="">Select the unit joining…</option>
+                            {surgicalUnits.map((u) => (
+                              <option key={u.id} value={u.name}>
+                                {u.name}
+                                {u.subspecialty && u.subspecialty !== u.name
+                                  ? ` — ${u.subspecialty}`
+                                  : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="label">
+                            What they are coming for
+                          </label>
+                          <input
+                            type="text"
+                            value={pu.role}
+                            onChange={(e) => updateParticipatingUnit(index, { role: e.target.value })}
+                            className="input"
+                            placeholder="e.g. vascular control, flap cover"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="label">
+                          Surgeon from that unit <span className="text-red-600">*</span>
+                        </label>
+                        {/* Resident surgeons stay searchable alongside
+                            consultants: everybody starts as SURGEON until an
+                            admin promotes them, so a consultant-only picker
+                            would be empty for most of the hospital. */}
+                        <SurgicalTeamMemberPicker
+                          roles="CONSULTANT_SURGEON,SURGEON"
+                          value={{
+                            userId: pu.surgeonId,
+                            name: pu.surgeonName,
+                            staffCode: pu.staffCode ?? null,
+                          }}
+                          onChange={(next) => updateParticipatingUnit(index, {
+                            surgeonName: next.name,
+                            surgeonId: next.userId ?? null,
+                            staffCode: next.staffCode ?? null,
+                          })}
+                          onRemove={() => updateParticipatingUnit(index, {
+                            surgeonName: '', surgeonId: null, staffCode: null,
+                          })}
+                          placeholder="Search by name or staff code…"
+                        />
+                        {/* Said plainly rather than enforced. A visiting
+                            surgeon from another hospital has no account here
+                            and this is exactly the case joint booking exists
+                            for, so the booking must stand — but whoever
+                            booked it needs to know the dashboard entry will
+                            not happen and the telephone call still has to. */}
+                        {pu.surgeonName.trim() !== '' && !pu.surgeonId && (
+                          <p className="mt-1 text-xs text-amber-700">
+                            This name is not matched to a staff account, so the
+                            case will not appear on their dashboard and no
+                            notice will reach them. The name still goes on the
+                            list — please tell them yourself.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {duplicateUnits.length > 0 && (
+                <p className="text-sm text-red-700">
+                  {duplicateUnits.join(', ')}{' '}
+                  {duplicateUnits.length === 1 ? 'is' : 'are'} named more than
+                  once. A unit joins a case once — please remove the extra row,
+                  or only the last one will be saved.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={addParticipatingUnit}
+                className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                Add another unit
+              </button>
+
+              {participatingUnits.length > completeParticipatingUnits.length && (
+                <p className="text-sm text-gray-600">
+                  {participatingUnits.length - completeParticipatingUnits.length}{' '}
+                  {participatingUnits.length - completeParticipatingUnits.length === 1
+                    ? 'row needs'
+                    : 'rows need'}{' '}
+                  both a unit and a surgeon before it can be saved. The booking
+                  is not held up by it — add the name when you know it.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
 
 
         {/*

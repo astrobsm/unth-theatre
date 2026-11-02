@@ -48,6 +48,15 @@ interface Surgery {
   indication: string;
   subspecialty: string;
   unit: string;
+  isMultidisciplinary?: boolean;
+  participatingUnits?: {
+    id: string;
+    unit: string;
+    surgeonName: string;
+    surgeonId: string | null;
+    role: string | null;
+    note: string | null;
+  }[];
   scheduledDate: string;
   scheduledTime: string;
   estimatedDuration: number;
@@ -359,6 +368,52 @@ export default function SurgeryDetailPage() {
               </div>
             )}
           </div>
+
+          {/* The other units on a joint case. Shown here rather than buried
+              in the notes because an invited surgeon arriving at this page
+              from their dashboard needs to see, immediately, which unit they
+              are on it for and who else is coming. */}
+          {surgery.isMultidisciplinary && (
+            <div className="mt-6 border-t border-gray-100 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900 font-medium">
+                  Multidisciplinary case
+                </span>
+                <span className="text-sm text-gray-500">
+                  {surgery.unit} with{' '}
+                  {(surgery.participatingUnits?.length ?? 0) === 1
+                    ? 'one other unit'
+                    : `${surgery.participatingUnits?.length ?? 0} other units`}
+                </span>
+              </div>
+              {(surgery.participatingUnits?.length ?? 0) === 0 ? (
+                // Booked as joint and never finished. Said plainly, because a
+                // theatre preparing for two teams needs to know the second
+                // one has not been named.
+                <p className="text-sm text-amber-700">
+                  Booked as a joint case, but no other unit has been named yet.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {surgery.participatingUnits?.map((pu) => (
+                    <li key={pu.id} className="text-sm">
+                      <span className="font-medium text-gray-900">{pu.unit}</span>
+                      <span className="text-gray-700"> — {pu.surgeonName}</span>
+                      {pu.role ? <span className="text-gray-600"> ({pu.role})</span> : null}
+                      {!pu.surgeonId && (
+                        <span className="text-xs text-amber-700 ml-2">
+                          not matched to a staff account — no notice was sent
+                        </span>
+                      )}
+                      {pu.note ? (
+                        <span className="block text-xs text-gray-500 italic">{pu.note}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

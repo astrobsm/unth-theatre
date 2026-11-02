@@ -472,7 +472,7 @@ model User {
   /// us they would rather not be. Null means never asked, which is what makes
   /// the sign-in prompt appear exactly once. Set even when they decline, so
   /// that declining is respected rather than re-asked every morning.
-  celebrationPrefsSetAt  DateTime?
+  celebrationPrefsSetAt   DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
   approvedBy              String?
@@ -1424,6 +1424,16 @@ model Surgery {
 
   // Scrub-nurse theatre reception & between-case workflow
   caseFlow TheatreCaseFlow? @relation("SurgeryCaseFlow")
+
+  /// A case two or more surgical units operate on together.
+  ///
+  /// Kept as its own flag rather than inferred from participatingUnits being
+  /// non-empty, so "this was booked as a joint case and the other units have
+  /// not been named yet" can be told apart from "this is a single-unit case".
+  /// The first is an incomplete booking somebody has to finish; the second is
+  /// finished. Inferring it would make those two states identical.
+  isMultidisciplinary Boolean                    @default(false)
+  participatingUnits  SurgeryParticipatingUnit[]
 
   stockMovements    StockMovement[]    @relation("StockMovementSurgery")
   stockReservations StockReservation[] @relation("StockReservationSurgery")
@@ -13809,4 +13819,55 @@ model MagnitudeBundleItem {
   @@unique([magnitude, itemId])
   @@index([magnitude])
   @@map("magnitude_bundle_items")
+}
+
+/// A unit joining somebody else's case, and the surgeon coming from it.
+///
+/// A joint case used to be recorded as free text in the booking notes, which
+/// meant the second and third units' surgeons found out they were operating
+/// when somebody telephoned them. A row here is a named person the system can
+/// actually reach: it puts the case on their own dashboard before the day and
+/// it credits them on the list.
+///
+/// surgeonId is a SOFT reference to User.id with no foreign key, matching
+/// Surgery.scrubNurseId and Surgery.theatreTechnicianId and for the same
+/// reason. It is null where the booking named a surgeon who has no account —
+/// which must stay bookable, because a visiting surgeon from another hospital
+/// is exactly the case this feature exists for. A null there costs only the
+/// dashboard entry; the name is still on the list.
+model SurgeryParticipatingUnit {
+  id        String @id @default(uuid())
+  surgeryId String
+
+  /// The unit joining the case, spelled as the surgical-unit list spells it.
+  unit        String
+  /// Snapshotted, so a list printed today still reads correctly if the
+  /// colleague is later renamed or leaves.
+  surgeonName String
+  surgeonId   String?
+
+  /// What this unit is coming to do, in the booker's words: "vascular
+  /// control", "flap cover". Optional, and worth having — the invited
+  /// surgeon's first question is what they are being asked for.
+  role String?
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  surgery Surgery @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+
+  /// Sync metadata, maintained by the capture trigger. Application code must
+  /// never write these.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  /// One row per unit per case. A unit joins once, with one named lead from
+  /// it; naming a second colleague from the same unit is an edit of that row
+  /// rather than a second unit.
+  @@unique([surgeryId, unit])
+  @@index([surgeryId])
+  @@index([surgeonId])
+  @@map("surgery_participating_units")
 }

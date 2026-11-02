@@ -381,6 +381,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'supply_records', cls: 'APPEND_ONLY', why: 'A delivery against an inventory item; the row is the event.' },
   { table: 'surgery_items', cls: 'APPEND_ONLY', why: 'An item attached to a case. Written once; verified as having no update call-site.' },
   { table: 'surgical_team_members', cls: 'APPEND_ONLY', why: 'Who was on the team for a case. Both nodes naming different people is a union, not a conflict.' },
+  { table: 'surgery_participating_units', cls: 'APPEND_ONLY', why: 'Which other units joined a case, and who came from each. Same shape as the team list above: two nodes naming different units is a union, not a conflict.' },
   { table: 'theatre_setup_items', cls: 'APPEND_ONLY', why: 'What was laid out for a setup; written once at setup time.' },
   { table: 'theatre_setup_returns', cls: 'APPEND_ONLY', why: 'What came back afterwards. A return is an event.' },
   { table: 'tv_alert_display_logs', cls: 'APPEND_ONLY', why: 'What the wall screen showed, and when. A display log nobody may rewrite.' },

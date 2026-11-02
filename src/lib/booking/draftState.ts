@@ -47,6 +47,10 @@ export interface BookingDraft {
 
   // The unit's team
   teamMembers?: unknown;
+  /** A joint case, and the other units on it. Saved so an interrupted
+   *  booking does not lose the colleagues it had already named. */
+  isMultidisciplinary?: boolean;
+  participatingUnits?: unknown;
   noUnitRegistrar?: boolean;
   noUnitSeniorRegistrar?: boolean;
 

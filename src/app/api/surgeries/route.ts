@@ -158,6 +158,21 @@ const surgerySchema = z.object({
     staffCode: z.string().nullish(),
   })).optional(),
 
+  // ── A case two or more units operate on together ──────────────────────
+  //
+  // surgeonId is nullish on purpose. A visiting surgeon from another
+  // hospital has no account here and is exactly the case this feature
+  // exists for, so a name alone must be bookable. What a null costs is the
+  // dashboard entry, never the name on the list.
+  isMultidisciplinary: z.boolean().optional(),
+  participatingUnits: z.array(z.object({
+    unit: z.string().min(1),
+    surgeonName: z.string().min(1),
+    surgeonId: z.string().nullish(),
+    role: z.string().nullish(),
+    note: z.string().nullish(),
+  })).optional(),
+
   /// "This unit has no registrar / no senior registrar." Recorded rather than
   /// inferred from an empty team: a blank means the question was not answered
   /// and a declaration means the post is vacant, and the unit card shows the
@@ -305,6 +320,14 @@ export async function GET(request: NextRequest) {
         readinessStatus: true, preopOutstanding: true,
         bookedById: true, bookedByName: true,
         consumablePackCode: true, pharmacyDrugCode: true,
+        // Safe to add to the list projection above: joint cases are the
+        // minority and the rows are a handful of short strings each, so this
+        // costs one small extra query and nothing like the consent scans the
+        // comment above is about.
+        isMultidisciplinary: true,
+        participatingUnits: {
+          select: { id: true, unit: true, surgeonName: true, surgeonId: true, role: true, note: true },
+        },
         patient: {
           select: {
             id: true,
@@ -468,6 +491,9 @@ export async function POST(request: NextRequest) {
     // submission, not only an early one, so this broke booking outright.
     const {
       teamMembers,
+      // Its own table; `isMultidisciplinary` stays in the spread because it
+      // IS a column on surgeries.
+      participatingUnits,
       surgeryType,
       surgeonId,
       assistantSurgeonId,
@@ -972,6 +998,34 @@ export async function POST(request: NextRequest) {
             role: tm.role,
           }))
         } : undefined,
+
+        // The other units on a joint case. Deduplicated by unit before it
+        // reaches the database: the form can produce two rows for one unit
+        // if somebody changes their mind about which colleague is coming,
+        // and the unique index would reject the whole booking for it. The
+        // LAST row for a unit wins, because that is the one the booker
+        // edited most recently.
+        participatingUnits: (() => {
+          if (!participatingUnits || participatingUnits.length === 0) return undefined;
+          const byUnit = new Map<string, { unit: string; surgeonName: string; surgeonId: string | null; role: string | null; note: string | null }>();
+          participatingUnits.forEach((u) => {
+            const unit = (u.unit || '').trim();
+            const surgeonName = (u.surgeonName || '').trim();
+            // A unit with nobody named is not an invitation, it is a blank
+            // row the form left behind.
+            if (!unit || !surgeonName) return;
+            byUnit.set(unit, {
+              unit,
+              surgeonName,
+              surgeonId: u.surgeonId || null,
+              role: u.role ? String(u.role).trim() || null : null,
+              note: u.note ? String(u.note).trim() || null : null,
+            });
+          });
+          const rows: { unit: string; surgeonName: string; surgeonId: string | null; role: string | null; note: string | null }[] = [];
+          byUnit.forEach((v) => rows.push(v));
+          return rows.length > 0 ? { create: rows } : undefined;
+        })(),
       },
       include: {
         patient: true,
@@ -1352,6 +1406,59 @@ export async function POST(request: NextRequest) {
     // which two synchronising databases make entirely possible — used to throw,
     // and the route answered 500 for a booking that had SUCCEEDED. The surgeon
     // saw a failure, booked it again, and the list gained a phantom case.
+    // ── Telling the invited units they are on a case ────────────────────
+    //
+    // The whole point of recording a joint case properly. A surgeon from
+    // another unit used to learn they were operating when somebody
+    // telephoned them, usually on the morning, and sometimes not at all.
+    //
+    // Sent at BOOKING, not the day before, and the dashboard card carries it
+    // from then on. A notice that waits until the eve of surgery is a notice
+    // that arrives after the invited surgeon has committed their day — which
+    // is the thing that was actually going wrong.
+    //
+    // Only to colleagues with an account. A visiting surgeon named by hand
+    // has no id to write to, and that is not a failure of the booking: the
+    // name is on the list and whoever booked the case knows to ring them.
+    if (surgery.isMultidisciplinary) {
+      const invited = await prisma.surgeryParticipatingUnit.findMany({
+        where: { surgeryId: surgery.id, surgeonId: { not: null } },
+        select: { surgeonId: true, unit: true, role: true },
+      });
+      if (invited.length > 0) {
+        const when = new Date(validatedData.scheduledDate).toLocaleDateString('en-GB', {
+          weekday: 'long', day: 'numeric', month: 'long',
+        });
+        await step('the invitations to the other units', async () => {
+          for (const i of invited) {
+            if (!i.surgeonId) continue;
+            await prisma.notification.create({
+              data: {
+                userId: i.surgeonId,
+                type: 'SURGERY_SCHEDULED',
+                title: `You are on a joint case — ${when}`,
+                message:
+                  `${patient.name} (${patient.folderNumber ?? 'no folder number'}) — `
+                  + `${validatedData.procedureName}, ${when}`
+                  + `${validatedData.scheduledTime ? ` at ${validatedData.scheduledTime}` : ''}. `
+                  + `${i.unit} is joining this case`
+                  + `${i.role ? ` for ${i.role}` : ''}. Booked by ${session.user.name ?? 'a colleague'}.`,
+                link: `/dashboard/surgeries/${surgery.id}`,
+              },
+            });
+          }
+          const ids: string[] = [];
+          invited.forEach((i) => { if (i.surgeonId) ids.push(i.surgeonId); });
+          void pushToUsers(ids, {
+            title: 'You are on a joint case',
+            body: `${patient.name} — ${validatedData.procedureName}, ${when}.`,
+            url: `/dashboard/surgeries/${surgery.id}`,
+            priority: 'HIGH', tag: 'joint-case',
+          });
+        });
+      }
+    }
+
     await step('the audit record', () =>
       prisma.auditLog.create({
         data: {

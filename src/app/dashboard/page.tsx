@@ -34,6 +34,7 @@ import TeamAvailabilityCard from '@/components/theatre/TeamAvailabilityCard';
 import TodaysCelebrationsCard from '@/components/TodaysCelebrationsCard';
 import MyAnaesthesiaCasesCard from '@/components/anaesthesia/MyCasesCard';
 import MyDutyRecordCard from '@/components/duty/MyDutyRecordCard';
+import JointCasesCard from '@/components/surgery/JointCasesCard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -203,6 +204,14 @@ export default function DashboardPage() {
           first question anybody has is whether the rest of the team is
           coming, and until now that was answered by telephone. */}
       <TeamAvailabilityCard />
+
+      {/* A case somebody ELSE booked and put this surgeon's name on. It sits
+          here because it is the only case on the dashboard they did not
+          already know about: their own list they know by heart, and an
+          invitation from another unit used to reach them by telephone on the
+          morning, when it reached them at all. Renders nothing for the many
+          surgeons who are on no joint case this week. */}
+      <JointCasesCard />
 
       {/* After the cards about today, because this one is about the month
           behind. It is here so that a colleague learns their own record from
