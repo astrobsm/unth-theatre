@@ -26,7 +26,10 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, Lock, Wifi, AlertCircle } from 'lucide-react';
+import { Loader2, Lock, Wifi, AlertCircle, Eye, EyeOff } from 'lucide-react';
+
+/** Remembers the tick itself, so unticking it does not have to be done twice. */
+const KEEP_KEY = 'orm.keepOnWifi';
 
 function PortalForm() {
   const params = useSearchParams();
@@ -68,8 +71,27 @@ function PortalForm() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep this device on the network.
+  //
+  // DEFAULTS TO ON, which is a decision and not a default-by-accident. The
+  // request that produced this was that staff stop meeting the portal every
+  // morning, and an opt-in box most people never see would not change that
+  // for anybody. The person who does not want it unticks it, once, and the
+  // choice is remembered below.
+  const [keepConnected, setKeepConnected] = useState(true);
+  useEffect(() => {
+    try {
+      // Only an explicit "no" overrides the default. An empty store — a new
+      // phone, a cleared browser — means nobody has said anything yet.
+      if (localStorage.getItem(KEEP_KEY) === '0') setKeepConnected(false);
+    } catch {
+      /* captive-portal browsers may refuse storage entirely */
+    }
+  }, []);
 
   // With no link-login-only the page was opened directly rather than by the
   // hotspot. Signing into the app still works; the network part cannot.
@@ -99,7 +121,34 @@ function PortalForm() {
       return;
     }
 
-    // 2. A one-time link that can carry this session into the real browser.
+    // 2. Whether this device is to be kept on the network.
+    //
+    // RECORDED HERE, in the seconds between the app sign-in succeeding and the
+    // browser leaving for the router, because this is the last moment anything
+    // of ours runs. The router asks RADIUS next, and RADIUS reads this row to
+    // decide which hotspot profile the session belongs to — which is what
+    // decides whether the phone is remembered. A row written afterwards would
+    // be read for the first time a week later.
+    //
+    // Never fatal, and deliberately not reported. The cost of a failure is one
+    // extra sign-in next week; refusing somebody the hospital network over it
+    // would be absurd.
+    try {
+      localStorage.setItem(KEEP_KEY, keepConnected ? '1' : '0');
+    } catch {
+      /* storage unavailable: the choice still applies to this sign-in */
+    }
+    try {
+      await fetch('/api/hotspot/remember', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mac, remember: keepConnected }),
+      });
+    } catch {
+      /* offline or slow — carry on and connect them */
+    }
+
+    // 3. A one-time link that can carry this session into the real browser.
     //
     // Minted HERE, in the two seconds between signing in and leaving for the
     // router, because this is the only moment the session exists in the
@@ -122,7 +171,7 @@ function PortalForm() {
       /* offline or slow — carry on without the handoff */
     }
 
-    // 3. The network. Submitting a real form (not fetch) because the browser
+    // 4. The network. Submitting a real form (not fetch) because the browser
     // must follow the router's redirect for the session to be established
     // against this client.
     if (viaHotspot) {
@@ -185,20 +234,82 @@ function PortalForm() {
             <label htmlFor="password" className="block text-sm font-medium text-gray-800 mb-1">
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            />
+            {/*
+              The eye is not a convenience here.
+
+              This password is typed on a phone, one-handed, often in a
+              corridor, into a captive-portal window that shows no error until
+              the whole form is submitted and the browser has left for the
+              router. A mistyped character costs a full round trip to find out
+              about. Being able to read back what you typed is the cheapest
+              fix there is, and the main application login already has it —
+              this page was simply never given the same.
+            */}
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 pr-12 text-base focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
             <p className="text-xs text-gray-500 mt-1">
               The same password you use for the ORM application.
             </p>
           </div>
+
+          {/*
+            Staying on the network.
+
+            WHAT IT HONESTLY DOES, because a promise a router cannot keep is
+            worse than no promise: the phone is recognised by the hotspot when
+            it comes back into range, so the portal does not appear. It does
+            NOT make the phone join the Wi-Fi — only the handset can do that,
+            from its own network settings, and only if the network is saved
+            there. Both sentences are below, in that order.
+
+            THE SHARED-HANDSET CAVEAT is stated rather than buried. Eight
+            phones are shared between ten people in this theatre, and one of
+            them has signed in as two different nurses five hours apart. The
+            network remembers the DEVICE; the ORM application still asks who
+            is holding it. Somebody reading this box needs to know that is the
+            arrangement, not discover it.
+          */}
+          <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+            <input
+              type="checkbox"
+              name="keepConnected"
+              checked={keepConnected}
+              onChange={(e) => setKeepConnected(e.target.checked)}
+              className="mt-0.5 h-5 w-5 flex-shrink-0 accent-emerald-600"
+            />
+            <span>
+              <span className="block text-sm font-medium text-emerald-900">
+                Keep this phone signed in to the Wi-Fi
+              </span>
+              <span className="block text-xs text-emerald-800 mt-0.5">
+                You will not be asked for your password again on this device.
+                Whenever it is back in the theatre and joins the network, it
+                reconnects on its own.
+              </span>
+              <span className="block text-xs text-emerald-700 mt-1">
+                Leave this unticked on a phone you share.
+              </span>
+            </span>
+          </label>
 
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-3 flex gap-2">
@@ -223,6 +334,28 @@ function PortalForm() {
             </p>
           )}
         </form>
+
+        {/*
+          The half of "reconnects automatically" that no web page can do.
+
+          Said only when the person has asked to be kept signed in, because
+          that is the moment the expectation is set — and the moment they
+          would otherwise be let down by it. A phone that has not saved
+          UNTH-THEATRE-ORM will not rejoin whatever the router remembers, and
+          the person would reasonably blame this page for it.
+        */}
+        {keepConnected && (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-white p-3">
+            <p className="text-xs text-gray-700">
+              <strong className="text-gray-900">One thing to check on the phone itself.</strong>{' '}
+              Open its Wi-Fi settings, tap <strong>UNTH-THEATRE-ORM</strong>, and make
+              sure <strong>Auto-join</strong> (iPhone) or <strong>Connect
+              automatically</strong> (Android) is on. No website can set that — the
+              hospital network remembers your phone, but only the phone can decide
+              to join.
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 flex gap-2">
           <Lock className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />

@@ -487,6 +487,7 @@ model User {
   cancellations       CaseCancellation[]
   maintenanceLogs     MaintenanceLog[]
   auditLogs           AuditLog[]
+  hotspotDevices      HotspotDevice[]
   whoChecklists       WHOChecklist[]        @relation("WHOChecklists")
   theatreSetups       TheatreSetup[]
   setupReturns        TheatreSetupReturn[]
@@ -896,6 +897,47 @@ model HotspotHandoff {
 
   @@index([expiresAt])
   @@map("hotspot_handoffs")
+}
+
+/// A handset its owner asked to be kept on the theatre Wi-Fi.
+///
+/// Staff asked to sign in to the network once and have their phone rejoin by
+/// itself afterwards. This row is the record of that consent: whose device,
+/// since when, until when, and whether it has been taken back. The RADIUS
+/// bridge reads it to decide which hotspot user profile a session belongs to,
+/// which is what decides whether the router remembers the device at all.
+/// See lib/hotspot/devices.ts for why it is a row and not just a router setting.
+///
+/// DELIBERATELY NOT CLASSIFIED FOR SYNC, for the same reason as the handoff
+/// above: a MAC address is meaningful only on the network it joined. The cloud
+/// node has no hotspot, and replicating "this phone may use the theatre Wi-Fi"
+/// to a building that has no theatre Wi-Fi is noise with a privacy cost.
+model HotspotDevice {
+  id          String    @id @default(uuid())
+  /// Upper-case, colon-separated — the single form lib/hotspot/devices.ts
+  /// normalises every MAC to. One row per device, so the person who last
+  /// signed in on a shared handset is the one it is enrolled to.
+  mac         String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// What the person last chose. Unticking keeps the row, so the audit trail
+  /// shows a consent withdrawn rather than a consent that never happened.
+  remembered  Boolean   @default(true)
+  /// "iPhone · E4F5" — enough for somebody to recognise their own phone.
+  label       String?
+  userAgent   String?
+  enrolledAt  DateTime  @default(now())
+  /// Touched by the bridge on every network login, so an unused device ages out.
+  lastSeenAt  DateTime?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  /// Who took it back — the owner, or an administrator for a lost handset.
+  revokedById String?
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("hotspot_devices")
 }
 
 model Roster {

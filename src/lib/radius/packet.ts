@@ -33,6 +33,12 @@ export const ATTR_REPLY_MESSAGE = 18;
 export const ATTR_CALLING_STATION_ID = 31; // the client's MAC, as MikroTik sends it
 export const ATTR_SESSION_TIMEOUT = 27;
 export const ATTR_MESSAGE_AUTHENTICATOR = 80;
+export const ATTR_VENDOR_SPECIFIC = 26;
+
+/** MikroTik's IANA private enterprise number, and the attributes we send it. */
+export const VENDOR_MIKROTIK = 14988;
+/** Mikrotik-Group: the name of the hotspot user profile this session belongs to. */
+export const MIKROTIK_GROUP = 3;
 
 const HEADER_LENGTH = 20;
 const AUTHENTICATOR_LENGTH = 16;
@@ -171,6 +177,43 @@ export function attribute(type: number, value: Buffer | string | number): Radius
     buf = value;
   }
   return { type, value: buf.length > 253 ? buf.subarray(0, 253) : buf };
+}
+
+/**
+ * Build a Vendor-Specific attribute (RFC 2865 §5.26).
+ *
+ * The wire format is a type-26 attribute whose value is the four-octet vendor
+ * id followed by the vendor's own type, its length INCLUDING the two octets of
+ * the header, and the value. Getting that inner length wrong is the classic
+ * mistake and it does not fail loudly: MikroTik discards the attribute and
+ * carries on, so the session silently lands on the wrong user profile.
+ *
+ * Used here for Mikrotik-Group, which is how a RADIUS reply says which hotspot
+ * user profile a session belongs to — and therefore, for us, whether the
+ * router should remember the device.
+ */
+export function vendorAttribute(
+  vendorId: number,
+  vendorType: number,
+  value: Buffer | string | number,
+): RadiusAttribute {
+  let inner: Buffer;
+  if (typeof value === 'number') {
+    inner = Buffer.alloc(4);
+    inner.writeUInt32BE(value >>> 0);
+  } else if (typeof value === 'string') {
+    inner = Buffer.from(value, 'utf8');
+  } else {
+    inner = value;
+  }
+  // 253 total, less 4 for the vendor id and 2 for the vendor header.
+  if (inner.length > 247) inner = inner.subarray(0, 247);
+
+  const head = Buffer.alloc(6);
+  head.writeUInt32BE(vendorId >>> 0, 0);
+  head[4] = vendorType;
+  head[5] = inner.length + 2;
+  return { type: ATTR_VENDOR_SPECIFIC, value: Buffer.concat([head, inner]) };
 }
 
 function serialiseAttributes(attributes: RadiusAttribute[]): Buffer {

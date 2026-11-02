@@ -22,6 +22,10 @@ import {
   ACCESS_REQUEST,
   ATTR_MESSAGE_AUTHENTICATOR,
   ATTR_REPLY_MESSAGE,
+  ATTR_VENDOR_SPECIFIC,
+  MIKROTIK_GROUP,
+  VENDOR_MIKROTIK,
+  vendorAttribute,
   ATTR_USER_NAME,
   ATTR_USER_PASSWORD,
   attribute,
@@ -242,5 +246,50 @@ describe('verifying a request Message-Authenticator', () => {
 
     buf[macAt] ^= 0xff;
     expect(verifyMessageAuthenticator(buf, decodePacket(buf)!, SECRET)).toBe(false);
+  });
+});
+
+describe('Mikrotik-Group, the attribute that chooses a hotspot profile', () => {
+  // This is how the bridge says "remember this device" or "do not". It fails
+  // in the worst possible way if it is built wrong: MikroTik discards a
+  // malformed vendor attribute and carries on, so the login SUCCEEDS and the
+  // session lands on the default profile. Nothing is logged, nothing errors,
+  // and the box on the portal quietly does nothing for ever.
+  it('wraps the profile name in a type-26 attribute with the vendor header', () => {
+    const a = vendorAttribute(VENDOR_MIKROTIK, MIKROTIK_GROUP, 'orm-remembered');
+
+    expect(a.type).toBe(ATTR_VENDOR_SPECIFIC);
+    expect(a.value.readUInt32BE(0)).toBe(VENDOR_MIKROTIK);
+    expect(a.value[4]).toBe(MIKROTIK_GROUP);
+    // The classic mistake: this length counts the two header octets as well
+    // as the value, and being out by two is silently discarded.
+    expect(a.value[5]).toBe('orm-remembered'.length + 2);
+    expect(a.value.subarray(6).toString('utf8')).toBe('orm-remembered');
+    expect(a.value.length).toBe(6 + 'orm-remembered'.length);
+  });
+
+  it('survives the round trip through a real reply', () => {
+    const requestAuthenticator = crypto.randomBytes(16);
+    const reply = encodeResponse({
+      code: ACCESS_ACCEPT,
+      identifier: 7,
+      requestAuthenticator,
+      secret: 'shhh',
+      attributes: [vendorAttribute(VENDOR_MIKROTIK, MIKROTIK_GROUP, 'orm-one-visit')],
+    });
+
+    const decoded = decodePacket(reply)!;
+    const vsa = decoded.attributes.find((x) => x.type === ATTR_VENDOR_SPECIFIC)!;
+    expect(vsa).toBeDefined();
+    expect(vsa.value.readUInt32BE(0)).toBe(VENDOR_MIKROTIK);
+    expect(vsa.value.subarray(6).toString('utf8')).toBe('orm-one-visit');
+  });
+
+  it('keeps the whole attribute inside the 253-octet limit', () => {
+    const a = vendorAttribute(VENDOR_MIKROTIK, MIKROTIK_GROUP, 'x'.repeat(400));
+    expect(a.value.length).toBeLessThanOrEqual(253);
+    // And the inner length still describes what is actually there, rather
+    // than what was asked for.
+    expect(a.value[5]).toBe(a.value.length - 6 + 2);
   });
 });

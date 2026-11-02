@@ -41,6 +41,8 @@ import {
   ATTR_SESSION_TIMEOUT,
   ATTR_USER_NAME,
   ATTR_USER_PASSWORD,
+  MIKROTIK_GROUP,
+  VENDOR_MIKROTIK,
   attribute,
   decodePacket,
   decryptUserPassword,
@@ -48,7 +50,9 @@ import {
   getAttribute,
   getString,
   verifyMessageAuthenticator,
+  vendorAttribute,
 } from '../../src/lib/radius/packet';
+import { expiryFrom, grantFor, normaliseMac } from '../../src/lib/hotspot/devices';
 import {
   failureMessage,
   verifyStaffCredentials,
@@ -76,6 +80,21 @@ const NAS_ALLOW = (process.env.RADIUS_NAS || '')
  * nothing to show that it had.
  */
 const SESSION_TIMEOUT_SECONDS = Number(process.env.RADIUS_SESSION_TIMEOUT || 24 * 60 * 60);
+
+/**
+ * Whether to name a hotspot user profile in the reply.
+ *
+ * OFF UNLESS THE ROUTER HAS BEEN SET UP FOR IT, and that is the whole reason
+ * this switch exists. Mikrotik-Group names a profile; a name the router does
+ * not have is not ignored, it is a REJECTED LOGIN. A bridge upgraded ahead of
+ * its router would therefore take the entire theatre off the Wi-Fi, which is
+ * a worse fault than the one being fixed.
+ *
+ * deploy/mikrotik/hotspot-setup.rsc creates both profiles and
+ * install-radius-bridge.sh sets this, so the two move together. Unset, every
+ * session behaves exactly as it did before any of this was written.
+ */
+const PROFILES_READY = /^(1|true|yes)$/i.test(process.env.RADIUS_HOTSPOT_PROFILES || '');
 
 if (!SECRET) {
   console.error('RADIUS_SECRET is not set. Refusing to start: an empty shared secret');
@@ -169,15 +188,79 @@ async function handle(packet: ReturnType<typeof decodePacket>, raw: Buffer): Pro
     return reject(packet, failureMessage(result.reason));
   }
 
-  console.log(`[radius] ACCEPT ${result.user.username} — ${result.user.role} (${mac})`);
+  // Does this person want this handset kept on the network?
+  //
+  // The row was written by the captive portal in the moment between the app
+  // sign-in and the browser leaving for the router, so by the time this
+  // request arrives it is already there. On every reconnection afterwards —
+  // when there is no browser involved at all, because the router is using its
+  // own cookie — this is the only place the choice is read.
+  const grant = await rememberedGrant(normaliseMac(mac), result.user.id);
+
+  console.log(
+    `[radius] ACCEPT ${result.user.username} — ${result.user.role} (${mac})`
+    + `${grant.remembered ? ' [kept signed in]' : ''}`,
+  );
+
+  // RADIUS_SESSION_TIMEOUT still governs the ordinary case, so an operator who
+  // set it has not quietly had it overridden; the longer figure applies only
+  // to a device somebody asked to be remembered.
+  const seconds = grant.remembered ? grant.sessionSeconds : SESSION_TIMEOUT_SECONDS;
+  const attributes = [attribute(ATTR_SESSION_TIMEOUT, seconds)];
+  // The profile is what carries mac-cookie-timeout, and mac-cookie-timeout is
+  // the single setting that decides how long the router recognises a device
+  // for. Everything else here is bookkeeping around that one attribute.
+  if (PROFILES_READY) {
+    attributes.push(vendorAttribute(VENDOR_MIKROTIK, MIKROTIK_GROUP, grant.profile));
+  }
+
   return encodeResponse({
     code: ACCESS_ACCEPT,
     identifier: packet.identifier,
     requestAuthenticator: packet.authenticator,
     secret: SECRET,
     includeMessageAuthenticator: hasMessageAuthenticator(packet),
-    attributes: [attribute(ATTR_SESSION_TIMEOUT, SESSION_TIMEOUT_SECONDS)],
+    attributes,
   });
+}
+
+/**
+ * Read — and renew — this device's enrolment.
+ *
+ * RENEWING ON EVERY SIGN-IN is what makes ninety days mean "for as long as you
+ * keep coming". A phone in daily use never reaches its expiry; one that
+ * stopped appearing in October is a stranger again in January, with nobody
+ * having had to notice or do anything.
+ *
+ * A DATABASE PROBLEM MUST NOT BECOME A WI-FI PROBLEM. Every failure here
+ * falls back to the ordinary one-day session, which is what everybody had
+ * before this feature existed. Somebody who cannot be recognised should be
+ * asked to sign in, not refused.
+ */
+async function rememberedGrant(mac: string | null, userId: string) {
+  if (!mac) return grantFor(null);
+  try {
+    const device = await prisma.hotspotDevice.findUnique({ where: { mac } });
+    const grant = grantFor(device);
+
+    if (grant.remembered) {
+      await prisma.hotspotDevice.update({
+        where: { mac },
+        data: {
+          lastSeenAt: new Date(),
+          expiresAt: expiryFrom(),
+          // The handset now belongs to whoever just proved who they are. A
+          // shared phone follows its last user, exactly as the router's own
+          // cookie does, so the two can never disagree about whose it is.
+          userId,
+        },
+      });
+    }
+    return grant;
+  } catch (err) {
+    console.warn('[radius] could not read the device enrolment:', (err as Error)?.message ?? err);
+    return grantFor(null);
+  }
 }
 
 function reject(packet: NonNullable<ReturnType<typeof decodePacket>>, message: string): Buffer {
@@ -204,6 +287,12 @@ socket.bind(PORT, () => {
   console.log(`[radius] listening on udp/${PORT}`);
   console.log(`[radius] accepting requests from: ${NAS_ALLOW.join(', ')}`);
   console.log(`[radius] session timeout: ${SESSION_TIMEOUT_SECONDS}s`);
+  console.log(
+    PROFILES_READY
+      ? '[radius] remembered devices: ON (naming hotspot profiles in the reply)'
+      : '[radius] remembered devices: OFF — set RADIUS_HOTSPOT_PROFILES=1 once the'
+        + ' router has the orm-remembered / orm-one-visit profiles',
+  );
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

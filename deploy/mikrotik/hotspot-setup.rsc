@@ -87,12 +87,57 @@ set [find where default=yes] use-radius=yes login-by=http-pap,cookie html-direct
 # meaning network identity implies clinical identity.
 /ip hotspot user profile
 # mac-cookie-timeout ONLY. session-timeout is deliberately left alone — RADIUS
-# returns Session-Timeout=86400 per login and that is the one place the 24-hour
-# rule should live; setting it here too would leave two numbers to disagree.
+# returns Session-Timeout per login and that is the one place the rule should
+# live; setting it here too would leave two numbers to disagree.
 # keepalive-timeout is left at its existing 2m as well: with cookies accepted, a
 # briefly-unreachable roaming client is re-recognised silently, so shortening
 # the path by dropping keepalives buys nothing and risks stale sessions.
-set [find where default=yes] mac-cookie-timeout=1d
+#
+# add-mac-cookie is set EXPLICITLY. It was yes on this router because somebody
+# typed it into Winbox once, and nothing recorded that. A router reset, a
+# replacement unit, or a second site would have lost it silently — with the
+# login-by=cookie line above still present and apparently correct.
+set [find where default=yes] add-mac-cookie=yes mac-cookie-timeout=1d
+
+# --- 4c. "Keep this phone signed in to the Wi-Fi" ---------------------------
+# Staff asked to sign in to the network once and have the phone rejoin by
+# itself from then on, rather than meeting the portal every morning. The
+# default profile above already does that for ONE DAY, for everybody, with no
+# say in it. Two things were wanted beyond that: longer, and a choice.
+#
+# mac-cookie-timeout is per-PROFILE, so a choice has to be two profiles. The
+# RADIUS bridge names one of them in Mikrotik-Group on every Access-Accept,
+# according to whether the person ticked the box on the portal. The names are
+# constants in src/lib/hotspot/devices.ts and must match these exactly.
+#
+# A NAME THE ROUTER DOES NOT HAVE IS A REJECTED LOGIN, not an ignored
+# attribute. That is why the bridge sends nothing at all until
+# RADIUS_HOTSPOT_PROFILES=1 is set in /etc/orm-radius.env — run this file
+# FIRST, then set it. install-radius-bridge.sh does both in that order.
+#
+# 90 days is what "permanently" can honestly mean on a hospital network: long
+# enough that nobody on a rota meets the portal twice, short enough that a
+# handset which left the building a term ago is a stranger again. The bridge
+# pushes the matching row's expiry forward on every sign-in, so a phone in
+# daily use is never asked.
+#
+# SET-OR-ADD, not remove-and-add like the sections above. A user profile that
+# any session is currently on cannot be removed, so re-running this file in
+# working hours would fail on the remove and leave the rest unapplied.
+:if ([:len [/ip hotspot user profile find where name="orm-remembered"]] = 0) do={
+  /ip hotspot user profile add name="orm-remembered" add-mac-cookie=yes mac-cookie-timeout=90d comment="ORM - staff who asked to stay signed in"
+} else={
+  /ip hotspot user profile set [find where name="orm-remembered"] add-mac-cookie=yes mac-cookie-timeout=90d comment="ORM - staff who asked to stay signed in"
+}
+
+# And the other half of the choice. A device here is authorised for this visit
+# and forgotten afterwards — the shared handsets in theatre, and anybody who
+# unticked the box. add-mac-cookie=no is the entire point of the profile.
+:if ([:len [/ip hotspot user profile find where name="orm-one-visit"]] = 0) do={
+  /ip hotspot user profile add name="orm-one-visit" add-mac-cookie=no comment="ORM - shared devices, not remembered"
+} else={
+  /ip hotspot user profile set [find where name="orm-one-visit"] add-mac-cookie=no comment="ORM - shared devices, not remembered"
+}
 
 # --- 5. Cache ---------------------------------------------------------------
 # Devices hold DNS answers. Without this, a phone that looked the name up before

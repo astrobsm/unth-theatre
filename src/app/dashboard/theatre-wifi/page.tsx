@@ -26,6 +26,7 @@ import {
   STEPS_FOR_NETWORK, COMMON_FAILURE, PRIMARY_SSID, THEATRE_SSIDS,
   WIFI_SECURITY, NETWORK_IS_OPEN, wifiQrPayload,
 } from '@/lib/hotspot/wifi';
+import RememberedDevicesCard from '@/components/hotspot/RememberedDevicesCard';
 
 /**
  * The network password.
@@ -230,8 +231,14 @@ export default function TheatreWifiPage() {
         <p className="text-sm text-gray-600">
           Once you are on the network, signing in opens both the network and the app at the same
           time, and the app moves into your normal browser so it is still there when you come
-          back to it.
+          back to it. Tick <span className="font-medium">Keep this phone signed in to the
+          Wi-Fi</span> on that page and it will not ask again — your phone rejoins by itself
+          whenever it is back in the theatre.
         </p>
+
+        {/* Where the one-way door gets a handle on it. Renders nothing until
+            there is a device to show. */}
+        <RememberedDevicesCard />
       </div>
     </div>
   );

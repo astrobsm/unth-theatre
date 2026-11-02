@@ -190,6 +190,51 @@ Finally, upload `deploy/mikrotik/login.html` to the router's `hotspot` directory
 Watch it work: `sudo journalctl -u orm-radius -f` — each attempt logs ACCEPT or
 REJECT with the reason and the resolved account.
 
+### "Keep this phone signed in to the Wi-Fi"
+
+Staff tick a box on the portal and their handset rejoins the network silently
+from then on, instead of meeting the portal every morning. Three parts, and
+they have to be turned on in this order.
+
+**What actually makes a phone rejoin silently** is MikroTik's MAC cookie, and
+its lifetime is `mac-cookie-timeout` on the hotspot **user profile**. Nothing
+else does it — not the RADIUS session timeout, not anything in the app. Because
+it is a per-profile setting, offering a *choice* means two profiles:
+
+| Profile | `add-mac-cookie` | `mac-cookie-timeout` | Who lands on it |
+| --- | --- | --- | --- |
+| `orm-remembered` | yes | 90d | Ticked the box |
+| `orm-one-visit` | no | — | Did not, or shares the handset |
+
+The RADIUS bridge names one of them in `Mikrotik-Group` on every Access-Accept,
+reading the `hotspot_devices` row the portal wrote a second earlier.
+
+```bash
+# 1. Give the router the two profiles.
+./scripts/local-server/deploy-mikrotik-portal.sh
+#    Confirm before going further:
+#    /ip hotspot user profile print where name~"orm-"
+
+# 2. Only then let the bridge name them.
+sudo RADIUS_HOTSPOT_PROFILES=1 ./scripts/local-server/install-radius-bridge.sh --nas 192.168.88.1
+```
+
+**Do not reverse those two steps.** A group name the router does not have is
+not an ignored attribute — it is a **rejected login**. Turning the bridge on
+first takes the whole theatre off the Wi-Fi at once. Unset, the bridge sends no
+group at all and every session behaves exactly as it did before.
+
+The enrolment lasts 90 days and **every sign-in pushes it forward**, so a phone
+in daily use is never asked again; one that stopped coming a term ago is a
+stranger. Staff see and remove their own devices on **Dashboard → Theatre
+Wi-Fi**; the row is also what an administrator revokes for a lost handset.
+
+Two things it is **not**. It is not a clinical identity — the network
+remembers the *device*, and eight handsets are shared between ten people here,
+so the ORM application still asks who is holding it. And it cannot make a phone
+join the SSID: that is the handset's own Auto-join setting, which no website on
+any platform may change. The portal says so, where the box is ticked.
+
 ### Keep WPA2 on the SSID — until one of two things is done
 
 Most captive portals sit on open Wi-Fi. This one must not, *yet*. Because CHAP is

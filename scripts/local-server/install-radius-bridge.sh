@@ -27,6 +27,22 @@ NAS=""
 # reporting 43200s after a restart, which reads exactly like a failed change.
 SESSION_TIMEOUT="${RADIUS_SESSION_TIMEOUT:-86400}"   # 24 hours
 
+# "Keep this phone signed in to the Wi-Fi" — whether the bridge may name a
+# hotspot user profile in its reply.
+#
+# OFF BY DEFAULT, and the reason is worth the paragraph. The attribute is
+# Mikrotik-Group, and a group name the router does not have is not an ignored
+# attribute — it is a REJECTED LOGIN. Turning this on before
+# deploy/mikrotik/hotspot-setup.rsc has created orm-remembered and
+# orm-one-visit would take the whole theatre off the Wi-Fi at once, which is a
+# considerably worse fault than the one it fixes.
+#
+# So: apply the .rsc to the router first, confirm with
+#     /ip hotspot user profile print where name~"orm-"
+# then re-run this with RADIUS_HOTSPOT_PROFILES=1. Until then every session
+# behaves exactly as it did before the feature existed.
+HOTSPOT_PROFILES="${RADIUS_HOTSPOT_PROFILES:-0}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --nas) NAS="$2"; shift 2 ;;
@@ -86,6 +102,7 @@ RADIUS_SECRET=${SECRET}
 RADIUS_NAS=${NAS}
 RADIUS_PORT=1812
 RADIUS_SESSION_TIMEOUT=${SESSION_TIMEOUT}
+RADIUS_HOTSPOT_PROFILES=${HOTSPOT_PROFILES}
 DATABASE_URL=${DB_URL}
 EOF
 sudo chmod 600 "$ENV_FILE"
