@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import BackLink from '@/components/BackLink';
 import {
   SURGICAL_SUBSPECIALTIES,
   searchInstruments,
@@ -348,9 +349,7 @@ export default function SurgicalCountPage({ params }: { params: { id: string } }
     return (
       <div className="max-w-5xl mx-auto p-6">
         <div className="mb-6">
-          <Link href={`/dashboard/surgeries/${params.id}`} className="text-blue-600 hover:underline">
-            ← Back to Surgery
-          </Link>
+          <BackLink fallback={`/dashboard/surgeries/${params.id}`} />
           <h1 className="text-3xl font-bold text-gray-900 mt-4">Surgical Count Checklist</h1>
         </div>
 
@@ -399,12 +398,7 @@ export default function SurgicalCountPage({ params }: { params: { id: string } }
   return (
     <div className="max-w-7xl mx-auto p-6 print:p-2">
       <div className="mb-6 print:mb-2">
-        <Link
-          href={`/dashboard/surgeries/${params.id}`}
-          className="text-blue-600 hover:underline print:hidden"
-        >
-          ← Back to Surgery
-        </Link>
+        <BackLink fallback={`/dashboard/surgeries/${params.id}`} />
         <h1 className="text-3xl font-bold text-gray-900 mt-4">Surgical Count Checklist</h1>
         <p className="text-gray-600 mt-2">
           {count.surgery.procedureName} — {count.surgery?.patient?.name || 'Unknown Patient'}

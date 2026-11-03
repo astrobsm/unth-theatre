@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { ArrowLeft, Edit, User, Calendar, Activity, Syringe, CheckCircle, XCircle, ThumbsUp, ThumbsDown, Plus, Trash2 } from 'lucide-react';
+import BackLink from '@/components/BackLink';
+import { Edit, User, Calendar, Activity, Syringe, CheckCircle, XCircle, ThumbsUp, ThumbsDown, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { summariseReviewLocation } from '@/lib/anaesthesia/reviewLocation';
 
@@ -260,12 +261,7 @@ export default function PreOpReviewDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard/preop-reviews"
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </Link>
+          <BackLink fallback="/dashboard/preop-reviews" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-indigo-600 hover:bg-gray-100" />
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Pre-Operative Review Details</h1>
             <p className="text-gray-600 mt-1">Complete anesthetic assessment</p>

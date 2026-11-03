@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BackLink from '@/components/BackLink';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 import { 
-  ArrowLeft, 
   ClipboardList, 
   Activity, 
   Calculator,
@@ -68,6 +69,7 @@ interface Surgery {
 export default function SurgeryDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const returnHere = useReturnHere();
   const { data: session } = useSession();
   const [surgery, setSurgery] = useState<Surgery | null>(null);
   const [loading, setLoading] = useState(true);
@@ -179,9 +181,7 @@ export default function SurgeryDetailPage() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Surgery Not Found</h2>
           <p className="text-gray-600 mb-4">The requested surgery could not be found.</p>
-          <Link href="/dashboard/surgeries" className="btn-primary">
-            Back to Surgeries
-          </Link>
+          <BackLink fallback="/dashboard/surgeries" className="btn-primary inline-flex items-center gap-1.5" />
         </div>
       </div>
     );
@@ -192,12 +192,12 @@ export default function SurgeryDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center space-x-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          {/* A bare arrow walking the browser's history: no words to say
+              where it went, and after a redirect it did not go there. */}
+          <BackLink
+            fallback="/dashboard/surgeries"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100"
+          />
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Surgery Details</h1>
             <p className="text-gray-600 mt-1">Complete surgical case information</p>
@@ -227,7 +227,7 @@ export default function SurgeryDetailPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Link
-                  href={`/dashboard/surgeries/${surgery.id}/post-op-notes`}
+                  href={returnHere(`/dashboard/surgeries/${surgery.id}/post-op-notes`)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
                 >
                   <FileText className="w-4 h-4" />
@@ -425,7 +425,7 @@ export default function SurgeryDetailPage() {
           {/* Intelligent Medical Scribe — analyses this booking's clinical data,
               consent and assessments and flags anything unsafe. Available to all. */}
           <Link
-            href={`/dashboard/surgeries/${surgery.id}/scribe`}
+            href={returnHere(`/dashboard/surgeries/${surgery.id}/scribe`)}
             className="flex items-center p-4 border-2 border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors group"
           >
             <div className="flex-shrink-0 w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center group-hover:bg-indigo-200">
@@ -454,7 +454,7 @@ export default function SurgeryDetailPage() {
 
           {canAccessAnesthesia && (
             <Link
-              href={`/dashboard/surgeries/${surgery.id}/anesthesia`}
+              href={returnHere(`/dashboard/surgeries/${surgery.id}/anesthesia`)}
               className="flex items-center p-4 border-2 border-red-200 rounded-lg hover:bg-red-50 transition-colors group"
             >
               <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center group-hover:bg-red-200">
@@ -469,7 +469,7 @@ export default function SurgeryDetailPage() {
 
           {canAccessSurgicalCount && (
             <Link
-              href={`/dashboard/surgeries/${surgery.id}/count`}
+              href={returnHere(`/dashboard/surgeries/${surgery.id}/count`)}
               className="flex items-center p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 transition-colors group"
             >
               <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200">
@@ -484,7 +484,7 @@ export default function SurgeryDetailPage() {
 
           {canAccessTiming && (
             <Link
-              href={`/dashboard/surgeries/${surgery.id}/timing`}
+              href={returnHere(`/dashboard/surgeries/${surgery.id}/timing`)}
               className="flex items-center p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition-colors group"
             >
               <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200">
@@ -499,7 +499,7 @@ export default function SurgeryDetailPage() {
 
           {canAccessConsumables && (
             <Link
-              href={`/dashboard/surgeries/${surgery.id}/consumables`}
+              href={returnHere(`/dashboard/surgeries/${surgery.id}/consumables`)}
               className="flex items-center p-4 border-2 border-orange-200 rounded-lg hover:bg-orange-50 transition-colors group"
             >
               <div className="flex-shrink-0 w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200">
@@ -514,7 +514,7 @@ export default function SurgeryDetailPage() {
 
           {canAccessBOM && (
             <Link
-              href={`/dashboard/surgeries/${surgery.id}/bom`}
+              href={returnHere(`/dashboard/surgeries/${surgery.id}/bom`)}
               className="flex items-center p-4 border-2 border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors group"
             >
               <div className="flex-shrink-0 w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center group-hover:bg-indigo-200">

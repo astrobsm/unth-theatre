@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import { requestFix } from '@/lib/geo/requestFix';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 import { GRADE_LABEL, REVIEWER_SOURCE_LABEL, type ReviewerGrade, type ReviewerSource } from '@/lib/anaesthesia/expectedReviewers';
 
 /**
@@ -116,6 +117,7 @@ const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export default function PreopWatchPage() {
+  const returnHere = useReturnHere();
   const [board, setBoard] = useState<Board | null>(null);
   const [day, setDay] = useState('');
   const [loading, setLoading] = useState(true);
@@ -545,13 +547,13 @@ export default function PreopWatchPage() {
 
                     <div className="flex shrink-0 flex-col items-end gap-2">
                       {!c.reviewedAt && (
-                        <Link href={`/dashboard/preop-reviews/new?surgeryId=${c.surgeryId}`}
+                        <Link href={returnHere(`/dashboard/preop-reviews/new?surgeryId=${c.surgeryId}`)}
                           className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">
                           Review this case
                         </Link>
                       )}
                       {c.reviewId && (
-                        <Link href={`/dashboard/preop-reviews/${c.reviewId}`}
+                        <Link href={returnHere(`/dashboard/preop-reviews/${c.reviewId}`)}
                           className="rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">
                           Open the review
                         </Link>

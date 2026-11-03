@@ -12,6 +12,7 @@ import {
   Filter,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 // jsPDF loaded dynamically when user clicks download/export
 
 interface BOMAnalytics {
@@ -46,6 +47,7 @@ interface BOMAnalytics {
 }
 
 export default function BOMAnalyticsPage() {
+  const returnHere = useReturnHere();
   const [analytics, setAnalytics] = useState<BOMAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('30'); // days
@@ -478,7 +480,7 @@ export default function BOMAnalyticsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/dashboard/surgeries/${surgery.id}/bom`}
+                      href={returnHere(`/dashboard/surgeries/${surgery.id}/bom`)}
                       className="text-sm text-secondary-600 hover:text-secondary-800 font-medium"
                     >
                       View BOM →

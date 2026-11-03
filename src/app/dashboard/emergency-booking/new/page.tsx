@@ -5,7 +5,8 @@ import { watToday } from '@/lib/watDay';
 import { checkRequiredByTime } from '@/lib/emergency/requiredByTime';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature, CheckCircle } from 'lucide-react';
+import BackLink from '@/components/BackLink';
+import { AlertTriangle, Siren, Droplet, Users, Plus, Trash2, FileText, Stethoscope, FileSignature, CheckCircle } from 'lucide-react';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import { isOfflineQueued, isOfflineQueuedBody, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
@@ -718,9 +719,10 @@ export default function NewEmergencyBookingPage() {
         </div>
       )}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        <BackLink
+          fallback="/dashboard/emergency-booking"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100"
+        />
         <Siren className="h-8 w-8 text-red-600" />
         <div>
           <h1 className="text-2xl font-bold text-red-700">New Emergency Surgery Booking</h1>

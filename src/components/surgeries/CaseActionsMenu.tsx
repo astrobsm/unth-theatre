@@ -35,6 +35,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 import { placeMenu, MENU_WIDTH, type Placement } from '@/lib/ui/menuPlacement';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 
 export interface CaseAction {
   /** What it is called, in the words a clinician would use. */
@@ -66,6 +67,7 @@ interface Props {
 }
 
 export default function CaseActionsMenu({ actions, patientName, procedureName }: Props) {
+  const returnHere = useReturnHere();
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<Placement | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -188,8 +190,12 @@ export default function CaseActionsMenu({ actions, patientName, procedureName }:
                 );
 
                 if (a.href && !a.disabled) {
+                  // Every action in this menu opens a page with its own back
+                  // link, and until now each of those guessed its way home —
+                  // usually to the surgery page, which is not this list.
+                  // One call here fixes all eleven of them.
                   return (
-                    <a key={a.label} href={a.href} className={cls} role="menuitem"
+                    <a key={a.label} href={returnHere(a.href)} className={cls} role="menuitem"
                       onClick={() => setOpen(false)}>
                       {body}
                     </a>

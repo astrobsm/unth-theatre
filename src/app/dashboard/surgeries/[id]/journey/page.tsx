@@ -6,9 +6,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import BackLink from '@/components/BackLink';
+import { useParams } from 'next/navigation';
 import {
-  ArrowLeft,
   Loader2,
   AlertTriangle,
   BedDouble,
@@ -105,7 +105,6 @@ function Section({
 
 export default function PatientJourneyPage() {
   const params = useParams();
-  const router = useRouter();
   const id = String(params.id);
   const [data, setData] = useState<JourneyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,21 +138,17 @@ export default function PatientJourneyPage() {
   if (notFound || !data) {
     return (
       <div className="max-w-3xl mx-auto p-6">
-        <Link
-          href="/dashboard/surgeries/completed"
+        <BackLink
+          fallback="/dashboard/surgeries/completed"
           className="text-blue-700 hover:text-blue-900 inline-flex items-center gap-1 text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Completed Surgeries
-        </Link>
+        />
         <div className="mt-8 flex flex-col items-center justify-center gap-4 text-center">
           <AlertTriangle className="w-10 h-10 text-yellow-500" />
           <div className="text-2xl font-semibold text-gray-800">Surgery not found</div>
-          <button
-            onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Go Back
-          </button>
+          <BackLink
+            fallback="/dashboard/surgeries/completed"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+          />
         </div>
       </div>
     );
@@ -164,12 +159,10 @@ export default function PatientJourneyPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6 print:p-0">
       <div className="flex items-center justify-between print:hidden">
-        <Link
-          href="/dashboard/surgeries/completed"
+        <BackLink
+          fallback="/dashboard/surgeries/completed"
           className="text-blue-700 hover:text-blue-900 inline-flex items-center gap-1 text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Completed Surgeries
-        </Link>
+        />
         <div className="flex items-center gap-2">
           {data.pacuAssessmentId && (
             <Link

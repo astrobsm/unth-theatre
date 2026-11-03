@@ -4,7 +4,7 @@ import DepositNotice from '@/components/DepositNotice';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill, Stethoscope } from 'lucide-react';
+import { AlertCircle, Syringe, Activity, Mic, Plus, Trash2, Pill, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
@@ -17,6 +17,7 @@ import { ANAESTHESIA_TYPES, ANAESTHESIA_TYPE_LABELS } from '@/lib/anaesthesiaTyp
 import { OPTIMISATION_CATEGORIES, CATEGORY_LABELS } from '@/lib/anaesthesia/fitness';
 import ContactName from '@/components/ContactName';
 import { requestFix } from '@/lib/geo/requestFix';
+import BackLink from '@/components/BackLink';
 import { whatsappLink } from '@/lib/whatsapp';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -935,12 +936,7 @@ export default function NewPreOpReviewPage() {
         </div>
       )}
       <div className="mb-6 flex items-center gap-4">
-        <Link
-          href="/dashboard/preop-reviews"
-          className="p-2 hover:bg-gray-100 rounded-lg transition"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </Link>
+        <BackLink fallback="/dashboard/preop-reviews" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-indigo-600 hover:bg-gray-100" />
         <div>
           <h1 className="text-3xl font-bold text-gray-900">New Pre-Operative Review</h1>
           <p className="text-gray-600 mt-2">

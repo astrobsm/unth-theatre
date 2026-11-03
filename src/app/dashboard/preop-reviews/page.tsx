@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { groupCasesBySubspecialty } from '@/lib/anaesthesia/caseGrouping';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -71,6 +72,7 @@ function todayIso(): string {
 }
 
 export default function PreOpReviewsPage() {
+  const returnHere = useReturnHere();
   const { data: session } = useSession();
   const router = useRouter();
   const [reviews, setReviews] = useState<PreOpReview[]>([]);
@@ -530,7 +532,7 @@ export default function PreOpReviewsPage() {
                           : 'inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700';
 
                         return (
-                          <Link href={href} className={buttonClass}>
+                          <Link href={returnHere(href)} className={buttonClass}>
                             <FilePlus2 className="h-4 w-4" />
                             {label}
                           </Link>

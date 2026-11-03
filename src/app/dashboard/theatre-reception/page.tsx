@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { isSurgeonRole } from '@/lib/roleGroups';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 import {
   ClipboardCheck,
   UserCheck,
@@ -83,7 +85,6 @@ export default function TheatreReceptionPage() {
    * demand would show "No porters available" until a second request landed.
    * That is a worse page, not a faster one.
    */
-  const [openCaseId, setOpenCaseId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('');
   const [theatreFilter, setTheatreFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -117,11 +118,49 @@ export default function TheatreReceptionPage() {
   const canRunWorkflow =
     !userRole || NURSE_ROLES.includes(userRole) || FULL_ACCESS.includes(userRole);
 
+  // ---- THE BOARD'S VIEW STATE LIVES IN THE URL ---------------------------
+  //
+  // Which day is showing and which case is open used to be React state, which
+  // meant they existed only for as long as this component did. Open the
+  // Surgical Count from an expanded case, come back, and the board had
+  // forgotten both: today's list, everything collapsed, scroll at the top.
+  // "Back" landed you on the right page and still not where you were.
+  //
+  // In the URL they survive the round trip, because the back link carries the
+  // whole address and not just the path — and they survive a reload, a shared
+  // link and the desktop shell for free.
+  //
+  // replace() rather than push(): opening a case is not a page you should have
+  // to press back through, and twenty expand/collapses should not bury the
+  // board you arrived from twenty entries down the history.
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const returnHere = useReturnHere();
+
+  const setViewParam = useCallback(
+    (key: string, value: string | null) => {
+      const next = new URLSearchParams(Array.from(searchParams?.entries() || []));
+      if (value) next.set(key, value);
+      else next.delete(key);
+      const qs = next.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+
+  const openCaseId = searchParams?.get('case') || null;
+  const toggleCase = (surgeryId: string) =>
+    setViewParam('case', openCaseId === surgeryId ? null : surgeryId);
+
   // Which day's list to show. Defaults to today, which is what a scrub nurse
   // wants every time except when catching up on yesterday or preparing for
   // tomorrow — so it is a control, not a fixed "today only".
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const today = new Date().toISOString().split('T')[0];
+  const selectedDate = searchParams?.get('date') || today;
+  // Today is the default, so it is left out of the address rather than
+  // written into it: the plain /dashboard/theatre-reception stays the
+  // everyday URL.
+  const setSelectedDate = (d: string) => setViewParam('date', d === today ? null : d);
 
   // Per-case local selections
   const [porterSel, setPorterSel] = useState<Record<string, string[]>>({});
@@ -428,11 +467,11 @@ export default function TheatreReceptionPage() {
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() => setOpenCaseId((cur) => (cur === c.surgeryId ? null : c.surgeryId))}
+                  onClick={() => toggleCase(c.surgeryId)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setOpenCaseId((cur) => (cur === c.surgeryId ? null : c.surgeryId));
+                      toggleCase(c.surgeryId);
                     }
                   }}
                   aria-expanded={openCaseId === c.surgeryId}
@@ -593,13 +632,21 @@ export default function TheatreReceptionPage() {
                         {dutyLinks(c.surgeryId).map((l) => {
                           const Icon = l.icon;
                           return (
-                            <a
+                            // returnHere() is what makes the duty page's back
+                            // link come back to THIS board, on this day, with
+                            // this case still open — rather than to the
+                            // surgery page, which is where it always went and
+                            // is not where anybody started.
+                            //
+                            // Link, not <a>: a plain anchor reloaded the whole
+                            // application to open a checklist.
+                            <Link
                               key={l.href}
-                              href={l.href}
+                              href={returnHere(l.href)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-blue-300 text-blue-700 hover:bg-blue-100"
                             >
                               <Icon className="w-3.5 h-3.5" /> {l.label}
-                            </a>
+                            </Link>
                           );
                         })}
                       </div>

@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import BackLink from '@/components/BackLink';
 import Link from 'next/link';
 import { 
-  ArrowLeft, 
+  
   User, 
   Calendar, 
   FileText, 
@@ -83,7 +84,6 @@ interface Patient {
 
 export default function PatientDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -157,12 +157,7 @@ export default function PatientDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center space-x-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          <BackLink fallback="/dashboard/patients" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100" />
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Patient Details</h1>
             <p className="text-gray-600 mt-1">Complete patient information</p>

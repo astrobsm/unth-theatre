@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 
 interface SurgeryItem {
   id: string;
@@ -25,6 +26,7 @@ interface SurgeryGroup {
 }
 
 export default function CompletedSurgeriesPage() {
+  const returnHere = useReturnHere();
   const [items, setItems] = useState<SurgeryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -191,10 +193,10 @@ export default function CompletedSurgeriesPage() {
                         <td className="px-4 py-3 text-sm text-gray-600">{s.scheduledTime}</td>
                         <td className="px-4 py-3 text-sm">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Link href={`/dashboard/surgeries/${s.id}/journey`} className="text-blue-700 hover:text-blue-900 font-medium">
+                            <Link href={returnHere(`/dashboard/surgeries/${s.id}/journey`)} className="text-blue-700 hover:text-blue-900 font-medium">
                               View Journey
                             </Link>
-                            <Link href={`/dashboard/surgeries/${s.id}/post-op-notes`} className="text-indigo-600 hover:text-indigo-800 font-medium">
+                            <Link href={returnHere(`/dashboard/surgeries/${s.id}/post-op-notes`)} className="text-indigo-600 hover:text-indigo-800 font-medium">
                               Post-Op Notes
                             </Link>
                             {s.pacuAssessment ? (

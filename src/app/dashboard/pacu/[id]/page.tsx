@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import BackLink from '@/components/BackLink';
 import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
 import dynamic from 'next/dynamic';
@@ -500,12 +501,10 @@ export default function PACUAssessmentDetailPage() {
           >
             Back to Recovery List
           </button>
-          <button
-            onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Go Back
-          </button>
+          <BackLink
+            fallback="/dashboard/pacu"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+          />
         </div>
       </div>
     );
@@ -522,12 +521,10 @@ export default function PACUAssessmentDetailPage() {
       {/* Header */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <button
-            onClick={() => router.back()}
-            className="text-primary-600 hover:text-primary-700 mb-2"
-          >
-            ← Back to PACU List
-          </button>
+          <BackLink
+            fallback="/dashboard/pacu"
+            className="mb-2 inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-700"
+          />
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             PACU Recovery Monitoring
           </h1>

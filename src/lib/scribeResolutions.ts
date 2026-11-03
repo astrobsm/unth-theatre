@@ -114,6 +114,8 @@ export const RESOLUTIONS: Record<string, Resolution> = {
   },
 };
 
+import { isSafeReturnPath, RETURN_PARAM } from './navigation/returnTo';
+
 export const resolutionFor = (code: string | undefined | null): Resolution | null =>
   (code && RESOLUTIONS[code]) || null;
 
@@ -139,8 +141,8 @@ export function resolutionHref(
   if (code) params.push(`code=${encodeURIComponent(code)}`);
   // Only ever an in-app path. An absolute or protocol-relative value here
   // would turn every finding into an open redirect.
-  if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
-    params.push(`returnTo=${encodeURIComponent(returnTo)}`);
+  if (isSafeReturnPath(returnTo)) {
+    params.push(`${RETURN_PARAM}=${encodeURIComponent(returnTo as string)}`);
   }
   return params.length ? `${base}?${params.join('&')}` : base;
 }
@@ -150,9 +152,7 @@ export function resolutionHref(
  * plain in-app path. Called by the pages staff are sent to.
  */
 export function safeReturnTo(value: string | null | undefined, fallback: string): string {
-  if (!value) return fallback;
-  if (!value.startsWith('/') || value.startsWith('//')) return fallback;
-  return value;
+  return isSafeReturnPath(value) ? (value as string) : fallback;
 }
 
 /** Findings that must be closed before a case may proceed. */

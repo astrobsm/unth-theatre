@@ -14,6 +14,7 @@ import ServiceWorkerUpdatePrompt from '@/components/ServiceWorkerUpdatePrompt';
 const NotificationBell = dynamic(() => import('@/components/NotificationBell'), { ssr: false });
 const SyncStatusBadge = dynamic(() => import('@/components/SyncStatusBadge'), { ssr: false });
 import { resolveAllowedModuleIds, MODULES, isFullAccessRole } from '@/lib/modules';
+import ScrollMemory from '@/components/ScrollMemory';
 import { getCachedData, setCachedData, removeCachedData } from '@/lib/offlineStore';
 
 // Non-critical chrome — these are not needed for first paint, so we code-split
@@ -962,6 +963,11 @@ export default function DashboardLayout({
             </div>
           </div>
         </header>
+
+        {/* Remembers where each page was scrolled to, so a back link
+            returns to the case you were looking at and not to the top of
+            the list. Renders nothing. */}
+        <ScrollMemory />
 
         <main
           className="dashboard-main p-4 sm:p-8 min-h-screen relative"

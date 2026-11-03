@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import BackLink from '@/components/BackLink';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 const VitalsChart = dynamic(() => import('@/components/VitalsChart'), {
@@ -333,9 +334,7 @@ export default function AnesthesiaMonitoringPage() {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="mb-6">
-          <Link href={`/dashboard/surgeries/${surgeryId}`} className="text-blue-600 hover:underline">
-            ← Back to Surgery
-          </Link>
+          <BackLink fallback={`/dashboard/surgeries/${surgeryId}`} />
           <h1 className="text-3xl font-bold text-gray-900 mt-4">Anesthesia Monitoring Record</h1>
         </div>
 
@@ -476,9 +475,7 @@ export default function AnesthesiaMonitoringPage() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-6">
-        <Link href={`/dashboard/surgeries/${surgeryId}`} className="text-blue-600 hover:underline">
-          ← Back to Surgery
-        </Link>
+        <BackLink fallback={`/dashboard/surgeries/${surgeryId}`} />
         <h1 className="text-3xl font-bold text-gray-900 mt-4">WHO Anesthesia Monitoring Record</h1>
         <p className="text-gray-600 mt-2">
           {record.surgery.procedureName} - {record.surgery?.patient?.name || 'Unknown Patient'} ({record.surgery?.patient?.age || 'N/A'}y, {record.surgery?.patient?.gender || 'N/A'})

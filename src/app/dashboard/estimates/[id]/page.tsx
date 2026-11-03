@@ -11,9 +11,10 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import BackLink from '@/components/BackLink';
 import {
-  ArrowLeft, Download, Plus, RefreshCw, Send, Trash2, TriangleAlert, Check, Ban,
+  Download, Plus, RefreshCw, Send, Trash2, TriangleAlert, Check, Ban,
 } from 'lucide-react';
 import { SECTION_LABELS, SECTION_ORDER, formatNaira } from '@/lib/estimates/calculate';
 import { CHARGE_KINDS } from '@/lib/estimates/chargeKinds';
@@ -66,7 +67,6 @@ const emptyLine = (): Line => ({
 
 export default function EstimateBuilderPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [est, setEst] = useState<Estimate | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
@@ -211,7 +211,7 @@ export default function EstimateBuilderPage() {
     return (
       <div className="p-6">
         <p className="text-red-700">{error ?? 'Estimate not found.'}</p>
-        <button onClick={() => router.back()} className="mt-3 text-blue-700 underline">Go back</button>
+        <BackLink fallback="/dashboard/estimates" className="mt-3 inline-flex items-center gap-1.5 text-blue-700 underline" />
       </div>
     );
   }
@@ -219,9 +219,7 @@ export default function EstimateBuilderPage() {
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-6xl">
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-800">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <BackLink fallback="/dashboard/estimates" className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-800" />
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-gray-900 truncate">
             {est.estimateNumber}

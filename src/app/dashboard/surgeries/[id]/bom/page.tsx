@@ -13,9 +13,9 @@ import {
   User,
   Building2,
   Printer,
-  ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
+import BackLink from '@/components/BackLink';
 // jsPDF loaded dynamically when user clicks download/export
 
 interface SurgeryBOM {
@@ -277,9 +277,7 @@ export default function SurgeryBOMPage() {
         <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
         <h2 className="text-2xl font-bold">BOM not found</h2>
         <p className="text-gray-600 mt-2">No consumables recorded for this surgery</p>
-        <Link href="/dashboard/surgeries" className="btn-primary mt-4 inline-block">
-          Back to Surgeries
-        </Link>
+        <BackLink fallback="/dashboard/surgeries" className="btn-primary mt-4 inline-flex items-center gap-1.5" />
       </div>
     );
   }
@@ -294,12 +292,10 @@ export default function SurgeryBOMPage() {
       {/* Header - Hide on print */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between print:hidden">
         <div className="flex items-center gap-4">
-          <Link
-            href={`/dashboard/surgeries/${surgeryId}`}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </Link>
+          <BackLink
+            fallback={`/dashboard/surgeries/${surgeryId}`}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100"
+          />
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Bill of Materials (BOM)</h1>
             <p className="text-gray-600 mt-1">Detailed cost breakdown for surgery</p>

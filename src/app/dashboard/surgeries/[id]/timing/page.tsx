@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import BackLink from '@/components/BackLink';
 
 interface SurgicalTiming {
   id: string;
@@ -54,7 +54,6 @@ interface SurgicalEvent {
 }
 
 export default function SurgicalTimingPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
   const [timing, setTiming] = useState<SurgicalTiming | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -213,12 +212,10 @@ export default function SurgicalTimingPage({ params }: { params: { id: string } 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="mb-8">
-        <button
-          onClick={() => router.back()}
-          className="text-blue-600 hover:text-blue-800 mb-4"
-        >
-          ← Back to Surgery
-        </button>
+        <BackLink
+          fallback={`/dashboard/surgeries/${params.id}`}
+          className="mb-4 inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800"
+        />
         <h1 className="text-3xl font-bold text-gray-900">Surgical Timing</h1>
         <p className="text-gray-600 mt-2">
           {timing?.surgery?.patient?.name || 'Unknown Patient'} ({timing?.surgery?.patient?.folderNumber || 'N/A'}) - {timing?.surgery?.procedureName}

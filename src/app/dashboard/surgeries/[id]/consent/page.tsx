@@ -8,12 +8,13 @@ import { useParams, useRouter } from 'next/navigation';
 // jsPDF (~400 KB) loads only when a consent PDF is actually produced.
 import type jsPDF from 'jspdf';
 import {
-  ArrowLeft, FileText, PenLine, Upload, Download, Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2,
+  FileText, PenLine, Upload, Download, Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2,
 } from 'lucide-react';
 import SignaturePad from '@/components/SignaturePad';
 import StaffComboInput from '@/components/StaffComboInput';
 import { formatAge } from '@/lib/age';
 import { safeReturnTo } from '@/lib/scribeResolutions';
+import BackLink from '@/components/BackLink';
 
 interface PatientInfo {
   id: string;
@@ -427,9 +428,7 @@ export default function SurgeryConsentPage() {
     <div className="max-w-4xl mx-auto space-y-6 pb-24">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Go back">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <BackLink fallback={`/dashboard/surgeries/${surgeryId}`} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100" />
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <FileText className="w-6 h-6 text-blue-600" /> Surgical Consent Form

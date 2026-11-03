@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Plus, Trash2, Package, DollarSign, AlertCircle, ShoppingCart, FileText } from 'lucide-react';
+import { Plus, Trash2, Package, DollarSign, AlertCircle, ShoppingCart, FileText } from 'lucide-react';
 import Link from 'next/link';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
+import BackLink from '@/components/BackLink';
 
 interface Surgery {
   id: string;
@@ -56,6 +58,7 @@ interface ExistingConsumable {
 }
 
 export default function SurgeryConsumablesPage() {
+  const returnHere = useReturnHere();
   const params = useParams();
   const router = useRouter();
   const surgeryId = params.id as string;
@@ -275,19 +278,14 @@ export default function SurgeryConsumablesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link
-          href="/dashboard/surgeries"
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </Link>
+        <BackLink fallback="/dashboard/surgeries" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100" />
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-gray-900">Surgery Consumables Tracking</h1>
           <p className="text-gray-600 mt-1">Record items used during surgical procedure</p>
         </div>
         {existingConsumables.length > 0 && (
           <Link
-            href={`/dashboard/surgeries/${surgeryId}/bom`}
+            href={returnHere(`/dashboard/surgeries/${surgeryId}/bom`)}
             className="btn-secondary flex items-center gap-2"
           >
             <FileText className="w-5 h-5" />

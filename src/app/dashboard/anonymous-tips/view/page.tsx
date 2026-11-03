@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import BackLink from '@/components/BackLink';
 import {
-  ArrowLeft,
   Eye,
   EyeOff,
   AlertTriangle,
@@ -167,9 +167,7 @@ export default function AnonymousTipsViewPage() {
     <div className="max-w-6xl mx-auto p-4 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <BackLink fallback="/dashboard/anonymous-tips" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-blue-600 hover:bg-gray-100" />
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Anonymous Incident Reports</h1>
           <p className="text-sm text-gray-500">Review and manage anonymous reports from staff</p>

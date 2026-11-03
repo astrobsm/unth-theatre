@@ -23,7 +23,8 @@
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import BackLink from '@/components/BackLink';
 import {
   AlertTriangle, Check, FileText, ImagePlus, Loader2, Plus, Printer, Send, Trash2, X,
 } from 'lucide-react';
@@ -74,7 +75,6 @@ type Tab = 'write' | 'summary' | 'previous';
 
 export default function PostOperativeNotesPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [surgery, setSurgery] = useState<any>(null);
   const [feed, setFeed] = useState<FeedEntry[]>([]);
@@ -285,6 +285,24 @@ export default function PostOperativeNotesPage() {
     window.addEventListener('beforeunload', onLeave);
     return () => window.removeEventListener('beforeunload', onLeave);
   }, []);
+
+  /**
+   * Leaving by a link inside the application is not a page unload: React
+   * unmounts this component, the 1.2-second debounce never fires, and
+   * beforeunload above is not called. Up to a second and a bit of an
+   * operation note lived only in the browser at that moment.
+   *
+   * So the back link waits for this. Returning false keeps the surgeon on the
+   * page with their text still in front of them, which is the only safe
+   * answer when the save did not land.
+   */
+  const flushBeforeLeaving = useCallback(async () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    if (!dirty.current) return true;
+    await save();
+    // save() clears dirty only when the server accepted it.
+    return !dirty.current;
+  }, [save]);
 
   const setValue = useCallback((key: string, value: unknown) => {
     setValues((s) => ({ ...s, [key]: value }));
@@ -497,9 +515,11 @@ export default function PostOperativeNotesPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <button onClick={() => router.back()} className="no-print text-blue-600 hover:text-blue-800">
-        ← Back
-      </button>
+      <BackLink
+        fallback={`/dashboard/surgeries/${params.id}`}
+        onLeave={flushBeforeLeaving}
+        className="no-print inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800"
+      />
 
       {/* ── Patient and operation, taken from the case. Never retyped. ───── */}
       <div>

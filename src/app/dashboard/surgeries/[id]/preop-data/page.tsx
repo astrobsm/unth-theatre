@@ -15,10 +15,11 @@
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, FlaskConical, Loader2, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { FlaskConical, Loader2, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 import { PREOP_FIELDS, CODE_TO_FIELD, type PreopField } from '@/lib/preopData';
 import { safeReturnTo } from '@/lib/scribeResolutions';
+import BackLink from '@/components/BackLink';
 
 interface Loaded {
   procedureName?: string;
@@ -39,7 +40,6 @@ function toLocalInput(value: unknown): string {
 
 export default function PreopDataPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [info, setInfo] = useState<Loaded | null>(null);
@@ -126,9 +126,7 @@ export default function PreopDataPage() {
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
-      <button onClick={() => router.back()} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
+      <BackLink fallback={`/dashboard/surgeries/${id}`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" />
 
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-lg bg-indigo-100 flex items-center justify-center">

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Plus, Trash2, Send } from "lucide-react";
+import BackLink from '@/components/BackLink';
 
 interface Med { drugName: string; dosage: string; route: string; frequency: string; duration: string; quantity: number; isControlled: boolean; notes?: string }
 
@@ -51,6 +52,9 @@ export default function PostOpPrescriptionPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-4">
+      {/* This page had no way back at all: the only exit was the browser's
+          own button, which on the desktop shell is not always there. */}
+      <BackLink fallback={`/dashboard/surgeries/${params.id}`} />
       <h1 className="text-2xl font-bold">Post-Op Prescription</h1>
       {surgery && (
         <p className="text-sm text-gray-600">

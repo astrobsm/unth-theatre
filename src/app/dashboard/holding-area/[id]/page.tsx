@@ -4,6 +4,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import BackLink from '@/components/BackLink';
+import { useReturnHere } from '@/lib/navigation/useReturnHere';
 import { patientLabel } from '@/lib/patientDisplay';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
@@ -86,6 +88,7 @@ interface Assessment {
 }
 
 export default function HoldingAreaAssessmentPage({ params }: { params: { id: string } }) {
+  const returnHere = useReturnHere();
   const router = useRouter();
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -288,12 +291,10 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Header */}
       <div className="mb-8">
-        <button
-          onClick={() => router.back()}
-          className="text-blue-600 hover:text-blue-800 mb-4"
-        >
-          ← Back to Holding Area
-        </button>
+        <BackLink
+          fallback="/dashboard/holding-area"
+          className="mb-4 inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800"
+        />
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -466,7 +467,7 @@ export default function HoldingAreaAssessmentPage({ params }: { params: { id: st
               </p>
             )}
             <a
-              href={`/dashboard/surgeries/${assessment.surgeryId}/consent`}
+              href={returnHere(`/dashboard/surgeries/${assessment.surgeryId}/consent`)}
               className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 underline"
             >
               Open / complete UNTH consent form
