@@ -23,6 +23,7 @@
 import {
   ROSTER_DUE_DAYS_BEFORE, STATE_LABELS, type RosterAssessment, type RosterPeriod,
 } from './overdue';
+import { withNetworkNotice } from '@/lib/comms/networkNotice';
 
 const SIGN_OFF = 'Theatre Management, UNTH Ituku-Ozalla';
 
@@ -137,7 +138,7 @@ export function buildRosterChase(input: RosterChaseInput): string {
       '',
       SIGN_OFF,
     );
-    return lines.join('\n');
+    return withNetworkNotice(lines.join('\n'));
   }
 
   // ── A pattern, where there is one ────────────────────────────────────
@@ -196,7 +197,7 @@ export function buildRosterChase(input: RosterChaseInput): string {
     SIGN_OFF,
   );
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
 
 /** The short form, for a notification title and the board. */

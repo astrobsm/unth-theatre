@@ -27,6 +27,8 @@
 // unassessed patient on a list -- are heavy enough on their own.
 // ============================================================
 
+import { withNetworkNotice } from '@/lib/comms/networkNotice';
+
 export type ReviewChaseRegister =
   /** Past the 7pm hand-back window, still unreviewed. Late, not yet missed. */
   | 'LATE'
@@ -115,7 +117,7 @@ export function buildReviewChaseMessage(input: ReviewChaseInput): string {
 
   if (input.register === 'LATE') {
     // Still recoverable, and written that way. Nobody is in trouble at 7pm.
-    return [
+    return withNetworkNotice([
       `Good evening ${dr},`,
       '',
       'The pre-operative anaesthetic review for this case has not yet been recorded, '
@@ -133,10 +135,10 @@ export function buildReviewChaseMessage(input: ReviewChaseInput): string {
         + 'built overnight on the assumption that this patient has been assessed.',
       '',
       `Thank you,\n${from}`,
-    ].join('\n');
+    ].join('\n'));
   }
 
-  return [
+  return withNetworkNotice([
     `Good evening ${dr},`,
     '',
     'The 9pm deadline has passed and no pre-operative anaesthetic review has been '
@@ -156,7 +158,7 @@ export function buildReviewChaseMessage(input: ReviewChaseInput): string {
       + 'matters.',
     '',
     `${from}`,
-  ].join('\n');
+  ].join('\n'));
 }
 
 /**

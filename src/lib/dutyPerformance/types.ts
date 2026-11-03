@@ -136,6 +136,20 @@ export interface DutyDefinition {
    */
   rosterCategory: string | null;
   /**
+   * What the absence of this record means in law, where that is a real and
+   * specific consequence rather than a way of adding weight to a request.
+   *
+   * SET ON ALMOST NOTHING, ON PURPOSE. A legal paragraph on every duty is a
+   * legal paragraph on none: staff learn to skip the block, and when it
+   * genuinely matters -- a theatre record subpoenaed years later -- it reads
+   * as the same boilerplate they have ignored twelve times. Only duties whose
+   * record is itself evidence carry one.
+   *
+   * It appears in the CHASE and never in the commendation. A thank-you that
+   * mentions liability is a warning with a compliment attached.
+   */
+  legalWeight?: string;
+  /**
    * For a duty that is routinely DONE by juniors and OWED by a senior.
    *
    * The pre-op review is the clear case: the registrars and senior registrars
@@ -330,11 +344,14 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
     label: 'Recording start and end of surgery',
     owner: 'Theatre nurses',
     verb: 'recorded',
-    deadline: 'on the day of surgery',
+    deadline: 'in real time, as each happens — not written up afterwards',
     why:
-      'Times that are not recorded cannot be recovered. Theatre utilisation, turnover and '
-      + 'every case-duration figure the hospital plans with are built from these two '
-      + 'timestamps, and a missing pair is a case that silently never happened.',
+      'These two timestamps are the operative record of when the patient was on the '
+      + 'table. Theatre utilisation, turnover and every case-duration figure the hospital '
+      + 'plans with are built from them, and a missing pair is a case that silently never '
+      + 'happened. They are also the hospital’s own account of the operation, entered '
+      + 'contemporaneously, and that is what makes them worth anything if the case is ever '
+      + 'questioned.',
     graceMinutes: 0,
     where: 'the case → Timing (Dashboard → Theatre Operations)',
     subordinates: 'the nurses and anaesthetic technicians on your team',
@@ -342,8 +359,9 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       'A time not entered on the day cannot be recovered, and the case becomes '
       + 'uncountable.',
     ask:
-      'Dashboard → Theatre Operations → the case → Timing: enter the incision time and '
-      + 'the end of procedure the same day.',
+      'Dashboard → Theatre Operations → the case → Timing: enter the incision time as the '
+      + 'surgeon begins, and the end of procedure as the operation finishes. As each '
+      + 'happens, not at the end of the list.',
     roles: ['SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ANAESTHETIC_TECHNICIAN'],
     rosterCategory: 'NURSES',
     delegation: null,
@@ -351,10 +369,26 @@ export const DUTIES: Record<DutyKey, DutyDefinition> = {
       'Open the case from Dashboard → Theatre Operations and choose Timing.',
       'Record the time of incision when the surgeon begins.',
       'Record the end of procedure when the operation finishes.',
-      'Both must be in before the end of the day. One without the other records '
-      + 'nothing — the pair is what makes the case countable, and a time not '
-      + 'entered on the day cannot be recovered afterwards.',
+      'Enter each one AS IT HAPPENS. A time written up from memory at the end of '
+      + 'a list is an estimate, and it is recorded as though it were observed.',
+      'One without the other records nothing — the pair is what makes the case '
+      + 'countable, and a time not entered on the day cannot be recovered.',
     ],
+    legalWeight:
+      'A word about why these two times, in particular, are not paperwork.\n\n'
+      + 'The incision time and the end of procedure are the hospital’s contemporaneous '
+      + 'record of when this patient was on the table. Where a patient later brings a '
+      + 'claim — and claims arrive months or years afterwards, long past anybody’s '
+      + 'memory of a particular list — the theatre record is the first document called '
+      + 'for, and these timestamps are what anchor every other entry in it to a clock.\n\n'
+      + 'A record entered at the time carries weight precisely because it was entered at '
+      + 'the time. One reconstructed afterwards does not, and one that was never made at '
+      + 'all leaves the hospital unable to show, from its own records, when the operation '
+      + 'began or ended. That gap is not neutral: it is read against the institution, and '
+      + 'it falls on the theatre and on the nurse named on the case to account for it.\n\n'
+      + 'None of that is a threat, and nobody is suggesting anyone would enter a time '
+      + 'untruthfully. It is simply what the record is for, and the reason the entry has '
+      + 'to be made in the theatre, as it happens, rather than remembered later.',
   },
   THEATRE_READINESS: {
     key: 'THEATRE_READINESS',

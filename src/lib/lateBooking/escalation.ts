@@ -26,6 +26,8 @@
 // not have to be redeployed to change it.
 // ============================================================
 
+import { withNetworkNotice } from '@/lib/comms/networkNotice';
+
 export type EscalationLevel = 'FIRST_WARNING' | 'SECOND_WARNING' | 'QUERY';
 
 export const ESCALATION_LABELS: Record<EscalationLevel, string> = {
@@ -227,7 +229,7 @@ export function buildChaseMessage(input: {
     `Theatre Management, UNTH Ituku-Ozalla`,
   );
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
 
 /** The in-app notice to the unit's supervising consultant. */

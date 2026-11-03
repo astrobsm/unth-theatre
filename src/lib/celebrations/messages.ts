@@ -351,6 +351,19 @@ function wordsFor(o: Occasion): Words {
  * own work in them reads as a letter, and that is the entire point of this
  * feature.
  */
+/**
+ * DELIBERATELY WITHOUT THE THEATRE NETWORK NOTICE.
+ *
+ * Theatre management asked for that notice on every chase and commendation,
+ * and it is on all of them. It is NOT on these two, which are birthday and
+ * new-month greetings, because this module exists to keep one rule: a
+ * greeting that reminds you about the ORM is a duty chase with a ribbon on
+ * it, and the person reading it learns the hospital only writes when it
+ * wants something. The tests enforce that rule by name.
+ *
+ * The people who get these also get the chases and the commendations, so
+ * they see the notice; they just do not see it on their birthday.
+ */
 export function buildCelebrationMessage(input: {
   occasion: Occasion;
   personName: string;

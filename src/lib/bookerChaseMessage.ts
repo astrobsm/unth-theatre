@@ -12,6 +12,7 @@
  */
 
 import { whatsappLink } from '@/lib/whatsapp';
+import { withNetworkNotice } from '@/lib/comms/networkNotice';
 
 /** The stored codes on Surgery.preopOutstanding, in words a person can act on. */
 const OUTSTANDING_LABEL: Record<string, string> = {
@@ -80,7 +81,7 @@ export function buildBookerChaseMessage(input: BookerChaseInput): string {
   );
   if (input.fromName) lines.push('', `— ${input.fromName}, UNTH Theatre`);
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
 
 /**

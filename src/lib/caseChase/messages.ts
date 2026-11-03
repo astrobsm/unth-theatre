@@ -32,6 +32,7 @@ import {
   CASE_GAPS, fixableGaps, type CaseGapCode,
 } from './gaps';
 import type { ChaseCase, ChaseGroup } from './collect';
+import { withNetworkNotice } from '@/lib/comms/networkNotice';
 
 const SIGN_OFF = 'Theatre Management, UNTH Ituku-Ozalla';
 
@@ -190,7 +191,7 @@ export function buildSurgeonCaseChase(input: {
     SIGN_OFF,
   );
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
 
 /**
@@ -276,7 +277,7 @@ export function buildConsultantCaseChase(input: {
     SIGN_OFF,
   );
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
 
 /**

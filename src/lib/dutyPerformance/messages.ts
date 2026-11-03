@@ -21,14 +21,23 @@
 import { DUTIES, type DutyKey, type DutyPerformance } from './types';
 import { shortDay, trimLabel, type MemberCaseload } from './caseload';
 import { formatRate, formatMargin } from './report';
+import { withNetworkNotice } from '@/lib/comms/networkNotice';
 
 const pct = (r: number | null) => formatRate(r);
 
-/** How the person's record reads in one sentence. */
+/**
+ * How the person's record reads in one sentence.
+ *
+ * The duty's LABEL is deliberately not pluralised into this line. It used to
+ * be, and produced "6 of 14 recording start and end of surgerys recorded" —
+ * an "s" bolted onto whatever word the label happened to end with. The label
+ * is already the subject line of the message, so the count needs only the
+ * verb, which reads correctly for every one of the ten duties.
+ */
 function standingLine(p: DutyPerformance, duty: DutyKey): string {
   const d = DUTIES[duty];
   const parts: string[] = [
-    `${p.done} of ${p.total} ${d.label.toLowerCase()}${p.total === 1 ? '' : 's'} ${d.verb}`,
+    `${p.done} of ${p.total} ${d.verb}`,
   ];
   if (p.outstanding > 0) parts.push(`${p.outstanding} never done`);
   if (p.late > 0) parts.push(`${p.late} done late`);
@@ -102,7 +111,9 @@ export function buildDutyChase(input: {
   if (p.done > 0) {
     lines.push(
       ``,
-      `Thank you for the ${p.done} you did ${d.verb} — that part of the work is reaching `
+      // "you have recorded", not "you did recorded". The verbs are past
+      // participles, and every one of the ten read ungrammatically here.
+      `Thank you for the ${p.done} you have ${d.verb} — that part of the work is reaching `
         + `the theatre as it should.`,
     );
   }
@@ -148,6 +159,21 @@ export function buildDutyChase(input: {
       + `closes that gap.`,
     ``,
     `Why it matters. ${d.why}`,
+  );
+
+  // The legal paragraph, on the few duties whose record is itself evidence.
+  //
+  // AFTER the appeal and the instructions, never before them. Opening with
+  // liability produces a defensive colleague, and the outcome wanted here is
+  // the time entered tomorrow — not a reply explaining that it was not their
+  // fault. It is also set on almost no duties on purpose: a legal block on
+  // every message is one staff learn to scroll past, and then it carries no
+  // weight on the day it genuinely matters.
+  if (d.legalWeight) {
+    lines.push(``, `*${d.label.toUpperCase()} — WHY THIS ONE IS DIFFERENT*`, d.legalWeight);
+  }
+
+  lines.push(
     ``,
     `If the screen cannot be found, or a login will not reach it, say so and somebody will `
       + `come and show you or your team — that is a five-minute problem and we would far `
@@ -162,7 +188,7 @@ export function buildDutyChase(input: {
     `Theatre Management, UNTH Ituku-Ozalla`,
   );
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
 
 /** The WhatsApp thank-you for somebody whose record earns one. */
@@ -217,5 +243,5 @@ export function buildDutyCommendation(input: {
     `Theatre Management, UNTH Ituku-Ozalla`,
   );
 
-  return lines.join('\n');
+  return withNetworkNotice(lines.join('\n'));
 }
