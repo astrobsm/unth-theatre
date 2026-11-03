@@ -2,6 +2,7 @@
 
 import FingerprintSignIn from '@/components/FingerprintSignIn';
 import { useState, useEffect } from 'react';
+import { purgeQueuedAuthMutations, refreshAppShellForSignIn } from '@/lib/auth/signInRecovery';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -26,6 +27,9 @@ export default function LoginPage() {
   const [keepSignedIn, setKeepSignedIn] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  /// Set when a stuck sign-in attempt was cleared off this device. Not an
+  /// error -- the device was at fault, and saying so is the point.
+  const [recoveryNote, setRecoveryNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [newPasswordValue, setNewPasswordValue] = useState('');
@@ -96,6 +100,50 @@ export default function LoginPage() {
     'CSSD',
     'Mortuary',
   ];
+
+  // Unstick a device that cannot sign in.
+  //
+  // Reported from theatre: "it signed me out and I can't sign in again." The
+  // cause was fixed in d1e7d51, but public/sw.js deliberately never calls
+  // skipWaiting(), so a desktop app nobody ever closes keeps running the
+  // pre-fix bundle and stays broken however many times we deploy the cure.
+  // This is the page a locked-out person is looking at, so it is the one
+  // place the repair can be applied.
+  //
+  // ONLINE ONLY. There IS an offline sign-in on this screen -- an encrypted
+  // local vault, below -- and dropping the app shell while the device cannot
+  // reach the server could leave somebody with neither. The purge still runs
+  // either way: a queued password is a thing to delete whatever the network
+  // is doing.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const removed = await purgeQueuedAuthMutations();
+      if (!cancelled && removed > 0) {
+        // Said plainly rather than silently: the person has been pressing
+        // this button to no effect, possibly for days, and deserves to know
+        // something was actually wrong with the device rather than with them.
+        setRecoveryNote(
+          `Cleared ${removed} stuck sign-in attempt${removed === 1 ? '' : 's'} left on this device. Please try again.`,
+        );
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      const refreshed = await refreshAppShellForSignIn();
+      // Reload ONCE, and only when something was genuinely replaced. A
+      // sign-in page that refreshes itself on every visit is its own fault.
+      if (refreshed && !cancelled) {
+        try {
+          if (sessionStorage.getItem('orm.signInRefreshed') !== '1') {
+            sessionStorage.setItem('orm.signInRefreshed', '1');
+            window.location.reload();
+          }
+        } catch {
+          /* storage blocked: skip the reload rather than risk a loop */
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Offline sign-in readiness. We deliberately do NOT auto-redirect into the
   // dashboard just because a session happens to be cached on the device — that
@@ -446,6 +494,12 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative">
               {error}
+            </div>
+          )}
+
+          {recoveryNote && (
+            <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded text-sm">
+              {recoveryNote}
             </div>
           )}
           

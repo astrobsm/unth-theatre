@@ -1,4 +1,6 @@
 {
+  "$comment_regions": "Functions run beside the database, not beside nothing. The DB is Supabase aws-1-eu-west-1 (Ireland); Vercel defaulted these functions to iad1 (Washington), so EVERY query crossed the Atlantic and back. A page making four sequential queries paid four of those round trips before it rendered. dub1 is Dublin, in the same region as the database, which also shortens the leg from Nigeria: Lagos-Dublin is a shorter hop than Lagos-Washington. Measured before the change: X-Vercel-Id cpt1::iad1.",
+  "regions": ["dub1"],
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "framework": "nextjs",

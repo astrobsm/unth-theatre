@@ -192,7 +192,47 @@ export default function DashboardLayout({
     // the page visibly blinking. One source of truth: the cached identity.
     if (typeof navigator !== 'undefined' && !navigator.onLine && cachedUser) return;
 
-    router.push('/auth/login');
+    // ASK THE SERVER BEFORE THROWING ANYBODY OUT.
+    //
+    // "unauthenticated" from useSession does NOT mean the session ended. It
+    // is also what NextAuth reports when its own call to /api/auth/session
+    // failed -- a dropped request on hospital Wi-Fi, a lost DNS lookup, a
+    // moment of captive-portal interference. The cookie is untouched and the
+    // person is still signed in; the browser merely could not ask.
+    //
+    // Reported from theatre: "it opened, I saw the duty roster, but it
+    // signed me out and I can't sign in again." That is this redirect firing
+    // on a failed fetch, mid-shift, on a valid session.
+    //
+    // navigator.onLine above does not catch it. It is true whenever the
+    // device has ANY network interface, so a handset associated to theatre
+    // Wi-Fi with a dead uplink reports itself online while every request
+    // fails -- which is the exact condition this hospital has.
+    //
+    // So: ask once, directly. Redirect only when the SERVER says there is no
+    // session. A failure to reach it means stay where you are.
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/session', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (cancelled) return;
+        if (!res.ok) return; // could not ask: not an answer, so not a sign-out
+        const session = await res.json().catch(() => null);
+        if (cancelled) return;
+        // A live session means useSession was wrong; it will catch up on its
+        // next poll and nobody needs to see the login page.
+        if (session && session.user) return;
+        router.push('/auth/login');
+      } catch {
+        // The request itself failed. Staying put is right: a signed-in person
+        // on a bad connection keeps their screen, and anything they try that
+        // genuinely needs the server will say so on its own.
+      }
+    })();
+    return () => { cancelled = true; };
   }, [status, router, identityChecked, cachedUser]);
 
   // Warm the always-visible top-level routes shortly after load so the very

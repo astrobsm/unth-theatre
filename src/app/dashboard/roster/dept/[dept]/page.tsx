@@ -34,6 +34,8 @@ interface DeptData {
   };
   weekStart: string; canManage: boolean; currentVersion: number; lastPublishedAt: string | null;
   draftCount: number; pendingRemovalCount: number; pendingChanges: number; rows: Row[];
+  /// The staff eligible for THIS department, filtered and slimmed server-side.
+  staff?: Staff[];
 }
 interface Version { id: string; version: number; status: string; publishedAt: string; publishedByName: string | null; rowCount: number; notes: string | null }
 interface Staff { id: string; fullName: string; role: string }
@@ -135,12 +137,22 @@ export default function DepartmentRosterPage() {
   }, [dept, weekStart, fDate]);
 
   useEffect(() => { load(); }, [load]);
+  // The staff list arrives WITH the roster now.
+  //
+  // This used to be its own request for /api/users?status=APPROVED -- 619
+  // people and 180 kB over hospital Wi-Fi, measured at 4.75 s, so that
+  // somebody could pick one of about twenty names. Everyone whose role was
+  // not in this department was then discarded in the browser, after being
+  // downloaded. The server does that filtering now, inside the same round
+  // trip that fetches the roster.
   useEffect(() => {
-    fetch('/api/users?status=APPROVED', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : [])).then((d) => setStaff(Array.isArray(d) ? d : d.users ?? [])).catch(() => {});
-  }, []);
+    if (data?.staff) setStaff(data.staff);
+  }, [data]);
 
   const eligibleStaff = useMemo(
+    // Still filtered here: an older server that does not send `staff` yet
+    // leaves the list empty rather than wrong, and a cached page mid-deploy
+    // must not show a picker full of porters.
     () => staff.filter((s) => data?.department.userRoles.includes(s.role)),
     [staff, data],
   );
