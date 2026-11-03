@@ -106,7 +106,24 @@ export const ROSTER_DEPARTMENTS: RosterDept[] = [
   },
   {
     slug: 'nurse-anaesthetists', label: 'Nurse Anaesthetists / Recovery', category: 'RECOVERY_NURSES',
-    userRoles: ['RECOVERY_ROOM_NURSE', 'ANAESTHETIST'],
+    // RECOVERY_ROOM_NURSE ONLY.
+    //
+    // This also listed ANAESTHETIST, which put all 40 physician anaesthetists
+    // into the staff picker alongside the 17 recovery nurses who belong
+    // there. The people this roster is for were outnumbered better than two
+    // to one in their own dropdown, and the easiest name to land on was the
+    // wrong one.
+    //
+    // Checked against the live roster before removing it: every row ever
+    // written to this department is a RECOVERY_ROOM_NURSE. Not one
+    // anaesthetist has been rostered here, so nothing is lost and no
+    // existing assignment is orphaned.
+    //
+    // The label says "Nurse Anaesthetists", and a nurse anaesthetist is NOT
+    // an ANAESTHETIST -- that enum value is the physician grade, which has
+    // its own department above. There is no NURSE_ANAESTHETIST role today;
+    // if one is added it belongs here, beside the recovery nurses.
+    userRoles: ['RECOVERY_ROOM_NURSE'],
     managerRoles: [...ROSTER_ADMIN_ROLES, 'CONSULTANT_ANAESTHETIST'],
   },
   {
