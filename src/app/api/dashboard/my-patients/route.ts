@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { apiError } from '@/lib/apiError';
 import { isPhase, type RecordedPhase } from '@/lib/theatreOps/milestones';
 import { sortTracker, trackCase, trackerSummary } from '@/lib/dashboard/perioperativeTracker';
+import { supervisingConsultantWhere } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,7 +84,8 @@ export async function GET(req: NextRequest) {
         OR: [
           { surgeonId: userId },
           { assistantSurgeonId: userId },
-          { supervisingConsultantId: userId },
+          // A list, not an id. Equality hid a consultant's own patients.
+          supervisingConsultantWhere(userId),
           { anesthetistId: userId },
           { scrubNurseId: userId },
           // Soft reference to User.id, no FK — matched by value like the rest.

@@ -6,6 +6,7 @@ import { buildPersonalBoard, boardSummary, QUERY_CUTOFF } from '@/lib/dashboard/
 import { personalCaseTasks } from '@/lib/dashboard/caseTasks';
 import { reviewBadge, isNoteworthy } from '@/lib/dashboard/reviewStatus';
 import { apiError } from '@/lib/apiError';
+import { supervisingConsultantWhere } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +79,8 @@ export async function GET(_req: NextRequest) {
             { surgeonId: userId },
             { assistantSurgeonId: userId },
             { anesthetistId: userId },
-            { supervisingConsultantId: userId },
+            // See supervisingConsultantWhere: the column is a list.
+            supervisingConsultantWhere(userId),
             { scrubNurseId: userId },
             { theatreTechnicianId: userId },
             { bookedById: userId },

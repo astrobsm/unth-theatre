@@ -15,6 +15,7 @@
 
 import prisma from '@/lib/prisma';
 import { caseGaps, hoursLate, type CaseGapCode } from './gaps';
+import { consultantIdsOf } from '@/lib/surgery/consultantIds';
 
 /** A case, as a message needs it. */
 export interface ChaseCase {
@@ -34,6 +35,8 @@ export interface ChaseCase {
   surgeonId: string | null;
   surgeonName: string | null;
   /** Who supervises the unit for this case. */
+  /// A comma-joined LIST on a shared unit. Read it with consultantIdsOf;
+  /// never compare it to a user id directly.
   consultantId: string | null;
   consultantName: string | null;
   /** Who actually entered the booking — usually a resident or a booking officer. */
@@ -168,15 +171,28 @@ const emptyCounts = (): Record<CaseGapCode, number> => ({
  * against that name is a tally nobody can act on — the board reports those
  * cases separately instead, which is what makes them fixable.
  */
+/**
+ * `pick` may return SEVERAL people for one case.
+ *
+ * A case supervised by two consultants belongs in both their groups: they
+ * both supervise it, and a chase that reached only one of them would let the
+ * other answer for nothing. Before this, the consultant key was the raw
+ * supervisingConsultantId column -- a comma-joined list on a shared unit --
+ * so such cases grouped under a composite that matched no real person, and
+ * the send route told the operator, untruthfully, that the consultant "is not
+ * recorded as the supervising consultant on any case".
+ */
 export function groupBy(
   cases: readonly ChaseCase[],
-  pick: (c: ChaseCase) => { id: string | null; name: string | null },
+  pick: (c: ChaseCase) => { id: string | null; name: string | null }
+    | { id: string | null; name: string | null }[],
 ): ChaseGroup[] {
   const byId: Record<string, ChaseGroup> = {};
   const order: string[] = [];
 
   cases.forEach((c) => {
-    const who = pick(c);
+    const picked = pick(c);
+    (Array.isArray(picked) ? picked : [picked]).forEach((who) => {
     if (!who.id) return;
     if (!byId[who.id]) {
       byId[who.id] = {
@@ -196,6 +212,7 @@ export function groupBy(
     if (c.gaps.some((code) => code !== 'LATE_BOOKING')) g.fixable += 1;
     if (c.gaps.indexOf('LATE_BOOKING') !== -1) g.lateCount += 1;
     if (c.unit && g.units.indexOf(c.unit) === -1) g.units.push(c.unit);
+    });
   });
 
   // Most to answer for first — but by cases that can still be FIXED, not by
@@ -213,6 +230,9 @@ export function unattributed(cases: readonly ChaseCase[]): {
 } {
   return {
     noSurgeon: cases.filter((c) => !c.surgeonId),
-    noConsultant: cases.filter((c) => !c.consultantId),
+    // Derived, not stored. A case naming two consultants is attributed, and
+    // a case whose column holds something that is not an id is not -- which
+    // plain `!c.consultantId` could not tell apart.
+    noConsultant: cases.filter((c) => consultantIdsOf(c.consultantId).length === 0),
   };
 }

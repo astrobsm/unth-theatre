@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import {
   consultantIdsOf,
@@ -159,5 +159,62 @@ describe('the late-booking chase no longer writes an unchecked id', () => {
     // Truncating consultantId to the first id would quietly drop the others
     // from the record of who was told.
     expect(route).toContain('consultantId: surgery.supervisingConsultantId');
+  });
+});
+
+describe('nowhere treats the column as a single id any more', () => {
+  // A GUARD, NOT A STYLE RULE. Each pattern below is a live defect:
+  // `{ supervisingConsultantId: userId }` silently matches nothing on a
+  // shared unit, and writing the raw value where a user id is expected
+  // throws against Notification's foreign key. They were spread over eleven
+  // files and it took a crash report from theatre to find them.
+  const SRC = join(__dirname, '..', '..', 'src');
+
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) out.push(...walk(full));
+      else if (/\.tsx?$/.test(e.name)) out.push(full);
+    }
+    return out;
+  };
+
+  // The helper itself quotes the patterns it replaces, so it is exempt.
+  //
+  // Read ONCE, here, not inside each test. Scanning 1,090 files three times
+  // over took over five seconds under the full suite's parallel load and the
+  // tests timed out -- a guard that fails when the machine is busy teaches
+  // people to ignore it.
+  const sources = walk(SRC)
+    .filter((f) => !f.endsWith(join('surgery', 'consultantIds.ts')))
+    .map((f) => ({ name: f.slice(SRC.length + 1), text: readFileSync(f, 'utf8') }));
+  const offenders = (re: RegExp) =>
+    sources.filter((f) => re.test(f.text)).map((f) => f.name);
+
+  const EQUALITY_FILTER = /supervisingConsultantId:\s*userId[\s,}]/;
+  const TRIPLE_EQUALS = /supervisingConsultantId\s*===|===\s*\w+\.supervisingConsultantId/;
+  const RAW_AS_USER_ID = /userId:\s*\w+\.supervisingConsultantId[\s,}]/;
+
+  it('has regexes that actually match the thing they forbid', () => {
+    // A guard that cannot fail is worse than none, and the first version of
+    // this one could not: a stray control character where a word boundary
+    // was meant made every pattern unmatchable, and it passed against a
+    // deliberate violation. These three lines are the positive control.
+    expect(EQUALITY_FILTER.test('OR: [{ supervisingConsultantId: userId },]')).toBe(true);
+    expect(TRIPLE_EQUALS.test('if (surgery.supervisingConsultantId === userId)')).toBe(true);
+    expect(RAW_AS_USER_ID.test('{ userId: s.supervisingConsultantId, role: 1 }')).toBe(true);
+  });
+
+  it('never filters Prisma on supervisingConsultantId by equality', () => {
+    expect(offenders(EQUALITY_FILTER)).toEqual([]);
+  });
+
+  it('never compares it with ===', () => {
+    expect(offenders(TRIPLE_EQUALS)).toEqual([]);
+  });
+
+  it('never writes the raw value where a single user id is expected', () => {
+    expect(offenders(RAW_AS_USER_ID)).toEqual([]);
   });
 });

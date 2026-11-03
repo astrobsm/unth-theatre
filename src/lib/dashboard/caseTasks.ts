@@ -1,4 +1,5 @@
 import type { TaskInput, BoardSeverity } from './personalBoard';
+import { isSupervisingConsultant } from '@/lib/surgery/consultantIds';
 
 /**
  * What THIS person still has to do about THIS case.
@@ -53,7 +54,10 @@ export type CaseRole =
 
 export function roleOnCase(surgery: CaseForTasks, userId: string): CaseRole {
   if (surgery.surgeonId === userId) return 'SURGEON';
-  if (surgery.supervisingConsultantId === userId) return 'CONSULTANT';
+  // Not `===`: on a shared unit this column holds every consultant's id,
+  // comma-joined, so equality was false for all of them and none of them
+  // got the tasks for their own case.
+  if (isSupervisingConsultant(surgery.supervisingConsultantId, userId)) return 'CONSULTANT';
   if (surgery.anesthetistId === userId) return 'ANAESTHETIST';
   if (surgery.scrubNurseId === userId) return 'SCRUB_NURSE';
   if (surgery.theatreTechnicianId === userId) return 'TECHNICIAN';

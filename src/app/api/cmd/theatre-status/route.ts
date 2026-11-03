@@ -7,6 +7,7 @@ import { parseTheatreDay, theatreDayBounds, dayKey } from '@/lib/theatre/day';
 import { buildCaseTeam, type TeamSource } from '@/lib/theatre/caseTeam';
 import { summarise } from '@/lib/theatre/availability';
 import { progress, theatreFullyReady, type Ticks } from '@/lib/theatre/readiness';
+import { idsOfPostField } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,7 +126,11 @@ export async function GET(request: NextRequest) {
     ]);
 
     const userIds = Array.from(new Set<string>([
-      ...surgeries.flatMap((s) => POST_FIELDS.map((f) => s[f]).filter(Boolean) as string[]),
+      // idsOfPostField, not map: supervisingConsultantId holds a
+      // comma-joined LIST on a shared unit, so a plain map produced a
+      // composite that resolved to no user and left every consultant on
+      // those cases out of the lookup.
+      ...surgeries.flatMap((s) => POST_FIELDS.flatMap((f) => idsOfPostField(f, s[f]))),
       ...assignments.map((a) => a.userId),
       ...bookedMembers.map((m) => m.userId).filter(Boolean) as string[],
       ...readiness.map((r) => r.confirmedById),

@@ -28,6 +28,7 @@
 import prisma from '@/lib/prisma';
 import { queueMessage } from './send';
 import { theatreDay, theatreDayBounds } from '@/lib/theatre/day';
+import { consultantsOf } from '@/lib/surgery/consultantIds';
 
 /**
  * When a morning list starts, in hours after theatre midnight.
@@ -152,7 +153,10 @@ export async function buildTomorrowDigest(theatreDayMidnight: Date): Promise<{
     const c: OutstandingCase = { surgeryId: s.id, items };
 
     add(s.surgeonId, s.surgeonName, 'Surgeon', c);
-    add(s.supervisingConsultantId, s.supervisingConsultantName, 'Supervising consultant', c);
+    // Each consultant separately: the column is a comma-joined list on a
+    // shared unit, and the digest went to nobody for those cases.
+    consultantsOf(s.supervisingConsultantId, s.supervisingConsultantName)
+      .forEach((x) => add(x.id, x.name, 'Supervising consultant', c));
     add(s.bookedById, s.bookedByName, 'Booked the case', c);
   }
 

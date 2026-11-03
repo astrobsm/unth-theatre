@@ -24,6 +24,7 @@ import { chaseLink, chaseType, type ChaseKind } from '@/lib/caseChase/notify';
 import { periodLabel } from '@/lib/dutyPerformance/export';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
+import { consultantsOf } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,7 +112,8 @@ export async function POST(request: NextRequest) {
     const cases = await collectCasesWithGaps(from, to);
     const groups = kind === 'surgeon'
       ? groupBy(cases, (c) => ({ id: c.surgeonId, name: c.surgeonName }))
-      : groupBy(cases, (c) => ({ id: c.consultantId, name: c.consultantName }));
+      : groupBy(cases, (c) => consultantsOf(c.consultantId, c.consultantName)
+        .map((x) => ({ id: x.id, name: x.name })));
 
     const group = groups.find((g) => g.personId === person.id) ?? null;
 

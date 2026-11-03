@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { triggerRadio } from '@/lib/radioEvents';
 import { generateUniqueEmergencyAnaesthesiaCode } from '@/lib/surgeryCodes';
+import { consultantIdsOf } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -331,7 +332,9 @@ export async function POST(request: NextRequest) {
           },
         });
         for (const id of [
-          surgery?.surgeonId, surgery?.assistantSurgeonId, surgery?.supervisingConsultantId,
+          surgery?.surgeonId, surgery?.assistantSurgeonId,
+          // Spread: the column is a list on a shared unit.
+          ...consultantIdsOf(surgery?.supervisingConsultantId),
           surgery?.bookedById, surgery?.scrubNurseId, surgery?.theatreTechnicianId,
           ...(surgery?.teamMembers ?? []).map((t) => t.userId),
         ]) {

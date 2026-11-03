@@ -23,6 +23,7 @@ import {
 import { CASE_GAPS, GAP_CODES } from '@/lib/caseChase/gaps';
 import { periodLabel } from '@/lib/dutyPerformance/export';
 import { SURGEON_TYPE, CONSULTANT_TYPE, chaseLink, chaseType } from '@/lib/caseChase/notify';
+import { consultantsOf } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,8 @@ export async function GET(request: NextRequest) {
     const cases = await collectCasesWithGaps(from, to);
 
     const surgeonGroups = groupBy(cases, (c) => ({ id: c.surgeonId, name: c.surgeonName }));
-    const consultantGroups = groupBy(cases, (c) => ({ id: c.consultantId, name: c.consultantName }));
+    const consultantGroups = groupBy(cases, (c) => consultantsOf(c.consultantId, c.consultantName)
+        .map((x) => ({ id: x.id, name: x.name })));
 
     // Roles and phone numbers for everybody we might write to, in one query.
     const ids: string[] = [];

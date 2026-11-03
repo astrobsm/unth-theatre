@@ -6,6 +6,7 @@ import { apiError } from '@/lib/apiError';
 import { parseTheatreDay, theatreDayBounds, dayKey } from '@/lib/theatre/day';
 import { buildCaseTeam, roleOnCase, type TeamSource } from '@/lib/theatre/caseTeam';
 import { isAvailabilityStatus, summarise } from '@/lib/theatre/availability';
+import { idsOfPostField, supervisingConsultantWhere } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,7 +90,11 @@ async function teamsFor(surgeries: SurgeryRow[]) {
   // them because the CMD's board offers a WhatsApp chat with each member and a
   // second round of lookups for that would be the same query again.
   const userIds = Array.from(new Set<string>([
-    ...surgeries.flatMap((s) => POST_FIELDS.map((f) => s[f]).filter(Boolean) as string[]),
+    // idsOfPostField, not map: supervisingConsultantId holds a
+    // comma-joined LIST on a shared unit, so a plain map produced a
+    // composite that resolved to no user and left every consultant on
+    // those cases out of the lookup.
+    ...surgeries.flatMap((s) => POST_FIELDS.flatMap((f) => idsOfPostField(f, s[f]))),
     ...assignments.map((a) => a.userId),
     ...bookedMembers.map((m) => m.userId).filter(Boolean) as string[],
   ]));
@@ -147,7 +152,9 @@ export async function GET(request: NextRequest) {
         status: { notIn: ['CANCELLED', 'COMPLETED'] },
         OR: [
           { surgeonId: userId },
-          { supervisingConsultantId: userId },
+          // A consultant on a shared unit is one id inside a comma-joined
+          // list, so plain equality matched none of his own cases.
+          supervisingConsultantWhere(userId),
           { assistantSurgeonId: userId },
           { anesthetistId: userId },
           { scrubNurseId: userId },

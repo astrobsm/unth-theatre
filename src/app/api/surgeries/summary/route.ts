@@ -6,6 +6,7 @@ import { getAnaesthetistTeamsForDate, selectTeam } from '@/lib/anaesthetistTeam'
 import { bucketTechnicianRoster, technicianForSpecialty } from '@/lib/technicianCoverage';
 import { findByUnit } from '@/lib/unitMatch';
 import { dedupeTeam } from '@/lib/theatre/teamNames';
+import { consultantIdsOf, consultantsOf } from '@/lib/surgery/consultantIds';
 
 type Contact = { name: string; phone: string | null } | null;
 
@@ -274,7 +275,7 @@ export async function GET(req: NextRequest) {
     const surgeonIds = Array.from(
       new Set(
         dayCases
-          .flatMap((s) => [s.surgeonId, s.supervisingConsultantId])
+          .flatMap((s) => [s.surgeonId, ...consultantIdsOf(s.supervisingConsultantId)])
           .filter((id): id is string => Boolean(id)),
       ),
     );
@@ -303,7 +304,8 @@ export async function GET(req: NextRequest) {
         list.push({ name, phone: id ? phoneOf.get(id) ?? null : null, role });
       };
       add(s.surgeonId, s.surgeonName, 'Surgeon');
-      add(s.supervisingConsultantId, s.supervisingConsultantName, 'Consultant');
+      consultantsOf(s.supervisingConsultantId, s.supervisingConsultantName)
+        .forEach((c) => add(c.id, c.name, 'Consultant'));
       surgeonsByUnit.set(s.unit, list);
     }
 

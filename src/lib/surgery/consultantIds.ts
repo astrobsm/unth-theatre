@@ -90,3 +90,43 @@ export function isSupervisingConsultant(
   if (!userId) return false;
   return consultantIdsOf(raw).indexOf(userId) !== -1;
 }
+
+/**
+ * A Prisma `where` fragment matching cases this person supervises.
+ *
+ * The replacement for `{ supervisingConsultantId: userId }`, which matches
+ * nothing on a shared unit because the stored value is a comma-joined list.
+ *
+ * WHY NOT `contains: userId`. It would be shorter and almost always right,
+ * and "almost always" is not a property to want in an access filter. These
+ * four alternatives match only on a comma boundary or the whole field, so a
+ * value can never be matched by part of itself.
+ *
+ * Verified against the live column before being written this way: 711 stored
+ * values, none with a space after the comma, none with uppercase hex, none
+ * with a stray leading or trailing comma. If that ever stops being true this
+ * needs normalising at write time, not loosening here.
+ */
+export function supervisingConsultantWhere(userId: string) {
+  return {
+    OR: [
+      { supervisingConsultantId: userId },
+      { supervisingConsultantId: { startsWith: `${userId},` } },
+      { supervisingConsultantId: { endsWith: `,${userId}` } },
+      { supervisingConsultantId: { contains: `,${userId},` } },
+    ],
+  };
+}
+
+/**
+ * Every user id held by one of a surgery's named-post columns.
+ *
+ * Only supervisingConsultantId is a list; the rest hold one id. Call sites
+ * that iterate POST_FIELDS use this so they do not have to remember which is
+ * which, and so the answer changes in one place if another column ever grows
+ * the same way.
+ */
+export function idsOfPostField(field: string, value: string | null | undefined): string[] {
+  if (value === null || value === undefined || value === '') return [];
+  return field === 'supervisingConsultantId' ? consultantIdsOf(value) : [value];
+}

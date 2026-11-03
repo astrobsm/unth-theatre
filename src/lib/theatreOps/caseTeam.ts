@@ -1,3 +1,5 @@
+import { consultantsOf } from '@/lib/surgery/consultantIds';
+
 // ============================================================
 // Who is on a case
 // ------------------------------------------------------------
@@ -73,7 +75,11 @@ export function caseTeamSlots(s: CaseTeamSource): CaseTeamSlot[] {
     { userId: s.anesthetistId, name: s.anesthetist?.fullName ?? null, roleOnCase: 'Anaesthetist' },
     { userId: s.scrubNurseId, name: null, roleOnCase: 'Scrub Nurse' },
     { userId: s.theatreTechnicianId, name: null, roleOnCase: 'Anaesthetic Technician' },
-    { userId: s.supervisingConsultantId, name: s.supervisingConsultantName, roleOnCase: 'Supervising Consultant' },
+    // One slot per consultant. A shared unit stores every consultant's id in
+    // this one column, comma-joined, and a composite id names nobody -- so
+    // the whole team panel simply omitted them.
+    ...consultantsOf(s.supervisingConsultantId, s.supervisingConsultantName)
+      .map((c) => ({ userId: c.id, name: c.name, roleOnCase: 'Supervising Consultant' })),
     ...s.teamMembers.map((m) => ({
       userId: m.userId,
       name: m.memberName,

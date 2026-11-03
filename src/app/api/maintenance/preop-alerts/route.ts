@@ -41,6 +41,7 @@ import {
   type AlertSubject,
   type TeamSlot,
 } from '@/lib/theatreOps/preopAlert';
+import { consultantsOf } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -209,7 +210,11 @@ export async function GET(request: NextRequest) {
         { userId: s.anesthetistId, name: s.anesthetist?.fullName ?? null, role: 'Anaesthetist' },
         { userId: s.scrubNurseId, name: null, role: 'Scrub Nurse' },
         { userId: s.theatreTechnicianId, name: null, role: 'Anaesthetic Technician' },
-        { userId: s.supervisingConsultantId, name: s.supervisingConsultantName, role: 'Supervising Consultant' },
+        // One slot per consultant. The column is a comma-joined list on a
+        // shared unit, and a composite id names nobody, so every supervising
+        // consultant on those cases was silently left off the alert.
+        ...consultantsOf(s.supervisingConsultantId, s.supervisingConsultantName)
+          .map((c) => ({ userId: c.id, name: c.name, role: 'Supervising Consultant' })),
         ...s.teamMembers.map((m) => ({
           userId: m.userId ?? null,
           name: m.memberName ?? null,

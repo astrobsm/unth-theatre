@@ -30,6 +30,7 @@ import {
   type Desk,
   type DeskStat,
 } from '@/lib/dashboards/desks';
+import { consultantIdsOf, supervisingConsultantWhere } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,7 +105,8 @@ async function consultantDesk(userId: string) {
       { surgeonId: userId },
       { assistantSurgeonId: userId },
       { anesthetistId: userId },
-      { supervisingConsultantId: userId },
+      // A list, not an id. See supervisingConsultantWhere.
+      supervisingConsultantWhere(userId),
       { teamMembers: { some: { userId } } },
     ],
   };
@@ -156,7 +158,9 @@ async function consultantDesk(userId: string) {
       { userId: s.anesthetistId, roleOnCase: 'Anaesthetist' },
       { userId: s.scrubNurseId, roleOnCase: 'Scrub Nurse' },
       { userId: s.theatreTechnicianId, roleOnCase: 'Anaesthetic Technician' },
-      { userId: s.supervisingConsultantId, roleOnCase: 'Supervising Consultant' },
+      // Every consultant on the unit, not a composite of all of them.
+      ...consultantIdsOf(s.supervisingConsultantId)
+        .map((id) => ({ userId: id, roleOnCase: 'Supervising Consultant' })),
       ...s.teamMembers.map((m) => ({ userId: m.userId, roleOnCase: m.role })),
     ].filter((x): x is { userId: string; roleOnCase: string } => !!x.userId);
 
