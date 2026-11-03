@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { groupCasesBySubspecialty } from '@/lib/anaesthesia/caseGrouping';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -46,6 +47,7 @@ interface PreOpReview {
 interface BookedSurgery {
   id: string;
   unit: string;
+  subspecialty?: string | null;
   procedureName: string;
   scheduledDate: string;
   scheduledTime?: string | null;
@@ -197,6 +199,14 @@ export default function PreOpReviewsPage() {
 
   const canApprove = ['ADMIN', 'CONSULTANT_ANAESTHETIST', 'THEATRE_MANAGER', 'ANAESTHETIST', 'SYSTEM_ADMINISTRATOR'].includes(session?.user?.role || '');
   const reviewBySurgeryId = new Map(reviews.map((review) => [review.surgeryId, review]));
+
+  // The day's list, arranged the way an anaesthetist reads it: by specialty,
+  // not by date. The rule itself is in caseGrouping.ts, with the live unit
+  // names from this hospital as its test cases.
+  const surgeryGroups = useMemo(
+    () => groupCasesBySubspecialty(bookedSurgeries, (s) => reviewBySurgeryId.has(s.id)),
+    [bookedSurgeries, reviews], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -439,7 +449,9 @@ export default function PreOpReviewsPage() {
           </h2>
           <p className="text-sm text-gray-600 mt-1">
             {dateFilter
-              ? `Sorted by theatre and surgical unit for ${new Date(dateFilter).toLocaleDateString()}`
+              ? `Grouped by subspecialty for ${new Date(dateFilter).toLocaleDateString()}`
+                + ` — ${bookedSurgeries.length} case${bookedSurgeries.length === 1 ? '' : 's'}`
+                + ` in ${surgeryGroups.length} specialt${surgeryGroups.length === 1 ? 'y' : 'ies'}`
               : 'Select a surgery date above to display booked surgeries'}
           </p>
         </div>
@@ -462,7 +474,33 @@ export default function PreOpReviewsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {bookedSurgeries.map((surgery) => (
+                {surgeryGroups.map((group) => (
+                  <Fragment key={group.name}>
+                    {/* The specialty banner. Sticky, because these lists run
+                        past a phone screen and a heading you have scrolled
+                        off is a heading you are no longer reading. */}
+                    <tr className="sticky top-0 z-10 bg-indigo-50">
+                      <th
+                        colSpan={7}
+                        scope="colgroup"
+                        className="px-6 py-2 text-left text-sm font-semibold text-indigo-900"
+                      >
+                        {group.name}
+                        <span className="ml-2 font-normal text-indigo-700">
+                          {group.cases.length} case{group.cases.length === 1 ? '' : 's'}
+                        </span>
+                        {group.outstanding > 0 ? (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                            {group.outstanding} still to review
+                          </span>
+                        ) : (
+                          <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-900">
+                            all reviewed
+                          </span>
+                        )}
+                      </th>
+                    </tr>
+                    {group.cases.map((surgery) => (
                   <tr key={surgery.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <span className="inline-flex items-center gap-1">
@@ -500,6 +538,8 @@ export default function PreOpReviewsPage() {
                       })()}
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

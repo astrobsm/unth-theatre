@@ -544,13 +544,73 @@ export default function NewPreOpReviewPage() {
     fetchScheduledSurgeries();
   }, []);
 
+  // ---- OPENING THE FORM ON ONE NAMED CASE --------------------------------
+  //
+  // Reported from theatre on 3 November: pressing "Open Review Form" against
+  // a patient on the booked list opened the form on "-- Select a surgery --",
+  // with nothing chosen. The anaesthetist had already said which patient they
+  // meant, and was asked again.
+  //
+  // THE CAUSE. This used to look the case up in the dropdown's own list,
+  // which is fetched as ?status=SCHEDULED. The case in the report —
+  // Eze Ifunanya, left cortical mastoidectomy — is COMPLETED, because the
+  // list the button sits on shows every case booked for the day whatever its
+  // status. So the id was never in the list, `matched` was undefined, and the
+  // effect did nothing at all. Silently: no selection, no message, no clue.
+  //
+  // THE FIX IS NOT TO WIDEN THE LIST. Whatever statuses that query covers,
+  // somebody will press the button on a case outside them. A case named in
+  // the URL is fetched BY ID, on its own, and merged into the options. The
+  // status of the case stops mattering, which is the only version of this
+  // that cannot come back.
   useEffect(() => {
-    if (!preselectedSurgeryId || surgeries.length === 0) return;
+    if (!preselectedSurgeryId) return;
+    // Already in the list — the ordinary case, and no second request for it.
     const matched = surgeries.find((s) => s.id === preselectedSurgeryId);
     if (matched) {
       setSelectedSurgeryId(matched.id);
       setError('');
+      return;
     }
+    // Not in the list. Fetch the one case rather than giving up quietly.
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/surgeries?id=${encodeURIComponent(preselectedSurgeryId)}`, {
+          cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('lookup failed');
+        const data = await r.json();
+        const one = Array.isArray(data)
+          ? data.find((s: Surgery) => s.id === preselectedSurgeryId)
+          : (data?.id === preselectedSurgeryId ? data : null);
+        if (cancelled) return;
+        if (!one) {
+          // Named and not found: say so. An empty dropdown where a patient
+          // was expected reads as a broken page, and the anaesthetist cannot
+          // tell whether to wait, reload, or start again.
+          setError(
+            'That case could not be opened — it may have been cancelled or removed. '
+            + 'Choose it from the list below instead.',
+          );
+          return;
+        }
+        // Prepended, so the case somebody asked for is the first option as
+        // well as the selected one.
+        setSurgeries((prev) => (
+          prev.some((s) => s.id === one.id) ? prev : [one, ...prev]
+        ));
+        setSelectedSurgeryId(one.id);
+        setError('');
+      } catch {
+        if (cancelled) return;
+        setError(
+          'That case could not be loaded — the server could not be reached. Choose it '
+          + 'from the list below, or try again.',
+        );
+      }
+    })();
+    return () => { cancelled = true; };
   }, [preselectedSurgeryId, surgeries]);
 
   useEffect(() => {
