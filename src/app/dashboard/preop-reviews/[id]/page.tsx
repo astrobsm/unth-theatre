@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { ArrowLeft, Edit, User, Calendar, Activity, Syringe, CheckCircle, XCircle, ThumbsUp, ThumbsDown, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { summariseReviewLocation } from '@/lib/anaesthesia/reviewLocation';
 
 interface PreOpReview {
   id: string;
@@ -49,6 +50,16 @@ interface PreOpReview {
   anesthetist: { fullName: string };
   consultantAnesthetist?: { fullName: string };
   createdAt: string;
+  /// Where the anaesthetist was standing when this was entered. Every field
+  /// is optional: reviews written before this existed have none, and a ward
+  /// with no signal produces none today.
+  reviewerLatitude?: number | null;
+  reviewerLongitude?: number | null;
+  reviewerAccuracyM?: number | null;
+  reviewerFixVerdict?: string | null;
+  reviewerDistanceM?: number | null;
+  reviewerLocationAt?: string | null;
+  reviewerLocationUnavailableReason?: string | null;
   surgery: {
     procedureName: string;
     surgeon: { fullName: string };
@@ -229,6 +240,20 @@ export default function PreOpReviewDetailPage() {
       </div>
     );
   }
+
+  // Described here rather than on the server because it is a sentence about
+  // data the page already has. The verdict itself was decided on the server
+  // when the review was written, and is stored on the row.
+  const where = review.reviewerLocationAt
+    || review.reviewerLatitude != null
+    || review.reviewerLocationUnavailableReason
+    ? summariseReviewLocation({
+      latitude: review.reviewerLatitude ?? null,
+      longitude: review.reviewerLongitude ?? null,
+      accuracyM: review.reviewerAccuracyM ?? null,
+      unavailableReason: review.reviewerLocationUnavailableReason ?? null,
+    }, 'This review was entered')
+    : null;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -916,6 +941,30 @@ export default function PreOpReviewDetailPage() {
             <p className="text-gray-900 mt-1">{new Date(review.createdAt).toLocaleString()}</p>
           </div>
         </div>
+
+        {/* WHERE IT WAS ENTERED FROM.
+            A pre-operative review is a bedside act, and until now nothing
+            recorded whether it was done at one. Shown as a plain sentence with
+            no tick and no cross: a doctor at the bedside whose handset never
+            found a satellite reads exactly like a doctor who was not there, so
+            this is a thing to ask about, never a finding on its own. Reviews
+            entered before this was added simply have nothing here. */}
+        {where && (
+          <div className="mt-6 border-t border-gray-100 pt-4">
+            <label className="text-sm font-medium text-gray-500">Recorded from</label>
+            <p className="mt-1 text-sm text-gray-800">{where.sentence}</p>
+            {where.mapUrl && (
+              <a
+                href={where.mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-sm font-medium text-indigo-600 underline"
+              >
+                See it on a map
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

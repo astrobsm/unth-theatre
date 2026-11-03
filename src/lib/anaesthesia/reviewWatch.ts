@@ -31,6 +31,22 @@
 //   has discharged their duty. If no replacement was named, the HOD answers,
 //   not them.
 //
+//   THE PATIENT WAS NOT IN THE WARD. Reported from theatre on 3 November: two
+//   urology cases listed for the next morning were not in their assigned ward
+//   when the anaesthetist went round — most likely day cases, not yet
+//   admitted. There was nothing to review. The form then asked for a fitness
+//   decision, which cannot honestly be given about a patient nobody has seen,
+//   so the review could not be completed and the case read as simply
+//   unreviewed. That is two injustices in one: the anaesthetist who walked to
+//   the ward is recorded as having done nothing, and the real failure — a
+//   patient who was never produced — is recorded nowhere at all.
+//
+//   So attendance is now recordable on its own. An anaesthetist who attended
+//   and found no patient has done everything available to them, and the
+//   summons goes to whoever listed a patient who was not there. The claim is
+//   stamped with their name, the time, and the position their handset
+//   reported, so it is checkable rather than merely asserted.
+//
 // Everything here is pure so these rules can be proved rather than argued
 // about in the meeting they feed.
 //
@@ -98,6 +114,18 @@ export interface ReviewWatchInput {
   reviewedAt?: Date | string | null;
   reviewedById?: string | null;
 
+  /**
+   * Set when an anaesthetist attended and the patient was not in the ward.
+   *
+   * Not a review and never counted as one — the patient has still not been
+   * seen. What it records is that the duty was discharged as far as it could
+   * be, which is the difference between a doctor who did not go and a doctor
+   * who went and found an empty bed.
+   */
+  patientAbsentAt?: Date | string | null;
+  /** Who attended and found nobody. */
+  patientAbsentById?: string | null;
+
   /** Set when the assigned anaesthetist declared they could not review. */
   handedBackAt?: Date | string | null;
   /** Set when the HOD named somebody else. */
@@ -113,6 +141,12 @@ export type ReviewWatchStatus =
   | 'AWAITING'
   /** Handed back in time; waiting for the HOD to name a replacement. */
   | 'AWAITING_REASSIGNMENT'
+  /**
+   * An anaesthetist attended and the patient was not in the ward. Still
+   * unreviewed — because the patient has still not been seen — but waiting on
+   * the ward and the surgical team, not on the anaesthetist.
+   */
+  | 'PATIENT_NOT_IN_WARD'
   /** Past 7pm, unreviewed, nobody told. The clean window has closed. */
   | 'HANDBACK_WINDOW_CLOSED'
   /** Past 9pm, unreviewed. A summons is due. */
@@ -134,7 +168,8 @@ export interface Accountability {
     | 'handed-back-too-late'
     | 'hod-did-not-reassign'
     | 'rota-gap'
-    | 'booked-too-late';
+    | 'booked-too-late'
+    | 'patient-not-produced';
   /** One line, in the words the summons should use. */
   reason: string;
 }
@@ -188,6 +223,17 @@ export function reviewWatchState(input: ReviewWatchInput, now: Date): ReviewWatc
 
   if (t >= review) return 'LAPSED';
 
+  // Attended, nobody there. Deliberately checked BEFORE the handback branch:
+  // somebody who walked to the ward has told us more than somebody who said
+  // they could not go, and it is the later and more specific fact.
+  //
+  // Note what this does NOT do: it does not make the case reviewed, and it
+  // does not stop the case lapsing at 9pm. The patient has not been seen, the
+  // morning team needs to know that, and a status that quietly closed the
+  // case would hide an unreviewed patient from the people operating on them.
+  // What changes at 9pm is only who answers for it.
+  if (asDate(input.patientAbsentAt)) return 'PATIENT_NOT_IN_WARD';
+
   // Handed back and not yet replaced. Stays in this state up to the review
   // deadline whichever side of 7pm it was declared — the HOD still has time to
   // act, and saying "window closed" while they can still fix it would send
@@ -218,6 +264,28 @@ export function accountableFor(input: ReviewWatchInput): Accountability | null {
       reason:
         'The case was booked after 7pm the evening before, leaving no window for a '
         + 'preoperative review. The booking is the delay, not the review.',
+    };
+  }
+
+  // Attended and found no patient. Checked before the handback and roster
+  // branches because it outranks both: whatever the rota said and whoever was
+  // named, a doctor who went to the bed and found it empty has done the only
+  // thing that was available to them.
+  //
+  // The summons goes to the booking, not to a role. A patient listed for
+  // tomorrow and not in the ward the evening before is either not admitted,
+  // not told, or a day case that was never declared as one — all three belong
+  // to the team that listed them, and the caller has the surgery to find
+  // whoever that was.
+  if (asDate(input.patientAbsentAt)) {
+    return {
+      userId: null,
+      ground: 'patient-not-produced',
+      reason:
+        'An anaesthetist attended to review this patient and the patient was not in the '
+        + 'ward. The review could not be done because there was nobody to see. A patient '
+        + 'listed for surgery must be in the ward the evening before, or the case must be '
+        + 'declared a day case so the review can be arranged for the morning.',
     };
   }
 
@@ -307,7 +375,14 @@ export function roleAccountableFor(ground: Accountability['ground']): string | n
  */
 export function needsHodNotice(input: ReviewWatchInput, now: Date): boolean {
   const state = reviewWatchState(input, now);
-  if (state !== 'HANDBACK_WINDOW_CLOSED' && state !== 'AWAITING_REASSIGNMENT') return false;
+  // PATIENT_NOT_IN_WARD is in here because the case still has no review. The
+  // HOD is told about an unreviewed case whatever the reason, and at 7pm a
+  // patient who is not yet admitted can still be sent for.
+  if (
+    state !== 'HANDBACK_WINDOW_CLOSED'
+    && state !== 'AWAITING_REASSIGNMENT'
+    && state !== 'PATIENT_NOT_IN_WARD'
+  ) return false;
   // Nothing the HOD can do about a case that did not exist in time.
   return !bookedTooLateToReview(input);
 }

@@ -16,6 +16,8 @@ import { ANAESTHESIA_CONSENT_TITLE, ANAESTHESIA_CONSENT_TEXT } from '@/lib/anaes
 import { ANAESTHESIA_TYPES, ANAESTHESIA_TYPE_LABELS } from '@/lib/anaesthesiaTypes';
 import { OPTIMISATION_CATEGORIES, CATEGORY_LABELS } from '@/lib/anaesthesia/fitness';
 import ContactName from '@/components/ContactName';
+import { requestFix } from '@/lib/geo/requestFix';
+import { whatsappLink } from '@/lib/whatsapp';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 // Comprehensive Anesthetic Medications Database
@@ -306,6 +308,7 @@ export default function NewPreOpReviewPage() {
   // Was the patient in the ward at the planned review time?
   const [patientInWard, setPatientInWard] = useState<boolean>(true);
   const [patientAbsenceNote, setPatientAbsenceNote] = useState('');
+  const [recordingAbsence, setRecordingAbsence] = useState(false);
 
   // Anesthetic Prescription states
   const [prescribedMedications, setPrescribedMedications] = useState<PrescribedMedication[]>([]);
@@ -399,6 +402,21 @@ export default function NewPreOpReviewPage() {
   const stepIsValid = (n: number) => {
     if (n === 0 && !selectedSurgeryId) {
       setError('Choose the booked surgery this review belongs to.');
+      return false;
+    }
+    // THE FAULT REPORTED ON 3 NOVEMBER. Saying "not in ward" used to carry the
+    // anaesthetist straight on to "FIT or NOT FIT for surgery" — a decision
+    // nobody can make about a patient they have not seen. So the review could
+    // not be finished, and the case read as though nobody had been near it.
+    //
+    // The next section is unreachable while the patient is absent, and the
+    // button underneath records the visit instead.
+    if (n === 0 && !patientInWard) {
+      setError(
+        'You have said the patient was not in the ward. There is nothing to assess and no '
+        + 'fitness decision to make — record the ward visit instead, using the button below. '
+        + 'That goes on the case, and the surgical team is told to produce the patient.',
+      );
       return false;
     }
     const el = sectionRefs.current[n];
@@ -559,6 +577,81 @@ export default function NewPreOpReviewPage() {
     }
   };
 
+  /**
+   * "I went to the ward and the patient was not there."
+   *
+   * A record in its own right, and deliberately NOT a review: the patient has
+   * still not been seen, the case still has no review against it, and the
+   * morning team must be able to see both of those. What it changes is who
+   * answers for the case at 9pm — the anaesthetist who walked to the ward has
+   * done everything that was available to them.
+   *
+   * The position is taken at the moment of recording and sent with it. Not as
+   * a gate — a ward behind concrete gives no fix and the record still has to
+   * be writable — but because a claim of attendance is worth more with
+   * something behind it, including to the person making it.
+   */
+  const recordPatientAbsent = async () => {
+    if (!selectedSurgeryId || !selectedSurgery) {
+      setError('Choose the booked surgery first.');
+      return;
+    }
+    const reason = patientAbsenceNote.trim();
+    if (reason.length < 5) {
+      setError(
+        'Say briefly what you found — "not yet admitted", "away for imaging", "ward says '
+        + 'day case". The surgical team needs it to know what to do next.',
+      );
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setRecordingAbsence(true);
+    setError('');
+    try {
+      const fix = await requestFix();
+      const response = await fetch('/api/preop-reviews/watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'patient-absent',
+          surgeryId: selectedSurgeryId,
+          reason,
+          fix,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(data?.error || 'The visit could not be recorded. Nothing has been saved.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      // The record is already written server-side, so a blocked pop-up can
+      // only leave a message unsent — never sent and unrecorded.
+      try { window.localStorage.removeItem(PREOP_REVIEW_DRAFT_KEY); } catch { /* nothing to clear */ }
+
+      const reachable: Array<{ number: string; text: string }> = (data?.whatsapp || [])
+        .filter((w: { number?: string | null }) => !!w.number);
+      reachable.forEach((w) => {
+        const href = whatsappLink(w.number, w.text);
+        if (href) window.open(href, '_blank', 'noopener');
+      });
+
+      notify.success(data?.message || 'The ward visit has been recorded against this case.');
+      router.push('/dashboard/preop-reviews/watch');
+    } catch {
+      setError(
+        'The visit could not be recorded — the server could not be reached. Nothing has '
+        + 'been saved, so try again when you have signal.',
+      );
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
+      setRecordingAbsence(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -607,6 +700,14 @@ export default function NewPreOpReviewPage() {
 
     const formData = new FormData(e.currentTarget);
     
+    // WHERE THIS IS BEING ENTERED FROM. Read after the form data above,
+    // because e.currentTarget is gone once this function has awaited anything.
+    //
+    // Awaited, but it cannot hang the submit and it cannot refuse it:
+    // requestFix always resolves, within its own timeout, with either a
+    // position or the reason there is none. Both are recorded.
+    const reviewerFix = await requestFix();
+
     const payload = {
       surgeryId: selectedSurgeryId,
       patientId,
@@ -641,6 +742,8 @@ export default function NewPreOpReviewPage() {
             priority: r.priority,
           }))
         : undefined,
+      // Where the anaesthetist was standing when they entered it.
+      reviewerFix,
       // Ward presence at planned review time
       patientInWardAtReview: patientInWard,
       patientAbsenceNote: !patientInWard ? (patientAbsenceNote.trim() || null) : null,
@@ -947,14 +1050,43 @@ export default function NewPreOpReviewPage() {
                   </button>
                 </div>
                 {!patientInWard && (
-                  <div className="mt-2">
+                  <div className="mt-3 rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-900">
+                      Then there is no review to do, and nothing to declare.
+                    </p>
+                    <p className="mt-1 text-sm text-amber-900">
+                      You cannot say whether a patient is fit for anaesthesia without seeing
+                      them, and this form will not ask you to. Record the visit instead. It
+                      goes on the case with your name and the time, the people who can
+                      produce the patient are written to, and the case is not held against
+                      you for being unreviewed.
+                    </p>
+                    <label className="mt-3 block text-xs font-medium text-amber-900">
+                      What did you find? *
+                    </label>
                     <input
                       type="text"
                       value={patientAbsenceNote}
                       onChange={(e) => setPatientAbsenceNote(e.target.value)}
-                      placeholder="Note (e.g. away for imaging, not yet admitted) — reach the patient on WhatsApp above"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g. not yet admitted — ward says it is a day case"
+                      className="mt-1 w-full rounded-lg border border-amber-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500"
                     />
+                    <button
+                      type="button"
+                      onClick={recordPatientAbsent}
+                      disabled={recordingAbsence}
+                      className="mt-3 w-full rounded-lg bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                    >
+                      {recordingAbsence
+                        ? 'Recording the visit…'
+                        : 'Record: I attended and the patient was not in the ward'}
+                    </button>
+                    <p className="mt-2 text-xs text-amber-800">
+                      Your handset&apos;s position is recorded with it where it can be read.
+                      If it cannot — a ward behind concrete, or location switched off — the
+                      visit is still recorded, with the reason there is no position. It is
+                      never a condition of recording the visit.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1386,7 +1518,16 @@ export default function NewPreOpReviewPage() {
                 </button>
               )}
 
-              {step < LAST_STEP ? (
+              {!patientInWard ? (
+                // Nothing to continue to. The panel in the first section holds
+                // the only action this case has, and offering "continue to
+                // Fitness" next to it would put the old dead end back.
+                <p className="flex-1 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  The patient was not in the ward, so there is no assessment to continue to.
+                  Record the ward visit in the panel above, or press
+                  {' '}<strong>Yes, present</strong> if you have since seen the patient.
+                </p>
+              ) : step < LAST_STEP ? (
                 <button
                   type="button"
                   onClick={() => goToStep(step + 1)}

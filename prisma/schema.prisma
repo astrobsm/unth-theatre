@@ -1888,6 +1888,30 @@ model PreopReviewAssignment {
   handedBackById   String?
   handedBackReason String?   @db.Text
 
+  /// ATTENDED, AND THE PATIENT WAS NOT IN THE WARD.
+  ///
+  /// Reported from theatre on 3 November: two urology cases listed for the
+  /// next morning were not in their assigned ward — most likely day cases,
+  /// never admitted. The anaesthetist could not declare a patient fit without
+  /// seeing them, so the review could not be completed, and the case read as
+  /// though nobody had been near it.
+  ///
+  /// This is NOT a review and must never be counted as one: the patient has
+  /// still not been seen. What it records is attendance — the duty discharged
+  /// as far as it could be — which is what moves the summons from the doctor
+  /// who went to whoever listed a patient who was not there. Stamped with the
+  /// name, the time and the handset's position so the claim is checkable.
+  patientAbsentAt                  DateTime?
+  patientAbsentById                String?
+  patientAbsentByName              String?
+  patientAbsentReason              String?   @db.Text
+  patientAbsentLatitude            Float?
+  patientAbsentLongitude           Float?
+  patientAbsentAccuracyM           Float?
+  patientAbsentFixVerdict          String? // ON_SITE | OFF_SITE | IMPRECISE | NO_FIX
+  patientAbsentDistanceM           Int?
+  patientAbsentLocationUnavailable String? // why there is no position
+
   /// The HOD naming a replacement.
   reassignedToId   String?
   reassignedToName String?
@@ -1918,6 +1942,7 @@ model PreopReviewAssignment {
   syncHlc     String? @map("sync_hlc")
 
   @@index([surgeryDate, lapsedAt])
+  @@index([surgeryDate, patientAbsentAt])
   @@index([expectedReviewerId, surgeryDate])
   @@map("preop_review_assignments")
 }
@@ -4299,6 +4324,27 @@ model PreOperativeAnestheticReview {
   // Was the patient physically present in the ward at the planned review time?
   patientInWardAtReview Boolean?
   patientAbsenceNote    String? // e.g. "away for imaging", "not admitted yet"
+
+  /// WHERE THE ANAESTHETIST WAS WHEN THIS WAS RECORDED.
+  ///
+  /// A pre-operative review is a bedside act: its whole value comes from
+  /// having stood next to the patient. Asked for by the theatre so that a
+  /// review entered from the ward and one entered from a car park can be told
+  /// apart — and so that an anaesthetist who did walk to the ward can show it.
+  ///
+  /// EVERY COLUMN IS NULLABLE AND MUST STAY SO. A ward behind concrete, a
+  /// handset with its radio off, a page served over plain http: all three
+  /// produce no position, and a review that could not be saved without one
+  /// would simply not be saved. The verdict and distance are computed on the
+  /// server from the coordinates — never taken from the browser, which could
+  /// otherwise claim to have been on site from anywhere.
+  reviewerLatitude                  Float?
+  reviewerLongitude                 Float?
+  reviewerAccuracyM                 Float? // radius of uncertainty, metres
+  reviewerFixVerdict                String? // ON_SITE | OFF_SITE | IMPRECISE | NO_FIX
+  reviewerDistanceM                 Int? // from the campus centre, to the nearest 10 m
+  reviewerLocationAt                DateTime?
+  reviewerLocationUnavailableReason String? // why there is no position, in plain words
 
   // Audit
   createdAt DateTime @default(now())

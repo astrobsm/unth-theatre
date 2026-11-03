@@ -17,6 +17,18 @@
 //   who could hand a case to a colleague directly would be choosing their own
 //   replacement, and the rule exists precisely so that a person who can see
 //   the whole rota makes that choice.
+//
+//   patient-absent — "I went, and the patient was not in the ward." Added
+//   3 November after two urology cases listed for the next morning turned out
+//   not to be in their ward: day cases, most likely, never admitted. The
+//   review form then asked for a fitness decision, which nobody can honestly
+//   give about a patient they have not seen, so the review could not be
+//   finished and the case read as though no anaesthetist had been near it.
+//
+//   This records the visit instead, with the handset's position behind it, and
+//   writes to the people who can produce the patient. It does NOT mark the
+//   case reviewed — the patient still has not been seen, and the morning team
+//   must be able to see that. What it changes is who answers for it at 9pm.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,6 +41,11 @@ import { classifyAnaesthetistAssignment, type RosterRow } from '@/lib/anaestheti
 import { getAnaesthetistTeamsForDate, subspecialtyForUnit } from '@/lib/anaesthetistTeam';
 import { expectedReviewersFor } from '@/lib/anaesthesia/expectedReviewers';
 import { buildReviewChaseMessage, registerForState } from '@/lib/anaesthesia/reviewChaseMessage';
+import { fixColumns, summariseReviewLocation, tidyReason } from '@/lib/anaesthesia/reviewLocation';
+import {
+  buildPatientAbsentMessage,
+  buildPatientAbsentNotice,
+} from '@/lib/anaesthesia/patientAbsentMessage';
 import {
   reviewWatchState, handbackDeadline, reviewDeadline, bookedTooLateToReview,
   type ReviewWatchInput,
@@ -54,7 +71,28 @@ const MAY_CHASE = [
   'THEATRE_CHAIRMAN',
 ];
 
+/**
+ * Who may record "I went and the patient was not there".
+ *
+ * Any anaesthetist, not only the one the case names. The person who walks to
+ * the ward is usually the registrar on the roster rather than the consultant
+ * the booking carries, and a rule that only let the named person record it
+ * would mean the doctor who actually went could not say so. The record names
+ * whoever made it, which is what makes that safe.
+ */
+const MAY_RECORD_ABSENCE = [
+  'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HEAD_OF_ANAESTHESIA',
+  'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
+];
+
 const WATCHED = ['SCHEDULED', 'IN_HOLDING_AREA', 'READY_FOR_THEATRE'] as const;
+
+/** A WAT wall-clock time, as "16:40". The deadlines are all Enugu time. */
+function watTime(at: Date): string {
+  return at.toLocaleTimeString('en-GB', {
+    timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit',
+  });
+}
 
 /** A unit name that names no unit. Saves a pointless lookup per case. */
 const s0 = (v: string) => !v.trim() || /^unassigned/i.test(v.trim());
@@ -89,7 +127,12 @@ export async function GET(request: NextRequest) {
         anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
         surgeon: { select: { fullName: true } },
         preOpReviews: {
-          select: { id: true, reviewDate: true, anesthetistId: true, anesthetistName: true, status: true },
+          select: {
+            id: true, reviewDate: true, anesthetistId: true, anesthetistName: true, status: true,
+            reviewerLatitude: true, reviewerLongitude: true, reviewerAccuracyM: true,
+            reviewerFixVerdict: true, reviewerDistanceM: true,
+            reviewerLocationUnavailableReason: true,
+          },
           take: 1,
         },
         reviewAssignment: true,
@@ -140,6 +183,8 @@ export async function GET(request: NextRequest) {
         expectedReviewerId: s.anesthetistId,
         assignmentSource,
         reviewedAt: review?.reviewDate ?? null,
+        patientAbsentAt: a?.patientAbsentAt ?? null,
+        patientAbsentById: a?.patientAbsentById ?? null,
         handedBackAt: a?.handedBackAt ?? null,
         reassignedToId: a?.reassignedToId ?? null,
       };
@@ -172,6 +217,29 @@ export async function GET(request: NextRequest) {
         reviewedAt: review?.reviewDate ?? null,
         reviewedByName: review?.anesthetistName ?? null,
         reviewId: review?.id ?? null,
+        // Where the review was entered from, and where the ward visit was
+        // claimed from. Shown as one line each, never as a pass or a fail:
+        // a doctor at the bedside whose handset never found a satellite looks
+        // exactly like a doctor who was not there.
+        reviewedWhere: review
+          ? summariseReviewLocation({
+            latitude: review.reviewerLatitude,
+            longitude: review.reviewerLongitude,
+            accuracyM: review.reviewerAccuracyM,
+            unavailableReason: review.reviewerLocationUnavailableReason,
+          }, 'Entered')
+          : null,
+        patientAbsentAt: a?.patientAbsentAt ?? null,
+        patientAbsentByName: a?.patientAbsentByName ?? null,
+        patientAbsentReason: a?.patientAbsentReason ?? null,
+        patientAbsentWhere: a?.patientAbsentAt
+          ? summariseReviewLocation({
+            latitude: a.patientAbsentLatitude,
+            longitude: a.patientAbsentLongitude,
+            accuracyM: a.patientAbsentAccuracyM,
+            unavailableReason: a.patientAbsentLocationUnavailable,
+          }, 'The ward visit was recorded')
+          : null,
         handedBackAt: a?.handedBackAt ?? null,
         handedBackReason: a?.handedBackReason ?? null,
         reassignedToName: a?.reassignedToName ?? null,
@@ -193,6 +261,7 @@ export async function GET(request: NextRequest) {
       rosterPublished: rosterRows.length > 0,
       canReassign: MAY_REASSIGN.includes(session.user.role),
       canChase: MAY_CHASE.includes(session.user.role),
+      canRecordAbsence: MAY_RECORD_ABSENCE.includes(session.user.role),
       cases,
     });
   } catch (error) {
@@ -219,8 +288,10 @@ export async function POST(request: NextRequest) {
   const surgery = await prisma.surgery.findUnique({
     where: { id: surgeryId },
     select: {
-      id: true, procedureName: true, scheduledDate: true, anesthetistId: true,
-      patient: { select: { name: true, folderNumber: true } },
+      id: true, procedureName: true, scheduledDate: true, scheduledTime: true,
+      anesthetistId: true, surgeonId: true, bookedById: true, bookedByName: true,
+      patient: { select: { name: true, folderNumber: true, ward: true } },
+      surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
     },
   });
   if (!surgery) return NextResponse.json({ error: 'No such case.' }, { status: 404 });
@@ -302,6 +373,200 @@ export async function POST(request: NextRequest) {
         : late
           ? 'Recorded and the HOD notified. Note this was after 7pm, so it is recorded as late.'
           : 'Recorded and the HOD notified.',
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // patient-absent -- attended, and there was nobody in the bed
+  // ------------------------------------------------------------------
+  if (action === 'patient-absent') {
+    if (!MAY_RECORD_ABSENCE.includes(session.user.role)) {
+      return NextResponse.json(
+        { error: 'Only an anaesthetist can record that a patient was not in the ward.' },
+        { status: 403 },
+      );
+    }
+
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (reason.length < 5) {
+      return NextResponse.json({
+        error: 'Say briefly what you found — "not yet admitted", "away for imaging", '
+          + '"ward says day case". The surgical team needs it to know what to do.',
+      }, { status: 400 });
+    }
+
+    // Already reviewed? Then this is somebody looking at a stale screen, and
+    // writing an absence over a completed review would undo a real record.
+    const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
+      where: { surgeryId },
+      select: { id: true, anesthetistName: true, reviewDate: true },
+    });
+    if (existingReview) {
+      return NextResponse.json({
+        error: `This case already has a review, entered by `
+          + `${existingReview.anesthetistName || 'an anaesthetist'}. Open it from the list `
+          + 'rather than recording a ward visit against it.',
+      }, { status: 409 });
+    }
+
+    // The position, assessed here. A client that could name its own verdict
+    // could claim to have been on site from anywhere.
+    const raw = (body.fix ?? {}) as Record<string, unknown>;
+    const fix = fixColumns({
+      latitude: typeof raw.latitude === 'number' ? raw.latitude : null,
+      longitude: typeof raw.longitude === 'number' ? raw.longitude : null,
+      accuracyM: typeof raw.accuracyM === 'number' ? raw.accuracyM : null,
+      unavailableReason: typeof raw.unavailableReason === 'string' ? raw.unavailableReason : null,
+    });
+
+    await prisma.preopReviewAssignment.upsert({
+      where: { surgeryId },
+      create: {
+        surgeryId,
+        surgeryDate: new Date(`${day}T00:00:00.000Z`),
+        expectedReviewerId: surgery.anesthetistId,
+        patientAbsentAt: now,
+        patientAbsentById: session.user.id,
+        patientAbsentByName: session.user.name || null,
+        patientAbsentReason: tidyReason(reason, 500),
+        patientAbsentLatitude: fix.latitude,
+        patientAbsentLongitude: fix.longitude,
+        patientAbsentAccuracyM: fix.accuracyM,
+        patientAbsentFixVerdict: fix.fixVerdict,
+        patientAbsentDistanceM: fix.distanceM,
+        patientAbsentLocationUnavailable: fix.unavailableReason,
+      },
+      update: {
+        // A second visit overwrites the first: the latest attempt is the one
+        // the evening watch and the morning team need, and the audit log keeps
+        // the earlier one.
+        patientAbsentAt: now,
+        patientAbsentById: session.user.id,
+        patientAbsentByName: session.user.name || null,
+        patientAbsentReason: tidyReason(reason, 500),
+        patientAbsentLatitude: fix.latitude,
+        patientAbsentLongitude: fix.longitude,
+        patientAbsentAccuracyM: fix.accuracyM,
+        patientAbsentFixVerdict: fix.fixVerdict,
+        patientAbsentDistanceM: fix.distanceM,
+        patientAbsentLocationUnavailable: fix.unavailableReason,
+      },
+    });
+
+    const longDay = new Date(`${day}T12:00:00.000Z`).toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos',
+    });
+    const facts = {
+      attendedByName: session.user.name ?? null,
+      patientName: surgery.patient?.name ?? null,
+      folderNumber: surgery.patient?.folderNumber ?? null,
+      ward: surgery.patient?.ward ?? null,
+      procedureName: surgery.procedureName,
+      surgeryDay: longDay,
+      scheduledTime: surgery.scheduledTime,
+      attendedAtLabel: watTime(now),
+      reason,
+    };
+
+    // Who can produce the patient: whoever booked it and the surgeon on it.
+    // The HOD of Anaesthesia is told as well, because the case will still be
+    // unreviewed at 9pm and they are the one who hears about that.
+    const people: Array<{ id: string; name: string; phone: string | null; why: string }> = [];
+    const seen = new Set<string>();
+    const add = (u: { id: string; fullName: string; phoneNumber: string | null } | null, why: string) => {
+      if (!u || seen.has(u.id)) return;
+      seen.add(u.id);
+      people.push({ id: u.id, name: u.fullName, phone: u.phoneNumber, why });
+    };
+
+    if (surgery.bookedById) {
+      add(await prisma.user.findUnique({
+        where: { id: surgery.bookedById },
+        select: { id: true, fullName: true, phoneNumber: true },
+      }), 'Booked the case');
+    }
+    add(surgery.surgeon ?? null, 'Surgeon on the case');
+
+    const notice = buildPatientAbsentNotice({ ...facts, recipientName: null });
+    for (const p of people) {
+      await prisma.notification.create({
+        data: {
+          userId: p.id,
+          type: 'PREOP_REVIEW_WATCH',
+          title: 'Your patient was not in the ward for anaesthetic review',
+          message: notice,
+          link: `/dashboard/surgeries/${surgeryId}`,
+        },
+      }).catch(() => undefined);
+      await pushToUsers([p.id], {
+        title: 'Patient not in the ward for anaesthetic review',
+        body: `${surgery.patient?.name ?? 'A patient'} — ${surgery.procedureName}`,
+        url: `/dashboard/surgeries/${surgeryId}`,
+      }).catch(() => undefined);
+    }
+
+    const hods = await prisma.user.findMany({
+      where: { role: 'HEAD_OF_ANAESTHESIA', status: 'APPROVED' },
+      select: { id: true },
+    });
+    for (const h of hods) {
+      await prisma.notification.create({
+        data: {
+          userId: h.id,
+          type: 'PREOP_REVIEW_WATCH',
+          title: 'A listed patient was not in the ward to be reviewed',
+          message: `${notice} Recorded by ${session.user.name ?? 'an anaesthetist'}; `
+            + 'the surgical team has been written to.',
+          link: '/dashboard/preop-reviews/watch',
+        },
+      }).catch(() => undefined);
+    }
+
+    // What happened and who was told. An attendance claim that left no trace
+    // would be worth nothing to the person who made it.
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'PREOP_REVIEW_PATIENT_ABSENT',
+        tableName: 'preop_review_assignments',
+        recordId: surgeryId,
+        changes: JSON.stringify({
+          surgeryDay: day,
+          attendedAt: now.toISOString(),
+          reason,
+          fixVerdict: fix.fixVerdict,
+          distanceM: fix.distanceM,
+          accuracyM: fix.accuracyM,
+          locationUnavailable: fix.unavailableReason,
+          told: people.map((p) => ({ id: p.id, name: p.name, why: p.why })),
+        }),
+      },
+    }).catch(() => undefined);
+
+    const where = summariseReviewLocation({
+      latitude: fix.latitude, longitude: fix.longitude, accuracyM: fix.accuracyM,
+      unavailableReason: fix.unavailableReason,
+    }, 'The visit was recorded');
+
+    return NextResponse.json({
+      ok: true,
+      recordedAt: now,
+      where: { label: where.label, sentence: where.sentence, mapUrl: where.mapUrl },
+      // The anaesthetist taps these to send it themselves. The record above is
+      // already written, so a blocked pop-up can only leave the message
+      // unsent — never sent and unrecorded.
+      whatsapp: people.map((p) => ({
+        id: p.id,
+        name: p.name,
+        number: p.phone,
+        text: buildPatientAbsentMessage({ ...facts, recipientName: p.name }),
+      })),
+      message: people.length === 0
+        ? 'Recorded against the case. Nobody is named as having booked it and it has no '
+          + 'surgeon on file, so there was nobody to write to — tell the ward directly.'
+        : `Recorded against the case, and ${people.map((p) => p.name).join(' and ')} `
+          + `${people.length === 1 ? 'has' : 'have'} been told on the ORM. `
+          + 'This case is NOT marked reviewed — the patient still has to be seen.',
     });
   }
 
@@ -400,6 +665,10 @@ export async function POST(request: NextRequest) {
       expectedReviewerId: full.anesthetistId,
       assignmentSource: 'unrostered',
       reviewedAt: full.preOpReviews[0]?.reviewDate ?? null,
+      // Without this, management could chase an anaesthetist who had already
+      // walked to the ward and recorded that the patient was not in it --
+      // which is precisely the chase that makes staff stop reading them.
+      patientAbsentAt: full.reviewAssignment?.patientAbsentAt ?? null,
       handedBackAt: full.reviewAssignment?.handedBackAt ?? null,
       reassignedToId: full.reviewAssignment?.reassignedToId ?? null,
     }, now);
@@ -409,7 +678,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: state === 'REVIEWED'
           ? 'This case has already been reviewed.'
-          : 'This case is not late yet. Chasing somebody who is still within time is how a chase stops being read.',
+          : state === 'PATIENT_NOT_IN_WARD'
+            ? 'An anaesthetist already went to the ward for this case and the patient was '
+              + 'not there. Chasing them for it is the one thing that will not help — the '
+              + 'surgical team has to produce the patient, and they have been written to.'
+            : 'This case is not late yet. Chasing somebody who is still within time is how a chase stops being read.',
       }, { status: 400 });
     }
 

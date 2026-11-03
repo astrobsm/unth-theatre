@@ -21,10 +21,28 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, CheckCircle2, Clock, Loader2, MessageCircle, UserCheck, UserX,
+  AlertTriangle, BedDouble, CheckCircle2, Clock, Loader2, MessageCircle, UserCheck, UserX,
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
+import { requestFix } from '@/lib/geo/requestFix';
 import { GRADE_LABEL, REVIEWER_SOURCE_LABEL, type ReviewerGrade, type ReviewerSource } from '@/lib/anaesthesia/expectedReviewers';
+
+/**
+ * What the server made of a handset's position.
+ *
+ * Shown as one sentence and a map link, deliberately without a tick or a
+ * cross. A doctor standing at the bedside whose phone never found a satellite
+ * produces exactly the same reading as a doctor who was not there, and a
+ * board that scored it would be scoring the building's walls.
+ */
+interface Where {
+  hasFix: boolean;
+  verdict: string;
+  label: string;
+  sentence: string;
+  mapUrl: string | null;
+  corroborated: boolean;
+}
 
 interface Case {
   surgeryId: string;
@@ -42,6 +60,13 @@ interface Case {
   reviewedAt: string | null;
   reviewedByName: string | null;
   reviewId: string | null;
+  /** Where the review was entered from. Never a pass or a fail — see below. */
+  reviewedWhere: Where | null;
+  /** An anaesthetist went and the patient was not in the ward. */
+  patientAbsentAt: string | null;
+  patientAbsentByName: string | null;
+  patientAbsentReason: string | null;
+  patientAbsentWhere: Where | null;
   handedBackAt: string | null;
   handedBackReason: string | null;
   reassignedToName: string | null;
@@ -59,6 +84,7 @@ interface Board {
   rosterPublished: boolean;
   canReassign: boolean;
   canChase?: boolean;
+  canRecordAbsence?: boolean;
   cases: Case[];
 }
 
@@ -67,6 +93,12 @@ const STATE: Record<string, { label: string; cls: string }> = {
   AWAITING: { label: 'Awaiting review', cls: 'bg-gray-100 text-gray-700' },
   AWAITING_REASSIGNMENT: { label: 'Handed back — needs reassigning', cls: 'bg-amber-100 text-amber-800' },
   HANDBACK_WINDOW_CLOSED: { label: 'Past 7pm, unreviewed', cls: 'bg-orange-100 text-orange-800' },
+  // Purple and not red: this case is a finding against the list, not against
+  // the department. Somebody walked to the ward and there was nobody in it.
+  PATIENT_NOT_IN_WARD: {
+    label: 'Attended — patient not in the ward',
+    cls: 'bg-purple-100 text-purple-800',
+  },
   LAPSED: { label: 'Missed the 9pm deadline', cls: 'bg-red-100 text-red-800' },
   SETTLED: { label: 'No longer pending', cls: 'bg-slate-100 text-slate-600' },
 };
@@ -183,6 +215,61 @@ export default function PreopWatchPage() {
       await load(day);
     } catch {
       setError('Could not reach the server.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * "I went to the ward and the patient was not there."
+   *
+   * Takes a position with it, and takes it on the ward — not at the desk
+   * afterwards, which is the whole reason this button is here on the board
+   * rather than only in the review form.
+   *
+   * requestFix never rejects and has its own ceiling, so a handset with no
+   * signal costs a few seconds and records the reason instead of blocking.
+   */
+  const recordAbsent = async (c: Case) => {
+    const reason = window.prompt(
+      `${c.patient?.name ?? 'This patient'} was not in the ward — what did you find?\n\n`
+      + 'e.g. "not yet admitted", "away for imaging", "ward says it is a day case".\n\n'
+      + 'This goes to whoever booked the case and to the surgeon, with your name and the '
+      + 'time. The case stays unreviewed — because the patient has not been seen — but it '
+      + 'will not be held against you.',
+    );
+    if (!reason || reason.trim().length < 5) return;
+
+    setBusy(c.surgeryId);
+    setError(null);
+    setNote(null);
+    setHandoff(null);
+    try {
+      const fix = await requestFix();
+      const r = await fetch('/api/preop-reviews/watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          surgeryId: c.surgeryId, action: 'patient-absent', reason: reason.trim(), fix,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setError(j.error ?? 'That did not work.'); return; }
+
+      const who = (j.whatsapp ?? []).map(
+        (w: { name: string; number: string | null; text: string }) => ({
+          name: w.name,
+          href: whatsappLink(w.number, w.text),
+        }),
+      );
+      setHandoff({ surgeryId: c.surgeryId, who });
+      setNote(j.message ?? 'Recorded.');
+
+      const first = who.find((w: { href: string | null }) => w.href);
+      if (first?.href) window.open(first.href, '_blank', 'noopener,noreferrer');
+      await load(day);
+    } catch {
+      setError('Could not reach the server. Nothing has been recorded.');
     } finally {
       setBusy(null);
     }
@@ -364,6 +451,61 @@ export default function PreopWatchPage() {
                           {c.reviewedByName ? ` by ${c.reviewedByName}` : ''}
                         </p>
                       )}
+                      {c.reviewedAt && c.reviewedWhere && (
+                        <p className="text-xs text-gray-500">
+                          {c.reviewedWhere.sentence}
+                          {c.reviewedWhere.mapUrl && (
+                            <>
+                              {' '}
+                              <a
+                                href={c.reviewedWhere.mapUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-indigo-600 underline"
+                              >
+                                See it on a map
+                              </a>
+                            </>
+                          )}
+                        </p>
+                      )}
+
+                      {/* Attended, and the bed was empty. Said at the same
+                          weight as a review, because for the person who walked
+                          there it is the same amount of work. */}
+                      {c.patientAbsentAt && !c.reviewedAt && (
+                        <div className="mt-1 rounded-lg border border-purple-200 bg-purple-50 p-2">
+                          <p className="text-sm font-medium text-purple-900">
+                            Patient not in the ward at {clock(c.patientAbsentAt)}
+                            {c.patientAbsentByName ? ` — ${c.patientAbsentByName} attended` : ''}
+                          </p>
+                          {c.patientAbsentReason && (
+                            <p className="text-sm text-purple-900">{c.patientAbsentReason}</p>
+                          )}
+                          {c.patientAbsentWhere && (
+                            <p className="mt-0.5 text-xs text-purple-700">
+                              {c.patientAbsentWhere.sentence}
+                              {c.patientAbsentWhere.mapUrl && (
+                                <>
+                                  {' '}
+                                  <a
+                                    href={c.patientAbsentWhere.mapUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium underline"
+                                  >
+                                    See it on a map
+                                  </a>
+                                </>
+                              )}
+                            </p>
+                          )}
+                          <p className="mt-1 text-xs text-purple-800">
+                            Still unreviewed: the patient has not been seen. The surgical team
+                            has been asked to produce them or to declare it a day case.
+                          </p>
+                        </div>
+                      )}
 
                       {/* The hand-off, kept on screen rather than fired once.
                           A browser blocks every pop-up but the first, so a
@@ -413,6 +555,21 @@ export default function PreopWatchPage() {
                           className="rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">
                           Open the review
                         </Link>
+                      )}
+                      {/* Offered to any anaesthetist, not only the one the
+                          case names: the person who walks to the ward is
+                          usually the registrar on the roster, not the
+                          consultant the booking carries. The record names
+                          whoever made it, which is what makes that safe. */}
+                      {board.canRecordAbsence && !c.reviewedAt && !c.patientAbsentAt && (
+                        <button type="button" disabled={busy === c.surgeryId}
+                          onClick={() => void recordAbsent(c)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 ring-1 ring-purple-300 hover:bg-purple-50 disabled:opacity-50"
+                          title="Record that you went to the ward and the patient was not there">
+                          {busy === c.surgeryId ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <BedDouble className="h-4 w-4" />}
+                          Patient not in the ward
+                        </button>
                       )}
                       {c.mine && !c.reviewedAt && !c.handedBackAt && (
                         <button type="button" disabled={busy === c.surgeryId}

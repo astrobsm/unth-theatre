@@ -129,6 +129,7 @@ async function collectPreopReview(from: string, to: string): Promise<DutyEvent[]
       expectedReviewerName: true,
       assignmentSource: true,
       handedBackAt: true,
+      patientAbsentAt: true,
       reassignedToId: true,
       reassignedToName: true,
       reviewedAt: true,
@@ -150,6 +151,16 @@ async function collectPreopReview(from: string, to: string): Promise<DutyEvent[]
     // to stay silent instead, which is the outcome the handback exists to
     // prevent.
     if (r.handedBackAt && !r.reassignedToId) return;
+
+    // Attended, and the patient was not in the ward. Not counted as done --
+    // the patient has not been seen, and a figure that said otherwise would
+    // be a false assurance to everybody reading it. Not counted as missed
+    // either: the doctor walked to the ward, and charging them for an empty
+    // bed is how a performance figure stops meaning anything to the person
+    // it is shown to. The case leaves the measure entirely, the same way a
+    // handback in time does, and the finding is raised against whoever
+    // listed a patient who was not there.
+    if (r.patientAbsentAt && !r.reviewedAt) return;
 
     // A fallback is cover, not an assignment. reviewWatch.ts makes the same
     // distinction before it summons anybody, and a board that ignored it

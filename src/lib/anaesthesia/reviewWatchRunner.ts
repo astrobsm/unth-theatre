@@ -159,6 +159,8 @@ export async function runPreopReviewWatch(
       assignmentSource,
       reviewedAt: review?.reviewDate ?? null,
       reviewedById: review?.anesthetistId ?? null,
+      patientAbsentAt: a?.patientAbsentAt ?? null,
+      patientAbsentById: a?.patientAbsentById ?? null,
       handedBackAt: a?.handedBackAt ?? null,
       reassignedToId: a?.reassignedToId ?? null,
       reassignedAt: a?.reassignedAt ?? null,
@@ -191,7 +193,15 @@ export async function runPreopReviewWatch(
 
     const state = reviewWatchState(input, now);
     const label = `${s.patient?.name ?? 'Patient'} (${s.patient?.folderNumber ?? '—'}) — `
-      + `${s.procedureName}, ${s.anesthetist?.fullName ?? 'no anaesthetist named'}`;
+      + `${s.procedureName}, ${s.anesthetist?.fullName ?? 'no anaesthetist named'}`
+      // An unreviewed case where somebody attended and found an empty bed
+      // needs a different action from the HOD — find the patient, not another
+      // anaesthetist — so the list says which kind each one is.
+      + (a?.patientAbsentAt
+        ? ` [ATTENDED ${a.patientAbsentAt.toISOString().slice(11, 16)}: patient NOT in the ward`
+          + `${a.patientAbsentByName ? `, seen by ${a.patientAbsentByName}` : ''}`
+          + `${a.patientAbsentReason ? ` — ${a.patientAbsentReason}` : ''}]`
+        : '');
 
     // ---- the 7pm job: tell the HOD while it can still be fixed ----
     if (needsHodNotice(input, now) && !a?.hodNotifiedAt) {
@@ -220,6 +230,7 @@ export async function runPreopReviewWatch(
       const raised = await raiseSummonses({
         ground: who.ground, reason: who.reason, userId: who.userId,
         surgeryId: s.id, bookedById: s.bookedById, bookedByName: s.bookedByName,
+        surgeonId: s.surgeonId,
         caseLabel: label, day, live,
       });
       out.summonsesRaised += raised;
@@ -243,6 +254,7 @@ export async function runPreopReviewWatch(
 async function raiseSummonses(args: {
   ground: string; reason: string; userId: string | null;
   surgeryId: string; bookedById: string | null; bookedByName: string | null;
+  surgeonId?: string | null;
   caseLabel: string; day: string; live: boolean;
 }): Promise<number> {
   const { ground, reason, userId, surgeryId, caseLabel, day, live } = args;
@@ -259,6 +271,27 @@ async function raiseSummonses(args: {
       where: { id: args.bookedById }, select: { id: true, fullName: true },
     });
     if (u) targets.push({ id: u.id, name: u.fullName, roleOnCase: 'Booked the case' });
+  } else if (ground === 'patient-not-produced') {
+    // A patient listed for tomorrow who is not in the ward tonight belongs to
+    // the team that listed them: not admitted, not told, or a day case nobody
+    // declared as one. The booker first, because that is the person who made
+    // the entry; the surgeon if the booking carries no user.
+    //
+    // NOT the anaesthetist, and that is the entire point of this ground. They
+    // walked to the ward. There was nobody in it.
+    const who = args.bookedById ?? args.surgeonId ?? null;
+    if (who) {
+      const u = await prisma.user.findUnique({
+        where: { id: who }, select: { id: true, fullName: true },
+      });
+      if (u) {
+        targets.push({
+          id: u.id,
+          name: u.fullName,
+          roleOnCase: args.bookedById ? 'Booked the case' : 'Surgeon on the case',
+        });
+      }
+    }
   } else if (ground === 'rota-gap' || ground === 'hod-did-not-reassign') {
     const hods = await prisma.user.findMany({
       where: { role: 'HEAD_OF_ANAESTHESIA', status: 'APPROVED' },
@@ -322,11 +355,21 @@ async function tellTheHod(cases: string[], day: string, live: boolean): Promise<
   });
   if (hods.length === 0) return;
 
+  const attended = cases.filter((c) => c.includes('patient NOT in the ward')).length;
+
   const body =
     `${cases.length} case${cases.length === 1 ? '' : 's'} on tomorrow's list (${day}) `
     + 'have no preoperative anaesthetic review and the 7pm reassignment deadline has passed. '
     + 'The review deadline is 9pm, after which a summons to the theatre audit is raised '
-    + `automatically.\n\n${cases.map((c) => `• ${c}`).join('\n')}`;
+    + 'automatically.'
+    + (attended > 0
+      ? `\n\n${attended} of them `
+        + `${attended === 1 ? 'is marked' : 'are marked'} ATTENDED — an anaesthetist went to `
+        + 'the ward and the patient was not there. Those need the patient produced or the '
+        + 'case declared a day case; sending another anaesthetist will not help, and the '
+        + 'summons for them goes to whoever listed the patient, not to the department.'
+      : '')
+    + `\n\n${cases.map((c) => `• ${c}`).join('\n')}`;
 
   for (const h of hods) {
     await prisma.notification.create({

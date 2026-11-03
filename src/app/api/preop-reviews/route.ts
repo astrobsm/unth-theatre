@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { ensureAnaesthesiaCodeForSurgery } from '@/lib/surgeryCodes';
+import { fixColumns } from '@/lib/anaesthesia/reviewLocation';
 import { ANAESTHESIA_TYPE_VALUES } from '@/lib/anaesthesiaTypes';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,20 @@ const createPreOpReviewSchema = z.object({
   // Ward presence at the planned review time.
   patientInWardAtReview: z.boolean().optional().nullable(),
   patientAbsenceNote: optStr,
+  // WHERE THE ANAESTHETIST WAS WHEN THEY ENTERED IT.
+  //
+  // Optional, nullable, and every field inside it optional, which is the
+  // design and not laziness: a review must save from a ward with no signal,
+  // from a handset with its radio off, and from a page served over plain http
+  // where the browser refuses to ask at all. The verdict is computed from the
+  // coordinates on this side — a client that could name its own verdict could
+  // claim to have been at the bedside from anywhere.
+  reviewerFix: z.object({
+    latitude: z.number().nullish(),
+    longitude: z.number().nullish(),
+    accuracyM: z.number().nullish(),
+    unavailableReason: z.string().max(300).nullish(),
+  }).optional().nullable(),
   // Prescription data
   prescription: z.object({
     medications: z.array(z.object({
@@ -228,8 +243,13 @@ export async function POST(request: NextRequest) {
     // Extract prescription + pack-consumable data before creating review
     const {
       prescription, anaesthesiaConsent, consumableRequests,
-      optimisationRequirements, ...reviewData
+      optimisationRequirements, reviewerFix, ...reviewData
     } = validatedData;
+
+    // Assessed here, never trusted from the browser. Stored whatever it says,
+    // including "no position" and the reason why — a gap with a reason beside
+    // it is a record; a blocked submit is not.
+    const where = fixColumns(reviewerFix ?? null);
 
     // Check if review already exists for this surgery
     const existingReview = await prisma.preOperativeAnestheticReview.findUnique({
@@ -252,6 +272,13 @@ export async function POST(request: NextRequest) {
         anesthetistId: session.user.id,
         anesthetistName: session.user.name || '',
         status: 'IN_PROGRESS',
+        reviewerLatitude: where.latitude,
+        reviewerLongitude: where.longitude,
+        reviewerAccuracyM: where.accuracyM,
+        reviewerFixVerdict: where.fixVerdict,
+        reviewerDistanceM: where.distanceM,
+        reviewerLocationAt: new Date(),
+        reviewerLocationUnavailableReason: where.unavailableReason,
         // Stamped with the decision so "who decided this, and when" is answered
         // by the row itself rather than inferred from the audit log.
         ...(reviewData.fitnessDecision
