@@ -1,10 +1,18 @@
 // ============================================================
 // Chasing one late elective booking
 // ------------------------------------------------------------
-//   POST { surgeryId } — record the offence, send the booker a WhatsApp
-//   chase, tell the unit's supervising consultant, and on the third and
-//   every later offence raise a formal query copied to the head of
+//   POST { surgeryId } — record the offence, write to the booker, to the
+//   surgeon on the case and to the unit's supervising consultant, and on the
+//   third and every later offence raise a formal query copied to the head of
 //   department for the subspecialty.
+//
+// THREE LETTERS, NOT ONE SENT THREE TIMES. Until 4 November only the booker
+// was written to by WhatsApp; the supervising consultant got an in-app line
+// they may never open and the operating surgeon got nothing at all — which
+// left the two people who can change tomorrow's list as the two nothing
+// reached. Each letter now carries that reader's own outstanding cases for
+// the operating day, because the late booking itself cannot be un-booked and
+// the rest of their list still can be put right. See lateBooking/caseAppeal.
 //
 // THE LATENESS IS RECOMPUTED HERE, never taken from the request. The client
 // says which case; the server decides whether it was late. A warning issued
@@ -31,7 +39,12 @@ import {
   DEFAULT_COUNTING_FROM,
 } from '@/lib/lateBooking/escalation';
 import { standingFor, PERFORMANCE_WINDOW_DAYS } from '@/lib/lateBooking/punctuality';
-import { consultantIdsOf } from '@/lib/surgery/consultantIds';
+import {
+  buildCaseAppeal, daySummaryLines, groupByBooker, type AppealRole,
+} from '@/lib/lateBooking/caseAppeal';
+import { collectCasesWithGaps, groupBy } from '@/lib/caseChase/collect';
+import { shortDay, roleWords } from '@/lib/caseChase/messages';
+import { consultantIdsOf, consultantsOf } from '@/lib/surgery/consultantIds';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +117,10 @@ export async function POST(request: NextRequest) {
         procedureName: true,
         bookedById: true,
         bookedByName: true,
+        // The operating surgeon, who is not always the booker and until now
+        // was never told.
+        surgeonId: true,
+        surgeonName: true,
         supervisingConsultantId: true,
         supervisingConsultantName: true,
         patient: { select: { name: true, folderNumber: true } },
@@ -184,16 +201,65 @@ export async function POST(request: NextRequest) {
       : (surgery.patient?.name ?? 'Patient');
     const unit = surgery.unit ?? 'Unrecorded unit';
 
+    // -- The rest of that operating day --
+    //
+    // ONE READ, GROUPED THREE WAYS: by the operating surgeon, by the
+    // supervising consultant and by whoever entered the booking. Three
+    // letters each computing a day's gaps for themselves would eventually
+    // disagree about the same list, and the one that was wrong would be the
+    // one a consultant quoted back at us.
+    //
+    // FAILURE HERE IS NOT FAILURE OF THE CHASE. The summary is an enrichment;
+    // the offence and the warning are the point. An empty day leaves every
+    // letter saying nothing about the day, which is correct and readable.
+    const operatingDay = dayLabel(surgery.scheduledDate);
+    const dayShort = shortDay(operatingDay);
+    const dayCases = await collectCasesWithGaps(operatingDay, operatingDay).catch((dayErr) => {
+      console.error('[late-bookings/chase] could not read the day:', dayErr);
+      return [];
+    });
+    const surgeonDay = groupBy(dayCases, (c) => ({ id: c.surgeonId, name: c.surgeonName }));
+    const consultantDay = groupBy(dayCases, (c) => consultantsOf(c.consultantId, c.consultantName)
+      .map((x) => ({ id: x.id, name: x.name })));
+    const bookerDay = groupBy(dayCases, (c) => ({ id: c.bookedById, name: c.bookedByName }));
+
+    // Addressing a letter to "Not recorded" is worse than not naming anybody.
+    const bookerPhrase = personName === 'Not recorded'
+      ? 'somebody whose name the booking did not record'
+      : personName;
+
+    /** The late case, as all three letters name it. */
+    const triggerCase = {
+      id: surgery.id,
+      patientLabel,
+      procedureName: surgery.procedureName ?? 'Not recorded',
+      scheduledFor: operatingDay,
+      bookedAtLabel: formatBookedAt(surgery.createdAt),
+      unit,
+      bookerName: bookerPhrase,
+      hoursLate: verdict.hoursLate ?? null,
+    };
+
     // -- The chase text, built before anything is written --
     const chase = buildChaseMessage({
       personName,
       patientLabel,
       procedureName: surgery.procedureName ?? 'Not recorded',
-      scheduledFor: dayLabel(surgery.scheduledDate),
+      scheduledFor: operatingDay,
       bookedAtLabel: formatBookedAt(surgery.createdAt),
       decision,
       unit,
       standing,
+      // The rest of what they booked for that day, so one message covers the
+      // list rather than arriving once per case.
+      daySummary: daySummaryLines({
+        dayLabel: dayShort,
+        group: surgery.bookedById
+          ? bookerDay.find((g) => g.personId === surgery.bookedById) ?? null
+          : null,
+        whose: 'The cases you booked',
+        excludeCaseId: surgery.id,
+      }),
     });
 
     // -- Who can actually be written to --
@@ -211,18 +277,95 @@ export async function POST(request: NextRequest) {
 
     const consultantIds = consultantIdsOf(surgery.supervisingConsultantId);
     const realConsultants = consultantIds.length
-      ? await prisma.user.findMany({ where: { id: { in: consultantIds } }, select: { id: true } })
+      ? await prisma.user.findMany({
+          where: { id: { in: consultantIds } },
+          select: { id: true, fullName: true, role: true, phoneNumber: true, status: true },
+        })
       : [];
     const unreachableConsultants = consultantIds.length - realConsultants.length;
+
+    const caseSurgeon = surgery.surgeonId
+      ? await prisma.user.findUnique({
+          where: { id: surgery.surgeonId },
+          select: { id: true, fullName: true, role: true, phoneNumber: true, status: true },
+        }).catch(() => null)
+      : null;
 
     const consultantNotice = buildConsultantNotice({
       bookerName: personName,
       unit,
       patientLabel,
       procedureName: surgery.procedureName ?? 'Not recorded',
-      scheduledFor: dayLabel(surgery.scheduledDate),
+      scheduledFor: operatingDay,
       decision,
     });
+
+    // -- The surgeon on the case, and the unit's consultant --
+    //
+    // THE SAME PERSON IS NEVER WRITTEN TO TWICE. On most cases the booker is
+    // also the operating surgeon, and a consultant is sometimes both. A
+    // colleague who receives the same chase under two headings reads the
+    // second as harassment and the third as noise, and the booker's letter
+    // already carries their day.
+    interface Appealed {
+      id: string;
+      name: string;
+      kind: AppealRole;
+      title: string;
+      text: string;
+      phone: string | null;
+      active: boolean;
+      whatsappQueued: boolean;
+      skipped: string | null;
+    }
+
+    const appealed: Appealed[] = [];
+    const written = new Set<string>();
+    if (surgery.bookedById) written.add(surgery.bookedById);
+
+    const addAppeal = (
+      u: {
+        id: string; fullName: string; role: unknown;
+        phoneNumber: string | null; status: unknown;
+      },
+      kind: AppealRole,
+    ) => {
+      if (written.has(u.id)) return;
+      written.add(u.id);
+
+      const group = (kind === 'surgeon' ? surgeonDay : consultantDay)
+        .find((g) => g.personId === u.id) ?? null;
+      const rest = (group?.cases ?? []).filter((c) => c.id !== surgery.id);
+
+      appealed.push({
+        id: u.id,
+        name: u.fullName,
+        kind,
+        title: kind === 'surgeon'
+          ? 'Late elective booking on your list'
+          : consultantNotice.title,
+        text: buildCaseAppeal({
+          role: kind,
+          personName: u.fullName,
+          roleLabel: roleWords(u.role ? String(u.role) : null),
+          unitLabel: unit,
+          dayLabel: dayShort,
+          trigger: triggerCase,
+          group,
+          // Only a consultant can use this. It is the one thing they can act
+          // on that nobody else can: which of their people left the gaps.
+          byBooker: kind === 'consultant' && rest.length > 0 ? groupByBooker(rest) : undefined,
+          decision,
+        }),
+        phone: u.phoneNumber ?? null,
+        active: String(u.status) === 'APPROVED',
+        whatsappQueued: false,
+        skipped: null,
+      });
+    };
+
+    if (caseSurgeon) addAppeal(caseSurgeon, 'surgeon');
+    realConsultants.forEach((c) => addAppeal(c, 'consultant'));
 
     // -- One transaction, or nothing --
     //
@@ -346,15 +489,27 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Every supervising consultant on the unit, not just the first.
-      for (let i = 0; i < realConsultants.length; i += 1) {
+      // The surgeon on the case, and every supervising consultant on the
+      // unit rather than just the first.
+      //
+      // THE WHOLE LETTER IS STORED, not a one-line notice. A consultant with
+      // no number on file, or whose WhatsApp hand-off is never pressed, is
+      // then still holding the same message as everybody else; a summary in
+      // the app and the detail only on a phone means the two readers of the
+      // same chase cannot discuss it.
+      //
+      // AND IT LINKS TO THE CASE, not to this report. The late-bookings board
+      // is restricted to theatre management and the heads of department, so
+      // the old link opened a refusal page for the consultant it was sent to.
+      // The case screen is where the outstanding items are actually closed.
+      for (let i = 0; i < appealed.length; i += 1) {
         await tx.notification.create({
           data: {
-            userId: realConsultants[i].id,
-            type: 'LATE_BOOKING_UNIT',
-            title: consultantNotice.title,
-            message: consultantNotice.message,
-            link: `/dashboard/late-bookings?case=${surgery.id}`,
+            userId: appealed[i].id,
+            type: appealed[i].kind === 'surgeon' ? 'LATE_BOOKING_CASE_SURGEON' : 'LATE_BOOKING_UNIT',
+            title: appealed[i].title,
+            message: appealed[i].text,
+            link: `/dashboard/surgeries/${surgery.id}`,
           },
         });
       }
@@ -418,6 +573,65 @@ export async function POST(request: NextRequest) {
       else whatsappSkipped = `${personName} has no phone number on file.`;
     }
 
+    // -- The appeals to the surgeon and the consultants --
+    //
+    // Each one is queued under its own scope, so the deduplication in
+    // queueMessage treats three letters about one case as three messages and
+    // not as one sent three times.
+    for (let i = 0; i < appealed.length; i += 1) {
+      const x = appealed[i];
+      const wa = x.active && x.phone ? toWhatsAppNumber(x.phone) : null;
+      try {
+        const q = await queueMessage({
+          channel: 'WHATSAPP' as never,
+          priority: 'NORMAL' as never,
+          recipientUserId: x.id,
+          recipientName: x.name,
+          recipientAddress: wa,
+          recipientIsStaff: true,
+          body: x.text,
+          relatedType: 'SURGERY',
+          relatedId: surgery.id,
+          trigger: x.kind === 'surgeon' ? 'LATE_BOOKING_SURGEON_APPEAL' : 'LATE_BOOKING_CONSULTANT_APPEAL',
+          scope: `${surgery.id}:${x.id}`,
+          createdById: actor.id ?? null,
+          createdByName: actorName,
+        });
+        x.whatsappQueued = q.queued === true;
+        if (!q.queued) x.skipped = q.reason ?? 'Not queued';
+      } catch (commsErr) {
+        console.error('[late-bookings/chase] appeal comms failed:', commsErr);
+        x.skipped = 'The message could not be queued. It is in their ORM notifications.';
+      }
+      if (!wa) {
+        x.skipped = x.active
+          ? `${x.name} has no phone number on file — in the app only.`
+          : `${x.name}'s account is not active — in the app only.`;
+      }
+    }
+
+    // THE QUEUE IS NOT A DELIVERY, so every reachable recipient comes back as
+    // a wa.me hand-off the operator can press. Returned as a list in the
+    // order they should be sent — the booker first, because the warning is
+    // theirs and the other two are being asked for help with it.
+    const handoffs: { name: string; kind: string; number: string; text: string }[] = [];
+    if (whatsapp) {
+      handoffs.push({
+        name: personName, kind: 'who booked it', number: whatsapp.number, text: whatsapp.text,
+      });
+    }
+    appealed.forEach((x) => {
+      const wa = x.active && x.phone ? toWhatsAppNumber(x.phone) : null;
+      if (wa) {
+        handoffs.push({
+          name: x.name,
+          kind: x.kind === 'surgeon' ? 'surgeon on the case' : 'supervising consultant',
+          number: wa,
+          text: x.text,
+        });
+      }
+    });
+
     if (unreachableConsultants > 0) {
       whatsappSkipped = [
         whatsappSkipped,
@@ -440,7 +654,14 @@ export async function POST(request: NextRequest) {
       queryId,
       standing,
       whatsapp,
+      handoffs,
       consultantsNotified: realConsultants.length,
+      alsoWritten: appealed.map((x) => ({
+        name: x.name,
+        kind: x.kind,
+        whatsappQueued: x.whatsappQueued,
+        skipped: x.skipped,
+      })),
     });
   } catch (err) {
     // A CATCH-ALL THAT SAYS NOTHING IS WHY THIS TOOK SO LONG TO FIND.

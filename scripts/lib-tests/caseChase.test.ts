@@ -137,7 +137,7 @@ describe('what is missing from a case', () => {
   it('says plainly when there is no consent to be seen', () => {
     expect(hasConsent({ ...ON_TIME_BOOKING })).toBe(false);
     expect(listGaps(['CONSENT', 'PRESCRIPTION']))
-      .toBe('no consent on the orm and no pharmacy prescription');
+      .toBe('no consent on the ORM and no pharmacy prescription');
   });
 });
 
@@ -335,7 +335,7 @@ describe('the short forms', () => {
 
   it('writes a case line the way a list is read aloud', () => {
     expect(caseLine(CASE())).toBe(
-      '• 10 Nov 08:00 — Mrs Okeke (12345) — Exploratory laparotomy — no consent on the orm',
+      '• 10 Nov 08:00 — Mrs Okeke (12345) — Exploratory laparotomy — no consent on the ORM',
     );
     expect(shortDay('2026-01-31')).toBe('31 Jan');
     expect(patientLabel(CASE({ patientName: null }))).toBe('a patient');

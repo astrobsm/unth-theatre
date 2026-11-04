@@ -178,9 +178,21 @@ export function hoursLate(c: CaseForGaps): number | null {
   }).hoursLate;
 }
 
+/**
+ * A gap's label inside a sentence.
+ *
+ * Lower case, except that ORM stays ORM. "no consent on the orm" is how this
+ * read for a fortnight, in letters to consultants, and an initialism written
+ * as a word is the kind of thing that makes a careful reader doubt the rest
+ * of the figures.
+ */
+export function gapWords(code: CaseGapCode): string {
+  return CASE_GAPS[code].label.toLowerCase().replace(/\borm\b/g, 'ORM');
+}
+
 /** The gaps, listed the way somebody says them: "a, b and c". */
 export function listGaps(codes: readonly CaseGapCode[]): string {
-  const words = codes.map((c) => CASE_GAPS[c].label.toLowerCase());
+  const words = codes.map((c) => gapWords(c));
   if (words.length === 0) return '';
   if (words.length === 1) return words[0];
   return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;

@@ -29,7 +29,7 @@
 // ============================================================
 
 import {
-  CASE_GAPS, fixableGaps, type CaseGapCode,
+  CASE_GAPS, fixableGaps, gapWords, type CaseGapCode,
 } from './gaps';
 import type { ChaseCase, ChaseGroup } from './collect';
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
@@ -58,7 +58,7 @@ export function patientLabel(c: ChaseCase): string {
 /** One line about one case: when, who, what, and what is missing. */
 export function caseLine(c: ChaseCase): string {
   const when = [shortDay(c.scheduledDay), c.scheduledTime].filter(Boolean).join(' ');
-  const gaps = c.gaps.map((g) => CASE_GAPS[g].label.toLowerCase()).join('; ');
+  const gaps = c.gaps.map((g) => gapWords(g)).join('; ');
   return `• ${when} — ${patientLabel(c)} — ${c.procedureName} — ${gaps}`;
 }
 

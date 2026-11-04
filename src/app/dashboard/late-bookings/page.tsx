@@ -51,14 +51,21 @@ export default function LateBookingsPage() {
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   /**
-   * The WhatsApp hand-off for the chase just recorded.
+   * The WhatsApp hand-offs for the chase just recorded: the booker, the
+   * surgeon on the case, and the unit's supervising consultant(s).
    *
    * KEPT ON SCREEN rather than only opened. The offence is recorded on the
    * server before this, so a blocked pop-up cannot leave a warning recorded
-   * and unsent without a way to send it — the link stays until the next
+   * and unsent without a way to send it — the links stay until the next
    * action.
+   *
+   * AND ONLY THE FIRST IS OPENED. Three window.open calls from one click are
+   * two blocked pop-ups, and the operator would have no way of knowing which
+   * of the three went out. The rest are pressed from here, one at a time.
    */
-  const [handoff, setHandoff] = useState<{ href: string; name: string } | null>(null);
+  const [handoffs, setHandoffs] = useState<
+    { href: string; name: string; kind: string }[]
+  >([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,7 +102,7 @@ export default function LateBookingsPage() {
     setBusy(surgeryId);
     setProblem(null);
     setNote(null);
-    setHandoff(null);
+    setHandoffs([]);
     try {
       const res = await fetch('/api/late-bookings/chase', {
         method: 'POST',
@@ -111,19 +118,27 @@ export default function LateBookingsPage() {
       if (data.alreadyRecorded) {
         setNote(data.message);
       } else {
-        const href = data.whatsapp
-          ? whatsappLink(data.whatsapp.number, data.whatsapp.text)
-          : null;
-        if (href) {
-          setHandoff({ href, name: personName });
-          // Opened straight away so the ordinary case is a single press. A
-          // blocked pop-up leaves the link below, not a silent warning.
-          window.open(href, '_blank', 'noopener');
+        type Handoff = { name: string; kind: string; number: string; text: string };
+        const links = ((data.handoffs ?? []) as Handoff[])
+          .map((h) => ({ href: whatsappLink(h.number, h.text), name: h.name, kind: h.kind }))
+          .filter(
+            (h): h is { href: string; name: string; kind: string } => Boolean(h.href),
+          );
+        setHandoffs(links);
+        if (links.length > 0) {
+          // The first is opened straight away so the ordinary case is a single
+          // press. A blocked pop-up leaves the link below, not a silent
+          // warning.
+          window.open(links[0].href, '_blank', 'noopener');
         }
+        const extra = links.length - 1;
         setNote(
           `${ESCALATION_LABELS[data.decision.level as keyof typeof ESCALATION_LABELS]} recorded.` +
-            (href
-              ? ' WhatsApp is opening with the message — press send there.'
+            (links.length > 0
+              ? ` WhatsApp is opening with ${personName}'s message — press send there.` +
+                (extra > 0
+                  ? ` ${extra} more to send below: the surgeon on the case and the supervising consultant. Each is a separate press.`
+                  : '')
               : ` No WhatsApp: ${data.whatsappSkipped ?? 'no number on file'}. It is in their ORM notifications.`) +
             (data.queryId ? ' Formal query issued and the head of department copied.' : ''),
         );
@@ -213,16 +228,21 @@ export default function LateBookingsPage() {
         {note && (
           <div className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">
             <p>{note}</p>
-            {handoff && (
-              <a
-                href={handoff.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white"
-              >
-                <MessageCircle className="h-4 w-4" />
-                Open WhatsApp to {handoff.name}
-              </a>
+            {handoffs.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {handoffs.map((h) => (
+                  <a
+                    key={`${h.kind}:${h.name}`}
+                    href={h.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {h.name} ({h.kind})
+                  </a>
+                ))}
+              </div>
             )}
           </div>
         )}

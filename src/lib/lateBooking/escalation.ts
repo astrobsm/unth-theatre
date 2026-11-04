@@ -166,6 +166,20 @@ export function buildChaseMessage(input: {
   unit: string;
   /** Their record so far, when it is known. */
   standing?: BookerStanding | null;
+  /**
+   * The rest of the day's cases they booked that still have something
+   * outstanding, already formatted -- see caseAppeal.daySummaryLines.
+   *
+   * PASSED IN RATHER THAN BUILT HERE, and not for tidiness: the summary needs
+   * the gap definitions and the case lines, which live under caseChase, and
+   * caseAppeal already imports this module for the ladder. Importing it back
+   * would close the cycle.
+   *
+   * Absent or empty means nothing else is outstanding, and the letter then
+   * says nothing about the day at all. A heading over an empty list reads as
+   * a fault in the system.
+   */
+  daySummary?: string[];
 }): string {
   const { decision, standing } = input;
 
@@ -203,6 +217,13 @@ export function buildChaseMessage(input: {
       ``,
       `We are pleading with you to keep your late bookings at the barest minimum — ideally nil.`,
     );
+  }
+
+  // The rest of their day, where there is one. Placed BEFORE the paragraph on
+  // why the hour matters: the list is the part that can still be acted on this
+  // afternoon, and the reasoning is the part a tired registrar skims.
+  if (input.daySummary && input.daySummary.length > 0) {
+    lines.push(...input.daySummary);
   }
 
   lines.push(
