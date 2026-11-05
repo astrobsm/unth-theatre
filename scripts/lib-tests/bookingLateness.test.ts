@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   bookingLateness, lateBookingCutoff, formatBookedAt, formatBookedAtShort,
-  LATE_CUTOFF_HOUR, LATE_CUTOFF_MINUTE, WAT_OFFSET_MINUTES,
+  LATE_CUTOFF_HOUR, LATE_CUTOFF_MINUTE, LATE_CUTOFF_LABEL, WAT_OFFSET_MINUTES,
 } from '../../src/lib/bookingLateness';
 
 // Times below are written as UTC instants with the WAT (UTC+1) equivalent in a
@@ -29,6 +29,17 @@ describe('lateBookingCutoff', () => {
     // the letters are what somebody gets disciplined by.
     expect(LATE_CUTOFF_MINUTE).toBe(30);
     expect(lateBookingCutoff(surgeryOn).getUTCMinutes()).toBe(LATE_CUTOFF_MINUTE);
+  });
+
+  it('says in prose exactly what it flags on', () => {
+    // LATE_CUTOFF_LABEL is written out so it survives minification and a
+    // deployed bundle can be grepped for the hour it is serving. That makes it
+    // a second copy of the same fact, and this is the only thing standing
+    // between the two copies and a letter that cites an hour the code does not
+    // use -- which is the one error the recipient of a warning can prove.
+    expect(LATE_CUTOFF_LABEL).toBe(
+      `${String(LATE_CUTOFF_HOUR).padStart(2, '0')}:${String(LATE_CUTOFF_MINUTE).padStart(2, '0')}`,
+    );
   });
 
   it('handles a surgery on the first of a month', () => {

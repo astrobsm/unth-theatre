@@ -43,9 +43,16 @@ export const LATE_CUTOFF_MINUTE = 30;
  * invites the one failure that cannot be argued down: a letter citing 15:00
  * while the code flags at 15:30 tells its recipient, in writing, that the
  * offence recorded against them was measured against an unpublished rule.
+ *
+ * WRITTEN OUT RATHER THAN COMPUTED FROM THE TWO CONSTANTS ABOVE, which it
+ * otherwise would be. A built bundle is minified, and a computed label leaves
+ * no trace of the hour in it: after a deploy there is then no way to ask the
+ * theatre server which cut-off it is actually serving, only to trust that the
+ * commit it reports was built. `grep 15:30 .next/server/...` is worth the one
+ * duplicated fact, and the duplication cannot drift -- bookingLateness.test.ts
+ * asserts this string against the two numbers.
  */
-export const LATE_CUTOFF_LABEL = `${String(LATE_CUTOFF_HOUR).padStart(2, '0')}`
-  + `:${String(LATE_CUTOFF_MINUTE).padStart(2, '0')}`;
+export const LATE_CUTOFF_LABEL = '15:30';
 
 /**
  * The moment after which booking an elective case for `scheduledDate` is late:
