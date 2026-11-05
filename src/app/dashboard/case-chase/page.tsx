@@ -23,6 +23,7 @@ import {
   AlertTriangle, CalendarClock, Check, ClipboardList, Eye, FileWarning,
   Loader2, Send, UserCog, Users,
 } from 'lucide-react';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 interface Row {
   personId: string;
@@ -138,7 +139,7 @@ export default function CaseChasePage() {
           <h1 className="text-xl font-bold text-gray-900">Cases awaiting paperwork</h1>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
             Booked cases with no consent on the ORM, no pharmacy prescription, no consumable
-            pack request, or booked after the 15:00 cut-off. Computed live from the case
+            pack request, or booked after the {LATE_CUTOFF_LABEL} cut-off. Computed live from the case
             records, not from the flag stored at booking.
           </p>
         </div>

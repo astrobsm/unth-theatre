@@ -18,11 +18,11 @@ import type { LateBookingCaseInput } from '../../src/lib/lateBooking/report';
 // record does not support it, or quoting a percentage that disagrees with the
 // one the late-booking report shows for the same person.
 
-// Scheduled 12 Oct. The deadline is 15:00 WAT on 11 Oct = 11 Oct 14:00 UTC.
+// Scheduled 12 Oct. The deadline is 15:30 WAT on 11 Oct = 11 Oct 14:30 UTC.
 const SCHEDULED = '2026-10-12T00:00:00Z';
-const LATE_AT = '2026-10-11T18:40:00Z'; // 4h40 past the deadline
-const NOTICE_2H = '2026-10-11T12:00:00Z'; // 2 hours of notice
-const NOTICE_53H = '2026-10-09T09:00:00Z'; // 53 hours of notice
+const LATE_AT = '2026-10-11T18:40:00Z'; // 4h10 past the deadline
+const NOTICE_2H = '2026-10-11T12:30:00Z'; // 2 hours of notice
+const NOTICE_53H = '2026-10-09T09:30:00Z'; // 53 hours of notice
 
 const CASE = (over: Partial<LateBookingCaseInput> = {}): LateBookingCaseInput => ({
   id: Math.random().toString(36).slice(2),

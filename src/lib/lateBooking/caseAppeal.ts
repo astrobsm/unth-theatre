@@ -32,6 +32,7 @@ import { CASE_GAPS, type CaseGapCode } from '@/lib/caseChase/gaps';
 import { caseLine, gapsPresent, MAX_CASES_LISTED } from '@/lib/caseChase/messages';
 import type { ChaseCase, ChaseGroup } from '@/lib/caseChase/collect';
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 import { ESCALATION_LABELS, type EscalationDecision } from './escalation';
 
 const SIGN_OFF = 'Theatre Management, UNTH Ituku-Ozalla';
@@ -115,7 +116,7 @@ export function daySummaryLines(input: {
   if (counts.CONSENT > 0) lines.push(`• ${counts.CONSENT} with no consent on the ORM`);
   if (counts.PRESCRIPTION > 0) lines.push(`• ${counts.PRESCRIPTION} with no pharmacy prescription`);
   if (counts.CONSUMABLES > 0) lines.push(`• ${counts.CONSUMABLES} with no consumable pack request`);
-  if (counts.LATE_BOOKING > 0) lines.push(`• ${counts.LATE_BOOKING} booked after the 15:00 cut-off`);
+  if (counts.LATE_BOOKING > 0) lines.push(`• ${counts.LATE_BOOKING} booked after the ${LATE_CUTOFF_LABEL} cut-off`);
 
   // The cases themselves. This is the half that gets acted on, so it is named
   // rather than counted: "your case is not ready" fits a surgeon's three
@@ -217,7 +218,7 @@ export function buildCaseAppeal(input: {
   // A figure somebody can check against their own memory of the afternoon is
   // far harder to wave away than "late".
   if (t.hoursLate != null) {
-    lines.push(`• Past the 15:00 cut-off by: ${Math.round(t.hoursLate)} hours`);
+    lines.push(`• Past the ${LATE_CUTOFF_LABEL} cut-off by: ${Math.round(t.hoursLate)} hours`);
   }
 
   // ── The day's list, which is the half that can still be helped ──────
@@ -246,8 +247,9 @@ export function buildCaseAppeal(input: {
   // ── Why, and the ask ────────────────────────────────────────────────
   lines.push(
     '',
-    'Why the hour matters. By 15:00 the list has been planned, CSSD has begun sterilising, '
-    + 'pharmacy and the consumable pack providers have drawn their packs, and the nursing '
+    `Why the hour matters. By ${LATE_CUTOFF_LABEL} the list has been planned, CSSD has `
+    + 'begun sterilising, pharmacy and the consumable pack providers have drawn their '
+    + 'packs, and the nursing '
     + 'officer has assigned staff to each theatre. A case arriving after that point does '
     + 'not join a queue — it displaces preparation already finished for another patient, '
     + 'and the patient who gets moved is rarely the one booked late.',
@@ -257,7 +259,7 @@ export function buildCaseAppeal(input: {
     '',
     isConsultant
       ? 'What we are asking of you. Please would you raise it with your team on the round: '
-        + 'the following day’s cases booked before 15:00, and three things checked on '
+        + `the following day’s cases booked before ${LATE_CUTOFF_LABEL}, and three things checked on `
         + 'every case before it is left — the consent on the ORM, the pharmacy '
         + 'prescription entered, and the consumable pack request entered. Booking is '
         + 'properly their work and we are not asking you to do it; we are asking you to '

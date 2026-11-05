@@ -38,6 +38,7 @@ import {
   type PunctualityReport,
   type BookerPerformance,
 } from '@/lib/lateBooking/punctuality';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 const pct = (rate: number | null): string =>
   rate == null ? '—' : `${Math.round(rate * 100)}%`;
@@ -198,7 +199,7 @@ export default function BookingPerformancePage() {
               Booking performance
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              Elective cases booked before 15:00 on the day before surgery, and how much notice
+              Elective cases booked before {LATE_CUTOFF_LABEL} on the day before surgery, and how much notice
               the theatre was given. Emergency and urgent cases are excluded — they could not
               have been booked ahead.
             </p>

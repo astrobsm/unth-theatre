@@ -33,6 +33,7 @@ import {
 } from './gaps';
 import type { ChaseCase, ChaseGroup } from './collect';
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 const SIGN_OFF = 'Theatre Management, UNTH Ituku-Ozalla';
 
@@ -128,7 +129,7 @@ export function buildSurgeonCaseChase(input: {
   if (g.counts.CONSENT > 0) lines.push(`• ${g.counts.CONSENT} with no consent on the ORM`);
   if (g.counts.PRESCRIPTION > 0) lines.push(`• ${g.counts.PRESCRIPTION} with no pharmacy prescription`);
   if (g.counts.CONSUMABLES > 0) lines.push(`• ${g.counts.CONSUMABLES} with no consumable pack request`);
-  if (g.counts.LATE_BOOKING > 0) lines.push(`• ${g.counts.LATE_BOOKING} booked after the 15:00 cut-off`);
+  if (g.counts.LATE_BOOKING > 0) lines.push(`• ${g.counts.LATE_BOOKING} booked after the ${LATE_CUTOFF_LABEL} cut-off`);
 
   // The cases themselves. This is the half that gets acted on.
   lines.push('', 'The cases:');
@@ -231,7 +232,7 @@ export function buildConsultantCaseChase(input: {
   if (g.counts.CONSENT > 0) lines.push(`• ${g.counts.CONSENT} with no consent on the ORM`);
   if (g.counts.PRESCRIPTION > 0) lines.push(`• ${g.counts.PRESCRIPTION} with no pharmacy prescription`);
   if (g.counts.CONSUMABLES > 0) lines.push(`• ${g.counts.CONSUMABLES} with no consumable pack request`);
-  if (g.counts.LATE_BOOKING > 0) lines.push(`• ${g.counts.LATE_BOOKING} booked after the 15:00 cut-off`);
+  if (g.counts.LATE_BOOKING > 0) lines.push(`• ${g.counts.LATE_BOOKING} booked after the ${LATE_CUTOFF_LABEL} cut-off`);
 
   // By whoever entered them. Named, because "somebody in your unit" is not
   // something a consultant can act on, and because the pattern is almost
@@ -270,7 +271,7 @@ export function buildConsultantCaseChase(input: {
     '',
     'Nothing here is a disciplinary matter and nothing has been copied to anybody. If your '
     + 'unit is being prevented from doing this — a screen that will not save, a resident '
-    + 'with no account, a clinic that makes 15:00 impossible — please tell the Theatre '
+    + `with no account, a clinic that makes ${LATE_CUTOFF_LABEL} impossible — please tell the Theatre `
     + 'Manager or the Theatre Chairman, because a difficulty raised is one we can solve.',
     '',
     'With thanks for your support,',

@@ -94,7 +94,7 @@ describe('what the person actually receives', () => {
     const msg = buildChaseMessage({ ...base, decision: escalationFor(0) });
     expect(msg).toContain('Inguinal hernia repair');
     expect(msg).toContain('11 Oct 2026, 7:40 PM');
-    expect(msg).toContain('15:00');
+    expect(msg).toContain('15:30');
     expect(msg).toContain('1 November 2026');
     // The route to raising a genuine difficulty must be in every message,
     // or the policy reads as punishment with no remedy.
@@ -205,7 +205,7 @@ const CASE = (over: Partial<LateBookingCaseInput> = {}): LateBookingCaseInput =>
   id: Math.random().toString(36).slice(2),
   scheduledDate: '2026-10-12T00:00:00Z',
   scheduledTime: '09:00',
-  // 11 Oct 18:40 UTC = 19:40 WAT, well past the 15:00 cut-off the day before.
+  // 11 Oct 18:40 UTC = 19:40 WAT, well past the 15:30 cut-off the day before.
   createdAt: '2026-10-11T18:40:00Z',
   surgeryType: 'ELECTIVE',
   unit: 'General Surgery',

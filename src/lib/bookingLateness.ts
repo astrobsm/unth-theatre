@@ -1,7 +1,7 @@
 // ============================================================
 // When was this case booked, and was it booked too late?
 // ------------------------------------------------------------
-// Theatre policy: an ELECTIVE case booked after 15:00 on the day before surgery
+// Theatre policy: an ELECTIVE case booked after 15:30 on the day before surgery
 // is late. By then the list is being planned, CSSD has begun setting up, and
 // consumables and blood have been requested — a case arriving after that point
 // disrupts work already done.
@@ -14,9 +14,9 @@
 /**
  * Nigeria is UTC+1 all year — West Africa Time, no daylight saving.
  *
- * This matters more than it looks. The server stores UTC, and "after 15:00"
- * means 15:00 in Enugu, which is 14:00 UTC. Comparing a UTC timestamp against a
- * naive 15:00 would mark every booking between 14:00 and 15:00 local as on time
+ * This matters more than it looks. The server stores UTC, and "after 15:30"
+ * means 15:30 in Enugu, which is 14:30 UTC. Comparing a UTC timestamp against a
+ * naive 15:30 would mark every booking between 14:30 and 15:30 local as on time
  * when it was late, and the error would be invisible — an hour's worth of late
  * bookings quietly reported as compliant.
  */
@@ -26,8 +26,30 @@ export const WAT_OFFSET_MINUTES = 60;
 export const LATE_CUTOFF_HOUR = 15;
 
 /**
+ * The minute within that hour.
+ *
+ * Moved from :00 to :30 on 5 November 2026 at the theatre's request. The half
+ * hour is not cosmetic: it decides whether a clinic that overran by twenty
+ * minutes earns a disciplinary letter, so it is declared here and nowhere else.
+ */
+export const LATE_CUTOFF_MINUTE = 30;
+
+/**
+ * The cut-off as it is written to people: "15:30".
+ *
+ * EVERY SENTENCE THAT NAMES THE DEADLINE IS BUILT FROM THIS, because the time
+ * appears in roughly thirty places -- three WhatsApp letters, the escalation
+ * ladder, the gap catalogue, four screens and a PDF. Hard-coding it in prose
+ * invites the one failure that cannot be argued down: a letter citing 15:00
+ * while the code flags at 15:30 tells its recipient, in writing, that the
+ * offence recorded against them was measured against an unpublished rule.
+ */
+export const LATE_CUTOFF_LABEL = `${String(LATE_CUTOFF_HOUR).padStart(2, '0')}`
+  + `:${String(LATE_CUTOFF_MINUTE).padStart(2, '0')}`;
+
+/**
  * The moment after which booking an elective case for `scheduledDate` is late:
- * 15:00 WAT on the day before.
+ * 15:30 WAT on the day before.
  */
 export function lateBookingCutoff(scheduledDate: Date): Date {
   // Read the scheduled date as a calendar day in WAT, not as a UTC instant. A
@@ -37,9 +59,9 @@ export function lateBookingCutoff(scheduledDate: Date): Date {
   const m = local.getUTCMonth();
   const d = local.getUTCDate();
 
-  // Day before at LATE_CUTOFF_HOUR local, expressed as a UTC instant.
-  const cutoffLocalMidnight = Date.UTC(y, m, d - 1, LATE_CUTOFF_HOUR, 0, 0);
-  return new Date(cutoffLocalMidnight - WAT_OFFSET_MINUTES * 60_000);
+  // Day before at the cut-off, local, expressed as a UTC instant.
+  const cutoffLocal = Date.UTC(y, m, d - 1, LATE_CUTOFF_HOUR, LATE_CUTOFF_MINUTE, 0);
+  return new Date(cutoffLocal - WAT_OFFSET_MINUTES * 60_000);
 }
 
 export interface BookingLatenessInput {
@@ -107,7 +129,7 @@ export function bookingLateness(input: BookingLatenessInput): BookingLateness {
   const hoursLate = (booked.getTime() - cutoff.getTime()) / 3_600_000;
   return {
     isLate: true,
-    reason: `Elective case booked after 15:00 on the day before surgery (${hoursLate < 24
+    reason: `Elective case booked after ${LATE_CUTOFF_LABEL} on the day before surgery (${hoursLate < 24
       ? `${Math.round(hoursLate)}h past the cut-off`
       : `${Math.floor(hoursLate / 24)}d past the cut-off`}).`,
     hoursLate,

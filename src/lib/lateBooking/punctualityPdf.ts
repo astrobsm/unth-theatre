@@ -19,6 +19,7 @@ import {
   formatNotice, COMMENDATION_RATE, MIN_CASES_TO_RANK,
   type PunctualityReport,
 } from './punctuality';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 const pct = (rate: number | null): string =>
   rate === null ? '—' : `${Math.round(rate * 100)}%`;
@@ -58,7 +59,7 @@ export async function buildBookingPerformancePdf(
   doc.setFont('times', 'normal');
   doc.setFontSize(9);
   const intro = doc.splitTextToSize(
-    `Elective cases booked before 15:00 on the day before surgery, for ${options.periodLabel}. `
+    `Elective cases booked before ${LATE_CUTOFF_LABEL} on the day before surgery, for ${options.periodLabel}. `
     + 'Emergency and urgent cases are excluded: they are booked when the patient needs them '
     + 'and could not have been booked ahead.',
     CONTENT_WIDTH,

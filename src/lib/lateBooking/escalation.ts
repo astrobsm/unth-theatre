@@ -27,6 +27,7 @@
 // ============================================================
 
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 export type EscalationLevel = 'FIRST_WARNING' | 'SECOND_WARNING' | 'QUERY';
 
@@ -76,7 +77,7 @@ export function escalationFor(priorOffences: number): EscalationDecision {
       copyToHeadOfDepartment: false,
       raisesQuery: false,
       summary:
-        'This is the first elective case you have booked after the 15:00 deadline since tracking began.',
+        `This is the first elective case you have booked after the ${LATE_CUTOFF_LABEL} deadline since tracking began.`,
     };
   }
 
@@ -209,7 +210,7 @@ export function buildChaseMessage(input: {
       `Where you presently stand: ${standing.late} of your ${standing.electiveTotal} elective bookings in ${standing.periodLabel} were made after the deadline — ${pct}%.`,
       ``,
       pct >= 50
-        ? `We are pleading with you to work this figure down. Every booking you move before 15:00 is one fewer list disrupted, and a colleague booking at your volume can change this percentage within a fortnight.`
+        ? `We are pleading with you to work this figure down. Every booking you move before ${LATE_CUTOFF_LABEL} is one fewer list disrupted, and a colleague booking at your volume can change this percentage within a fortnight.`
         : `We are asking you to work this figure down further, towards nil. You are already booking most of your cases on time, and the few that slip are the ones that cost the theatre a nurse and a set.`,
     );
   } else {
@@ -228,7 +229,7 @@ export function buildChaseMessage(input: {
 
   lines.push(
     ``,
-    `Why we are asking. Elective cases must be booked before 15:00 on the day before surgery. By that hour the list has been planned, CSSD has begun sterilising, pharmacy and the consumable pack providers have drawn their packs, and the nursing officer has assigned staff to each theatre. A case arriving after that point does not join a queue — it displaces preparation already finished for another patient, and the patient who gets moved is rarely the one booked late.`,
+    `Why we are asking. Elective cases must be booked before ${LATE_CUTOFF_LABEL} on the day before surgery. By that hour the list has been planned, CSSD has begun sterilising, pharmacy and the consumable pack providers have drawn their packs, and the nursing officer has assigned staff to each theatre. A case arriving after that point does not join a queue — it displaces preparation already finished for another patient, and the patient who gets moved is rarely the one booked late.`,
     ``,
     `For the record, this is logged as a ${ESCALATION_LABELS[decision.level].toLowerCase()}. ${decision.summary}`,
   );
@@ -244,7 +245,7 @@ export function buildChaseMessage(input: {
     ``,
     `From 1 November 2026, elective cases booked after the deadline will not have a nurse or a theatre assigned. This is not aimed at anyone; it is the only way the theatre can protect the patients already prepared for.`,
     ``,
-    `If something genuinely prevents you booking before 15:00 — a clinic that overruns, a result that arrives late, a patient travelling a long way — please tell the Theatre Manager or the Theatre Chairman before 12 noon on the day before. A difficulty raised in advance is always accommodated; one raised afterwards cannot be, because the work has already been done.`,
+    `If something genuinely prevents you booking before ${LATE_CUTOFF_LABEL} — a clinic that overruns, a result that arrives late, a patient travelling a long way — please tell the Theatre Manager or the Theatre Chairman before 12 noon on the day before. A difficulty raised in advance is always accommodated; one raised afterwards cannot be, because the work has already been done.`,
     ``,
     `Thank you for your cooperation, and for the cases you do book on time.`,
     `Theatre Management, UNTH Ituku-Ozalla`,
@@ -266,7 +267,7 @@ export function buildConsultantNotice(input: {
     title: `Late elective booking in ${input.unit}`,
     message:
       `${input.bookerName} booked ${input.procedureName} for ${input.patientLabel} ` +
-      `(scheduled ${input.scheduledFor}) after the 15:00 deadline. ` +
+      `(scheduled ${input.scheduledFor}) after the ${LATE_CUTOFF_LABEL} deadline. ` +
       `This is late booking number ${input.decision.offenceNumber} for them since tracking began — ` +
       `${ESCALATION_LABELS[input.decision.level].toLowerCase()}.` +
       (input.decision.copyToHeadOfDepartment

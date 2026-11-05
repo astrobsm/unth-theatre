@@ -115,7 +115,7 @@ describe('the letter to the surgeon on the case', () => {
   });
 
   it('quotes how late it was, as a figure they can check', () => {
-    // "late" can be argued with. Nineteen hours past 15:00 cannot.
+    // "late" can be argued with. Nineteen hours past 15:30 cannot.
     expect(msg).toContain('19 hours');
   });
 

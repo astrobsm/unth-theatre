@@ -27,7 +27,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireRole } from '@/lib/apiMiddleware';
-import { bookingLateness, formatBookedAt } from '@/lib/bookingLateness';
+import { bookingLateness, formatBookedAt, LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 import {
@@ -416,7 +416,7 @@ export async function POST(request: NextRequest) {
               description:
                 `Dear ${person.fullName},\n\n` +
                 `This is to formally query you regarding the booking of elective surgical cases ` +
-                `after the stipulated deadline of 15:00 on the day preceding surgery.\n\n` +
+                `after the stipulated deadline of ${LATE_CUTOFF_LABEL} on the day preceding surgery.\n\n` +
                 `The present case is as follows:\n` +
                 `  Patient: ${patientLabel}\n` +
                 `  Procedure: ${surgery.procedureName ?? 'Not recorded'}\n` +
@@ -426,14 +426,14 @@ export async function POST(request: NextRequest) {
                 `  Hours past the deadline: ${Math.round(verdict.hoursLate ?? 0)}\n\n` +
                 `This is late booking number ${decision.offenceNumber} recorded against you since ` +
                 `tracking began on ${DEFAULT_COUNTING_FROM}. Two prior warnings have been issued.\n\n` +
-                `Late booking of elective cases disrupts work that is already complete. By 15:00 the ` +
+                `Late booking of elective cases disrupts work that is already complete. By ${LATE_CUTOFF_LABEL} the ` +
                 `operating list has been planned, CSSD has begun sterilising for the following day, ` +
                 `pharmacy and the consumable pack providers have drawn their packs, and nursing ` +
                 `assignments have been made. A case arriving after that point displaces another ` +
                 `patient's preparation.\n\n` +
                 `You are required to provide a written explanation within 48 hours of receipt of ` +
                 `this query. A copy has been forwarded to your Head of Department.\n\n` +
-                `Where a genuine difficulty prevents booking before 15:00, this must be communicated ` +
+                `Where a genuine difficulty prevents booking before ${LATE_CUTOFF_LABEL}, this must be communicated ` +
                 `to the Theatre Manager or the Theatre Chairman before 12 noon on the preceding day.\n\n` +
                 `Signed,\nTheatre Management\nUniversity of Nigeria Teaching Hospital, Ituku-Ozalla`,
               deadlineTime: deadline,

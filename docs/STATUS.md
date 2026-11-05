@@ -13,7 +13,7 @@ Run `node scripts/deploy-check.js` for the machine-checkable half of this.
 |---|---|
 | **Dictation restart fix** | Done. Was losing a second of speech after every phrase on phones. **Needs testing on a real phone.** |
 | **Bi-directional sync** | Working. 75 entries, 0 deferred. |
-| **Booking lateness tagging** | Done. Elective bookings after 15:00 the day before are flagged LATE. |
+| **Booking lateness tagging** | Done. Elective bookings after 15:30 the day before are flagged LATE. |
 | **Procedure → pack auto-attach** | Done, multi-procedure supported. |
 | **Consent + labs mandatory** | Done, with recorded clinical override for emergencies. |
 | **Theatre/nurse/anaesthetist assignment** | Done, with who-assigned tracking. |

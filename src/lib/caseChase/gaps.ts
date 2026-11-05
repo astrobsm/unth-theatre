@@ -23,7 +23,7 @@
 // work.
 // ============================================================
 
-import { bookingLateness } from '@/lib/bookingLateness';
+import { bookingLateness, LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 export type CaseGapCode = 'LATE_BOOKING' | 'CONSENT' | 'PRESCRIPTION' | 'CONSUMABLES';
 
@@ -55,15 +55,16 @@ export const CASE_GAPS: Record<CaseGapCode, CaseGapDefinition> = {
   LATE_BOOKING: {
     code: 'LATE_BOOKING',
     label: 'Booked late',
-    short: 'was booked after the 15:00 cut-off',
+    short: `was booked after the ${LATE_CUTOFF_LABEL} cut-off`,
     consequence:
-      'By 15:00 the list has been planned, CSSD has begun sterilising, pharmacy and the '
-      + 'pack providers have drawn their packs and the nursing officer has assigned staff '
-      + 'to each theatre. A case arriving after that hour does not join a queue — it '
+      `By ${LATE_CUTOFF_LABEL} the list has been planned, CSSD has begun sterilising, `
+      + 'pharmacy and the pack providers have drawn their packs and the nursing officer '
+      + 'has assigned staff to each theatre. A case arriving after that hour does not '
+      + 'join a queue — it '
       + 'displaces preparation already finished for another patient, and the patient who '
       + 'gets moved is rarely the one booked late.',
     fix:
-      'Book the following day’s cases before 15:00. Where a clinic overruns or a '
+      `Book the following day’s cases before ${LATE_CUTOFF_LABEL}. Where a clinic overruns or a `
       + 'result arrives late, tell the Theatre Manager before noon and it will be '
       + 'accommodated.',
   },

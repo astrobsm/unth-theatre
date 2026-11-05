@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   bookingLateness, lateBookingCutoff, formatBookedAt, formatBookedAtShort,
-  LATE_CUTOFF_HOUR, WAT_OFFSET_MINUTES,
+  LATE_CUTOFF_HOUR, LATE_CUTOFF_MINUTE, WAT_OFFSET_MINUTES,
 } from '../../src/lib/bookingLateness';
 
 // Times below are written as UTC instants with the WAT (UTC+1) equivalent in a
@@ -10,33 +10,41 @@ import {
 const surgeryOn = new Date('2026-08-12T00:00:00Z'); // Wed 12 Aug
 
 describe('lateBookingCutoff', () => {
-  it('is 15:00 WAT on the day before surgery', () => {
-    // 15:00 WAT on 11 Aug == 14:00 UTC on 11 Aug.
-    expect(lateBookingCutoff(surgeryOn).toISOString()).toBe('2026-08-11T14:00:00.000Z');
+  it('is 15:30 WAT on the day before surgery', () => {
+    // 15:30 WAT on 11 Aug == 14:30 UTC on 11 Aug.
+    expect(lateBookingCutoff(surgeryOn).toISOString()).toBe('2026-08-11T14:30:00.000Z');
   });
 
   it('uses WAT, not UTC, for the cut-off hour', () => {
-    // The bug this guards: comparing a UTC timestamp against a naive 15:00 would
-    // treat 14:00-15:00 WAT bookings as on time when they are late — an hour of
+    // The bug this guards: comparing a UTC timestamp against a naive 15:30 would
+    // treat 14:30-15:30 WAT bookings as on time when they are late — an hour of
     // late bookings quietly reported as compliant.
     const cutoff = lateBookingCutoff(surgeryOn);
     expect(cutoff.getUTCHours()).toBe(LATE_CUTOFF_HOUR - WAT_OFFSET_MINUTES / 60);
   });
 
+  it('carries the half hour, not just the hour', () => {
+    // The minute is the whole of the 5 November change. Dropping it would put
+    // the cut-off back at 15:00 while every letter went on saying 15:30 — and
+    // the letters are what somebody gets disciplined by.
+    expect(LATE_CUTOFF_MINUTE).toBe(30);
+    expect(lateBookingCutoff(surgeryOn).getUTCMinutes()).toBe(LATE_CUTOFF_MINUTE);
+  });
+
   it('handles a surgery on the first of a month', () => {
     // Day-before crosses into the previous month.
     expect(lateBookingCutoff(new Date('2026-09-01T00:00:00Z')).toISOString())
-      .toBe('2026-08-31T14:00:00.000Z');
+      .toBe('2026-08-31T14:30:00.000Z');
   });
 
   it('handles a surgery on the first of January', () => {
     expect(lateBookingCutoff(new Date('2026-01-01T00:00:00Z')).toISOString())
-      .toBe('2025-12-31T14:00:00.000Z');
+      .toBe('2025-12-31T14:30:00.000Z');
   });
 
   it('handles a leap-year boundary', () => {
     expect(lateBookingCutoff(new Date('2028-03-01T00:00:00Z')).toISOString())
-      .toBe('2028-02-29T14:00:00.000Z');
+      .toBe('2028-02-29T14:30:00.000Z');
   });
 
   it('reads a scheduled date as a WAT calendar day', () => {
@@ -56,25 +64,34 @@ describe('bookingLateness — elective', () => {
   });
 
   it('is on time at exactly the cut-off', () => {
-    // 15:00:00 WAT exactly. "After 15:00" means after, so this is not late.
-    expect(late('2026-08-11T14:00:00Z').isLate).toBe(false);
+    // 15:30:00 WAT exactly. "After 15:30" means after, so this is not late.
+    expect(late('2026-08-11T14:30:00Z').isLate).toBe(false);
+  });
+
+  it('gives the half hour the theatre asked for on 5 November', () => {
+    // 14:10 UTC == 15:10 WAT: late under the old 15:00 rule, on time now.
+    // This is the only test that fails if the minute is quietly reverted, and
+    // the clinic that overran by ten minutes is exactly who it is for.
+    expect(late('2026-08-11T14:10:00Z').isLate).toBe(false);
+    expect(late('2026-08-11T14:29:00Z').isLate).toBe(false);
   });
 
   it('is late one minute after the cut-off', () => {
-    expect(late('2026-08-11T14:01:00Z').isLate).toBe(true);
+    expect(late('2026-08-11T14:31:00Z').isLate).toBe(true);
   });
 
   it('is late for a 16:32 WAT booking the day before', () => {
-    // 15:32 UTC == 16:32 WAT.
+    // 15:32 UTC == 16:32 WAT, an hour past the 15:30 cut-off.
     const r = late('2026-08-11T15:32:00Z');
     expect(r.isLate).toBe(true);
-    expect(r.hoursLate).toBeCloseTo(1.53, 1);
+    expect(r.hoursLate).toBeCloseTo(1.03, 1);
   });
 
   it('catches the WAT window that a naive comparison would miss', () => {
-    // 14:30 UTC is 15:30 WAT — late. A naive check against 15:00 UTC would call
-    // this on time.
-    expect(late('2026-08-11T14:30:00Z').isLate).toBe(true);
+    // 15:00 UTC is 16:00 WAT — late. A naive check against 15:30 UTC would
+    // call this on time, and half an hour of late bookings would be reported
+    // as compliant without anybody seeing a wrong number.
+    expect(late('2026-08-11T15:00:00Z').isLate).toBe(true);
   });
 
   it('is late when booked on the morning of surgery', () => {
@@ -93,7 +110,7 @@ describe('bookingLateness — elective', () => {
   });
 
   it('gives a reason that can be checked, not just a flag', () => {
-    expect(late('2026-08-11T16:00:00Z').reason).toMatch(/after 15:00 on the day before/);
+    expect(late('2026-08-11T16:00:00Z').reason).toMatch(/after 15:30 on the day before/);
   });
 });
 

@@ -25,7 +25,7 @@
 // report.ts uses, so the two pages can never disagree about one person.
 // ============================================================
 
-import { bookingLateness, lateBookingCutoff } from '@/lib/bookingLateness';
+import { bookingLateness, lateBookingCutoff, LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 import type { LateBookingCaseInput } from '@/lib/lateBooking/report';
 
 /**
@@ -54,7 +54,7 @@ export interface BookerPerformance {
   /** onTime / electiveTotal, 0–1. Null when they booked nothing elective. */
   complianceRate: number | null;
   /**
-   * Hours of notice before the 15:00 deadline, median over their on-time
+   * Hours of notice before the 15:30 deadline, median over their on-time
    * cases. Null when none of their bookings can be timed.
    */
   medianNoticeHours: number | null;
@@ -382,8 +382,8 @@ export function buildCommendationMessage(input: {
     `Dear ${input.personName},`,
     ``,
     p.perfect
-      ? `Every one of your ${p.electiveTotal} elective bookings for ${input.periodLabel} was made before the 15:00 deadline.`
-      : `${p.onTime} of your ${p.electiveTotal} elective bookings for ${input.periodLabel} were made before the 15:00 deadline — ${pct}.`,
+      ? `Every one of your ${p.electiveTotal} elective bookings for ${input.periodLabel} was made before the ${LATE_CUTOFF_LABEL} deadline.`
+      : `${p.onTime} of your ${p.electiveTotal} elective bookings for ${input.periodLabel} were made before the ${LATE_CUTOFF_LABEL} deadline — ${pct}.`,
   ];
 
   if (p.medianNoticeHours != null) {

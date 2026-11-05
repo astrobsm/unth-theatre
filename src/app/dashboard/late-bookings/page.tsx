@@ -29,6 +29,7 @@ import {
 import { whatsappLink } from '@/lib/whatsapp';
 import { formatRate, type LateBookingReport } from '@/lib/lateBooking/report';
 import { ESCALATION_LABELS, ENFORCEMENT_FROM } from '@/lib/lateBooking/escalation';
+import { LATE_CUTOFF_LABEL } from '@/lib/bookingLateness';
 
 type Recorded = {
   surgeryId: string;
@@ -175,7 +176,7 @@ export default function LateBookingsPage() {
               Late elective bookings
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              Elective cases booked after 15:00 on the day before surgery. Emergency and urgent
+              Elective cases booked after {LATE_CUTOFF_LABEL} on the day before surgery. Emergency and urgent
               cases are excluded — they are booked when the patient needs them.
             </p>
           </div>
@@ -433,11 +434,11 @@ function Directive() {
         </p>
         <p>
           Our records show a sustained rise in elective cases booked after the agreed deadline of{' '}
-          <strong>15:00 on the day before surgery</strong>. We are writing to explain why this
+          <strong>{LATE_CUTOFF_LABEL} on the day before surgery</strong>. We are writing to explain why this
           matters, and what will change.
         </p>
         <p>
-          By 15:00 the following day&apos;s work is already in motion. The operating list has been
+          By {LATE_CUTOFF_LABEL} the following day&apos;s work is already in motion. The operating list has been
           planned and theatre time allocated. CSSD has begun sterilising the instrument sets for
           those cases. Pharmacy has dispensed against the booked list, and the consumable pack
           providers have drawn and packed. Most importantly, the nursing officer has made staff
@@ -457,7 +458,7 @@ function Directive() {
               month: 'long',
               year: 'numeric',
             })}
-            , elective cases booked after 15:00 on the preceding day will not have a nurse or a
+            , elective cases booked after {LATE_CUTOFF_LABEL} on the preceding day will not have a nurse or a
             theatre assigned.
           </strong>{' '}
           The case will remain on the record and may be rebooked for the next available list.
@@ -465,7 +466,7 @@ function Directive() {
         <p>
           <strong>Where there is a genuine difficulty.</strong> We recognise that circumstances
           arise — a clinic that overruns, an investigation result that arrives late, a patient who
-          travels a long distance. Where anything prevents you from booking before 15:00, please
+          travels a long distance. Where anything prevents you from booking before {LATE_CUTOFF_LABEL}, please
           communicate it to the <strong>Theatre Manager</strong> or the{' '}
           <strong>Theatre Chairman</strong> before <strong>12 noon on the day before</strong>. A
           difficulty raised in advance will always be accommodated. One raised afterwards cannot

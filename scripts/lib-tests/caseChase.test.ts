@@ -22,7 +22,7 @@ import {
 //   and attributing a case to the wrong person, which is how two people each
 //   conclude the message was meant for somebody else.
 
-// A case booked at 14:00 the day before: inside the 15:00 cut-off.
+// A case booked at 14:00 the day before: inside the 15:30 cut-off.
 const ON_TIME_BOOKING = {
   scheduledDate: new Date('2026-11-10T00:00:00Z'),
   bookedAt: new Date('2026-11-09T13:00:00Z'), // 14:00 WAT
