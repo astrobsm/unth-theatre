@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import {
+  AREA_STATUSES, areasNotOk, legacyColumnsFor, summariseAreas, type WaterArea,
+} from '@/lib/water/waterAreas';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +24,15 @@ const createWaterStatusSchema = z.object({
   hotWaterAvailable: z.boolean(),
   hotWaterTemperature: z.string().optional(),
   boilerOperational: z.boolean(),
+  // Every room this shift was asked about. Optional because a client that
+  // has not been reloaded since the deploy still posts the seven fields
+  // below, and a plumber mid-shift should not meet a validation error.
+  areaStatuses: z.array(z.object({
+    key: z.string().min(1),
+    name: z.string().min(1),
+    location: z.string().default(''),
+    status: z.enum(AREA_STATUSES),
+  })).optional(),
   theatre1Status: z.string().default('OK'),
   theatre2Status: z.string().default('OK'),
   theatre3Status: z.string().default('OK'),
@@ -131,11 +143,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const data = createWaterStatusSchema.parse(body);
+    const { areaStatuses, ...data } = createWaterStatusSchema.parse(body);
+
+    // The old columns are written from the areas where a name still matches,
+    // so the two shapes cannot disagree about the same room. Where the client
+    // sent no areas at all, whatever it did send in the seven fields stands.
+    const areas: WaterArea[] = areaStatuses ?? [];
+    const legacy = areas.length > 0 ? legacyColumnsFor(areas) : {};
 
     const waterStatus = await prisma.plumbingWaterStatus.create({
       data: {
         ...data,
+        ...legacy,
+        areaStatuses: areas.length > 0 ? JSON.stringify(areas) : null,
         loggedById: session.user.id,
         loggedByName: session.user.name || '',
       },
@@ -143,6 +163,8 @@ export async function POST(request: NextRequest) {
         loggedBy: { select: { fullName: true, role: true } },
       },
     });
+
+    const affected = areasNotOk(areas);
 
     // If critical status, create notifications
     if (data.overallStatus === 'CRITICAL' || data.overallStatus === 'OFFLINE') {
@@ -160,7 +182,12 @@ export async function POST(request: NextRequest) {
             userId: staff.id,
             type: 'PLUMBING_CRITICAL',
             title: `🚰 WATER SUPPLY ${data.overallStatus}`,
-            message: `Water supply is ${data.overallStatus}. Municipal: ${data.municipalWaterAvailable ? 'Yes' : 'No'}, Borehole: ${data.boreholeOperational ? 'Yes' : 'No'}, Tank: ${data.overheadTankLevel}%. ${data.actionRequired || ''}`,
+            // The affected rooms are named. A theatre manager reading this
+            // on a phone at 6am needs to know whether their list can run,
+            // and "water is CRITICAL" does not tell them that.
+            message: `Water supply is ${data.overallStatus}. Municipal: ${data.municipalWaterAvailable ? 'Yes' : 'No'}, Borehole: ${data.boreholeOperational ? 'Yes' : 'No'}, Tank: ${data.overheadTankLevel}%.`
+              + (affected.length > 0 ? ` Affected: ${summariseAreas(areas, 6)}.` : '')
+              + (data.actionRequired ? ` ${data.actionRequired}` : ''),
             link: '/dashboard/plumbing-water-supply',
           },
         })
@@ -179,6 +206,8 @@ export async function POST(request: NextRequest) {
           overallStatus: data.overallStatus,
           shiftType: data.shiftType,
           overheadTankLevel: data.overheadTankLevel,
+          areasChecked: areas.length,
+          areasAffected: affected.map((a) => `${a.name}: ${a.status}`),
         }),
       },
     });

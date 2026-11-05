@@ -1,0 +1,21 @@
+-- The water report covers every theatre, not the first four.
+--
+-- plumbing_water_status had a column per theatre, and it had four of them:
+-- theatre1Status .. theatre4Status, plus the scrub area, recovery and CSSD.
+-- The hospital operates in thirteen rooms across four locations -- Theatres
+-- 1-5 and Suites 1-3 in the Professor Ojukwu complex, the Eye Theatre, three
+-- A&E theatres and CTU TH1 -- so a shift could be signed off as OK while
+-- nine of those rooms had been asked about by nobody.
+--
+-- A column per theatre cannot be the answer: adding a room would then mean a
+-- migration, and until somebody wrote it the new theatre would be invisible
+-- on the form with nothing to show that it was missing. So the statuses move
+-- into one JSON array of { key, name, location, status }, one entry per room,
+-- built from theatre_suites when the form is opened.
+--
+-- The seven old columns are kept and are still written on every new log.
+-- They hold months of real shifts, and anything still reading them -- an
+-- export, a query run by hand -- must keep getting the truth about Theatre 3
+-- rather than a default of OK.
+
+ALTER TABLE "plumbing_water_status" ADD COLUMN IF NOT EXISTS "areaStatuses" TEXT;

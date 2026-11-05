@@ -7657,7 +7657,27 @@ model PlumbingWaterStatus {
   hotWaterTemperature String? // Celsius reading
   boilerOperational   Boolean @default(true)
 
+  /// Every room this shift was asked about, as a JSON array of
+  /// { key, name, location, status }.
+  ///
+  /// The seven columns below covered Theatre 1-4 and three shared rooms. The
+  /// hospital operates in thirteen rooms across four locations, so a report
+  /// could say the water was fine while saying nothing at all about the Eye
+  /// Theatre, the A&E theatres or the Cardiothoracic Centre.
+  ///
+  /// The name and location are written into the row rather than looked up
+  /// from TheatreSuite at display time: this is a log of what somebody
+  /// checked on a given morning, and renaming a theatre next year must not
+  /// change what last March's record says.
+  areaStatuses String?
+
   // Theatre-specific status
+  //
+  // KEPT, AND STILL WRITTEN. Months of shifts are recorded in these columns
+  // and nothing here deletes them; areaStatuses is back-filled into them on
+  // every new log so that anything still reading theatre3Status gets the
+  // truth about Theatre 3 rather than the default of OK, which is the most
+  // dangerous thing a water column can say.
   theatre1Status          String @default("OK") // OK, LOW_PRESSURE, NO_WATER, LEAK
   theatre2Status          String @default("OK")
   theatre3Status          String @default("OK")

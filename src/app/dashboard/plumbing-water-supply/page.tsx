@@ -23,6 +23,10 @@ import {
   ShowerHead,
   ClipboardList,
 } from 'lucide-react';
+import {
+  buildWaterAreas, groupAreasByLocation, readWaterAreas, summariseAreas,
+  faultLocations, AREA_STATUS_LABEL, type TheatreRow, type WaterArea,
+} from '@/lib/water/waterAreas';
 
 // ===== INTERFACES =====
 
@@ -74,6 +78,8 @@ interface WaterStatus {
   hotWaterAvailable: boolean;
   hotWaterTemperature: string | null;
   boilerOperational: boolean;
+  /** JSON array of every room this shift covered. Null on rows logged before it existed. */
+  areaStatuses: string | null;
   theatre1Status: string;
   theatre2Status: string;
   theatre3Status: string;
@@ -172,12 +178,6 @@ const FAULT_CATEGORIES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-const THEATRE_LOCATIONS = [
-  'Theatre 1', 'Theatre 2', 'Theatre 3', 'Theatre 4',
-  'Scrub Area', 'Recovery Area (PACU)', 'Sterilization Area (CSSD)',
-  'Holding Area', 'Storage Room', 'Corridor', 'Restroom', 'Staff Room', 'Other',
-];
-
 // ===== COMPONENT =====
 
 export default function PlumbingWaterSupplyPage() {
@@ -223,8 +223,6 @@ export default function PlumbingWaterSupplyPage() {
     mainPumpOperational: true, backupPumpOperational: true, boosterPumpOperational: true,
     mainLinePressure: 'NORMAL', theatreLinePressure: 'NORMAL',
     hotWaterAvailable: true, hotWaterTemperature: '', boilerOperational: true,
-    theatre1Status: 'OK', theatre2Status: 'OK', theatre3Status: 'OK', theatre4Status: 'OK',
-    scrubAreaStatus: 'OK', recoveryAreaStatus: 'OK', sterilizationAreaStatus: 'OK',
     drainageFlowing: true, drainageIssues: '',
     overallStatus: 'OPERATIONAL', actionRequired: '', actionTaken: '', notes: '',
   });
@@ -251,6 +249,13 @@ export default function PlumbingWaterSupplyPage() {
 
   // Plumber list for assignment
   const [plumbers, setPlumbers] = useState<{ id: string; fullName: string }[]>([]);
+
+  // Every theatre in the database, which is what the report has to cover.
+  // Held in state rather than listed in this file: a room added next month
+  // must appear on the form by itself, because nobody filling in a form can
+  // see that a room is missing from it.
+  const [theatres, setTheatres] = useState<TheatreRow[]>([]);
+  const [statusAreas, setStatusAreas] = useState<WaterArea[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -288,12 +293,30 @@ export default function PlumbingWaterSupplyPage() {
     } catch {}
   }, []);
 
+  const fetchTheatres = useCallback(async () => {
+    try {
+      const res = await fetch('/api/theatres');
+      if (res.ok) {
+        const data = await res.json();
+        setTheatres(Array.isArray(data) ? data : []);
+      }
+    } catch {}
+  }, []);
+
+  // The form is seeded from the theatre list and keeps whatever the user has
+  // already picked, so a theatre arriving late over a slow link cannot wipe
+  // a half-filled form.
+  useEffect(() => {
+    setStatusAreas(prev => buildWaterAreas(theatres, prev));
+  }, [theatres]);
+
   useEffect(() => {
     fetchData();
     fetchPlumbers();
+    fetchTheatres();
     const interval = setInterval(fetchData, 30 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [fetchData, fetchPlumbers]);
+  }, [fetchData, fetchPlumbers, fetchTheatres]);
 
   const handleReportFault = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,11 +350,15 @@ export default function PlumbingWaterSupplyPage() {
       const res = await fetch('/api/plumbing-water-supply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(statusData),
+        body: JSON.stringify({ ...statusData, areaStatuses: statusAreas }),
       });
       if (res.ok) {
         setShowStatusForm(false);
+        setStatusAreas(buildWaterAreas(theatres));
         fetchData();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Server error' }));
+        alert(err.error || 'Failed to log the water status. Please try again.');
       }
     } catch (error) {
       console.error('Error logging status:', error);
@@ -687,35 +714,47 @@ export default function PlumbingWaterSupplyPage() {
 
                   {/* Theatre-Level Status */}
                   <div className="bg-white rounded-xl shadow-sm border p-6">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                      <ShowerHead className="w-5 h-5 text-blue-600" /> Theatre Water Status
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {[
-                        { key: 'theatre1Status', label: 'Theatre 1' },
-                        { key: 'theatre2Status', label: 'Theatre 2' },
-                        { key: 'theatre3Status', label: 'Theatre 3' },
-                        { key: 'theatre4Status', label: 'Theatre 4' },
-                        { key: 'scrubAreaStatus', label: 'Scrub Area' },
-                        { key: 'recoveryAreaStatus', label: 'Recovery Area' },
-                        { key: 'sterilizationAreaStatus', label: 'Sterilization' },
-                      ].map(area => {
-                        const val = (latestStatus as any)[area.key] as string;
-                        return (
-                          <div key={area.key} className={`p-4 rounded-lg border-2 ${
-                            val === 'OK' ? 'border-green-200 bg-green-50' :
-                            val === 'LOW_PRESSURE' ? 'border-yellow-200 bg-yellow-50' :
-                            val === 'NO_WATER' ? 'border-red-200 bg-red-50' :
-                            'border-orange-200 bg-orange-50'
-                          }`}>
-                            <p className="text-sm font-bold text-gray-800">{area.label}</p>
-                            <p className="text-lg mt-1">
-                              {AREA_STATUS_EMOJI[val] || '❓'} {val.replace(/_/g, ' ')}
-                            </p>
-                          </div>
-                        );
-                      })}
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <ShowerHead className="w-5 h-5 text-blue-600" /> Theatre Water Status
+                      </h3>
+                      <p className="text-sm text-gray-600">{summariseAreas(readWaterAreas(latestStatus), 4)}</p>
                     </div>
+                    {/* Grouped by location: somebody at the Eye Theatre reads
+                        one heading rather than hunting a flat list of sixteen
+                        rooms for the one that is theirs. */}
+                    {groupAreasByLocation(readWaterAreas(latestStatus)).map(group => (
+                      <div key={group.location} className="mb-5 last:mb-0">
+                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+                          {group.location}
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {group.areas.map(area => (
+                            <div key={area.key} className={`p-4 rounded-lg border-2 ${
+                              area.status === 'OK' ? 'border-green-200 bg-green-50' :
+                              area.status === 'LOW_PRESSURE' ? 'border-yellow-200 bg-yellow-50' :
+                              area.status === 'NO_WATER' ? 'border-red-200 bg-red-50' :
+                              'border-orange-200 bg-orange-50'
+                            }`}>
+                              <p className="text-sm font-bold text-gray-800">{area.name}</p>
+                              <p className="text-lg mt-1">
+                                {AREA_STATUS_EMOJI[area.status] || '❓'} {AREA_STATUS_LABEL[area.status] || area.status}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {/* A theatre created since this shift was logged is not in
+                        the record, and saying so beats leaving a gap that
+                        reads like a clean bill of health. */}
+                    {theatres.filter(t => t.isOperatingRoom !== false).length
+                      > readWaterAreas(latestStatus).filter(a => a.key.startsWith('theatre:')).length && (
+                      <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        Theatres have been added since this status was logged. The next log will cover
+                        all {theatres.filter(t => t.isOperatingRoom !== false).length} of them.
+                      </p>
+                    )}
                   </div>
 
                   {/* Drainage */}
@@ -1016,6 +1055,7 @@ export default function PlumbingWaterSupplyPage() {
                         <th className="text-left p-4 font-semibold">OH Tank</th>
                         <th className="text-left p-4 font-semibold">GND Tank</th>
                         <th className="text-left p-4 font-semibold">Pressure</th>
+                        <th className="text-left p-4 font-semibold">Theatres &amp; areas</th>
                         <th className="text-left p-4 font-semibold">Logged By</th>
                       </tr>
                     </thead>
@@ -1047,6 +1087,20 @@ export default function PlumbingWaterSupplyPage() {
                             </span>
                           </td>
                           <td className="p-4">{ws.mainLinePressure}</td>
+                          {/* Named, not counted. "3 areas affected" sends a
+                              theatre manager to open the record; "Eye Theatre
+                              (No water)" tells them whether a list can run. */}
+                          <td className="p-4">
+                            {(() => {
+                              const areas = readWaterAreas(ws);
+                              const bad = areas.filter(a => a.status !== 'OK');
+                              return (
+                                <span className={bad.length > 0 ? 'text-red-700 font-semibold' : 'text-gray-600'}>
+                                  {summariseAreas(areas, 2)}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="p-4">{ws.loggedBy.fullName}</td>
                         </tr>
                       ))}
@@ -1120,7 +1174,7 @@ export default function PlumbingWaterSupplyPage() {
                     className="w-full px-3 py-2 border rounded-lg"
                   >
                     <option value="">Select location...</option>
-                    {THEATRE_LOCATIONS.map(loc => (
+                    {faultLocations(theatres).map(loc => (
                       <option key={loc} value={loc}>{loc}</option>
                     ))}
                   </select>
@@ -1286,34 +1340,57 @@ export default function PlumbingWaterSupplyPage() {
                 </div>
               </div>
 
-              {/* Theatre-level status */}
+              {/* Theatre-level status, every room in the database */}
               <div className="p-4 bg-purple-50 rounded-xl">
-                <h4 className="font-semibold text-purple-800 mb-3">Theatre Water Status</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { key: 'theatre1Status', label: 'Theatre 1' },
-                    { key: 'theatre2Status', label: 'Theatre 2' },
-                    { key: 'theatre3Status', label: 'Theatre 3' },
-                    { key: 'theatre4Status', label: 'Theatre 4' },
-                    { key: 'scrubAreaStatus', label: 'Scrub Area' },
-                    { key: 'recoveryAreaStatus', label: 'Recovery' },
-                    { key: 'sterilizationAreaStatus', label: 'Sterilization' },
-                  ].map(area => (
-                    <div key={area.key}>
-                      <label className="block text-xs text-gray-600 mb-1">{area.label}</label>
-                      <select
-                        value={(statusData as any)[area.key]}
-                        onChange={e => setStatusData(p => ({ ...p, [area.key]: e.target.value }))}
-                        className="w-full px-2 py-1.5 border rounded text-sm"
-                      >
-                        <option value="OK">✅ OK</option>
-                        <option value="LOW_PRESSURE">⚠️ Low Pressure</option>
-                        <option value="NO_WATER">🚫 No Water</option>
-                        <option value="LEAK">💧 Leak</option>
-                      </select>
-                    </div>
-                  ))}
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <h4 className="font-semibold text-purple-800">Theatre Water Status</h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-purple-700">
+                      {statusAreas.length} area{statusAreas.length === 1 ? '' : 's'}
+                    </span>
+                    {/* Sixteen dropdowns is a lot to leave at OK one at a time
+                        on a morning when nothing is wrong, and a form that is
+                        tedious to fill in honestly gets filled in carelessly. */}
+                    <button
+                      type="button"
+                      onClick={() => setStatusAreas(prev => prev.map(a => ({ ...a, status: 'OK' })))}
+                      className="text-xs px-2 py-1 rounded border border-purple-300 text-purple-800 hover:bg-purple-100"
+                    >
+                      Mark all OK
+                    </button>
+                  </div>
                 </div>
+
+                {statusAreas.length === 0 ? (
+                  <p className="text-sm text-purple-900">Loading the theatre list…</p>
+                ) : (
+                  groupAreasByLocation(statusAreas).map(group => (
+                    <div key={group.location} className="mb-4 last:mb-0">
+                      <p className="text-xs font-bold uppercase tracking-wide text-purple-700 mb-2">
+                        {group.location}
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {group.areas.map(area => (
+                          <div key={area.key}>
+                            <label className="block text-xs text-gray-600 mb-1">{area.name}</label>
+                            <select
+                              value={area.status}
+                              onChange={e => setStatusAreas(prev => prev.map(a => (
+                                a.key === area.key ? { ...a, status: e.target.value } : a
+                              )))}
+                              className="w-full px-2 py-1.5 border rounded text-sm"
+                            >
+                              <option value="OK">✅ OK</option>
+                              <option value="LOW_PRESSURE">⚠️ Low Pressure</option>
+                              <option value="NO_WATER">🚫 No Water</option>
+                              <option value="LEAK">💧 Leak</option>
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* Drainage */}
