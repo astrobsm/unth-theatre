@@ -39,6 +39,12 @@ const CelebrationPrompt = dynamic(() => import('@/components/CelebrationPrompt')
 
 // Availability for today's cases, for whoever is on a team today.
 const TeamCheckInCard = dynamic(() => import('@/components/TeamCheckInCard'), { ssr: false });
+// Asked on arrival, once, in front of the page — the card below is skipped
+// by exactly the people whose answer the theatre needs at 07:40. Renders
+// nothing unless this person is on a case today that they have not answered.
+const ArrivalAvailabilityPrompt = dynamic(
+  () => import('@/components/ArrivalAvailabilityPrompt'), { ssr: false },
+);
 import {
   LayoutDashboard,
   Package,
@@ -1044,6 +1050,7 @@ export default function DashboardLayout({
                 different page and the people whose answer the theatre needs
                 are the least likely to go looking for the board. Renders
                 nothing for anyone not on a team today, which is most people. */}
+            <ArrivalAvailabilityPrompt />
             <TeamCheckInCard />
             <OrmGoLiveBanner />
             <OrmHourlyBroadcast />

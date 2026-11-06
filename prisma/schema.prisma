@@ -6468,6 +6468,8 @@ model EmergencyTeamAvailability {
   // Geo-location
   latitude            Float?
   longitude           Float?
+  /// Why no position arrived. See the note on SurgeryTeamCheckIn.
+  locationUnavailableReason String?
   locationTimestamp   DateTime?
   estimatedArrivalMin Int? // Estimated minutes to arrive
   distanceKm          Float? // Calculated distance to hospital
@@ -11668,6 +11670,16 @@ model SurgeryTeamCheckIn {
   /// The site check. Coordinates deliberately absent — see above.
   fixVerdict CheckInFixVerdict @default(NO_FIX)
   distanceM  Int?
+
+  /// WHY there is no position, in the handset's own words.
+  ///
+  /// NO_FIX used to mean three different things at once: permission refused,
+  /// a basement with no signal, and a page served over plain http. Only the
+  /// first is a choice the person made, and only the first is something a
+  /// coordinator should weigh when a check-in cannot be corroborated. Added
+  /// 6 November with the arrival prompt, which tells the person in as many
+  /// words that a refusal leaves their availability unverifiable.
+  locationUnavailableReason String?
 
   /// A label the device supplies for itself, so a check-in can be traced to a
   /// handset without that handset being a tracker.

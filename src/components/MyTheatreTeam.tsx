@@ -27,6 +27,18 @@ interface Allocation {
   scrubNurseId?: string | null;
   circulatingNurse: string | null;
   circulatingNurseId?: string | null;
+  /**
+   * The best thing actually known about who is covering this theatre, and
+   * which of the three places it came from.
+   *
+   * Added 6 November after the card was reported as wrong: it showed
+   * "Not assigned" for anaesthetists and technicians on a day when every
+   * case had an anaesthetist and sixteen technicians were on the published
+   * roster. Optional, because a cached page from before the deploy will not
+   * have it and must still render.
+   */
+  anaesthetistLine?: TeamLine;
+  technicianLine?: TeamLine;
   notes: string | null;
   teamAssigned?: boolean;
   surgeons?: string | null;
@@ -36,6 +48,51 @@ interface Allocation {
 interface SurgicalUnit {
   id: string;
   name: string;
+}
+
+interface TeamLine {
+  source: 'allocation' | 'cases' | 'roster' | 'none';
+  people: { id?: string | null; name: string; tier?: string | null }[];
+  note: string | null;
+}
+
+/**
+ * One team line, printed with the source it came from.
+ *
+ * The source is shown whenever it is NOT the theatre allocation, because
+ * those two claims are different and a reader has to be able to tell them
+ * apart: "the anaesthetist for this room" and "one of fifteen anaesthetists
+ * on this morning's roster" cannot look the same on a card somebody uses to
+ * decide who to ring.
+ */
+function TeamLineView({ line, maxNamed = 4 }: { line?: TeamLine; maxNamed?: number }) {
+  if (!line || line.people.length === 0) {
+    return <p className="text-gray-400">Not assigned</p>;
+  }
+  const shown = line.people.slice(0, maxNamed);
+  const rest = line.people.length - shown.length;
+  return (
+    <div>
+      <ul className="text-gray-800">
+        {shown.map((p, i) => (
+          <li key={p.id || `${p.name}-${i}`}>
+            <ContactName type="user" id={p.id || undefined} name={p.name} />
+            {p.tier ? <span className="text-xs text-gray-400"> ({p.tier.replace(/_/g, ' ').toLowerCase()})</span> : null}
+          </li>
+        ))}
+      </ul>
+      {rest > 0 && (
+        <p className="text-xs text-gray-500">and {rest} more on duty</p>
+      )}
+      {line.note && (
+        <p className={`text-xs mt-0.5 ${
+          line.source === 'roster' ? 'text-amber-700' : 'text-gray-500'
+        }`}>
+          {line.note}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function todayIso() {
@@ -164,7 +221,8 @@ export default function MyTheatreTeam() {
 
                 {a.teamAssigned === false && (
                   <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                    Team not yet allocated for this theatre on this date. Check back once the duty roster / theatre allocation is published.
+                    Nobody is recorded for this theatre on this date — not on the theatre
+                    allocation, not on the day&apos;s cases, and not on the published roster.
                   </div>
                 )}
 
@@ -182,17 +240,19 @@ export default function MyTheatreTeam() {
                             </li>
                           ))}
                         </ul>
-                      ) : <p className="text-gray-400">Not assigned</p>}
+                      ) : <TeamLineView line={a.anaesthetistLine} />}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                  <div className="flex items-start gap-2">
+                    <Wrench className="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <span className="text-xs text-gray-500">Anaesthetic Technician: </span>
-                      <span className="text-gray-800">{a.anaestheticTechnician
-                        ? <ContactName type="user" id={a.anaestheticTechnicianId || undefined} name={a.anaestheticTechnician} />
-                        : <span className="text-gray-400">Not assigned</span>}</span>
+                      <p className="text-xs text-gray-500">Anaesthetic Technician</p>
+                      {a.anaestheticTechnician ? (
+                        <span className="text-gray-800">
+                          <ContactName type="user" id={a.anaestheticTechnicianId || undefined} name={a.anaestheticTechnician} />
+                        </span>
+                      ) : <TeamLineView line={a.technicianLine} />}
                     </div>
                   </div>
 
