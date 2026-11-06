@@ -22,11 +22,18 @@ import {
   Waves,
   ShowerHead,
   ClipboardList,
+  MapPin,
+  MessageCircle,
 } from 'lucide-react';
 import {
   buildWaterAreas, groupAreasByLocation, readWaterAreas, summariseAreas,
-  faultLocations, AREA_STATUS_LABEL, type TheatreRow, type WaterArea,
+  faultLocations, missingExplanations, AREA_STATUS_LABEL,
+  type TheatreRow, type WaterArea,
 } from '@/lib/water/waterAreas';
+import { openForLabel, reassessmentNotice } from '@/lib/water/issues';
+import { readinessAreas } from '@/lib/water/readiness';
+import { requestFix } from '@/lib/geo/requestFix';
+import { whatsappLink } from '@/lib/whatsapp';
 
 // ===== INTERFACES =====
 
@@ -90,11 +97,60 @@ interface WaterStatus {
   drainageFlowing: boolean;
   drainageIssues: string | null;
   overallStatus: string;
+  /** How the theatres get water while whatever is wrong stays wrong. */
+  contingencyPlan: string | null;
+  /** Where the person was when they logged it. Null where nothing arrived. */
+  loggedFixVerdict: string | null;
+  loggedDistanceM: number | null;
+  loggedLocationUnavailableReason: string | null;
   loggedBy: { fullName: string; role: string };
   loggedByName: string;
   actionRequired: string | null;
   actionTaken: string | null;
   notes: string | null;
+}
+
+/**
+ * A water fault that is waiting to be re-assessed.
+ *
+ * It outlives the report that opened it. Closed by one thing only: a later
+ * report that looked at the same area and found it OK.
+ */
+interface WaterIssue {
+  id: string;
+  source: string;
+  sourceId: string;
+  areaKey: string;
+  areaName: string;
+  location: string | null;
+  status: string;
+  problem: string | null;
+  actionTaken: string | null;
+  contingencyPlan: string | null;
+  openedAt: string;
+  openedByName: string | null;
+  lastSeenAt: string;
+  sightings: number;
+  chaseCount: number;
+  resolvedAt: string | null;
+  resolvedByName?: string | null;
+}
+
+/** A chase the person filing the report can press, there and then. */
+interface Handoff {
+  name: string;
+  kind: string;
+  number: string;
+  text: string;
+}
+
+interface Escalation {
+  opened: { areaKey: string; areaName: string; status: string }[];
+  closed: { areaKey: string; areaName: string; openedAt: string }[];
+  openCount: number;
+  handoffs: Handoff[];
+  whatsappQueued: number;
+  whatsappSkipped: string[];
 }
 
 interface Stats {
@@ -117,6 +173,8 @@ interface WaterReadiness {
   overallReadiness: string;
   riskDetails: string | null;
   actionTaken: string | null;
+  contingencyPlan: string | null;
+  loggedFixVerdict: string | null;
   notes: string | null;
   submittedAt: string;
   isLate: boolean;
@@ -225,6 +283,10 @@ export default function PlumbingWaterSupplyPage() {
     hotWaterAvailable: true, hotWaterTemperature: '', boilerOperational: true,
     drainageFlowing: true, drainageIssues: '',
     overallStatus: 'OPERATIONAL', actionRequired: '', actionTaken: '', notes: '',
+    // Asked for only when something is not OK, and then insisted on. The
+    // theatre's question is never "is it broken" but "are we operating
+    // today", and this is the field that answers it.
+    contingencyPlan: '',
   });
 
   // Resolve form
@@ -244,6 +306,7 @@ export default function PlumbingWaterSupplyPage() {
     overallReadiness: 'READY',
     riskDetails: '',
     actionTaken: '',
+    contingencyPlan: '',
     notes: '',
   });
 
@@ -256,6 +319,17 @@ export default function PlumbingWaterSupplyPage() {
   // see that a room is missing from it.
   const [theatres, setTheatres] = useState<TheatreRow[]>([]);
   const [statusAreas, setStatusAreas] = useState<WaterArea[]>([]);
+
+  // The faults still waiting for somebody to go back and look again.
+  const [openIssues, setOpenIssues] = useState<WaterIssue[]>([]);
+  // Both forms take a position before they post, which takes a few seconds
+  // on a handset indoors. Without this the person presses Submit twice and
+  // the theatre gets two faults for one leak.
+  const [submitting, setSubmitting] = useState(false);
+  // What the submission did, shown straight afterwards: the queue is not a
+  // delivery, so the wa.me buttons are what actually reach the two men who
+  // have to fix it.
+  const [chase, setChase] = useState<Escalation | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -270,6 +344,7 @@ export default function PlumbingWaterSupplyPage() {
         setLatestStatus(data.latestStatus || null);
         setFaults(data.faults || []);
         setStats(data.stats || { totalFaults: 0, openFaults: 0, criticalFaults: 0, resolvedToday: 0 });
+        setOpenIssues(data.openIssues || []);
       }
       if (readinessRes.ok) {
         const rdata = await readinessRes.json();
@@ -346,15 +421,36 @@ export default function PlumbingWaterSupplyPage() {
 
   const handleLogStatus = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
+    // The same check the server runs. Stopped here so the person is told
+    // which box is empty while they are still looking at it, rather than
+    // being handed a validation error after a ten-second position lookup.
+    const missing = missingExplanations(statusAreas, statusData.contingencyPlan);
+    if (missing.length > 0) {
+      alert(missing.join('\n'));
+      return;
+    }
+
+    setSubmitting(true);
     try {
+      // WHERE THIS IS BEING LOGGED FROM. Awaited, but it cannot refuse the
+      // submit and it cannot hang it: requestFix always resolves inside its
+      // own timeout with either a position or the reason there is none, and
+      // both are recorded.
+      const fix = await requestFix();
+
       const res = await fetch('/api/plumbing-water-supply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...statusData, areaStatuses: statusAreas }),
+        body: JSON.stringify({ ...statusData, areaStatuses: statusAreas, fix }),
       });
       if (res.ok) {
+        const saved = await res.json().catch(() => null);
         setShowStatusForm(false);
         setStatusAreas(buildWaterAreas(theatres));
+        setStatusData(p => ({ ...p, contingencyPlan: '' }));
+        if (saved?.escalation) setChase(saved.escalation as Escalation);
         fetchData();
       } else {
         const err = await res.json().catch(() => ({ error: 'Server error' }));
@@ -362,7 +458,35 @@ export default function PlumbingWaterSupplyPage() {
       }
     } catch (error) {
       console.error('Error logging status:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  /**
+   * Go back and look at the open faults again.
+   *
+   * Opens the status form with the open faults' own statuses and notes
+   * already in it, and everything else at OK. That is the shape of a
+   * re-assessment: the person changes the ones that are now fixed and
+   * leaves the rest, instead of retyping sixteen rooms from a blank form
+   * and silently closing a fault by forgetting it.
+   */
+  const startReassessment = () => {
+    setStatusAreas(prev => prev.map(area => {
+      const issue = openIssues.find(i => i.areaKey === area.key);
+      if (!issue) return { key: area.key, name: area.name, location: area.location, status: 'OK' };
+      return {
+        ...area,
+        status: issue.status,
+        problem: issue.problem ?? '',
+        actionTaken: issue.actionTaken ?? '',
+      };
+    }));
+    const plan = openIssues.map(i => i.contingencyPlan).find(Boolean);
+    if (plan) setStatusData(p => ({ ...p, contingencyPlan: plan }));
+    setShowStatusForm(true);
   };
 
   const handleFaultAction = async (faultId: string, action: string, extraData?: any) => {
@@ -409,11 +533,29 @@ export default function PlumbingWaterSupplyPage() {
 
   const handleLogReadiness = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
+    const missing = missingExplanations(
+      readinessAreas(readinessData), readinessData.contingencyPlan,
+    );
+    if (missing.length > 0) {
+      alert([
+        'This readiness report cannot be filed yet:',
+        ...missing.map(m => m
+          .replace(/^Say what is wrong in .*$/, 'Say what the problem is.')
+          .replace(/^Say what has been done about .*$/, 'Say what has been done about it so far.'))
+          .filter((m, i, all) => all.indexOf(m) === i),
+      ].join('\n'));
+      return;
+    }
+
+    setSubmitting(true);
     try {
+      const fix = await requestFix();
       const res = await fetch('/api/water-supply-readiness', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(readinessData),
+        body: JSON.stringify({ ...readinessData, fix }),
       });
       if (res.ok) {
         const result = await res.json();
@@ -432,8 +574,10 @@ export default function PlumbingWaterSupplyPage() {
           overallReadiness: 'READY',
           riskDetails: '',
           actionTaken: '',
+          contingencyPlan: '',
           notes: '',
         });
+        if (result?.escalation) setChase(result.escalation as Escalation);
         fetchData();
       } else {
         const err = await res.json().catch(() => ({ error: 'Server error' }));
@@ -442,8 +586,20 @@ export default function PlumbingWaterSupplyPage() {
     } catch (error) {
       console.error('Error logging readiness:', error);
       alert('Network error. Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  // What the form is still missing, recomputed as it is filled in. Used to
+  // keep the submit button honest rather than to scold: the reasons are
+  // listed beside it, so nobody is left pressing a dead button.
+  const statusMissing = missingExplanations(statusAreas, statusData.contingencyPlan);
+  const readinessMissing = missingExplanations(
+    readinessAreas(readinessData), readinessData.contingencyPlan,
+  );
+  const statusAreasNotOk = statusAreas.filter(a => a.status !== 'OK');
+  const readinessNotOk = readinessAreas(readinessData).filter(a => a.status !== 'OK');
 
   const isWaterSupplyStaff = ['WATER_SUPPLY_SUPERVISOR', 'WORKS_SUPERVISOR', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(session?.user?.role || '');
   const isPlumber = ['PLUMBER', 'PLUMBING_SUPERVISOR', 'WORKS_SUPERVISOR'].includes(session?.user?.role || '');
@@ -545,6 +701,72 @@ export default function PlumbingWaterSupplyPage() {
             ) : (
               <span><strong>Action required:</strong> Log today&apos;s water-supply readiness before {compliance.deadlineHourWat % 12 || 12} PM to confirm there will be no water shortage for tomorrow&apos;s surgery.</span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Water faults still open — nothing closes these but a re-assessment */}
+      {department === 'water' && openIssues.length > 0 && (
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-red-800">
+                {reassessmentNotice(openIssues)}
+              </p>
+              <ul className="mt-3 space-y-2">
+                {openIssues.slice(0, 8).map(issue => (
+                  <li
+                    key={issue.id}
+                    className="text-sm text-red-900 bg-white/70 border border-red-200 rounded-lg p-3"
+                  >
+                    <p className="font-semibold">
+                      {issue.areaName}{issue.location ? ` — ${issue.location}` : ''}:{' '}
+                      {AREA_STATUS_LABEL[issue.status]
+                        || issue.status.replace(/_/g, ' ').toLowerCase()}
+                    </p>
+                    {issue.problem && <p className="mt-1">Problem: {issue.problem}</p>}
+                    {issue.actionTaken && <p>Done so far: {issue.actionTaken}</p>}
+                    {issue.contingencyPlan && <p>Plan B: {issue.contingencyPlan}</p>}
+                    <p className="text-xs text-red-700 mt-1">
+                      Open {openForLabel(issue.openedAt)}
+                      {issue.openedByName ? ` · reported by ${issue.openedByName}` : ''}
+                      {issue.sightings > 1 ? ` · found broken ${issue.sightings} times` : ''}
+                      {issue.chaseCount > 0 ? ` · chased ${issue.chaseCount}×` : ''}
+                    </p>
+                    {/* A fault is closed by the form that asks about it, and
+                        by no other. Saying which one saves somebody filling
+                        in the wrong report and finding it still open. */}
+                    <p className="text-xs text-red-600 mt-0.5">
+                      {issue.areaKey.startsWith('readiness:')
+                        ? 'Closes when a daily readiness report gives this promise again.'
+                        : 'Closes when a water status report finds this area OK again.'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              {openIssues.length > 8 && (
+                <p className="text-xs text-red-700 mt-2">
+                  and {openIssues.length - 8} more.
+                </p>
+              )}
+              {isWaterSupplyStaff && openIssues.some(i => !i.areaKey.startsWith('readiness:')) && (
+                <button
+                  onClick={startReassessment}
+                  className="mt-3 px-5 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2 font-semibold"
+                >
+                  <RefreshCw className="w-4 h-4" /> Re-assess and correct the status
+                </button>
+              )}
+              {isWaterSupplyStaff && openIssues.some(i => i.areaKey.startsWith('readiness:')) && (
+                <button
+                  onClick={() => setShowReadinessForm(true)}
+                  className="mt-3 ml-0 md:ml-3 px-5 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 inline-flex items-center gap-2 font-semibold"
+                >
+                  <RefreshCw className="w-4 h-4" /> Re-assess the daily readiness
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -772,9 +994,44 @@ export default function PlumbingWaterSupplyPage() {
                     )}
                   </div>
 
+                  {/* Plan B, where there was one. The theatre's actual
+                      question is whether today's list can run. */}
+                  {latestStatus.contingencyPlan && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-amber-900">Plan B for water today</p>
+                      <p className="text-sm text-amber-800 mt-1">{latestStatus.contingencyPlan}</p>
+                    </div>
+                  )}
+
                   {/* Meta Info */}
                   <div className="text-sm text-gray-500 text-right">
                     Last updated: {new Date(latestStatus.statusDate).toLocaleString()} by {latestStatus.loggedBy.fullName} ({latestStatus.shiftType} shift)
+                    {/* Said as a fact about the handset, never as a doubt
+                        about the person: a theatre basement gives no
+                        position however diligent the round was. */}
+                    {latestStatus.loggedFixVerdict === 'ON_SITE' ? (
+                      <span className="block text-xs">
+                        Logged from inside the hospital site
+                        {typeof latestStatus.loggedDistanceM === 'number'
+                          ? `, about ${latestStatus.loggedDistanceM} m from the centre of the campus`
+                          : ''}.
+                      </span>
+                    ) : latestStatus.loggedFixVerdict === 'OFF_SITE' ? (
+                      <span className="block text-xs">
+                        Logged from outside the site boundary
+                        {typeof latestStatus.loggedDistanceM === 'number'
+                          ? `, about ${latestStatus.loggedDistanceM} m from the centre of the campus`
+                          : ''}. A handset left behind reads the same way.
+                      </span>
+                    ) : latestStatus.loggedFixVerdict === 'IMPRECISE' ? (
+                      <span className="block text-xs">
+                        Logged with a position too vague to place.
+                      </span>
+                    ) : latestStatus.loggedLocationUnavailableReason ? (
+                      <span className="block text-xs">
+                        Logged without a position: {latestStatus.loggedLocationUnavailableReason}.
+                      </span>
+                    ) : null}
                   </div>
                 </>
               )}
@@ -1375,10 +1632,19 @@ export default function PlumbingWaterSupplyPage() {
                             <label className="block text-xs text-gray-600 mb-1">{area.name}</label>
                             <select
                               value={area.status}
-                              onChange={e => setStatusAreas(prev => prev.map(a => (
-                                a.key === area.key ? { ...a, status: e.target.value } : a
-                              )))}
-                              className="w-full px-2 py-1.5 border rounded text-sm"
+                              onChange={e => setStatusAreas(prev => prev.map(a => {
+                                if (a.key !== area.key) return a;
+                                // Back to OK drops the description with it. A
+                                // room marked fixed that still carries "the
+                                // riser valve is shut" is how a closed fault
+                                // gets chased for another week.
+                                return e.target.value === 'OK'
+                                  ? { key: a.key, name: a.name, location: a.location, status: 'OK' }
+                                  : { ...a, status: e.target.value };
+                              }))}
+                              className={`w-full px-2 py-1.5 border rounded text-sm ${
+                                area.status === 'OK' ? '' : 'border-red-400 bg-red-50'
+                              }`}
                             >
                               <option value="OK">✅ OK</option>
                               <option value="LOW_PRESSURE">⚠️ Low Pressure</option>
@@ -1392,6 +1658,84 @@ export default function PlumbingWaterSupplyPage() {
                   ))
                 )}
               </div>
+
+              {/* What is wrong, what has been done, and what we do meanwhile.
+                  Appears only when something is not OK, and then it is
+                  compulsory: a fault with no description is a summons with
+                  no information in it, and the head of works arrives at a
+                  theatre with the wrong tools. */}
+              {statusAreasNotOk.length > 0 && (
+                <div className="p-4 bg-red-50 border-2 border-red-200 rounded-xl space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-red-800">
+                      {statusAreasNotOk.length} area{statusAreasNotOk.length === 1 ? ' is' : 's are'} not OK
+                    </h4>
+                    <p className="text-xs text-red-700 mt-1">
+                      This raises a WhatsApp chase to the Head of Water Supply and the Head of
+                      Works, and opens a fault that stays open until somebody goes back, looks
+                      again and logs it as OK.
+                    </p>
+                  </div>
+
+                  {statusAreasNotOk.map(area => (
+                    <div key={area.key} className="bg-white border border-red-200 rounded-lg p-3">
+                      <p className="text-sm font-bold text-gray-800">
+                        {area.name}{area.location ? ` — ${area.location}` : ''}
+                        <span className="ml-2 text-red-700">
+                          {AREA_STATUS_LABEL[area.status] || area.status}
+                        </span>
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            What is the problem? *
+                          </label>
+                          <textarea
+                            value={area.problem ?? ''}
+                            onChange={e => setStatusAreas(prev => prev.map(a => (
+                              a.key === area.key ? { ...a, problem: e.target.value } : a
+                            )))}
+                            className="w-full px-2 py-1.5 border rounded text-sm"
+                            rows={2}
+                            placeholder="e.g. the riser valve on the second floor is shut and the key is missing"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Action taken so far *
+                          </label>
+                          <textarea
+                            value={area.actionTaken ?? ''}
+                            onChange={e => setStatusAreas(prev => prev.map(a => (
+                              a.key === area.key ? { ...a, actionTaken: e.target.value } : a
+                            )))}
+                            className="w-full px-2 py-1.5 border rounded text-sm"
+                            rows={2}
+                            placeholder="e.g. called the works office, borehole switched to this line"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div>
+                    <label className="block text-sm font-semibold text-red-800 mb-1">
+                      Plan B for water today *
+                    </label>
+                    <textarea
+                      value={statusData.contingencyPlan}
+                      onChange={e => setStatusData(p => ({ ...p, contingencyPlan: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      rows={2}
+                      placeholder="How do the theatres get water until this is fixed? e.g. 2,000L tanker at 10am, scrub water drawn from Suite 1, CSSD moved to A&E"
+                    />
+                    <p className="text-xs text-red-700 mt-1">
+                      The theatres will ask whether today&apos;s list can run. This is the answer
+                      they get, and it goes out with the chase.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Drainage */}
               <div className="p-4 bg-gray-50 rounded-xl">
@@ -1437,12 +1781,34 @@ export default function PlumbingWaterSupplyPage() {
                   className="w-full px-3 py-2 border rounded-lg" rows={2} />
               </div>
 
+              {/* Said plainly, before the button and not after it. Staff
+                  are entitled to know that filing this records where they
+                  were standing. */}
+              <p className="text-xs text-gray-500 flex items-start gap-2">
+                <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                Your location is recorded with this report, so a round that was
+                walked can be shown to have been walked. It is never a condition of
+                filing: if the handset gives no position, the reason is recorded instead
+                and the report is saved exactly the same.
+              </p>
+
+              {statusMissing.length > 0 && (
+                <ul className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                  {statusMissing.map(m => <li key={m}>• {m}</li>)}
+                </ul>
+              )}
+
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setShowStatusForm(false)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300">
                   Cancel
                 </button>
-                <button type="submit" className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 font-semibold">
-                  <Send className="w-5 h-5" /> Log Status
+                <button
+                  type="submit"
+                  disabled={submitting || statusMissing.length > 0}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-5 h-5" />
+                  {submitting ? 'Taking your location…' : 'Log Status'}
                 </button>
               </div>
             </form>
@@ -1529,27 +1895,94 @@ export default function PlumbingWaterSupplyPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Risk Details (if any)</label>
-                <textarea
-                  value={readinessData.riskDetails}
-                  onChange={e => setReadinessData(prev => ({ ...prev, riskDetails: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  rows={2}
-                  placeholder="Describe any anticipated shortage or risk to water supply..."
-                />
-              </div>
+              {/* Appears the moment a promise cannot be given, or the
+                  overall verdict is anything but READY. The same three
+                  questions the shift report asks, for the same reason. */}
+              {readinessNotOk.length > 0 && (
+                <div className="p-4 bg-red-50 border-2 border-red-200 rounded-xl space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-red-800">
+                      Water for the next surgery day is not assured
+                    </h4>
+                    <p className="text-xs text-red-700 mt-1">
+                      Not assured: {readinessNotOk.map(a => a.name).join(', ')}. Filing this
+                      raises a WhatsApp chase to the Head of Water Supply and the Head of Works,
+                      and opens a fault that stays open until somebody re-assesses it.
+                    </p>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Action Taken</label>
-                <textarea
-                  value={readinessData.actionTaken}
-                  onChange={e => setReadinessData(prev => ({ ...prev, actionTaken: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  rows={2}
-                  placeholder="Action taken to ensure water availability (e.g. tankers ordered, pumps run)..."
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-red-800 mb-1">
+                      What is the problem? *
+                    </label>
+                    <textarea
+                      value={readinessData.riskDetails}
+                      onChange={e => setReadinessData(prev => ({ ...prev, riskDetails: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      rows={2}
+                      placeholder="e.g. the borehole pump is down and the overhead tank will not last the morning list"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-red-800 mb-1">
+                      Action taken so far *
+                    </label>
+                    <textarea
+                      value={readinessData.actionTaken}
+                      onChange={e => setReadinessData(prev => ({ ...prev, actionTaken: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      rows={2}
+                      placeholder="e.g. tanker ordered for 6am, works office informed, pump taken for repair"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-red-800 mb-1">
+                      Plan B for water that day *
+                    </label>
+                    <textarea
+                      value={readinessData.contingencyPlan}
+                      onChange={e => setReadinessData(prev => ({ ...prev, contingencyPlan: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      rows={2}
+                      placeholder="How do the theatres get water that day? e.g. 2 tankers from 05:30, scrub water stored overnight in Suite 1, CSSD run at A&E"
+                    />
+                    <p className="text-xs text-red-700 mt-1">
+                      The theatre manager will ask whether tomorrow&apos;s list can run. This is
+                      the answer, and it goes out with the chase.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {readinessNotOk.length === 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Notes on the supply (optional)</label>
+                    <textarea
+                      value={readinessData.riskDetails}
+                      onChange={e => setReadinessData(prev => ({ ...prev, riskDetails: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      rows={2}
+                      placeholder="Anything worth recording even though water is assured..."
+                    />
+                  </div>
+                  {/* Kept on a good day too. Running the pumps and filling
+                      the tanks is why tomorrow is assured, and a supervisor
+                      who did it should be able to say so. */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Action taken (optional)</label>
+                    <textarea
+                      value={readinessData.actionTaken}
+                      onChange={e => setReadinessData(prev => ({ ...prev, actionTaken: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      rows={2}
+                      placeholder="e.g. tanks topped up overnight, booster pump serviced"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
@@ -1561,12 +1994,35 @@ export default function PlumbingWaterSupplyPage() {
                 />
               </div>
 
+              <p className="text-xs text-gray-500 flex items-start gap-2">
+                <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                Your location is recorded with this report. If the handset gives no
+                position, the reason is recorded instead and the report is saved exactly
+                the same.
+              </p>
+
+              {readinessMissing.length > 0 && (
+                <ul className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                  {readinessMissing
+                    .map(m => m
+                      .replace(/^Say what is wrong in .*$/, 'Say what the problem is.')
+                      .replace(/^Say what has been done about .*$/, 'Say what has been done about it so far.'))
+                    .filter((m, i, all) => all.indexOf(m) === i)
+                    .map(m => <li key={m}>• {m}</li>)}
+                </ul>
+              )}
+
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setShowReadinessForm(false)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300">
                   Cancel
                 </button>
-                <button type="submit" className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2 font-semibold">
-                  <Send className="w-5 h-5" /> Submit Readiness
+                <button
+                  type="submit"
+                  disabled={submitting || readinessMissing.length > 0}
+                  className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-5 h-5" />
+                  {submitting ? 'Taking your location…' : 'Submit Readiness'}
                 </button>
               </div>
             </form>
@@ -1667,6 +2123,121 @@ export default function PlumbingWaterSupplyPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== WHAT THE REPORT JUST DID =====
+          Shown straight after a submission, because this is the only moment
+          the person is still holding their phone with the theatre in front
+          of them. The queue is not a delivery -- a queued WhatsApp row waits
+          on a provider the theatre server does not have -- so the buttons
+          here are what actually reaches the two men who have to fix it. */}
+      {chase && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-8">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                {chase.handoffs.length > 0 || chase.opened.length > 0 ? (
+                  <><AlertTriangle className="w-6 h-6 text-red-600" /> Chase the water fault</>
+                ) : (
+                  <><CheckCircle className="w-6 h-6 text-green-600" /> Report filed</>
+                )}
+              </h2>
+              <button
+                onClick={() => setChase(null)}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            {chase.closed.length > 0 && (
+              <div className="mb-4 text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="font-semibold">
+                  {chase.closed.length} fault{chase.closed.length === 1 ? '' : 's'} closed by this
+                  re-assessment:
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {chase.closed.map(c => (
+                    <li key={c.areaKey}>
+                      • {c.areaName} — was open {openForLabel(c.openedAt)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {chase.opened.length > 0 && (
+              <div className="mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="font-semibold">
+                  {chase.opened.length} fault{chase.opened.length === 1 ? '' : 's'} opened:
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {chase.opened.map(o => (
+                    <li key={o.areaKey}>
+                      • {o.areaName} — {AREA_STATUS_LABEL[o.status] || o.status}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2">
+                  {chase.opened.length === 1 ? 'It stays' : 'They stay'} open until somebody goes
+                  back, looks again and logs the area as OK.
+                </p>
+              </div>
+            )}
+
+            {chase.handoffs.length > 0 && (
+              <>
+                <p className="text-sm text-gray-700 mb-3">
+                  Press each one and send. The message is already written — what is wrong,
+                  what has been done, and the plan B for water today.
+                </p>
+                <div className="space-y-2">
+                  {chase.handoffs.map(h => {
+                    const href = whatsappLink(h.number, h.text);
+                    return href ? (
+                      <a
+                        key={`${h.number}-${h.kind}`}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold"
+                      >
+                        <MessageCircle className="w-5 h-5" />
+                        <span className="flex-1">
+                          Send to {h.name}
+                          <span className="block text-xs font-normal opacity-90">{h.kind}</span>
+                        </span>
+                      </a>
+                    ) : null;
+                  })}
+                </div>
+              </>
+            )}
+
+            {chase.whatsappSkipped.length > 0 && (
+              <ul className="mt-4 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                {chase.whatsappSkipped.map(m => <li key={m}>• {m}</li>)}
+              </ul>
+            )}
+
+            {chase.handoffs.length === 0 && chase.opened.length === 0
+              && chase.closed.length === 0 && (
+              <p className="text-sm text-gray-700">
+                Everything was reported OK. Nothing was chased.
+              </p>
+            )}
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setChase(null)}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

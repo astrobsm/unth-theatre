@@ -3,6 +3,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { readinessAreas } from '@/lib/water/readiness';
+import { missingExplanations } from '@/lib/water/waterAreas';
+import { escalateWaterReport } from '@/lib/water/escalate';
+// Shared with the pre-operative review and the shift water report, so all
+// three agree about what a handset fix means. See the note in
+// src/app/api/plumbing-water-supply/route.ts.
+import { fixColumns, summariseReviewLocation } from '@/lib/anaesthesia/reviewLocation';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,9 +35,21 @@ const createReadinessSchema = z.object({
   theatreActivitiesWaterReady: z.boolean().default(false),
   noShortageConfirmed: z.boolean().default(false),
   overallReadiness: z.enum(['READY', 'AT_RISK', 'NOT_READY']),
-  riskDetails: z.string().optional(),
-  actionTaken: z.string().optional(),
+  // riskDetails is the problem, under the name this form has always used.
+  // Both it and actionTaken become required once anything is not ready --
+  // checked below rather than here, so the message names the box.
+  riskDetails: z.string().max(2000).optional(),
+  actionTaken: z.string().max(2000).optional(),
+  /** How the theatres get water on the day this report covers. */
+  contingencyPlan: z.string().max(2000).optional(),
   notes: z.string().optional(),
+  /** Where the handset was. Optional throughout — see the status route. */
+  fix: z.object({
+    latitude: z.number().nullable().optional(),
+    longitude: z.number().nullable().optional(),
+    accuracyM: z.number().nullable().optional(),
+    unavailableReason: z.string().max(300).nullable().optional(),
+  }).optional(),
 });
 
 // Returns true when the current time (WAT) is at/after the 5 PM cutoff.
@@ -65,8 +84,18 @@ export async function GET(request: NextRequest) {
       orderBy: { readinessDate: 'desc' },
     });
 
+    // The readiness faults still waiting to be re-assessed. Same table as
+    // the shift report's, deliberately: a hospital has one water problem at
+    // a time, not one per form.
+    const openIssues = await prisma.waterAreaIssue.findMany({
+      where: { resolvedAt: null, areaKey: { startsWith: 'readiness:' } },
+      orderBy: { openedAt: 'asc' },
+      take: 50,
+    }).catch(() => []);
+
     return NextResponse.json({
       reports,
+      openIssues,
       compliance: {
         loggedToday: Boolean(loggedToday),
         pastDeadline: isPastDeadline(new Date()),
@@ -75,7 +104,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching water supply readiness:', error);
-    return NextResponse.json({ reports: [], compliance: { loggedToday: false, pastDeadline: false, deadlineHourWat: DEADLINE_HOUR_WAT } });
+    return NextResponse.json({ reports: [], openIssues: [], compliance: { loggedToday: false, pastDeadline: false, deadlineHourWat: DEADLINE_HOUR_WAT } });
   }
 }
 
@@ -97,8 +126,33 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = createReadinessSchema.parse(body);
 
+    // Everything this report says is not ready, in the same shape the shift
+    // report uses, so one escalation path serves both forms.
+    const areas = readinessAreas(data);
+    const missing = missingExplanations(areas, data.contingencyPlan);
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          // The readiness form calls the problem "risk details", so the
+          // messages are rewritten to name the box the person is looking at
+          // rather than a field name they have never seen.
+          error: missing
+            .map((m) => m
+              .replace(/^Say what is wrong in .*$/, 'Say what the problem is.')
+              .replace(/^Say what has been done about .*$/, 'Say what has been done about it so far.'))
+            .filter((m, i, all) => all.indexOf(m) === i)
+            .join(' '),
+          details: missing,
+        },
+        { status: 400 },
+      );
+    }
+
     const now = new Date();
     const isLate = isPastDeadline(now);
+
+    // Assessed on the server, never taken from the browser.
+    const where = fixColumns(data.fix ?? null);
 
     // Default the covered surgery day to tomorrow when not supplied.
     const forDate = data.forDate
@@ -117,7 +171,15 @@ export async function POST(request: NextRequest) {
         overallReadiness: data.overallReadiness,
         riskDetails: data.riskDetails || null,
         actionTaken: data.actionTaken || null,
+        contingencyPlan: (data.contingencyPlan ?? '').trim() || null,
         notes: data.notes || null,
+        loggedLatitude: where.latitude,
+        loggedLongitude: where.longitude,
+        loggedAccuracyM: where.accuracyM,
+        loggedFixVerdict: where.fixVerdict,
+        loggedDistanceM: where.distanceM,
+        loggedLocationAt: now,
+        loggedLocationUnavailableReason: where.unavailableReason,
         submittedAt: now,
         isLate,
         disciplinaryQueryIssued: isLate,
@@ -160,34 +222,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Notify management when next-day water supply is not ready / at risk.
-    if (data.overallReadiness !== 'READY') {
-      try {
-        const management = await prisma.user.findMany({
-          where: {
-            status: 'APPROVED',
-            role: {
-              in: ['THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'CHIEF_MEDICAL_DIRECTOR', 'WORKS_SUPERVISOR'],
-            },
-          },
-          select: { id: true },
-        });
-
-        if (management.length > 0) {
-          await prisma.notification.createMany({
-            data: management.map((m) => ({
-              userId: m.id,
-              type: 'WATER_READINESS_RISK',
-              title: `🚰 Water Supply ${data.overallReadiness === 'NOT_READY' ? 'NOT READY' : 'AT RISK'} for Next Surgery`,
-              message: `Next-day water-supply readiness is ${data.overallReadiness}. ${data.riskDetails || ''}`.trim(),
-              link: '/dashboard/plumbing-water-supply',
-            })),
-          });
-        }
-      } catch (notifyError) {
-        console.error('Failed to dispatch water-risk notifications:', notifyError);
-      }
-    }
+    // Faults opened for each promise that cannot be given, faults closed
+    // for the ones this report can now give, and the head of water supply
+    // and the head of works chased on WhatsApp. The in-app notification to
+    // management that used to live here is raised inside it, so one report
+    // produces one alert rather than two.
+    //
+    // It never throws: the readiness report is already saved, and a saved
+    // report that answers 500 gets filed twice.
+    const escalation = await escalateWaterReport({
+      source: 'READINESS',
+      sourceId: readiness.id,
+      areas,
+      contingencyPlan: (data.contingencyPlan ?? '').trim() || null,
+      loggedById: session.user.id,
+      loggedByName: session.user.name || '',
+      loggedByRole: session.user.role,
+      at: now,
+      overall: data.overallReadiness,
+      overheadTankLevel: data.overheadTankLevel,
+      groundTankLevel: data.groundTankLevel,
+      locationSentence: summariseReviewLocation(
+        data.fix ?? null, 'This readiness report was logged',
+      ).sentence,
+      forDate: forDate.toLocaleDateString('en-GB', {
+        weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Lagos',
+      }),
+    });
 
     await prisma.auditLog.create({
       data: {
@@ -199,11 +260,16 @@ export async function POST(request: NextRequest) {
           overallReadiness: data.overallReadiness,
           isLate,
           forDate,
+          contingencyPlan: (data.contingencyPlan ?? '').trim() || null,
+          faultsOpened: escalation.opened.map((o) => o.areaName),
+          faultsClosed: escalation.closed.map((c) => c.areaName),
+          whatsappQueued: escalation.whatsappQueued,
+          loggedFrom: where.fixVerdict,
         }),
       },
     });
 
-    return NextResponse.json({ readiness, isLate }, { status: 201 });
+    return NextResponse.json({ readiness, isLate, escalation }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation error', details: error.errors }, { status: 400 });

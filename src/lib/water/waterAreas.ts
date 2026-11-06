@@ -40,6 +40,17 @@ export interface WaterArea {
   /** Empty for the shared rooms and for rows logged before this existed. */
   location: string;
   status: string;
+  /**
+   * What is actually wrong in this room, in the words of whoever looked.
+   *
+   * Asked for on 6 November. "Theatre 3: NO_WATER" tells a works supervisor
+   * to go and find out; "the riser valve on the second floor is shut and
+   * nobody can find the key" tells them what to take with them. Only
+   * meaningful when the status is not OK, and only asked for then.
+   */
+  problem?: string;
+  /** What the person logging it has already done about it. */
+  actionTaken?: string;
 }
 
 /** A row of TheatreSuite, as /api/theatres returns it. */
@@ -91,7 +102,7 @@ export function buildWaterAreas(
   theatres: readonly TheatreRow[],
   previous?: readonly WaterArea[] | null,
 ): WaterArea[] {
-  const carried = new Map((previous ?? []).map((a) => [a.key, a.status]));
+  const carried = new Map((previous ?? []).map((a) => [a.key, a]));
 
   const rooms = theatres
     .filter((t) => t.isOperatingRoom !== false)
@@ -104,7 +115,16 @@ export function buildWaterAreas(
 
   const shared = SUPPORT_AREAS.map((s) => ({ key: s.key, name: s.name, location: '' }));
 
-  return [...rooms, ...shared].map((a) => ({ ...a, status: asStatus(carried.get(a.key) ?? 'OK') }));
+  return [...rooms, ...shared].map((a) => {
+    const was = carried.get(a.key);
+    const status = asStatus(was?.status ?? 'OK');
+    // The notes go with the status they explain. Carrying "the riser valve is
+    // shut" onto a room somebody has just marked OK would leave a fixed room
+    // described as broken, which is how a closed fault gets chased for a week.
+    return status === 'OK'
+      ? { ...a, status }
+      : { ...a, status, problem: was?.problem ?? '', actionTaken: was?.actionTaken ?? '' };
+  });
 }
 
 /** The areas under their location headings, in the order buildWaterAreas gave. */
@@ -155,6 +175,13 @@ export function readWaterAreas(row: StoredAreas | null | undefined): WaterArea[]
             name: String(a.name ?? ''),
             location: String(a.location ?? ''),
             status: asStatus(a.status),
+            // Absent on every row logged before 6 November, and absent on any
+            // room that was fine. Undefined rather than '' so a reader can
+            // tell "nothing to explain" from "explained with nothing".
+            ...(typeof a.problem === 'string' && a.problem.trim()
+              ? { problem: a.problem.trim() } : {}),
+            ...(typeof a.actionTaken === 'string' && a.actionTaken.trim()
+              ? { actionTaken: a.actionTaken.trim() } : {}),
           }))
           .filter((a) => a.key && a.name);
         if (areas.length > 0) return areas;
@@ -198,6 +225,53 @@ export function legacyColumnsFor(areas: readonly WaterArea[]): Record<string, st
   SUPPORT_AREAS.forEach((s) => {
     out[s.legacyColumn] = byKey.get(s.key) ?? 'OK';
   });
+  return out;
+}
+
+/**
+ * The shortest a problem or an action may be and still mean anything.
+ *
+ * Low on purpose. A gate set where a tired plumber at 6 a.m. cannot clear it
+ * does not produce better descriptions; it produces "aaaa", or a form nobody
+ * submits. Three characters stops an empty box and a stray keystroke, and
+ * the rest is left to the person and to whoever reads it afterwards.
+ */
+export const MIN_NOTE = 3;
+
+/**
+ * Why this report cannot be filed yet, in sentences a person can act on.
+ *
+ * Empty means it is fine to submit. Enforced on BOTH sides: the form hides
+ * the submit button, and the API checks again, because a browser left open
+ * since before the deploy posts the old shape and a handset on a bad link
+ * posts whatever it last had in memory.
+ *
+ * WHY A REPORT WITH A FAULT IN IT IS NOT ALLOWED THROUGH WITHOUT THESE. The
+ * whole point of the fault being logged is that somebody else has to act on
+ * it, tonight, from a phone. A row that says NO_WATER and nothing else sends
+ * the head of works out with no idea what he is going to, and gives the
+ * theatre no answer at all to the only question the surgeons will ask: what
+ * are we doing about water today?
+ */
+export function missingExplanations(
+  areas: readonly WaterArea[],
+  contingencyPlan?: string | null,
+): string[] {
+  const bad = areasNotOk(areas);
+  if (bad.length === 0) return [];
+
+  const out: string[] = [];
+  bad.forEach((a) => {
+    if ((a.problem ?? '').trim().length < MIN_NOTE) {
+      out.push(`Say what is wrong in ${a.name}.`);
+    }
+    if ((a.actionTaken ?? '').trim().length < MIN_NOTE) {
+      out.push(`Say what has been done about ${a.name} so far.`);
+    }
+  });
+  if ((contingencyPlan ?? '').trim().length < MIN_NOTE) {
+    out.push('Give the plan B for water today — how the theatres get water while this is unfixed.');
+  }
   return out;
 }
 

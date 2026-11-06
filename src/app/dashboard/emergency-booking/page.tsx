@@ -11,8 +11,11 @@ import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories
 import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
   User, Users, Building2, Siren, Phone, Calendar, MapPin, Navigation,
-  Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2
+  Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2,
+  Megaphone, MessageCircle, Gavel
 } from 'lucide-react';
+import { whatsappLink } from '@/lib/whatsapp';
+import { HOUR_RULE_NOTICE_PLAIN } from '@/lib/emergency/hourRule';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
 
@@ -206,6 +209,98 @@ interface EmergencyBooking {
   surgeon?: { fullName: string; phoneNumber?: string };
   anesthetist?: { fullName: string; phoneNumber?: string };
 }
+
+/**
+ * One person on the emergency, and whether they have done their part.
+ *
+ * Mirrors the roll call the chase endpoint builds. It is deliberately the
+ * same object the message is written from, so what a sender reads on the
+ * screen and what the team receives on their phones cannot disagree.
+ */
+interface ChaseMember {
+  userId: string;
+  name: string;
+  phoneNumber: string | null;
+  roleOnCase: string;
+  teamRole: string | null;
+  source: string;
+  availability: string | null;
+  respondedAt: string | null;
+  mustReview: boolean;
+  reviewDone: boolean;
+  mustRespond: boolean;
+}
+
+interface ChaseStanding {
+  deadline: string | null;
+  minutesRemaining: number | null;
+  overdue: boolean;
+  settled: boolean;
+  setByRequiredBy: boolean;
+  label: string;
+}
+
+interface ChaseRollCall {
+  bookingId: string;
+  standing: ChaseStanding;
+  members: ChaseMember[];
+  summary: {
+    total: number;
+    expected: number;
+    responded: number;
+    coming: number;
+    unavailable: number;
+    silent: { name: string; roleOnCase: string }[];
+    reviewDone: boolean;
+    reachable: number;
+  };
+  canChase: boolean;
+  chases: {
+    id: string;
+    chasedAt: string;
+    chasedByName: string | null;
+    recipients: number;
+    responded: number;
+    overdue: boolean;
+    whatsappQueued: number;
+  }[];
+}
+
+interface ChaseResult {
+  chaseId: string | null;
+  standing: ChaseStanding;
+  recipients: number;
+  expected: number;
+  responded: number;
+  reviewDone: boolean;
+  silent: { name: string; roleOnCase: string }[];
+  whatsappQueued: number;
+  whatsappSkipped: string[];
+  handoffs: { name: string; kind: string; number: string; text: string }[];
+}
+
+/**
+ * Who may fire a chase.
+ *
+ * Mirrors CHASE_ROLES on the endpoint, which is the authority — this list
+ * only decides whether the button is drawn. A chase is a dozen WhatsApp
+ * messages and a formal notice, and a button every signed-in user could
+ * press would be pressed as a joke once and disabled for ever.
+ */
+const CHASE_ROLES = [
+  'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'CHIEF_MEDICAL_DIRECTOR',
+  'CMAC', 'DC_MAC', 'THEATRE_CHAIRMAN', 'HEAD_OF_SURGERY', 'HEAD_OF_ANAESTHESIA',
+  'HEAD_OF_OBSTETRICS_GYNAECOLOGY', 'NURSE_MANAGER', 'CHIEF_NURSING_OFFICER',
+  'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
+];
+
+const AVAILABILITY_WORDS: Record<string, string> = {
+  AVAILABLE: 'Available',
+  EN_ROUTE: 'En route',
+  ARRIVED: 'Arrived',
+  UNAVAILABLE: 'Unavailable',
+  ON_ANOTHER_CASE: 'On another case',
+};
 
 interface OnDutyStaff {
   userId: string;
@@ -424,6 +519,15 @@ export default function EmergencyBookingPage() {
   // Keyed by booking: a single shared message would appear under every card
   // on the board, including cases it had nothing to do with.
   const [assignNote, setAssignNote] = useState<Record<string, string>>({});
+
+  // Chasing the whole team against the hour.
+  const [chaseFor, setChaseFor] = useState<string | null>(null);
+  const [chaseData, setChaseData] = useState<ChaseRollCall | null>(null);
+  const [chaseNote, setChaseNote] = useState('');
+  const [chaseLoading, setChaseLoading] = useState(false);
+  const [chaseSending, setChaseSending] = useState(false);
+  const [chaseResult, setChaseResult] = useState<ChaseResult | null>(null);
+  const [chaseError, setChaseError] = useState<string | null>(null);
 
   const canAssignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
     'THEATRE_CHAIRMAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'NURSE_MANAGER']
@@ -909,6 +1013,59 @@ export default function EmergencyBookingPage() {
     }
   };
 
+  /**
+   * Open the roll call for a case.
+   *
+   * Read before anything is sent, deliberately. The sender sees who has
+   * already answered and who has not before deciding to put a formal notice
+   * in front of thirteen people — and quite often the right answer, once
+   * they can see it, is to ring the one person who is silent.
+   */
+  const openChase = useCallback(async (bookingId: string) => {
+    setChaseFor(bookingId);
+    setChaseData(null);
+    setChaseResult(null);
+    setChaseError(null);
+    setChaseNote('');
+    setChaseLoading(true);
+    try {
+      const res = await fetch(`/api/emergency-booking/${bookingId}/chase-team`);
+      if (res.ok) setChaseData(await res.json());
+      else {
+        const err = await res.json().catch(() => ({ error: 'Could not read the team.' }));
+        setChaseError(err.error || 'Could not read the team.');
+      }
+    } catch {
+      setChaseError('Network error. Check your connection and try again.');
+    } finally {
+      setChaseLoading(false);
+    }
+  }, []);
+
+  const sendChase = useCallback(async () => {
+    if (!chaseFor || chaseSending) return;
+    setChaseSending(true);
+    setChaseError(null);
+    try {
+      const res = await fetch(`/api/emergency-booking/${chaseFor}/chase-team`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: chaseNote.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) setChaseResult(data as ChaseResult);
+      else setChaseError(data?.error || 'The chase could not be sent.');
+    } catch {
+      setChaseError('Network error. The chase was not sent.');
+    } finally {
+      setChaseSending(false);
+    }
+  }, [chaseFor, chaseNote, chaseSending]);
+
+  const canChaseTeam = Boolean(
+    session?.user?.role && CHASE_ROLES.includes(session.user.role),
+  );
+
   const canCreateBooking = session?.user?.role && [
     'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER',
     'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'
@@ -1350,6 +1507,22 @@ export default function EmergencyBookingPage() {
                             Unavailable
                           </button>
                         </>
+                      )}
+
+                      {/* Chase the whole team against the hour.
+                          Shown while the case is still waiting to start and
+                          never after: a formal notice about an operation
+                          already under way is how a formal notice stops
+                          being read. */}
+                      {canChaseTeam
+                        && !['IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(booking.status) && (
+                        <button
+                          onClick={() => openChase(booking.id)}
+                          className="flex items-center gap-1 px-3 py-2 bg-red-700 text-white rounded-lg text-sm font-semibold hover:bg-red-800"
+                        >
+                          <Megaphone className="h-4 w-4" />
+                          Chase the team
+                        </button>
                       )}
 
                       {/* Assign theatre — theatre-side staff only.
@@ -2213,6 +2386,235 @@ export default function EmergencyBookingPage() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== CHASE THE WHOLE TEAM ===== */}
+      {chaseFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-6">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Megaphone className="h-6 w-6 text-red-700" />
+                {chaseResult ? 'The team has been chased' : 'Chase the whole team'}
+              </h2>
+              <button
+                onClick={() => { setChaseFor(null); setChaseData(null); setChaseResult(null); }}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            {chaseLoading && (
+              <p className="text-sm text-gray-500">Reading the team…</p>
+            )}
+
+            {chaseError && (
+              <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {chaseError}
+              </p>
+            )}
+
+            {/* ---- Before sending: the roll call ---- */}
+            {chaseData && !chaseResult && (
+              <>
+                <div className={`rounded-xl border-2 p-3 mb-4 ${
+                  chaseData.standing.overdue
+                    ? 'border-red-300 bg-red-50 text-red-900'
+                    : 'border-amber-300 bg-amber-50 text-amber-900'
+                }`}>
+                  <p className="font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    {chaseData.standing.label}
+                    {chaseData.standing.deadline && (
+                      <span className="font-normal">
+                        — on the table by {new Date(chaseData.standing.deadline)
+                          .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </p>
+                  {chaseData.standing.setByRequiredBy && (
+                    <p className="text-xs mt-1">
+                      That is the time the surgeon asked for, which is sooner than the hour.
+                    </p>
+                  )}
+                  <p className="text-sm mt-1">
+                    {chaseData.summary.responded} of {chaseData.summary.expected} have answered
+                    {chaseData.summary.coming > 0 ? `, ${chaseData.summary.coming} coming` : ''}
+                    {chaseData.summary.unavailable > 0 ? `, ${chaseData.summary.unavailable} unavailable` : ''}.
+                    {' '}Pre-anaesthetic review:{' '}
+                    <strong>{chaseData.summary.reviewDone ? 'recorded' : 'not yet recorded'}</strong>.
+                  </p>
+                </div>
+
+                <div className="border rounded-xl overflow-hidden mb-4">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold">Who</th>
+                        <th className="text-left px-3 py-2 font-semibold">On this case</th>
+                        <th className="text-left px-3 py-2 font-semibold">Answered</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {chaseData.members.map(m => (
+                        <tr key={m.userId} className={m.mustRespond && !m.availability ? 'bg-red-50' : ''}>
+                          <td className="px-3 py-2">
+                            <span className="font-medium text-gray-900">{m.name}</span>
+                            {!m.phoneNumber && (
+                              <span className="block text-[11px] text-amber-700">
+                                No phone number on file — app only
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {m.roleOnCase}
+                            {m.mustReview && (
+                              <span className={`block text-[11px] ${m.reviewDone ? 'text-green-700' : 'text-red-700'}`}>
+                                {m.reviewDone
+                                  ? 'Pre-anaesthetic review recorded'
+                                  : 'Pre-anaesthetic review NOT recorded'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {m.availability ? (
+                              <span className="text-gray-900">
+                                {AVAILABILITY_WORDS[m.availability] ?? m.availability}
+                              </span>
+                            ) : m.mustRespond ? (
+                              <span className="text-red-700 font-semibold">No answer</span>
+                            ) : (
+                              <span className="text-gray-400">Informed only</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* The notice the recipients will get, shown to the sender
+                    first. Nobody should send a formal notice in their own
+                    name without having read it. */}
+                <details className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <Gavel className="h-4 w-4" />
+                    The notice each of them will receive
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-gray-700 font-sans">
+                    {HOUR_RULE_NOTICE_PLAIN}
+                  </pre>
+                </details>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Anything to add (optional)
+                  </label>
+                  <textarea
+                    value={chaseNote}
+                    onChange={e => setChaseNote(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g. Theatre 3 is free now and the patient is consented"
+                  />
+                </div>
+
+                {chaseData.chases.length > 0 && (
+                  <p className="text-xs text-gray-500 mb-4">
+                    Last chased {new Date(chaseData.chases[0].chasedAt).toLocaleString()}
+                    {chaseData.chases[0].chasedByName ? ` by ${chaseData.chases[0].chasedByName}` : ''}
+                    {' '}· {chaseData.chases.length} chase{chaseData.chases.length === 1 ? '' : 's'} on this case.
+                  </p>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => { setChaseFor(null); setChaseData(null); }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendChase}
+                    disabled={chaseSending || !chaseData.canChase || chaseData.members.length === 0}
+                    className="px-5 py-2 bg-red-700 text-white rounded-xl hover:bg-red-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Megaphone className="h-4 w-4" />
+                    {chaseSending
+                      ? 'Sending…'
+                      : `Chase all ${chaseData.members.length}`}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ---- After sending: the hand-offs ---- */}
+            {chaseResult && (
+              <>
+                <p className="text-sm text-gray-700 mb-3">
+                  {chaseResult.recipients} people were notified in the app.
+                  {chaseResult.silent.length > 0 && (
+                    <> Still no answer from{' '}
+                      {chaseResult.silent.map(x => `${x.name} (${x.roleOnCase})`).join(', ')}.
+                    </>
+                  )}
+                </p>
+                {!chaseResult.reviewDone && (
+                  <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                    The pre-anaesthetic review is still not on the app. The anaesthetist has
+                    been told that the trolley does not move until it is recorded.
+                  </p>
+                )}
+
+                {chaseResult.handoffs.length > 0 && (
+                  <>
+                    <p className="text-sm text-gray-700 mb-2">
+                      Press each one to send it on WhatsApp. The message is already written.
+                    </p>
+                    <div className="space-y-2 mb-3">
+                      {chaseResult.handoffs.map(h => {
+                        const href = whatsappLink(h.number, h.text);
+                        return href ? (
+                          <a
+                            key={`${h.number}-${h.kind}`}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold"
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            <span className="flex-1">
+                              {h.name}
+                              <span className="block text-xs font-normal opacity-90">{h.kind}</span>
+                            </span>
+                          </a>
+                        ) : null;
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {chaseResult.whatsappSkipped.length > 0 && (
+                  <ul className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 mb-3">
+                    {chaseResult.whatsappSkipped.map(m => <li key={m}>• {m}</li>)}
+                  </ul>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => { setChaseFor(null); setChaseData(null); setChaseResult(null); fetchBookings(); }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

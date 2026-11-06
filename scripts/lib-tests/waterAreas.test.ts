@@ -302,9 +302,12 @@ describe('the page and the API', () => {
     expect(api).toMatch(/\}\)\)\.optional\(\),/);
   });
 
-  it('names the affected rooms in the critical alert', () => {
+  it('names the rooms in the critical alert', () => {
     // "Water supply is CRITICAL" does not tell a theatre manager reading it
-    // at 6am whether their list can run.
-    expect(api).toContain('Affected: ${summariseAreas(areas, 6)}');
+    // at 6am whether their list can run. Since 6 November this alert fires
+    // only where no individual room was faulted -- the escalation names them
+    // otherwise -- so what it reports is that every room was checked and
+    // found OK, which is the useful thing to say about a supply-level alarm.
+    expect(api).toContain('Rooms: ${summariseAreas(areas, 6)}');
   });
 });

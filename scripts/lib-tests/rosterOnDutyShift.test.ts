@@ -79,16 +79,30 @@ describe('the board and the endpoint agree', () => {
   });
 
   it('the endpoint honours it', () => {
-    const src = read('src/app/api/roster/on-duty/route.ts');
-    expect(src).toContain('shiftForPurpose');
-    expect(src).toContain('searchParams.get("for")');
+    // The resolution moved into src/lib/roster/onDutyTeam.ts on 6 November so
+    // that the emergency team chase reaches exactly the people this endpoint
+    // names. The route passes the question through; the lib answers it.
+    const route = read('src/app/api/roster/on-duty/route.ts');
+    expect(route).toContain('searchParams.get("for")');
+    expect(route).toContain('resolveOnDutyTeam');
+    const lib = read('src/lib/roster/onDutyTeam.ts');
+    expect(lib).toContain('shiftForPurpose');
+  });
+
+  it('the chase asks the same question as the board', () => {
+    // Two copies of "who is on call" would eventually disagree, and a card
+    // naming one anaesthetist while the WhatsApp went to another would
+    // discredit both.
+    const chase = read('src/app/api/emergency-booking/[id]/chase-team/route.ts');
+    expect(chase).toContain('resolveOnDutyTeam');
+    expect(chase).toContain("purpose: 'emergency'");
   });
 
   it('one person rostered twice fills one slot', () => {
     // Both on-call consultants held two rows for 3 September, so the first and
     // second anaesthetist would otherwise be the same name: a team of two on
     // screen and a team of one in the theatre.
-    const src = read('src/app/api/roster/on-duty/route.ts');
+    const src = read('src/lib/roster/onDutyTeam.ts');
     expect(src).toContain('uniqueAnaesthetists');
   });
 });

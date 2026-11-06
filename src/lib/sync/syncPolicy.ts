@@ -328,6 +328,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'anonymous_tips', cls: 'APPEND_ONLY', why: 'Raised without a name, and never editable — that is the whole guarantee.' },
   { table: 'security_reports', cls: 'APPEND_ONLY', why: 'An account of an event at a time.' },
   { table: 'announcements', cls: 'LWW', why: 'What the suite hears and when. Latest wording wins.' },
+  { table: 'emergency_team_chases', cls: 'LWW', why: 'One round of chasing an emergency team. Sent from whichever node the manager has in hand; both must show who was told and when.' },
   { table: 'emergency_team_availability', cls: 'LWW', why: 'Who answered an emergency call and whether they are coming.' },
 
   // ── Account recovery ─────────────────────────────────────────────────────
@@ -431,6 +432,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'theatre_sub_stores', cls: 'LWW', why: 'The sub-store itself. Reference data with no clinical history to lose.' },
   { table: 'user_reports', cls: 'LWW', why: 'A report raised by a user, moving through triage.' },
   { table: 'walkie_talkie_logs', cls: 'LWW', why: 'Handset issue and return; the return is written onto the issue row.' },
+  { table: 'water_area_issues', cls: 'LWW', why: 'A water fault and whether it has been re-assessed. Opened on one node and cleared on whichever is up that morning.' },
   { table: 'water_supply_logs', cls: 'LWW', why: 'Water deliveries and readings, corrected in place.' },
   { table: 'water_supply_readiness', cls: 'LWW', why: 'Water readiness for the day; latest statement stands.' },
 ];

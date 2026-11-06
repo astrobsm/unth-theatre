@@ -4655,6 +4655,7 @@ model EmergencySurgeryBooking {
   anesthetist            User?                           @relation("EmergencyBookingAnesthetist", fields: [anesthetistId], references: [id])
   surgery                Surgery?                        @relation("EmergencyBookingSurgery", fields: [surgeryId], references: [id])
   teamAvailability       EmergencyTeamAvailability[]
+  teamChases             EmergencyTeamChase[]
   preAnaestheticReviews  EmergencyPreAnaestheticReview[]
   emergencyPrescriptions EmergencyPrescription[]
   emergencyLabRequests   EmergencyLabRequest[]           @relation("EmergencyLabRequests")
@@ -6496,6 +6497,65 @@ model EmergencyTeamAvailability {
   @@map("emergency_team_availability")
 }
 
+/// One round of chasing the whole team on an emergency.
+///
+/// Asked for on 6 November. The delay ladder in lib/emergencyEscalation.ts
+/// already asks everybody why a case did not start -- an hour after it
+/// should have. This is the chase somebody sends while there is still time
+/// to make the hour, and it is recorded for the same reason the ladder is:
+/// when a case is reviewed afterwards, the first question is who was told
+/// and when, and "I rang him" is not an answer anybody can check.
+///
+/// The roll call is written into the row as JSON rather than read back from
+/// the availability table at display time. It is a record of what was true
+/// when the chase went out -- who had answered, who was silent, whether the
+/// anaesthetic review existed -- and a later response must not quietly
+/// rewrite it into a tidier story.
+model EmergencyTeamChase {
+  id                 String @id @default(uuid())
+  emergencyBookingId String
+
+  chasedAt     DateTime @default(now())
+  chasedById   String?
+  chasedByName String?
+
+  /// Where the case stood against the hour at that moment. Negative minutes
+  /// mean it was already past the start-by time.
+  deadlineAt        DateTime?
+  minutesToDeadline Int?
+  overdue           Boolean   @default(false)
+
+  /// Counts at the moment of the chase.
+  recipients     Int     @default(0)
+  expected       Int     @default(0)
+  responded      Int     @default(0)
+  reviewRecorded Boolean @default(false)
+
+  /// JSON array of { userId, name, roleOnCase, availability, reached }.
+  rollCall String?
+
+  /// Whether the chase actually went out, so a silent failure is visible.
+  whatsappQueued  Int     @default(0)
+  whatsappSkipped String?
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  emergencyBooking EmergencySurgeryBooking @relation(fields: [emergencyBookingId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns
+  /// as drift. Application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([emergencyBookingId, chasedAt])
+  @@map("emergency_team_chases")
+}
+
 // ========================
 // Emergency Pre-Anaesthetic Review & Prescription
 // ========================
@@ -7693,6 +7753,39 @@ model PlumbingWaterStatus {
   // Overall
   overallStatus String // OPERATIONAL, DEGRADED, CRITICAL, OFFLINE
 
+  /// How the theatres get water while whatever is wrong stays wrong.
+  ///
+  /// Required by the API whenever any area is not OK. The theatre's question
+  /// is never "is it broken" -- they can see that -- it is "are we operating
+  /// today", and this is the only field that answers it. Nullable because
+  /// months of existing rows predate it and a report with nothing wrong has
+  /// nothing to plan around.
+  contingencyPlan String?
+
+  /// WHERE THE PERSON WAS WHEN THEY LOGGED THIS.
+  ///
+  /// Asked for on 6 November, and for the same reason the pre-operative
+  /// review records it: a water report is a statement that somebody walked
+  /// the theatres and looked. A report entered from home at 06:00 and one
+  /// entered in the scrub corridor are not the same evidence, and until now
+  /// nothing could tell them apart -- nor could a plumber who DID walk the
+  /// complex show that he had.
+  ///
+  /// EVERY COLUMN IS NULLABLE AND MUST STAY SO. A theatre basement behind
+  /// concrete, a handset with its radio off, the page served over plain http
+  /// on the theatre server: all three produce no position, and a report that
+  /// could not be filed without one would simply not be filed. The verdict
+  /// and the distance are computed on the server from the coordinates, never
+  /// accepted from the browser, which could otherwise claim to have been on
+  /// site from anywhere.
+  loggedLatitude                  Float?
+  loggedLongitude                 Float?
+  loggedAccuracyM                 Float? // radius of uncertainty, metres
+  loggedFixVerdict                String? // ON_SITE | OFF_SITE | IMPRECISE | NO_FIX
+  loggedDistanceM                 Int? // from the campus centre, to the nearest 10 m
+  loggedLocationAt                DateTime?
+  loggedLocationUnavailableReason String? // why there is no position, in plain words
+
   // Logged by
   loggedById   String
   loggedBy     User   @relation("PlumbingStatusLogger", fields: [loggedById], references: [id])
@@ -7736,6 +7829,35 @@ model WaterSupplyReadiness {
   actionTaken      String?
   notes            String?
 
+  /// How the theatres get water on the day this report covers, if the
+  /// promise above cannot be kept. Required by the API whenever the report
+  /// is anything other than READY with all four promises given.
+  contingencyPlan String?
+
+  /// WHERE THE PERSON WAS WHEN THEY LOGGED THIS.
+  ///
+  /// Asked for on 6 November, and for the same reason the pre-operative
+  /// review records it: a water report is a statement that somebody walked
+  /// the theatres and looked. A report entered from home at 06:00 and one
+  /// entered in the scrub corridor are not the same evidence, and until now
+  /// nothing could tell them apart -- nor could a plumber who DID walk the
+  /// complex show that he had.
+  ///
+  /// EVERY COLUMN IS NULLABLE AND MUST STAY SO. A theatre basement behind
+  /// concrete, a handset with its radio off, the page served over plain http
+  /// on the theatre server: all three produce no position, and a report that
+  /// could not be filed without one would simply not be filed. The verdict
+  /// and the distance are computed on the server from the coordinates, never
+  /// accepted from the browser, which could otherwise claim to have been on
+  /// site from anywhere.
+  loggedLatitude                  Float?
+  loggedLongitude                 Float?
+  loggedAccuracyM                 Float? // radius of uncertainty, metres
+  loggedFixVerdict                String? // ON_SITE | OFF_SITE | IMPRECISE | NO_FIX
+  loggedDistanceM                 Int? // from the campus centre, to the nearest 10 m
+  loggedLocationAt                DateTime?
+  loggedLocationUnavailableReason String? // why there is no position, in plain words
+
   // Compliance / disciplinary tracking (must be logged before 5pm daily)
   submittedAt             DateTime @default(now())
   isLate                  Boolean  @default(false)
@@ -7751,6 +7873,83 @@ model WaterSupplyReadiness {
   @@index([forDate])
   @@index([overallReadiness])
   @@map("water_supply_readiness")
+}
+
+/// A water fault that stays open until somebody re-assesses the same area.
+///
+/// Asked for on 6 November: "when the error is fixed, the user need to re
+/// assess and correct the status." Before this, a report was a snapshot. A
+/// plumber logged NO_WATER in the Eye Theatre, the bell rang, somebody fixed
+/// the valve -- and the row went on saying NO_WATER for ever, because the
+/// next morning's form started blank and the fault was not closed so much as
+/// no longer mentioned.
+///
+/// One row per area per episode. It is opened by the report that first finds
+/// the area not OK, refreshed by every later report that still finds it
+/// broken, and closed by the first report that looks at the SAME area and
+/// finds it OK. Nothing else closes it: not time, not silence, and not a
+/// kinder status. See src/lib/water/issues.ts, which holds that decision as
+/// pure functions because it is one somebody may have to defend.
+///
+/// NO DATABASE-LEVEL "one open row per area" CONSTRAINT. Postgres expresses
+/// that as a partial unique index, which Prisma cannot declare, and a raw
+/// one would read as drift on every `migrate diff` this project relies on.
+/// The API looks for an open row before opening another.
+model WaterAreaIssue {
+  id String @id @default(uuid())
+
+  /// STATUS (a shift water report) or READINESS (the daily promise).
+  source   String
+  /// The report row that opened it.
+  sourceId String
+
+  /// The area key as the report wrote it -- `theatre:<id>`, `support:<slug>`
+  /// or `readiness:<aspect>`. Tracked by key, never by name, so a theatre
+  /// renamed mid-fault does not orphan its own fault.
+  areaKey  String
+  areaName String
+  location String?
+
+  status          String
+  problem         String?
+  actionTaken     String?
+  contingencyPlan String?
+
+  openedAt     DateTime @default(now())
+  openedById   String?
+  openedByName String?
+
+  /// Refreshed by each later report that still finds this area broken.
+  lastSeenAt     DateTime @default(now())
+  lastSeenStatus String?
+  /// How many reports have found it broken, the first one included.
+  sightings      Int      @default(1)
+
+  /// When the chase last went out, so a re-chase is paced rather than fired
+  /// on every refresh.
+  lastChasedAt DateTime?
+  chaseCount   Int       @default(0)
+
+  /// The re-assessment that cleared it.
+  resolvedAt         DateTime?
+  resolvedById       String?
+  resolvedByName     String?
+  resolvedBySourceId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns
+  /// as drift. Application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([areaKey])
+  @@index([resolvedAt])
+  @@index([openedAt])
+  @@map("water_area_issues")
 }
 
 // ============================================

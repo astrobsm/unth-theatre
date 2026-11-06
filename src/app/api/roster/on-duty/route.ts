@@ -1,28 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { resolveOnDutyTeam, type OnDutyShift } from "@/lib/roster/onDutyTeam";
 
 export const dynamic = "force-dynamic";
-
-import { shiftForPurpose } from "@/lib/rosterOnDutyShift";
-
-type StaffEntry = {
-  id: string;
-  userId: string;
-  name: string;
-  role: string;
-  staffCode: string | null;
-  phoneNumber: string | null;
-  extension: string | null;
-  availabilityStatus: string | null;
-  currentLocation: string | null;
-  seniorityLevel: string | null;
-  subRole: string | null;
-  theatreId: string | null;
-  shift: string;
-  source?: "roster" | "role"; // roster = rostered on duty; role = on-call by role (fallback contact)
-};
 
 /**
  * GET /api/roster/on-duty
@@ -31,27 +12,21 @@ type StaffEntry = {
  *   date       (required) — ISO date or datetime. The shift is derived from
  *                           the time portion when `shift` is not supplied.
  *   shift      (optional) — MORNING | CALL | NIGHT. Overrides derived shift.
+ *   for        (optional) — "emergency" answers with the on-call team rather
+ *                           than the morning (elective) roster.
  *   theatreId  (optional) — limit to a specific theatre. Omit (or pass
  *                           "any" / "all") to return staff on duty across
  *                           every theatre — the right behaviour for an
  *                           emergency surgery where we just need anyone
  *                           on duty in that role.
  *
- * Response:
- *   {
- *     date, shift, theatreId,
- *     team: {
- *       anaesthetist: StaffEntry | null,           // first ANAESTHETIST on duty
- *       anaestheticTechnician: StaffEntry | null,  // first ANAESTHETIC_TECHNICIAN
- *       scrubNurse: StaffEntry | null,             // first NURSE on duty
- *       circulatingNurse: StaffEntry | null,       // second NURSE on duty
- *       cleaner: StaffEntry | null,                // first CLEANER on duty
- *       porter: StaffEntry | null,                 // first PORTER on duty
- *       pharmacist: StaffEntry | null,             // first PHARMACIST on duty
- *     },
- *     candidates: { anaesthetists: StaffEntry[], anaestheticTechnicians: ..., nurses: ..., cleaners: ..., porters: ..., pharmacists: ... },
- *     rostersFound: number,
- *   }
+ * Response: { date, shift, purpose, theatreId, team, candidates, rostersFound }
+ *
+ * The resolution itself lives in src/lib/roster/onDutyTeam.ts, because the
+ * emergency team chase has to reach exactly the people this endpoint names.
+ * Two copies of "who is on call" would eventually disagree, and a screen
+ * listing one anaesthetist while the WhatsApp went to another would discredit
+ * both of them.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -80,214 +55,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // WHAT IS BEING ASKED changes which shift answers.
-    //
-    // "Who is on duty at 10:00?" for an elective list is the MORNING roster.
-    // For an EMERGENCY it is the on-call team, and never the morning one:
-    // MORNING is the elective roster — the anaesthetists label that shift
-    // "ELECTIVES" — so answering an emergency with it names people who are
-    // committed to their own lists and are not the ones to ring.
-    const purpose = searchParams.get("for") === "emergency" ? "emergency" : "elective";
-    const shift =
-      (shiftParam as "MORNING" | "CALL" | "NIGHT" | null) ||
-      shiftForPurpose(parsed, purpose);
-
-    // Roster.date is a Prisma @db.Date — strip the time so equality matches.
-    const dateOnly = new Date(
-      Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
-    );
-
-    const where: {
-      date: Date;
-      shift: "MORNING" | "CALL" | "NIGHT";
-      theatreId?: string;
-      status: string;
-    } = {
-      date: dateOnly,
-      shift,
-      status: "PUBLISHED", // only published rosters are "on duty"; drafts are excluded
-    };
-
-    const theatreFilter = theatreIdParam?.trim();
-    if (theatreFilter && theatreFilter !== "any" && theatreFilter !== "all") {
-      where.theatreId = theatreFilter;
-    }
-
-    const rosters = await prisma.roster.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            role: true,
-            staffCode: true,
-            phoneNumber: true,
-            extension: true,
-            availabilityStatus: true,
-            currentLocation: true,
-          },
-        },
-      },
-      orderBy: [
-        // CONSULTANT first, then SENIOR_REGISTRAR, then REGISTRAR, then nulls.
-        { seniorityLevel: "asc" },
-        { uploadedAt: "desc" },
-      ],
+    const result = await resolveOnDutyTeam({
+      date: parsed,
+      shift: (shiftParam as OnDutyShift | null) || null,
+      purpose: searchParams.get("for") === "emergency" ? "emergency" : "elective",
+      theatreId: theatreIdParam,
     });
 
-    const toEntry = (r: (typeof rosters)[number]): StaffEntry => ({
-      id: r.id,
-      userId: r.user.id,
-      name: r.user.fullName,
-      role: r.user.role,
-      staffCode: r.user.staffCode,
-      phoneNumber: r.user.phoneNumber,
-      extension: r.user.extension ?? null,
-      availabilityStatus: r.user.availabilityStatus ?? null,
-      currentLocation: r.user.currentLocation ?? null,
-      seniorityLevel: r.seniorityLevel ?? null,
-      subRole: r.subRole ?? null,
-      theatreId: r.theatreId ?? null,
-      shift: r.shift,
-      source: "roster",
-    });
-
-    const candidates = {
-      anaesthetists: [] as StaffEntry[],
-      anaestheticTechnicians: [] as StaffEntry[],
-      nurses: [] as StaffEntry[],
-      recoveryNurses: [] as StaffEntry[],
-      cleaners: [] as StaffEntry[],
-      porters: [] as StaffEntry[],
-      pharmacists: [] as StaffEntry[],
-    };
-
-    for (const r of rosters) {
-      const entry = toEntry(r);
-      switch (r.staffCategory) {
-        case "ANAESTHETISTS":
-          candidates.anaesthetists.push(entry);
-          break;
-        case "ANAESTHETIC_TECHNICIANS":
-          candidates.anaestheticTechnicians.push(entry);
-          break;
-        case "NURSES":
-          candidates.nurses.push(entry);
-          break;
-        case "RECOVERY_NURSES":
-          candidates.recoveryNurses.push(entry);
-          break;
-        case "CLEANERS":
-          candidates.cleaners.push(entry);
-          break;
-        case "PORTERS":
-          candidates.porters.push(entry);
-          break;
-        case "PHARMACISTS":
-          candidates.pharmacists.push(entry);
-          break;
-      }
-    }
-
-    // Pick the most-senior anaesthetist (CONSULTANT > SENIOR_REGISTRAR > REGISTRAR).
-    const senorityRank = (s: string | null) => {
-      switch (s) {
-        case "CONSULTANT":
-          return 0;
-        case "SENIOR_REGISTRAR":
-          return 1;
-        case "REGISTRAR":
-          return 2;
-        default:
-          return 3;
-      }
-    };
-    // DE-DUPLICATED BY PERSON FIRST. The same anaesthetist can hold more than
-    // one row for a shift — on 3 September both on-call consultants had two
-    // apiece, one carrying "ALL EMERGENCIES (on-call)" and one carrying no
-    // assignment — and without this the first and second anaesthetist slots
-    // fill with the same name, which reads as a team of two and is a team of
-    // one.
-    const uniqueAnaesthetists = Array.from(
-      new Map(candidates.anaesthetists.map((a) => [a.userId, a])).values()
-    );
-    const sortedAnaesthetists = uniqueAnaesthetists.sort(
-      (a, b) => senorityRank(a.seniorityLevel) - senorityRank(b.seniorityLevel)
-    );
-
-    // Nurses: split by subRole where recorded; otherwise fall back to order.
-    const bySub = (want: string) => candidates.nurses.filter((n) => (n.subRole ?? "").toUpperCase() === want);
-    const scrub = bySub("SCRUB");
-    const circ = bySub("CIRCULATING");
-    const supervisors = bySub("SUPERVISING");
-    const plainNurses = candidates.nurses.filter(
-      (n) => !["SCRUB", "CIRCULATING", "SUPERVISING", "HOLDING_AREA"].includes((n.subRole ?? "").toUpperCase())
-    );
-    const scrubNurse = scrub[0] ?? plainNurses[0] ?? candidates.nurses[0] ?? null;
-    const circulatingNurse =
-      circ[0] ?? plainNurses.find((n) => n.userId !== scrubNurse?.userId) ?? candidates.nurses.find((n) => n.userId !== scrubNurse?.userId) ?? null;
-
-    // Role-based fallback contacts for disciplines that are not part of the
-    // standing duty roster (theatre manager, blood bank, CSSD, recovery, biomed).
-    // "On-call by role" — the first APPROVED user of the role. Advisory contact.
-    const ROLE_CONTACTS: Array<[string, string[]]> = [
-      ["theatreManager", ["THEATRE_MANAGER"]],
-      ["bloodBank", ["BLOODBANK_STAFF"]],
-      ["cssd", ["CSSD_STAFF", "CSSD_SUPERVISOR"]],
-      ["biomedicalEngineer", ["BIOMEDICAL_ENGINEER"]],
-    ];
-    const roleContacts: Record<string, StaffEntry | null> = {};
-    await Promise.all(
-      ROLE_CONTACTS.map(async ([key, roles]) => {
-        const u = await prisma.user.findFirst({
-          where: { role: { in: roles as any }, status: "APPROVED" as any },
-          select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true, availabilityStatus: true, currentLocation: true },
-          orderBy: { fullName: "asc" },
-        });
-        roleContacts[key] = u
-          ? { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, availabilityStatus: u.availabilityStatus ?? null, currentLocation: u.currentLocation ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" }
-          : null;
-      })
-    );
-
-    // Recovery nurse: prefer a rostered RECOVERY_NURSES entry, else by role.
-    let recoveryNurse: StaffEntry | null = candidates.recoveryNurses[0] ?? null;
-    if (!recoveryNurse) {
-      const u = await prisma.user.findFirst({
-        where: { role: "RECOVERY_ROOM_NURSE" as any, status: "APPROVED" as any },
-        select: { id: true, fullName: true, role: true, staffCode: true, phoneNumber: true, extension: true, availabilityStatus: true, currentLocation: true },
-      });
-      if (u) recoveryNurse = { id: u.id, userId: u.id, name: u.fullName, role: u.role, staffCode: u.staffCode, phoneNumber: u.phoneNumber, extension: u.extension ?? null, availabilityStatus: u.availabilityStatus ?? null, currentLocation: u.currentLocation ?? null, seniorityLevel: null, subRole: null, theatreId: null, shift, source: "role" };
-    }
-
-    const team = {
-      anaesthetist: sortedAnaesthetists[0] ?? null,
-      // Second/emergency anaesthetist for cover.
-      anaesthetist2: sortedAnaesthetists[1] ?? null,
-      anaestheticTechnician: candidates.anaestheticTechnicians[0] ?? null,
-      scrubNurse,
-      circulatingNurse,
-      supervisors,
-      recoveryNurse,
-      cleaner: candidates.cleaners[0] ?? null,
-      porter: candidates.porters[0] ?? null,
-      pharmacist: candidates.pharmacists[0] ?? null,
-      theatreManager: roleContacts.theatreManager ?? null,
-      bloodBank: roleContacts.bloodBank ?? null,
-      cssd: roleContacts.cssd ?? null,
-      biomedicalEngineer: roleContacts.biomedicalEngineer ?? null,
-    };
-
-    return NextResponse.json({
-      date: dateOnly.toISOString().slice(0, 10),
-      shift,
-      purpose,
-      theatreId: where.theatreId ?? null,
-      team,
-      candidates,
-      rostersFound: rosters.length,
-    });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[/api/roster/on-duty] error:", error);
     return NextResponse.json(
