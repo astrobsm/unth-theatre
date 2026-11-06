@@ -315,7 +315,7 @@ export default function DashboardLayout({
     { href: '/dashboard/roster/technician-coverage', icon: Wrench, label: 'Technician Coverage', badge: 'NEW' },
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
     { href: '/dashboard/preop-reviews/watch', icon: UserCheck, label: "Tomorrow's Reviews", badge: 'NEW' },
-    { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Rx Approvals', badge: 'NEW' },
+    { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Consultant Anaesthetist Prescription Approval', badge: 'NEW' },
     { href: '/dashboard/prescriptions', icon: FileText, label: 'Pharmacy' },
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
@@ -747,20 +747,48 @@ export default function DashboardLayout({
     try { router.prefetch(href); } catch { /* ignore */ }
   };
 
+  /**
+   * One row of the sidebar.
+   *
+   * THE NAME IS NEVER CUT. It used to be `truncate`, which in a 256px bar
+   * left about 115px for the text once the indent, the icon and the NEW
+   * badge had taken their share -- thirteen characters. So the menu read
+   * "Anaesthet... NEW" three times over and "Technicia... NEW" under it,
+   * and the only way to tell the Anaesthetist Board from the Anaesthetist
+   * Coverage was to click one and see where you landed. A truncated menu
+   * is not a menu; it is a quiz.
+   *
+   * Asked for on 6 November: full names, and reduce the font if that is
+   * what it takes. So:
+   *
+   *   the label WRAPS instead of truncating, and the row grows to fit it;
+   *   the type is a size down with tight leading, which is what buys the
+   *     second line its space without the rows looking loose;
+   *   the indent and the side padding give back about 30px, which is most
+   *     of a word;
+   *   the badge cannot shrink and cannot be squeezed by a long name, and
+   *     sits against the first line rather than floating beside a block;
+   *   the icon is nudged down a hair so it lines up with the first line of
+   *     a wrapped label rather than with the middle of the block.
+   */
   const renderNavItem = (item: NavItemT, nested = false) => {
     const isActive = isItemActive(item.href);
-    const pad = nested ? 'pl-12 pr-4' : 'px-6';
-    const className = `flex items-center ${pad} py-3 transition-all duration-200 relative ${
+    const pad = nested ? 'pl-9 pr-3' : 'px-4';
+    const className = `flex items-start ${pad} py-2.5 transition-all duration-200 relative ${
       isActive
         ? 'bg-primary-700 border-l-4 border-accent-500 text-white'
         : 'text-primary-100 hover:bg-primary-700 hover:border-l-4 hover:border-accent-500'
     }`;
     const inner = (
       <>
-        <item.icon className="w-5 h-5 mr-3 flex-shrink-0" />
-        <span className="flex-1 truncate">{item.label}</span>
+        <item.icon className="w-[18px] h-[18px] mr-2.5 mt-0.5 flex-shrink-0" />
+        <span className={`flex-1 min-w-0 break-words leading-snug ${
+          nested ? 'text-xs' : 'text-[13px]'
+        }`}>
+          {item.label}
+        </span>
         {item.badge && (
-          <span className="ml-2 px-2 py-0.5 bg-accent-500 text-white text-xs font-bold rounded-full">
+          <span className="ml-1.5 mt-0.5 px-1.5 py-0.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex-shrink-0 self-start">
             {item.badge}
           </span>
         )}
@@ -853,11 +881,14 @@ export default function DashboardLayout({
                       if (willOpen) warmGroup();
                     }}
                     onPointerEnter={warmGroup}
-                    className="w-full flex items-center px-6 py-3 text-primary-100 hover:bg-primary-700 transition-colors"
+                    className="w-full flex items-start px-4 py-2.5 text-primary-100 hover:bg-primary-700 transition-colors"
                     aria-expanded={open}
                   >
-                    <GroupIcon className="w-5 h-5 mr-3 flex-shrink-0" />
-                    <span className="flex-1 text-left font-semibold text-xs uppercase tracking-wider">
+                    <GroupIcon className="w-[18px] h-[18px] mr-2.5 mt-0.5 flex-shrink-0" />
+                    {/* Wraps like the items below it. A group heading cut in
+                        half is worse than an item cut in half: it is the
+                        thing you navigate by. */}
+                    <span className="flex-1 min-w-0 text-left font-semibold text-[11px] uppercase tracking-wide leading-snug break-words">
                       {section.label}
                     </span>
                     {open ? (
@@ -882,8 +913,14 @@ export default function DashboardLayout({
                 {session.user.name?.charAt(0)}
               </div>
               <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{session.user.name}</p>
-                <p className="text-xs text-primary-300 truncate">{session.user.role.replace(/_/g, ' ')}</p>
+                {/* Names in full here too. A staff list holds names far
+                    longer than "Super Administrator", and a signed-in user
+                    seeing somebody else's half-name is a reason to doubt
+                    they are signed in as themselves. */}
+                <p className="text-sm font-semibold leading-snug break-words">{session.user.name}</p>
+                <p className="text-[11px] text-primary-300 leading-snug break-words">
+                  {session.user.role.replace(/_/g, ' ')}
+                </p>
               </div>
             </div>
             <button

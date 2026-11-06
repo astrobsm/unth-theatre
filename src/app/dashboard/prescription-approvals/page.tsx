@@ -291,7 +291,7 @@ export default function PrescriptionApprovalsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Shield className="w-7 h-7 text-blue-600" />
-            Prescription Approvals
+            Consultant Anaesthetist Prescription Approval
           </h1>
           <p className="text-gray-500 mt-1">
             Review and approve anaesthetic prescriptions before pharmacy packing

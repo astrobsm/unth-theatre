@@ -214,13 +214,13 @@ const KB: KbEntry[] = [
     topic: 'Submit a prescription',
     keywords: ['prescription', 'prescribe', 'submit prescription', 'anaesthetic prescription', 'drug order'],
     answer:
-      'Prescriptions → New Prescription (opens from a pre-op review or directly). Add medications (drug, dose, route, frequency, duration), indications and special instructions. Submit — pharmacy is alerted on the radio in real time and via Prescription Approvals.',
+      'Prescriptions → New Prescription (opens from a pre-op review or directly). Add medications (drug, dose, route, frequency, duration), indications and special instructions. Submit — pharmacy is alerted on the radio in real time and via Consultant Anaesthetist Prescription Approval.',
   },
   {
     topic: 'Approve a prescription',
     keywords: ['approve prescription', 'pharmacy approve', 'prescription approval'],
     answer:
-      'Pharmacist role only. Prescription Approvals → open pending → review → Approve / Query / Reject. Approved scripts move to Medication Tracking for collection, administration and reconciliation.',
+      'Pharmacist role only. Consultant Anaesthetist Prescription Approval → open pending → review → Approve / Query / Reject. Approved scripts move to Medication Tracking for collection, administration and reconciliation.',
   },
   {
     topic: 'Medication tracking',
