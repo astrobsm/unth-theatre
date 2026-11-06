@@ -4,6 +4,14 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { generateUniqueEmergencyAnaesthesiaCode } from '@/lib/surgeryCodes';
+import { queueMessage } from '@/lib/comms/send';
+import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
+import {
+  OPTIMISATION_CATEGORIES, canCompleteReview, type OptimisationRequirement,
+} from '@/lib/anaesthesia/fitness';
+import {
+  adviceNotificationLine, buildSurgeonFitnessAdvice,
+} from '@/lib/emergency/fitnessAdvice';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +45,24 @@ const createReviewSchema = z.object({
   anaestheticPlan: z.string().optional(),
   specialConsiderations: z.string().optional(),
   riskAssessment: z.string().optional(),
+  /**
+   * WAS BEING SILENTLY DISCARDED. The form has had a box headed "What needs
+   * to be optimised before surgery" for as long as it has had two steps, and
+   * the anaesthetist's answer never reached the database: zod strips keys it
+   * does not declare, and this one was not declared. Anybody who typed in it
+   * was typing into a void.
+   */
+  optimisationNeeded: z.string().max(4000).optional(),
+  /** Fit for the proposed anaesthesia, now. The same two values as elective. */
+  fitnessDecision: z.enum(['FIT', 'NOT_FIT']).optional(),
+  /** What must be done to make an unfit patient fit. Required when NOT_FIT. */
+  optimisationRequirements: z.array(z.object({
+    category: z.enum(OPTIMISATION_CATEGORIES),
+    action: z.string().min(1).max(2000),
+    responsible: z.string().max(200).nullish(),
+    targetCompletion: z.string().nullish(),
+    priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional(),
+  })).optional(),
   consentObtained: z.boolean().default(false),
   consentNotes: z.string().optional(),
   // Prescription
@@ -117,6 +143,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = createReviewSchema.parse(body);
 
+    // THE DECISION IS MANDATORY, and checked here as well as in the form.
+    //
+    // The same gate the elective review uses, so the two cannot drift: a
+    // decision, and — when the answer is NOT_FIT — at least one requirement
+    // with an instruction in it. "Not fit" with nothing to do is a dead end;
+    // somebody has to know what would change the answer, or the case simply
+    // stalls with no owner.
+    const requirements: OptimisationRequirement[] = (data.optimisationRequirements ?? [])
+      .map((r) => ({
+        category: r.category,
+        action: r.action,
+        responsible: r.responsible ?? null,
+        targetCompletion: r.targetCompletion ?? null,
+        priority: r.priority ?? 'MEDIUM',
+      }));
+
+    const gate = canCompleteReview({
+      decision: data.fitnessDecision ?? null,
+      requirements,
+      reviewerId: session.user.id,
+    });
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.problems.join(' '), details: gate.problems },
+        { status: 400 },
+      );
+    }
+
+    const decidedAt = new Date();
+
     // Create the review
     const review = await prisma.emergencyPreAnaestheticReview.create({
       data: {
@@ -143,6 +199,11 @@ export async function POST(request: NextRequest) {
         anaestheticPlan: data.anaestheticPlan,
         specialConsiderations: data.specialConsiderations,
         riskAssessment: data.riskAssessment,
+        optimisationNeeded: data.optimisationNeeded,
+        fitnessDecision: data.fitnessDecision,
+        fitnessDecidedAt: decidedAt,
+        fitnessDecidedById: session.user.id,
+        optimisationPlan: requirements.length > 0 ? JSON.stringify(requirements) : null,
         consentObtained: data.consentObtained,
         consentNotes: data.consentNotes,
         status: 'COMPLETED',
@@ -248,6 +309,132 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    /**
+     * TELL THE SURGEON.
+     *
+     * The decision is useless sitting in a row. The surgeon is standing
+     * somewhere waiting to know whether to send for the patient, and until
+     * now the answer reached them only if the anaesthetist happened to find
+     * them in person.
+     *
+     * Both answers are sent, because silence is the thing this change
+     * exists to end: FIT is four lines saying nothing is waiting on
+     * anaesthesia, NOT_FIT carries the list and asks for optimisation and
+     * re-listing.
+     *
+     * Never throws. The review is already written, and a saved review that
+     * answers 500 is entered twice by an anaesthetist who thinks it failed.
+     */
+    let advice: { text: string; whatsapp: { name: string; number: string } | null } | null = null;
+    let adviceSkipped: string | null = null;
+    try {
+      const booking = await prisma.emergencySurgeryBooking.findUnique({
+        where: { id: data.emergencyBookingId },
+        select: {
+          procedureName: true, theatreName: true, surgeonId: true, surgeonName: true,
+          surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
+        },
+      });
+
+      const decision = data.fitnessDecision as 'FIT' | 'NOT_FIT';
+      const text = buildSurgeonFitnessAdvice({
+        decision,
+        requirements,
+        facts: {
+          patientName: data.patientName,
+          folderNumber: data.folderNumber,
+          procedureName: booking?.procedureName ?? 'this emergency',
+          theatreName: booking?.theatreName ?? null,
+          surgeonName: booking?.surgeonName ?? null,
+          reviewerName: session.user.name || 'The anaesthetist',
+          anaestheticPlan: data.anaestheticPlan ?? null,
+          optimisationNeeded: data.optimisationNeeded ?? null,
+          riskAssessment: data.riskAssessment ?? null,
+          at: decidedAt,
+        },
+      });
+
+      // The bell first: it is the channel that is certain to arrive.
+      const line = adviceNotificationLine(
+        decision, requirements, session.user.name || 'The anaesthetist',
+      );
+      const recipients = new Set<string>();
+      if (booking?.surgeon?.id) recipients.add(booking.surgeon.id);
+      // The theatre manager too when the patient is not fit: somebody has to
+      // know the room is not about to be used, and it is not the surgeon's
+      // job to tell them while they are arranging blood.
+      if (decision === 'NOT_FIT') {
+        const managers = await prisma.user.findMany({
+          where: {
+            status: 'APPROVED' as any,
+            role: { in: ['THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR'] as any },
+          },
+          select: { id: true },
+        });
+        managers.forEach((m) => recipients.add(m.id));
+      }
+
+      if (recipients.size > 0) {
+        await prisma.notification.createMany({
+          data: Array.from(recipients).map((userId) => ({
+            userId,
+            type: 'EMERGENCY_FITNESS_DECISION',
+            title: decision === 'FIT'
+              ? `✅ Fit for anaesthesia — ${data.patientName}`
+              : `⛔ NOT fit for anaesthesia — ${data.patientName}`,
+            message: line,
+            link: '/dashboard/emergency-booking',
+          })),
+        });
+      }
+
+      const wa = booking?.surgeon?.phoneNumber
+        ? toWhatsAppNumber(booking.surgeon.phoneNumber)
+        : null;
+      if (booking?.surgeon?.id) {
+        try {
+          await queueMessage({
+            channel: 'WHATSAPP' as never,
+            priority: (decision === 'NOT_FIT' ? 'URGENT' : 'HIGH') as never,
+            recipientUserId: booking.surgeon.id,
+            recipientName: booking.surgeon.fullName,
+            recipientAddress: wa,
+            recipientIsStaff: true,
+            body: text,
+            relatedType: 'EMERGENCY_BOOKING',
+            relatedId: data.emergencyBookingId,
+            trigger: 'EMERGENCY_FITNESS_ADVICE',
+            scope: `${review.id}:${booking.surgeon.id}`,
+            createdById: session.user.id,
+            createdByName: session.user.name || '',
+          });
+        } catch (e) {
+          console.error('[emergency-pre-anaesthetic] advice queue failed:', e);
+        }
+      } else {
+        adviceSkipped = 'No surgeon is recorded on this booking, so nobody was advised.';
+      }
+      if (booking?.surgeon?.id && !wa) {
+        adviceSkipped = `${booking.surgeon.fullName} has no phone number on file — advised in the app only.`;
+      }
+
+      // THE QUEUE IS NOT A DELIVERY: the hand-off is what reaches a phone.
+      advice = {
+        text,
+        whatsapp: wa && booking?.surgeon
+          ? { name: booking.surgeon.fullName, number: wa }
+          : null,
+      };
+
+      await prisma.emergencyPreAnaestheticReview.update({
+        where: { id: review.id },
+        data: { surgeonAdvisedAt: new Date(), surgeonAdviceText: text },
+      });
+    } catch (e) {
+      console.error('[emergency-pre-anaesthetic] could not advise the surgeon:', e);
+      adviceSkipped = 'The review was saved, but the surgeon could not be advised automatically. Tell them directly.';
+    }
+
     // Audit log
     await prisma.auditLog.create({
       data: {
@@ -259,11 +446,18 @@ export async function POST(request: NextRequest) {
           bookingId: data.emergencyBookingId,
           patient: data.patientName,
           hasPrescription: !!prescription,
+          fitnessDecision: data.fitnessDecision,
+          requirements: requirements.map((r) => `${r.category}: ${r.action}`),
+          surgeonAdvised: Boolean(advice),
         }),
       },
     });
 
-    return NextResponse.json({ review, prescription }, { status: 201 });
+    return NextResponse.json({
+      review, prescription, advice, adviceSkipped,
+      fitnessDecision: data.fitnessDecision,
+      requirements,
+    }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation error', details: error.errors }, { status: 400 });

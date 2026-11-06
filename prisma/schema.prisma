@@ -6627,6 +6627,46 @@ model EmergencyPreAnaestheticReview {
   /// things somebody must DO before it starts, and a reader cannot act on
   /// the second if it is buried in the first.
   optimisationNeeded String?
+
+  /// IS THIS PATIENT FIT FOR THE PROPOSED ANAESTHESIA, NOW.
+  ///
+  /// Asked for on 6 November: the emergency assessment must end in a fitness
+  /// decision and, where the answer is no, in a list of what would change it
+  /// and advice to the surgeon to optimise and re-list.
+  ///
+  /// The elective review has answered this question since August; the
+  /// emergency one ended in three prose fields and nothing anybody
+  /// downstream could act on. A scrub nurse reading "would benefit from
+  /// optimisation of haemoglobin" has to decide for herself whether the case
+  /// is off, and two people read it two ways.
+  ///
+  /// THE SAME ENUM AS THE ELECTIVE REVIEW, deliberately. A patient is fit for
+  /// an anaesthetic or is not, and a second vocabulary for emergencies would
+  /// mean the theatre board had to learn which kind of case it was looking at
+  /// before it could read the answer.
+  fitnessDecision    AnaestheticFitness?
+  fitnessDecidedAt   DateTime?
+  fitnessDecidedById String?
+
+  /// What must be done to make this patient fit, as a JSON array of
+  /// { category, action, responsible, targetCompletion, priority }.
+  ///
+  /// JSON rather than rows, unlike the elective
+  /// AnaestheticOptimisationRequirement table, and the reason is the clock:
+  /// an emergency optimisation is measured in minutes and is closed by the
+  /// anaesthetist re-reviewing the patient, not by a task board being ticked
+  /// off over days. What is needed here is the list as it was given, carried
+  /// into the advice to the surgeon and readable afterwards.
+  optimisationPlan   String? @db.Text
+
+  /// When the surgeon was told, and what they were told.
+  ///
+  /// Recorded because "I told him" is not an answer anybody can check, and
+  /// because an unfit emergency that was never re-listed is exactly the case
+  /// a review afterwards asks about.
+  surgeonAdvisedAt  DateTime?
+  surgeonAdviceText String?   @db.Text
+
   consentObtained    Boolean @default(false)
   consentNotes       String?
 

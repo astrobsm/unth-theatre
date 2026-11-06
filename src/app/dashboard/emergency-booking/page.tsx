@@ -16,6 +16,10 @@ import {
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import { HOUR_RULE_NOTICE_PLAIN } from '@/lib/emergency/hourRule';
+import {
+  CATEGORY_LABELS, OPTIMISATION_CATEGORIES, canCompleteReview,
+  type FitnessDecision, type OptimisationRequirement,
+} from '@/lib/anaesthesia/fitness';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
 
@@ -671,6 +675,51 @@ export default function EmergencyBookingPage() {
 
   /** Which step of the assessment is open (1..REVIEW_STEPS.length). */
   const [reviewStep, setReviewStep] = useState(1);
+
+  /**
+   * The answer the rest of the theatre is waiting for: is this patient fit
+   * for the proposed anaesthetic, now.
+   *
+   * Kept out of reviewForm because reviewForm is a bag of strings that gets
+   * mapped wholesale onto the payload, and this one decides whether a
+   * patient goes to theatre. It is typed, it is validated by the same gate
+   * the server uses, and it is empty until somebody chooses.
+   */
+  const [fitnessDecision, setFitnessDecision] = useState<FitnessDecision | ''>('');
+  const [requirements, setRequirements] = useState<{
+    category: string; action: string; responsible: string;
+    targetCompletion: string; priority: string;
+  }[]>([]);
+  /** What the surgeon was told, shown the moment the review is saved. */
+  const [fitnessAdvice, setFitnessAdvice] = useState<{
+    decision: FitnessDecision;
+    text: string;
+    whatsapp: { name: string; number: string } | null;
+    skipped: string | null;
+  } | null>(null);
+
+  const addRequirement = () => setRequirements(rs => [...rs, {
+    category: 'FURTHER_INVESTIGATION', action: '', responsible: '',
+    targetCompletion: '', priority: 'HIGH',
+  }]);
+  const updateRequirement = (i: number, patch: Partial<typeof requirements[number]>) =>
+    setRequirements(rs => rs.map((r, n) => (n === i ? { ...r, ...patch } : r)));
+  const removeRequirement = (i: number) =>
+    setRequirements(rs => rs.filter((_, n) => n !== i));
+
+  /**
+   * What still stops this review being submitted.
+   *
+   * The same function the API calls, so the form cannot be kinder than the
+   * server: a decision is mandatory, and NOT FIT without a single
+   * instruction is a dead end that leaves the case stalled with no owner.
+   */
+  const reviewProblems = canCompleteReview({
+    decision: fitnessDecision || null,
+    requirements: requirements as OptimisationRequirement[],
+    // The session is the reviewer; the gate only needs to know there is one.
+    reviewerId: session?.user?.id ?? 'session',
+  }).problems;
   /**
    * Prescribing a drug by name, on the plan step, folded away by default.
    *
@@ -923,6 +972,12 @@ export default function EmergencyBookingPage() {
   // Submit pre-anaesthetic review
   const handleSubmitReview = async () => {
     if (!reviewBooking) return;
+    // Checked here so the anaesthetist is told which box is empty while they
+    // are still looking at it, rather than meeting a 400 after the submit.
+    if (reviewProblems.length > 0) {
+      alert(reviewProblems.join('\n'));
+      return;
+    }
     setSubmittingReview(true);
     try {
       const payload: any = {
@@ -976,6 +1031,23 @@ export default function EmergencyBookingPage() {
       // Needed to hang the consumable requests on a case.
       if (reviewBooking.surgeryId) payload.surgeryId = reviewBooking.surgeryId;
 
+      // The decision, and what would change it.
+      payload.fitnessDecision = fitnessDecision;
+      if (fitnessDecision === 'NOT_FIT') {
+        payload.optimisationRequirements = requirements.map(r => ({
+          category: r.category,
+          action: r.action.trim(),
+          responsible: r.responsible.trim() || null,
+          // A datetime-local value is read in the browser's own zone, which
+          // on a theatre handset is WAT. Sent as an instant so the server is
+          // not left guessing.
+          targetCompletion: r.targetCompletion
+            ? new Date(r.targetCompletion).toISOString()
+            : null,
+          priority: r.priority,
+        }));
+      }
+
       const res = await fetch('/api/emergency-pre-anaesthetic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -983,6 +1055,7 @@ export default function EmergencyBookingPage() {
       });
 
       if (res.ok) {
+        const saved = await res.json().catch(() => null);
         setShowReviewModal(false);
         setReviewBooking(null);
         setReviewForm({
@@ -1000,7 +1073,22 @@ export default function EmergencyBookingPage() {
         setAnaesPacks({ medications: [], consumableRequests: [] });
         setReviewStep(1);
         if (expandedBooking) fetchReviews(expandedBooking);
-        alert('Pre-anaesthetic review submitted. Emergency prescription sent to pharmacy.');
+
+        // What the surgeon was told, handed straight back. The queue is not
+        // a delivery, so the wa.me button here is what actually reaches
+        // them while the anaesthetist is still standing by the patient.
+        if (saved?.advice?.text && fitnessDecision) {
+          setFitnessAdvice({
+            decision: fitnessDecision,
+            text: saved.advice.text,
+            whatsapp: saved.advice.whatsapp ?? null,
+            skipped: saved.adviceSkipped ?? null,
+          });
+        } else {
+          alert('Pre-anaesthetic review submitted. Emergency prescription sent to pharmacy.');
+        }
+        setFitnessDecision('');
+        setRequirements([]);
       } else {
         const err = await res.json();
         alert(err.error || 'Failed to submit review');
@@ -2334,6 +2422,165 @@ export default function EmergencyBookingPage() {
               </div>
               </>
               )}
+
+              {/* ===== THE DECISION =====
+                  Last on the last step, because it is the conclusion of the
+                  assessment and not another field in it. Everything above
+                  is the evidence; this is the answer the rest of the theatre
+                  is waiting for, and until 6 November the form never asked
+                  it at all. */}
+              {reviewStep === 2 && (
+                <div className="md:col-span-2 mt-2 border-2 border-purple-200 rounded-xl overflow-hidden">
+                  <div className="bg-purple-50 px-4 py-3 border-b border-purple-200">
+                    <h4 className="font-bold text-purple-900 flex items-center gap-2">
+                      <Stethoscope className="h-5 w-5" />
+                      Fitness for the proposed anaesthesia
+                    </h4>
+                    <p className="text-xs text-purple-800 mt-1">
+                      Required. The theatre, the holding area and the surgeon all read this
+                      answer; prose above it cannot be acted on by anybody but you.
+                    </p>
+                  </div>
+
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setFitnessDecision('FIT'); setRequirements([]); }}
+                        className={`px-4 py-3 rounded-xl border-2 text-left font-semibold ${
+                          fitnessDecision === 'FIT'
+                            ? 'border-green-600 bg-green-50 text-green-900'
+                            : 'border-gray-200 hover:border-green-300 text-gray-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <CheckCircle className="h-5 w-5" /> FIT for this anaesthetic
+                        </span>
+                        <span className="block text-xs font-normal mt-1">
+                          Nothing is waiting on anaesthesia. The case can go.
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFitnessDecision('NOT_FIT');
+                          // Open one empty requirement straight away: "not
+                          // fit" with nothing to do is the dead end this
+                          // section exists to prevent.
+                          setRequirements(rs => (rs.length > 0 ? rs : [{
+                            category: 'FURTHER_INVESTIGATION', action: '',
+                            responsible: '', targetCompletion: '', priority: 'HIGH',
+                          }]));
+                        }}
+                        className={`px-4 py-3 rounded-xl border-2 text-left font-semibold ${
+                          fitnessDecision === 'NOT_FIT'
+                            ? 'border-red-600 bg-red-50 text-red-900'
+                            : 'border-gray-200 hover:border-red-300 text-gray-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <XCircle className="h-5 w-5" /> NOT FIT as they stand
+                        </span>
+                        <span className="block text-xs font-normal mt-1">
+                          Say what must be done to make them fit.
+                        </span>
+                      </button>
+                    </div>
+
+                    {fitnessDecision === 'NOT_FIT' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-gray-800">
+                            What will make this patient fit
+                          </p>
+                          <button
+                            type="button"
+                            onClick={addRequirement}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-purple-300 text-purple-800 hover:bg-purple-50 font-semibold"
+                          >
+                            + Add another
+                          </button>
+                        </div>
+
+                        {requirements.map((r, i) => (
+                          <div key={i} className="border border-red-200 bg-red-50/50 rounded-lg p-3 space-y-2">
+                            <div className="flex items-start gap-2">
+                              <select
+                                aria-label={`Requirement ${i + 1} category`}
+                                value={r.category}
+                                onChange={e => updateRequirement(i, { category: e.target.value })}
+                                className="flex-1 border rounded-lg p-2 text-sm"
+                              >
+                                {OPTIMISATION_CATEGORIES.map(c => (
+                                  <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>
+                                ))}
+                              </select>
+                              <select
+                                aria-label={`Requirement ${i + 1} priority`}
+                                value={r.priority}
+                                onChange={e => updateRequirement(i, { priority: e.target.value })}
+                                className="border rounded-lg p-2 text-sm"
+                              >
+                                <option value="CRITICAL">Critical</option>
+                                <option value="HIGH">High</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="LOW">Low</option>
+                              </select>
+                              {requirements.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeRequirement(i)}
+                                  title="Remove this requirement"
+                                  className="text-red-400 hover:text-red-600 p-2"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              value={r.action}
+                              onChange={e => updateRequirement(i, { action: e.target.value })}
+                              rows={2}
+                              className="w-full border rounded-lg p-2 text-sm"
+                              placeholder="Precisely what must be done — e.g. Two units crossmatched and in theatre; potassium corrected to above 3.0"
+                            />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={r.responsible}
+                                onChange={e => updateRequirement(i, { responsible: e.target.value })}
+                                className="border rounded-lg p-2 text-sm"
+                                placeholder="Who is being asked — a person or a unit"
+                              />
+                              <input
+                                type="datetime-local"
+                                aria-label={`Requirement ${i + 1} target time`}
+                                value={r.targetCompletion}
+                                onChange={e => updateRequirement(i, { targetCompletion: e.target.value })}
+                                className="border rounded-lg p-2 text-sm"
+                              />
+                            </div>
+                          </div>
+                        ))}
+
+                        <p className="text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
+                          On submitting, the surgeon is advised by WhatsApp and in the app to
+                          <strong> optimise and re-list as soon as these are done</strong> — in an
+                          emergency that means within the hour, not another day. The case is
+                          unblocked by an anaesthetist re-assessing the patient, not by the items
+                          being ticked off.
+                        </p>
+                      </div>
+                    )}
+
+                    {reviewProblems.length > 0 && (
+                      <ul className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                        {reviewProblems.map(m => <li key={m}>• {m}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer — step navigation. Submit appears only on the last
@@ -2368,8 +2615,8 @@ export default function EmergencyBookingPage() {
                 ) : (
                   <button
                     onClick={handleSubmitReview}
-                    disabled={submittingReview}
-                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50 w-full sm:w-auto"
+                    disabled={submittingReview || reviewProblems.length > 0}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   >
                     {submittingReview ? (
                       <>
@@ -2385,6 +2632,80 @@ export default function EmergencyBookingPage() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== WHAT THE SURGEON WAS TOLD =====
+          Shown the moment the review is saved, while the anaesthetist is
+          still standing by the patient. The queued WhatsApp waits on a
+          provider the theatre server does not have, so the button here is
+          what actually reaches the surgeon's phone. */}
+      {fitnessAdvice && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-start justify-between mb-3">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                {fitnessAdvice.decision === 'FIT' ? (
+                  <><CheckCircle className="h-6 w-6 text-green-600" /> Fit — the surgeon has been told</>
+                ) : (
+                  <><XCircle className="h-6 w-6 text-red-600" /> Not fit — advise the surgeon</>
+                )}
+              </h2>
+              <button
+                onClick={() => setFitnessAdvice(null)}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-700 mb-3">
+              The review is saved and the prescription has gone to the pharmacy.
+              {fitnessAdvice.decision === 'NOT_FIT'
+                ? ' The surgeon has been asked to optimise and re-list as soon as the items below are done.'
+                : ' Nothing is waiting on anaesthesia.'}
+            </p>
+
+            <pre className="whitespace-pre-wrap text-xs text-gray-800 font-sans bg-gray-50 border rounded-lg p-3 mb-3 max-h-64 overflow-y-auto">
+              {fitnessAdvice.text.split('────────────────────')[0].trim()}
+            </pre>
+
+            {fitnessAdvice.whatsapp && (() => {
+              const href = whatsappLink(fitnessAdvice.whatsapp.number, fitnessAdvice.text);
+              return href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold mb-3"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  <span className="flex-1">
+                    Send to {fitnessAdvice.whatsapp.name}
+                    <span className="block text-xs font-normal opacity-90">
+                      Surgeon on this case
+                    </span>
+                  </span>
+                </a>
+              ) : null;
+            })()}
+
+            {fitnessAdvice.skipped && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                {fitnessAdvice.skipped}
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setFitnessAdvice(null)}
+                className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
