@@ -1,4 +1,5 @@
 import { installPdfTextGuard } from '@/lib/pdfSafeText';
+import { formatRecoveryMinutes } from '@/lib/pacu/slipFormat';
 // jsPDF and autoTable are loaded dynamically to keep them out of the initial bundle
 
 /**
@@ -988,7 +989,9 @@ export async function generatePatientDischargePDF(data: PerioperativeRecordData)
       ['Discharge Readiness', val(p.dischargeReadiness).replace(/_/g, ' ')],
       ['Discharge Time', fmt(p.dischargeTime)],
       ['Discharged To', val(p.dischargedTo)],
-      ['Time in Recovery', p.totalTimeInPACU != null ? `${p.totalTimeInPACU} min` : '—'],
+      // In words, like the transfer slip. The raw figure printed
+      // "102711 min" for a record that was opened and never closed.
+      ['Time in Recovery', formatRecoveryMinutes(p.totalTimeInPACU)],
       ['Vitals Stable', yn(p.dischargeVitalsStable)],
       ['Pain Controlled', yn(p.dischargePainControlled)],
       ['Fully Conscious', yn(p.dischargeFullyConscious)],
