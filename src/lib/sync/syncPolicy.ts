@@ -329,6 +329,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'security_reports', cls: 'APPEND_ONLY', why: 'An account of an event at a time.' },
   { table: 'announcements', cls: 'LWW', why: 'What the suite hears and when. Latest wording wins.' },
   { table: 'emergency_team_chases', cls: 'LWW', why: 'One round of chasing an emergency team. Sent from whichever node the manager has in hand; both must show who was told and when.' },
+  { table: 'emergency_case_blockers', cls: 'LWW', why: 'Why an emergency has not started, and who was chased. Recorded on whichever node the person in the theatre is holding; cleared on whichever is up at the time.' },
   { table: 'emergency_team_availability', cls: 'LWW', why: 'Who answered an emergency call and whether they are coming.' },
 
   // ── Account recovery ─────────────────────────────────────────────────────

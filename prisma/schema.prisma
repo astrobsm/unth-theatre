@@ -4656,6 +4656,7 @@ model EmergencySurgeryBooking {
   surgery                Surgery?                        @relation("EmergencyBookingSurgery", fields: [surgeryId], references: [id])
   teamAvailability       EmergencyTeamAvailability[]
   teamChases             EmergencyTeamChase[]
+  caseBlockers           EmergencyCaseBlocker[]
   preAnaestheticReviews  EmergencyPreAnaestheticReview[]
   emergencyPrescriptions EmergencyPrescription[]
   emergencyLabRequests   EmergencyLabRequest[]           @relation("EmergencyLabRequests")
@@ -6556,6 +6557,76 @@ model EmergencyTeamChase {
 
   @@index([emergencyBookingId, chasedAt])
   @@map("emergency_team_chases")
+}
+
+/// Why a booked emergency has not started, and who was chased about it.
+///
+/// Asked for on 7 November 2026: "a place to report reason for the case not
+/// starting yet or any blocker to the emergency so that the appropriate person
+/// can be chased with whatsapp message".
+///
+/// The hour rule has always said a case is defensible in two ways only -- it
+/// starts within the hour, or a blocker is recorded within the hour -- and
+/// until this table there was nowhere on the emergency board to record one.
+/// CaseBlockerReport exists for elective lists but hangs off a Surgery row,
+/// and an emergency has no Surgery until it is approved, which is exactly the
+/// stretch where the hour runs out.
+///
+/// Reason codes are the ones lib/caseBlockers.ts uses for elective cases, plus
+/// five that only stop an emergency, so a month's figures add up across both
+/// boards. The list is in lib/emergency/blockers.ts, which also decides who is
+/// chased for each.
+///
+/// A row closes only when a person records that it is cleared. Not on a timer,
+/// not because the case later started.
+model EmergencyCaseBlocker {
+  id                 String @id @default(uuid())
+  emergencyBookingId String
+
+  /// One of EMERGENCY_BLOCKER_REASONS in lib/emergency/blockers.
+  reason String
+  /// Free text. Compulsory for the reasons whose whole meaning is in it.
+  detail String? @db.Text
+
+  reportedById   String?
+  reportedByName String
+  reportedByRole String?
+  reportedAt     DateTime @default(now())
+
+  /// Where the case stood against the hour when this was recorded. This is the
+  /// fact a review turns on: a blocker recorded inside the hour satisfies the
+  /// standard, one recorded after it does not cure the breach.
+  deadlineAt          DateTime?
+  minutesToDeadline   Int?
+  overdueWhenReported Boolean   @default(false)
+
+  /// JSON array of { userId, name, role, label, reached }.
+  chased          String?
+  whatsappQueued  Int     @default(0)
+  whatsappSkipped String? @db.Text
+
+  /// Cleared by a person, and by nothing else.
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolvedByName String?
+  resolvedNote   String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  emergencyBooking EmergencySurgeryBooking @relation(fields: [emergencyBookingId], references: [id])
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns
+  /// as drift. Application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([emergencyBookingId, reportedAt])
+  @@index([resolvedAt])
+  @@index([reason])
+  @@map("emergency_case_blockers")
 }
 
 // ========================

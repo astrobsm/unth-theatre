@@ -88,6 +88,47 @@ export const ROLE_DUTY: Record<string, string> = {
   CSSD: 'Confirm the instrument sets for this case are sterile and available.',
 };
 
+/**
+ * The two things every chased person must do, written as steps.
+ *
+ * ASKED FOR ON 7 NOVEMBER: "a whatsapp message chase button to call
+ * attention of the team members of the booked emergency and steps to take to
+ * indicate their availability and report any blocker."
+ *
+ * WHY STEPS AND NOT A SENTENCE. The chase already told people to tap their
+ * availability, and the people who most need to are the ones who open this
+ * app twice a month and do not know the screen is called Emergency Surgery
+ * Booking, or that the buttons sit on the card rather than in a menu. "Tap
+ * your availability" is an instruction to somebody who already knows where
+ * it is. A numbered route, from the handset in their hand to the button, is
+ * an instruction to everybody else.
+ *
+ * WHY THE BLOCKER STEP IS HERE AT ALL. Until 7 November the emergency board
+ * had nowhere to record one, while the notice at the foot of every chase
+ * promised that a blocker recorded within the hour satisfies the standard. A
+ * rule that cannot be complied with on the screen that states it is not a
+ * rule, it is a trap. The step says plainly that this is the part which
+ * protects them, because it is true, and because it is the only framing that
+ * gets a blocker recorded at minute forty instead of a silence.
+ */
+export const RESPONSE_STEPS = [
+  '*WHAT TO DO \u2014 STEP BY STEP:*',
+  '1. Open the app and sign in.',
+  '2. Go to *Emergency Surgery Booking* in the menu.',
+  '3. Find this patient among the active cases.',
+  '4. Tap one of *I\u2019m Available*, *En Route*, *Arrived* or *Unavailable*. '
+    + 'That is your availability. It is the only one the theatre can see, and a '
+    + 'name with nothing beside it is read as "not coming".',
+  '5. If anything is stopping you, or stopping the case, tap *Report a blocker*, '
+    + 'choose what is in the way and say it in one line. Whoever can clear it is '
+    + 'chased on WhatsApp the moment you press it.',
+  '',
+  'Step 5 is the one that protects you. An hour that passes with neither a start '
+    + 'nor a recorded blocker is a breach by everybody on the case. An hour with a '
+    + 'blocker recorded inside it is a case that could not go \u2014 which is a '
+    + 'different thing entirely, and a defensible one.',
+].join('\n');
+
 export interface RollCallMember {
   userId: string;
   name: string;
@@ -279,6 +320,10 @@ export function buildTeamChaseMessage(input: {
           + 'read as "not coming".',
     );
   }
+
+  lines.push('');
+  lines.push('');
+  lines.push(RESPONSE_STEPS);
 
   lines.push('');
   lines.push(

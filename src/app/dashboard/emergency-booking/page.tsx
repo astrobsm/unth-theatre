@@ -12,10 +12,11 @@ import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
   User, Users, Building2, Siren, Phone, Calendar, MapPin, Navigation,
   Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2,
-  Megaphone, MessageCircle, Gavel
+  Megaphone, MessageCircle, Gavel, ShieldAlert
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import { HOUR_RULE_NOTICE_PLAIN } from '@/lib/emergency/hourRule';
+import { EMERGENCY_BLOCKER_REASONS } from '@/lib/emergency/blockers';
 import {
   CATEGORY_LABELS, OPTIMISATION_CATEGORIES, canCompleteReview,
   type FitnessDecision, type OptimisationRequirement,
@@ -212,6 +213,15 @@ interface EmergencyBooking {
   bloodUnits?: number;
   surgeon?: { fullName: string; phoneNumber?: string };
   anesthetist?: { fullName: string; phoneNumber?: string };
+  /// Blockers still open on this case. Sent with the board so a card can say
+  /// what is holding the case up without asking for it.
+  caseBlockers?: {
+    id: string;
+    reason: string;
+    detail: string | null;
+    reportedByName: string;
+    reportedAt: string;
+  }[];
 }
 
 /**
@@ -270,6 +280,48 @@ interface ChaseRollCall {
   }[];
 }
 
+/** A blocker as the board shows it. */
+interface BlockerRow {
+  id: string;
+  reason: string;
+  label: string;
+  owner: string | null;
+  detail: string | null;
+  line: string;
+  reportedByName: string;
+  reportedByRole: string | null;
+  reportedAt: string;
+  overdueWhenReported: boolean;
+  minutesToDeadline: number | null;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
+  resolvedNote: string | null;
+  whatsappQueued: number;
+  chased: { name: string; label: string }[];
+}
+
+interface BlockerData {
+  bookingId: string;
+  standing: ChaseStanding;
+  /** The catalogue comes from the server, so the list of reasons and the
+   *  people each one chases can never drift apart across the wire. */
+  reasons: { code: string; label: string; owner: string; needsDetail: boolean }[];
+  blockers: BlockerRow[];
+  openCount: number;
+  canResolve: boolean;
+}
+
+interface BlockerResult {
+  blocker: BlockerRow;
+  compliance: string;
+  standing: ChaseStanding;
+  owner: string;
+  chased: { name: string; label: string }[];
+  whatsappQueued: number;
+  whatsappSkipped: string[];
+  handoffs: { name: string; kind: string; number: string; text: string }[];
+}
+
 interface ChaseResult {
   chaseId: string | null;
   standing: ChaseStanding;
@@ -291,6 +343,16 @@ interface ChaseResult {
  * messages and a formal notice, and a button every signed-in user could
  * press would be pressed as a joke once and disabled for ever.
  */
+/**
+ * Reason codes as words, for the banner on a card.
+ *
+ * Derived from the catalogue rather than retyped, so a reason added to
+ * lib/emergency/blockers.ts can never show on the board as a raw code.
+ */
+const BLOCKER_LABELS: Record<string, string> = Object.fromEntries(
+  EMERGENCY_BLOCKER_REASONS.map((r) => [r.code, r.label]),
+);
+
 const CHASE_ROLES = [
   'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'CHIEF_MEDICAL_DIRECTOR',
   'CMAC', 'DC_MAC', 'THEATRE_CHAIRMAN', 'HEAD_OF_SURGERY', 'HEAD_OF_ANAESTHESIA',
@@ -532,6 +594,22 @@ export default function EmergencyBookingPage() {
   const [chaseSending, setChaseSending] = useState(false);
   const [chaseResult, setChaseResult] = useState<ChaseResult | null>(null);
   const [chaseError, setChaseError] = useState<string | null>(null);
+
+  // -- Reporting what is stopping a case ---------------------------------
+  //
+  // Asked for on 7 November: "a place to report reason for the case not
+  // starting yet or any blocker to the emergency so that the appropriate
+  // person can be chased with whatsapp message". Every signed-in member of
+  // staff may do it; see the note on the endpoint for why that is deliberate.
+  const [blockerFor, setBlockerFor] = useState<string | null>(null);
+  const [blockerData, setBlockerData] = useState<BlockerData | null>(null);
+  const [blockerReason, setBlockerReason] = useState('');
+  const [blockerDetail, setBlockerDetail] = useState('');
+  const [blockerLoading, setBlockerLoading] = useState(false);
+  const [blockerSending, setBlockerSending] = useState(false);
+  const [blockerResult, setBlockerResult] = useState<BlockerResult | null>(null);
+  const [blockerError, setBlockerError] = useState<string | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const canAssignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
     'THEATRE_CHAIRMAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'NURSE_MANAGER']
@@ -1102,6 +1180,83 @@ export default function EmergencyBookingPage() {
   };
 
   /**
+   * Why this case has not started, and who gets chased about it.
+   *
+   * Read before anything is recorded: the dialogue shows what is already open
+   * on the case first, because the commonest thing a second person has to say
+   * about a delay is that somebody has already said it.
+   */
+  const openBlocker = async (bookingId: string) => {
+    setBlockerFor(bookingId);
+    setBlockerData(null);
+    setBlockerResult(null);
+    setBlockerError(null);
+    setBlockerReason('');
+    setBlockerDetail('');
+    setBlockerLoading(true);
+    try {
+      const res = await fetch(`/api/emergency-booking/${bookingId}/blocker`);
+      if (res.ok) setBlockerData(await res.json());
+      else {
+        const err = await res.json().catch(() => ({}));
+        setBlockerError(err.error || 'Could not read the blockers on this case.');
+      }
+    } catch {
+      setBlockerError('Network error. Check your connection and try again.');
+    } finally {
+      setBlockerLoading(false);
+    }
+  };
+
+  const sendBlocker = async () => {
+    if (!blockerFor || !blockerReason) return;
+    setBlockerSending(true);
+    setBlockerError(null);
+    try {
+      const res = await fetch(`/api/emergency-booking/${blockerFor}/blocker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: blockerReason, detail: blockerDetail }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) setBlockerResult(data as BlockerResult);
+      else setBlockerError(data?.error || 'That could not be recorded.');
+    } catch {
+      setBlockerError('Network error. Nothing was recorded — try again.');
+    } finally {
+      setBlockerSending(false);
+    }
+  };
+
+  const resolveBlocker = async (blockerId: string) => {
+    if (!blockerFor) return;
+    setResolvingId(blockerId);
+    setBlockerError(null);
+    try {
+      const res = await fetch(`/api/emergency-booking/${blockerFor}/blocker`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockerId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        setBlockerData((p) => (p
+          ? {
+            ...p,
+            openCount: data.openCount,
+            blockers: p.blockers.map((b) => (b.id === blockerId ? data.blocker : b)),
+          }
+          : p));
+        fetchBookings();
+      } else setBlockerError(data?.error || 'That could not be recorded.');
+    } catch {
+      setBlockerError('Network error. Nothing was recorded — try again.');
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  /**
    * Open the roll call for a case.
    *
    * Read before anything is sent, deliberately. The sender sees who has
@@ -1557,6 +1712,37 @@ export default function EmergencyBookingPage() {
                       </div>
                     </div>
 
+                    {/* What is stopping this case, on the card itself.
+                        A blocker recorded where only the person who filed it
+                        can see it is the delay staying invisible with an extra
+                        step in it. It stays until somebody records it cleared;
+                        nothing closes it on a timer. */}
+                    {(booking.caseBlockers?.length ?? 0) > 0 && (
+                      <div className="mt-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-3">
+                        <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+                          <ShieldAlert className="h-4 w-4 flex-shrink-0" />
+                          {booking.caseBlockers?.length === 1
+                            ? 'This case is held up'
+                            : `This case is held up — ${booking.caseBlockers?.length} blockers`}
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {booking.caseBlockers?.map((b) => (
+                            <li key={b.id} className="text-xs text-amber-900">
+                              • <strong>{BLOCKER_LABELS[b.reason] ?? b.reason}</strong>
+                              {b.detail ? ` — ${b.detail}` : ''}
+                              <span className="opacity-75">
+                                {' '}({b.reportedByName}, {new Date(b.reportedAt)
+                                  .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-1 text-[11px] text-amber-800">
+                          Open until somebody records that it is cleared.
+                        </p>
+                      </div>
+                    )}
+
                     {/* ACTION BUTTONS ROW */}
                     <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-gray-200">
                       {/* Team Availability Response */}
@@ -1610,6 +1796,30 @@ export default function EmergencyBookingPage() {
                         >
                           <Megaphone className="h-4 w-4" />
                           Chase the team
+                        </button>
+                      )}
+
+                      {/* Why it has not started.
+                          Open to EVERY signed-in member of staff, and that is
+                          the point: the person who knows the case cannot start
+                          is whoever is standing in the room, which is as often
+                          the technician as the consultant. Hidden only once the
+                          case is no longer waiting — there is nothing left to
+                          report about a case already on the table. */}
+                      {!['IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(booking.status) && (
+                        <button
+                          onClick={() => openBlocker(booking.id)}
+                          className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-semibold ${
+                            (booking.caseBlockers?.length ?? 0) > 0
+                              ? 'bg-amber-500 text-white hover:bg-amber-600'
+                              : 'bg-white text-amber-800 border-2 border-amber-500 hover:bg-amber-50'
+                          }`}
+                        >
+                          <ShieldAlert className="h-4 w-4" />
+                          {(booking.caseBlockers?.length ?? 0) > 0
+                            ? `${booking.caseBlockers?.length} blocker${
+                              booking.caseBlockers?.length === 1 ? '' : 's'} open`
+                            : 'Report a blocker'}
                         </button>
                       )}
 
@@ -2707,6 +2917,220 @@ export default function EmergencyBookingPage() {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== WHY IT HAS NOT STARTED ===== */}
+      {blockerFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <ShieldAlert className="h-6 w-6 text-amber-600" />
+                {blockerResult ? 'Recorded, and the chase has gone' : 'What is stopping this case?'}
+              </h2>
+              <button
+                onClick={() => { setBlockerFor(null); setBlockerData(null); setBlockerResult(null); }}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            {blockerLoading && <p className="text-sm text-gray-500">Reading the case…</p>}
+
+            {blockerError && (
+              <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {blockerError}
+              </p>
+            )}
+
+            {/* ---- Before reporting ---- */}
+            {blockerData && !blockerResult && (
+              <>
+                <div className={`rounded-xl border-2 p-3 mb-4 ${
+                  blockerData.standing.overdue
+                    ? 'border-red-300 bg-red-50 text-red-900'
+                    : 'border-amber-300 bg-amber-50 text-amber-900'
+                }`}>
+                  <p className="font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    {blockerData.standing.label}
+                  </p>
+                  {/* The whole reason this screen exists, said once, plainly.
+                      The hour rule has always offered two ways to comply and
+                      the board had nowhere to do the second one. */}
+                  <p className="mt-1 text-xs">
+                    {blockerData.standing.overdue
+                      ? 'The hour has gone. Recording what is in the way does not undo that, '
+                        + 'but it names it, it chases whoever can clear it, and it is what the '
+                        + 'review will ask about.'
+                      : 'Recording a blocker inside the hour satisfies the standard. A case '
+                        + 'that genuinely cannot start is defensible; silence is not.'}
+                  </p>
+                </div>
+
+                {/* Blockers already on this case, newest first. */}
+                {blockerData.blockers.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    {blockerData.blockers.map((b) => (
+                      <div
+                        key={b.id}
+                        className={`rounded-lg border p-2.5 text-sm ${
+                          b.resolvedAt
+                            ? 'border-gray-200 bg-gray-50 text-gray-600'
+                            : 'border-amber-300 bg-amber-50 text-amber-900'
+                        }`}
+                      >
+                        <p className="font-semibold">
+                          {b.resolvedAt ? '✅ ' : '🚧 '}{b.label}
+                          {b.detail ? <span className="font-normal"> — {b.detail}</span> : null}
+                        </p>
+                        <p className="text-xs opacity-80">
+                          {b.reportedByName}, {new Date(b.reportedAt).toLocaleString()}
+                          {b.chased.length > 0 && ` · chased ${b.chased.length}`}
+                          {b.resolvedAt && ` · cleared by ${b.resolvedByName}`}
+                        </p>
+                        {!b.resolvedAt && blockerData.canResolve && (
+                          <button
+                            onClick={() => resolveBlocker(b.id)}
+                            disabled={resolvingId === b.id}
+                            className="mt-1.5 rounded-lg bg-green-700 px-3 py-1 text-xs font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+                          >
+                            {resolvingId === b.id ? 'Recording…' : 'This is cleared now'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  What is in the way?
+                </label>
+                <select
+                  value={blockerReason}
+                  onChange={(e) => setBlockerReason(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg text-sm mb-2"
+                >
+                  <option value="">-- choose the reason --</option>
+                  {blockerData.reasons.map((r) => (
+                    <option key={r.code} value={r.code}>{r.label}</option>
+                  ))}
+                </select>
+
+                {/* Who this will chase, before it chases them. Nobody should
+                    send a formal chase to a consultant body without having been
+                    told that is what the button does. */}
+                {blockerReason && (
+                  <p className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-2.5 text-xs text-blue-900">
+                    <strong>This chases {blockerData.reasons
+                      .find((r) => r.code === blockerReason)?.owner}</strong>
+                    {' '}on WhatsApp and in the app, with the patient, the procedure, how long
+                    is left, and what they must do.
+                  </p>
+                )}
+
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Say it in a line
+                  {blockerData.reasons.find((r) => r.code === blockerReason)?.needsDetail
+                    ? ' (required for this one)'
+                    : ' (optional)'}
+                </label>
+                <textarea
+                  value={blockerDetail}
+                  onChange={(e) => setBlockerDetail(e.target.value)}
+                  rows={2}
+                  maxLength={600}
+                  className="w-full px-3 py-2 border rounded-lg text-sm mb-4"
+                  placeholder="e.g. Diathermy in Theatre 2 is not working; no spare on the floor"
+                />
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => { setBlockerFor(null); setBlockerData(null); }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendBlocker}
+                    disabled={blockerSending || !blockerReason}
+                    className="px-5 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <ShieldAlert className="h-4 w-4" />
+                    {blockerSending ? 'Recording…' : 'Record it and chase them'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ---- After reporting: the hand-offs ---- */}
+            {blockerResult && (
+              <>
+                <p className={`mb-3 rounded-lg border p-3 text-sm ${
+                  blockerResult.standing.overdue
+                    ? 'border-red-200 bg-red-50 text-red-900'
+                    : 'border-green-200 bg-green-50 text-green-900'
+                }`}>
+                  {blockerResult.compliance}
+                </p>
+
+                <p className="text-sm text-gray-700 mb-3">
+                  {blockerResult.chased.length > 0
+                    ? `${blockerResult.chased.length} people were told in the app: `
+                      + `${blockerResult.chased.map((c) => `${c.name} (${c.label})`).join(', ')}.`
+                    : 'Nobody could be found to chase for this reason — the blocker is on the record.'}
+                </p>
+
+                {blockerResult.handoffs.length > 0 && (
+                  <>
+                    <p className="text-sm text-gray-700 mb-2">
+                      Press each one to send it on WhatsApp. The message is already written.
+                    </p>
+                    <div className="space-y-2 mb-3">
+                      {blockerResult.handoffs.map((h) => {
+                        const href = whatsappLink(h.number, h.text);
+                        return href ? (
+                          <a
+                            key={`${h.number}-${h.kind}`}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold"
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            <span className="flex-1">
+                              {h.name}
+                              <span className="block text-xs font-normal opacity-90">{h.kind}</span>
+                            </span>
+                          </a>
+                        ) : null;
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {blockerResult.whatsappSkipped.length > 0 && (
+                  <ul className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 mb-3">
+                    {blockerResult.whatsappSkipped.map((m) => <li key={m}>• {m}</li>)}
+                  </ul>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setBlockerFor(null); setBlockerData(null); setBlockerResult(null); fetchBookings();
+                    }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

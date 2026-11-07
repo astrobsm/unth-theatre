@@ -202,6 +202,20 @@ export async function GET(request: NextRequest) {
             scheduledTime: true,
           },
         },
+        // What is holding each case up, so the board can say so on the card
+        // without one fetch per card. Open ones only, scalars only -- the
+        // lesson above about fat includes applies here exactly as much.
+        caseBlockers: {
+          where: { resolvedAt: null },
+          select: {
+            id: true,
+            reason: true,
+            detail: true,
+            reportedByName: true,
+            reportedAt: true,
+          },
+          orderBy: { reportedAt: 'desc' },
+        },
       },
       orderBy: [
         { priority: 'asc' },
