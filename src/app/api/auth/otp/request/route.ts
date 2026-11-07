@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { sendSms } from '@/lib/sms';
+import { resolveRecoveryUser } from '@/lib/auth/recoveryLookup';
 import {
   generateCode,
   hashCode,
@@ -19,14 +20,13 @@ export const dynamic = 'force-dynamic';
  * POST /api/auth/otp/request
  * Body: { identifier: string, purpose: 'PASSWORD_RESET' | 'USERNAME_RECOVERY' }
  *
- * `identifier` is a username OR a phone number — staff who have forgotten their
- * username obviously cannot supply one, and staff who have forgotten their
- * password usually can. Accepting both is the difference between a recovery
- * flow that works and one that only works for people who did not need it.
+ * `identifier` is a STAFF ID NUMBER, a duty code, a phone number or a username.
+ * The Staff ID printed on the card in a person's pocket is the identifier most
+ * likely to be both known and correctly spelled; see lib/auth/recoveryLookup.
  *
  * THE RESPONSE IS ALWAYS THE SAME. Whether the account exists, has no phone
  * number, or was invented by whoever is poking at the endpoint, the caller sees
- * one sentence. Anything else turns this route into a way to enumerate 551
+ * one sentence. Anything else turns this route into a way to enumerate 625
  * members of hospital staff by name.
  */
 
@@ -54,46 +54,29 @@ export async function POST(request: NextRequest) {
 
     if (!identifier) {
       return NextResponse.json(
-        { error: 'Enter your username or the phone number registered with your account.' },
+        {
+          error:
+            'Enter your Staff ID number, or the phone number or username registered '
+            + 'with your account.',
+        },
         { status: 400 },
       );
     }
 
-    // Find by phone if it looks like a phone, otherwise by username. Phone
-    // numbers are matched on the normalised form, because the same person is
-    // stored as 08039133373 by one admin and +2348039133373 by another.
-    const asPhone = normaliseNigerianPhone(identifier);
-    let user = null;
+    // Staff ID number, duty code, phone number or username. One resolver,
+    // shared with /otp/verify: when the two routes each had their own copy of
+    // this lookup, adding a way of identifying yourself to one of them meant
+    // the other would reject the code it had just sent.
+    const match = await resolveRecoveryUser(identifier);
 
-    if (asPhone) {
-      // No normalised column exists, so the candidate spellings are built and
-      // matched. Cheap: this runs once, on a route nobody hits in a loop.
-      const local = `0${asPhone.slice(3)}`;
-      user = await prisma.user.findFirst({
-        where: {
-          status: 'APPROVED',
-          OR: [
-            { phoneNumber: asPhone },
-            { phoneNumber: `+${asPhone}` },
-            { phoneNumber: local },
-            { phoneNumber: local.replace(/(\d{4})(\d{3})(\d{4})/, '$1 $2 $3') },
-          ],
-        },
-        select: { id: true, phoneNumber: true },
-      });
-    }
-    if (!user) {
-      user = await prisma.user.findFirst({
-        where: { username: identifier, status: 'APPROVED' },
-        select: { id: true, phoneNumber: true },
-      });
-    }
-
-    // Unknown account, or an account with no usable phone number. Same answer.
-    // The 16 staff with nothing on file reach the Theatre Manager instead, and
-    // this route must not be the thing that tells an outsider who they are.
-    const destination = normaliseNigerianPhone(user?.phoneNumber);
-    if (!user || !destination) return generic;
+    // Unknown account, an identifier that names more than one account, or an
+    // account with no usable phone number. The same answer to all three. The
+    // 20 approved staff with no phone number on file reach the Theatre Manager
+    // instead, and this route must not be the thing that tells an outsider who
+    // they are.
+    const destination = normaliseNigerianPhone(match?.user.phoneNumber);
+    if (!match || !destination) return generic;
+    const user = match.user;
 
     const recent = await prisma.authOtp.findMany({
       where: { userId: user.id, purpose },
@@ -164,7 +147,14 @@ export async function POST(request: NextRequest) {
         action: 'OTP_REQUESTED',
         tableName: 'auth_otps',
         recordId: otp.id,
-        changes: JSON.stringify({ purpose, delivered: result.sent, provider: result.provider }),
+        changes: JSON.stringify({
+          purpose,
+          delivered: result.sent,
+          provider: result.provider,
+          // How they identified themselves, so a support call can be answered
+          // without asking the person to repeat what they typed.
+          identifiedBy: match.matchedBy,
+        }),
       },
     }).catch(() => { /* an audit failure must not block a locked-out user */ });
 

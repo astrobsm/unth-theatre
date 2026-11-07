@@ -590,7 +590,7 @@ export default function LoginPage() {
               href="/auth/recover"
               className="block text-sm font-medium text-primary-600 hover:text-primary-700"
             >
-              Forgot your username or password? Get a code by SMS
+              Forgot your username or password? Recover with your Staff ID
             </Link>
             {/* Email recovery is removed, not hidden: SMTP has never been
                 configured, so both of those links failed silently and sent

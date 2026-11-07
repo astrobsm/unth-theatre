@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import crypto from 'crypto';
-import {
-  verifyCode,
-  normaliseNigerianPhone,
-  hashCode,
-  type OtpPurpose,
-} from '@/lib/auth/otp';
+import { verifyCode, hashCode, type OtpPurpose } from '@/lib/auth/otp';
+import { resolveRecoveryUser } from '@/lib/auth/recoveryLookup';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +13,11 @@ export const dynamic = 'force-dynamic';
  * For USERNAME_RECOVERY this is the end of the journey: a correct code returns
  * the username, because a username is not a secret — it is printed on rotas and
  * said aloud in handovers. Protecting it behind a code at all is only to stop
- * the endpoint being used to harvest 551 staff names.
+ * the endpoint being used to harvest 625 staff names.
+ *
+ * A Staff ID number is not a secret either, which is why it identifies the
+ * account here but never unlocks it: the code sent to the registered phone is
+ * what proves the person asking is the person named on the card.
  *
  * For PASSWORD_RESET it returns a short-lived ticket, which the reset route
  * exchanges for a password change. The code is consumed here, so it cannot be
@@ -51,29 +51,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Enter the 6-digit code that was sent to you.' }, { status: 400 });
     }
 
-    const asPhone = normaliseNigerianPhone(identifier);
-    let user = null;
-    if (asPhone) {
-      const local = `0${asPhone.slice(3)}`;
-      user = await prisma.user.findFirst({
-        where: {
-          status: 'APPROVED',
-          OR: [
-            { phoneNumber: asPhone },
-            { phoneNumber: `+${asPhone}` },
-            { phoneNumber: local },
-            { phoneNumber: local.replace(/(\d{4})(\d{3})(\d{4})/, '$1 $2 $3') },
-          ],
-        },
-        select: { id: true, username: true },
-      });
-    }
-    if (!user) {
-      user = await prisma.user.findFirst({
-        where: { username: identifier, status: 'APPROVED' },
-        select: { id: true, username: true },
-      });
-    }
+    // The same resolver the request route used, so whatever identified the
+    // person well enough to be sent a code identifies them well enough to
+    // redeem it.
+    const match = await resolveRecoveryUser(identifier);
+    const user = match?.user ?? null;
 
     // One message for every failure below, so a wrong code, an expired code and
     // an account that does not exist are indistinguishable from outside.
