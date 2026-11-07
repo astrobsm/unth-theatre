@@ -23,6 +23,7 @@ import { useSession } from 'next-auth/react';
 import {
   ChevronLeft, Loader2, ShieldCheck, Trash2, UserPlus, Users,
 } from 'lucide-react';
+import TheatreNursingPosts from '@/components/TheatreNursingPosts';
 
 interface Allocation {
   id: string;
@@ -156,11 +157,13 @@ export default function HoldingAreaStaffingPage() {
         <Link href="/dashboard/holding-area" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
           <ChevronLeft className="h-4 w-4" /> Holding area
         </Link>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">Holding area staffing</h1>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900">Theatre staffing</h1>
         <p className="text-gray-600">
-          Who is on the holding area, by shift. The holding area is a waiting area, not a
-          theatre — no operation happens in it — but patients are received, verified and
-          handed over there, so it needs named staff.
+          Who is on the holding area and on the theatre nursing posts, by shift.
+          The holding area is a waiting area, not a theatre — no operation happens
+          in it — but patients are received, verified and handed over there, so it
+          needs named staff. The nursing posts below are who the emergency chase
+          reaches when a case has no theatre.
         </p>
       </div>
 
@@ -250,7 +253,7 @@ export default function HoldingAreaStaffingPage() {
         return (
           <section key={s.value}>
             <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-              <Users className="h-5 w-5 text-gray-500" /> {s.label} shift
+              <Users className="h-5 w-5 text-gray-500" /> Holding area — {s.label} shift
               <span className="text-sm font-normal text-gray-500">
                 {rows.length} {rows.length === 1 ? 'person' : 'people'}
               </span>
@@ -294,6 +297,12 @@ export default function HoldingAreaStaffingPage() {
           </section>
         );
       })}
+
+      {/* The theatre nursing posts. Kept on this screen rather than a new one
+          because it is the same job done by the same person at the same
+          moment: naming who is covering the floor today. */}
+      <hr className="border-gray-200" />
+      <TheatreNursingPosts date={date} canAllocate={canAllocate} />
     </div>
   );
 }

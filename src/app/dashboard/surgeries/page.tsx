@@ -6,6 +6,7 @@ import { Plus, Search, Calendar, AlertCircle, Eye, RefreshCw, Wifi, WifiOff, Pri
 import Link from 'next/link';
 import { AlertTriangle, MessageCircle } from 'lucide-react';
 import PhoneLink from '@/components/PhoneLink';
+import NurseSupervisorBand from '@/components/NurseSupervisorBand';
 import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { outstandingLabel } from '@/lib/preopRequirements';
@@ -939,6 +940,12 @@ export default function SurgeriesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Who is supervising the floor on the day being looked at, with a
+          number to ring. Asked for on 7 November; it reads the same roster
+          rows the theatre staffing screen writes, so there is one answer to
+          "who is supervising", not two. */}
+      <NurseSupervisorBand date={dateFilter} />
+
       <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Surgery Scheduling</h1>

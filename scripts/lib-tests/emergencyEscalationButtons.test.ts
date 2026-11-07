@@ -407,7 +407,14 @@ describe('the endpoints', () => {
 
   it('takes the nurses from the published roster, not from every scrub nurse', () => {
     // Sixty-nine are registered; chasing by role would be a broadcast.
-    expect(assign).toContain("add(fromStaff(team?.scrubNurse), 'Scrub Nurse on call', 'NURSE');");
+    //
+    // Since 7 November the nurses come from the nursing posts named on the
+    // theatre staffing screen, with the on-duty roster kept as the fallback
+    // for a day nobody staffed it. Both are roster-backed; neither is a
+    // findMany on SCRUB_NURSE, which is the thing this test exists to stop.
+    expect(assign).toContain('await resolveEmergencyNursing({');
+    expect(assign).toContain('add(nursing?.scrub ?? null,');
+    expect(assign).toContain("add(fromStaff(team?.scrubNurse), 'Scrub Nurse on duty', 'NURSE');");
     expect(assign).toContain('resolveOnDutyTeam({');
     expect(assign).not.toMatch(/role: \{ in: \[[^\]]*'SCRUB_NURSE'/);
   });

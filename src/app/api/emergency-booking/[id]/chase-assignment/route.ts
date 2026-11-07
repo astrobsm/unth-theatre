@@ -37,6 +37,9 @@ import prisma from '@/lib/prisma';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 import { resolveOnDutyTeam, type StaffEntry } from '@/lib/roster/onDutyTeam';
+import {
+  locationForTheatreName, resolveEmergencyNursing,
+} from '@/lib/roster/theatreNursing';
 import { hourRuleStanding } from '@/lib/emergency/hourRule';
 import {
   ASSIGNMENT_STEPS, assignmentNotificationLine, assignmentSummary,
@@ -183,12 +186,42 @@ async function resolveTargets(booking: LoadedBooking): Promise<{
     'MANAGER',
   ));
 
-  // 2. The nurses who work the assignment panel, from the published roster.
-  add(fromStaff(team?.scrubNurse), 'Scrub Nurse on call', 'NURSE');
-  add(fromStaff(team?.circulatingNurse), 'Circulating Nurse on call', 'NURSE');
-  (team?.supervisors ?? []).forEach((s, i) => add(
-    fromStaff(s), `Nurse Supervisor ${i + 1}`, 'NURSE',
+  // 2. The nurses who work the assignment panel, from the nursing posts named
+  //    on the theatre staffing screen. Asked for on 7 November: until that
+  //    screen existed these three slots resolved to nobody on every single
+  //    chase, because there was nowhere in the application to name them.
+  //
+  //    Read through resolveEmergencyNursing rather than the on-duty team,
+  //    because that resolver knows two things this chase needs and the
+  //    general one does not: an A/E case is covered by the A/E pair and not
+  //    by the main theatre's, and a nurse supervisor is found on the floor's
+  //    shift rather than the emergency rota's.
+  const nursing = await resolveEmergencyNursing({
+    date: new Date(booking.requiredByTime ?? booking.requestedAt),
+    location: locationForTheatreName(booking.theatreName),
+  }).catch(() => null);
+
+  const where = nursing?.location === 'A_AND_E' ? 'A/E theatre' : 'main theatre';
+  add(nursing?.scrub ?? null, `Scrub Nurse on call (${where})`, 'NURSE');
+  add(nursing?.circulating ?? null, `Circulating Nurse on call (${where})`, 'NURSE');
+
+  // The supervisors, chased alongside the theatre manager, as asked.
+  (nursing?.supervisors ?? []).forEach((s) => add(
+    s, `Nurse Supervisor (${s.shift.toLowerCase()})`, 'NURSE',
   ));
+
+  // Whoever the on-duty board would have named, if the posts above are empty.
+  // Not a replacement: a fallback, so a day nobody staffed the screen still
+  // reaches a nurse rather than nobody.
+  if (!nursing?.scrub) add(fromStaff(team?.scrubNurse), 'Scrub Nurse on duty', 'NURSE');
+  if (!nursing?.circulating) {
+    add(fromStaff(team?.circulatingNurse), 'Circulating Nurse on duty', 'NURSE');
+  }
+  if (!(nursing?.supervisors ?? []).length) {
+    (team?.supervisors ?? []).forEach((s, i) => add(
+      fromStaff(s), `Nurse Supervisor ${i + 1}`, 'NURSE',
+    ));
+  }
 
   // 3. The consultant anaesthetist, who is told where the review stands.
   if (booking.anesthetist) {
