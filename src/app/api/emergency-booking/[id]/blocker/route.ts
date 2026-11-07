@@ -74,6 +74,28 @@ const RESOLVE_ROLES = [
  */
 const PER_ROLE_CAP = 3;
 
+/**
+ * Who hears it when nobody holds the role that owns it.
+ *
+ * Found on the live system the day this shipped: of the twenty-three roles
+ * this catalogue chases, nine have no approved account at all -- there is no
+ * registered theatre manager, no blood bank, no biomedical engineer, no works
+ * supervisor and no emergency laboratory. Seven reasons, NO_BLOOD among them,
+ * would therefore have reached nobody but the booking surgeon, and where the
+ * surgeon is the one reporting it they are not chased about their own report
+ * -- so a blocker on blood for an emergency laparotomy would have gone
+ * precisely nowhere.
+ *
+ * That is a gap in who is registered, not in the code, and registering those
+ * accounts is the real fix. Until then a blocker that cannot find its owner
+ * goes to whoever can give the order instead, and the message says plainly
+ * that is why they are getting it. A chase that silently reaches nobody is
+ * worse than no chase, because the screen says it was sent.
+ */
+const NO_OWNER_FALLBACK = [
+  'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_CHAIRMAN',
+];
+
 const reportSchema = z.object({
   reason: z.string().min(1),
   detail: z.string().max(600).optional(),
@@ -282,6 +304,29 @@ export async function POST(
         skipped.push(
           `${inRole.length - PER_ROLE_CAP} more ${role.replace(/_/g, ' ').toLowerCase()} `
           + 'were not messaged — the first few were.',
+        );
+      }
+    }
+
+    // Nobody at all holds the roles that own this one. See NO_OWNER_FALLBACK:
+    // the blocker goes to whoever can give the order instead, labelled with
+    // the reason they are receiving it, rather than reaching nobody while the
+    // screen says it was sent.
+    const foundAnOwner = recipients.length > 0;
+    if (spec.roles.length > 0 && !foundAnOwner) {
+      const standIn = await prisma.user.findMany({
+        where: { status: 'APPROVED' as never, role: { in: NO_OWNER_FALLBACK as never } },
+        select: { id: true, fullName: true, phoneNumber: true, role: true },
+        orderBy: { fullName: 'asc' },
+      }).catch(() => []);
+      standIn.slice(0, PER_ROLE_CAP).forEach((u) => add(
+        u,
+        `theatre management — nobody is registered as ${spec.owner}`,
+      ));
+      if (standIn.length === 0) {
+        skipped.push(
+          'No theatre management account could be found either, so this blocker has '
+          + 'reached nobody but the people on the case. Tell somebody directly.',
         );
       }
     }

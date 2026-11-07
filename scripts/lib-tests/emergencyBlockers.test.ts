@@ -372,6 +372,28 @@ describe('the endpoint', () => {
     expect(api).toContain('were not messaged');
   });
 
+  it('falls back when nobody holds the role that owns the blocker', () => {
+    // Found live the day this shipped: nine of the twenty-three roles have no
+    // approved account, so NO_BLOOD would have reached nobody but the booking
+    // surgeon -- and nobody at all where the surgeon is the reporter.
+    expect(api).toContain('const foundAnOwner = recipients.length > 0;');
+    expect(api).toContain('if (spec.roles.length > 0 && !foundAnOwner) {');
+    // And says why they are getting it, rather than pretending they own it.
+    expect(api).toContain('nobody is registered as ${spec.owner}');
+  });
+
+  it('says so when even the fallback finds nobody', () => {
+    expect(api).toContain('this blocker has');
+    expect(api).toContain('Tell somebody directly.');
+  });
+
+  it('never falls back for a blocker the people on the case own', () => {
+    // PATIENT_NOT_READY, NO_CONSENT and PATIENT_NOT_FIT name no roles because
+    // the surgeon IS the owner. Sending those to administration would be the
+    // broadcast this whole design avoids.
+    expect(api).toContain('spec.roles.length > 0 &&');
+  });
+
   it('hands the sender a wa.me link for everybody reachable', () => {
     // queueMessage writes a row for a provider that is not configured on the
     // theatre server. The hand-off is the part that reaches a phone tonight.
