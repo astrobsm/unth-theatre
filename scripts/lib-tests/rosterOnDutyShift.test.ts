@@ -93,9 +93,15 @@ describe('the board and the endpoint agree', () => {
     // Two copies of "who is on call" would eventually disagree, and a card
     // naming one anaesthetist while the WhatsApp went to another would
     // discredit both.
+    //
+    // Asked through lib/emergency/caseRollCall since 7 November, which the
+    // team chase, the assignment chase and the CMAC escalation all share.
+    // Assert the whole chain, so deleting the delegation fails here.
     const chase = read('src/app/api/emergency-booking/[id]/chase-team/route.ts');
-    expect(chase).toContain('resolveOnDutyTeam');
-    expect(chase).toContain("purpose: 'emergency'");
+    const rollCall = read('src/lib/emergency/caseRollCall.ts');
+    expect(chase).toContain('await assembleRollCall(booking);');
+    expect(rollCall).toContain('resolveOnDutyTeam');
+    expect(rollCall).toContain("purpose: 'emergency'");
   });
 
   it('one person rostered twice fills one slot', () => {

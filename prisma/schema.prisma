@@ -6518,6 +6518,16 @@ model EmergencyTeamChase {
   id                 String @id @default(uuid())
   emergencyBookingId String
 
+  /// TEAM | ASSIGNMENT | CMAC. TEAM chases everybody on the case against the
+  /// hour. ASSIGNMENT chases the theatre manager, the nurses on call and the
+  /// consultant anaesthetist because nobody in theatre has taken the case and
+  /// it still has no room. CMAC hands the Chairman of the Medical Advisory
+  /// Committee the case and the team's phone numbers once two hours have
+  /// passed without it starting. All three are rounds of chasing one booking
+  /// and share this table; without the column a review months later cannot
+  /// tell which message a person was actually sent.
+  kind String @default("TEAM")
+
   chasedAt     DateTime @default(now())
   chasedById   String?
   chasedByName String?

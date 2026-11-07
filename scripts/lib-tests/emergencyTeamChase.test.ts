@@ -401,23 +401,34 @@ describe('the endpoint and the page', () => {
   it('chases the people the booking card itself names', () => {
     // One resolver, not two. A screen listing one anaesthetist while the
     // WhatsApp went to another would discredit both.
-    expect(api).toContain("resolveOnDutyTeam({");
-    expect(api).toContain("purpose: 'emergency'");
+    //
+    // The roll call moved to lib/emergency/caseRollCall on 7 November, when
+    // the CMAC escalation became a third consumer of it. The chain is
+    // asserted whole: the route must delegate, and the shared lib must be the
+    // thing that asks the roster.
+    const rollCall = read('src/lib/emergency/caseRollCall.ts');
+    expect(api).toContain("import { assembleRollCall } from '@/lib/emergency/caseRollCall';");
+    expect(api).toContain('await assembleRollCall(booking);');
+    expect(api).not.toContain('function slotsFor(');
+    expect(rollCall).toContain('resolveOnDutyTeam({');
+    expect(rollCall).toContain("purpose: 'emergency'");
     expect(onDuty).toContain('resolveOnDutyTeam');
     expect(onDuty).not.toContain('prisma.roster.findMany');
     // And asks it the same way: the card passes the date alone, so a chase
     // that narrowed by theatre would resolve a smaller team than the screen
     // shows. On-call rosters are published against the shift, not a room.
     expect(api).not.toContain('theatreId: booking.theatreId');
+    expect(rollCall).not.toContain('theatreId:');
   });
 
   it('covers the whole list, from the surgeon to the porter', () => {
+    const rollCall = read('src/lib/emergency/caseRollCall.ts');
     [
       'Surgeon who booked this case', 'Anaesthetist named on the booking',
       'Anaesthetist (1st on call)', 'Anaesthetist (2nd on call)',
       'Anaesthetic Technician', 'Scrub Nurse', 'Circulating Nurse',
       'Recovery Nurse', 'Porter', 'Cleaner', 'Pharmacist', 'Blood Bank',
-    ].forEach((label) => expect(api, label).toContain(label));
+    ].forEach((label) => expect(rollCall, label).toContain(label));
   });
 
   it('refuses to chase a case that is no longer waiting to start', () => {

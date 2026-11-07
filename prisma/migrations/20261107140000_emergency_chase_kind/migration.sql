@@ -1,0 +1,31 @@
+-- Telling the two kinds of emergency chase apart.
+--
+-- Asked for on 7 November 2026:
+--
+--   "add a button to chase the theatre manager if the booked emergency have
+--    not been acknowledged by the nurses, add a message of how they will
+--    assign theatre and scrub and circulating nurses"
+--
+-- A TEAM chase goes to everybody on the case against the one-hour rule. An
+-- ASSIGNMENT chase goes to the theatre manager, the nurses on call and the
+-- consultant anaesthetist because nobody in theatre has taken the case and it
+-- still has no room. A CMAC escalation hands the Chairman of the Medical
+-- Advisory Committee the case and the team phone numbers once two hours have
+-- passed. All three are rounds of chasing one booking and share this table.
+-- Without the column a review months later cannot tell which message a person
+-- was actually sent, which is the only question anybody asks of it.
+--
+-- Existing rows are all TEAM chases -- the assignment chase did not exist
+-- before this migration -- so the default backfills them correctly.
+--
+-- No sync_enable_table call: emergency_team_chases is already captured, and
+-- sync_capture() uses to_jsonb(NEW), so a new column replicates with no
+-- further wiring and needs no TABLE_POLICIES change.
+--
+-- Guarded: a failed migration blocks `migrate deploy` and therefore every
+-- later release. Plain double-dash comments only; a Prisma triple-slash doc
+-- comment in a migration once broke `migrate deploy`.
+
+-- AlterTable
+ALTER TABLE "emergency_team_chases"
+  ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'TEAM';

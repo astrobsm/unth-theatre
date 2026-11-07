@@ -12,11 +12,12 @@ import {
   AlertTriangle, Plus, Clock, CheckCircle, XCircle, RefreshCw,
   User, Users, Building2, Siren, Phone, Calendar, MapPin, Navigation,
   Stethoscope, Pill, ChevronDown, ChevronUp, Activity, Search, Trash2,
-  Megaphone, MessageCircle, Gavel, ShieldAlert
+  Megaphone, MessageCircle, Gavel, ShieldAlert, DoorOpen, PhoneCall
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import { HOUR_RULE_NOTICE_PLAIN } from '@/lib/emergency/hourRule';
 import { EMERGENCY_BLOCKER_REASONS } from '@/lib/emergency/blockers';
+import { CMAC_AFTER_MINUTES } from '@/lib/emergency/cmacEscalation';
 import {
   CATEGORY_LABELS, OPTIMISATION_CATEGORIES, canCompleteReview,
   type FitnessDecision, type OptimisationRequirement,
@@ -322,6 +323,69 @@ interface BlockerResult {
   handoffs: { name: string; kind: string; number: string; text: string }[];
 }
 
+/** Nobody in theatre has taken this case: who would be chased about it. */
+interface AssignData {
+  bookingId: string;
+  needed: boolean;
+  status: string;
+  theatreName: string | null;
+  bookedAt: string;
+  standing: ChaseStanding;
+  review: {
+    done: boolean; started: boolean; reviewerName: string | null;
+    at: string | null; fitness: string | null; sentence: string;
+  };
+  summary: string;
+  steps: string;
+  targets: { name: string; label: string; kind: string; reachable: boolean }[];
+  skipped: string[];
+  canChase: boolean;
+  chases: { id: string; chasedAt: string; chasedByName: string | null; recipients: number }[];
+}
+
+interface AssignResult {
+  chaseId: string | null;
+  standing: ChaseStanding;
+  review: { done: boolean; sentence: string };
+  recipients: number;
+  targets: { name: string; label: string; kind: string }[];
+  whatsappQueued: number;
+  whatsappSkipped: string[];
+  handoffs: { name: string; kind: string; number: string; text: string }[];
+}
+
+/** Two hours gone: what the CMAC would be handed. */
+interface CmacData {
+  bookingId: string;
+  due: boolean;
+  waited: string;
+  waitedMinutes: number | null;
+  minutesUntilDue: number | null;
+  settled: boolean;
+  officers: { name: string; label: string; reachable: boolean }[];
+  usedFallback: boolean;
+  directory: string;
+  reachable: number;
+  members: number;
+  responded: number;
+  expected: number;
+  review: { done: boolean; started: boolean; reviewerName: string | null };
+  openBlockers: { label: string; detail: string | null; reportedByName: string | null }[];
+  canEscalate: boolean;
+}
+
+interface CmacResult {
+  chaseId: string | null;
+  waited: string;
+  officers: { name: string; label: string }[];
+  usedFallback: boolean;
+  teamListed: number;
+  reachable: number;
+  whatsappQueued: number;
+  whatsappSkipped: string[];
+  handoffs: { name: string; kind: string; number: string; text: string }[];
+}
+
 interface ChaseResult {
   chaseId: string | null;
   standing: ChaseStanding;
@@ -610,6 +674,48 @@ export default function EmergencyBookingPage() {
   const [blockerResult, setBlockerResult] = useState<BlockerResult | null>(null);
   const [blockerError, setBlockerError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  // -- Nobody in theatre has taken the case --------------------------------
+  //
+  // Asked for on 7 November: "a button to chase the theatre manager if the
+  // booked emergency have not been acknowledged by the nurses, add a message
+  // of how they will assign theatre and scrub and circulating nurses" — and
+  // that the consultant anaesthetist be told in the same message whether the
+  // patient has been reviewed.
+  const [assignFor, setAssignFor] = useState<string | null>(null);
+  const [assignData, setAssignData] = useState<AssignData | null>(null);
+  const [assignChaseNote, setAssignChaseNote] = useState('');
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignSending, setAssignSending] = useState(false);
+  const [assignResult, setAssignResult] = useState<AssignResult | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  // -- Two hours gone: hand it to the CMAC ---------------------------------
+  //
+  // Asked for on 7 November: "after 2 hour without the case starting a dynamic
+  // button appears that sends a message to the c-mac about the emergency case
+  // with the phone numbers of the team members on the case so he can reach out
+  // to them."
+  const [cmacFor, setCmacFor] = useState<string | null>(null);
+  const [cmacData, setCmacData] = useState<CmacData | null>(null);
+  const [cmacNote, setCmacNote] = useState('');
+  const [cmacLoading, setCmacLoading] = useState(false);
+  const [cmacSending, setCmacSending] = useState(false);
+  const [cmacResult, setCmacResult] = useState<CmacResult | null>(null);
+  const [cmacError, setCmacError] = useState<string | null>(null);
+
+  /**
+   * Minutes since a case was booked.
+   *
+   * Drives the dynamic CMAC button. Computed on the browser clock, which is
+   * only ever used to decide whether to DRAW the button — the endpoint
+   * recomputes the two hours server-side and refuses early, because a window
+   * only the UI respects is not a window.
+   */
+  const minutesSinceBooking = (iso: string): number => {
+    const t = new Date(iso).getTime();
+    return Number.isNaN(t) ? 0 : Math.max(0, Math.round((Date.now() - t) / 60000));
+  };
 
   const canAssignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
     'THEATRE_CHAIRMAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'NURSE_MANAGER']
@@ -1176,6 +1282,96 @@ export default function EmergencyBookingPage() {
       alert('An error occurred');
     } finally {
       setSubmittingReview(false);
+    }
+  };
+
+  /**
+   * The two escalations a case can need while it waits.
+   *
+   * Both read the case before anything is sent: the sender sees who would be
+   * chased, where the anaesthetic review stands and — for the CMAC — exactly
+   * which personal numbers are about to be forwarded, because nobody should
+   * send a colleague's number onward without having looked at the list.
+   */
+  const openAssignChase = async (bookingId: string) => {
+    setAssignFor(bookingId);
+    setAssignData(null);
+    setAssignResult(null);
+    setAssignError(null);
+    setAssignChaseNote('');
+    setAssignLoading(true);
+    try {
+      const res = await fetch(`/api/emergency-booking/${bookingId}/chase-assignment`);
+      if (res.ok) setAssignData(await res.json());
+      else {
+        const err = await res.json().catch(() => ({}));
+        setAssignError(err.error || 'Could not read this case.');
+      }
+    } catch {
+      setAssignError('Network error. Check your connection and try again.');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const sendAssignChase = async () => {
+    if (!assignFor) return;
+    setAssignSending(true);
+    setAssignError(null);
+    try {
+      const res = await fetch(`/api/emergency-booking/${assignFor}/chase-assignment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: assignChaseNote }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) setAssignResult(data as AssignResult);
+      else setAssignError(data?.error || 'The chase could not be sent.');
+    } catch {
+      setAssignError('Network error. The chase was not sent.');
+    } finally {
+      setAssignSending(false);
+    }
+  };
+
+  const openCmac = async (bookingId: string) => {
+    setCmacFor(bookingId);
+    setCmacData(null);
+    setCmacResult(null);
+    setCmacError(null);
+    setCmacNote('');
+    setCmacLoading(true);
+    try {
+      const res = await fetch(`/api/emergency-booking/${bookingId}/escalate-cmac`);
+      if (res.ok) setCmacData(await res.json());
+      else {
+        const err = await res.json().catch(() => ({}));
+        setCmacError(err.error || 'Could not read this case.');
+      }
+    } catch {
+      setCmacError('Network error. Check your connection and try again.');
+    } finally {
+      setCmacLoading(false);
+    }
+  };
+
+  const sendCmac = async () => {
+    if (!cmacFor) return;
+    setCmacSending(true);
+    setCmacError(null);
+    try {
+      const res = await fetch(`/api/emergency-booking/${cmacFor}/escalate-cmac`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: cmacNote }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) setCmacResult(data as CmacResult);
+      else setCmacError(data?.error || 'The escalation could not be sent.');
+    } catch {
+      setCmacError('Network error. Nothing was sent.');
+    } finally {
+      setCmacSending(false);
     }
   };
 
@@ -1796,6 +1992,37 @@ export default function EmergencyBookingPage() {
                         >
                           <Megaphone className="h-4 w-4" />
                           Chase the team
+                        </button>
+                      )}
+
+                      {/* Nobody in theatre has taken this case.
+                          Shown only while the booking is still SUBMITTED or
+                          APPROVED — once a theatre is assigned the case HAS
+                          been acknowledged, and chasing people to assign one
+                          is how a chase stops being read. */}
+                      {['SUBMITTED', 'APPROVED'].includes(booking.status) && (
+                        <button
+                          onClick={() => openAssignChase(booking.id)}
+                          className="flex items-center gap-1 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700"
+                        >
+                          <DoorOpen className="h-4 w-4" />
+                          No theatre yet — chase the manager
+                        </button>
+                      )}
+
+                      {/* Two hours gone. The button does not exist before then:
+                          an escalation an executive receives on nights when
+                          theatre already has it in hand is one he stops
+                          reading, and then the one that mattered is lost with
+                          the rest. The endpoint enforces the same two hours. */}
+                      {!['IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(booking.status)
+                        && minutesSinceBooking(booking.requestedAt) >= CMAC_AFTER_MINUTES && (
+                        <button
+                          onClick={() => openCmac(booking.id)}
+                          className="flex items-center gap-1 px-3 py-2 bg-purple-800 text-white rounded-lg text-sm font-bold hover:bg-purple-900 ring-2 ring-purple-300"
+                        >
+                          <PhoneCall className="h-4 w-4" />
+                          2 hours — send to CMAC with the team&apos;s numbers
                         </button>
                       )}
 
@@ -2917,6 +3144,395 @@ export default function EmergencyBookingPage() {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== NOBODY IN THEATRE HAS TAKEN THIS CASE ===== */}
+      {assignFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <DoorOpen className="h-6 w-6 text-orange-600" />
+                {assignResult ? 'The chase has gone' : 'This case has no theatre'}
+              </h2>
+              <button
+                onClick={() => { setAssignFor(null); setAssignData(null); setAssignResult(null); }}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            {assignLoading && <p className="text-sm text-gray-500">Reading the case…</p>}
+
+            {assignError && (
+              <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {assignError}
+              </p>
+            )}
+
+            {assignData && !assignResult && (
+              <>
+                <div className={`rounded-xl border-2 p-3 mb-4 ${
+                  assignData.standing.overdue
+                    ? 'border-red-300 bg-red-50 text-red-900'
+                    : 'border-orange-300 bg-orange-50 text-orange-900'
+                }`}>
+                  <p className="font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    {assignData.standing.label}
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Nobody in theatre has acknowledged this booking, so it has no room, no
+                    scrub nurse and no circulating nurse — and the surgeon who booked it has
+                    no way of knowing it has been seen.
+                  </p>
+                </div>
+
+                {/* Where the review stands. Asked for explicitly: the
+                    consultant anaesthetist is told this in the same message. */}
+                <div className={`rounded-xl border p-3 mb-4 text-sm ${
+                  assignData.review.done
+                    ? 'border-green-200 bg-green-50 text-green-900'
+                    : 'border-amber-300 bg-amber-50 text-amber-900'
+                }`}>
+                  <p className="font-semibold">
+                    {assignData.review.done
+                      ? `Anaesthetic review recorded${assignData.review.reviewerName
+                        ? ` by ${assignData.review.reviewerName}` : ''}.`
+                      : assignData.review.started
+                        ? `Anaesthetic review started${assignData.review.reviewerName
+                          ? ` by ${assignData.review.reviewerName}` : ''} and not finished.`
+                        : 'No anaesthetic review has been recorded for this patient.'}
+                  </p>
+                  <p className="mt-1 text-xs">
+                    The consultant anaesthetist is told this in the same message.
+                  </p>
+                </div>
+
+                {assignData.targets.length > 0 ? (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">
+                      Who will be chased ({assignData.targets.length})
+                    </p>
+                    <ul className="space-y-0.5">
+                      {assignData.targets.map((t) => (
+                        <li key={`${t.name}-${t.label}`} className="text-xs text-gray-700">
+                          • <strong>{t.name}</strong> — {t.label}
+                          {!t.reachable && (
+                            <span className="text-amber-700"> (no phone on file — app only)</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mb-4 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg p-3">
+                    Nobody could be found to chase for this date.
+                  </p>
+                )}
+
+                {assignData.skipped.length > 0 && (
+                  <ul className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 mb-4">
+                    {assignData.skipped.map((m) => <li key={m}>• {m}</li>)}
+                  </ul>
+                )}
+
+                {/* The instructions they will receive, shown to the sender
+                    first — if a step names a control nobody can find, the
+                    sender is the person who will notice. */}
+                <details className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <Gavel className="h-4 w-4" />
+                    The instructions each of them will receive
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-gray-700 font-sans">
+                    {assignData.steps.replace(/\*/g, '')}
+                  </pre>
+                </details>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Anything to add (optional)
+                  </label>
+                  <textarea
+                    value={assignChaseNote}
+                    onChange={(e) => setAssignChaseNote(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g. Theatre 3 finishes in ten minutes and can take this"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => { setAssignFor(null); setAssignData(null); }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendAssignChase}
+                    disabled={assignSending || !assignData.canChase || assignData.targets.length === 0}
+                    className="px-5 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <DoorOpen className="h-4 w-4" />
+                    {assignSending ? 'Sending…' : `Chase all ${assignData.targets.length}`}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {assignResult && (
+              <>
+                <p className="text-sm text-gray-700 mb-3">
+                  {assignResult.recipients} people were told in the app, with the steps for
+                  assigning a theatre and where the anaesthetic review stands.
+                </p>
+
+                {assignResult.handoffs.length > 0 && (
+                  <>
+                    <p className="text-sm text-gray-700 mb-2">
+                      Press each one to send it on WhatsApp. The message is already written.
+                    </p>
+                    <div className="space-y-2 mb-3">
+                      {assignResult.handoffs.map((h) => {
+                        const href = whatsappLink(h.number, h.text);
+                        return href ? (
+                          <a
+                            key={`${h.number}-${h.kind}`}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold"
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            <span className="flex-1">
+                              {h.name}
+                              <span className="block text-xs font-normal opacity-90">{h.kind}</span>
+                            </span>
+                          </a>
+                        ) : null;
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {assignResult.whatsappSkipped.length > 0 && (
+                  <ul className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 mb-3">
+                    {assignResult.whatsappSkipped.map((m) => <li key={m}>• {m}</li>)}
+                  </ul>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setAssignFor(null); setAssignData(null); setAssignResult(null); fetchBookings();
+                    }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== TWO HOURS — HAND IT TO THE CMAC ===== */}
+      {cmacFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <PhoneCall className="h-6 w-6 text-purple-800" />
+                {cmacResult ? 'Sent to the CMAC' : 'Escalate to the CMAC'}
+              </h2>
+              <button
+                onClick={() => { setCmacFor(null); setCmacData(null); setCmacResult(null); }}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            {cmacLoading && <p className="text-sm text-gray-500">Reading the case…</p>}
+
+            {cmacError && (
+              <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {cmacError}
+              </p>
+            )}
+
+            {cmacData && !cmacResult && (
+              <>
+                <div className="rounded-xl border-2 border-purple-300 bg-purple-50 text-purple-900 p-3 mb-4">
+                  <p className="font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Booked {cmacData.waited} ago and not started
+                  </p>
+                  <p className="mt-1 text-xs">
+                    The CMAC is handed the case and the numbers of everybody on it, so he can
+                    reach them directly. This is sent in your name, not automatically.
+                  </p>
+                </div>
+
+                {cmacData.openBlockers.length > 0 ? (
+                  <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                    <p className="text-sm font-semibold text-amber-900">
+                      What is recorded as stopping it
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {cmacData.openBlockers.map((b) => (
+                        <li key={b.label + (b.detail ?? '')} className="text-xs text-amber-900">
+                          • <strong>{b.label}</strong>{b.detail ? ` — ${b.detail}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900">
+                    <strong>No blocker has been recorded on this case.</strong> Two hours with
+                    neither a start nor a recorded reason is a breach of the theatre standard,
+                    and the CMAC will be told so.
+                  </p>
+                )}
+
+                {/* The directory, shown before it is sent. Nobody should
+                    forward a colleague's personal number without seeing
+                    exactly what is going and to whom. */}
+                <details className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3" open>
+                  <summary className="cursor-pointer text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    The numbers he will be given ({cmacData.reachable} of {cmacData.members})
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-gray-700 font-sans">
+                    {cmacData.directory.replace(/\*/g, '')}
+                  </pre>
+                </details>
+
+                <div className="mb-4">
+                  <p className="text-sm font-semibold text-gray-700 mb-1">
+                    Going to ({cmacData.officers.length})
+                  </p>
+                  {cmacData.officers.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {cmacData.officers.map((o) => (
+                        <li key={o.name} className="text-xs text-gray-700">
+                          • <strong>{o.name}</strong> — {o.label}
+                          {!o.reachable && (
+                            <span className="text-amber-700"> (no phone on file — app only)</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-red-800">
+                      No CMAC, Deputy CMAC or Chief Medical Director account is registered.
+                    </p>
+                  )}
+                  {cmacData.usedFallback && cmacData.officers.length > 0 && (
+                    <p className="mt-1 text-xs text-amber-800">
+                      No CMAC or Deputy CMAC is registered — this goes to the Chief Medical
+                      Director instead.
+                    </p>
+                  )}
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Anything the CMAC should know (optional)
+                  </label>
+                  <textarea
+                    value={cmacNote}
+                    onChange={(e) => setCmacNote(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g. Surgeon is in another theatre; no second consultant on call"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => { setCmacFor(null); setCmacData(null); }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendCmac}
+                    disabled={cmacSending || !cmacData.canEscalate || !cmacData.due
+                      || cmacData.officers.length === 0}
+                    className="px-5 py-2 bg-purple-800 text-white rounded-xl hover:bg-purple-900 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <PhoneCall className="h-4 w-4" />
+                    {cmacSending ? 'Sending…' : 'Send to the CMAC'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {cmacResult && (
+              <>
+                <p className="text-sm text-gray-700 mb-3">
+                  Sent to {cmacResult.officers.map((o) => `${o.name} (${o.label})`).join(', ')} —
+                  with {cmacResult.reachable} of {cmacResult.teamListed} team members&apos;
+                  numbers.
+                </p>
+
+                {cmacResult.handoffs.length > 0 && (
+                  <>
+                    <p className="text-sm text-gray-700 mb-2">
+                      Press to send it on WhatsApp. The message is already written.
+                    </p>
+                    <div className="space-y-2 mb-3">
+                      {cmacResult.handoffs.map((h) => {
+                        const href = whatsappLink(h.number, h.text);
+                        return href ? (
+                          <a
+                            key={`${h.number}-${h.kind}`}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold"
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            <span className="flex-1">
+                              {h.name}
+                              <span className="block text-xs font-normal opacity-90">{h.kind}</span>
+                            </span>
+                          </a>
+                        ) : null;
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {cmacResult.whatsappSkipped.length > 0 && (
+                  <ul className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 mb-3">
+                    {cmacResult.whatsappSkipped.map((m) => <li key={m}>• {m}</li>)}
+                  </ul>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setCmacFor(null); setCmacData(null); setCmacResult(null); fetchBookings();
+                    }}
+                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
