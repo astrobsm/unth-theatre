@@ -212,12 +212,18 @@ export function buildCmacMessage(input: {
 
   lines.push('🚨🚨🚨 *EMERGENCY NOT OPERATED — TWO HOURS* 🚨🚨🚨');
   lines.push('');
-  lines.push(`${input.recipientName}, ${input.recipientLabel}:`);
+  // The CMAC is always written to in the consultant register. See
+  // lib/emergency/consultantTone: the facts are identical to everybody
+  // else's, the manner is not.
+  lines.push(`Dear ${input.recipientName},`);
+  lines.push('');
+  lines.push(`Good day sir/ma. Our sincere apologies for reaching out at this hour.`);
   lines.push('');
   lines.push(
-    `An emergency booked *${cmac.waited} ago* has still not gone to theatre. `
-    + 'It is escalated to you so that you can reach the people on it directly — '
-    + 'their numbers are below.',
+    `As ${input.recipientLabel}, your attention is respectfully drawn to an emergency `
+    + `booked *${cmac.waited} ago* which has still not gone to theatre. `
+    + 'The numbers of everyone on the case are set out below so that you may reach them '
+    + 'directly, or have the residents and registrars under them told to do the needful.',
   );
 
   lines.push('');
@@ -278,6 +284,8 @@ export function buildCmacMessage(input: {
     + 'Theatre Audit Committee is drafted in the name of every person on it.',
   );
   lines.push('────────────────────');
+  lines.push('');
+  lines.push('Thank you very much sir/ma for your time and your help.');
   lines.push('');
   lines.push(
     facts.escalatedByName

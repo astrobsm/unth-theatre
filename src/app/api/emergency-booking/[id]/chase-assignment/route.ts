@@ -90,8 +90,10 @@ async function loadBooking(id: string) {
   return prisma.emergencySurgeryBooking.findUnique({
     where: { id },
     include: {
-      surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
-      anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
+      // role is what tells a consultant from a registrar, and decides how
+      // each of them is written to. See lib/emergency/consultantTone.
+      surgeon: { select: { id: true, fullName: true, phoneNumber: true, role: true } },
+      anesthetist: { select: { id: true, fullName: true, phoneNumber: true, role: true } },
       surgery: { select: { actualStartTime: true } },
       preAnaestheticReviews: {
         select: {
@@ -113,6 +115,8 @@ interface Target {
   phoneNumber: string | null;
   label: string;
   kind: ChaseKind;
+  /** The role on the account, which decides the register. */
+  role: string | null;
 }
 
 /**
@@ -131,7 +135,10 @@ async function resolveTargets(booking: LoadedBooking): Promise<{
   const seen = new Set<string>();
 
   const add = (
-    p: { id?: string; userId?: string; fullName?: string; name?: string; phoneNumber?: string | null } | null,
+    p: {
+      id?: string; userId?: string; fullName?: string; name?: string;
+      phoneNumber?: string | null; role?: string | null; userRole?: string | null;
+    } | null,
     label: string,
     kind: ChaseKind,
   ) => {
@@ -139,7 +146,14 @@ async function resolveTargets(booking: LoadedBooking): Promise<{
     const name = p?.name ?? p?.fullName;
     if (!userId || !name || seen.has(userId)) return;
     seen.add(userId);
-    targets.push({ userId, name, phoneNumber: p?.phoneNumber ?? null, label, kind });
+    targets.push({
+      userId,
+      name,
+      phoneNumber: p?.phoneNumber ?? null,
+      label,
+      kind,
+      role: p?.role ?? p?.userRole ?? null,
+    });
   };
 
   // NO theatreId filter, deliberately and permanently: on-call rosters are
@@ -152,7 +166,7 @@ async function resolveTargets(booking: LoadedBooking): Promise<{
 
   const team = roster?.team;
   const fromStaff = (s: StaffEntry | null | undefined) => (s
-    ? { userId: s.userId, name: s.name, phoneNumber: s.phoneNumber }
+    ? { userId: s.userId, name: s.name, phoneNumber: s.phoneNumber, role: s.role }
     : null);
 
   // 1. The theatre manager -- the person this chase was asked for.
@@ -188,7 +202,9 @@ async function resolveTargets(booking: LoadedBooking): Promise<{
     select: { id: true, fullName: true, phoneNumber: true },
     orderBy: { fullName: 'asc' },
   }).catch(() => []);
-  consultants.slice(0, CONSULTANT_CAP).forEach((c) => add(c, 'Consultant Anaesthetist', 'ANAESTHETIST'));
+  consultants.slice(0, CONSULTANT_CAP).forEach((c) => add(
+    { ...c, role: 'CONSULTANT_ANAESTHETIST' }, 'Consultant Anaesthetist', 'ANAESTHETIST',
+  ));
 
   if (!targets.some((t) => t.kind === 'ANAESTHETIST')) {
     skipped.push(
@@ -371,6 +387,7 @@ export async function POST(
       const text = buildAssignmentChaseMessage({
         recipientName: target.name,
         recipientLabel: target.label,
+        recipientRole: target.role,
         kind: target.kind,
         facts,
         standing,

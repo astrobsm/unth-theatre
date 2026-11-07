@@ -39,6 +39,7 @@
 // ============================================================
 
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
+import { askBlock, closing, isConsultantRole, opening } from './consultantTone';
 import {
   HOUR_RULE_NOTICE, deadlineClock, type HourRuleStanding,
 } from './hourRule';
@@ -137,6 +138,13 @@ export interface RollCallMember {
   roleOnCase: string;
   /** The EmergencyTeamRole value, where one exists for them. */
   teamRole: string | null;
+  /**
+   * The role on their ACCOUNT, which is a different thing from their part in
+   * this case and the only safe way to tell a consultant from a registrar.
+   * A roster slot reading "Anaesthetist (1st on call)" is either on any given
+   * night, and addressing a registrar as a consultant reads as sarcasm.
+   */
+  userRole: string | null;
   /** case = named on the booking; roster = on the published duty roster;
    *  role = the first holder of the role, as a fallback contact. */
   source: 'case' | 'roster' | 'role';
@@ -166,7 +174,11 @@ export interface TeamSlotInput {
   label: string;
   teamRole: string | null;
   source: 'case' | 'roster' | 'role';
-  person: { userId: string; name: string; phoneNumber?: string | null } | null;
+  person: {
+    userId: string; name: string; phoneNumber?: string | null;
+    /** The role on the account. Decides the register; see consultantTone. */
+    userRole?: string | null;
+  } | null;
 }
 
 /**
@@ -201,6 +213,7 @@ export function buildRollCall(
       phoneNumber: p.phoneNumber ?? null,
       roleOnCase: slot.label,
       teamRole: slot.teamRole,
+      userRole: p.userRole ?? null,
       source: slot.source,
       availability: response?.status ?? null,
       respondedAt: response?.respondedAt ?? null,
@@ -277,7 +290,15 @@ export function buildTeamChaseMessage(input: {
       : '🚨 *EMERGENCY — THE HOUR IS RUNNING* 🚨',
   );
   lines.push('');
-  lines.push(`${member.name}, you are the *${member.roleOnCase}* on this emergency:`);
+  const consultant = isConsultantRole(member.userRole);
+
+  if (consultant) {
+    opening({ name: member.name, label: member.roleOnCase, consultant })
+      .forEach((l) => lines.push(l));
+    lines.push('');
+  } else {
+    lines.push(`${member.name}, you are the *${member.roleOnCase}* on this emergency:`);
+  }
   lines.push(caseLine(facts));
   if (facts.surgeonName && member.teamRole !== 'SURGEON') {
     lines.push(`Surgeon: ${facts.surgeonName}`);
@@ -297,7 +318,11 @@ export function buildTeamChaseMessage(input: {
   }
 
   lines.push('');
-  lines.push(`*What is needed from you:* ${ROLE_DUTY[member.teamRole ?? ''] ?? ROLE_DUTY[member.roleOnCase] ?? 'Confirm you are coming to this case.'}`);
+  askBlock(
+    ROLE_DUTY[member.teamRole ?? ''] ?? ROLE_DUTY[member.roleOnCase]
+      ?? 'Confirm you are coming to this case.',
+    consultant,
+  ).forEach((l) => lines.push(l));
 
   if (member.mustReview && !member.reviewDone) {
     lines.push('');
@@ -362,6 +387,7 @@ export function buildTeamChaseMessage(input: {
     );
   }
   lines.push('────────────────────');
+  closing(consultant).forEach((l) => { lines.push(''); lines.push(l); });
   lines.push('');
   lines.push(
     facts.chasedByName

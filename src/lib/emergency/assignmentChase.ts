@@ -44,6 +44,7 @@
 // ============================================================
 
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
+import { askBlock, closing, isConsultantRole, opening } from './consultantTone';
 import { HOUR_RULE_NOTICE, deadlineClock, type HourRuleStanding } from './hourRule';
 
 /** Statuses that mean nobody in theatre has taken the case yet. */
@@ -229,6 +230,8 @@ export function buildAssignmentChaseMessage(input: {
   recipientName: string;
   /** Why this person is getting it: "Theatre Manager", "Scrub Nurse on call". */
   recipientLabel: string;
+  /** Their role on the system. Decides the register; see consultantTone. */
+  recipientRole?: string | null;
   kind: ChaseKind;
   facts: AssignmentCaseFacts;
   standing: HourRuleStanding;
@@ -239,6 +242,7 @@ export function buildAssignmentChaseMessage(input: {
   now?: Date;
 }): string {
   const { facts, standing, review } = input;
+  const consultant = isConsultantRole(input.recipientRole);
   const lines: string[] = [];
 
   lines.push(
@@ -247,9 +251,8 @@ export function buildAssignmentChaseMessage(input: {
       : '🚨 *EMERGENCY NOT ACKNOWLEDGED — NO THEATRE ASSIGNED* 🚨',
   );
   lines.push('');
-  lines.push(
-    `${input.recipientName}, you are being chased as *${input.recipientLabel}*.`,
-  );
+  opening({ name: input.recipientName, label: input.recipientLabel, consultant })
+    .forEach((l) => lines.push(l));
   lines.push('');
 
   lines.push(
@@ -277,7 +280,7 @@ export function buildAssignmentChaseMessage(input: {
   );
 
   lines.push('');
-  lines.push(`*What is needed from you:* ${ASSIGNMENT_DUTY[input.kind]}`);
+  askBlock(ASSIGNMENT_DUTY[input.kind], consultant).forEach((l) => lines.push(l));
 
   // The review, for everybody. The theatre manager assigning a room needs to
   // know the case cannot go yet as much as the anaesthetist does -- that is
@@ -305,6 +308,7 @@ export function buildAssignmentChaseMessage(input: {
   lines.push('────────────────────');
   lines.push(HOUR_RULE_NOTICE);
   lines.push('────────────────────');
+  closing(consultant).forEach((l) => { lines.push(''); lines.push(l); });
   lines.push('');
   lines.push(
     facts.chasedByName

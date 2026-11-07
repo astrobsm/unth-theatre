@@ -49,8 +49,12 @@ export const EMPTY_ROSTER_TEAM: RosterTeam = {
 
 /** The booking fields the roll call needs. Kept narrow so any loader fits. */
 export interface RollCallBooking {
-  surgeon: { id: string; fullName: string; phoneNumber: string | null } | null;
-  anesthetist: { id: string; fullName: string; phoneNumber: string | null } | null;
+  surgeon: {
+    id: string; fullName: string; phoneNumber: string | null; role?: string | null;
+  } | null;
+  anesthetist: {
+    id: string; fullName: string; phoneNumber: string | null; role?: string | null;
+  } | null;
   requestedAt: Date | string;
   requiredByTime?: Date | string | null;
   teamAvailability: { userId: string; status: string; respondedAt?: Date | string | null }[];
@@ -61,8 +65,10 @@ export interface RollCallBooking {
  * The ordered slots, from the people named on the case outwards.
  */
 export function slotsFor(booking: RollCallBooking, roster: RosterTeam): TeamSlotInput[] {
+  // The account role travels with the person, so a chase can tell a
+  // consultant from a registrar. See lib/emergency/consultantTone.
   const fromStaff = (s: StaffEntry | null) => (s
-    ? { userId: s.userId, name: s.name, phoneNumber: s.phoneNumber }
+    ? { userId: s.userId, name: s.name, phoneNumber: s.phoneNumber, userRole: s.role }
     : null);
 
   const slots: TeamSlotInput[] = [
@@ -75,6 +81,7 @@ export function slotsFor(booking: RollCallBooking, roster: RosterTeam): TeamSlot
           userId: booking.surgeon.id,
           name: booking.surgeon.fullName,
           phoneNumber: booking.surgeon.phoneNumber,
+          userRole: booking.surgeon.role ?? null,
         }
         : null,
     },
@@ -87,6 +94,7 @@ export function slotsFor(booking: RollCallBooking, roster: RosterTeam): TeamSlot
           userId: booking.anesthetist.id,
           name: booking.anesthetist.fullName,
           phoneNumber: booking.anesthetist.phoneNumber,
+          userRole: booking.anesthetist.role ?? null,
         }
         : null,
     },

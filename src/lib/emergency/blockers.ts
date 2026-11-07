@@ -43,6 +43,7 @@
 // ============================================================
 
 import { withNetworkNotice } from '@/lib/comms/networkNotice';
+import { askBlock, closing, isConsultantRole, opening } from './consultantTone';
 import { deadlineClock, type HourRuleStanding } from './hourRule';
 
 export interface BlockerReasonSpec {
@@ -339,12 +340,15 @@ export function buildBlockerChaseMessage(input: {
   recipientName: string;
   /** Why this person is getting it: "Theatre Manager", "blood bank". */
   recipientLabel: string;
+  /** Their role on the system. Decides the register; see consultantTone. */
+  recipientRole?: string | null;
   facts: BlockerCaseFacts;
   standing: HourRuleStanding;
   reportedByName: string;
   reportedByRole?: string | null;
 }): string {
   const { spec, standing, facts } = input;
+  const consultant = isConsultantRole(input.recipientRole);
   const lines: string[] = [];
 
   lines.push(
@@ -352,6 +356,15 @@ export function buildBlockerChaseMessage(input: {
       ? '🚨🚨 *EMERGENCY HELD UP — PAST THE HOUR* 🚨🚨'
       : '🚨 *EMERGENCY HELD UP — THE HOUR IS RUNNING* 🚨',
   );
+  // Order differs by register, deliberately. A consultant is greeted before
+  // anything is put to him; everybody else gets the problem in the first
+  // line, because that is the line that gets read in a corridor.
+  if (consultant) {
+    lines.push('');
+    opening({ name: input.recipientName, label: input.recipientLabel, consultant })
+      .forEach((l) => lines.push(l));
+  }
+
   lines.push('');
   lines.push(`*What is stopping it:* ${spec.label}`);
   if ((input.detail ?? '').trim()) lines.push(`*Reported as:* ${(input.detail ?? '').trim()}`);
@@ -370,11 +383,12 @@ export function buildBlockerChaseMessage(input: {
   );
 
   lines.push('');
-  lines.push(
-    `${input.recipientName}, you are being chased as *${input.recipientLabel}* because `
-    + 'this is yours to clear.',
-  );
-  lines.push(`👉 *${spec.ask}*`);
+  if (!consultant) {
+    opening({ name: input.recipientName, label: input.recipientLabel, consultant })
+      .forEach((l) => lines.push(l));
+    lines.push('');
+  }
+  askBlock(spec.ask, consultant).forEach((l) => lines.push(l));
 
   lines.push('');
   lines.push(
@@ -400,6 +414,7 @@ export function buildBlockerChaseMessage(input: {
     + '— and of whoever was named as holding it up.',
   );
   lines.push('────────────────────');
+  closing(consultant).forEach((l) => { lines.push(''); lines.push(l); });
   lines.push('');
   lines.push('— UNTH Theatre, Operative Resource Manager');
 

@@ -67,8 +67,10 @@ async function loadBooking(id: string) {
   return prisma.emergencySurgeryBooking.findUnique({
     where: { id },
     include: {
-      surgeon: { select: { id: true, fullName: true, phoneNumber: true } },
-      anesthetist: { select: { id: true, fullName: true, phoneNumber: true } },
+      // role is what tells a consultant from a registrar, and decides how
+      // each of them is written to. See lib/emergency/consultantTone.
+      surgeon: { select: { id: true, fullName: true, phoneNumber: true, role: true } },
+      anesthetist: { select: { id: true, fullName: true, phoneNumber: true, role: true } },
       surgery: { select: { actualStartTime: true } },
       teamAvailability: { select: { userId: true, status: true, respondedAt: true } },
       preAnaestheticReviews: {
