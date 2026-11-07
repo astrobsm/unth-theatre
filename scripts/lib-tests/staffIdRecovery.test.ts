@@ -244,15 +244,16 @@ describe('the recovery screen', () => {
     expect(page()).toContain('that code works here too');
   });
 
-  it('names the username at the end of the password flow', () => {
+  it('names the username, before and after the password is changed', () => {
     const src = page();
-    expect(src).toContain('Your username is');
-    expect(src).toContain('setUsername(d.username ?? '.concat("'');"));
+    // Twice on purpose: once on the confirm screen, so somebody who only
+    // forgot the username can stop there, and once at the end.
+    expect((src.match(/Your username is/g) ?? []).length).toBe(2);
     expect(src).toContain('Copy username');
   });
 
   it('offers sign-in with the username already filled in', () => {
-    expect(page()).toContain('/auth/login?u=${encodeURIComponent(username)}');
+    expect(page()).toContain('/auth/login?u=${encodeURIComponent(found.username)}');
   });
 
   it('does not send a locked-out person to a page that does not exist', () => {
