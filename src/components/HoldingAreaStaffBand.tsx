@@ -11,6 +11,11 @@
  * nobody did, and "who was on the holding area this morning" was answered from
  * memory.
  *
+ * ONE BLOCK PER COMPLEX. Professor Ojukwu, the Eye Theatre, A&E and the
+ * Cardiothoracic Centre each have their own holding area, each with its own
+ * staff. A single combined list showed a nurse in one building as cover for a
+ * room in another.
+ *
  * ALL THREE SHIFTS, NOT JUST THE CURRENT ONE. A patient is wheeled in at the
  * end of one shift and handed over in the next, so whoever is reading this
  * needs the name on either side of the boundary, not only the name on now.
@@ -22,15 +27,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users, UserPlus, AlertTriangle } from 'lucide-react';
+import { Users, UserPlus, AlertTriangle, Building2 } from 'lucide-react';
 import { watMinutesOfDay } from '@/lib/watDay';
 import { electiveShiftFromMinutes, type DutyShift } from '@/lib/rosterOnDutyShift';
+import { HOLDING_AREA_COMPLEXES } from '@/lib/holdingArea/complexes';
 
 interface Allocation {
   id: string;
   userId: string | null;
   staffName: string;
   shift: string;
+  /** Which complex's holding area. Every complex has its own. */
+  complex: string;
   notes: string | null;
   allocatedByName: string | null;
   allocatedAt: string | null;
@@ -97,15 +105,26 @@ export default function HoldingAreaStaffBand({
     );
   }
 
-  const forShift = (s: DutyShift) => staff.filter((a) => a.shift === s);
-  const onNow = currentShift ? forShift(currentShift) : [];
-  const nobodyOnNow = currentShift !== null && onNow.length === 0;
+  const forShift = (complex: string, s: DutyShift) =>
+    staff.filter((a) => a.complex === complex && a.shift === s);
+
+  // Only the complexes that have somebody on today, plus any where the
+  // current shift is empty — an empty Eye Theatre at 10:00 is worth saying;
+  // an empty one at 03:00, when it does not run, is noise.
+  const emptyNow = (complex: string) =>
+    currentShift !== null && forShift(complex, currentShift).length === 0;
+  const shown = HOLDING_AREA_COMPLEXES.filter(
+    (c) => staff.some((a) => a.complex === c.key) || emptyNow(c.key),
+  );
+  const nobodyAnywhereNow = currentShift !== null && shown.every((c) => emptyNow(c.key));
 
   return (
     <div className="mb-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
         <Users className="h-4 w-4 text-gray-500" />
-        <h2 className="text-sm font-semibold text-gray-800">On the holding area</h2>
+        <h2 className="text-sm font-semibold text-gray-800">
+          On the holding areas
+        </h2>
         <Link
           href="/dashboard/holding-area/staffing"
           className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:text-blue-900"
@@ -120,19 +139,28 @@ export default function HoldingAreaStaffBand({
         </Link>
       </div>
 
-      {nobodyOnNow && (
+      {nobodyAnywhereNow && (
         <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-sm text-amber-900">
           <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <span>
-            Nobody is named to the holding area for the shift running now. Patients waiting
-            here are nobody&apos;s named responsibility until somebody is put on it.
+            No holding area has anybody named to it for the shift running now. Patients
+            waiting in them are nobody&apos;s named responsibility until somebody is put on.
           </span>
         </div>
       )}
 
+      {shown.map((c) => (
+      <div key={c.key}>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-1.5 bg-gray-50 border-y border-gray-100">
+          <Building2 className="h-3.5 w-3.5 text-gray-400" />
+          <h3 className="text-xs font-semibold text-gray-700">{c.key}</h3>
+          {emptyNow(c.key) && (
+            <span className="text-xs text-amber-700">nobody on it right now</span>
+          )}
+        </div>
       <div className="divide-y divide-gray-50">
         {SHIFTS.map((s) => {
-          const rows = forShift(s.value);
+          const rows = forShift(c.key, s.value);
           const isNow = currentShift === s.value;
           return (
             <div
@@ -167,6 +195,8 @@ export default function HoldingAreaStaffBand({
           );
         })}
       </div>
+      </div>
+      ))}
     </div>
   );
 }

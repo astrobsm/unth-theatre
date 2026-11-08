@@ -21,15 +21,18 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
-  ChevronLeft, Loader2, ShieldCheck, Trash2, UserPlus, Users,
+  Building2, ChevronLeft, Loader2, ShieldCheck, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import TheatreNursingPosts from '@/components/TheatreNursingPosts';
+import { HOLDING_AREA_COMPLEXES, DEFAULT_COMPLEX } from '@/lib/holdingArea/complexes';
 
 interface Allocation {
   id: string;
   userId: string;
   staffName: string;
   shift: string;
+  /** Which complex's holding area. Every complex has its own. */
+  complex: string;
   notes: string | null;
   allocatedByName: string | null;
   allocatedAt: string;
@@ -55,6 +58,7 @@ export default function HoldingAreaStaffingPage() {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [userId, setUserId] = useState('');
   const [shift, setShift] = useState('MORNING');
+  const [complex, setComplex] = useState<string>(DEFAULT_COMPLEX);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,14 +120,18 @@ export default function HoldingAreaStaffingPage() {
       const res = await fetch('/api/holding-area/staffing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, shift, notes, date }),
+        body: JSON.stringify({ userId, shift, complex, notes, date }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMessage({ tone: 'bad', text: data.error || 'That could not be saved.' });
         return;
       }
-      setMessage({ tone: 'good', text: `${data.allocated?.staffName ?? 'Staff'} is on the holding area.` });
+      setMessage({
+        tone: 'good',
+        text: `${data.allocated?.staffName ?? 'Staff'} is on the `
+          + `${data.allocated?.complex ?? complex} holding area.`,
+      });
       setUserId('');
       setNotes('');
       await load(date);
@@ -185,7 +193,7 @@ export default function HoldingAreaStaffingPage() {
           <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
             <UserPlus className="h-5 w-5 text-blue-600" /> Put somebody on the holding area
           </h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label htmlFor="haStaff" className="mb-1 block text-sm font-semibold text-gray-800">Who</label>
               <select
@@ -198,6 +206,25 @@ export default function HoldingAreaStaffingPage() {
                 <option value="">Select a member of staff</option>
                 {staff.map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              {/* Which holding area. Each complex has its own, and an
+                  allocation in the wrong one names somebody to a room they
+                  are not standing in. */}
+              <label htmlFor="haComplex" className="mb-1 block text-sm font-semibold text-gray-800">
+                Which holding area
+              </label>
+              <select
+                id="haComplex"
+                name="haComplex"
+                value={complex}
+                onChange={(e) => setComplex(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-300 px-3 py-2.5 text-sm"
+              >
+                {HOLDING_AREA_COMPLEXES.map((c) => (
+                  <option key={c.key} value={c.key}>{c.key}</option>
                 ))}
               </select>
             </div>
@@ -246,23 +273,32 @@ export default function HoldingAreaStaffingPage() {
         </div>
       )}
 
-      {/* By shift, because that is how the floor is covered and how anybody
-          reading this later will ask the question. */}
+      {/* By complex, then by shift. Each theatre complex has its own holding
+          area, and one combined list was how a nurse in the Eye Theatre came
+          to be shown as covering a room in Professor Ojukwu. */}
+      {HOLDING_AREA_COMPLEXES.map((c) => (
+      <div key={c.key} className="space-y-3">
+        <h2 className="flex items-center gap-2 border-b border-gray-200 pb-1 text-xl font-bold text-gray-900">
+          <Building2 className="h-5 w-5 text-gray-500" /> {c.key}
+          <span className="text-sm font-normal text-gray-500">
+            {allocations.filter((a) => a.complex === c.key).length} named today
+          </span>
+        </h2>
       {SHIFTS.map((s) => {
-        const rows = allocations.filter((a) => a.shift === s.value);
+        const rows = allocations.filter((a) => a.shift === s.value && a.complex === c.key);
         return (
           <section key={s.value}>
-            <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-              <Users className="h-5 w-5 text-gray-500" /> Holding area — {s.label} shift
+            <h3 className="flex items-center gap-2 text-base font-bold text-gray-800">
+              <Users className="h-5 w-5 text-gray-500" /> {s.label} shift
               <span className="text-sm font-normal text-gray-500">
                 {rows.length} {rows.length === 1 ? 'person' : 'people'}
               </span>
-            </h2>
+            </h3>
             {loading ? (
               <p className="mt-2 text-sm text-gray-500">Loading…</p>
             ) : rows.length === 0 ? (
               <p className="mt-2 rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                Nobody is named to the holding area for this shift.
+                Nobody is named to the {c.key} holding area for this shift.
               </p>
             ) : (
               <ul className="mt-2 space-y-2">
@@ -297,6 +333,8 @@ export default function HoldingAreaStaffingPage() {
           </section>
         );
       })}
+      </div>
+      ))}
 
       {/* The theatre nursing posts. Kept on this screen rather than a new one
           because it is the same job done by the same person at the same

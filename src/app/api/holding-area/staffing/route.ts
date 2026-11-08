@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { apiError } from '@/lib/apiError';
 import { parseTheatreDay, dayKey } from '@/lib/theatre/day';
+import {
+  normaliseComplex, complexOfRow, HOLDING_AREA_COMPLEXES,
+} from '@/lib/holdingArea/complexes';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,10 +47,16 @@ export async function GET(request: NextRequest) {
   try {
     const day = parseTheatreDay(request.nextUrl.searchParams.get('date'));
 
+    // Every complex has its own holding area, so a row without a complex
+    // answers a different question from the one being asked. The filter is
+    // applied after reading because rows written before this change store
+    // the old MAIN_THEATRE code, which `complexOfRow` resolves.
+    const wantComplex = normaliseComplex(request.nextUrl.searchParams.get('complex'));
+
     const rows = await prisma.roster.findMany({
       where: { date: day, subRole: 'HOLDING_AREA' },
       select: {
-        id: true, userId: true, staffName: true, shift: true,
+        id: true, userId: true, staffName: true, shift: true, location: true,
         notes: true, uploadedBy: true, uploadedAt: true, status: true,
       },
       orderBy: [{ shift: 'asc' }, { staffName: 'asc' }],
@@ -63,18 +72,25 @@ export async function GET(request: NextRequest) {
         }).catch(() => [])
       : [];
 
-    return NextResponse.json({
-      date: dayKey(day),
-      staff: rows.map((r) => ({
+    const staff = rows
+      .map((r) => ({
         id: r.id,
         userId: r.userId,
         staffName: r.staffName,
         shift: r.shift,
+        complex: complexOfRow(r.location),
         notes: r.notes,
         allocatedByName: allocators.find((a) => a.id === r.uploadedBy)?.fullName ?? null,
         allocatedAt: r.uploadedAt,
         status: r.status,
-      })),
+      }))
+      .filter((r) => !wantComplex || r.complex === wantComplex);
+
+    return NextResponse.json({
+      date: dayKey(day),
+      complex: wantComplex,
+      complexes: HOLDING_AREA_COMPLEXES,
+      staff,
     });
   } catch (error) {
     return apiError('holding-area/staffing GET', error);
@@ -101,11 +117,23 @@ export async function POST(request: NextRequest) {
     const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 300) : '';
     const day = parseTheatreDay(typeof body.date === 'string' ? body.date : null);
 
+    // Which holding area. Required, and never guessed: an allocation put in
+    // the wrong complex names somebody to a room they are not standing in,
+    // and the chase that follows reaches them instead of whoever is.
+    const complex = normaliseComplex(body.complex);
+
     if (!userId || !isShift(shift)) {
       return NextResponse.json(
         { error: 'Choose the member of staff and which shift they are covering.' },
         { status: 400 },
       );
+    }
+    if (!complex) {
+      return NextResponse.json({
+        error: 'Choose which theatre complex’s holding area they are on. '
+          + 'Each complex has its own.',
+        complexes: HOLDING_AREA_COMPLEXES,
+      }, { status: 400 });
     }
 
     const user = await prisma.user.findUnique({
@@ -119,13 +147,20 @@ export async function POST(request: NextRequest) {
     // Already on it for that shift. Said plainly rather than silently written
     // twice — two rows for one person is what makes a duty sheet stop being
     // believed.
+    // Across EVERY complex, not just this one. Nobody can stand in two
+    // holding areas at once, and a roster that says they do is a roster that
+    // sends half the chases to a room the person is not in.
     const existing = await prisma.roster.findFirst({
       where: { userId, date: day, shift, subRole: 'HOLDING_AREA' },
-      select: { id: true },
+      select: { id: true, location: true },
     });
     if (existing) {
+      const where = complexOfRow(existing.location);
       return NextResponse.json({
-        error: `${user.fullName} is already on the holding area for that shift.`,
+        error: where === complex
+          ? `${user.fullName} is already on the ${complex} holding area for that shift.`
+          : `${user.fullName} is already on the ${where} holding area for that shift. `
+            + 'Take them off there first — nobody can cover two holding areas at once.',
         code: 'ALREADY_ALLOCATED',
       }, { status: 409 });
     }
@@ -139,7 +174,10 @@ export async function POST(request: NextRequest) {
         // No theatreId. That is the point of this whole change: the holding
         // area is not a theatre, so a row naming somebody to it names no room.
         theatreId: null,
-        location: 'MAIN_THEATRE',
+        // The complex, stored verbatim. Within subRole HOLDING_AREA this
+        // column means "which holding area"; see lib/holdingArea/complexes.ts
+        // for why it is this column and not a new one.
+        location: complex,
         date: day,
         shift,
         uploadedBy: session.user.id,
@@ -149,7 +187,9 @@ export async function POST(request: NextRequest) {
         // somebody standing in the holding area with no record of it.
         status: 'PUBLISHED',
       },
-      select: { id: true, staffName: true, shift: true, notes: true, uploadedAt: true },
+      select: {
+        id: true, staffName: true, shift: true, location: true, notes: true, uploadedAt: true,
+      },
     });
 
     await prisma.auditLog.create({
@@ -159,12 +199,14 @@ export async function POST(request: NextRequest) {
         tableName: 'rosters',
         recordId: created.id,
         changes: JSON.stringify({
-          staffName: user.fullName, date: dayKey(day), shift, notes: notes || null,
+          staffName: user.fullName, date: dayKey(day), shift, complex, notes: notes || null,
         }),
       },
     }).catch(() => { /* the allocation stands even if the log does not */ });
 
-    return NextResponse.json({ allocated: created });
+    return NextResponse.json({
+      allocated: { ...created, complex: complexOfRow(created.location) },
+    });
   } catch (error) {
     return apiError('holding-area/staffing POST', error);
   }

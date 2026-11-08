@@ -1,5 +1,6 @@
 'use client';
 
+import { HOLDING_AREA_COMPLEXES } from '@/lib/holdingArea/complexes';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Phone,
@@ -12,6 +13,7 @@ import {
   AlertTriangle,
   User,
   Building2,
+  BellRing,
 } from 'lucide-react';
 
 interface CaseData {
@@ -86,6 +88,20 @@ export default function CallForPatientPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Chasing the holding area for a patient who was called for but has not
+  // arrived. The result is kept whole rather than flattened into a string:
+  // it carries who was reached and the wa.me hand-offs, and on a refusal it
+  // carries the reason the message went nowhere.
+  const [chasingId, setChasingId] = useState<string | null>(null);
+  const [chaseResult, setChaseResult] = useState<{
+    ok: boolean;
+    text: string;
+    reached?: string[];
+    handoffs?: Array<{ name: string; number: string; text: string }>;
+    needsComplex?: boolean;
+    surgeryId?: string;
+  } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [printData, setPrintData] = useState<any | null>(null);
   // Invite flow: choose the porter(s) who will transport the patient.
@@ -297,6 +313,46 @@ export default function CallForPatientPage() {
       setTimeout(() => setError(null), 4000);
     } finally {
       setSavingSending(false);
+    }
+  };
+
+  const chaseHoldingArea = async (caseItem: CaseData, complex?: string) => {
+    setChasingId(caseItem.surgeryId);
+    setChaseResult(null);
+    try {
+      const res = await fetch('/api/holding-area/chase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surgeryId: caseItem.surgeryId, complex: complex ?? undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // A refusal is not a failure to be swallowed: it is the answer. It
+        // says nothing was sent and why, and for an unplaceable theatre it
+        // asks which holding area rather than guessing one.
+        setChaseResult({
+          ok: false,
+          text: data.error || 'The holding area could not be chased.',
+          needsComplex: data.code === 'COMPLEX_UNKNOWN',
+          surgeryId: caseItem.surgeryId,
+        });
+        return;
+      }
+      setChaseResult({
+        ok: true,
+        text: `${data.complex} holding area chased — ${(data.reached || []).length} `
+          + `nurse(s) on the ${data.shiftLabel} shift.`,
+        reached: data.reached || [],
+        handoffs: data.handoffs || [],
+      });
+    } catch {
+      setChaseResult({
+        ok: false,
+        text: 'The chase could not be sent — check the connection.',
+        surgeryId: caseItem.surgeryId,
+      });
+    } finally {
+      setChasingId(null);
     }
   };
 
@@ -564,6 +620,72 @@ export default function CallForPatientPage() {
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           {error}
+        </div>
+      )}
+      {chaseResult && (
+        <div className={`mb-4 p-4 rounded-lg border ${
+          chaseResult.ok ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-300'
+        }`}>
+          <div className="flex items-start gap-2">
+            {chaseResult.ok
+              ? <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-green-700 mt-0.5" />
+              : <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-700 mt-0.5" />}
+            <div className="min-w-0 flex-1">
+              <p className={`text-sm ${chaseResult.ok ? 'text-green-800' : 'text-amber-900'}`}>
+                {chaseResult.text}
+              </p>
+              {chaseResult.reached && chaseResult.reached.length > 0 && (
+                <p className="text-xs text-gray-700 mt-1">
+                  Sent to: {chaseResult.reached.join(', ')}
+                </p>
+              )}
+              {/* The queue is not a delivery: the provider runs on the cloud
+                  and not on the theatre server, so the hand-off is the part
+                  that actually reaches a phone tonight. */}
+              {chaseResult.handoffs && chaseResult.handoffs.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {chaseResult.handoffs.map((h) => (
+                    <a
+                      key={h.number}
+                      href={`https://wa.me/${h.number}?text=${encodeURIComponent(h.text)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700"
+                    >
+                      WhatsApp {h.name}
+                    </a>
+                  ))}
+                </div>
+              )}
+              {/* An unplaceable theatre is asked about, never guessed. */}
+              {chaseResult.needsComplex && chaseResult.surgeryId && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {HOLDING_AREA_COMPLEXES.map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => {
+                        const target = (data?.theatreGroups ?? [])
+                          .flatMap((g) => g.cases)
+                          .find((x) => x.surgeryId === chaseResult.surgeryId);
+                        if (target) void chaseHoldingArea(target, c.key);
+                      }}
+                      className="px-2.5 py-1 bg-white border border-amber-300 text-amber-900 text-xs font-medium rounded-lg hover:bg-amber-100"
+                    >
+                      {c.short}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setChaseResult(null)}
+              className="text-xs text-gray-500 hover:text-gray-700 flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
       {successMsg && (
@@ -838,6 +960,26 @@ export default function CallForPatientPage() {
                               >
                                 <Printer className="w-3 h-3" />
                                 Print
+                              </button>
+                            )}
+
+                            {/* Chase the holding area. Shown once the patient
+                                has been called for and has not yet arrived —
+                                which is exactly the window in which the
+                                theatre is waiting and nobody in it can see
+                                where the patient has got to. */}
+                            {caseItem.existingCallUp
+                              && ['INVITED', 'PATIENT_EN_ROUTE'].includes(
+                                caseItem.existingCallUp.status,
+                              ) && (
+                              <button
+                                onClick={() => void chaseHoldingArea(caseItem)}
+                                disabled={chasingId === caseItem.surgeryId}
+                                title="Ask the holding area for this complex what is holding the patient"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-800 text-xs font-medium rounded-lg hover:bg-amber-200 transition disabled:opacity-50"
+                              >
+                                <BellRing className="w-3 h-3" />
+                                {chasingId === caseItem.surgeryId ? 'Chasing…' : 'Chase holding area'}
                               </button>
                             )}
                           </div>

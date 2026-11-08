@@ -118,9 +118,24 @@ describe('the band on the holding area page', () => {
   it('says plainly when the shift running now has nobody on it', () => {
     // Only for a shift where that is a live problem — an empty shift last
     // Tuesday is history, not an alarm.
-    expect(band).toContain('nobodyOnNow');
-    expect(band).toContain('currentShift !== null && onNow.length === 0');
-    expect(band).toContain('Nobody is named to the holding area for the shift running now');
+    expect(band).toContain('emptyNow');
+    expect(band).toContain('currentShift !== null');
+    expect(band).toContain('nobody on it right now');
+    // And the whole-floor warning only where EVERY holding area is empty, so
+    // one quiet complex does not raise an alarm about all of them.
+    expect(band).toContain('nobodyAnywhereNow');
+    expect(band).toContain('shown.every((c) => emptyNow(c.key))');
+    expect(band).toContain('No holding area has anybody named to it');
+  });
+
+  it('shows one block per complex, since each has its own holding area', () => {
+    // A single combined list is how a nurse in the Eye Theatre came to be
+    // shown as cover for a room in Professor Ojukwu.
+    expect(band).toContain('HOLDING_AREA_COMPLEXES');
+    expect(band).toContain('a.complex === complex');
+    // A complex nobody is on and which is not running now is left out
+    // rather than printed as an empty row at 03:00.
+    expect(band).toContain('staff.some((a) => a.complex === c.key) || emptyNow(c.key)');
   });
 
   it('points at the screen that sets it, without promising an action', () => {
