@@ -37,9 +37,22 @@ export const EMERGENCY_DAY_END_HOUR = 18;
  * Unchanged: every existing caller of the on-duty endpoint means this.
  */
 export function electiveShiftFromDate(d: Date): DutyShift {
-  const h = d.getHours();
-  if (h >= 8 && h < 16) return 'MORNING';
-  if (h >= 16 && h < 22) return 'CALL';
+  return electiveShiftFromMinutes(d.getHours() * 60 + d.getMinutes());
+}
+
+/**
+ * The same split, from minutes past midnight.
+ *
+ * `electiveShiftFromDate` reads the clock of whatever machine it runs on. That
+ * is right in a browser on the theatre floor and wrong on a server, or on a
+ * laptop somebody brought back from a conference with its timezone still set.
+ * A caller that knows the hospital's own minute — `watMinutesOfDay` — should
+ * pass it here instead, and get the shift the floor is actually running.
+ */
+export function electiveShiftFromMinutes(minutes: number): DutyShift {
+  const m = ((Math.floor(minutes) % 1440) + 1440) % 1440;
+  if (m >= 8 * 60 && m < 16 * 60) return 'MORNING';
+  if (m >= 16 * 60 && m < 22 * 60) return 'CALL';
   return 'NIGHT';
 }
 

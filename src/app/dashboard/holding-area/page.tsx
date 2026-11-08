@@ -6,6 +6,7 @@ import { CalendarDays, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { SYNC_INTERVALS } from '@/lib/sync';
 import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { watToday } from '@/lib/watDay';
+import HoldingAreaStaffBand from '@/components/HoldingAreaStaffBand';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
 
@@ -495,6 +496,11 @@ export default function HoldingAreaPage() {
           </button>
         </div>
       )}
+
+      {/* Who is on the room, before the patients in it. A nurse reading this
+          page is standing in the holding area; the name against the shift is
+          the thing they most often have to ask somebody for. */}
+      <HoldingAreaStaffBand date={selectedDate} isToday={selectedDate === watToday()} />
 
       {/* Assessments Grid */}
       {assessments.length === 0 ? (
