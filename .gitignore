@@ -89,3 +89,8 @@ public/downloads/*.apk
 /assets/icon-background.png
 /assets/splash.png
 /assets/splash-dark.png
+
+# The executive-accounts input names real officers; see
+# scripts/create-executive-accounts.ts. Never commit it.
+executive-accounts*.json
+people.json

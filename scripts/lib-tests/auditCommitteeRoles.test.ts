@@ -57,6 +57,45 @@ describe('every committee role is a real role', () => {
     }
   });
 
+  /**
+   * Bulk upload keeps its OWN hardcoded role list, separate from
+   * ONBOARDING_ROLES, so the two can drift apart without anything noticing.
+   * It matters more than the registration form, not less: the route admits a
+   * THEATRE_MANAGER, so an executive seat reachable there could be filled by
+   * somebody well below the officer whose seat it is.
+   */
+  it('cannot be created by bulk upload either', () => {
+    const route = fs.readFileSync(
+      path.join(REPO, 'src/app/api/users/bulk-upload/route.ts'), 'utf8',
+    );
+    const list = /const validRoles = \[([\s\S]*?)\];/.exec(route);
+    expect(list, 'validRoles not found in the bulk-upload route').toBeTruthy();
+    for (const r of ADMIN_CREATED_ONLY) {
+      expect(list![1], `${r} must not be bulk-uploadable`).not.toContain(`'${r}'`);
+    }
+    // And the guard is only worth anything if the list is really being read.
+    expect(list![1]).toContain("'SURGEON'");
+  });
+
+  /**
+   * The one path that MAY create these accounts. If the script ever widened to
+   * ADMIN or SYSTEM_ADMINISTRATOR it would be a back door with a helpful
+   * comment on it, so the set it accepts is pinned here.
+   */
+  it('is created only by the executive-accounts script, and only these three', () => {
+    const script = fs.readFileSync(
+      path.join(REPO, 'scripts/create-executive-accounts.ts'), 'utf8',
+    );
+    const m = /const EXECUTIVE_ROLES = \[([\s\S]*?)\] as const;/.exec(script);
+    expect(m, 'EXECUTIVE_ROLES not found in the script').toBeTruthy();
+    const allowed = (m![1].match(/'([A-Z_]+)'/g) ?? []).map((x) => x.replace(/'/g, ''));
+    expect(allowed.sort()).toEqual([...ADMIN_CREATED_ONLY].sort());
+    // It must refuse anything else rather than fall through to creating it.
+    expect(script).toContain('is not an executive seat');
+    // And never quietly promote an existing account into the seat.
+    expect(script).toContain('will not change an existing non-executive account');
+  });
+
   it('has a distinct staff-code prefix', () => {
     // Two roles sharing a prefix makes staff codes ambiguous.
     const prefixes = ONBOARDING_ROLES.map((r) => r.prefix);
