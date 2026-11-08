@@ -62,6 +62,7 @@ import {
   Settings,
   Building2,
   Heart,
+  HeartPulse,
   Stethoscope,
   UserCheck,
   Bed,
@@ -325,6 +326,7 @@ export default function DashboardLayout({
     { href: '/dashboard/prescriptions', icon: FileText, label: 'Pharmacy' },
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
+    { href: '/dashboard/setup-chase', icon: Wrench, label: 'Theatre Setup Checks', badge: 'NEW' },
 
     // === DAY-OF-SURGERY LOGISTICS ===
     { href: '/dashboard/my-practice', icon: Stethoscope, label: 'My Practice', badge: 'NEW' },
@@ -371,6 +373,7 @@ export default function DashboardLayout({
 
     // === POST-OPERATIVE ===
     { href: '/dashboard/pacu', icon: Bed, label: 'PACU (Recovery)' },
+    { href: '/dashboard/recovery-chase', icon: HeartPulse, label: 'Recovery Records Outstanding', badge: 'NEW' },
     { href: '/dashboard/transfers', icon: ArrowLeftRight, label: 'Patient Transfers' },
 
     // === EMERGENCY LAB & INVESTIGATIONS ===
@@ -628,9 +631,11 @@ export default function DashboardLayout({
       '/dashboard/preop-reviews',
       '/dashboard/preop-reviews/watch',
       '/dashboard/anesthesia-setup',
+      '/dashboard/setup-chase',
       '/dashboard/prescription-approvals',
     ] },
     { type: 'single', href: '/dashboard/pacu' },
+    { type: 'single', href: '/dashboard/recovery-chase' },
     { type: 'group', label: 'Pharmacy', icon: Pill, hrefs: [
       '/dashboard/prescriptions',
       '/announcement-display/pharmacy',

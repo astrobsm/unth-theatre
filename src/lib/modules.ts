@@ -85,6 +85,10 @@ export const MODULES: AppModule[] = [
   { id: 'prescriptions', label: 'Pharmacy', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
   { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER'], category: 'Pre-Op' },
   { id: 'anesthesia-setup', label: 'Anesthesia Setup', paths: ['/dashboard/anesthesia-setup'], defaultRoles: ['ANAESTHETIC_TECHNICIAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
+  // Beside the setup screen it reports on, and granted to the technicians
+  // themselves: a technician who can see the missing end-of-day check logs
+  // it rather than receiving a letter about it.
+  { id: 'setup-chase', label: 'Theatre Setup Checks', paths: ['/dashboard/setup-chase'], defaultRoles: ['ANAESTHETIC_TECHNICIAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HEAD_OF_ANAESTHESIA', 'BIOMEDICAL_ENGINEER', 'BIOMEDICAL_TECHNICIAN'], category: 'Pre-Op' },
 
   // Day-of-surgery logistics
   { id: 'roster', label: 'Duty Roster', paths: ['/dashboard/roster'], defaultRoles: [...CLINICAL_CORE, 'THEATRE_CAFETERIA_MANAGER'], category: 'Logistics' },
@@ -131,6 +135,11 @@ export const MODULES: AppModule[] = [
 
   // Post-operative
   { id: 'pacu', label: 'PACU (Recovery)', paths: ['/dashboard/pacu'], defaultRoles: ['RECOVERY_ROOM_NURSE', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Post-Op' },
+  // Beside PACU on purpose: it is the same records read from the other end,
+  // and it is granted to the same nurses so a supervisor can close a gap
+  // instead of receiving a message about it. Sending is gated separately, in
+  // src/lib/recoveryChase/access.ts.
+  { id: 'recovery-chase', label: 'Recovery Records Outstanding', paths: ['/dashboard/recovery-chase'], defaultRoles: ['RECOVERY_ROOM_NURSE', 'SCRUB_NURSE', 'INFECTION_CONTROL_NURSE', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HEAD_OF_ANAESTHESIA'], category: 'Post-Op' },
 
   // Radiology sits in Pre-Op because that is when the great majority of these
   // are asked for, but the worklist itself spans the whole case — including the

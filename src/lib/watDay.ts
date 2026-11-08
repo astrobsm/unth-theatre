@@ -102,6 +102,25 @@ export function watInstantFrom(day: string, time: string): Date | null {
   );
 }
 
+/**
+ * The value a Prisma `@db.Date` column holds for a WAT calendar day.
+ *
+ * A `@db.Date` stores a bare date and Prisma reads it back as midnight UTC, so
+ * a range query against one has to be built from midnight UTC — NOT from
+ * watDayRange, which returns the INSTANT a WAT day begins and is 23:00 on the
+ * previous day. Mixing the two is an off-by-one that silently drops the last
+ * day of every window, and the symptom is not "no rows" but a confident report
+ * that nobody set up any theatre yesterday.
+ *
+ * Returns null for anything it cannot read, so a malformed range is refused
+ * rather than silently becoming Invalid Date.
+ */
+export function dateColumn(day: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day).trim());
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
 /** Day of week in WAT, 0 = Sunday — matching Date.getDay()'s numbering. */
 export function watDayOfWeek(value: Date | string | number): number {
   const d = value instanceof Date ? value : new Date(value);
