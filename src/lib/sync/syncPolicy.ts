@@ -94,6 +94,11 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'equipment', cls: 'LWW', why: 'Current status of a device; history lives in maintenance records.' },
   { table: 'theatre_meals', cls: 'LWW', why: 'Administrative counts.' },
   { table: 'wards', cls: 'LWW', why: 'Reference data. Renaming or adding a ward has no clinical history to lose.' },
+  // A decision record: it is written once by the applicant and once by the
+  // board, and the two writes are to different columns. LWW rather than
+  // APPEND_ONLY because the status genuinely walks PENDING -> APPROVED or
+  // REJECTED, and later REVOKED; the latest decision is the one in force.
+  { table: 'research_access_requests', cls: 'LWW', why: 'An application and its decision. The most recent decision is the one in force, and a stale node must never resurrect a withdrawn approval.' },
   // Reclassified from APPEND_ONLY on 17 August 2026. It was never append-only:
   // status walks PENDING → PLAYING → PLAYED → ACKNOWLEDGED → EXPIRED, and
   // lastPlayedAt, acknowledgedAt and acknowledgedById are all written after

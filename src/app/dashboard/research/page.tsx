@@ -23,6 +23,8 @@ const Bar = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.B
 const Line = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Line), { ssr: false, loading: chartLoading });
 const Pie = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Pie), { ssr: false, loading: chartLoading });
 const Doughnut = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Doughnut), { ssr: false, loading: chartLoading });
+const CollegeLogbook = dynamic(() => import('@/components/research/CollegeLogbook'), { ssr: false });
+const ResearchAccess = dynamic(() => import('@/components/research/ResearchAccess'), { ssr: false });
 
 // ---- Palette ---------------------------------------------------------------
 const PALETTE = [
@@ -111,7 +113,7 @@ function StatRow({ name, s }: { name: string; s: any }) {
 
 export default function ResearchPage() {
   const { data: session } = useSession();
-  const [tab, setTab] = useState<'dashboard' | 'query'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'query' | 'logbook' | 'access'>('dashboard');
 
   // -------- Shared filters --------
   const [meta, setMeta] = useState<any>({ specialties: [], units: [], theatres: [], surgeons: [], anaesthetists: [] });
@@ -415,7 +417,50 @@ export default function ResearchPage() {
         >
           <Database className="w-4 h-4 inline mr-1.5" />Research Query Builder
         </button>
+        <button
+          onClick={() => setTab('logbook')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'logbook' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          <ClipboardList className="w-4 h-4 inline mr-1.5" />College Log Book
+        </button>
+        <button
+          onClick={() => setTab('access')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'access' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          <Stethoscope className="w-4 h-4 inline mr-1.5" />Research Access
+        </button>
       </div>
+
+      {/* What this person can actually see, said before any figure is shown.
+          A count that looks small is then explained rather than mistaken for
+          a quiet month. */}
+      {data?.scope && (
+        <div className={`mb-4 flex items-start gap-2 rounded-xl border p-3 text-xs leading-relaxed ${
+          data.scope.kind === 'OWN'
+            ? 'border-amber-200 bg-amber-50 text-amber-900'
+            : 'border-green-200 bg-green-50 text-green-900'}`}>
+          <Sigma className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {data.scope.explanation}
+            {data.scope.kind === 'OWN' && (
+              <>
+                {' '}
+                <button type="button" onClick={() => setTab('access')}
+                  className="font-bold underline">
+                  Apply to the Theatre Research Board
+                </button>
+                {data.scope.pending && (
+                  <> — your application &ldquo;{data.scope.pending.title}&rdquo; is already with
+                  them, due by {String(data.scope.pending.dueBy).slice(0, 16).replace('T', ' ')}.</>
+                )}
+              </>
+            )}
+          </span>
+        </div>
+      )}
+
+      {tab === 'logbook' && <CollegeLogbook />}
+      {tab === 'access' && <ResearchAccess onChanged={() => void loadDashboard()} />}
 
       {tab === 'dashboard' && (
         <>

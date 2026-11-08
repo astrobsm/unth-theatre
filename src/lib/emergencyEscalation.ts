@@ -67,6 +67,13 @@ export const AUDIT_COMMITTEE_ROLES = [
   'HEAD_OF_SURGERY',
   'HEAD_OF_OBSTETRICS_GYNAECOLOGY',
   'HEAD_OF_PHARMACY',
+  // Added 8 November 2026 with the Theatre Research Board. A delayed emergency
+  // in one of these departments stops at that head's desk exactly as it does
+  // for the four above; leaving them off would have given them a duty sheet
+  // pointing at a board they were locked out of.
+  'HEAD_OF_MAXILLOFACIAL',
+  'HEAD_OF_ENT',
+  'HEAD_OF_OPHTHALMOLOGY',
   // The services a case waits on. CSSD and oxygen keep their existing HOD
   // roles rather than gaining a second one.
   'CSSD_SUPERVISOR',

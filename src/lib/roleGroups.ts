@@ -14,6 +14,25 @@
 /** senior role -> the role(s) whose access it also has. */
 export const ROLE_INHERITS: Record<string, string[]> = {
   CONSULTANT_SURGEON: ['SURGEON'],
+
+  // The clinical heads, added 8 November 2026 with the Theatre Research Board.
+  //
+  // Each head is a consultant in their own discipline who also runs it, so the
+  // head role inherits the consultant role and reaches everything a consultant
+  // reaches. Without this, creating HEAD_OF_ENT would have produced an account
+  // that could chair a research application but could not open a theatre list
+  // -- and the ~127 places that name SURGEON would each have needed editing.
+  //
+  // The three heads that already existed are mapped here too. They were
+  // previously listed explicitly wherever they applied, which worked but meant
+  // every new screen had to remember to list them.
+  HEAD_OF_SURGERY: ['CONSULTANT_SURGEON'],
+  HEAD_OF_OBSTETRICS_GYNAECOLOGY: ['CONSULTANT_SURGEON'],
+  HEAD_OF_MAXILLOFACIAL: ['CONSULTANT_SURGEON'],
+  HEAD_OF_ENT: ['CONSULTANT_SURGEON'],
+  HEAD_OF_OPHTHALMOLOGY: ['CONSULTANT_SURGEON'],
+  HEAD_OF_ANAESTHESIA: ['CONSULTANT_ANAESTHETIST'],
+  HEAD_OF_PHARMACY: ['PHARMACIST'],
   // NOTE: CONSULTANT_ANAESTHETIST is deliberately NOT mapped to ANAESTHETIST.
   // That pair predates this file and is already listed explicitly wherever it
   // applies; adding inheritance would silently widen consultants' access

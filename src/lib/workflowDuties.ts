@@ -795,6 +795,11 @@ export const DUTY_SHEETS: DutySheet[] = [
       'HEAD_OF_SURGERY',
       'HEAD_OF_OBSTETRICS_GYNAECOLOGY',
       'HEAD_OF_PHARMACY',
+      // Added 8 November 2026 with the Theatre Research Board. The duty is the
+      // same oversight duty; only the department differs.
+      'HEAD_OF_MAXILLOFACIAL',
+      'HEAD_OF_ENT',
+      'HEAD_OF_OPHTHALMOLOGY',
     ],
     headline:
       'A delayed emergency is nearly always somebody\'s department. Yours is the desk it stops at.',
@@ -1228,6 +1233,57 @@ export const DUTY_SHEETS: DutySheet[] = [
       },
     ],
     remember: 'When a scheduled job stops, nothing breaks visibly. Check the quiet things.',
+  },
+
+  // ---------------------------------------------------------------------
+  // The Theatre Research Board, added 8 November 2026.
+  //
+  // A clinician sees their own cases in the research module and applies for
+  // anything wider. This is the desk that application lands on, and the
+  // twenty-four hours is an undertaking the board made, not a system default.
+  {
+    id: 'theatre-research-board',
+    title: 'Theatre Research Board',
+    roles: [
+      'ETHICS_COMMITTEE_CHAIRMAN',
+      'HEAD_OF_OPERATIONS',
+    ],
+    headline:
+      'A researcher can see their own cases. Everything wider passes your desk, and the board '
+      + 'undertook to answer within twenty-four hours.',
+    duties: [
+      {
+        task: 'Review research access applications',
+        when: 'Within 24 hours of submission',
+        why:
+          'Until the board decides, the applicant can only see cases their own name is on. An '
+          + 'application left sitting does not fail safe: it stops an audit, a dissertation or a '
+          + 'mortality review that somebody is waiting on.',
+        where: 'Research & Analytics → Access requests',
+        critical: true,
+      },
+      {
+        task: 'Grant the narrowest scope that answers the question',
+        when: 'At the decision',
+        why:
+          'An approval to study appendicectomy outcomes is not an approval to read the whole '
+          + 'theatre. The scope you grant is the scope the query runs under, so narrowing it here '
+          + 'is the control, not a note in the minutes.',
+        where: 'Research & Analytics → Access requests',
+        critical: true,
+      },
+      {
+        task: 'Set an expiry on every grant',
+        when: 'At the decision',
+        why:
+          'A standing grant outlives the study it was given for. The expiry is what makes an '
+          + 'approval reviewable rather than permanent.',
+        where: 'Research & Analytics → Access requests',
+      },
+    ],
+    remember:
+      'The default is a clinician seeing their own work. Everything else is something the board '
+      + 'decided to allow, and can be asked about.',
   },
 ];
 

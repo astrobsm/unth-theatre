@@ -38,6 +38,14 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   { value: 'HEAD_OF_SURGERY',          label: 'Head of Surgery',                  prefix: 'SGH' },
   { value: 'HEAD_OF_OBSTETRICS_GYNAECOLOGY', label: 'Head of Obstetrics & Gynaecology', prefix: 'OGH' },
   { value: 'HEAD_OF_PHARMACY',         label: 'Head of Pharmacy',                 prefix: 'PHH' },
+  // The Theatre Research Board seats added 8 November 2026. Without an entry
+  // here a new head cannot be onboarded at all: the role exists in the enum
+  // and the registration form has no option for it.
+  { value: 'HEAD_OF_MAXILLOFACIAL',    label: 'Head of Maxillofacial Surgery',    prefix: 'MFH' },
+  { value: 'HEAD_OF_ENT',              label: 'Head of ENT',                      prefix: 'ENH' },
+  { value: 'HEAD_OF_OPHTHALMOLOGY',    label: 'Head of Ophthalmology',            prefix: 'OPH' },
+  { value: 'HEAD_OF_OPERATIONS',       label: 'Head of Operations',               prefix: 'OPS' },
+  { value: 'ETHICS_COMMITTEE_CHAIRMAN', label: 'Ethics Committee Chairman',       prefix: 'ETC' },
   { value: 'OXYGEN_UNIT_SUPERVISOR',   label: 'Oxygen Tech HOD',                  prefix: 'OXH' },
   { value: 'CSSD_SUPERVISOR',          label: 'CSSD HOD',                         prefix: 'CSH' },
   { value: 'LAUNDRY_SUPERVISOR',       label: 'Laundry HOD',                      prefix: 'LDH' },

@@ -27,6 +27,21 @@ enum UserRole {
   HEAD_OF_SURGERY
   HEAD_OF_OBSTETRICS_GYNAECOLOGY
   HEAD_OF_PHARMACY
+  /// The Theatre Research Board, added 8 November 2026.
+  ///
+  /// A researcher may only see cases their own name is on; anything wider is
+  /// applied for and reviewed by this board. Five of its twelve seats had no
+  /// role in this enum at all, so the board could not have been convened -- an
+  /// application would have sat with nobody able to open it.
+  ///
+  /// Each clinical head INHERITS its consultant role (see roleGroups.ts), so a
+  /// Head of ENT reaches everything a consultant surgeon reaches without the
+  /// ~127 places that name SURGEON having to be edited.
+  ETHICS_COMMITTEE_CHAIRMAN
+  HEAD_OF_MAXILLOFACIAL
+  HEAD_OF_ENT
+  HEAD_OF_OPHTHALMOLOGY
+  HEAD_OF_OPERATIONS
   LAUNDRY_SUPERVISOR
   CSSD_SUPERVISOR
   OXYGEN_UNIT_SUPERVISOR
@@ -719,6 +734,10 @@ model User {
   ocrQualityCaptures  OcrQualityAssessment[] @relation("OcrQualityCapturedBy")
 
   @@map("users")
+  /// Research access applications this user made, and those they decided.
+  researchRequests  ResearchAccessRequest[] @relation("ResearchApplicant")
+  researchDecisions ResearchAccessRequest[] @relation("ResearchDecider")
+
 }
 
 // Per-user module access grants. Each row is an admin-issued override that
@@ -14329,4 +14348,82 @@ model SurgeryParticipatingUnit {
   @@index([surgeryId])
   @@index([surgeonId])
   @@map("surgery_participating_units")
+}
+
+// ============================================================
+// Research access: applying to look beyond your own cases
+// ------------------------------------------------------------
+// The default in the research module is that a clinician sees the cases their
+// own name is on. Anything wider is an application, reviewed by the Theatre
+// Research Board, and granted for a stated purpose and a stated period.
+//
+// WHY A RECORD RATHER THAN A FLAG ON THE USER. An ethics approval is a thing
+// with a question, a reason, a scope, a decision, a decision-maker and an
+// expiry. A boolean on the user row answers none of those, and the first time
+// anybody asks "who approved this and on what basis" there would be nothing
+// to show. This table IS the answer to that question.
+//
+// THE SCOPE IS PART OF THE GRANT. An approval to study appendicectomy
+// outcomes is not an approval to read the whole theatre. Where the board
+// grants a narrower scope than was asked for, the narrower one is what the
+// query runs under.
+enum ResearchAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  /// Withdrawn by the applicant before a decision.
+  WITHDRAWN
+  /// Approved, then stopped early by the board.
+  REVOKED
+}
+
+model ResearchAccessRequest {
+  id          String @id @default(uuid())
+  applicantId String
+  applicant   User   @relation("ResearchApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+
+  /// The study, in the applicant's own words. Printed to the board.
+  title            String
+  /// Why the applicant needs cases that are not theirs.
+  rationale        String @db.Text
+  /// What they intend to do with it: audit, dissertation, publication.
+  purpose          String
+  /// The population asked for, as a sentence. Not a query.
+  scopeRequested   String @db.Text
+  /// The period of cases asked for.
+  periodFrom       DateTime? @db.Date
+  periodTo         DateTime? @db.Date
+  /// Whether an ethics approval already exists elsewhere, and its reference.
+  ethicsReference  String?
+
+  status      ResearchAccessStatus @default(PENDING)
+  submittedAt DateTime             @default(now())
+  /// The hour by which the board undertook to answer. Twenty-four hours from
+  /// submission; stored rather than computed so a change to the undertaking
+  /// does not silently re-date every application already in flight.
+  dueBy       DateTime
+
+  decidedAt     DateTime?
+  decidedById   String?
+  decidedBy     User?     @relation("ResearchDecider", fields: [decidedById], references: [id])
+  decidedByName String?
+  decisionNote  String?   @db.Text
+  /// What was actually granted, where the board narrowed it.
+  scopeGranted  String?   @db.Text
+  /// When the grant lapses. A standing, permanent grant is not offered.
+  expiresAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Sync metadata, maintained by the capture trigger. Declared here ONLY so
+  /// `prisma migrate diff` does not read these columns as drift; the trigger
+  /// owns them and application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([applicantId, status])
+  @@index([status, submittedAt])
+  @@map("research_access_requests")
 }

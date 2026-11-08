@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { describe, welchTTest, mannWhitneyU, chiSquare, pearson } from '@/lib/stats';
 import { SURGEON_ROLES } from '@/lib/roleGroups';
+import { researchScopeFor, withScope } from '@/lib/research/scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,9 +104,17 @@ function weekKey(d: Date): string {
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-function fetchSurgeries(where: any) {
+/**
+ * The one place research cases are read from.
+ *
+ * The parameter is named `scopedWhere` deliberately: every caller must pass a
+ * clause that has already been through withScope(), and the name is what
+ * tells the next person that. A helper taking a bare `where` reads as though
+ * an unscoped clause were acceptable, and eventually one is passed.
+ */
+function fetchSurgeries(scopedWhere: any) {
   return prisma.surgery.findMany({
-    where,
+    where: scopedWhere,
     include: {
       patient: { select: { age: true, gender: true, ward: true } },
       surgeon: { select: { fullName: true } },
@@ -174,10 +183,17 @@ export async function GET(request: NextRequest) {
 
     // Distinct filter option lists are cheap and drive the dashboard selectors.
     if (searchParams.get('meta') === '1') {
+      // SCOPED, like every other read here. These three build the filter
+      // dropdowns, and an unscoped list would name the specialties, units and
+      // theatres of cases this person cannot open -- a small leak, but a leak
+      // through a door nobody thinks to check because it only fills a select.
+      const metaActor = session.user as { id?: string; role?: string };
+      const metaScope = await researchScopeFor(metaActor.id, metaActor.role);
+      const metaWhere = withScope({}, metaScope) as never;
       const [specialties, units, locations, surgeons, anaesthetists] = await Promise.all([
-        prisma.surgery.findMany({ distinct: ['subspecialty'], select: { subspecialty: true }, orderBy: { subspecialty: 'asc' } }),
-        prisma.surgery.findMany({ distinct: ['unit'], select: { unit: true }, orderBy: { unit: 'asc' } }),
-        prisma.surgery.findMany({ distinct: ['location'], select: { location: true }, orderBy: { location: 'asc' } }),
+        prisma.surgery.findMany({ where: metaWhere, distinct: ['subspecialty'], select: { subspecialty: true }, orderBy: { subspecialty: 'asc' } }),
+        prisma.surgery.findMany({ where: metaWhere, distinct: ['unit'], select: { unit: true }, orderBy: { unit: 'asc' } }),
+        prisma.surgery.findMany({ where: metaWhere, distinct: ['location'], select: { location: true }, orderBy: { location: 'asc' } }),
         prisma.user.findMany({ where: { role: { in: [...SURGEON_ROLES] } }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } }),
         prisma.user.findMany({ where: { role: { in: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'] } }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } }),
       ]);
@@ -190,7 +206,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const where = buildWhere(searchParams);
+    // Scoped like the rest of the module: a clinician sees the cases their own
+    // name is on unless the Theatre Research Board has granted more. Applied
+    // to the where clause so the other cases are never read at all.
+    const actor = session.user as { id?: string; role?: string };
+    const scope = await researchScopeFor(actor.id, actor.role);
+    const where = withScope(buildWhere(searchParams), scope);
     const surgeries = await fetchSurgeries(where);
     const allRows = surgeries.map(toRow);
     const rows = applyRowFilters(allRows, searchParams);
@@ -275,6 +296,8 @@ export async function GET(request: NextRequest) {
     const cancellationByReason = countBy(cancelledRows, (r) => r.cancellationReason || 'Unspecified');
 
     return NextResponse.json({
+      scope: { kind: scope.kind, explanation: scope.explanation, grant: scope.grant,
+        pending: scope.pending },
       filters: Object.fromEntries(searchParams.entries()),
       volume: {
         total,
@@ -388,7 +411,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const surgeries = await fetchSurgeries(where);
+    const actorP = session.user as { id?: string; role?: string };
+    const scopeP = await researchScopeFor(actorP.id, actorP.role);
+    const surgeries = await fetchSurgeries(withScope(where, scopeP));
     let rows = surgeries.map(toRow);
 
     // Apply inclusion (all must match) and exclusion (none must match) criteria.

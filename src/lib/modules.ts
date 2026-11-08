@@ -36,12 +36,32 @@ import { AUDIT_COMMITTEE_ROLES } from './emergencyEscalation';
 const CLINICAL_CORE = [
   'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC',
   'HEAD_OF_ANAESTHESIA', 'HEAD_OF_SURGERY', 'HEAD_OF_OBSTETRICS_GYNAECOLOGY', 'HEAD_OF_PHARMACY',
+  // The heads added 8 November 2026 with the Theatre Research Board. A head
+  // who cannot open the delayed-emergency board is a head whose duty sheet
+  // points at a screen they are locked out of.
+  'HEAD_OF_MAXILLOFACIAL', 'HEAD_OF_ENT', 'HEAD_OF_OPHTHALMOLOGY',
   'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
   'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
   'ANAESTHETIC_TECHNICIAN',
 ];
 
 const ADMIN_VIEWERS = ['CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC'];
+
+/**
+ * The Theatre Research Board, as a module-access list.
+ *
+ * The authoritative roster is RESEARCH_BOARD_ROLES in
+ * src/lib/research/board.ts; this mirrors it so that modules.ts stays free of
+ * a circular import. A test asserts the two agree, because a board member who
+ * cannot open the screen their applications arrive on is a board member who
+ * will not review anything.
+ */
+const RESEARCH_BOARD_ROLES = [
+  'THEATRE_CHAIRMAN', 'ETHICS_COMMITTEE_CHAIRMAN', 'THEATRE_MANAGER',
+  'HEAD_OF_SURGERY', 'HEAD_OF_ANAESTHESIA', 'HEAD_OF_MAXILLOFACIAL',
+  'HEAD_OF_ENT', 'HEAD_OF_OBSTETRICS_GYNAECOLOGY', 'HEAD_OF_OPHTHALMOLOGY',
+  'CMAC', 'HEAD_OF_OPERATIONS', 'HEAD_OF_PHARMACY',
+];
 
 // NOTE: Roles in FULL_ACCESS_ROLES are intentionally omitted from
 // `defaultRoles` arrays — they bypass the check entirely.
@@ -209,7 +229,11 @@ export const MODULES: AppModule[] = [
   // as the other reports: it is a management view of the whole hospital's
   // theatre activity, not a clinical screen.
   { id: 'case-mix', label: 'Case Mix', paths: ['/dashboard/case-mix'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
-  { id: 'research', label: 'Research & Analytics', paths: ['/dashboard/research'], defaultRoles: [...ADMIN_VIEWERS, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Reports' },
+  // Every clinician reaches the research module; what they can SEE inside it
+  // is their own cases unless the Theatre Research Board has granted wider
+  // scope (src/lib/research/scope.ts). The board itself is listed because
+  // the applications are reviewed on this screen.
+  { id: 'research', label: 'Research & Analytics', paths: ['/dashboard/research'], defaultRoles: [...ADMIN_VIEWERS, ...RESEARCH_BOARD_ROLES, 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER'], category: 'Reports' },
   { id: 'presentation', label: 'Presentation', paths: ['/dashboard/presentation'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'training', label: 'Staff Training', paths: ['/training'], defaultRoles: ['*'], category: 'Reports' },
   { id: 'settings', label: 'Settings', paths: ['/dashboard/settings'], defaultRoles: ['*'], category: 'Reports' },
