@@ -104,3 +104,74 @@ describe('the median, and refusing to invent one', () => {
     expect(curve.medianNote).toContain('No usable observations');
   });
 });
+
+describe('the log-rank test', () => {
+  it('finds no difference between two identical groups', () => {
+    const rows = [
+      ...Array.from({ length: 20 }, (_, i) => obs(i + 1, i < 10, 'A')),
+      ...Array.from({ length: 20 }, (_, i) => obs(i + 1, i < 10, 'B')),
+    ];
+    const r = logRank(rows);
+    expect(r.pValue!).toBeGreaterThan(0.5);
+    expect(r.df).toBe(1);
+    expect(r.groups).toHaveLength(2);
+  });
+
+  it('finds a difference when one group does much worse', () => {
+    const rows = [
+      // A: everyone has the event early.
+      ...Array.from({ length: 25 }, (_, i) => obs(i + 1, true, 'A')),
+      // B: almost nobody does, and late.
+      ...Array.from({ length: 25 }, (_, i) => obs(i + 30, i > 22, 'B')),
+    ];
+    const r = logRank(rows);
+    expect(r.pValue!).toBeLessThan(0.01);
+    // A observed more events than expected; B fewer.
+    const a = r.groups.find((g) => g.label === 'A')!;
+    expect(a.observed).toBeGreaterThan(a.expected);
+  });
+
+  it('refuses a single group', () => {
+    const r = logRank([obs(1, true, 'A'), obs(2, false, 'A')]);
+    expect(r.statistic).toBeNull();
+    expect(r.detail).toContain('at least two groups');
+  });
+
+  it('refuses when nothing happened in any group', () => {
+    const r = logRank([obs(1, false, 'A'), obs(2, false, 'B')]);
+    expect(r.statistic).toBeNull();
+    expect(r.detail).toContain('No events occurred');
+  });
+
+  it('splits into one curve per group, largest first', () => {
+    const curves = kaplanMeierByGroup([
+      ...Array.from({ length: 5 }, (_, i) => obs(i + 1, true, 'Small')),
+      ...Array.from({ length: 15 }, (_, i) => obs(i + 1, i < 8, 'Large')),
+    ]);
+    expect(curves.map((c) => c.label)).toEqual(['Large', 'Small']);
+    expect(curves[0].n).toBe(15);
+  });
+});
+
+describe('survival at a named time', () => {
+  const curve = kaplanMeier([
+    obs(10, true), obs(20, true), obs(30, true),
+    obs(40, false), obs(50, false), obs(60, false),
+  ]);
+
+  it('reads the curve at that point', () => {
+    expect(survivalAt(curve, 5)).toBe(1);
+    expect(survivalAt(curve, 10)).toBeCloseTo(0.8333, 3);
+    expect(survivalAt(curve, 25)).toBeCloseTo(0.6667, 3);
+  });
+
+  it('REFUSES to extrapolate past the longest follow-up', () => {
+    // Beyond the data there is no estimate, only a guess, and a 90-day
+    // survival quoted from 60 days of follow-up is exactly that.
+    expect(survivalAt(curve, 100)).toBeNull();
+  });
+
+  it('gives nothing for an empty curve', () => {
+    expect(survivalAt(kaplanMeier([]), 10)).toBeNull();
+  });
+});

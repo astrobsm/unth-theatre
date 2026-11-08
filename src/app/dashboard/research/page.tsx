@@ -25,6 +25,7 @@ const Pie = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.P
 const Doughnut = dynamic(() => import('@/components/charts/ChartKit').then((m) => m.Doughnut), { ssr: false, loading: chartLoading });
 const CollegeLogbook = dynamic(() => import('@/components/research/CollegeLogbook'), { ssr: false });
 const ResearchAccess = dynamic(() => import('@/components/research/ResearchAccess'), { ssr: false });
+const AdvancedAnalysis = dynamic(() => import('@/components/research/AdvancedAnalysis'), { ssr: false });
 
 // ---- Palette ---------------------------------------------------------------
 const PALETTE = [
@@ -113,7 +114,7 @@ function StatRow({ name, s }: { name: string; s: any }) {
 
 export default function ResearchPage() {
   const { data: session } = useSession();
-  const [tab, setTab] = useState<'dashboard' | 'query' | 'logbook' | 'access'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'query' | 'engine' | 'logbook' | 'access'>('dashboard');
 
   // -------- Shared filters --------
   const [meta, setMeta] = useState<any>({ specialties: [], units: [], theatres: [], surgeons: [], anaesthetists: [] });
@@ -418,6 +419,12 @@ export default function ResearchPage() {
           <Database className="w-4 h-4 inline mr-1.5" />Research Query Builder
         </button>
         <button
+          onClick={() => setTab('engine')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'engine' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          <Sigma className="w-4 h-4 inline mr-1.5" />Research Engine
+        </button>
+        <button
           onClick={() => setTab('logbook')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'logbook' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
@@ -458,6 +465,11 @@ export default function ResearchPage() {
           </span>
         </div>
       )}
+
+      {/* The full catalogue, the modern tests, and the report. The Query
+          Builder above keeps its thirteen headline fields for the quick
+          questions; this is where the other 196 variables live. */}
+      {tab === 'engine' && <AdvancedAnalysis />}
 
       {tab === 'logbook' && <CollegeLogbook />}
       {tab === 'access' && <ResearchAccess onChanged={() => void loadDashboard()} />}

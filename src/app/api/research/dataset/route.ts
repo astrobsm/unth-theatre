@@ -33,6 +33,14 @@ import {
 import { RESEARCH_INCLUDE } from '@/lib/research/include';
 import { researchScopeFor, withScope } from '@/lib/research/scope';
 import { interpret } from '@/lib/research/interpret';
+import { interpretLogistic, interpretSurvival, interpretDiagnostic }
+  from '@/lib/research/interpretModel';
+import { logisticRegression, indicatorColumns, type LogisticResult }
+  from '@/lib/research/regression';
+import { kaplanMeierByGroup, logRank, type SurvivalCurve } from '@/lib/research/survival';
+import { rocCurve, cohensKappa, type RocResult, type AgreementResult }
+  from '@/lib/research/diagnostic';
+import { buildTableOne } from '@/lib/research/tableOne';
 import {
   RESEARCH_VARIABLES, RESEARCH_VARIABLE_COUNT, catalogueForClient, variable,
   numericValue, categoryValue, type VariableValue,
@@ -348,6 +356,97 @@ export async function POST(request: NextRequest) {
               detail: `Slope is ${yDef.unit ?? yDef.label} per ${xDef.unit ?? xDef.label}.` };
           }
         }
+      } else if (t.type === 'logistic' && t.outcomeField) {
+        // Logistic regression. The outcome must be a yes/no variable; each
+        // predictor is taken as a number where it is one, and expanded into
+        // indicator columns against a reference level where it is a category.
+        const outDef = variable(t.outcomeField);
+        const chosen: string[] = Array.isArray(t.predictors) ? t.predictors : [];
+        const predictorDefs = chosen
+          .map((k) => variable(k))
+          .filter((v): v is NonNullable<typeof v> => !!v && v.key !== outDef?.key);
+        if (outDef && outDef.kind === 'boolean' && predictorDefs.length > 0) {
+          const columns: Array<{ name: string; values: Array<number | null> }> = [];
+          const references: Array<{ field: string; reference: string }> = [];
+          predictorDefs.forEach((v) => {
+            if (v.kind === 'numeric') {
+              columns.push({ name: v.label, values: rows.map((r) => numericValue(r[v.key])) });
+              return;
+            }
+            if (v.kind === 'boolean') {
+              columns.push({
+                name: v.label,
+                values: rows.map((r) => (r[v.key] === true ? 1 : r[v.key] === false ? 0 : null)),
+              });
+              return;
+            }
+            const expanded = indicatorColumns(
+              v.label,
+              rows.map((r) => categoryValue(r[v.key])),
+              typeof t.references?.[v.key] === 'string' ? t.references[v.key] : undefined,
+            );
+            if (expanded.reference) references.push({ field: v.label, reference: expanded.reference });
+            expanded.columns.forEach((c) => columns.push(c));
+          });
+          const res = logisticRegression({
+            outcome: rows.map((r) => (r[outDef.key] === true ? true
+              : r[outDef.key] === false ? false : null)),
+            predictors: columns,
+          });
+          inferential = { ...res, outcomeField: outDef.key, references };
+        }
+      } else if (t.type === 'survival' && t.timeField && t.eventField) {
+        // Kaplan-Meier, and the log-rank test when a grouping was named.
+        const timeDef = variable(t.timeField);
+        const eventDef = variable(t.eventField);
+        const byDef = t.groupField ? variable(t.groupField) : null;
+        if (timeDef && timeDef.kind === 'numeric' && eventDef && eventDef.kind === 'boolean') {
+          const obs = rows.map((r) => ({
+            time: numericValue(r[timeDef.key]),
+            event: r[eventDef.key] === true ? true : r[eventDef.key] === false ? false : null,
+            group: byDef ? categoryValue(r[byDef.key]) : null,
+          }));
+          const curves = kaplanMeierByGroup(obs);
+          const test = byDef ? logRank(obs) : null;
+          inferential = {
+            test: test?.test ?? 'Kaplan-Meier',
+            statistic: test?.statistic ?? null,
+            pValue: test?.pValue ?? null,
+            df: test?.df ?? null,
+            groups: test?.groups ?? null,
+            curves,
+            timeField: timeDef.key,
+            eventField: eventDef.key,
+            groupField: byDef?.key ?? null,
+            timeUnit: timeDef.unit ?? null,
+            detail: test?.detail
+              ?? 'One curve. Name a grouping variable to compare curves with the log-rank test.',
+          };
+        }
+      } else if (t.type === 'roc' && t.scoreField && t.outcomeField) {
+        const scoreDef = variable(t.scoreField);
+        const outDef = variable(t.outcomeField);
+        if (scoreDef && scoreDef.kind === 'numeric' && outDef && outDef.kind === 'boolean') {
+          const res = rocCurve({
+            scores: rows.map((r) => numericValue(r[scoreDef.key])),
+            outcome: rows.map((r) => (r[outDef.key] === true ? true
+              : r[outDef.key] === false ? false : null)),
+            higherIsPositive: t.higherIsPositive !== false,
+          });
+          inferential = { ...res, scoreField: scoreDef.key, outcomeField: outDef.key };
+        }
+      } else if (t.type === 'kappa' && t.fieldA && t.fieldB) {
+        const aDef = variable(t.fieldA);
+        const bDef = variable(t.fieldB);
+        if (aDef && bDef && aDef.kind !== 'numeric' && bDef.kind !== 'numeric') {
+          const asText = (v: VariableValue) => (v === true ? 'Yes' : v === false ? 'No'
+            : categoryValue(v));
+          const res = cohensKappa(
+            rows.map((r) => asText(r[aDef.key])),
+            rows.map((r) => asText(r[bDef.key])),
+          );
+          inferential = { ...res, fieldA: aDef.key, fieldB: bDef.key };
+        }
       }
     }
 
@@ -356,7 +455,39 @@ export async function POST(request: NextRequest) {
     // does not, and what would weaken it. See src/lib/research/interpret.ts
     // for the rule about never writing "no difference".
     let interpretation: unknown = null;
-    if (inferential) {
+    if (inferential && (t?.type === 'logistic' || t?.type === 'survival'
+      || t?.type === 'roc' || t?.type === 'kappa')) {
+      // These four do not reduce to one p-value, so they carry their own
+      // interpreters. Handing them to interpret() would print a headline about
+      // a statistic that the analysis never produced.
+      const r = inferential as Record<string, unknown>;
+      const label = (key: unknown) => (typeof key === 'string'
+        ? (variable(key)?.label ?? 'the outcome') : 'the outcome');
+      if (t.type === 'logistic') {
+        interpretation = interpretLogistic(r as unknown as LogisticResult, {
+          outcomeLabel: label(t.outcomeField),
+          references: (r.references as Array<{ field: string; reference: string }>) ?? [],
+        });
+      } else if (t.type === 'survival') {
+        interpretation = interpretSurvival({
+          curves: (r.curves as SurvivalCurve[]) ?? [],
+          pValue: (r.pValue as number | null) ?? null,
+          statistic: (r.statistic as number | null) ?? null,
+          outcomeLabel: label(t.eventField),
+          groupLabel: t.groupField ? variable(t.groupField)?.label ?? null : null,
+          timeUnit: (r.timeUnit as string | null) ?? null,
+        });
+      } else if (t.type === 'roc') {
+        interpretation = interpretDiagnostic(r as unknown as RocResult, {
+          outcomeLabel: label(t.outcomeField),
+          scoreLabel: t.scoreField ? variable(t.scoreField)?.label ?? null : null,
+        });
+      } else {
+        interpretation = interpretDiagnostic(r as unknown as AgreementResult, {
+          outcomeLabel: label(t.fieldA),
+        });
+      }
+    } else if (inferential) {
       const r = inferential as Record<string, unknown>;
       const numLabel = t?.numericField ? variable(t.numericField)?.label : null;
       const grpLabel = t?.groupField ? variable(t.groupField)?.label
@@ -387,6 +518,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // ── Table 1, where one was asked for ───────────────────────────
+    let tableOne: unknown = null;
+    const t1 = body?.tableOne;
+    if (t1?.groupBy) {
+      const by = variable(String(t1.groupBy));
+      const chosen: string[] = Array.isArray(t1.variables) ? t1.variables : [];
+      const vars = chosen
+        .map((k) => variable(k))
+        .filter((v): v is NonNullable<typeof v> => !!v && v.kind !== 'date');
+      if (by && vars.length > 0) {
+        tableOne = buildTableOne(rows, by, vars, { parametric: t1.parametric === true });
+      }
+    }
+
     const codes = new Map<string, string>();
     let counter = 0;
     const code = (prefix: string, name: string | null): string | null => {
@@ -409,6 +554,7 @@ export async function POST(request: NextRequest) {
       grouped,
       inferential,
       interpretation,
+      tableOne,
       dataset: withDataset
         ? rows.slice(0, MAX_ROWS_RETURNED).map((r, i) => anonymise(r, i, code))
         : [],
