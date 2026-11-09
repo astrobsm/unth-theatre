@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import {
+  hashInviteToken, inviteState, careContextOf,
+} from "@/lib/patients/feedbackInvite";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,8 @@ const createSchema = z.object({
   message: z.string().trim().max(5000).optional(),
   wouldRecommend: z.boolean().optional(),
   source: z.string().trim().max(20).optional(),
+  /** An end-of-care invitation. See the anonymity handling in POST below. */
+  token: z.string().trim().max(200).optional(),
 });
 
 // POST /api/feedback/patient — PUBLIC: patients/relatives submit their experience.
@@ -59,25 +64,89 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const created = await prisma.patientFeedback.create({
-    data: {
-      patientName: d.patientName || null,
-      folderNumber: d.folderNumber || null,
-      phoneNumber: d.phoneNumber || null,
-      relationship: d.relationship || null,
-      overallRating: d.overallRating ?? null,
-      staffCourtesyRating: d.staffCourtesyRating ?? null,
-      cleanlinessRating: d.cleanlinessRating ?? null,
-      waitTimeRating: d.waitTimeRating ?? null,
-      communicationRating: d.communicationRating ?? null,
-      painManagementRating: d.painManagementRating ?? null,
-      journeyStage: d.journeyStage || null,
-      whatWentWell: d.whatWentWell || null,
-      whatToImprove: d.whatToImprove || null,
-      message: d.message || null,
-      wouldRecommend: d.wouldRecommend ?? null,
-      source: d.source || "link",
-    },
+  // ── An end-of-care invitation ─────────────────────────────────────────
+  //
+  // THIS IS WHERE THE LINK IS SEVERED, and it is the only reason the word
+  // "anonymous" may appear on the page the patient just read.
+  //
+  // The request row knows which patient was invited — that is how one
+  // invitation per case is kept and how the unit is attached. It must not know
+  // it a moment longer than the submission takes. So the feedback is written,
+  // the row is marked used, and its patientId and surgeryId are cleared, all
+  // in ONE transaction: if the write succeeds and the clearing does not, the
+  // database is left holding exactly the join this feature promises does not
+  // exist.
+  //
+  // What is deliberately NOT stored: responseData on the request row. The
+  // column exists and filling it would put the patient's words next to their
+  // patientId's former home, with the submission timestamp to match. The
+  // feedback lives in patient_feedback; the request row keeps only the fact
+  // that it was used.
+  let careUnit: string | null = null;
+  let careComplex: string | null = null;
+  let inviteId: string | null = null;
+
+  if (d.token) {
+    const row = await prisma.feedbackRequest.findUnique({
+      where: { tokenHash: hashInviteToken(d.token) },
+      select: { id: true, expiresAt: true, submittedAt: true, surgeryId: true },
+    });
+
+    const state = inviteState(row);
+    if (!state.ok) {
+      return NextResponse.json({ error: state.message, problem: state.problem }, { status: 409 });
+    }
+
+    inviteId = row!.id;
+    if (row!.surgeryId) {
+      const s = await prisma.surgery.findUnique({
+        where: { id: row!.surgeryId },
+        select: { unit: true, location: true },
+      }).catch(() => null);
+      const ctx = careContextOf(s ?? {});
+      careUnit = ctx.unit;
+      careComplex = ctx.complex;
+    }
+  }
+
+  const identified = inviteId === null;
+
+  const created = await prisma.$transaction(async (tx) => {
+    const row = await tx.patientFeedback.create({
+      data: {
+        // An invited submission carries no identity, whatever was posted. The
+        // form does not offer these fields when a token is present; this makes
+        // that true of the endpoint as well, so a crafted request cannot sign
+        // a submission the patient believed was anonymous.
+        patientName: identified ? (d.patientName || null) : null,
+        folderNumber: identified ? (d.folderNumber || null) : null,
+        phoneNumber: identified ? (d.phoneNumber || null) : null,
+        relationship: d.relationship || null,
+        overallRating: d.overallRating ?? null,
+        staffCourtesyRating: d.staffCourtesyRating ?? null,
+        cleanlinessRating: d.cleanlinessRating ?? null,
+        waitTimeRating: d.waitTimeRating ?? null,
+        communicationRating: d.communicationRating ?? null,
+        painManagementRating: d.painManagementRating ?? null,
+        journeyStage: d.journeyStage || null,
+        whatWentWell: d.whatWentWell || null,
+        whatToImprove: d.whatToImprove || null,
+        message: d.message || null,
+        wouldRecommend: d.wouldRecommend ?? null,
+        source: identified ? (d.source || "link") : "end-of-care",
+        careUnit,
+        careComplex,
+      },
+    });
+
+    if (inviteId) {
+      await tx.feedbackRequest.update({
+        where: { id: inviteId },
+        data: { submittedAt: new Date(), patientId: null, surgeryId: null },
+      });
+    }
+
+    return row;
   });
 
   return NextResponse.json({ ok: true, id: created.id }, { status: 201 });

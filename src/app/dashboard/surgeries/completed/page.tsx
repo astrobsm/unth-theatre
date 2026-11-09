@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useReturnHere } from '@/lib/navigation/useReturnHere';
+import FeedbackInviteButton from '@/components/FeedbackInviteButton';
 
 interface SurgeryItem {
   id: string;
@@ -208,6 +209,14 @@ export default function CompletedSurgeriesPage() {
                                 Admit to PACU
                               </Link>
                             )}
+                            {/* The page of finished cases is where somebody
+                                goes when the care is over, which is exactly
+                                when there is something worth asking. */}
+                            <FeedbackInviteButton
+                              surgeryId={s.id}
+                              patientName={s.patient?.name}
+                              status={s.status}
+                            />
                           </div>
                         </td>
                       </tr>

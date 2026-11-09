@@ -99,11 +99,49 @@ export default function PatientFeedbackPage() {
   const setRating = (key: keyof Ratings, v: number) =>
     setRatings((r) => ({ ...r, [key]: v }));
 
+  /**
+   * An end-of-care invitation (?t=…), if this page was opened from one.
+   *
+   * null while we are still asking, so the identity fields are not flashed up
+   * and then taken away — a patient who sees a Name box appear and vanish has
+   * been given two different answers about whether this is anonymous, and will
+   * believe the first one.
+   */
+  const [invite, setInvite] = useState<{
+    token: string;
+    ok: boolean;
+    unit: string | null;
+    message?: string;
+    anonymity?: { kept: string[]; notKept: string[]; caution: string };
+  } | null>(null);
+  const [checkingInvite, setCheckingInvite] = useState(true);
+
   // Prefill patient identity when staff share a personalised link
   // (e.g. /feedback?name=John%20Doe&folder=UNTH123&phone=080...).
+  //
+  // NOT when the page was opened from an end-of-care invitation. That link
+  // promises the hospital will not know who wrote this, and a form that
+  // arrives with the patient's own name already in it has broken the promise
+  // before they have typed a word — whether or not the name is submitted,
+  // because what they can see is what they will believe.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    const t = params.get('t');
+
+    if (t) {
+      setCheckingInvite(true);
+      fetch(`/api/feedback/invite?t=${encodeURIComponent(t)}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => setInvite({ token: t, ok: Boolean(d.ok), unit: d.unit ?? null, message: d.message, anonymity: d.anonymity }))
+        // A failed check is not a refused invitation. The patient still gets a
+        // form; it just cannot carry the unit.
+        .catch(() => setInvite({ token: t, ok: false, unit: null }))
+        .finally(() => setCheckingInvite(false));
+      return;
+    }
+
+    setCheckingInvite(false);
     const name = params.get('name');
     const folder = params.get('folder');
     const phone = params.get('phone');
@@ -111,6 +149,9 @@ export default function PatientFeedbackPage() {
     if (folder) setFolderNumber(folder);
     if (phone) setPhoneNumber(phone);
   }, []);
+
+  /** Opened from a working invitation: this submission is anonymous. */
+  const anonymous = invite?.ok === true;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,15 +167,19 @@ export default function PatientFeedbackPage() {
     setBusy(true);
     try {
       const payload: Record<string, unknown> = {
-        patientName: patientName.trim() || undefined,
-        folderNumber: folderNumber.trim() || undefined,
-        phoneNumber: phoneNumber.trim() || undefined,
+        // Nothing identifying is even assembled on an invited submission. The
+        // endpoint drops these too; both, because the one that is forgotten is
+        // always the one that mattered.
+        patientName: anonymous ? undefined : (patientName.trim() || undefined),
+        folderNumber: anonymous ? undefined : (folderNumber.trim() || undefined),
+        phoneNumber: anonymous ? undefined : (phoneNumber.trim() || undefined),
         relationship: relationship || undefined,
         journeyStage: journeyStage || undefined,
         whatWentWell: whatWentWell.trim() || undefined,
         whatToImprove: whatToImprove.trim() || undefined,
         wouldRecommend: wouldRecommend ?? undefined,
-        source: 'link',
+        source: anonymous ? 'end-of-care' : 'link',
+        token: anonymous ? invite!.token : undefined,
       };
       for (const f of RATING_FIELDS) {
         if (ratings[f.key] > 0) payload[f.key] = ratings[f.key];
@@ -332,7 +377,37 @@ export default function PatientFeedbackPage() {
             </div>
           </div>
 
-          {/* Optional identity */}
+          {/* Optional identity — absent entirely on an invited submission.
+              Nothing is shown at all until the invitation has been checked.
+              Rendering the Name box first and removing it a tick later gives
+              the patient two different answers about whether this is
+              anonymous, and they will believe the first one. */}
+          {checkingInvite ? null : anonymous ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+              <p className="text-sm font-semibold text-green-900">
+                This is anonymous. You are not asked for your name.
+              </p>
+              {invite?.anonymity && (
+                <div className="mt-2 grid gap-2 text-xs text-green-900 sm:grid-cols-2">
+                  <div>
+                    <p className="font-semibold">What we keep</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {invite.anonymity.kept.map((k) => <li key={k}>{k}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold">What we do not</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {invite.anonymity.notKept.map((k) => <li key={k}>{k}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+              {invite?.anonymity?.caution && (
+                <p className="mt-2 text-xs text-green-800">{invite.anonymity.caution}</p>
+              )}
+            </div>
+          ) : (
           <details className="rounded-lg bg-gray-50 border border-gray-100 p-4">
             <summary className="text-sm font-medium text-gray-700 cursor-pointer">
               Add your details (optional)
@@ -376,6 +451,16 @@ export default function PatientFeedbackPage() {
               </div>
             </div>
           </details>
+          )}
+
+          {/* An invitation that cannot be used. The ordinary form stays open
+              below it — a patient who followed a link we broke should not be
+              turned away. */}
+          {invite && !invite.ok && invite.message && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {invite.message}
+            </p>
+          )}
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">

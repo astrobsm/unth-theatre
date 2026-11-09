@@ -20,6 +20,7 @@ import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/book
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import ReportBlockerButton from '@/components/ReportBlockerButton';
 import PatientMessageButton from '@/components/PatientMessageButton';
+import FeedbackInviteButton from '@/components/FeedbackInviteButton';
 import CasePacksButton from '@/components/CasePacksButton';
 import AmendCaseButton from '@/components/surgeries/AmendCaseButton';
 import CaseActionsMenu from '@/components/surgeries/CaseActionsMenu';
@@ -1707,6 +1708,18 @@ export default function SurgeriesPage() {
                           )?.toISOString() ?? null}
                           bookedAt={surgery.createdAt || new Date().toISOString()}
                           onReported={() => void fetchSurgeries()}
+                        />
+
+                        {/* Asking how it went, once the care is over.
+                            Sits on the finished case because that is the last
+                            moment the hospital and the patient are still in
+                            contact. Anonymous: the link carries no identity,
+                            and the row that knew which patient it was is
+                            cleared the instant they answer. */}
+                        <FeedbackInviteButton
+                          surgeryId={surgery.id}
+                          patientName={surgery.patient?.name}
+                          status={surgery.status}
                         />
 
                         {/* Telling the patient, from the row the news is

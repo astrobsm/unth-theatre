@@ -26,6 +26,9 @@ interface PatientFeedback {
   communicationRating: number | null;
   painManagementRating: number | null;
   journeyStage: string | null;
+  /** Set on an end-of-care submission. The unit, never the patient. */
+  careUnit: string | null;
+  careComplex: string | null;
   whatWentWell: string | null;
   whatToImprove: string | null;
   message: string | null;
@@ -238,6 +241,24 @@ export default function FeedbackReview({ kind }: { kind: Tab }) {
                       <span className="font-medium text-gray-900">
                         {p.patientName || 'Anonymous'}
                       </span>
+                      {/* The unit, where an end-of-care invitation carried one.
+                          Without it on screen the column is recorded and never
+                          read, and the feedback goes to nobody — which is the
+                          thing the whole invitation was built to fix. The
+                          patient stays unnamed either way. */}
+                      {p.careUnit && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-violet-100 font-medium text-violet-800">
+                          {p.careUnit}
+                        </span>
+                      )}
+                      {p.source === 'end-of-care' && (
+                        <span
+                          title="Sent from an end-of-care invitation. It cannot be traced back to the patient."
+                          className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                        >
+                          End of care
+                        </span>
+                      )}
                       {p.relationship && (
                         <span className="text-xs text-gray-500">({p.relationship})</span>
                       )}

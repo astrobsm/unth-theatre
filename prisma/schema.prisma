@@ -7683,11 +7683,26 @@ model PatientFeedback {
   status String @default("NEW") // NEW | REVIEWED | PUBLISHED | ARCHIVED
 
   // Metadata
-  source    String? // qr | link | dashboard
+  source    String? // qr | link | dashboard | end-of-care
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// WHICH CARE THIS IS ABOUT, AND NOTHING MORE.
+  ///
+  /// An end-of-care invitation is anonymous: no patientId, no surgeryId, no
+  /// name. But feedback nobody can act on is feedback nobody acts on, and
+  /// "somewhere in this hospital a nurse was rude" improves nothing. So the
+  /// unit and the theatre complex travel with it and the identity does not.
+  ///
+  /// This is a real trade-off rather than a free one, and the patient is told
+  /// about it in as many words before they write: on a quiet unit in a quiet
+  /// week, a unit plus a date is a small group of people. It is recorded
+  /// because the alternative is feedback that cannot be sent to anybody.
+  careUnit    String?
+  careComplex String?
+
   @@index([status])
+  @@index([careUnit])
   @@map("patient_feedback")
 }
 
