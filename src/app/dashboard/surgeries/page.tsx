@@ -19,6 +19,7 @@ import ContactName from '@/components/ContactName';
 import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import ReportBlockerButton from '@/components/ReportBlockerButton';
+import PatientMessageButton from '@/components/PatientMessageButton';
 import CasePacksButton from '@/components/CasePacksButton';
 import AmendCaseButton from '@/components/surgeries/AmendCaseButton';
 import CaseActionsMenu from '@/components/surgeries/CaseActionsMenu';
@@ -1706,6 +1707,18 @@ export default function SurgeriesPage() {
                           )?.toISOString() ?? null}
                           bookedAt={surgery.createdAt || new Date().toISOString()}
                           onReported={() => void fetchSurgeries()}
+                        />
+
+                        {/* Telling the patient, from the row the news is
+                            discovered on. A delay or a new date is learned
+                            here, while scanning the list, and a patient who is
+                            not told in that moment is usually not told at all.
+                            Four fixed messages; whose phone it goes to is shown
+                            before anything is sent. */}
+                        <PatientMessageButton
+                          surgeryId={surgery.id}
+                          patientName={surgery.patient?.name}
+                          status={surgery.status}
                         />
 
                         {/* Receive in Theatre stays out of the menu. The

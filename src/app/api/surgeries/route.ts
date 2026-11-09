@@ -21,6 +21,7 @@ import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
 import { buildPackRequests } from '@/lib/packRequests';
 import { apiError } from '@/lib/apiError';
 import { quoteFor, koboToNaira, isMagnitude } from '@/lib/specialNeeds/pricing';
+import { bookingContactDecision } from '@/lib/patients/contact';
 
 export const dynamic = 'force-dynamic';
 
@@ -598,6 +599,61 @@ export async function POST(request: NextRequest) {
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    // ── A booking the hospital cannot tell the patient about ──────────────
+    //
+    // Enforced HERE rather than only on the registration form, because the
+    // register is filled in once and a number typed into it months ago may have
+    // been wrong all along. Booking is the moment the hospital takes on an
+    // obligation to this person — to tell them when it slips, when it moves,
+    // and that nobody but a ward nurse or the pharmacist may sell them a list —
+    // and an obligation with no way to reach them is not one that can be kept.
+    //
+    // The next of kin counts. Plenty of patients here have no phone of their
+    // own, and the number the family actually answers is the relative's.
+    //
+    // AN EMERGENCY IS NEVER HELD UP BY THIS. An unidentified trauma patient has
+    // no phone and no relative on file, and a booking screen that refuses to
+    // take them is a far worse failure than an untold patient. The emergency
+    // path may pass `noContactReason`, which does not suppress the problem — it
+    // records who decided it, so the ward can be asked for a number later.
+    // The decision itself is in lib/patients/contact.ts and is tested there.
+    // Kept out of this handler deliberately: a gate written inline here can
+    // only ever be checked by asserting that the `if` still looks the way
+    // somebody remembers, and that assertion passes just as happily when the
+    // condition has been neutered.
+    const contactDecision = bookingContactDecision({
+      patient,
+      surgeryType,
+      noContactReason: body?.noContactReason,
+    });
+
+    if (!contactDecision.allow) {
+      return NextResponse.json({
+        error: contactDecision.refusal,
+        code: 'NO_PATIENT_CONTACT',
+        // So the form can put the cursor in the right box instead of making
+        // somebody hunt a long page for it.
+        field: 'phoneNumber',
+        patientId: patient.id,
+        mayOverride: contactDecision.mayOverride,
+      }, { status: 400 });
+    }
+
+    if (contactDecision.recorded) {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'BOOKED_WITHOUT_PATIENT_CONTACT',
+          tableName: 'patients',
+          recordId: patient.id,
+          changes: JSON.stringify({
+            reason: contactDecision.recorded.reason,
+            surgeryType,
+          }),
+        },
+      }).catch(() => { /* an emergency booking must not fail over its own log */ });
     }
 
     // The same-day double-booking check used to sit here as a flat refusal. It

@@ -24,6 +24,12 @@ export interface QueueMessageInput {
   recipientName?: string | null;
   recipientAddress?: string | null;
   recipientIsStaff?: boolean;
+  /**
+   * The recipient is the patient this is about, or the next of kin on their
+   * file. See checkSendAllowed — it is what lets a patient be told their own
+   * operation has moved, and it loosens nothing else.
+   */
+  recipientIsPatient?: boolean;
 
   /** A stored template, or a body supplied directly for a manual send. */
   templateCode?: string | null;
@@ -179,6 +185,7 @@ export async function queueMessage(input: QueueMessageInput): Promise<QueueResul
       sensitivity,
       priority: input.priority,
       recipientIsStaff: input.recipientIsStaff ?? Boolean(input.recipientUserId),
+      recipientIsPatient: input.recipientIsPatient ?? false,
       recipientAddress: input.recipientAddress,
       killSwitch: await killSwitch(),
       providerApproved,

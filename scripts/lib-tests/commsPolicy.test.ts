@@ -69,7 +69,50 @@ describe('sensitivity', () => {
       recipientIsStaff: false, recipientAddress: '2348012345678',
     });
     expect(r.allowed).toBe(false);
-    expect(r.reason).toMatch(/not staff/);
+    expect(r.reason).toMatch(/neither staff nor the patient/);
+  });
+
+  it('lets a patient be told their own name', () => {
+    // Telling somebody their own name is not disclosing it. Read the rule
+    // above as covering the patient too and the hospital becomes unable to
+    // tell a frightened person that their operation has moved — which is the
+    // harm the rule was written to prevent, arriving by the other door.
+    expect(checkSendAllowed({
+      ...base, channel: 'WHATSAPP', sensitivity: 'PATIENT_IDENTIFIED',
+      recipientIsStaff: false, recipientIsPatient: true,
+      recipientAddress: '2348012345678',
+    }).allowed).toBe(true);
+  });
+
+  it('still refuses clinical detail to the patient themselves', () => {
+    // THE LIMIT OF THE EXEMPTION. One mistyped digit at booking puts this on a
+    // stranger's phone, so what a stranger could learn must stay at "somebody
+    // has an appointment" — never a diagnosis, even though the patient is
+    // entitled to their own.
+    const r = checkSendAllowed({
+      ...base, channel: 'WHATSAPP', sensitivity: 'CLINICAL',
+      recipientIsStaff: false, recipientIsPatient: true,
+      recipientAddress: '2348012345678',
+    });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/[Cc]linical detail/);
+  });
+
+  it('does not let the patient flag smuggle a message past anything else', () => {
+    // It is an exemption from one rule, not a bypass. The kill switch, an
+    // expiry, a missing address and an opt-out all still apply.
+    const patient = {
+      ...base, channel: 'WHATSAPP' as const, sensitivity: 'PATIENT_IDENTIFIED' as const,
+      recipientIsStaff: false, recipientIsPatient: true,
+      recipientAddress: '2348012345678',
+    };
+    expect(checkSendAllowed({ ...patient, killSwitch: { all: true } }).allowed).toBe(false);
+    expect(checkSendAllowed({ ...patient, recipientAddress: '' }).allowed).toBe(false);
+    expect(checkSendAllowed({ ...patient, recipientOptedOut: true }).allowed).toBe(false);
+    expect(checkSendAllowed({ ...patient, providerApproved: false }).allowed).toBe(false);
+    expect(checkSendAllowed({
+      ...patient, expiresAt: new Date(Date.now() - 1000),
+    }).allowed).toBe(false);
   });
 
   it('lets operational messages go anywhere', () => {

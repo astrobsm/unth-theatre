@@ -38,6 +38,7 @@ import { isOfflineQueued, queuedMessage } from '@/lib/offlineResponse';
 import { MIN_OVERRIDE_REASON } from '@/lib/preopRequirements';
 import { notify } from '@/lib/notifications';
 import { bookingGate, isFormUsable, type PriorCase } from '@/lib/bookingGate';
+import PatientContactRequired from '@/components/PatientContactRequired';
 import BookingGateNotice from '@/components/BookingGateNotice';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
@@ -54,6 +55,15 @@ interface Patient {
   ageUnit?: string;
   gender: string;
   ward: string;
+  /**
+   * How this person is reached. Carried on the picker row rather than fetched
+   * when one is chosen, so the form can say whether the patient is reachable
+   * the instant they are selected — a round trip here is a second of somebody
+   * staring at a form that has not yet told them it is going to refuse.
+   */
+  phoneNumber?: string | null;
+  caregiverName?: string | null;
+  caregiverPhone?: string | null;
 }
 
 interface Surgeon {
@@ -426,6 +436,18 @@ export default function NewSurgeryPage() {
   const [details, setDetails] = useState({ name: '', age: '', ageUnit: 'years', ward: '' });
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsMsg, setDetailsMsg] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+
+  /**
+   * Can the hospital reach this patient at all?
+   *
+   * Owned by PatientContactRequired and lifted here so the submit button can
+   * refuse. Starts true so the button is not dead before a patient has even
+   * been chosen — the gate below already keeps the form inert until then, and
+   * two things disabling the same button for different reasons is how a form
+   * becomes impossible to diagnose.
+   */
+  const [contactReachable, setContactReachable] = useState(true);
+  const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
   useEffect(() => {
     // The override belongs to the patient it was granted for. Carrying it to
@@ -1589,6 +1611,24 @@ export default function NewSurgeryPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // No way to reach the patient, no booking.
+    //
+    // Checked before anything else, and before the early-booking shortcut,
+    // because that shortcut exists to get a case onto the list with the bare
+    // essentials — and being able to tell the patient it has moved is one of
+    // them. The server refuses this too; this only saves a round trip and puts
+    // the message next to the box that fixes it.
+    if (!contactReachable) {
+      setLoading(false);
+      setError(
+        'This patient has no WhatsApp number on file. Add their number, or a next-of-kin '
+        + 'number if they have no phone, in Patient Information above — otherwise the '
+        + 'hospital has no way to tell them about a delay, a new date or a cancellation.',
+      );
+      document.getElementById('patientSearch')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
 
     // Read and CLEAR immediately: if this submission fails and the surgeon
     // presses the full "Schedule Surgery" button next, that press must not
@@ -2797,6 +2837,30 @@ ${pretty} — ${days} days from today.
                   {detailsMsg.text}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* How this patient will be reached.
+              Inside the Patient Information card because it is a fact about
+              the person, not about the operation, and it is saved onto the
+              patient record so the next case booked for them does not ask
+              again. The booking cannot be submitted until there is a number —
+              see handleSubmit, and the matching refusal in POST /api/surgeries,
+              because a check that exists only in a browser is not a check. */}
+          {selectedPatientId && (
+            <div className="mt-4">
+              <PatientContactRequired
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.name}
+                phoneNumber={selectedPatient?.phoneNumber ?? null}
+                caregiverName={selectedPatient?.caregiverName ?? null}
+                caregiverPhone={selectedPatient?.caregiverPhone ?? null}
+                onReachableChange={setContactReachable}
+                onSaved={(patch) =>
+                  setPatients((prev) =>
+                    prev.map((x) => (x.id === selectedPatientId ? { ...x, ...patch } : x)))
+                }
+              />
             </div>
           )}
         </div>

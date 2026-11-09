@@ -33,6 +33,8 @@
 // because it is a threat.
 // ============================================================
 
+import type { CommSensitivity } from './policy';
+
 export type TemplateCategory = 'UTILITY';
 
 export interface TemplateSpec {
@@ -58,6 +60,19 @@ export interface TemplateSpec {
   buttonLabel?: string;
   /** One line explaining when this fires, shown on the setup screen. */
   when: string;
+  /**
+   * How far this message's content may travel.
+   *
+   * Declared HERE rather than at the call site, and carried into the stored
+   * template row, because the whole point of the classification is that the
+   * wording and its handling cannot drift apart. A caller that passes a body
+   * directly can claim any sensitivity it likes; a caller naming a template
+   * gets the one the words were written under.
+   *
+   * Omitted means OPERATIONAL, which every staff template above is: they name
+   * a case count and a date, never a patient.
+   */
+  sensitivity?: CommSensitivity;
 }
 
 /**
@@ -297,7 +312,226 @@ export const WHATSAPP_TEMPLATES: TemplateSpec[] = [
     variables: ['name', 'when', 'where', 'matter'],
     buttonLabel: 'Open the summons',
   },
+
+  // ── Messages to the patient ────────────────────────────────────────────
+  //
+  // Everything above goes to a colleague with an ORM account. These four go to
+  // a patient or their next of kin, on a personal phone, and that changes four
+  // things.
+  //
+  // 1. THE TONE. Somebody waiting for an operation is frightened, and a message
+  //    that reads like a system notification makes it worse. These say who we
+  //    are, what is happening, what to do, and that we are sorry — in that
+  //    order, because that is the order the worry arrives in. They never use a
+  //    word a person would have to look up, and they never leave a patient
+  //    wondering whether they have been forgotten.
+  //
+  // 2. NO CLINICAL DETAIL, EVER. Not the procedure, not the diagnosis, not a
+  //    result. A phone is shared, read over a shoulder, and backed up to
+  //    somebody's cloud account — and one digit typed wrong at booking sends
+  //    the lot to a stranger. The reasons are picked from a fixed list in
+  //    lib/patients/notices.ts exactly so that nobody can type a diagnosis into
+  //    a box that ends up here.
+  //
+  // 3. THE WARD HAS THE LAST WORD. Every one of these points back to the ward
+  //    nurse and says to follow them if the two differ. A WhatsApp message
+  //    cannot know that this patient is diabetic and must not fast like
+  //    everyone else, so it must not be the final authority on anything
+  //    clinical — and it says so in the message rather than in a comment here.
+  //
+  // 4. THEY CARRY THE FEEDBACK LINK. The moment a patient is holding a message
+  //    from the hospital is the moment they are most able to say how it is
+  //    going, and the link is anonymous, so saying something unflattering
+  //    costs them nothing. It goes last, after the instruction, so it never
+  //    competes with the thing they actually need to read.
+
+  {
+    code: 'PATIENT_SAFETY_NOTICE',
+    metaName: 'orm_patient_safety_notice',
+    category: 'UTILITY',
+    language: 'en',
+    sensitivity: 'PATIENT_IDENTIFIED',
+    when: 'Given to a patient once their operation is booked, and again whenever they ask. '
+      + 'Warns them that only the ward nurses and the hospital pharmacist may hand them a '
+      + 'list of items to buy.',
+    metaBody:
+      'Dear {{1}}, a short safety note from {{2}}.\n\n'
+      + 'Sometimes people approach patients with a list of items or medicines to buy, or '
+      + 'ask them for money. Only the nurses on your ward and the hospital pharmacist may '
+      + 'give you such a list.\n\n'
+      + 'If anyone else gives you a list, asks you for money, or offers to buy things on '
+      + 'your behalf, please do not pay and do not buy anything. Show the list to your '
+      + 'ward nurse first and let them confirm it — even if the person is in uniform, and '
+      + 'even if they say the theatre sent them.\n\n'
+      + 'If this happens, please tell your ward nurse or the theatre office. You are not '
+      + 'in any trouble for asking, and we would far rather you asked.\n\n'
+      + 'You are in good hands, and your operation is being looked after.\n\n'
+      + 'To tell us about your care, anonymously: {{3}} — it helps us put things right.',
+    body:
+      'Dear {{name}}, a short safety note from {{hospital}}.\n\n'
+      + 'Sometimes people approach patients with a list of items or medicines to buy, or '
+      + 'ask them for money. Only the nurses on your ward and the hospital pharmacist may '
+      + 'give you such a list.\n\n'
+      + 'If anyone else gives you a list, asks you for money, or offers to buy things on '
+      + 'your behalf, please do not pay and do not buy anything. Show the list to your '
+      + 'ward nurse first and let them confirm it — even if the person is in uniform, and '
+      + 'even if they say the theatre sent them.\n\n'
+      + 'If this happens, please tell your ward nurse or the theatre office. You are not '
+      + 'in any trouble for asking, and we would far rather you asked.\n\n'
+      + 'You are in good hands, and your operation is being looked after.\n\n'
+      + 'To tell us about your care, anonymously: {{feedbackLink}} — it helps us put '
+      + 'things right.',
+    variables: ['name', 'hospital', 'feedbackLink'],
+  },
+
+  {
+    code: 'PATIENT_CASE_HOLDING',
+    metaName: 'orm_patient_case_holding',
+    category: 'UTILITY',
+    language: 'en',
+    sensitivity: 'PATIENT_IDENTIFIED',
+    when: 'While a patient is waiting and the list has run late. Confirms the operation is '
+      + 'still going ahead and says what is holding it up.',
+    metaBody:
+      'Dear {{1}}, a message from {{2}}.\n\n'
+      + 'Your operation is still going ahead. You have not been forgotten, and your place '
+      + 'on the list is being kept for you.\n\n'
+      + 'What is holding things up: {{3}}. We expect to send for you {{4}}.\n\n'
+      + 'Please stay on the ward, as we may call for you at short notice, and keep to the '
+      + 'eating and drinking instructions your nurse gave you unless they tell you '
+      + 'otherwise.\n\n'
+      + 'We are sorry for the wait. If anything worries you while you wait, please ask '
+      + 'your ward nurse — that is what they are there for.\n\n'
+      + 'To tell us how this felt, anonymously: {{5}} — we do read every one.',
+    body:
+      'Dear {{name}}, a message from {{hospital}}.\n\n'
+      + 'Your operation is still going ahead. You have not been forgotten, and your place '
+      + 'on the list is being kept for you.\n\n'
+      + 'What is holding things up: {{reason}}. We expect to send for you {{expected}}.\n\n'
+      + 'Please stay on the ward, as we may call for you at short notice, and keep to the '
+      + 'eating and drinking instructions your nurse gave you unless they tell you '
+      + 'otherwise.\n\n'
+      + 'We are sorry for the wait. If anything worries you while you wait, please ask '
+      + 'your ward nurse — that is what they are there for.\n\n'
+      + 'To tell us how this felt, anonymously: {{feedbackLink}} — we do read every one.',
+    variables: ['name', 'hospital', 'reason', 'expected', 'feedbackLink'],
+  },
+
+  {
+    code: 'PATIENT_CASE_RESCHEDULED',
+    metaName: 'orm_patient_case_rescheduled',
+    category: 'UTILITY',
+    language: 'en',
+    sensitivity: 'PATIENT_IDENTIFIED',
+    when: 'When an operation is moved to another day. Carries the new date and what to do '
+      + 'about eating and drinking before it.',
+    metaBody:
+      'Dear {{1}}, a message from {{2}}.\n\n'
+      + 'Your operation has been moved to another day. We are sorry — we know how much '
+      + 'goes into preparing for it, and we would not move it without good reason.\n\n'
+      + 'New date: {{3}}.\nWhy it moved: {{4}}.\n\n'
+      + 'Before that day: {{5}}\n\n'
+      + 'Your ward nurse will go through all of this with you and will say if anything is '
+      + 'different in your own case — please follow them rather than this message if the '
+      + 'two differ. Your place is kept, and your surgical team knows about the change.\n\n'
+      + 'To tell us about your care, anonymously: {{6}} — it helps us do better.',
+    body:
+      'Dear {{name}}, a message from {{hospital}}.\n\n'
+      + 'Your operation has been moved to another day. We are sorry — we know how much '
+      + 'goes into preparing for it, and we would not move it without good reason.\n\n'
+      + 'New date: {{newDate}}.\nWhy it moved: {{reason}}.\n\n'
+      + 'Before that day: {{instructions}}\n\n'
+      + 'Your ward nurse will go through all of this with you and will say if anything is '
+      + 'different in your own case — please follow them rather than this message if the '
+      + 'two differ. Your place is kept, and your surgical team knows about the change.\n\n'
+      + 'To tell us about your care, anonymously: {{feedbackLink}} — it helps us do better.',
+    variables: ['name', 'hospital', 'newDate', 'reason', 'instructions', 'feedbackLink'],
+  },
+
+  {
+    code: 'PATIENT_CASE_CANCELLED',
+    metaName: 'orm_patient_case_cancelled',
+    category: 'UTILITY',
+    language: 'en',
+    sensitivity: 'PATIENT_IDENTIFIED',
+    when: 'When an operation will not take place as planned and no new date has been set '
+      + 'yet. Says what to do now, including about eating and drinking.',
+    metaBody:
+      'Dear {{1}}, a message from {{2}}.\n\n'
+      + 'We are very sorry: your operation will not go ahead as planned.\n\n'
+      + 'Why: {{3}}.\n\n'
+      + 'What to do now: {{4}}\n\n'
+      + 'A new date has not been fixed yet. Your surgical team and your ward nurse will '
+      + 'arrange one with you, and you remain under their care in the meantime. Please do '
+      + 'not leave the ward until your nurse has seen you, and do ask them anything you '
+      + 'are unsure about.\n\n'
+      + 'To tell us about your care, anonymously: {{5}} — especially when we have let you '
+      + 'down.',
+    body:
+      'Dear {{name}}, a message from {{hospital}}.\n\n'
+      + 'We are very sorry: your operation will not go ahead as planned.\n\n'
+      + 'Why: {{reason}}.\n\n'
+      + 'What to do now: {{instructions}}\n\n'
+      + 'A new date has not been fixed yet. Your surgical team and your ward nurse will '
+      + 'arrange one with you, and you remain under their care in the meantime. Please do '
+      + 'not leave the ward until your nurse has seen you, and do ask them anything you '
+      + 'are unsure about.\n\n'
+      + 'To tell us about your care, anonymously: {{feedbackLink}} — especially when we '
+      + 'have let you down.',
+    variables: ['name', 'hospital', 'reason', 'instructions', 'feedbackLink'],
+  },
+
+  {
+    code: 'PATIENT_PAYMENT_WARNING',
+    metaName: 'orm_patient_payment_warning',
+    category: 'UTILITY',
+    language: 'en',
+    sensitivity: 'PATIENT_IDENTIFIED',
+    when: 'Once the drug and consumable deposits are set for a case. Tells the patient that '
+      + 'the hospital now supplies everything, that no one may hand them a shopping list, '
+      + 'and that money goes to the revenue unit and nowhere else.',
+    metaBody:
+      'Dear {{1}}, an important note about payment from {{2}}.\n\n'
+      + 'Everything needed for your operation — your medicines and the theatre items — is '
+      + 'arranged by the hospital. {{3}}\n\n'
+      + 'So please do not accept a shopping list or a prescription to go and buy anything, '
+      + 'from anybody, and do not hand money to any individual. Payment is made only at the '
+      + 'hospital revenue unit, and you must be given an official receipt for it.\n\n'
+      + 'Money given to a person instead of the revenue unit is at your own risk. It cannot '
+      + 'be traced and it cannot be refunded. It should not happen to you, and you do not '
+      + 'have to accept it.\n\n'
+      + 'If anyone asks you for money or hands you a list, please tell your ward nurse or '
+      + 'the theatre office straight away. You are not in any trouble for asking, and your '
+      + 'care will not be affected.\n\n'
+      + 'To tell us about this, anonymously: {{4}} — it is how we put a stop to it.',
+    body:
+      'Dear {{name}}, an important note about payment from {{hospital}}.\n\n'
+      + 'Everything needed for your operation — your medicines and the theatre items — is '
+      + 'arranged by the hospital. {{deposit}}\n\n'
+      + 'So please do not accept a shopping list or a prescription to go and buy anything, '
+      + 'from anybody, and do not hand money to any individual. Payment is made only at the '
+      + 'hospital revenue unit, and you must be given an official receipt for it.\n\n'
+      + 'Money given to a person instead of the revenue unit is at your own risk. It cannot '
+      + 'be traced and it cannot be refunded. It should not happen to you, and you do not '
+      + 'have to accept it.\n\n'
+      + 'If anyone asks you for money or hands you a list, please tell your ward nurse or '
+      + 'the theatre office straight away. You are not in any trouble for asking, and your '
+      + 'care will not be affected.\n\n'
+      + 'To tell us about this, anonymously: {{feedbackLink}} — it is how we put a stop to it.',
+    variables: ['name', 'hospital', 'deposit', 'feedbackLink'],
+  },
 ];
+
+/** The templates addressed to a patient rather than to a member of staff. */
+export const PATIENT_TEMPLATE_CODES = [
+  'PATIENT_SAFETY_NOTICE',
+  'PATIENT_PAYMENT_WARNING',
+  'PATIENT_CASE_HOLDING',
+  'PATIENT_CASE_RESCHEDULED',
+  'PATIENT_CASE_CANCELLED',
+] as const;
+
+export type PatientTemplateCode = typeof PATIENT_TEMPLATE_CODES[number];
 
 export const templateByCode = (code: string): TemplateSpec | undefined =>
   WHATSAPP_TEMPLATES.find((t) => t.code === code);

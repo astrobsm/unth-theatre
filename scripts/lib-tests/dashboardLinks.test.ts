@@ -107,6 +107,11 @@ describe('dashboard routes', () => {
 });
 
 describe('every link in the app leads somewhere', () => {
+  // 30 seconds, not the default 5. This one reads every source file in the app
+  // looking for hrefs, and it runs alongside 239 other test files on whatever
+  // cores are left. It finishes in about a second on an idle machine and timed
+  // out in a full run — a failure that says nothing about the links and sends
+  // somebody hunting a dead route that does not exist.
   it('has no /dashboard link without a page', () => {
     const dead: string[] = [];
     links().forEach((files, link) => {
@@ -115,7 +120,7 @@ describe('every link in the app leads somewhere', () => {
       dead.push(`${link}   <- ${Array.from(files).sort().join(', ')}`);
     });
     expect(dead.sort()).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe('the personal board', () => {

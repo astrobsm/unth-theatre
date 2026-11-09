@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
           data: {
             code: t.code, channel: 'WHATSAPP', version: 1,
             body: t.body, variables: t.variables as never,
-            sensitivity: 'OPERATIONAL',
+            sensitivity: (t.sensitivity ?? 'OPERATIONAL') as never,
             providerTemplateId: t.metaName,
             providerLanguage: t.language,
             // Never assumed. Approval is Meta's to give and is recorded only
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
           data: {
             code: t.code, channel: 'WHATSAPP', version: existing.version + 1,
             body: t.body, variables: t.variables as never,
-            sensitivity: 'OPERATIONAL',
+            sensitivity: (t.sensitivity ?? 'OPERATIONAL') as never,
             providerTemplateId: t.metaName,
             providerLanguage: t.language,
             // Deliberately NOT carried over. The wording changed, so whatever

@@ -67,6 +67,12 @@ const optionalDateTime = z
 const PICKER_FIELDS = {
   id: true, name: true, folderNumber: true, ptNumber: true,
   age: true, ageUnit: true, gender: true, ward: true,
+  // How the patient is reached. Added deliberately, and it does not reopen what
+  // the paragraph above closed: a phone number is not a clinical history. The
+  // booking form has to know at the moment a patient is CHOSEN whether this
+  // case can be booked at all, and a second round trip to find out is a second
+  // of somebody staring at a form that has not yet said it will refuse.
+  phoneNumber: true, caregiverName: true, caregiverPhone: true,
 } as const;
 
 const patientSchema = z.object({

@@ -42,6 +42,21 @@ export interface SendCheckInput {
    * in-app record, which is the hospital's own log of what it told whom.
    */
   recipientOptedOut?: boolean;
+  /**
+   * The recipient IS the patient the message is about — or the next of kin
+   * recorded on that patient's own file as the person to reach.
+   *
+   * Telling somebody their own name is not disclosing it. The rule below exists
+   * to stop a patient's identity reaching a VENDOR or a contractor, who has no
+   * business knowing who the operation is for; applied to the patient
+   * themselves it stops the hospital telling a frightened person their own
+   * operation has moved, which is the opposite of protecting them.
+   *
+   * It does NOT loosen anything else. CLINICAL content is still refused on an
+   * external channel for a patient exactly as for everyone else, so the worst a
+   * mistyped digit can do is tell a stranger that somebody has an appointment.
+   */
+  recipientIsPatient?: boolean;
   /** When the message stops being worth sending. */
   expiresAt?: Date | null;
   now?: Date;
@@ -94,12 +109,23 @@ export function checkSendAllowed(input: SendCheckInput): SendCheckResult {
     };
   }
 
-  // A patient's name may go to staff, never to an outside party such as a
-  // vendor — they have no reason to know who the operation is for.
-  if (input.sensitivity === 'PATIENT_IDENTIFIED' && isExternal(input.channel) && !input.recipientIsStaff) {
+  // A patient's name may go to staff, and to the patient themselves, but never
+  // to an outside party such as a vendor — they have no reason to know who the
+  // operation is for.
+  //
+  // The patient is not an "outside party" to their own name. Reading this rule
+  // as though they were is how a hospital ends up unable to tell somebody that
+  // their operation has moved, and that silence is itself the harm the rule was
+  // written to prevent.
+  if (
+    input.sensitivity === 'PATIENT_IDENTIFIED'
+    && isExternal(input.channel)
+    && !input.recipientIsStaff
+    && !input.recipientIsPatient
+  ) {
     return {
       allowed: false,
-      reason: 'This template names a patient and the recipient is not staff.',
+      reason: 'This template names a patient and the recipient is neither staff nor the patient.',
     };
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/apiMiddleware';
 import prisma from '@/lib/prisma';
 import { detectConflict } from '@/lib/concurrency';
+import { phoneProblem } from '@/lib/patients/contact';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +124,29 @@ export async function PUT(
     if (body.gender !== undefined) updateData.gender = body.gender;
     if (body.ward !== undefined) updateData.ward = body.ward;
     if (body.ptNumber !== undefined) updateData.ptNumber = body.ptNumber;
+
+    // ── How this patient is reached ───────────────────────────────────────
+    //
+    // Validated rather than stored as typed. A number WhatsApp cannot resolve
+    // is worse than an empty box: the booking passes its contact check, the
+    // button to tell the patient appears, wa.me opens a chat with nobody, and
+    // everyone involved believes the patient was told.
+    //
+    // A blank is allowed through, because clearing a wrong number is a real
+    // thing somebody needs to do; what is refused is a non-number.
+    for (const field of ['phoneNumber', 'caregiverPhone'] as const) {
+      if (body[field] === undefined) continue;
+      const raw = body[field] === null ? '' : String(body[field]).trim();
+      if (!raw) { updateData[field] = null; continue; }
+      const problem = phoneProblem(raw);
+      if (problem) {
+        return NextResponse.json({ error: problem, field }, { status: 400 });
+      }
+      updateData[field] = raw;
+    }
+    if (body.caregiverName !== undefined) {
+      updateData.caregiverName = String(body.caregiverName ?? '').trim() || null;
+    }
 
     const updatedPatient = await prisma.patient.update({
       where: { id },

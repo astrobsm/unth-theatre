@@ -17,7 +17,9 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { WHATSAPP_TEMPLATES, validateTemplate, templateByCode } from '../../src/lib/comms/templates';
+import {
+  WHATSAPP_TEMPLATES, validateTemplate, templateByCode, PATIENT_TEMPLATE_CODES,
+} from '../../src/lib/comms/templates';
 
 describe('WhatsApp templates', () => {
   it('has templates at all', () => {
@@ -101,9 +103,90 @@ describe('WhatsApp templates', () => {
 
   it('tells the reader where to go', () => {
     // A reminder with nothing to tap is a reminder to do something later, which
-    // is the behaviour being fixed. Every template carries a button.
-    const noButton = WHATSAPP_TEMPLATES.filter((t) => !t.buttonLabel).map((t) => t.code);
-    expect(noButton).toEqual([]);
+    // is the behaviour being fixed. Every STAFF template carries a button into
+    // the app.
+    //
+    // The patient templates deliberately do not, and must not: the button opens
+    // ORM, a patient has no account, and so the one thing offered to a
+    // frightened person would be a sign-in screen they cannot get past. Their
+    // destination is in the words instead — the ward nurse, and a feedback link
+    // that needs no login — which the next test holds them to.
+    const noButton = WHATSAPP_TEMPLATES
+      .filter((t) => !t.buttonLabel)
+      .map((t) => t.code);
+    expect(noButton.slice().sort()).toEqual(PATIENT_TEMPLATE_CODES.slice().sort());
+  });
+
+  it('keeps the patient messages free of anything clinical', () => {
+    // THE ONE THAT MATTERS MOST HERE. These are the only templates addressed to
+    // somebody outside the hospital, and a phone number is one mistyped digit
+    // away from a stranger. If that happens, what the stranger learns must be
+    // "somebody has an appointment at UNTH" and nothing more.
+    //
+    // Enforced on the WORDS rather than on the call site, because a variable
+    // named innocently can still be filled with a diagnosis. The guard against
+    // that is that there is no slot for one: no template below mentions a
+    // procedure, a diagnosis or a result, and this fails if one starts to.
+    const CLINICAL = /\b(diagnos|procedure|operation name|surger\w* type|histolog|biops|tumou?r|cancer|malignan|HIV|hepatit|HBsAg|haemoglobin|hemoglobin|result\w*|specimen|lesion|amputat|stoma)\b/i;
+
+    for (const code of PATIENT_TEMPLATE_CODES) {
+      const t = templateByCode(code);
+      expect(t, `${code} is missing`).toBeTruthy();
+      expect(t!.metaBody, `${code} metaBody`).not.toMatch(CLINICAL);
+      expect(t!.body, `${code} body`).not.toMatch(CLINICAL);
+      // No variable may be a place to put one, either.
+      for (const v of t!.variables) expect(v).not.toMatch(CLINICAL);
+    }
+  });
+
+  it('classifies the patient messages as naming a patient', () => {
+    // They open "Dear <name>". Declared PATIENT_IDENTIFIED so checkSendAllowed
+    // decides whether that may leave the building, instead of the classification
+    // being quietly set to OPERATIONAL by whoever wired the send.
+    for (const code of PATIENT_TEMPLATE_CODES) {
+      expect(templateByCode(code)!.sensitivity, code).toBe('PATIENT_IDENTIFIED');
+    }
+    // And the staff templates stay as they were — none of them names anybody.
+    const staff = WHATSAPP_TEMPLATES
+      .filter((t) => !(PATIENT_TEMPLATE_CODES as readonly string[]).includes(t.code));
+    for (const t of staff) {
+      expect(t.sensitivity ?? 'OPERATIONAL', t.code).toBe('OPERATIONAL');
+    }
+  });
+
+  it('gives the patient somewhere to go that needs no login', () => {
+    // The staff templates have a button into ORM. A patient has no account, so
+    // theirs carry a feedback link in the body instead — and it is anonymous,
+    // which is the only reason an unhappy patient would use it at all.
+    for (const code of PATIENT_TEMPLATE_CODES) {
+      const t = templateByCode(code)!;
+      expect(t.variables, code).toContain('feedbackLink');
+      expect(t.body, code).toMatch(/anonymous/i);
+      // And a human being to ask, which a link is no substitute for.
+      expect(t.body, code).toMatch(/ward nurse|surgical team/i);
+    }
+  });
+
+  it('speaks to the patient kindly, and never blames them', () => {
+    for (const code of PATIENT_TEMPLATE_CODES) {
+      const t = templateByCode(code)!;
+      expect(t.metaBody, code).toMatch(/^Dear /);
+      // Hospital shorthand that a frightened person would have to decode.
+      expect(t.body, code).not.toMatch(/\b(NPO|nil by mouth|pre-?op|post-?op|theatre list|ASA|DNA|defaulted)\b/i);
+      expect(t.body, code).not.toMatch(/\b(you failed|your fault|you must not|unacceptable)\b/i);
+    }
+
+    // The three that carry bad news apologise for it. A cancellation that reads
+    // as an administrative fact is how a family concludes nobody cared.
+    for (const code of ['PATIENT_CASE_HOLDING', 'PATIENT_CASE_RESCHEDULED', 'PATIENT_CASE_CANCELLED']) {
+      expect(templateByCode(code)!.body, code).toMatch(/\bsorry\b/i);
+    }
+    // And the two that could leave somebody fearing they were dropped say
+    // plainly that they were not.
+    expect(templateByCode('PATIENT_CASE_HOLDING')!.body)
+      .toMatch(/not been forgotten|place on the list/i);
+    expect(templateByCode('PATIENT_CASE_CANCELLED')!.body)
+      .toMatch(/remain under their care|arrange one with you/i);
   });
 
   it('says when each one fires, in words', () => {
