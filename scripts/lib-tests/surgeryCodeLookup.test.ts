@@ -154,6 +154,45 @@ describe('the pharmacy page', () => {
   });
 });
 
+describe('the day the pharmacy page opens on', () => {
+  it('is tomorrow, because that is the list being packed', () => {
+    expect(pharmacy).toContain('useState(defaultPharmacyDay)');
+    expect(pharmacy).not.toContain('useState(todayInputValue)');
+  });
+
+  it('reads the day in WAT, never off the device', () => {
+    // todayInputValue() used getTimezoneOffset(), which is the device clock —
+    // exactly what lib/watDay exists to stop. A laptop an hour behind would
+    // hand somebody the wrong list every evening.
+    expect(pharmacy).not.toContain('getTimezoneOffset');
+    expect(pharmacy).toContain("from '@/lib/pharmacy/day'");
+  });
+
+  it('calls the field what it actually filters on', () => {
+    // The API has always filtered scheduledSurgeryDate, while the box called
+    // itself the "pharmacy request date". Both readings give a plausible list
+    // of real patients, so nobody on the wrong one would notice.
+    expect(pharmacy).toContain('Surgery date — the day these operations are happening');
+    expect(pharmacy).not.toContain('Pharmacy request date');
+    expect(pharmacy).not.toContain('Showing pharmacy requests for');
+    expect(pharmacy).toContain('Showing every prescription for surgery on');
+  });
+
+  it('offers one-tap days as well as the picker', () => {
+    expect(pharmacy).toContain("label: 'Tomorrow'");
+    expect(pharmacy).toContain("label: 'Today'");
+    expect(pharmacy).toContain("label: 'Yesterday'");
+    expect(pharmacy).toContain('shiftDay(d, 1)');
+    // The picker itself stays — the three buttons are a shortcut, not the
+    // whole range. A Friday afternoon is spent on Monday.
+    expect(pharmacy).toContain('type="date"');
+  });
+
+  it('warns when the chosen day can no longer be packed for', () => {
+    expect(pharmacy).toContain('dayCaution(selectedDate)');
+  });
+});
+
 describe('the consumable pack desk', () => {
   it('takes either the code or the patient number, like pharmacy', () => {
     expect(consumables).toContain('lookupBy="either"');

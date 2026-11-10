@@ -27,6 +27,10 @@ import { isNarcotic } from '@/lib/narcotics';
 import { whatsappLink, whatsappChatLink, buildOutOfStockWhatsAppMessage } from '@/lib/whatsapp';
 import SurgicalShoppingListsPanel from '@/components/SurgicalShoppingListsPanel';
 import SurgeryCodeLookup from '@/components/SurgeryCodeLookup';
+import {
+  defaultPharmacyDay, describeDay, dayCaution, shiftDay, watTomorrow,
+} from '@/lib/pharmacy/day';
+import { watToday } from '@/lib/watDay';
 import PostOpPrescriptionsPanel from '@/components/PostOpPrescriptionsPanel';
 import {
   buildRegisterPdf,
@@ -46,12 +50,6 @@ import {
   type PurchaseCheck,
   type PurchaseOutcome,
 } from '@/lib/pharmacy/purchaseVerification';
-
-function todayInputValue() {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
 
 interface Medication {
   name: string;
@@ -148,7 +146,7 @@ export default function PrescriptionsPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'needsPacking' | 'all' | 'packed' | 'partiallyPacked'>('needsPacking');
-  const [selectedDate, setSelectedDate] = useState(todayInputValue);
+  const [selectedDate, setSelectedDate] = useState(defaultPharmacyDay);
   // Search by patient PT / folder number (also matches patient name).
   const [search, setSearch] = useState('');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
@@ -723,22 +721,81 @@ export default function PrescriptionsPage() {
         />
       </div>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-lg shadow-sm mb-4 p-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="pharmacy-request-date" className="block text-xs font-medium text-blue-900 mb-1">Pharmacy request date</label>
-          <input
-            id="pharmacy-request-date"
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value || todayInputValue())}
-            className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-            aria-label="Select pharmacy request date"
-          />
+      {/* WHICH DAY'S LIST. Opens on TOMORROW, because that is what pharmacy
+          is packing: today's drugs went onto the trolley yesterday, and a
+          screen that opens on today shows work nobody can still do.
+
+          The date is the day of the OPERATION, not the day the prescription
+          was written — which is what the API has always filtered on, while
+          this box called itself the "pharmacy request date". Both readings
+          produce a plausible list of real patients, so a pharmacist on the
+          wrong one would never notice. */}
+      <div className="bg-blue-50 border border-blue-100 rounded-lg shadow-sm mb-4 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor="pharmacy-surgery-date" className="block text-xs font-medium text-blue-900 mb-1">
+              Surgery date — the day these operations are happening
+            </label>
+            <input
+              id="pharmacy-surgery-date"
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value || defaultPharmacyDay())}
+              className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              aria-label="Select the surgery date to show prescriptions for"
+            />
+          </div>
+
+          {/* One tap for the three days actually used, so moving between them
+              is not a calendar widget every time. */}
+          <div className="flex items-end gap-1.5">
+            {([
+              { label: 'Yesterday', day: shiftDay(watToday(), -1) },
+              { label: 'Today', day: watToday() },
+              { label: 'Tomorrow', day: watTomorrow() },
+            ]).map((b) => (
+              <button
+                key={b.label}
+                type="button"
+                onClick={() => setSelectedDate(b.day)}
+                aria-pressed={selectedDate === b.day}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                  selectedDate === b.day
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : 'border-blue-200 bg-white text-blue-900 hover:bg-blue-100'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setSelectedDate((d) => shiftDay(d, 1))}
+              className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-100"
+              title="The day after the one shown"
+            >
+              Next day →
+            </button>
+          </div>
+
+          <div className="text-sm text-blue-900">
+            Showing every prescription for surgery on{' '}
+            <strong>{describeDay(selectedDate)}</strong>.
+            <span className="block text-xs text-blue-700 mt-1">
+              This date also controls the surgical shopping lists below.
+            </span>
+          </div>
         </div>
-        <div className="text-sm text-blue-900">
-          Showing pharmacy requests for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}.
-          <span className="block text-xs text-blue-700 mt-1">This date controls prescriptions and surgical shopping lists.</span>
-        </div>
+
+        {/* Said only when the chosen day cannot be packed for. A pharmacist
+            deliberately reviewing last week should not be nagged; one who has
+            drifted onto a past day should be told, because that list looks
+            exactly like a normal one. */}
+        {dayCaution(selectedDate) && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+            {dayCaution(selectedDate)}
+          </p>
+        )}
       </div>
 
       {/* Date-range PDF export toolbar */}
@@ -906,8 +963,8 @@ export default function PrescriptionsPage() {
           <h3 className="text-lg font-medium text-gray-900 mb-2">No prescriptions found</h3>
           <p className="text-gray-600">
             {filter === 'needsPacking' 
-              ? `All prescriptions have been packed for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}!`
-              : `No prescriptions available for ${new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}`}
+              ? `Everything for surgery on ${describeDay(selectedDate)} has been packed.`
+              : `No prescriptions have been written for any surgery on ${describeDay(selectedDate)}.`}
           </p>
         </div>
       ) : (
@@ -932,7 +989,7 @@ export default function PrescriptionsPage() {
             )}
           </div>
           <p className="text-xs text-gray-500">
-            Showing pharmacy requests for {new Date(`${selectedDate}T00:00:00`).toLocaleDateString()}. Sorted by patient PT number (emergencies pinned to the top).
+            Every prescription for surgery on {describeDay(selectedDate)}. Sorted by patient PT number (emergencies pinned to the top).
           </p>
 
           {visiblePrescriptions.length === 0 ? (
