@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Search, Loader2, AlertTriangle, User, ClipboardList } from "lucide-react";
+import { Search, Loader2, AlertTriangle, User, ClipboardList, Copy, Check } from "lucide-react";
+import { looksLikeSurgeryCode } from "@/lib/surgeryCodes";
 
 type CodeType = "CONSUMABLE" | "PHARMACY" | "ANAESTHESIA";
 
@@ -26,9 +27,27 @@ interface LookupResult {
     subspecialty?: string | null;
     location?: string | null;
   } | null;
+  /**
+   * All three codes for this case, whichever way it was found.
+   *
+   * The desk is asked "what is my code?" by the patient standing in front of
+   * it, and a lookup by PT number used to read these out of the database and
+   * throw them away before the screen saw them.
+   */
+  codes?: {
+    consumable: string | null;
+    pharmacy: string | null;
+    anaesthesia: string | null;
+  };
   items?: any[];
   error?: string;
 }
+
+const CODE_LABEL: Array<{ key: "pharmacy" | "consumable" | "anaesthesia"; label: string }> = [
+  { key: "pharmacy", label: "Pharmacy" },
+  { key: "consumable", label: "Consumables" },
+  { key: "anaesthesia", label: "Anaesthesia" },
+];
 
 const TITLES: Record<CodeType, string> = {
   CONSUMABLE: "Requested Consumables",
@@ -48,9 +67,18 @@ export default function SurgeryCodeLookup({
 }: {
   expect?: CodeType;
   title?: string;
-  lookupBy?: "code" | "patient";
+  /**
+   * "either" takes whatever the person at the counter types.
+   *
+   * They are handed both. One patient arrives holding a slip with PH-7K9QF2
+   * on it; the next lost the slip and gives their PT number. Making the
+   * counter work out which box to use produces "no surgery found" for a
+   * patient standing right there with a perfectly good code.
+   */
+  lookupBy?: "code" | "patient" | "either";
 }) {
   const [code, setCode] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LookupResult | null>(null);
@@ -64,11 +92,16 @@ export default function SurgeryCodeLookup({
     setResult(null);
     try {
       const params = new URLSearchParams();
-      if (lookupBy === "patient") {
+      // In "either" mode the shape of what was typed decides. looksLikeSurgeryCode
+      // only matches the three prefixes this system issues, so a folder number
+      // that happens to contain a dash is still looked up as a patient.
+      const asCode = lookupBy === "code"
+        || (lookupBy === "either" && looksLikeSurgeryCode(trimmed));
+      if (asCode) {
+        params.set("code", trimmed);
+      } else {
         params.set("patientIdentifier", trimmed);
         if (expect) params.set("type", expect);
-      } else {
-        params.set("code", trimmed);
       }
 
       const r = await fetch(`/api/surgery-codes/lookup?${params.toString()}`, {
@@ -101,15 +134,14 @@ export default function SurgeryCodeLookup({
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder={
-              lookupBy === "patient"
-                ? "e.g. PT-12345 or folder number"
-                : expect === "PHARMACY"
-                ? "e.g. PH-7K9QF2"
-                : expect === "ANAESTHESIA"
-                ? "e.g. AN-7K9QF2"
-                : "e.g. CP-7K9QF2"
-            }
+            placeholder={(() => {
+              const sample = expect === "PHARMACY" ? "PH-7K9QF2"
+                : expect === "ANAESTHESIA" ? "AN-7K9QF2"
+                : "CP-7K9QF2";
+              if (lookupBy === "patient") return "e.g. PT-12345 or folder number";
+              if (lookupBy === "either") return `${sample} or PT-12345`;
+              return `e.g. ${sample}`;
+            })()}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono tracking-wider uppercase"
             autoComplete="off"
           />
@@ -161,6 +193,48 @@ export default function SurgeryCodeLookup({
                 {result.patient?.caregiverName && (
                   <>• {result.patient.caregiverName}: {result.patient.caregiverPhone}</>
                 )}
+              </div>
+            )}
+
+            {/* The patient's codes, whichever way this case was found.
+                "What is my code?" is the question actually asked at the
+                counter, and a lookup by PT number used to read these out of
+                the database and drop them before the screen saw them.
+                A code that was never issued says so, rather than showing a
+                blank that reads as a display fault. */}
+            {result.codes && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">
+                {CODE_LABEL.map(({ key, label }) => {
+                  const value = result.codes?.[key] ?? null;
+                  if (!value) {
+                    return (
+                      <span
+                        key={key}
+                        className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-400"
+                      >
+                        {label}: not issued
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(value);
+                        setCopied(key);
+                      }}
+                      title={`Copy the ${label.toLowerCase()} code`}
+                      className="inline-flex items-center gap-1 rounded border border-primary-200 bg-white px-2 py-1 text-[11px] font-mono font-semibold tracking-wider text-primary-800 hover:bg-primary-50"
+                    >
+                      <span className="font-sans font-normal text-gray-500">{label}:</span>
+                      {value}
+                      {copied === key
+                        ? <Check className="h-3 w-3 text-green-600" />
+                        : <Copy className="h-3 w-3 text-gray-400" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -6,6 +6,32 @@ import { normaliseCode } from "@/lib/surgeryCodes";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The three codes for a case, for the desk that is looking at it.
+ *
+ * Returned on EVERY result, whichever way the case was found. A pharmacist
+ * who looked a patient up by PT number is the person most likely to be asked
+ * "what is my code?", and before this the codes were read out of the database
+ * and then thrown away before the screen saw them.
+ *
+ * A missing code comes back as null, never as a stand-in. The old code did
+ * `pharmacyDrugCode ?? patientIdentifier`, so a case booked before the codes
+ * existed displayed the patient's own PT number in the place a PH- code goes
+ * — and a pharmacist reading that out sends the patient away with something
+ * that is not a code and will never resolve.
+ */
+function codesOf(s: {
+  consumablePackCode?: string | null;
+  pharmacyDrugCode?: string | null;
+  anaesthesiaDrugCode?: string | null;
+} | null | undefined) {
+  return {
+    consumable: s?.consumablePackCode ?? null,
+    pharmacy: s?.pharmacyDrugCode ?? null,
+    anaesthesia: s?.anaesthesiaDrugCode ?? null,
+  };
+}
+
 // GET /api/surgery-codes/lookup?code=CP-XXXXXX
 // A provider keys in the patient's code and sees exactly what was requested.
 // The code itself is the access token, but a valid session is still required so
@@ -44,6 +70,8 @@ export async function GET(req: NextRequest) {
               subspecialty: true,
               location: true,
               consumablePackCode: true,
+              pharmacyDrugCode: true,
+              anaesthesiaDrugCode: true,
               patient: {
                 select: {
                   name: true,
@@ -68,7 +96,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           found: true,
           codeType: "CONSUMABLE",
-          code: latestRequest.surgery.consumablePackCode ?? patientIdentifier,
+          code: latestRequest.surgery.consumablePackCode ?? null,
+          codes: codesOf(latestRequest.surgery),
           patient: {
             name: latestRequest.surgery.patient?.name ?? null,
             folderNumber: latestRequest.surgery.patient?.ptNumber ?? latestRequest.surgery.patient?.folderNumber ?? null,
@@ -106,7 +135,9 @@ export async function GET(req: NextRequest) {
               surgeryType: true,
               subspecialty: true,
               location: true,
+              consumablePackCode: true,
               pharmacyDrugCode: true,
+              anaesthesiaDrugCode: true,
               patient: {
                 select: {
                   name: true,
@@ -131,7 +162,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           found: true,
           codeType: "PHARMACY",
-          code: latestRequest.surgery.pharmacyDrugCode ?? patientIdentifier,
+          code: latestRequest.surgery.pharmacyDrugCode ?? null,
+          codes: codesOf(latestRequest.surgery),
           patient: {
             name: latestRequest.surgery.patient?.name ?? null,
             folderNumber: latestRequest.surgery.patient?.ptNumber ?? latestRequest.surgery.patient?.folderNumber ?? null,
@@ -179,6 +211,8 @@ export async function GET(req: NextRequest) {
               surgeryType: true,
               subspecialty: true,
               location: true,
+              consumablePackCode: true,
+              pharmacyDrugCode: true,
               anaesthesiaDrugCode: true,
             },
           },
@@ -189,7 +223,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           found: true,
           codeType: "ANAESTHESIA",
-          code: latestPrescription.surgery?.anaesthesiaDrugCode ?? patientIdentifier,
+          code: latestPrescription.surgery?.anaesthesiaDrugCode ?? null,
+          codes: codesOf(latestPrescription.surgery),
           patient: {
             name: latestPrescription.patient?.name ?? latestPrescription.patientName ?? null,
             folderNumber: latestPrescription.patient?.ptNumber ?? latestPrescription.patient?.folderNumber ?? null,
@@ -295,6 +330,7 @@ export async function GET(req: NextRequest) {
       found: true,
       codeType,
       code,
+      codes: codesOf(surgery),
       patient: {
         name: surgery.patient?.name ?? null,
         folderNumber: surgery.patient?.folderNumber ?? null,
@@ -327,6 +363,9 @@ export async function GET(req: NextRequest) {
       found: true,
       codeType: "ANAESTHESIA",
       code,
+      // An emergency prescription carries only its own anaesthesia code;
+      // there is no surgery row holding a CP or PH code to report.
+      codes: { consumable: null, pharmacy: null, anaesthesia: code },
       isEmergency: true,
       patient: {
         name: emergencyRx.patientName ?? null,

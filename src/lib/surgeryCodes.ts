@@ -103,3 +103,42 @@ export async function generateUniqueEmergencyAnaesthesiaCode(
   }
   return `${CODE_PREFIX.anaesthesia}-${randomBody(9)}`;
 }
+
+// ============================================================
+// Telling a code from a patient number
+// ------------------------------------------------------------
+// The desks that look these up are handed both. A patient arrives at the
+// pharmacy window holding a slip with PH-7K9QF2 on it; the next one gives
+// their PT number because they lost the slip. Forcing the person at the
+// counter to work out which box to type into produces a "no surgery found"
+// for a patient who is standing right there with a perfectly good code.
+//
+// So the boxes take either, and this decides which. Deliberately strict: it
+// matches only the three prefixes this system issues, so a folder number that
+// happens to contain a dash is still treated as a patient number rather than
+// looked up as a code and reported missing.
+// ============================================================
+
+/** The prefixes, as a regex alternation: CP|PH|AN. */
+const PREFIXES = Object.values(CODE_PREFIX).join('|');
+
+/**
+ * Does this look like a code this system issued, rather than a patient number?
+ *
+ * The body is checked against the same unambiguous alphabet the generator
+ * uses, so "PH-" followed by nothing, or by characters that could never have
+ * been minted, is not mistaken for a code that merely does not exist yet.
+ */
+export function looksLikeSurgeryCode(input: string): boolean {
+  const code = normaliseCode(input);
+  return new RegExp(`^(${PREFIXES})-[${ALPHABET}]{4,12}$`).test(code);
+}
+
+/** Which desk a code belongs to, or null when it is not one of ours. */
+export function codeTypeOf(input: string): SurgeryCodeType | null {
+  if (!looksLikeSurgeryCode(input)) return null;
+  const prefix = normaliseCode(input).slice(0, 2);
+  const found = (Object.keys(CODE_PREFIX) as SurgeryCodeType[])
+    .find((k) => CODE_PREFIX[k] === prefix);
+  return found ?? null;
+}

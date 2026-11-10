@@ -697,18 +697,29 @@ export default function PrescriptionsPage() {
         </p>
       </div>
 
-      {/* Patient lookup — pharmacy uses the patient's PT / folder number to see
-          the surgery drugs and anaesthetic prescription for that patient. */}
-      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Three desks, three boxes, and each takes EITHER the code or the
+          patient's number.
+          A patient arrives at the window holding a slip with PH-7K9QF2 on it;
+          the next one lost the slip and gives a PT number. Boxes that took
+          only one of the two answered "no surgery found" to a patient standing
+          right there with a perfectly good code.
+          The codes themselves now come back with every result, so the counter
+          can read them out when asked. */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <SurgeryCodeLookup
           expect="PHARMACY"
-          lookupBy="patient"
-          title="Surgery drugs — enter the patient's PT number"
+          lookupBy="either"
+          title="Surgery drugs — pharmacy code or PT number"
+        />
+        <SurgeryCodeLookup
+          expect="CONSUMABLE"
+          lookupBy="either"
+          title="Consumables — consumable code or PT number"
         />
         <SurgeryCodeLookup
           expect="ANAESTHESIA"
-          lookupBy="patient"
-          title="Anaesthetic prescription — enter the patient's PT number"
+          lookupBy="either"
+          title="Anaesthetic prescription — code or PT number"
         />
       </div>
 
