@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normaliseCode } from "@/lib/surgeryCodes";
+import { patientNumberForms, ambiguousNumberMessage } from "@/lib/patients/numberForms";
 
 export const dynamic = "force-dynamic";
 
@@ -47,12 +48,56 @@ export async function GET(req: NextRequest) {
   const expectedType = searchParams.get("type") as "CONSUMABLE" | "PHARMACY" | "ANAESTHESIA" | null;
 
   if (patientIdentifier && (expectedType === "CONSUMABLE" || expectedType === "PHARMACY" || expectedType === "ANAESTHESIA")) {
-    const patientWhere = {
-      OR: [
-        { folderNumber: { equals: patientIdentifier, mode: "insensitive" as const } },
-        { ptNumber: { equals: patientIdentifier, mode: "insensitive" as const } },
-      ],
-    };
+    // ── Which patient is this? ────────────────────────────────────────────
+    //
+    // Resolved FIRST, and on its own, for two reasons.
+    //
+    // The number is typed six ways — PT-12345, PT 12345, PT12345, sometimes
+    // bare digits off the card — and the stored value is one of them. An
+    // exact match failed for a patient who was on file and standing at the
+    // counter, and the screen said "no surgery found", which reads as "never
+    // booked" and sends somebody to the booking office.
+    //
+    // And because the old query nested the patient match inside a findFirst
+    // on the request table, two patients matching one number resolved
+    // silently to whichever had the most recent request. At a pharmacy
+    // window that dispenses the wrong patient's drugs. Now it refuses and
+    // names them.
+    const forms = patientNumberForms(patientIdentifier);
+    const matches = await prisma.patient.findMany({
+      where: {
+        OR: forms.candidates.flatMap((c) => [
+          { folderNumber: { equals: c, mode: "insensitive" as const } },
+          { ptNumber: { equals: c, mode: "insensitive" as const } },
+        ]),
+      },
+      select: { id: true, name: true, folderNumber: true, ptNumber: true },
+    });
+
+    if (matches.length > 1) {
+      return NextResponse.json(
+        {
+          found: false,
+          ambiguous: true,
+          error: ambiguousNumberMessage(patientIdentifier, matches),
+        },
+        { status: 409 }
+      );
+    }
+
+    if (matches.length === 0) {
+      return NextResponse.json(
+        {
+          found: false,
+          error: `No patient on file matches "${patientIdentifier}". `
+            + `The number can be typed PT-12345, PT 12345 or PT12345, `
+            + `or as the folder number.`,
+        },
+        { status: 404 }
+      );
+    }
+
+    const patientWhere = { id: matches[0].id };
 
     if (expectedType === "CONSUMABLE") {
       const latestRequest = await prisma.surgeryConsumableRequest.findFirst({
@@ -247,16 +292,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // The patient IS on file — matched above — so this is a different fact
+    // from "no such number", and the two used to read identically. One sends
+    // somebody to the booking office; this one means the case is booked and
+    // nobody has requested anything for it yet.
+    const found = matches[0];
     return NextResponse.json(
       {
         found: false,
-        error: `No ${
+        patientExists: true,
+        patient: {
+          name: found.name,
+          folderNumber: found.ptNumber ?? found.folderNumber,
+        },
+        error: `${found.name ?? "That patient"} is on file, but no ${
           expectedType === "CONSUMABLE"
-            ? "consumable request"
+            ? "consumables have been requested"
             : expectedType === "PHARMACY"
-            ? "pharmacy request"
-            : "anaesthesia prescription"
-        } found for that PT number`,
+            ? "drugs or dressings have been requested"
+            : "anaesthetic prescription has been written"
+        } for them yet.`,
       },
       { status: 404 }
     );

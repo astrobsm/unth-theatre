@@ -162,10 +162,13 @@ export default function ConsumablePackProviderPage() {
         </div>
       </div>
 
+      {/* Takes either the consumable code off the patient's slip or their PT
+          number, in whichever form they say it. A desk that accepted only one
+          of the two turned away people holding the other. */}
       <SurgeryCodeLookup
         expect="CONSUMABLE"
-        lookupBy="patient"
-        title="Consumable pack — enter the patient's PT number"
+        lookupBy="either"
+        title="Consumable pack — consumable code or PT number"
       />
 
       {/* Date selector + search / sort by patient PT (folder) number */}

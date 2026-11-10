@@ -109,7 +109,17 @@ export default function SurgeryCodeLookup({
       });
       const data: LookupResult = await r.json();
       if (!r.ok || !data.found) {
-        setError(data.error || "No surgery found for that code.");
+        // The server's wording is always the better one: it knows whether the
+        // patient is on file with nothing requested, whether the number hit
+        // two patients, or whether nothing matched at all. The fallback only
+        // covers a server that said nothing, and even then it must not claim
+        // "that code" when a patient number was what was typed.
+        setError(
+          data.error
+          || (asCode
+            ? "No surgery found for that code."
+            : "No patient found for that number.")
+        );
         return;
       }
       if (expect && data.codeType !== expect) {
@@ -138,8 +148,8 @@ export default function SurgeryCodeLookup({
               const sample = expect === "PHARMACY" ? "PH-7K9QF2"
                 : expect === "ANAESTHESIA" ? "AN-7K9QF2"
                 : "CP-7K9QF2";
-              if (lookupBy === "patient") return "e.g. PT-12345 or folder number";
-              if (lookupBy === "either") return `${sample} or PT-12345`;
+              if (lookupBy === "patient") return "PT-12345, PT 12345 or folder number";
+              if (lookupBy === "either") return `${sample}, PT-12345 or PT 12345`;
               return `e.g. ${sample}`;
             })()}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono tracking-wider uppercase"

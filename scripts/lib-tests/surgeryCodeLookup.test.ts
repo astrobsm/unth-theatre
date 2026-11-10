@@ -25,6 +25,7 @@ const read = (p: string) => fs.readFileSync(path.join(REPO, p), 'utf8');
 const api = read('src/app/api/surgery-codes/lookup/route.ts');
 const widget = read('src/components/SurgeryCodeLookup.tsx');
 const pharmacy = read('src/app/dashboard/prescriptions/page.tsx');
+const consumables = read('src/app/dashboard/consumable-pack-provider/page.tsx');
 
 describe('telling a code from a patient number', () => {
   it('recognises every code this system mints', () => {
@@ -119,8 +120,10 @@ describe('the boxes at the counter', () => {
 
   it('say so in the placeholder', () => {
     // Otherwise the counter does not know it may type a code, and carries on
-    // asking for a PT number the patient does not have.
-    expect(widget).toContain('or PT-12345');
+    // asking for a PT number the patient does not have — or does not know
+    // that a space instead of a hyphen is fine.
+    expect(widget).toContain('PT-12345 or PT 12345');
+    expect(widget).toContain('${sample}');
   });
 
   it('show the codes, and mark the ones that do not exist', () => {
@@ -148,5 +151,55 @@ describe('the pharmacy page', () => {
     expect(pharmacy).not.toContain("enter the patient's PT number");
     expect(pharmacy).toContain('pharmacy code or PT number');
     expect(pharmacy).toContain('consumable code or PT number');
+  });
+});
+
+describe('the consumable pack desk', () => {
+  it('takes either the code or the patient number, like pharmacy', () => {
+    expect(consumables).toContain('lookupBy="either"');
+    expect(consumables).not.toContain('lookupBy="patient"');
+    expect(consumables).toContain('consumable code or PT number');
+  });
+});
+
+describe('a number that could be two patients', () => {
+  it('is refused, not resolved to whichever is most recent', () => {
+    // THE ONE THAT MATTERS MOST HERE. Folder numbers are bare digits and PT
+    // numbers are prefixed, so expanding "12345" into both shapes can land on
+    // two people. The old query nested the patient match inside a findFirst
+    // on the request table, which silently picked the one with the newest
+    // request — at a pharmacy window, the wrong person's drugs.
+    expect(api).toContain('prisma.patient.findMany');
+    expect(api).toContain('matches.length > 1');
+    expect(api).toContain('ambiguous: true');
+    expect(api).toContain('{ status: 409 }');
+    expect(api).toContain('ambiguousNumberMessage(patientIdentifier, matches)');
+    // The patient is resolved BEFORE any request table is consulted.
+    expect(api.indexOf('prisma.patient.findMany'))
+      .toBeLessThan(api.indexOf('surgeryConsumableRequest.findFirst'));
+  });
+
+  it('matches every spelling of the number', () => {
+    expect(api).toContain('patientNumberForms(patientIdentifier)');
+    expect(api).toContain('forms.candidates.flatMap');
+    // Both columns, case-blind.
+    expect(api).toContain('folderNumber: { equals: c, mode: "insensitive" as const }');
+    expect(api).toContain('ptNumber: { equals: c, mode: "insensitive" as const }');
+  });
+
+  it('tells an unknown number apart from one with nothing requested', () => {
+    // They used to read identically. One means go to the booking office; the
+    // other means the case is booked and nobody has requested anything yet.
+    expect(api).toContain('No patient on file matches');
+    expect(api).toContain('patientExists: true');
+    expect(api).toContain('is on file, but no');
+  });
+
+  it('says which spellings are accepted when nothing matched', () => {
+    expect(api).toContain('PT-12345, PT 12345 or PT12345');
+  });
+
+  it('advertises them in the box as well', () => {
+    expect(widget).toContain('PT-12345 or PT 12345');
   });
 });
