@@ -284,3 +284,120 @@ describe('searching the list', () => {
     expect(matchesQuery('Total hip replacement', 'knee')).toBe(false);
   });
 });
+
+describe('the master list, transcribed', () => {
+  // Rebuilt in November 2026 from the hospital's master procedure list —
+  // "Surgical Consumables & Drugs Shopping Lists", ten specialties plus a
+  // cross-specialty section, with that document's own subsection headings
+  // kept as the category.
+
+  it('holds the whole list, not a sample of it', () => {
+    expect(catalogueSize()).toBeGreaterThan(1900);
+    for (const s of SUBSPECIALTIES) expect(CATALOGUE[s].length).toBeGreaterThan(40);
+  });
+
+  it('kept Ophthalmology, which the master list does not cover', () => {
+    // The document has no eye section. Rebuilding from it alone would empty
+    // this picker, and an empty picker looks exactly like a broken one — the
+    // surgeon sees no options and has no way to tell whether that is a bug or
+    // a specialty that has nothing scheduled.
+    expect(CATALOGUE.Ophthalmology.length).toBeGreaterThan(40);
+    expect(CATALOGUE.Ophthalmology.map((e) => e.name))
+      .toContain('Extracapsular cataract extraction with intraocular lens');
+  });
+
+  it('contains no two entries that are the same words in a different order', () => {
+    // THE reason the established wording was kept wherever the document only
+    // reworded an operation.
+    //
+    // procedureSlug keeps word ORDER, so "Excision of lipoma" and "Lipoma
+    // excision" produce two different slugs: the collision test above passes,
+    // and seed-procedures.js — which only ever ADDS rows — writes both. One
+    // operation then appears twice in the dropdown, and the pack mapping,
+    // which is keyed on the name, follows only one of them.
+    //
+    // Sorting the slug's words is a blunter key than the catalogue's real one
+    // and is used here only to refuse that specific shape of duplicate.
+    const wordSet = (n: string) => procedureSlug(n).split('-').filter(Boolean).sort().join('-');
+    const dupes: string[] = [];
+    for (const s of SUBSPECIALTIES) {
+      const seen = new Map<string, string>();
+      for (const e of CATALOGUE[s]) {
+        const w = wordSet(e.name);
+        const prev = seen.get(w);
+        if (prev) dupes.push(`${s}: "${prev}" vs "${e.name}"`);
+        else seen.set(w, e.name);
+      }
+    }
+    expect(dupes).toEqual([]);
+  });
+
+  it('keeps the wording already seeded where the document only reworded it', () => {
+    // These rows exist in the live database and carry pack mappings. The
+    // master list calls them "Lipoma excision", "Appendicectomy – open",
+    // "Cholecystectomy – laparoscopic", "Gastroschisis repair" and
+    // "Ventricular septal defect closure"; adopting that wording would add a
+    // second row rather than rename the first, because the seed cannot rename.
+    const names = allEntries().map((e) => e.name);
+    for (const kept of [
+      'Excision of lipoma',
+      'Open appendicectomy',
+      'Laparoscopic cholecystectomy',
+      'Repair of gastroschisis',
+      'Closure of ventricular septal defect',
+    ]) expect(names).toContain(kept);
+  });
+
+  it('offers a cross-specialty procedure to every unit that books it', () => {
+    // Section 11 asks for "the responsible specialty and alternative eligible
+    // specialties properly identified". The unique key is (subspecialty,
+    // slug), so the only way to say that here is to list the procedure under
+    // each eligible unit — and the only way to say a procedure is NOT shared
+    // is for it to appear once.
+    const where = (name: string) =>
+      allEntries().filter((e) => e.name === name).map((e) => e.subspecialty).sort();
+
+    expect(where('Central venous catheter insertion'))
+      .toEqual(['Cardiothoracic Surgery', 'General Surgery', 'Paediatric Surgery']);
+    expect(where('Examination under anaesthesia')).toEqual([
+      'ENT (Otorhinolaryngology)', 'General Surgery', 'Obstetrics & Gynaecology',
+      'Paediatric Surgery', 'Urology',
+    ]);
+    // A craniotomy is not something another unit may book.
+    expect(where('Emergency craniotomy')).toEqual(['Neurosurgery']);
+    expect(allEntries().filter((e) => e.crossSpecialty).length).toBeGreaterThan(100);
+  });
+
+  it('brought across operations that only the master list names', () => {
+    // Sampled one per specialty, so a half-finished re-import is visible.
+    const names = allEntries().map((e) => e.name);
+    for (const m of [
+      'Roux-en-Y gastric bypass',
+      'Free flap reconstruction',
+      'Selective dorsal rhizotomy',
+      'Carotid endarterectomy',
+    ]) expect(names).toContain(m);
+  });
+
+  it('has no two optgroups in one specialty that mean the same thing', () => {
+    // A survivor that kept its old short category sits beside the master
+    // list's longer one — "Endocrine" next to "Breast and endocrine surgery",
+    // "Thoracic" next to "Thoracic and lung surgery". Both are headings over
+    // the same operations, and a picker showing both reads as a fault in the
+    // list: a surgeon who opens the first one concludes the second is where
+    // everything else went, and scrolls past what they were looking for.
+    //
+    // Stated as: no heading's words may be wholly contained in another's.
+    const wordsOf = (c: string) => new Set(procedureSlug(c).split('-').filter(Boolean));
+    const overlaps: string[] = [];
+    for (const s of SUBSPECIALTIES) {
+      const cats = [...new Set(CATALOGUE[s].map((e) => e.category))];
+      for (const a of cats) for (const b of cats) {
+        if (a === b) continue;
+        const [wa, wb] = [wordsOf(a), wordsOf(b)];
+        if (wa.size && [...wa].every((w) => wb.has(w))) overlaps.push(`${s}: "${a}" inside "${b}"`);
+      }
+    }
+    expect(overlaps).toEqual([]);
+  });
+});
