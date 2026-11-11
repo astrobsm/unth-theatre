@@ -294,16 +294,20 @@ describe('the master list, transcribed', () => {
   // kept as the category.
 
   it('holds the whole list, not a sample of it', () => {
-    expect(catalogueSize()).toBeGreaterThan(1900);
+    expect(catalogueSize()).toBeGreaterThan(2400);
     for (const s of SUBSPECIALTIES) expect(CATALOGUE[s].length).toBeGreaterThan(40);
   });
 
-  it('kept Ophthalmology, which the master list does not cover', () => {
-    // The document has no eye section. Rebuilding from it alone would empty
-    // this picker, and an empty picker looks exactly like a broken one — the
-    // surgeon sees no options and has no way to tell whether that is a bug or
-    // a specialty that has nothing scheduled.
-    expect(CATALOGUE.Ophthalmology.length).toBeGreaterThan(40);
+  it('carries Ophthalmology, which arrived as a list of its own', () => {
+    // The first master list covered ten specialties and no eye surgery, so
+    // for one commit this picker held only the 43 entries it started with.
+    // Ophthalmology then came separately, in the same shape — sections A to K,
+    // several with numbered subsections — and is merged on the same terms.
+    //
+    // Both assertions matter. The count would catch a re-import that dropped
+    // the list; the named entry would catch one that kept the count by
+    // replacing the established wording, which is what the seed cannot undo.
+    expect(CATALOGUE.Ophthalmology.length).toBeGreaterThan(500);
     expect(CATALOGUE.Ophthalmology.map((e) => e.name))
       .toContain('Extracapsular cataract extraction with intraocular lens');
   });
@@ -320,7 +324,16 @@ describe('the master list, transcribed', () => {
     //
     // Sorting the slug's words is a blunter key than the catalogue's real one
     // and is used here only to refuse that specific shape of duplicate.
-    const wordSet = (n: string) => procedureSlug(n).split('-').filter(Boolean).sort().join('-');
+    //
+    // A bracketed ALL-CAPS acronym goes too, because "Pars plana vitrectomy
+    // (PPV)" and "Pars plana vitrectomy" are one operation written twice —
+    // the master list spells the acronym out, the catalogue did not, and the
+    // slug differs by a word so nothing else catches it. Brackets holding a
+    // real word stay: "(mesh)" and "(tissue)", "(vacuum)" and "(forceps)",
+    // "(recession)" and "(resection)" are different operations, and a rule
+    // that stripped those would quietly delete half of each pair.
+    const wordSet = (n: string) =>
+      procedureSlug(n.replace(/\s*\([A-Z0-9]{2,6}\)/g, ' ')).split('-').filter(Boolean).sort().join('-');
     const dupes: string[] = [];
     for (const s of SUBSPECIALTIES) {
       const seen = new Map<string, string>();
@@ -378,6 +391,8 @@ describe('the master list, transcribed', () => {
       'Free flap reconstruction',
       'Selective dorsal rhizotomy',
       'Carotid endarterectomy',
+      'Descemet membrane endothelial keratoplasty (DMEK)',
+      'Frontalis sling procedure',
     ]) expect(names).toContain(m);
   });
 
@@ -403,7 +418,14 @@ describe('the master list, transcribed', () => {
     // list: a surgeon who opens the first one concludes the second is where
     // everything else went, and scrolls past what they were looking for.
     //
-    // Stated as: no heading's words may be wholly contained in another's.
+    // Stated as: no heading's words may be wholly contained in another's —
+    // UNLESS the longer one's extra words re-scope it to a different set of
+    // patients. "Cataract and lens surgery" sits inside "Congenital cataract
+    // and paediatric lens surgery", and those are not one group: adult and
+    // congenital cataract are different operations on different lists, with
+    // different consumables. "Endocrine" inside "Breast and endocrine
+    // surgery" adds no such word, and that is the duplication this guards.
+    const SCOPE = ['congenital', 'paediatric', 'pediatric', 'revision', 'emergency', 'secondary'];
     const wordsOf = (c: string) => new Set(procedureSlug(c).split('-').filter(Boolean));
     const overlaps: string[] = [];
     for (const s of SUBSPECIALTIES) {
@@ -411,7 +433,9 @@ describe('the master list, transcribed', () => {
       for (const a of cats) for (const b of cats) {
         if (a === b) continue;
         const [wa, wb] = [wordsOf(a), wordsOf(b)];
-        if (wa.size && [...wa].every((w) => wb.has(w))) overlaps.push(`${s}: "${a}" inside "${b}"`);
+        if (!wa.size || ![...wa].every((w) => wb.has(w))) continue;
+        if ([...wb].filter((w) => !wa.has(w)).some((w) => SCOPE.includes(w))) continue;
+        overlaps.push(`${s}: "${a}" inside "${b}"`);
       }
     }
     expect(overlaps).toEqual([]);
