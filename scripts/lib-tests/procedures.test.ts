@@ -7,6 +7,8 @@
  * dropdown back into free text with extra steps.
  */
 import { describe, expect, it } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 import {
   allEntries,
@@ -377,6 +379,20 @@ describe('the master list, transcribed', () => {
       'Selective dorsal rhizotomy',
       'Carotid endarterectomy',
     ]) expect(names).toContain(m);
+  });
+
+  it('is smaller than the cap the API fetches it under', () => {
+    // Read off the route, not asserted as a number here, because the failure
+    // this guards is silent: findMany({ take }) does not complain when it
+    // truncates, so a catalogue that outgrows the cap loses whatever sorts
+    // last and the picker simply stops offering those operations. The cap was
+    // 2000 against 587 entries and the rebuild took the catalogue to 1,974.
+    const route = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'app', 'api', 'procedures', 'route.ts'),
+      'utf8',
+    );
+    const take = Number(/take:\s*(\d+)/.exec(route)?.[1]);
+    expect(take).toBeGreaterThan(catalogueSize() * 2);
   });
 
   it('has no two optgroups in one specialty that mean the same thing', () => {

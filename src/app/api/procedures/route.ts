@@ -56,9 +56,15 @@ export async function GET(request: NextRequest) {
         usageCount: true,
         source: true,
       },
-      // A generous cap: the whole catalogue is smaller than this, and a
-      // dropdown that silently truncated would be worse than a slow one.
-      take: 2000,
+      // A cap that cannot be reached by the call this route actually gets.
+      // The picker always passes a subspecialty and the largest of those is
+      // around three hundred; the number here is for the unfiltered call the
+      // route still allows. It was 2000 while the catalogue held 587 rows,
+      // with a comment saying the whole catalogue was smaller than the cap —
+      // the rebuild from the master list took it to 1,974 and left that
+      // sentence twenty-six rows from being false, at which point the
+      // dropdown would start dropping operations off the end in silence.
+      take: 10000,
     });
 
     const ordered = pickerOrder(rows);
