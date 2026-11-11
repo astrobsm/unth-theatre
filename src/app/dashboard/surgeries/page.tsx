@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { AlertTriangle, MessageCircle } from 'lucide-react';
 import PhoneLink from '@/components/PhoneLink';
 import NurseSupervisorBand from '@/components/NurseSupervisorBand';
+import PharmacistOnDutyBand from '@/components/PharmacistOnDutyBand';
 import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { outstandingLabel } from '@/lib/preopRequirements';
@@ -947,6 +948,12 @@ export default function SurgeriesPage() {
           rows the theatre staffing screen writes, so there is one answer to
           "who is supervising", not two. */}
       <NurseSupervisorBand date={dateFilter} />
+
+      {/* And who to ring for drugs on that day. Next to the supervisor band
+          because the two are read for the same reason — something on the list
+          has stopped and somebody has to be reached — and a case held up for
+          drugs is the commonest version of it. */}
+      <PharmacistOnDutyBand date={dateFilter} />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div>
