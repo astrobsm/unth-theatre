@@ -74,6 +74,33 @@ export function describeDay(day: string, now: Date = new Date()): string {
 }
 
 /**
+ * What the post-operative dispensing list opens on: TODAY.
+ *
+ * The opposite default from the packing list above, and for the opposite
+ * reason. A post-op prescription is written after the operation, so tomorrow's
+ * is a list that cannot exist yet. Today's is the work in hand — drugs a
+ * patient in recovery is waiting on — and yesterday's is what somebody comes
+ * back to when a relative arrives late to collect.
+ */
+export const defaultPostOpDay = (now: Date = new Date()): string => watToday(now);
+
+/**
+ * A warning when the post-op list is showing a day that cannot hold anything.
+ *
+ * Only for the future. A past day is entirely legitimate here — chasing an
+ * uncollected prescription from last week is the normal reason to change the
+ * date at all — so it says nothing, where the packing list would.
+ */
+export function postOpDayCaution(day: string, now: Date = new Date()): string | null {
+  const rel = dayRelation(day, now);
+  if (rel === 'TOMORROW' || rel === 'FUTURE') {
+    return 'This day has not happened yet. Post-operative prescriptions are written after '
+      + 'the operation, so there will be nothing here until the day arrives.';
+  }
+  return null;
+}
+
+/**
  * A warning when the chosen day is not one that can still be packed for.
  *
  * Returned rather than thrown, and null when there is nothing to say: a

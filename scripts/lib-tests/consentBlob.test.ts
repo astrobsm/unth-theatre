@@ -42,6 +42,11 @@ describe('the consent blob', () => {
     expect(routes.length).toBeGreaterThan(50);
   });
 
+  // 30 seconds, not the default 5. This reads every API route file in the
+  // app, and it runs alongside 245 other test files on whatever cores are
+  // left. It finishes in well under a second on an idle machine and timed out
+  // in a full run — a failure that says nothing about consent blobs and sends
+  // somebody hunting a leak that is not there.
   it('is selected only by the routes that serve the file', () => {
     const offenders = routes.filter((file) => {
       const rel = path.relative(API, file);
@@ -50,7 +55,7 @@ describe('the consent blob', () => {
     }).map((f) => path.relative(API, f));
 
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   it('gives the rest a way to ask without fetching it', () => {
     const helper = path.resolve(__dirname, '..', '..', 'src', 'lib', 'consentPresence.ts');

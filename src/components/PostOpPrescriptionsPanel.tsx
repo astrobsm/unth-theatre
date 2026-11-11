@@ -1,7 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pill, Search, RefreshCw, CheckCircle2, Clock, Package, BadgeDollarSign } from 'lucide-react';
+import { Pill, Search, RefreshCw, CheckCircle2, Clock, Package, BadgeDollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  defaultPostOpDay, postOpDayCaution, describeDay, shiftDay,
+} from '@/lib/pharmacy/day';
+import { watToday } from '@/lib/watDay';
 
 interface Med {
   drugName: string;
@@ -50,12 +54,24 @@ export default function PostOpPrescriptionsPanel({ canPack }: { canPack: boolean
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  /**
+   * Which day's prescriptions are on screen.
+   *
+   * Today by default. Without a day the panel asked for everything and got
+   * the newest 200 ever written, so on 11 November it opened on cases from
+   * 8 July — prescriptions long since collected, sitting above the ones a
+   * patient in recovery is waiting for.
+   */
+  const [day, setDay] = useState(defaultPostOpDay);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/post-op-prescriptions', { cache: 'no-store' });
+      const res = await fetch(
+        `/api/post-op-prescriptions?date=${encodeURIComponent(day)}`,
+        { cache: 'no-store' },
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to load');
       setItems(Array.isArray(json) ? json : []);
@@ -64,7 +80,7 @@ export default function PostOpPrescriptionsPanel({ canPack }: { canPack: boolean
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [day]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -114,6 +130,79 @@ export default function PostOpPrescriptionsPanel({ canPack }: { canPack: boolean
         </button>
       </div>
 
+      {/* WHICH DAY. Today by default — a post-op prescription is written after
+          the operation, so this is the work in hand. Backwards is the useful
+          direction: a relative who arrives on Thursday to collect Tuesday's
+          drugs is the reason somebody changes this. */}
+      <div className="mb-4 rounded-lg border border-purple-100 bg-purple-50/50 p-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label htmlFor="postop-day" className="block text-xs font-medium text-purple-900 mb-1">
+              Prescriptions written on
+            </label>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setDay((d) => shiftDay(d, -1))}
+                title="The day before"
+                aria-label="Previous day"
+                className="rounded-lg border border-purple-200 bg-white p-2 text-purple-800 hover:bg-purple-100"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <input
+                id="postop-day"
+                type="date"
+                value={day}
+                onChange={(e) => setDay(e.target.value || defaultPostOpDay())}
+                className="rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500"
+              />
+              <button
+                type="button"
+                onClick={() => setDay((d) => shiftDay(d, 1))}
+                title="The day after"
+                aria-label="Next day"
+                className="rounded-lg border border-purple-200 bg-white p-2 text-purple-800 hover:bg-purple-100"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-1.5">
+            {([
+              { label: 'Today', target: watToday() },
+              { label: 'Yesterday', target: shiftDay(watToday(), -1) },
+            ]).map((b) => (
+              <button
+                key={b.label}
+                type="button"
+                onClick={() => setDay(b.target)}
+                aria-pressed={day === b.target}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                  day === b.target
+                    ? 'border-purple-600 bg-purple-600 text-white'
+                    : 'border-purple-200 bg-white text-purple-900 hover:bg-purple-100'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-sm text-purple-900">
+            Showing prescriptions written on <strong>{describeDay(day)}</strong>
+            {!loading && ` — ${items.length} ${items.length === 1 ? 'prescription' : 'prescriptions'}`}.
+          </p>
+        </div>
+
+        {postOpDayCaution(day) && (
+          <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+            {postOpDayCaution(day)}
+          </p>
+        )}
+      </div>
+
       <div className="relative max-w-md mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
@@ -127,7 +216,16 @@ export default function PostOpPrescriptionsPanel({ canPack }: { canPack: boolean
       {error && <div className="p-3 mb-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">{loading ? 'Loading…' : 'No post-operative prescriptions found.'}</p>
+        <p className="text-sm text-gray-400">
+          {loading
+            ? 'Loading…'
+            : q.trim()
+              ? `Nothing on ${describeDay(day)} matches "${q.trim()}".`
+              /* Names the day. "No prescriptions found" reads as "none exist",
+                 and somebody goes looking for a fault instead of changing the
+                 date. */
+              : `No post-operative prescriptions were written on ${describeDay(day)}.`}
+        </p>
       ) : (
         <div className="space-y-3">
           {filtered.map((rx) => {

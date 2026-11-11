@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { triggerRadio } from "@/lib/radioEvents";
 import { findDuplicate, UNTOUCHED_STATUSES } from "@/lib/prescriptions/duplicateGuard";
+import { watDayRange } from "@/lib/watDay";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,16 @@ const createSchema = z.object({
   totalCost: z.number().min(0).optional(),
 });
 
-// GET /api/post-op-prescriptions?status=&surgeryId=
+// GET /api/post-op-prescriptions?status=&surgeryId=&date=YYYY-MM-DD
+//
+// `date` is OPT-IN, and deliberately not defaulted to today. Two other
+// callers depend on getting everything: the post-op notes page looks a
+// prescription up by surgeryId, and medication tracking filters by status
+// across days. Defaulting here would quietly empty both.
+//
+// The dispensing panel passes it, because without one the screen showed the
+// newest 200 prescriptions ever written — on 11 November it opened on cases
+// from 8 July, which is not a list anybody is working from.
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -50,10 +60,24 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const surgeryId = searchParams.get("surgeryId");
+  const date = searchParams.get("date");
 
   const where: any = {};
   if (status) where.status = status;
   if (surgeryId) where.surgeryId = surgeryId;
+
+  if (date) {
+    // Bounded in WAT, not in the runtime's timezone. The theatre server runs
+    // UTC, so a day read locally would start an hour late and drop every
+    // prescription written between midnight and 1 a.m. — the night-list ones,
+    // which is the wrong set to lose.
+    //
+    // Filtered on prescribedAt: when the surgeon wrote it. createdAt is
+    // usually the same instant but is a database fact, and a row re-created
+    // by a sync replay would file itself under the day it arrived.
+    const { start, end } = watDayRange(date);
+    where.prescribedAt = { gte: start, lt: end };
+  }
 
   const items = await prisma.postOpPrescription.findMany({
     where,

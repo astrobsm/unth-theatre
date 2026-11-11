@@ -952,6 +952,22 @@ export default function PrescriptionsPage() {
         </div>
       </div>
 
+      {/* ANAESTHETIC PRESCRIPTIONS — the main list on this page.
+          Named out loud, because it never was. These are the anaesthetists'
+          prescriptions for the cases on the chosen day (emergency ones
+          included), and the page simply called them "prescriptions" while a
+          separate post-operative list sat above under its own heading. Two
+          unlabelled lists of drugs for different patients on one screen is a
+          good way to pack from the wrong one. */}
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+          <Pill className="h-5 w-5 text-blue-600" /> Anaesthetic prescriptions
+        </h2>
+        <span className="text-sm text-gray-600">
+          For surgery on <strong>{describeDay(selectedDate)}</strong>. Change the day above.
+        </span>
+      </div>
+
       {/* Prescriptions List */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
