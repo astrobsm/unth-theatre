@@ -1,7 +1,7 @@
 // ============================================================
 // The board: which departments' rosters are late
 // ------------------------------------------------------------
-//   GET ?month=YYYY-MM
+//   GET ?week=YYYY-MM-DD  (default: this week)  |  ?month=YYYY-MM
 //
 // Read-only. One row per standing roster department, ordered to put the ones
 // with nothing submitted at the top, because that is the order somebody would
@@ -18,7 +18,9 @@ import { requireRole } from '@/lib/apiMiddleware';
 import prisma from '@/lib/prisma';
 import { collectRosterStandings } from '@/lib/rosterChase/collect';
 import { rosterHeadline } from '@/lib/rosterChase/messages';
-import { STATE_LABELS, watToday, type RosterSubmissionState } from '@/lib/rosterChase/overdue';
+import {
+  STATE_LABELS, watToday, resolveChasePeriod, type RosterSubmissionState,
+} from '@/lib/rosterChase/overdue';
 import { ROSTER_CHASE_TYPE, rosterChaseLink } from '@/lib/rosterChase/notify';
 
 export const dynamic = 'force-dynamic';
@@ -45,19 +47,21 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const today = watToday();
-    const month = url.searchParams.get('month') ?? today.slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      return NextResponse.json({ error: 'Which month?' }, { status: 400 });
-    }
+    // Week by default — that is the question theatre asks on a Monday.
+    const resolved = resolveChasePeriod({
+      week: url.searchParams.get('week'),
+      month: url.searchParams.get('month'),
+    }, today);
+    if (!resolved) return NextResponse.json({ error: 'Which week?' }, { status: 400 });
 
-    const standings = await collectRosterStandings(month, today);
-    if (!standings) return NextResponse.json({ error: 'Which month?' }, { status: 400 });
+    const standings = await collectRosterStandings(resolved.period, today);
+    if (!standings) return NextResponse.json({ error: 'Which week?' }, { status: 400 });
 
-    // Who has already been written to about this month, per department.
+    // Who has already been written to about this period, per department.
     const sent = await prisma.notification.findMany({
       where: {
         type: ROSTER_CHASE_TYPE,
-        link: { startsWith: `/dashboard/roster-chase?month=${month}&dept=` },
+        link: { startsWith: `/dashboard/roster-chase?${resolved.key}&dept=` },
       },
       select: { userId: true, link: true, createdAt: true },
     });
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest) {
         draftRows: d.assessment.draftRows,
         publishedRows: d.assessment.publishedRows,
         notYetDue: d.assessment.notYetDue,
-        priorLateMonths: d.priorLateMonths,
+        tally: d.tally,
         nobodyToWriteTo: d.nobodyToWriteTo,
         candidateCount: d.candidateCount,
         recipients: d.recipients.map((r) => ({
@@ -92,7 +96,7 @@ export async function GET(request: NextRequest) {
           hasPhone: r.hasPhone,
           active: r.active,
           source: r.source,
-          sentAt: sentBy[`${rosterChaseLink(month, d.slug)}|${r.id}`] ?? null,
+          sentAt: sentBy[`${rosterChaseLink(resolved.key, d.slug)}|${r.id}`] ?? null,
         })),
       }))
       .sort((a, b) => (ORDER[a.state as RosterSubmissionState] - ORDER[b.state as RosterSubmissionState])
@@ -105,7 +109,8 @@ export async function GET(request: NextRequest) {
     departments.forEach((d) => { counts[d.state] += 1; });
 
     return NextResponse.json({
-      month,
+      periodKey: resolved.key,
+      periodKind: resolved.kind,
       today,
       period: standings.period,
       counts,

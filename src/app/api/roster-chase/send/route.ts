@@ -21,7 +21,10 @@ import { requireRole } from '@/lib/apiMiddleware';
 import prisma from '@/lib/prisma';
 import { collectRosterStandings } from '@/lib/rosterChase/collect';
 import { buildRosterChase, rosterHeadline } from '@/lib/rosterChase/messages';
-import { STATE_LABELS, watToday, worthChasing } from '@/lib/rosterChase/overdue';
+import {
+  STATE_LABELS, watToday, worthChasing, resolveChasePeriod,
+} from '@/lib/rosterChase/overdue';
+import { buildRosterChaseLetter } from '@/lib/rosterChase/letter';
 import { ROSTER_CHASE_TYPE, rosterChaseLink } from '@/lib/rosterChase/notify';
 import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
@@ -52,19 +55,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const month = String(body?.month ?? '');
+    const week = body?.week ? String(body.week) : null;
+    const month = body?.month ? String(body.month) : null;
+    // A letter rather than a message: same facts, different instrument.
+    const asLetter = body?.letter === true;
     const slug = String(body?.dept ?? '');
     const personId = body?.personId ? String(body.personId) : null;
     const note = typeof body?.note === 'string' ? body.note.slice(0, 600) : null;
     const preview = body?.preview === true;
 
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      return NextResponse.json({ error: 'Which month?' }, { status: 400 });
-    }
+    const today = watToday();
+    const resolved = resolveChasePeriod({ week, month }, today);
+    if (!resolved) return NextResponse.json({ error: 'Which week?' }, { status: 400 });
     if (!slug) return NextResponse.json({ error: 'Which department?' }, { status: 400 });
 
-    const standings = await collectRosterStandings(month, watToday());
-    if (!standings) return NextResponse.json({ error: 'Which month?' }, { status: 400 });
+    const standings = await collectRosterStandings(resolved.period, today);
+    if (!standings) return NextResponse.json({ error: 'Which week?' }, { status: 400 });
 
     const dept = standings.departments.find((d) => d.slug === slug);
     if (!dept) return NextResponse.json({ error: 'No such department.' }, { status: 404 });
@@ -106,23 +112,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const link = rosterChaseLink(month, slug);
+    const link = rosterChaseLink(resolved.key, slug);
 
     if (preview) {
       const one = chosen[0];
+      // A LETTER IS ONLY EVER PREVIEWED, never queued to a phone. It is a
+      // document to print, sign and file; pushing it down a WhatsApp thread
+      // would be the wrong instrument and would also bury the record it
+      // carries. The screen copies or prints what comes back.
+      const letter = asLetter
+        ? buildRosterChaseLetter({
+          personName: one.fullName,
+          roleLabel: roleWords(one.role),
+          deptLabel: dept.label,
+          deptSlug: dept.slug,
+          period: standings.period,
+          assessment: dept.assessment,
+          tally: dept.tally,
+          today,
+          note,
+        })
+        : null;
+
       return NextResponse.json({
         preview: true,
+        isLetter: asLetter,
         headline: rosterHeadline({
           deptLabel: dept.label, period: standings.period, assessment: dept.assessment,
         }),
         recipients: chosen.map((r) => r.fullName),
-        text: buildRosterChase({
+        text: letter ?? buildRosterChase({
           personName: one.fullName,
           roleLabel: roleWords(one.role),
           deptLabel: dept.label,
           period: standings.period,
           assessment: dept.assessment,
-          priorLateMonths: dept.priorLateMonths,
+          priorConsecutive: Math.max(0, dept.tally.runningStreak - 1),
           note,
         }),
       });
@@ -167,7 +192,7 @@ export async function POST(request: NextRequest) {
         deptLabel: dept.label,
         period: standings.period,
         assessment: dept.assessment,
-        priorLateMonths: dept.priorLateMonths,
+        priorConsecutive: Math.max(0, dept.tally.runningStreak - 1),
         note,
       });
 

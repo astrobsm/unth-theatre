@@ -17,9 +17,21 @@
 import prisma from '@/lib/prisma';
 import { ROSTER_DEPARTMENTS, ROSTER_ADMIN_ROLES } from '@/lib/rosterDepartments';
 import {
-  assessRoster, monthPeriod, watToday, dueDay, daysBetween,
+  assessRoster, monthPeriod, weekPeriod, watToday, dueDay, daysBetween,
+  assessPeriods, offenceTally, trailingWeeks,
   type RosterAssessment, type RosterPeriod, type PublicationFact,
+  type OffenceTally, type PublicationSpan,
 } from './overdue';
+
+/**
+ * How far back the offence tally looks.
+ *
+ * Twelve weeks: long enough that a run of three is visibly a run, short enough
+ * that it is all inside the period the publish machinery has existed for.
+ * assessPeriods judges on publications alone, so a roster from before that
+ * would read as missing — see the note on it.
+ */
+export const TALLY_WEEKS = 12;
 
 /**
  * The role that is actually the head of a roster department, where one exists.
@@ -68,15 +80,14 @@ export interface DeptStanding {
   assessment: RosterAssessment;
   recipients: RosterRecipient[];
   /**
-   * How many of the three preceding months had no publication in by their own
-   * deadline.
+   * How often this department has failed over the trailing TALLY_WEEKS weeks.
    *
-   * Computed from publications alone, which is why it is named as a count of
-   * months rather than presented as a verdict: a department whose rows were
-   * published before this machinery existed would show here, and the letter
-   * only ever uses it to say "a pattern usually means something structural".
+   * Derived from the publications already on file rather than from a counter
+   * incremented when a chase is sent: a counter would count chases rather than
+   * failures, and would start at zero on the day it shipped. This is what the
+   * chase letter quotes, so it states counts and never characterises them.
    */
-  priorLateMonths: number;
+  tally: OffenceTally;
   /** Set when there is nobody at all to write to. */
   nobodyToWriteTo: boolean;
   /**
@@ -107,12 +118,10 @@ export function previousMonth(month: string): string {
  * one. A per-department loop of queries would be twelve round trips to answer
  * one screen.
  */
-export async function collectRosterStandings(month: string, today?: string): Promise<{
-  period: RosterPeriod;
-  departments: DeptStanding[];
-} | null> {
-  const period = monthPeriod(month);
-  if (!period) return null;
+export async function collectRosterStandings(
+  period: RosterPeriod,
+  today?: string,
+): Promise<{ period: RosterPeriod; departments: DeptStanding[] } | null> {
 
   const now = today ?? watToday();
   const slugs = ROSTER_DEPARTMENTS.map((d) => d.slug);
@@ -122,7 +131,11 @@ export async function collectRosterStandings(month: string, today?: string): Pro
   // it: a fortnightly roster published for the 28th of one month to the 10th
   // of the next is a real submission for both, and an equality test on
   // periodStart would report the second month as empty.
-  const windowStart = new Date(`${previousMonth(month)}-01T00:00:00.000Z`);
+  // Reaches back TALLY_WEEKS so the same query answers both the period being
+  // viewed and the trailing record, rather than a second round trip per
+  // department.
+  const tallyWeeks = trailingWeeks(period.end, TALLY_WEEKS);
+  const windowStart = new Date(`${tallyWeeks[0].start}T00:00:00.000Z`);
   const periodEnd = new Date(`${period.end}T23:59:59.999Z`);
 
   const [pubs, draftRows, publishedRows, supervisors] = await Promise.all([
@@ -220,6 +233,12 @@ export async function collectRosterStandings(month: string, today?: string): Pro
         rowCount: p.rowCount,
       }));
 
+    const spans: PublicationSpan[] = mine.map((p) => ({
+      publishedDay: new Date(p.publishedAt.getTime() + 60 * 60_000).toISOString().slice(0, 10),
+      periodStart: dayOf(p.periodStart),
+      periodEnd: dayOf(p.periodEnd),
+    }));
+
     const assessment = assessRoster({
       period,
       publications: forThis,
@@ -265,12 +284,7 @@ export async function collectRosterStandings(month: string, today?: string): Pro
       category: d.category,
       assessment,
       recipients,
-      priorLateMonths: priorLateCount(month, mine.map((p) => ({
-        start: dayOf(p.periodStart),
-        end: dayOf(p.periodEnd),
-        publishedDay: new Date(p.publishedAt.getTime() + 60 * 60_000)
-          .toISOString().slice(0, 10),
-      }))),
+      tally: offenceTally(assessPeriods(tallyWeeks, spans, now)),
       nobodyToWriteTo: recipients.length === 0,
       /** Set when a role fallback would have named a whole cadre. */
       candidateCount: tooManyToName ? managers.length : 0,

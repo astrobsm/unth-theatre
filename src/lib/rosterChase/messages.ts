@@ -64,8 +64,12 @@ export interface RosterChaseInput {
   deptLabel: string;
   period: RosterPeriod;
   assessment: RosterAssessment;
-  /** How many months in a row this has happened, where it is known. */
-  priorLateMonths?: number | null;
+  /**
+   * How many periods in a row this has already happened, not counting the one
+   * being written about. Period-neutral since the board went weekly: the same
+   * message is now sent about a week far more often than about a month.
+   */
+  priorConsecutive?: number | null;
   /** Words from theatre management, added on the screen. */
   note?: string | null;
 }
@@ -142,11 +146,11 @@ export function buildRosterChase(input: RosterChaseInput): string {
   }
 
   // ── A pattern, where there is one ────────────────────────────────────
-  if (input.priorLateMonths && input.priorLateMonths > 0) {
+  if (input.priorConsecutive && input.priorConsecutive > 0) {
     lines.push(
       '',
-      `This is the ${input.priorLateMonths + 1}${input.priorLateMonths + 1 === 2 ? 'nd' : input.priorLateMonths + 1 === 3 ? 'rd' : 'th'} `
-      + `month in a row. We mention it not to keep a score but because a pattern usually `
+      `This is the ${input.priorConsecutive + 1}${input.priorConsecutive + 1 === 2 ? 'nd' : input.priorConsecutive + 1 === 3 ? 'rd' : 'th'} `
+      + `time in a row. We mention it not to keep a score but because a pattern usually `
       + `means something structural — a list you are waiting on, somebody on leave, an `
       + `account that cannot reach the screen — and those are things we can actually `
       + `help with.`,

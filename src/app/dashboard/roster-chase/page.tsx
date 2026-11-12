@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, CalendarClock, Check, Eye, FileClock, Loader2, MessageCircle, Send,
+  AlertTriangle, CalendarClock, Check, Eye, FileClock, FileText, Loader2, MessageCircle, Send,
   UserPlus,
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
@@ -47,14 +47,18 @@ interface Dept {
   draftRows: number;
   publishedRows: number;
   notYetDue: boolean;
-  priorLateMonths: number;
+  tally: {
+    periods: number; late: number; missing: number; onTime: number;
+    failures: number; runningStreak: number; worstStreak: number; totalDaysLate: number;
+  };
   nobodyToWriteTo: boolean;
   candidateCount: number;
   recipients: Recipient[];
 }
 
 interface Board {
-  month: string;
+  periodKey: string;
+  periodKind: 'week' | 'month';
   today: string;
   period: { start: string; end: string; label: string };
   counts: Record<string, number>;
@@ -76,7 +80,10 @@ const roleWords = (role: string | null) => (role || '')
 
 export default function RosterChasePage() {
   const [board, setBoard] = useState<Board | null>(null);
-  const [month, setMonth] = useState('');
+  // The board opens on THIS WEEK. It used to open on the calendar month,
+  // which is how a department with no roster for the coming week could sit on
+  // this screen looking up to date.
+  const [weekStart, setWeekStart] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [result, setResult] = useState('');
@@ -96,18 +103,18 @@ export default function RosterChasePage() {
     { name: string; href: string | null; alreadySent: boolean }[]
   >([]);
 
-  const load = useCallback(async (m?: string) => {
+  const load = useCallback(async (w?: string) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/roster-chase${m ? `?month=${m}` : ''}`, { cache: 'no-store' });
+      const res = await fetch(`/api/roster-chase${w ? `?week=${w}` : ''}`, { cache: 'no-store' });
       const d = await res.json();
       if (!res.ok) {
         setError(d.error ?? 'Could not read the board.');
         return;
       }
       setBoard(d);
-      setMonth(d.month);
+      setWeekStart(d.period?.start ?? '');
     } catch {
       setError('Could not read the board.');
     } finally {
@@ -117,8 +124,17 @@ export default function RosterChasePage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const act = async (dept: Dept, asPreview: boolean, personId?: string) => {
-    setBusy(`${dept.slug}-${asPreview ? 'p' : 's'}-${personId ?? 'all'}`);
+  /** Step a YYYY-MM-DD by whole days. Noon, so no offset can cross a date. */
+  const shiftWeek = (day: string, by: number): string => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+    if (!m) return day;
+    const t = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12));
+    t.setUTCDate(t.getUTCDate() + by);
+    return t.toISOString().slice(0, 10);
+  };
+
+  const act = async (dept: Dept, asPreview: boolean, personId?: string, asLetter = false) => {
+    setBusy(`${dept.slug}-${asLetter ? 'l' : asPreview ? 'p' : 's'}-${personId ?? 'all'}`);
     setError('');
     setResult('');
     setHandoff([]);
@@ -127,8 +143,8 @@ export default function RosterChasePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          month, dept: dept.slug, personId: personId ?? null,
-          note: note || null, preview: asPreview,
+          week: weekStart, dept: dept.slug, personId: personId ?? null,
+          note: note || null, preview: asPreview, letter: asLetter,
         }),
       });
       const d = await res.json();
@@ -168,7 +184,7 @@ export default function RosterChasePage() {
       const first = outgoing.find((o) => o.href);
       if (first?.href) window.open(first.href, '_blank', 'noopener,noreferrer');
 
-      await load(month);
+      await load(weekStart);
     } catch {
       setError('Could not do that.');
     } finally {
@@ -191,13 +207,33 @@ export default function RosterChasePage() {
             </p>
           </div>
         </div>
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => { setMonth(e.target.value); void load(e.target.value); }}
-          className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-          aria-label="Which month"
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void load(shiftWeek(weekStart, -7))}
+            className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+            aria-label="Previous week"
+          >←</button>
+          <input
+            type="date"
+            value={weekStart}
+            onChange={(e) => { setWeekStart(e.target.value); void load(e.target.value); }}
+            className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
+            aria-label="Any day in the week to show"
+            title="Any day in the week — the board snaps to its Monday"
+          />
+          <button
+            type="button"
+            onClick={() => void load(shiftWeek(weekStart, 7))}
+            className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+            aria-label="Next week"
+          >→</button>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-lg border border-gray-300 px-2 py-2 text-xs font-medium"
+          >This week</button>
+        </div>
       </div>
 
       {board && (
@@ -274,8 +310,15 @@ export default function RosterChasePage() {
                 <p className="mt-0.5 text-xs text-gray-700">
                   {d.draftRows > 0 && `${d.draftRows} draft rows · `}
                   {d.publishedRows} published rows
-                  {d.priorLateMonths > 0 && ' · the previous month was late too'}
                 </p>
+                {d.tally && d.tally.failures > 0 && (
+                  <p className="mt-0.5 text-xs font-medium text-red-700">
+                    Record: {d.tally.failures} of the last {d.tally.periods} weeks
+                    {d.tally.missing > 0 && ` · ${d.tally.missing} with no roster`}
+                    {d.tally.late > 0 && ` · ${d.tally.late} late`}
+                    {d.tally.runningStreak > 1 && ` · ${d.tally.runningStreak} weeks running`}
+                  </p>
+                )}
                 {d.recipients.length > 0 ? (
                   <p className="mt-1.5 text-xs text-gray-600">
                     {d.recipients.map((r) => (
@@ -323,6 +366,24 @@ export default function RosterChasePage() {
                       : <Send className="h-3.5 w-3.5" />}
                     Write to {d.recipients.length === 1 ? 'the head' : `all ${d.recipients.length}`}
                   </button>
+                  {/* The letter is the instrument for when asking has stopped
+                      working, so it is offered once there is a record to cite
+                      — and not before, because a formal letter about a first
+                      oversight is how a chase loses its weight. */}
+                  {d.tally && d.tally.failures > 1 && (
+                    <button
+                      type="button"
+                      disabled={busy !== ''}
+                      onClick={() => void act(d, true, undefined, true)}
+                      className="flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"
+                      title={`${d.tally.failures} failures in the last ${d.tally.periods} weeks`}
+                    >
+                      {busy === `${d.slug}-l-all`
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <FileText className="h-3.5 w-3.5" />}
+                      Chase letter
+                    </button>
+                  )}
                 </div>
               )}
             </div>

@@ -168,13 +168,13 @@ describe('the letter to the head of department', () => {
     period: NOV, publications: [], draftRows: 0, publishedRows: 0, today: '2026-11-05',
   });
 
-  const letter = (assessment: typeof late, priorLateMonths = 0) => buildRosterChase({
+  const letter = (assessment: typeof late, priorConsecutive = 0) => buildRosterChase({
     personName: 'Dr Okafor',
     roleLabel: 'Consultant Anaesthetist',
     deptLabel: 'Anaesthetic Technicians',
     period: NOV,
     assessment,
-    priorLateMonths,
+    priorConsecutive,
   });
 
   it('addresses them by role and names the department and month', () => {
@@ -225,9 +225,14 @@ describe('the letter to the head of department', () => {
     expect(m).toMatch(/A word from you is worth more/i);
   });
 
-  it('mentions a repeated month as a structural question, not a score', () => {
+  it('mentions a repeat as a structural question, not a score', () => {
+    // "month in a row" became "time in a row" when the board went weekly:
+    // this message is now sent about a week far more often than about a
+    // month, and naming the wrong unit in a chase is the kind of detail the
+    // person being chased notices and answers instead of the roster.
     const m = letter(missing, 1);
-    expect(m).toContain('2nd month in a row');
+    expect(m).toContain('2nd time in a row');
+    expect(m).not.toContain('month in a row');
     expect(m).toMatch(/not to keep a score/i);
     expect(m).toMatch(/something structural/i);
   });
