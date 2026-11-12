@@ -123,6 +123,15 @@ export default function RosterSupervisorsPage() {
         A supervisor may edit, bulk-upload and publish the duty roster for the one department named
         here. Nothing else about their account changes.
       </p>
+      {/* Naming a supervisor and chasing one who has not delivered are the two
+          halves of the same job, and the second half was being looked for on
+          this page. */}
+      <Link
+        href="/dashboard/roster-chase"
+        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+      >
+        See whose roster is late, and chase them
+      </Link>
 
       {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 

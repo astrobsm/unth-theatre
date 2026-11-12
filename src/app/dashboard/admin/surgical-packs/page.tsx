@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import {
   Package, Pill, Plus, Trash2, Save, Sparkles, Loader2, CheckCircle2, XCircle, Pencil, X,
+  Search,
 } from 'lucide-react';
 
 type Kind = 'CONSUMABLE' | 'PHARMACY';
@@ -51,6 +52,7 @@ export default function SurgicalPacksAdminPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,9 +152,45 @@ export default function SurgicalPacksAdminPage() {
     return <div className="text-center py-8 text-red-600">You do not have permission to manage surgical packs.</div>;
   }
 
-  const grouped = SUBSPECIALTIES.map((s) => ({ sub: s, list: packs.filter((p) => p.subspecialty === s) }))
+  // WHY A COUNT AND A SEARCH BOX, ON A PAGE THAT ALREADY LISTS EVERYTHING.
+  // The list is grouped by subspecialty and runs to several screens, so after
+  // a batch of packs is created there is no way to tell from the top of the
+  // page whether they all arrived — you scroll, you see General Surgery, and
+  // you conclude the rest are missing. The totals answer that without
+  // scrolling, and the search answers "did MY packs land" directly.
+  const ANAESTHESIA_PREFIX = 'ANAESTHESIA::';
+  const q = query.trim().toLowerCase();
+  const matches = (p: Pack) =>
+    !q
+    || p.name.toLowerCase().includes(q)
+    || p.subspecialty.toLowerCase().includes(q)
+    || (p.description || '').toLowerCase().includes(q);
+  const visible = packs.filter(matches);
+
+  const grouped = SUBSPECIALTIES.map((s) => ({ sub: s, list: visible.filter((p) => p.subspecialty === s) }))
     .filter((g) => g.list.length > 0);
-  const otherPacks = packs.filter((p) => !SUBSPECIALTIES.includes(p.subspecialty));
+
+  // Anaesthesia packs are filed as "ANAESTHESIA::<technique>" so the
+  // pre-anaesthetic review can find them. Shown raw they all fell into one
+  // bucket called "Other", which is where seventy packs went to hide.
+  const anaesthesiaGroups = Array.from(
+    new Set(visible.filter((p) => p.subspecialty.startsWith(ANAESTHESIA_PREFIX))
+      .map((p) => p.subspecialty))
+  ).sort().map((sub) => ({
+    sub: `Anaesthesia — ${sub.slice(ANAESTHESIA_PREFIX.length)}`,
+    list: visible.filter((p) => p.subspecialty === sub),
+  }));
+
+  const otherPacks = visible.filter(
+    (p) => !SUBSPECIALTIES.includes(p.subspecialty) && !p.subspecialty.startsWith(ANAESTHESIA_PREFIX)
+  );
+
+  const totals = {
+    all: packs.length,
+    active: packs.filter((p) => p.isActive).length,
+    draft: packs.filter((p) => !p.isActive).length,
+    shown: visible.length,
+  };
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -165,12 +203,33 @@ export default function SurgicalPacksAdminPage() {
             Named consumable and pharmacy packs surgeons apply at booking. Only active packs are
             offered. The mandatory base pack is separate and always attaches.
           </p>
+          {!loading && (
+            <p className="mt-1 text-sm text-gray-700">
+              <strong>{totals.all}</strong> pack{totals.all === 1 ? '' : 's'} in all ·{' '}
+              <span className="text-green-700">{totals.active} active</span> ·{' '}
+              <span className="text-gray-500">{totals.draft} draft</span>
+              {q && <> · showing <strong>{totals.shown}</strong> for “{query.trim()}”</>}
+            </p>
+          )}
         </div>
-        {!draft && (
-          <button onClick={startNew} className="btn-primary inline-flex items-center gap-2">
-            <Plus className="w-4 h-4" /> New pack
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find a pack or subspecialty…"
+              aria-label="Search packs"
+              className="input-field w-56 pl-8"
+            />
+          </div>
+          {!draft && (
+            <button onClick={startNew} className="btn-primary inline-flex items-center gap-2">
+              <Plus className="w-4 h-4" /> New pack
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Editor */}
@@ -288,11 +347,18 @@ export default function SurgicalPacksAdminPage() {
         <div className="flex items-center gap-2 text-gray-500"><Loader2 className="w-5 h-5 animate-spin" /> Loading…</div>
       ) : packs.length === 0 ? (
         <p className="text-gray-500">No packs yet. Create one to get started.</p>
+      ) : visible.length === 0 ? (
+        <p className="text-gray-500">
+          No pack matches “{query.trim()}”. {totals.all} pack{totals.all === 1 ? '' : 's'} exist —
+          clear the search to see them.
+        </p>
       ) : (
         <div className="space-y-6">
-          {[...grouped, ...(otherPacks.length ? [{ sub: 'Other', list: otherPacks }] : [])].map((g) => (
+          {[...grouped, ...anaesthesiaGroups, ...(otherPacks.length ? [{ sub: 'Other', list: otherPacks }] : [])].map((g) => (
             <div key={g.sub}>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{g.sub}</h2>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                {g.sub} <span className="font-normal normal-case">({g.list.length})</span>
+              </h2>
               <div className="space-y-2">
                 {g.list.map((p) => (
                   <div key={p.id} className="card flex items-center gap-3 py-3">

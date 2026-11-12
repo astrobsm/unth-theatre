@@ -235,6 +235,15 @@ export default function RosterPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Duty Roster Management</h1>
           <p className="text-gray-600 mt-2">View published duty rosters. Submit and publish them from the department rosters below.</p>
         </div>
+        {/* The chase lives on its own page and was being hunted for from here.
+            A link costs nothing and is where somebody thinking about rosters
+            looks first. */}
+        <Link
+          href="/dashboard/roster-chase"
+          className="inline-flex items-center gap-2 self-start rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+        >
+          Chase a department whose roster is late
+        </Link>
       </div>
 
       {/* Department rosters — the ONLY submission route.

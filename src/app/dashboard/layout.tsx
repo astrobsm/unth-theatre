@@ -453,7 +453,12 @@ export default function DashboardLayout({
     // Beside Late Bookings on purpose: the same question asked of a case
     // rather than of a booking time, and the two are read together.
     menuItems.push({ href: '/dashboard/case-chase', icon: ClipboardCheck, label: 'Cases Awaiting Paperwork', badge: 'NEW' });
-    menuItems.push({ href: '/dashboard/roster-chase', icon: FileClock, label: 'Roster Submissions', badge: 'NEW' });
+    // "Roster Submissions" is what the page shows; "Chase Late Rosters" is what
+    // somebody is looking for when they open the menu. Renamed after an admin
+    // reported being unable to find anywhere to chase supervisors who had not
+    // uploaded — while this item was on screen, under a name that reads as a
+    // record of submissions rather than a way to go after the missing ones.
+    menuItems.push({ href: '/dashboard/roster-chase', icon: FileClock, label: 'Chase Late Rosters', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit', icon: FileWarning, label: 'Theatre Audit', badge: 'AUDIT' });
     menuItems.push({ href: '/dashboard/theatre-audit/conference', icon: Gavel, label: 'Theatre Audit Conference', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/theatre-audit/pool', icon: Gavel, label: 'Weekly Audit Pool', badge: 'NEW' });
