@@ -28,6 +28,7 @@ import { CATALOGUE } from '../../src/lib/procedures/catalogue';
 
 const REPO = path.join(__dirname, '..', '..');
 const SEED = fs.readFileSync(path.join(REPO, 'scripts', 'seed-ophthalmology-packs.js'), 'utf8');
+const ACTIVATE = fs.readFileSync(path.join(REPO, 'scripts', 'activate-ophthalmology-packs.js'), 'utf8');
 
 const procedurePacks = OPHTHALMOLOGY_PACKS.filter((p) => !p.subspecialty.startsWith(ANAESTHESIA_PREFIX));
 const anaesthesiaPacks = OPHTHALMOLOGY_PACKS.filter((p) => p.subspecialty.startsWith(ANAESTHESIA_PREFIX));
@@ -64,6 +65,42 @@ describe('nothing here is live until somebody says so', () => {
     // and a near-miss is an empty picker with no error anywhere.
     expect(SEED).toContain('REFUSING TO SEED');
     expect(SEED).toContain("known.has('Ophthalmology')");
+  });
+});
+
+describe('activating is a separate decision from seeding', () => {
+  it('lives in its own script, which is the only one that can flip the flag', () => {
+    // Writing a draft and deciding it is fit to hand a patient are two
+    // decisions by two people. One script that did both would mean the second
+    // one stops being made.
+    expect(ACTIVATE).toContain('isActive: true');
+    expect(ACTIVATE).toContain('--write');
+  });
+
+  it('only ever touches packs this repository defines', () => {
+    // A pack somebody wrote by hand is not this script's business.
+    expect(ACTIVATE).toContain('wantedKeys.has(key(r))');
+    expect(ACTIVATE).toContain('OPHTHALMOLOGY_PACKS');
+  });
+
+  it('leaves a pack that is already active alone', () => {
+    // So a second run cannot quietly revert an edit somebody made after the
+    // first one.
+    expect(ACTIVATE).toContain('mine.filter((r) => !r.isActive)');
+  });
+
+  it('holds back the two sets that shadow packs already in use', () => {
+    // "General anaesthesia (adult eye)" beside the active "General" puts two
+    // things that read the same in front of an anaesthetist starting a list.
+    expect(ACTIVATE).toContain('SHADOWING');
+    expect(ACTIVATE).toContain('--include-ga');
+    expect(ACTIVATE).toContain('General anaesthesia (adult eye)');
+    expect(ACTIVATE).toContain('General anaesthesia (paediatric eye)');
+  });
+
+  it('does nothing without --write', () => {
+    expect(ACTIVATE).toContain('if (!WRITE)');
+    expect(ACTIVATE).toContain('Dry run.');
   });
 });
 
