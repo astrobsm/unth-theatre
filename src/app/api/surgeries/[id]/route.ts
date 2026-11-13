@@ -231,6 +231,15 @@ export async function PUT(
       depositAmount,
       depositConfirmed,
       patientWard,
+      // INPATIENT OR DAY CASE, amendable after booking.
+      //
+      // It was captured at booking and nowhere else, so a case already on
+      // the list could not be corrected at all — and since the booking form
+      // defaulted it to inpatient until today, EVERY case on the list is
+      // marked inpatient whether or not anybody decided that. Without this
+      // the only way to mark a day case already booked for tomorrow would be
+      // to cancel the case and book it again.
+      isDayCase,
     } = body;
 
     // ── Double-booking guard, on the path that now does the allocating ──────
@@ -368,6 +377,10 @@ export async function PUT(
     if (needStereo !== undefined) updateData.needStereo = needStereo;
     if (needMontrellMattress !== undefined) updateData.needMontrellMattress = needMontrellMattress;
     if (needStirups !== undefined) updateData.needStirups = needStirups;
+    // Coerced, not passed through: this field decides whether an
+    // anaesthetist walks to a ward, and a string "false" from a form post
+    // is truthy. Only an explicit true means day case.
+    if (isDayCase !== undefined) updateData.isDayCase = isDayCase === true;
     if (needPneumaticTourniquet !== undefined) updateData.needPneumaticTourniquet = needPneumaticTourniquet;
     if (needCArm !== undefined) updateData.needCArm = needCArm;
     if (needMicroscope !== undefined) updateData.needMicroscope = needMicroscope;

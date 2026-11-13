@@ -39,6 +39,8 @@ const FORM = read('src/app/dashboard/surgeries/new/page.tsx');
 const SCHEDULE = read('src/app/dashboard/surgeries/page.tsx');
 const FLAG = read('src/components/DayCaseFlag.tsx');
 const DRAFT = read('src/lib/booking/draftState.ts');
+const AMEND_API = read('src/app/api/surgeries/[id]/route.ts');
+const EDIT = read('src/app/dashboard/surgeries/[id]/edit/page.tsx');
 
 /** Source with comment lines removed, for assertions about absence. */
 const code = (src: string) =>
@@ -266,5 +268,51 @@ describe('the schedule page says which it is, under the name', () => {
     expect(admissionLabel(null)).toBe('Inpatient');
     const note = FLAG.slice(FLAG.indexOf('export function InpatientNote'));
     expect(note).toContain('Inpatient');
+  });
+});
+
+describe('a case already on the list can be corrected', () => {
+  it('is accepted by the amend route at all', () => {
+    // It was captured at booking and nowhere else. Since the booking form
+    // defaulted it to inpatient until now, EVERY case already on the list is
+    // marked inpatient whether or not anybody decided that — and without this
+    // the only way to mark a day case booked for tomorrow would be to cancel
+    // the case and book it again.
+    expect(AMEND_API).toContain('isDayCase,');
+    expect(AMEND_API).toContain('updateData.isDayCase');
+  });
+
+  it('coerces rather than passing the body value through', () => {
+    // This field decides whether somebody walks across the hospital, and the
+    // string "false" from a form post is truthy.
+    expect(AMEND_API).toContain('updateData.isDayCase = isDayCase === true;');
+  });
+
+  it('only writes it when the caller actually sent it', () => {
+    // An unrelated edit — a remark, a ward move — must not silently reset the
+    // admission type to inpatient by omitting it.
+    expect(AMEND_API).toContain('if (isDayCase !== undefined) updateData.isDayCase');
+  });
+
+  it('is shown and sent by the edit screen', () => {
+    expect(EDIT).toContain('setAdmissionType(admissionTypeOf(s.isDayCase));');
+    expect(EDIT).toContain('isDayCase: isDayCaseFrom(admissionType),');
+    // From the shared list, so the wording cannot drift from the booking form.
+    expect(EDIT).toContain('ADMISSION_TYPE_OPTIONS.map');
+  });
+
+  it('shows a saved case as the answer the column holds, with no blank option', () => {
+    // Unlike the booking form there is no unanswered state here: the case is
+    // saved, so the column holds a true or a false. A blank option would
+    // invite somebody to clear a field that cannot be empty.
+    expect(EDIT).toContain("useState<AdmissionType>('INPATIENT')");
+    const select = EDIT.slice(EDIT.indexOf('id="admissionType"'), EDIT.indexOf('id="admissionType"') + 700);
+    expect(select).not.toContain('<option value="">');
+  });
+
+  it('names the change in the audit log in words', () => {
+    // "isDayCase: false -> true" in a history nobody can read is a change
+    // nobody can review.
+    expect(EDIT).toContain("isDayCase: 'Inpatient / day case',");
   });
 });

@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  ADMISSION_TYPE_OPTIONS,
+  admissionTypeOf,
+  isDayCaseFrom,
+  type AdmissionType,
+} from '@/lib/booking/admissionType';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import ScheduleConflictDialog from '@/components/scheduling/ScheduleConflictDialog';
@@ -84,6 +90,11 @@ export default function EditSurgeryPage() {
 
   // Patient ward (the patient may be moved to a different ward after booking)
   const [patientWard, setPatientWard] = useState('');
+  // Inpatient or day case. Unlike the booking form there is no unanswered
+  // state here: the case is saved, so the column holds a true or a false
+  // and this screen shows which and lets it be corrected.
+  const [admissionType, setAdmissionType] = useState<AdmissionType>('INPATIENT');
+  const [originalAdmission, setOriginalAdmission] = useState<AdmissionType>('INPATIENT');
   const [patientName, setPatientName] = useState('');
   const [originalWard, setOriginalWard] = useState('');
 
@@ -122,6 +133,9 @@ export default function EditSurgeryPage() {
         setNeedStereo(!!s.needStereo);
         setNeedStirups(!!s.needStirups);
         setNeedMontrellMattress(!!s.needMontrellMattress);
+
+        setAdmissionType(admissionTypeOf(s.isDayCase));
+        setOriginalAdmission(admissionTypeOf(s.isDayCase));
 
         const ward = s.patient?.ward || '';
         setPatientWard(ward);
@@ -180,6 +194,7 @@ export default function EditSurgeryPage() {
           needStirups,
           needMontrellMattress,
           patientWard,
+          isDayCase: isDayCaseFrom(admissionType),
         }),
       });
       if (!res.ok) {
@@ -316,6 +331,37 @@ export default function EditSurgeryPage() {
                   <option value={patientWard}>{patientWard}</option>
                 )}
               </select>
+            </div>
+            {/* INPATIENT OR DAY CASE — in the ward card, because it is the
+                same question asked one step earlier: whether there is a bed
+                at all. A day case's ward is where they will be admitted in
+                the morning, not where they are tonight, and the theatre list
+                relabels it accordingly. */}
+            <div>
+              <label className="label" htmlFor="admissionType">Inpatient or day case</label>
+              <select
+                id="admissionType"
+                value={admissionType}
+                onChange={(e) => setAdmissionType(e.target.value as AdmissionType)}
+                className="input-field"
+              >
+                {ADMISSION_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              {admissionType !== originalAdmission && (
+                <p className="mt-1 text-xs text-amber-700">
+                  {admissionType === 'DAY_CASE'
+                    ? 'Will be flagged DAY CASE on the theatre list and the anaesthetist\u2019s board.'
+                    : 'Will stop being flagged as a day case.'}
+                </p>
+              )}
+              {admissionType === 'DAY_CASE' && admissionType === originalAdmission && (
+                <p className="mt-1 text-xs text-amber-700">
+                  Flagged DAY CASE on the theatre list. The ward above is where
+                  the patient is admitted on the morning of surgery.
+                </p>
+              )}
             </div>
             {patientWard !== originalWard && (
               <div className="flex items-end">
@@ -530,6 +576,7 @@ const FIELD_LABELS: Record<string, string> = {
   location: 'Location',
   theatreId: 'Theatre',
   patientWard: 'Patient ward',
+  isDayCase: 'Inpatient / day case',
   unit: 'Surgical unit',
   subspecialty: 'Subspecialty',
   surgeonId: 'Surgeon',
