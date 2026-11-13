@@ -109,4 +109,24 @@ describe('the ward line, which is the one that misleads', () => {
     expect(wardAt).toBeGreaterThan(-1);
     expect(flagAt).toBeLessThan(wardAt);
   });
+
+  it('sits directly under the patient name, not further down the cell', () => {
+    // Asked for explicitly: the patient column is what an anaesthetist reads
+    // to decide who they are going to see, so the flag has to be part of
+    // reading the NAME rather than something noticed below the folder number.
+    const flagAt = SCHEDULE.indexOf('{surgery.isDayCase && <DayCaseFlag');
+    const identifierAt = SCHEDULE.indexOf('{label.identifier}');
+    expect(identifierAt).toBeGreaterThan(-1);
+    expect(flagAt).toBeLessThan(identifierAt);
+
+    const preopFlagAt = PREOP.indexOf('{surgery.isDayCase && <DayCaseFlag');
+    const preopFolderAt = PREOP.indexOf('{surgery.patient.folderNumber}');
+    expect(preopFolderAt).toBeGreaterThan(-1);
+    expect(preopFlagAt).toBeLessThan(preopFolderAt);
+
+    const boardFlagAt = BOARD.indexOf('{c.isDayCase && <DayCaseFlag');
+    const boardFolderAt = BOARD.indexOf('{c.folderNumber}');
+    expect(boardFolderAt).toBeGreaterThan(-1);
+    expect(boardFlagAt).toBeLessThan(boardFolderAt);
+  });
 });

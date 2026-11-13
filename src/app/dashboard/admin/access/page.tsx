@@ -31,8 +31,12 @@ interface DetailResponse {
   modules: ModuleEntry[];
 }
 
-function formatRole(role: string) {
-  return role.replace(/_/g, ' ');
+function formatRole(role: string | null | undefined) {
+  // Tolerant because the list it is called over is built from data, not from
+  // an enum: the same shape crashed /dashboard/staff-availability in
+  // production ("Cannot read properties of undefined (reading 'replace')"),
+  // and the whole page went blank rather than the one row.
+  return (role || '').replace(/_/g, ' ');
 }
 
 export default function ModuleAccessAdminPage() {
@@ -119,7 +123,14 @@ export default function ModuleAccessAdminPage() {
     });
   }, [users, roleFilter, search]);
 
-  const allRoles = useMemo(() => Array.from(new Set(users.map((u) => u.role))).sort(), [users]);
+  // Filtered: a user row without a role would otherwise put `undefined` in a
+  // list that is mapped into formatRole and used as a React key.
+  const allRoles = useMemo(
+    () => Array.from(
+      new Set(users.map((u) => u.role).filter((r): r is string => typeof r === 'string' && r !== '')),
+    ).sort(),
+    [users],
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, ModuleEntry[]>();

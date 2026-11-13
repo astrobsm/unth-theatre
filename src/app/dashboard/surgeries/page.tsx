@@ -1452,18 +1452,20 @@ export default function SurgeriesPage() {
                                 <ContactName type="patient" id={surgery.patient.id} name={label.name} />
                               )}
                             </div>
+                            {/* DIRECTLY UNDER THE NAME, in the patient column.
+                                That is the cell an anaesthetist reads to decide
+                                who they are going to see, and the flag has to be
+                                part of reading the name rather than something
+                                found further down the cell. The ward line below
+                                is the one that misleads — on a day case it is
+                                where the patient will be admitted in the
+                                morning, not where they are tonight — so it sits
+                                after the flag and is relabelled. */}
+                            {surgery.isDayCase && <DayCaseFlag className="mt-1" />}
                             <div className={label.notLoaded ? 'text-xs text-amber-600' : 'text-xs text-gray-500'}>
                               {label.identifier}
                               {ageSex && <span className="ml-1 text-gray-400">· {ageSex}</span>}
                             </div>
-                            {/* THE WARD LINE IS THE ONE THAT MISLEADS. On a
-                                day case it is where the patient will be
-                                admitted on the morning, not where they are
-                                tonight — and read at speed it is an
-                                instruction to walk there. So the flag goes
-                                above it and the ward is demoted to what it
-                                actually means. */}
-                            {surgery.isDayCase && <DayCaseFlag className="mt-1.5" />}
                             {surgery.patient?.ward && (
                               <div className="text-xs text-gray-500">
                                 {surgery.isDayCase ? 'Admitting ward' : 'Ward'}: {surgery.patient.ward}

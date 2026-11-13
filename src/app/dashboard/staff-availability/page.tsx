@@ -21,7 +21,14 @@ import {
 } from '@/lib/staffLocation';
 
 interface Staff {
-  id: string; fullName: string; role: string; department: string | null; staffId: string | null;
+  id: string; fullName: string;
+  /**
+   * Non-null in the database, and still optional here: the page crashed in
+   * production on a row that reached it without one, and a type that insists
+   * otherwise only stops the compiler from helping.
+   */
+  role?: string | null;
+  department: string | null; staffId: string | null;
   phoneNumber: string | null; extension: string | null;
   availabilityStatus: string | null; availabilityNote: string | null; currentLocation: string | null; availabilityUpdatedAt: string | null;
   currentLatitude: number | null; currentLongitude: number | null; locationAccuracyM: number | null;
@@ -134,7 +141,26 @@ export default function StaffAvailabilityBoard() {
   }, [fix, myRow]);
   useEffect(() => { if (myRow) { setMyStatus(myRow.availabilityStatus ?? ''); setMyLoc(myRow.currentLocation ?? ''); setMyNote(myRow.availabilityNote ?? ''); } }, [myRow]);
 
-  const roles = useMemo(() => Array.from(new Set(staff.map((s) => s.role))).sort(), [staff]);
+  /**
+   * The roles present on the board, for the filter.
+   *
+   * FILTERED, because this list is mapped straight into `.replace()` and a row
+   * that arrives without a role puts `undefined` in it — which throws inside
+   * the map and takes the WHOLE PAGE down, not the one row. That is what
+   * happened in production: "Cannot read properties of undefined (reading
+   * 'replace')", and the board showed nothing at all.
+   *
+   * User.role is non-null in the schema, so the row should be impossible; it
+   * is dropped here anyway. A filter missing one entry is a smaller thing than
+   * a blank screen, and a page that renders only when every row is perfect is
+   * a page that will go blank again for the next reason.
+   */
+  const roles = useMemo(
+    () => Array.from(
+      new Set(staff.map((s) => s.role).filter((r): r is string => typeof r === 'string' && r !== '')),
+    ).sort(),
+    [staff],
+  );
 
   const saveMine = async () => {
     if (!myStatus) { setMsg('Pick a status.'); return; }
@@ -311,7 +337,7 @@ export default function StaffAvailabilityBoard() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium text-gray-900 truncate">{s.fullName}{s.id === me && <span className="text-[10px] text-emerald-600 ml-1">(you)</span>}</div>
-                    <div className="text-xs text-gray-500">{s.role.replace(/_/g, ' ')}{s.staffId ? ` · ${s.staffId}` : ''}</div>
+                    <div className="text-xs text-gray-500">{s.role ? s.role.replace(/_/g, ' ') : 'Role not recorded'}{s.staffId ? ` · ${s.staffId}` : ''}</div>
                   </div>
                   <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border flex-shrink-0 ${m.chip}`}>
                     <span className={`w-2 h-2 rounded-full ${m.dot}`} /> {m.label}

@@ -521,10 +521,10 @@ export default function PreOpReviewsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.scheduledTime || '—'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <div>{surgery.patient?.name || '—'}</div>
+                      {surgery.isDayCase && <DayCaseFlag className="mt-1" />}
                       {surgery.patient?.folderNumber && (
                         <div className="text-xs text-gray-500">{surgery.patient.folderNumber}</div>
                       )}
-                      {surgery.isDayCase && <DayCaseFlag className="mt-1.5" />}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{surgery.procedureName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.surgeon?.fullName || 'Not assigned'}</td>

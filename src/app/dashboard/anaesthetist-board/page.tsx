@@ -284,8 +284,8 @@ export default function AnaesthetistBoardPage() {
                 <div className="min-w-[14rem] flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-gray-900">{c.patientName}</span>
-                    {c.folderNumber && <span className="text-xs text-gray-500">{c.folderNumber}</span>}
                     {c.isDayCase && <DayCaseFlag compact />}
+                    {c.folderNumber && <span className="text-xs text-gray-500">{c.folderNumber}</span>}
                     {c.surgeryType === 'EMERGENCY' && (
                       <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-100 text-red-700">
                         Emergency
