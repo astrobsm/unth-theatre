@@ -14,11 +14,16 @@
 // deciding whose bed to walk to. Every screen an anaesthetist works from
 // omitted it, so the case looked like any other inpatient on the list.
 //
-// WHY THE LABEL ALONE IS NOT ENOUGH. "Day case" is a billing and discharge
-// term, and read quickly it says something about where the patient GOES
-// afterwards. The mistake being prevented is an assumption about where they
-// ARE NOW. So the flag carries the consequence in words — not on a ward,
-// arrives on the morning — because that is the sentence that stops the walk.
+// THE LABEL ALONE, BY DECISION. This used to spell out the consequence in
+// prose — not on a ward, comes in on the morning, do not go looking for a
+// bed — on the argument that "day case" is a discharge term and reads as a
+// statement about where the patient GOES rather than where they ARE.
+//
+// That argument lost to the table. Three lines of text in a patient cell
+// pushed the rows apart and distorted the theatre list, which is read by
+// scanning a column; it was reported and the prose was cut. The sentence
+// is still on the tooltip for anyone who wants it, and the amber badge is
+// loud enough to stop a reader on the row — which was the point.
 //
 // NOT A STATUS. This says nothing about whether the patient has arrived; it
 // says the case is one where they will not be on a ward the night before.
@@ -29,10 +34,14 @@
 import { Sun, AlertTriangle } from 'lucide-react';
 
 /**
- * The loud version: a band for a row on a list somebody walks away from.
+ * A one-line amber badge. Both forms say the same two words now that the
+ * sentence has gone; they differ only in weight, and the difference is worth
+ * keeping because the surfaces are different.
  *
- * `compact` is for places where the row is already dense — it keeps the
- * colour and the word and drops the sentence.
+ * Default: bordered, on a pale fill, with a warning triangle — for a list that
+ * somebody reads and then walks away from.
+ * `compact`: a solid chip — for the anaesthetist's board, where every row
+ * already carries several badges and a fourth border is noise.
  */
 export default function DayCaseFlag({
   compact = false,
@@ -49,21 +58,25 @@ export default function DayCaseFlag({
     );
   }
 
+  // ONE LINE, and inline rather than a block.
+  //
+  // It used to carry the sentence as well: "Not on a ward. The patient
+  // comes in on the morning of surgery - do not go looking for a bed."
+  // Asked for and removed: three lines of prose in a table cell pushed
+  // every row apart and distorted the list. A theatre list is read by
+  // scanning a column, and a warning that wrecks the column costs more
+  // than the words explain. The words survive in the tooltip.
+  //
+  // Inline-flex, so the badge cannot set a row
+  // height on its own.
   return (
-    <div
-      className={`flex items-start gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 px-2.5 py-1.5 ${className}`}
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border border-amber-500 bg-amber-100 px-1.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-amber-900 ${className}`}
+      title="Day case — the patient is not on a ward. They come in on the morning of surgery."
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-      <div className="min-w-0">
-        <p className="text-xs font-extrabold uppercase tracking-wide text-amber-900">
-          Day case
-        </p>
-        <p className="text-xs text-amber-900">
-          Not on a ward. The patient comes in on the morning of surgery — do not
-          go looking for a bed.
-        </p>
-      </div>
-    </div>
+      <AlertTriangle className="h-3 w-3 flex-shrink-0 text-amber-700" />
+      Day case
+    </span>
   );
 }
 

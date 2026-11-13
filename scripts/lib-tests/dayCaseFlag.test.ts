@@ -65,13 +65,34 @@ describe('the flag reaches the screen', () => {
 });
 
 describe('what the flag says', () => {
-  it('names the consequence, not only the category', () => {
-    // "Day case" is a discharge term and reads as a statement about where the
-    // patient GOES. The mistake being prevented is an assumption about where
-    // they ARE, so the words have to carry that.
-    expect(FLAG).toContain('Not on a ward');
-    expect(FLAG).toContain('comes in on the morning of surgery');
-    expect(FLAG).toMatch(/do not\s+go looking for a bed/);
+  it('says the words and nothing more, so a table cell keeps its shape', () => {
+    // This test used to demand the opposite, and the reasoning was sound:
+    // "day case" is a discharge term and reads as a statement about where
+    // the patient GOES, while the mistake being prevented is an assumption
+    // about where they ARE. So the flag spelled out the consequence.
+    //
+    // It lost to the table. Three lines of prose in the patient cell pushed
+    // every row apart and distorted the theatre list, which is read by
+    // scanning a column. Reported, and cut by decision. The sentence lives
+    // on in the tooltip, asserted below.
+    //
+    // Pinned as an absence so it cannot drift back in: whoever reads the
+    // rationale above and finds it persuasive would otherwise restore the
+    // prose and break the list again.
+    const code = FLAG.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    expect(code).not.toContain('do not');
+    expect(code).not.toContain('go looking for a bed');
+    // The badge itself is one line of text.
+    expect(code).toContain('Day case');
+  });
+
+  it('cannot set a row height on its own', () => {
+    // inline-flex in a <span>, not a block <div>: a badge that establishes
+    // its own box is a badge that can stretch the row it sits in, which is
+    // exactly what was reported.
+    const full = FLAG.slice(FLAG.indexOf('return (', FLAG.indexOf('if (compact)')));
+    expect(full).toContain('<span');
+    expect(full).toContain('inline-flex');
   });
 
   it('claims nothing about whether the patient has actually arrived', () => {
