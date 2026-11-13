@@ -66,3 +66,32 @@ export default function DayCaseFlag({
     </div>
   );
 }
+
+/**
+ * THE OTHER ANSWER, said quietly.
+ *
+ * Why an inpatient needs a mark at all: a day case used to be indicated by
+ * the PRESENCE of the band above and nothing else, so a row with no band
+ * meant either "this is an inpatient" or "the flag did not render" or
+ * "nobody ever answered the question". Those three look identical, and the
+ * third was the truth for every case in the database until the booking form
+ * started requiring an answer. A reader could not tell, and said so: "I
+ * still cannot find where you indicated day cases."
+ *
+ * With both answers printed, an unmarked row is visibly a fault rather than
+ * a quiet claim about a patient.
+ *
+ * DELIBERATELY RECESSIVE. The inpatient is the ordinary case and must not
+ * compete with the warning: grey text, no border, no icon. The day case is
+ * the one that changes what somebody does next.
+ */
+export function InpatientNote({ className = '' }: { className?: string }) {
+  return (
+    <p
+      className={`text-[11px] font-medium uppercase tracking-wide text-gray-400 ${className}`}
+      title="Inpatient — admitted to a ward before surgery."
+    >
+      Inpatient
+    </p>
+  );
+}

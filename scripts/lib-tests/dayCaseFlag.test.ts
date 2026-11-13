@@ -103,7 +103,12 @@ describe('the ward line, which is the one that misleads', () => {
   });
 
   it('puts the flag above it, not after it', () => {
-    const flagAt = SCHEDULE.indexOf('{surgery.isDayCase && <DayCaseFlag');
+    // The schedule now renders BOTH answers from one ternary — a day case
+    // gets the band, an inpatient gets the quiet word — so the anchor is
+    // the component, not the old `&&`. The previous anchor did not just
+    // fail: its sibling below passed on -1 being less than everything,
+    // which is a test that had stopped testing.
+    const flagAt = SCHEDULE.indexOf('<DayCaseFlag className="mt-1" />');
     const wardAt = SCHEDULE.indexOf("{surgery.isDayCase ? 'Admitting ward' : 'Ward'}");
     expect(flagAt).toBeGreaterThan(-1);
     expect(wardAt).toBeGreaterThan(-1);
@@ -114,7 +119,8 @@ describe('the ward line, which is the one that misleads', () => {
     // Asked for explicitly: the patient column is what an anaesthetist reads
     // to decide who they are going to see, so the flag has to be part of
     // reading the NAME rather than something noticed below the folder number.
-    const flagAt = SCHEDULE.indexOf('{surgery.isDayCase && <DayCaseFlag');
+    const flagAt = SCHEDULE.indexOf('<DayCaseFlag className="mt-1" />');
+    expect(flagAt).toBeGreaterThan(-1);
     const identifierAt = SCHEDULE.indexOf('{label.identifier}');
     expect(identifierAt).toBeGreaterThan(-1);
     expect(flagAt).toBeLessThan(identifierAt);

@@ -43,7 +43,12 @@ export interface BookingDraft {
   needBloodTransfusion?: boolean;
   otherSpecialNeeds?: string;
   postOpDestination?: string;
+  /** Kept for drafts written before admissionType existed. Derived from
+   *  admissionType on every save now; never the source of truth. */
   isDayCase?: boolean;
+  /** 'INPATIENT' | 'DAY_CASE'. Absent or '' means nobody has answered,
+   *  which is NOT the same as inpatient — see admissionType.ts. */
+  admissionType?: string;
 
   // The unit's team
   teamMembers?: unknown;

@@ -9,6 +9,15 @@ import {
   CONSENT_DRAFT_KEY,
   type BookingDraft,
 } from '@/lib/booking/draftState';
+import {
+  ADMISSION_TYPE_OPTIONS,
+  ADMISSION_MISSING_MESSAGE,
+  admissionTypeChosen,
+  admissionTypeFromDraft,
+  isDayCaseFrom,
+  postOpDestinationFor,
+  type AdmissionType,
+} from '@/lib/booking/admissionType';
 import { planUpload, compressionSummary } from '@/lib/consentCompression';
 import { compressConsentImage, readFileUnchanged } from '@/lib/consentCompressionBrowser';
 import SpecialNeedsPicker, {
@@ -546,7 +555,12 @@ export default function NewSurgeryPage() {
   });
   const setPreopField = (k: keyof typeof preop, v: string) => setPreop((p) => ({ ...p, [k]: v }));
   const [postOpDestination, setPostOpDestination] = useState('');
-  const [isDayCase, setIsDayCase] = useState(false);
+  // INPATIENT OR DAY CASE. No default: '' means nobody has answered yet,
+  // and the form refuses to send until somebody has. The boolean the
+  // database holds is derived, never set directly, so the two cannot drift.
+  // See src/lib/booking/admissionType.ts for why a checkbox was not enough.
+  const [admissionType, setAdmissionType] = useState<AdmissionType | ''>('');
+  const isDayCase = isDayCaseFrom(admissionType);
   /**
    * THIS SCREEN BOOKS ELECTIVE CASES. It is not a choice any more.
    *
@@ -1181,6 +1195,7 @@ export default function NewSurgeryPage() {
       otherSpecialNeeds,
       postOpDestination,
       isDayCase,
+      admissionType,
       teamMembers,
       isMultidisciplinary,
       participatingUnits,
@@ -1200,7 +1215,7 @@ export default function NewSurgeryPage() {
     selectedTheatreId, selectedSurgeonId, supervisingConsultantIds, assistantIds,
     scheduledDate, scheduledTime, estimatedDuration, magnitude, anesthesiaType,
     localAnaestheticId, needBloodTransfusion, otherSpecialNeeds, postOpDestination,
-    isDayCase, teamMembers, noUnitRegistrar, noUnitSeniorRegistrar, specialNeeds,
+    isDayCase, admissionType, teamMembers, noUnitRegistrar, noUnitSeniorRegistrar, specialNeeds,
     selectedConsumables, selectedDrugs, consentFile, consentForm, preopOverrideReason,
   ]);
 
@@ -1226,7 +1241,11 @@ export default function NewSurgeryPage() {
     setNeedBloodTransfusion(pick(d.needBloodTransfusion, false));
     setOtherSpecialNeeds(pick(d.otherSpecialNeeds, ''));
     setPostOpDestination(pick(d.postOpDestination, ''));
-    setIsDayCase(pick(d.isDayCase, false));
+    // Not pick(): a draft saved before this field existed carries
+    // isDayCase:false from the old unchecked box, which is the absence of
+    // an answer rather than an answer of "inpatient". It restores as
+    // unanswered and the booker is asked once.
+    setAdmissionType(admissionTypeFromDraft(d));
     if (d.teamMembers !== undefined) setTeamMembers(d.teamMembers as never);
     if (d.isMultidisciplinary !== undefined) setIsMultidisciplinary(!!d.isMultidisciplinary);
     if (d.participatingUnits !== undefined) setParticipatingUnits(d.participatingUnits as never);
@@ -1627,6 +1646,34 @@ export default function NewSurgeryPage() {
         + 'hospital has no way to tell them about a delay, a new date or a cancellation.',
       );
       document.getElementById('patientSearch')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // INPATIENT OR DAY CASE. Checked here, in JavaScript, and NOT with the
+    // browser's `required` attribute.
+    //
+    // A required field on a collapsed step is a form that cannot be
+    // submitted at all: stepClass() hides a step with `hidden`, the
+    // browser refuses to validate a display:none control, and the failure
+    // appears as "an invalid form control is not focusable" in the console
+    // where no surgeon will ever see it. That is already written up a few
+    // dozen lines below as the reason the early button carries
+    // formNoValidate. So the one field that must not be skipped is checked
+    // the only way that works on every path: before the early-booking
+    // shortcut, so neither button can get past it.
+    if (!admissionTypeChosen(admissionType)) {
+      setLoading(false);
+      setError(
+        'Say ' + ADMISSION_MISSING_MESSAGE + '. It is on the Schedule step, beside the date. '
+        + 'An anaesthetist reads it to decide whether the patient is on a ward tonight - '
+        + 'a day case left unmarked sends somebody walking to a bed that was never booked.',
+      );
+      setStep(1);
+      setTimeout(() => {
+        const el = document.getElementById('admissionType');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el?.focus();
+      }, 50);
       return;
     }
 
@@ -2410,7 +2457,11 @@ ${pretty} — ${days} days from today.
             setEstimatedDuration('');
             setOtherSpecialNeeds('');
             setPostOpDestination('');
-            setIsDayCase(false);
+            // Back to unanswered, not to "inpatient". Admission type belongs
+            // to the PATIENT, not to the list: a morning list runs a day case
+            // and an inpatient one after the other, so carrying the last
+            // answer over would mislabel the next patient silently.
+            setAdmissionType('');
             setMagnitude('');
             setAnesthesiaType('');
             setLocalAnaestheticId('');
@@ -3367,6 +3418,59 @@ ${pretty} — ${days} days from today.
               />
             </div>
 
+            {/* INPATIENT OR DAY CASE - here, beside the date, and required.
+
+                Reported twice: "I still cannot find where you indicated day
+                cases on the booked surgeries." Nothing was indicated because
+                nothing was ever marked. The answer used to be an unchecked
+                checkbox inside "Post-operative disposition" on the next step
+                - a block about where the patient goes AFTER surgery - so a
+                booker who did not notice it booked an inpatient by default,
+                and the flag on every board had nothing to render.
+
+                It belongs on the Schedule step because it IS a scheduling
+                fact: it says whether the patient sleeps in this hospital
+                tonight. And it has to be on a step everyone reaches - a case
+                is bookable from the "Book now" button on the next step, and
+                almost nobody walks to the end of a six-step wizard. */}
+            <div className="md:col-span-2">
+              <label htmlFor="admissionType" className="label">
+                Inpatient or day case *
+              </label>
+              <select
+                id="admissionType"
+                name="admissionType"
+                aria-required="true"
+                value={admissionType}
+                onChange={(e) => {
+                  const next = e.target.value as AdmissionType | '';
+                  setAdmissionType(next);
+                  // A day case implies a same-day discharge. Offered, not
+                  // forced: only fills a destination left empty.
+                  setPostOpDestination((cur) => postOpDestinationFor(next, cur));
+                }}
+                className={`input-field ${admissionType === '' ? 'border-amber-400 bg-amber-50' : ''}`}
+                title="Whether the patient is admitted to a ward or comes in on the day"
+              >
+                <option value="">Select - this one is required...</option>
+                {ADMISSION_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              {admissionType === 'DAY_CASE' ? (
+                <p className="mt-1 text-xs font-medium text-amber-700">
+                  Flagged DAY CASE on the theatre list, the anaesthetist's board
+                  and the pre-op review list, so nobody walks to a ward for this
+                  patient.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-gray-500">
+                  An anaesthetist reads this to decide whether the patient is on
+                  a ward tonight. There is no default - it has to be answered.
+                </p>
+              )}
+            </div>
+
             <div>
               <div className="flex items-baseline justify-between gap-2">
                 <label className="label">Time *</label>
@@ -3792,21 +3896,33 @@ ${pretty} — ${days} days from today.
               </select>
               <p className="mt-1 text-xs text-gray-500">Planned disposition; the recovery team confirms this at discharge.</p>
             </div>
+            {/* THE CHECKBOX THAT USED TO BE HERE IS GONE.
+
+                "Day case (admitted & discharged same day)", unchecked by
+                default, in a block about post-operative disposition. It was
+                the only place the question was asked and it was missed often
+                enough that no case in the database was ever marked - which is
+                why the flag built for every board appeared on nothing at all.
+                The question is now a required dropdown on the Schedule step;
+                this is a read-only echo of the answer, because it changes what
+                the destination beside it should say. */}
             <div className="flex items-end">
-              <label className="flex items-center space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isDayCase}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setIsDayCase(checked);
-                    // A day case implies a same-day discharge destination.
-                    if (checked && !postOpDestination) setPostOpDestination('DAY_CASE_DISCHARGE');
-                  }}
-                  className="w-5 h-5 text-primary-600 rounded"
-                />
-                <span className="text-gray-700">Day case (admitted &amp; discharged same day)</span>
-              </label>
+              <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">Admission (set on the Schedule step)</p>
+                {admissionType === '' ? (
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="text-sm font-semibold text-amber-700 underline"
+                  >
+                    Not answered yet - set it
+                  </button>
+                ) : (
+                  <p className={`text-sm font-semibold ${isDayCase ? 'text-amber-700' : 'text-gray-800'}`}>
+                    {isDayCase ? 'Day case - not on a ward' : 'Inpatient - admitted to a ward'}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>

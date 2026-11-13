@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { AlertTriangle, MessageCircle } from 'lucide-react';
 import PhoneLink from '@/components/PhoneLink';
 import NurseSupervisorBand from '@/components/NurseSupervisorBand';
-import DayCaseFlag from '@/components/DayCaseFlag';
+import DayCaseFlag, { InpatientNote } from '@/components/DayCaseFlag';
 import PharmacistOnDutyBand from '@/components/PharmacistOnDutyBand';
 import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -1461,7 +1461,9 @@ export default function SurgeriesPage() {
                                 where the patient will be admitted in the
                                 morning, not where they are tonight — so it sits
                                 after the flag and is relabelled. */}
-                            {surgery.isDayCase && <DayCaseFlag className="mt-1" />}
+                            {surgery.isDayCase
+                              ? <DayCaseFlag className="mt-1" />
+                              : <InpatientNote className="mt-1" />}
                             <div className={label.notLoaded ? 'text-xs text-amber-600' : 'text-xs text-gray-500'}>
                               {label.identifier}
                               {ageSex && <span className="ml-1 text-gray-400">· {ageSex}</span>}
