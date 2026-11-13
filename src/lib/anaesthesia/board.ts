@@ -40,6 +40,8 @@ export interface BoardCase {
   age: number | null;
   gender: string | null;
   ward: string | null;
+  /** Same-day discharge: the patient is not on that ward the night before. */
+  isDayCase: boolean;
   procedureName: string;
   unit: string;
   subspecialty: string | null;

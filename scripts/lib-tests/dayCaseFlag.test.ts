@@ -1,0 +1,112 @@
+/**
+ * "The anaesthetist walks round the hospital only to discover the case is a
+ * day case and the patient has not arrived."
+ *
+ * isDayCase has been captured at booking since the beginning. It was displayed
+ * on exactly one screen — call-for-patient, which the holding area reads — and
+ * projected by neither of the APIs that feed the screens an anaesthetist
+ * actually works from. So the case looked like any other inpatient, the row
+ * said "Ward: X", and somebody walked there.
+ *
+ * The projection is the half that silently breaks: a flag added to a component
+ * while the field is missing from the query renders nothing at all, and the
+ * page looks exactly as it did before. So the queries are asserted as well as
+ * the components.
+ */
+import { describe, expect, it } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+
+const REPO = path.join(__dirname, '..', '..');
+const read = (p: string) => fs.readFileSync(path.join(REPO, p), 'utf8');
+
+const FLAG = read('src/components/DayCaseFlag.tsx');
+const SURGERIES_API = read('src/app/api/surgeries/route.ts');
+const BOARD_API = read('src/app/api/anaesthesia/board/route.ts');
+const MY_CASES_API = read('src/app/api/anaesthesia/my-cases/route.ts');
+const SCHEDULE = read('src/app/dashboard/surgeries/page.tsx');
+const PREOP = read('src/app/dashboard/preop-reviews/page.tsx');
+const BOARD = read('src/app/dashboard/anaesthetist-board/page.tsx');
+
+describe('the flag reaches the screen', () => {
+  it('is projected by every API an anaesthetist works from', () => {
+    // Without this the component renders nothing and the page is unchanged,
+    // which is the failure mode that looks most like success.
+    for (const [name, src] of [
+      ['surgery list', SURGERIES_API],
+      ['anaesthesia board', BOARD_API],
+      ['my cases', MY_CASES_API],
+    ] as const) {
+      expect(src, name).toContain('isDayCase: true');
+    }
+  });
+
+  it('is rendered on every list somebody walks away from', () => {
+    for (const [name, src] of [
+      ['surgery schedule', SCHEDULE],
+      ['pre-op review list', PREOP],
+      ['anaesthetist board', BOARD],
+    ] as const) {
+      expect(src, name).toContain('DayCaseFlag');
+      expect(src, name).toContain("from '@/components/DayCaseFlag'");
+    }
+  });
+
+  it('survives the export, which is the copy carried round the theatre', () => {
+    expect(SCHEDULE).toContain('DAY CASE');
+    expect(SCHEDULE).toContain('.daycase {');
+  });
+
+  it('prints as a solid block, not a tint', () => {
+    // The list is photocopied as often as it is read on screen, and a pale
+    // amber badge is indistinguishable from the rest of a black-and-white row.
+    expect(SCHEDULE).toMatch(/\.daycase \{[^}]*background:#b45309[^}]*color:#fff/);
+  });
+});
+
+describe('what the flag says', () => {
+  it('names the consequence, not only the category', () => {
+    // "Day case" is a discharge term and reads as a statement about where the
+    // patient GOES. The mistake being prevented is an assumption about where
+    // they ARE, so the words have to carry that.
+    expect(FLAG).toContain('Not on a ward');
+    expect(FLAG).toContain('comes in on the morning of surgery');
+    expect(FLAG).toMatch(/do not\s+go looking for a bed/);
+  });
+
+  it('claims nothing about whether the patient has actually arrived', () => {
+    // It knows the case is a day case; it does not know their whereabouts.
+    // An anaesthetist who trusted a stale "arrived" once would stop reading
+    // the flag altogether.
+    //
+    // Matched on the code with the comments stripped: the paragraph above the
+    // component explaining why it must not say "arrived" contains the word,
+    // and an assertion that failed on its own rationale would teach the next
+    // person to delete the check rather than respect it.
+    const code = FLAG.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    expect(code).not.toMatch(/\barrived\b/i);
+    expect(code).not.toMatch(/\bin the hospital\b/i);
+  });
+
+  it('carries the warning in the compact form too', () => {
+    // The dense rows get the short version, but a bare word with no tooltip
+    // would be the same omission in smaller type.
+    expect(FLAG).toContain('title="Day case — the patient is not on a ward.');
+  });
+});
+
+describe('the ward line, which is the one that misleads', () => {
+  it('is relabelled on a day case rather than left to be read as "go here"', () => {
+    // On a day case the ward is where they will be admitted in the morning,
+    // not where they are tonight.
+    expect(SCHEDULE).toContain("{surgery.isDayCase ? 'Admitting ward' : 'Ward'}");
+  });
+
+  it('puts the flag above it, not after it', () => {
+    const flagAt = SCHEDULE.indexOf('{surgery.isDayCase && <DayCaseFlag');
+    const wardAt = SCHEDULE.indexOf("{surgery.isDayCase ? 'Admitting ward' : 'Ward'}");
+    expect(flagAt).toBeGreaterThan(-1);
+    expect(wardAt).toBeGreaterThan(-1);
+    expect(flagAt).toBeLessThan(wardAt);
+  });
+});

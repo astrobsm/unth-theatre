@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true, procedureName: true, unit: true, subspecialty: true,
       scheduledTime: true, status: true, surgeryType: true, location: true,
-      theatreId: true, anesthesiaType: true,
+      theatreId: true, anesthesiaType: true, isDayCase: true,
       patient: { select: { name: true, folderNumber: true, ptNumber: true, age: true, gender: true, ward: true } },
       surgeon: { select: { fullName: true } },
       surgeonName: true,
@@ -152,6 +152,7 @@ export async function GET(req: NextRequest) {
         age: s.patient?.age ?? null,
         gender: s.patient?.gender ?? null,
         ward: s.patient?.ward ?? null,
+        isDayCase: s.isDayCase === true,
         procedureName: s.procedureName,
         unit: s.unit,
         subspecialty: s.subspecialty,

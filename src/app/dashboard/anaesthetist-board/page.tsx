@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import DayCaseFlag from '@/components/DayCaseFlag';
 import {
   Stethoscope, RefreshCw, Calendar, AlertTriangle, CheckCircle2, Clock,
   UserX, FileText, ThumbsUp, ThumbsDown, Loader2, ChevronRight,
@@ -37,6 +38,7 @@ interface BoardCase {
   age: number | null;
   gender: string | null;
   ward: string | null;
+  isDayCase?: boolean;
   procedureName: string;
   unit: string;
   scheduledTime: string;
@@ -283,6 +285,7 @@ export default function AnaesthetistBoardPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-gray-900">{c.patientName}</span>
                     {c.folderNumber && <span className="text-xs text-gray-500">{c.folderNumber}</span>}
+                    {c.isDayCase && <DayCaseFlag compact />}
                     {c.surgeryType === 'EMERGENCY' && (
                       <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-100 text-red-700">
                         Emergency

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { groupCasesBySubspecialty } from '@/lib/anaesthesia/caseGrouping';
 import { useReturnHere } from '@/lib/navigation/useReturnHere';
+import DayCaseFlag from '@/components/DayCaseFlag';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -58,6 +59,12 @@ interface BookedSurgery {
     name: string;
     folderNumber?: string | null;
   };
+  /**
+   * Same-day discharge. THE flag on this screen: this is the list an
+   * anaesthetist picks from when deciding whose bed to walk to, and a day-case
+   * patient is not in one until the morning of surgery.
+   */
+  isDayCase?: boolean;
   surgeon?: {
     fullName?: string | null;
   } | null;
@@ -517,6 +524,7 @@ export default function PreOpReviewsPage() {
                       {surgery.patient?.folderNumber && (
                         <div className="text-xs text-gray-500">{surgery.patient.folderNumber}</div>
                       )}
+                      {surgery.isDayCase && <DayCaseFlag className="mt-1.5" />}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{surgery.procedureName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{surgery.surgeon?.fullName || 'Not assigned'}</td>

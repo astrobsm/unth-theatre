@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { AlertTriangle, MessageCircle } from 'lucide-react';
 import PhoneLink from '@/components/PhoneLink';
 import NurseSupervisorBand from '@/components/NurseSupervisorBand';
+import DayCaseFlag from '@/components/DayCaseFlag';
 import PharmacistOnDutyBand from '@/components/PharmacistOnDutyBand';
 import { bookerChaseWhatsAppUrl } from '@/lib/bookerChaseMessage';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -49,6 +50,13 @@ interface Surgery {
    * one screen that did not say a case was unprepared.
    */
   preopOutstanding?: string | null;
+  /**
+   * Same-day discharge case. The patient is NOT on a ward the night before —
+   * they come in on the morning — which is why it is flagged on the row
+   * rather than left to the post-operative destination field.
+   */
+  isDayCase?: boolean;
+  postOpDestination?: string | null;
   /** Who booked the case, with the role and number needed to reach them. */
   bookedBy?: { id: string | null; name: string | null; role: string | null; phone: string | null } | null;
   procedureName: string;
@@ -846,7 +854,9 @@ export default function SurgeriesPage() {
           <td>${escape(s.patient?.name || 'Unknown')}</td>
           <td>${escape(s.patient?.folderNumber || 'N/A')}</td>
           <td>${escape(ageSex)}</td>
-          <td>${escape(s.patient?.ward || '—')}</td>
+          <td>${s.isDayCase
+            ? '<span class="daycase">DAY CASE</span><br/><span class="sub">not on a ward &mdash; arrives on the morning</span>'
+            : escape(s.patient?.ward || '—')}</td>
           <td>${escape(s.procedureName)}</td>
           <td>${escape(s.indication || '—')}</td>
           <td>${escape(s.surgeon?.fullName || s.surgeonName || 'Not assigned')}</td>
@@ -892,6 +902,10 @@ export default function SurgeriesPage() {
         th, td { border:1px solid #cbd5e1; padding:4px 6px; vertical-align:top; text-align:left; }
         th { background:#e0e7ff; font-size:10px; text-transform:uppercase; }
         .sub { color:#64748b; font-size:10px; }
+        /* Printed in black and white as often as in colour, so the day-case
+           mark is a solid block rather than a tint: on a photocopied list a
+           pale amber badge is indistinguishable from the rest of the row. */
+        .daycase { display:inline-block; background:#b45309; color:#fff; font-weight:800; padding:1px 5px; border-radius:3px; font-size:9px; letter-spacing:0.04em; }
         .badge { display:inline-block; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; padding:1px 5px; border-radius:8px; font-size:9px; margin:1px 2px 1px 0; white-space:nowrap; }
         /* Bold and boxed rather than merely coloured: theatre lists are often
            printed on a monochrome laser printer, where a red tint disappears
@@ -1442,8 +1456,18 @@ export default function SurgeriesPage() {
                               {label.identifier}
                               {ageSex && <span className="ml-1 text-gray-400">· {ageSex}</span>}
                             </div>
+                            {/* THE WARD LINE IS THE ONE THAT MISLEADS. On a
+                                day case it is where the patient will be
+                                admitted on the morning, not where they are
+                                tonight — and read at speed it is an
+                                instruction to walk there. So the flag goes
+                                above it and the ward is demoted to what it
+                                actually means. */}
+                            {surgery.isDayCase && <DayCaseFlag className="mt-1.5" />}
                             {surgery.patient?.ward && (
-                              <div className="text-xs text-gray-500">Ward: {surgery.patient.ward}</div>
+                              <div className="text-xs text-gray-500">
+                                {surgery.isDayCase ? 'Admitting ward' : 'Ward'}: {surgery.patient.ward}
+                              </div>
                             )}
                           </>
                         );

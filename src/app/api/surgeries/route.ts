@@ -319,6 +319,11 @@ export async function GET(request: NextRequest) {
         needBloodTransfusion: true, needDiathermy: true, needStereo: true,
         needStirups: true, needMontrellMattress: true, otherSpecialNeeds: true,
         readinessStatus: true, preopOutstanding: true,
+        // A day-case patient is not on a ward the night before. Captured at
+        // booking since the beginning and projected nowhere, so every screen
+        // an anaesthetist works from showed the case as an ordinary inpatient
+        // and somebody walked to a bed that was never occupied.
+        isDayCase: true, postOpDestination: true,
         bookedById: true, bookedByName: true,
         consumablePackCode: true, pharmacyDrugCode: true,
         // Safe to add to the list projection above: joint cases are the
