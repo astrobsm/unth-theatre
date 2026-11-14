@@ -176,7 +176,18 @@ async function main() {
       + (composed.generated ? '  [composed]' : '  [mapped]'),
     );
 
-    if (!WRITE) continue;
+    // On a dry run, NAME them. The counts say how much will change; only
+    // the names let a clinician judge whether it should, and this output is
+    // the review step, so it has to carry the thing being reviewed.
+    if (!WRITE) {
+      for (const x of newConsumables as any[]) {
+        console.log(`        c  ${x.quantity} x ${x.name}${x.notes ? `   [${x.notes}]` : ''}`);
+      }
+      for (const x of newDrugs as any[]) {
+        console.log(`        p  ${x.quantity} x ${x.name}${x.dosage ? ` ${x.dosage}` : ''}${x.notes ? `   [${x.notes}]` : ''}`);
+      }
+      continue;
+    }
 
     if (newConsumables.length) {
       await prisma.surgeryConsumableRequest.createMany({
