@@ -30,6 +30,12 @@ import prisma from '../src/lib/prisma';
 import { familyOf, approachOf, FAMILY_LABEL, type ProcedureFamily } from '../src/lib/packs/standards';
 
 const ALL = process.argv.includes('--all');
+/**
+ * --csv prints ONE row per procedure and nothing else, for a consultant to
+ * read away from a terminal. The prose report is for whoever runs it; this
+ * is for whoever has to judge it.
+ */
+const CSV = process.argv.includes('--csv');
 const SUSPECT_ONLY = process.argv.includes('--suspect');
 
 /**
@@ -117,6 +123,30 @@ async function main() {
   const mapped = rows.filter((r) => r.mapped).length;
   const unmatched = rows.filter((r) => r.unmatched).length;
   const suspects = rows.filter((r) => r.suspect);
+
+  if (CSV) {
+    const esc = (v: unknown) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    console.log([
+      'procedure', 'cases', 'subspecialties', 'family', 'approach',
+      'mapped', 'confirmed', 'needsReview',
+    ].join(','));
+    for (const r of rows) {
+      console.log([
+        esc(r.name), r.count, esc(r.subs.join('; ')),
+        esc(FAMILY_LABEL[r.family]), esc(r.approach),
+        r.mapped ? 'yes' : 'no',
+        r.confirmed ? 'yes' : 'no',
+        // The two kinds worth a human eye, named so the column can be
+        // filtered on directly.
+        r.suspect ? 'family-disagrees-with-subspecialty'
+          : r.unmatched ? 'fell-through-to-general' : '',
+      ].join(','));
+    }
+    return;
+  }
 
   console.log('═══ What has been booked ═══');
   console.log(`cases:                    ${cases}`);
