@@ -1,8 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Package, Pill, Plus, Trash2, Send, AlertTriangle } from 'lucide-react';
+import { Package, Pill, Plus, Trash2, Send, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { MIN_PACK_REASON } from '@/lib/theatreOps/packAmendment';
+import {
+  groupConsumables,
+  groupPharmacy,
+  CONSUMABLE_CATEGORY_OPTIONS,
+  DRUG_TYPE_OPTIONS,
+} from '@/lib/packs/labels';
 
 /**
  * The consumables and pharmacy lists for a case, editable by the team.
@@ -23,6 +29,11 @@ interface PackLine {
   quantity: number;
   unit?: string | null;
   status: string;
+  /** Consumables. The GET returns the whole row, so this was always on the
+   *  wire — the list simply ignored it and showed one flat column. */
+  category?: string | null;
+  /** Pharmacy lines. Antibiotic, analgesic, infusion, and so on. */
+  type?: string | null;
   addedAfterBooking?: boolean | null;
   additionReason?: string | null;
   removalReason?: string | null;
@@ -30,7 +41,15 @@ interface PackLine {
 
 type ListKind = 'CONSUMABLE' | 'PHARMACY';
 
-interface NewItem { list: ListKind; name: string; quantity: number; reason: string }
+/**
+ * A staged addition.
+ *
+ * `group` is the category (consumables) or type (pharmacy). It is asked for
+ * rather than defaulted, because the API defaults a missing one to OTHER and
+ * a list where every added item lands in Other re-creates the flat column
+ * this change exists to remove — one "Other" heading at a time.
+ */
+interface NewItem { list: ListKind; name: string; quantity: number; reason: string; group: string }
 
 export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) {
   const [consumables, setConsumables] = useState<PackLine[]>([]);
@@ -43,6 +62,8 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
   /** Staged, not yet sent. */
   const [additions, setAdditions] = useState<NewItem[]>([]);
   const [removals, setRemovals] = useState<Record<string, { list: ListKind; reason: string }>>({});
+  /** Shut sections, by `${list}:${category}`. Absent means open. */
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     try {
@@ -76,6 +97,9 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
         body: JSON.stringify({
           add: additions.map((a) => ({
             list: a.list, name: a.name.trim(), quantity: a.quantity, reason: a.reason.trim(),
+            // The API takes `category` for a consumable and `type` for a
+            // pharmacy line, and defaults either to OTHER when absent.
+            ...(a.list === 'CONSUMABLE' ? { category: a.group } : { type: a.group }),
           })),
           remove: Object.entries(removals).map(([id, r]) => ({ list: r.list, id, reason: r.reason.trim() })),
           submit: true,
@@ -161,8 +185,68 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
     </div>
   );
 
+  /**
+   * The list, in sections.
+   *
+   * Collapsible, and OPEN by default. A pack that opens closed is a pack
+   * somebody has to click eight times to read, and the question this screen
+   * answers most often is "what is on the list". Closing is for the
+   * sections already dealt with.
+   *
+   * Each heading carries its own count, and a withdrawn count beside it
+   * where there is one, so a section that has lost something says so while
+   * it is shut.
+   */
+  const renderSections = (
+    sections: { key: string; label: string; lines: PackLine[] }[],
+    kind: ListKind,
+  ) => {
+    if (sections.length === 0) {
+      return <p className="text-sm text-gray-500">Nothing requested yet.</p>;
+    }
+    return (
+      <div className="space-y-2">
+        {sections.map((s) => {
+          const id = `${kind}:${s.key}`;
+          const shut = !!collapsed[id];
+          const withdrawn = s.lines.filter(
+            (l) => String(l.status).toUpperCase() === 'CANCELLED',
+          ).length;
+          return (
+            <div key={id} className="rounded-lg border border-gray-200">
+              <button
+                type="button"
+                onClick={() => setCollapsed((p) => ({ ...p, [id]: !p[id] }))}
+                className="flex w-full items-center justify-between gap-2 rounded-t-lg bg-gray-50 px-3 py-2 text-left"
+                aria-expanded={!shut}
+              >
+                <span className="text-sm font-semibold text-gray-800">
+                  {s.label}
+                  <span className="ml-2 font-normal text-gray-500">
+                    {s.lines.length}
+                    {withdrawn > 0 && (
+                      <span className="ml-1 text-amber-700">· {withdrawn} withdrawn</span>
+                    )}
+                  </span>
+                </span>
+                {shut ? <ChevronRight className="h-4 w-4 text-gray-500" />
+                      : <ChevronDown className="h-4 w-4 text-gray-500" />}
+              </button>
+              {!shut && <div className="p-2">{renderList(kind, s.lines)}</div>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const addRow = (list: ListKind) =>
-    setAdditions((prev) => [...prev, { list, name: '', quantity: 1, reason: '' }]);
+    setAdditions((prev) => [...prev, {
+      list, name: '', quantity: 1, reason: '',
+      // Pre-filled with the bucket so the control is never empty, and
+      // changeable before it is sent.
+      group: 'OTHER',
+    }]);
 
   if (loading) return <div className="rounded-xl border bg-white p-4 text-sm text-gray-500">Loading pack lists…</div>;
 
@@ -176,8 +260,11 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
-          <h3 className="mb-2 flex items-center gap-2 font-medium"><Package className="h-4 w-4" /> Consumables</h3>
-          {renderList('CONSUMABLE', consumables)}
+          <h3 className="mb-2 flex items-center gap-2 font-medium">
+            <Package className="h-4 w-4" /> Consumables
+            <span className="text-sm font-normal text-gray-500">({consumables.length})</span>
+          </h3>
+          {renderSections(groupConsumables(consumables), 'CONSUMABLE')}
           {canEdit && (
             <button onClick={() => addRow('CONSUMABLE')} className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-indigo-700">
               <Plus className="h-4 w-4" /> Add a consumable
@@ -185,8 +272,11 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
           )}
         </div>
         <div>
-          <h3 className="mb-2 flex items-center gap-2 font-medium"><Pill className="h-4 w-4" /> Pharmacy pack</h3>
-          {renderList('PHARMACY', pharmacy)}
+          <h3 className="mb-2 flex items-center gap-2 font-medium">
+            <Pill className="h-4 w-4" /> Pharmacy pack
+            <span className="text-sm font-normal text-gray-500">({pharmacy.length})</span>
+          </h3>
+          {renderSections(groupPharmacy(pharmacy), 'PHARMACY')}
           {canEdit && (
             <button onClick={() => addRow('PHARMACY')} className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-indigo-700">
               <Plus className="h-4 w-4" /> Add a drug or dressing
@@ -201,17 +291,27 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
           {additions.map((a, i) => (
             <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
               <input
-                className="input-field sm:col-span-4" placeholder="Item"
+                className="input-field sm:col-span-3" placeholder="Item"
                 value={a.name}
                 onChange={(e) => setAdditions((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
               />
+              <select
+                className="input-field sm:col-span-3"
+                value={a.group}
+                aria-label={a.list === 'CONSUMABLE' ? 'Category' : 'Type'}
+                title={a.list === 'CONSUMABLE' ? 'Which section it belongs in' : 'Which section it belongs in'}
+                onChange={(e) => setAdditions((p) => p.map((x, j) => (j === i ? { ...x, group: e.target.value } : x)))}
+              >
+                {(a.list === 'CONSUMABLE' ? CONSUMABLE_CATEGORY_OPTIONS : DRUG_TYPE_OPTIONS)
+                  .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
               <input
-                type="number" min={1} className="input-field sm:col-span-2" placeholder="Qty"
+                type="number" min={1} className="input-field sm:col-span-1" placeholder="Qty"
                 value={a.quantity}
                 onChange={(e) => setAdditions((p) => p.map((x, j) => (j === i ? { ...x, quantity: Number(e.target.value) || 1 } : x)))}
               />
               <input
-                className="input-field sm:col-span-5" placeholder="Why is it needed?"
+                className="input-field sm:col-span-4" placeholder="Why is it needed?"
                 value={a.reason}
                 onChange={(e) => setAdditions((p) => p.map((x, j) => (j === i ? { ...x, reason: e.target.value } : x)))}
               />
