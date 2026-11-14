@@ -74,7 +74,16 @@ const FAMILY_PATTERNS: Array<{ re: RegExp; family: ProcedureFamily }> = [
   // Cranial first. These names share words with other specialties
   // ('evacuation', 'fixation') and a craniotomy matched elsewhere loses its
   // bone wax, its haemostat and its head pins.
-  { re: /\b(craniot|cranioplast|burr ?hole|aneurysm clip|\bedh\b|\bsdh\b|extradural|subdural|evacuation of (haematoma|hematoma))/i, family: 'CRANIOTOMY' },
+  //
+  // 'depressed skull fracture' is here and not with the orthopaedic
+  // fractures. Found by reviewing every procedure this hospital has booked
+  // against what the classifier makes of it: "Elevation of depressed skull
+  // fracture", four cases, all booked by Neurosurgery, was matching
+  // `fracture` further down and being packed for FRACTURE FIXATION — plates,
+  // screws and K-wires, and no bone wax, no haemostat, no head pins. The
+  // word 'fracture' is in the name, and it is the only orthopaedic thing
+  // about it.
+  { re: /\b(craniot|cranioplast|burr ?hole|aneurysm clip|\bedh\b|\bsdh\b|extradural|subdural|evacuation of (haematoma|hematoma)|depressed skull fracture|skull fracture|elevation of depressed)/i, family: 'CRANIOTOMY' },
   { re: /\b(appendic|appendec)/i, family: 'APPENDICECTOMY' },
   { re: /\b(colect|hemicolect|colostom|ileostom|anterior resection|abdominoperineal|colorect|sigmoid|rectopexy|haemorrhoid|hemorrhoid|fistula.?in.?ano|anal|pilonidal)/i, family: 'COLORECTAL' },
   { re: /\b(cholecystect|biliary|choledoch|bile duct|hepaticojejunost)/i, family: 'BILIARY' },
@@ -111,7 +120,14 @@ const FAMILY_PATTERNS: Array<{ re: RegExp; family: ProcedureFamily }> = [
   { re: /\b(shunt|ventriculoperitoneal|\bvp shunt|myelomeningocele|encephalocele)/i, family: 'CSF_SHUNT' },
 
   { re: /\b(turp|cystoscop|ureteroscop|urethroscop|transurethral|\bpcnl\b|lithotrips|\bdj stent|double.?j)/i, family: 'UROLOGY_ENDOSCOPIC' },
-  { re: /\b(nephrect|prostatect|pyelolithot|ureterolithot|cystect|orchid|hydrocel|circumcis|urethroplast|vesicolithot|varicocel)/i, family: 'UROLOGY_OPEN' },
+  // cystostom/suprapubic and the open prostate biopsy were added after the
+  // same review: "Suprapubic cystostomy" (six cases) and "Open Prostate
+  // biopsy" (seven) were reaching SUPERFICIAL and being packed as minor skin
+  // work — no catheter, no drainage bag, no specimen pot.
+  //
+  // A needle prostate biopsy is genuinely minor and is left alone; it is the
+  // OPEN one that is not.
+  { re: /\b(nephrect|prostatect|pyelolithot|ureterolithot|cystect|orchid|hydrocel|circumcis|urethroplast|vesicolithot|varicocel|cystostom|suprapubic|open prostate biopsy)/i, family: 'UROLOGY_OPEN' },
 
   { re: /\b(tonsillect|adenoid|laryngect|tracheost|pharyng|glossect|neck dissection|maxillect)/i, family: 'ENT_AERODIGESTIVE' },
   { re: /\b(myringot|mastoid|septoplast|rhinoplast|antrostom|polypect|grommet|stapedect|\bfess\b)/i, family: 'ENT_CLEAN' },

@@ -219,3 +219,77 @@ describe('the editor on the case page', () => {
     expect(EDITOR).toContain('readyToSend');
   });
 });
+
+describe('changing a line rather than deleting and retyping it', () => {
+  /**
+   * Asked for by two examples that are the same shape: the pack offers
+   * cefazolin and this patient needs a different antibiotic; the pack offers
+   * plain lidocaine and this case needs it with adrenaline.
+   *
+   * Plain and with-adrenaline are NOT interchangeable — the standards library
+   * says so in its own comments — which is exactly why this picks from a list
+   * instead of asking somebody to retype a drug name at speed.
+   */
+  it('offers a Change control beside the delete one', () => {
+    expect(EDITOR).toContain('Repeat2');
+    expect(EDITOR).toContain('Change this for another of the same kind');
+  });
+
+  it('narrows the alternatives to the line’s own kind', () => {
+    // The whole catalogue would mean scrolling past gauze to change an
+    // antibiotic, and would let a swap move a line into a section where it
+    // does not belong.
+    expect(EDITOR).toContain('/api/admin/drug-dressing-templates?type=');
+    expect(EDITOR).toContain('/api/admin/consumable-templates?category=');
+  });
+
+  it('does not offer the item as its own replacement', () => {
+    expect(EDITOR).toContain('choices = list.filter((n) => n.toLowerCase() !== l.name.trim().toLowerCase())');
+  });
+
+  it('stages a swap as a withdrawal AND an addition, not a rewrite', () => {
+    // The provider may already have picked the old item. A row that silently
+    // becomes a different drug is how somebody carries cefazolin to a theatre
+    // that is expecting ceftriaxone — so the old line stays, struck through,
+    // exactly as every other withdrawal does.
+    expect(EDITOR).toContain('reason: `Changed to ${s.to}`');
+    expect(EDITOR).toContain("reason: `Changed from ${was?.name ?? 'the previous item'}`");
+  });
+
+  it('keeps the replacement in the same section and quantity', () => {
+    // A swap changes the AGENT, not how much or where it belongs. Reshuffling
+    // the list would hide what actually changed.
+    expect(EDITOR).toContain('quantity: was?.quantity ?? 1');
+    expect(EDITOR).toContain("? { category: was?.category ?? 'OTHER' }");
+    expect(EDITOR).toContain(": { type: was?.type ?? 'OTHER' }");
+  });
+
+  it('counts a staged swap as a change to be submitted', () => {
+    expect(EDITOR).toContain('Object.keys(swaps).length');
+  });
+
+  it('clears the staged swaps once they are sent', () => {
+    // Otherwise the next submit sends them again and withdraws a line that is
+    // already gone.
+    expect(EDITOR).toContain('setSwaps({});');
+  });
+});
+
+describe('removing a line no longer waits on a reason', () => {
+  it('does not block the submit on removals', () => {
+    // readyToSend tests the additions only now.
+    const ready = EDITOR.slice(EDITOR.indexOf('const readyToSend'), EDITOR.indexOf('const readyToSend') + 400);
+    expect(ready).toContain('additions.every');
+    expect(ready).not.toContain('Object.values(removals).every');
+  });
+
+  it('still offers the box, because the provider does read it', () => {
+    // What went is the refusal, not the channel.
+    expect(EDITOR).toMatch(/placeholder="Optional/);
+  });
+
+  it('no longer tells the user that every change needs a reason', () => {
+    expect(EDITOR).not.toContain('Every change needs a reason.');
+    expect(EDITOR).toContain('A new item needs a reason. Removing and changing do not.');
+  });
+});

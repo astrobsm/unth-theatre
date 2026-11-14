@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Package, Pill, Plus, Trash2, Send, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Package, Pill, Plus, Trash2, Send, AlertTriangle, ChevronDown, ChevronRight,
+  Repeat2, X,
+} from 'lucide-react';
 import { MIN_PACK_REASON } from '@/lib/theatreOps/packAmendment';
 import {
   groupConsumables,
@@ -65,6 +68,64 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
   /** Shut sections, by `${list}:${category}`. Absent means open. */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  /**
+   * CHANGING a line, rather than deleting it and typing a replacement.
+   *
+   * Asked for by example, and both examples are the same shape: the pack
+   * offers cefazolin and this patient needs a different antibiotic; the pack
+   * offers plain lidocaine and this case needs it with adrenaline. Plain and
+   * with-adrenaline are NOT interchangeable, and the old way of correcting
+   * that was to delete one line, write a reason, add another, write another
+   * reason, and get the category right by hand.
+   *
+   * A swap is staged as what it actually is: the old line withdrawn and the
+   * new one added, both carrying a reason naming the other. It is NOT an
+   * in-place rewrite of the row — the provider may already have picked the
+   * old item, and a line that silently becomes a different drug is how
+   * somebody carries cefazolin to a theatre expecting ceftriaxone.
+   *
+   * The replacement inherits the old line's category or type, so it lands in
+   * the same section and the list does not reshuffle under the reader.
+   */
+  const [swaps, setSwaps] = useState<Record<string, { list: ListKind; to: string }>>({});
+  /** Which line is currently showing its alternatives. */
+  const [swapOpen, setSwapOpen] = useState<string | null>(null);
+  /** Alternatives by `${list}:${group}`, fetched once and kept. */
+  const [options, setOptions] = useState<Record<string, string[]>>({});
+  const [optionsLoading, setOptionsLoading] = useState<string | null>(null);
+
+  /**
+   * The alternatives for a line: the catalogue, narrowed to its own kind.
+   *
+   * Narrowed deliberately. Offering the whole catalogue would mean scrolling
+   * past gauze to change an antibiotic, and would let a swap move a line
+   * into a section it does not belong in.
+   */
+  const loadOptions = useCallback(async (list: ListKind, group: string) => {
+    const key = `${list}:${group}`;
+    if (options[key] || optionsLoading === key) return;
+    setOptionsLoading(key);
+    try {
+      const url = list === 'PHARMACY'
+        ? `/api/admin/drug-dressing-templates?type=${encodeURIComponent(group)}&activeOnly=true`
+        : `/api/admin/consumable-templates?category=${encodeURIComponent(group)}&activeOnly=true`;
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = res.ok ? await res.json() : [];
+      const names = Array.from(new Set(
+        (Array.isArray(data) ? data : [])
+          .map((t: { name?: string }) => String(t?.name ?? '').trim())
+          .filter(Boolean),
+      )).sort();
+      setOptions((p) => ({ ...p, [key]: names }));
+    } catch {
+      // An empty list is reported in the control itself rather than as a
+      // page-level error: the rest of the pack is still editable.
+      setOptions((p) => ({ ...p, [key]: [] }));
+    } finally {
+      setOptionsLoading(null);
+    }
+  }, [options, optionsLoading]);
+
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/surgeries/${surgeryId}/pack`, { cache: 'no-store' });
@@ -82,10 +143,13 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
 
   useEffect(() => { load(); }, [load]);
 
-  const staged = additions.length + Object.keys(removals).length;
+  const staged = additions.length + Object.keys(removals).length + Object.keys(swaps).length;
+  // Removing no longer waits on a reason, and a swap writes its own on both
+  // sides — each naming the other item, which is what the provider needs and
+  // all they need. Adding still asks: it is the rarer action, it costs the
+  // hospital money, and nobody downstream can guess why a line appeared.
   const readyToSend =
-    additions.every((a) => a.name.trim() && a.quantity >= 1 && a.reason.trim().length >= MIN_PACK_REASON)
-    && Object.values(removals).every((r) => r.reason.trim().length >= MIN_PACK_REASON);
+    additions.every((a) => a.name.trim() && a.quantity >= 1 && a.reason.trim().length >= MIN_PACK_REASON);
 
   const submit = async () => {
     setSaving(true);
@@ -95,13 +159,48 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          add: additions.map((a) => ({
-            list: a.list, name: a.name.trim(), quantity: a.quantity, reason: a.reason.trim(),
-            // The API takes `category` for a consumable and `type` for a
-            // pharmacy line, and defaults either to OTHER when absent.
-            ...(a.list === 'CONSUMABLE' ? { category: a.group } : { type: a.group }),
-          })),
-          remove: Object.entries(removals).map(([id, r]) => ({ list: r.list, id, reason: r.reason.trim() })),
+          add: [
+            ...additions.map((a) => ({
+              list: a.list, name: a.name.trim(), quantity: a.quantity, reason: a.reason.trim(),
+              // The API takes `category` for a consumable and `type` for a
+              // pharmacy line, and defaults either to OTHER when absent.
+              ...(a.list === 'CONSUMABLE' ? { category: a.group } : { type: a.group }),
+            })),
+            // The replacement half of each swap. It inherits the quantity
+            // and the section of the line it replaces: a swap is a change of
+            // AGENT, not of how much or of where it belongs, and making the
+            // list reshuffle under the reader would hide what changed.
+            ...Object.entries(swaps).map(([id, s]) => {
+              const was = [...consumables, ...pharmacy].find((l) => l.id === id);
+              return {
+                list: s.list,
+                name: s.to,
+                quantity: was?.quantity ?? 1,
+                reason: `Changed from ${was?.name ?? 'the previous item'}`,
+                ...(s.list === 'CONSUMABLE'
+                  ? { category: was?.category ?? 'OTHER' }
+                  : { type: was?.type ?? 'OTHER' }),
+              };
+            }),
+          ],
+          remove: [
+            ...Object.entries(removals).map(([id, r]) => ({
+              list: r.list, id, reason: r.reason.trim(),
+            })),
+            // The withdrawal half of each swap. A swap is staged as what it
+            // actually is — the old line withdrawn, the new one added — and
+            // NOT as a rewrite of the row: the provider may already have
+            // picked the old item, and a line that silently becomes a
+            // different drug is how somebody carries cefazolin to a theatre
+            // that is expecting ceftriaxone.
+            //
+            // The reason is written here rather than asked for. It names the
+            // replacement, which is what the provider needs and all they
+            // need.
+            ...Object.entries(swaps).map(([id, s]) => ({
+              list: s.list, id, reason: `Changed to ${s.to}`,
+            })),
+          ],
           submit: true,
         }),
       });
@@ -109,6 +208,8 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
       if (!res.ok) { setMessage(body.error || 'The changes were not saved.'); return; }
       setMessage(body.message || 'Saved.');
       setAdditions([]);
+      setSwaps({});
+      setSwapOpen(null);
       setRemovals({});
       await load();
     } catch {
@@ -146,20 +247,42 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
                 )}
               </span>
               {canEdit && !withdrawn && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRemovals((prev) => {
-                      const next = { ...prev };
-                      if (next[l.id]) delete next[l.id];
-                      else next[l.id] = { list: kind, reason: '' };
-                      return next;
-                    })}
-                  className="shrink-0 text-red-600"
-                  title={markedForRemoval ? 'Keep this item' : 'Remove this item'}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <span className="flex shrink-0 items-center gap-2">
+                  {/* CHANGE, beside delete. Swapping one agent for another
+                      is not a deletion and a typed replacement: cefazolin
+                      for another antibiotic, plain lidocaine for lidocaine
+                      with adrenaline. Those two are not interchangeable,
+                      which is exactly why picking from a list beats
+                      retyping a name. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const group = String(
+                        (kind === 'PHARMACY' ? l.type : l.category) ?? 'OTHER',
+                      ).toUpperCase();
+                      setSwapOpen((cur) => (cur === l.id ? null : l.id));
+                      void loadOptions(kind, group);
+                    }}
+                    className="text-indigo-600"
+                    title="Change this for another of the same kind"
+                  >
+                    <Repeat2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRemovals((prev) => {
+                        const next = { ...prev };
+                        if (next[l.id]) delete next[l.id];
+                        else next[l.id] = { list: kind, reason: '' };
+                        return next;
+                      })}
+                    className="text-red-600"
+                    title={markedForRemoval ? 'Keep this item' : 'Remove this item'}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </span>
               )}
             </div>
 
@@ -170,10 +293,73 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
               <p className="mt-1 text-xs italic text-gray-600">Added: {l.additionReason}</p>
             )}
 
+            {/* Staged swap, shown on the line it changes. */}
+            {swaps[l.id] && (
+              <p className="mt-1 flex items-center gap-2 text-xs font-medium text-indigo-800">
+                <Repeat2 className="h-3 w-3" /> changing to {swaps[l.id].to}
+                <button
+                  type="button"
+                  className="text-gray-500"
+                  title="Undo this change"
+                  onClick={() => setSwaps((p) => {
+                    const next = { ...p };
+                    delete next[l.id];
+                    return next;
+                  })}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </p>
+            )}
+
+            {swapOpen === l.id && canEdit && !withdrawn && (() => {
+              const group = String(
+                (kind === 'PHARMACY' ? l.type : l.category) ?? 'OTHER',
+              ).toUpperCase();
+              const key = `${kind}:${group}`;
+              const list = options[key];
+              if (!list) {
+                return <p className="mt-2 text-xs text-gray-500">Loading alternatives…</p>;
+              }
+              // The item being replaced is not offered as its own
+              // replacement.
+              const choices = list.filter((n) => n.toLowerCase() !== l.name.trim().toLowerCase());
+              if (choices.length === 0) {
+                return (
+                  <p className="mt-2 text-xs text-amber-700">
+                    No other {kind === 'PHARMACY' ? 'drug' : 'item'} of this kind is in the
+                    catalogue. Delete this line and add the one you want.
+                  </p>
+                );
+              }
+              return (
+                <select
+                  className="input-field mt-2 text-sm"
+                  value=""
+                  aria-label={`Change ${l.name}`}
+                  onChange={(e) => {
+                    const to = e.target.value;
+                    if (!to) return;
+                    setSwaps((p) => ({ ...p, [l.id]: { list: kind, to } }));
+                    setSwapOpen(null);
+                  }}
+                >
+                  <option value="">Change {l.name} to…</option>
+                  {choices.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              );
+            })()}
+
+            {/* REMOVING NO LONGER NEEDS A REASON. The box is still here and
+                still sent when it is filled in — the provider does read it
+                — but nothing waits on it. Removing a line the standard
+                supplied and this patient does not need is the commonest
+                edit on this screen, and a sentence demanded for each one
+                made the quickest correction the slowest. */}
             {markedForRemoval && (
               <input
                 className="input-field mt-2 text-sm"
-                placeholder="Why is this being removed? The pack provider reads this."
+                placeholder="Optional — anything the pack provider should know"
                 value={removals[l.id].reason}
                 onChange={(e) =>
                   setRemovals((prev) => ({ ...prev, [l.id]: { ...prev[l.id], reason: e.target.value } }))}
@@ -336,14 +522,14 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
             onClick={submit}
             disabled={saving || !readyToSend}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            title={readyToSend ? 'Send the changes and notify the providers' : `Every change needs a reason of at least ${MIN_PACK_REASON} characters`}
+            title={readyToSend ? 'Send the changes and notify the providers' : `A NEW item needs a reason of at least ${MIN_PACK_REASON} characters`}
           >
             <Send className="h-4 w-4" />
             {saving ? 'Sending…' : `Submit ${staged} change${staged === 1 ? '' : 's'} and notify providers`}
           </button>
           {!readyToSend && (
             <span className="inline-flex items-center gap-1 text-sm text-amber-700">
-              <AlertTriangle className="h-4 w-4" /> Every change needs a reason.
+              <AlertTriangle className="h-4 w-4" /> A new item needs a reason. Removing and changing do not.
             </span>
           )}
         </div>

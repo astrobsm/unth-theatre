@@ -76,14 +76,18 @@ export function checkRemoval(input: RemovalInput): PackChangeCheck {
   if (!input.byId) {
     return { ok: false, problem: 'The person making the change must be identified.', requiresProviderNotice: acted };
   }
-  if ((input.reason ?? '').trim().length < MIN_PACK_REASON) {
-    return {
-      ok: false,
-      problem: `Say why the item is being removed — at least ${MIN_PACK_REASON} characters. `
-        + 'The pack provider reads this to decide whether to repack the tray or simply not add it.',
-      requiresProviderNotice: acted,
-    };
-  }
+  // NO REASON IS REQUIRED TO REMOVE A LINE. It used to be, on the argument
+  // that the provider reads it to decide whether to repack a tray or simply
+  // not add the item. That argument is still true, and it lost anyway:
+  // removing an item is the commonest correction on this screen — a pack
+  // composed from a standard always carries something this patient does not
+  // need — and a ten-character sentence demanded for each one made the
+  // quickest edit the slowest. Asked for directly.
+  //
+  // The box is still offered and still sent when it is filled in. What has
+  // gone is the refusal. Adding an item still asks, because that one is
+  // rarer, costs the hospital money, and the provider genuinely cannot
+  // guess at it.
   return { ok: true, problem: null, requiresProviderNotice: acted };
 }
 

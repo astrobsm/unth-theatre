@@ -341,3 +341,38 @@ describe('the cervix and the cervical spine', () => {
     expect(familyOf('Cervical lymph node biopsy')).not.toBe('GYNAE_VAGINAL');
   });
 });
+
+describe('the misroutes a review of every booked procedure turned up', () => {
+  /**
+   * Found by running the pack classifier over all 628 distinct procedures this
+   * hospital has actually booked and flagging each whose family disagreed with
+   * the subspecialty it was booked under. None of these is hypothetical: each
+   * has real cases behind it.
+   */
+  it('packs a depressed skull fracture as cranial, not orthopaedic', () => {
+    // Four cases, all Neurosurgery. The only orthopaedic thing about it is the
+    // word 'fracture' in the name, and that was enough to send it to plates,
+    // screws and K-wires with no bone wax, no haemostat and no head pins.
+    expect(familyOf('Elevation of depressed skull fracture')).toBe('CRANIOTOMY');
+    expect(familyOf('Elevation of Depressed Skull Fracture')).toBe('CRANIOTOMY');
+  });
+
+  it('still sends a limb fracture to fracture fixation', () => {
+    // The fix must not swallow the orthopaedic cases it sits above.
+    expect(familyOf('ORIF of femoral shaft fracture')).toBe('FRACTURE_FIXATION');
+    expect(familyOf('Closed reduction of distal radius fracture')).toBe('FRACTURE_FIXATION');
+  });
+
+  it('packs a suprapubic cystostomy as open urology', () => {
+    // Six cases, all urology units, reaching SUPERFICIAL — packed as minor
+    // skin work, with no catheter and no drainage bag.
+    expect(familyOf('Suprapubic cystostomy')).toBe('UROLOGY_OPEN');
+  });
+
+  it('separates an open prostate biopsy from a needle one', () => {
+    // Seven open cases were being packed as minor skin work. A needle biopsy
+    // genuinely is minor and keeps its lighter pack.
+    expect(familyOf('Open Prostate biopsy')).toBe('UROLOGY_OPEN');
+    expect(familyOf('Prostate Biopsy')).not.toBe('UROLOGY_OPEN');
+  });
+});

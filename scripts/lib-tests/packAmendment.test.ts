@@ -45,12 +45,41 @@ describe('removing an item', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('refuses a removal with no reason worth reading', () => {
-    // The provider reads this to decide whether to repack a tray or simply not
-    // add the item.
-    const r = checkRemoval({ currentStatus: 'REQUESTED', reason: 'no', ...BY });
+  it('ALLOWS a removal with no reason at all', () => {
+    // This test used to demand the opposite, and the reasoning was sound:
+    // the provider reads the reason to decide whether to repack a tray or
+    // simply not add the item.
+    //
+    // It lost to how often the action happens. A pack composed from a
+    // standard always carries something this patient does not need, so
+    // removing a line is the commonest correction on the screen, and a
+    // ten-character sentence demanded for each one made the quickest edit
+    // the slowest. Asked for directly.
+    //
+    // The box is still offered and a reason still travels when it is given.
+    // What has gone is the refusal.
+    for (const reason of ['', 'no', '   ']) {
+      const r = checkRemoval({ currentStatus: 'REQUESTED', reason, ...BY });
+      expect(r.ok, JSON.stringify(reason)).toBe(true);
+      expect(r.problem, JSON.stringify(reason)).toBeNull();
+    }
+  });
+
+  it('still demands one for an ADDITION', () => {
+    // The asymmetry is deliberate. Adding is rarer, it costs the hospital
+    // money and the family a bigger deposit, and nobody downstream can guess
+    // why a line appeared.
+    const r = checkAddition({ name: 'Ceftriaxone 1 g', quantity: 1, reason: 'no', ...BY });
     expect(r.ok).toBe(false);
     expect(r.problem).toContain(String(MIN_PACK_REASON));
+  });
+
+  it('still refuses a removal from somebody who may not edit the pack', () => {
+    // Dropping the reason must not drop the authorisation with it.
+    const r = checkRemoval({
+      currentStatus: 'REQUESTED', reason: '', byId: 'u1', byRole: 'PORTER',
+    });
+    expect(r.ok).toBe(false);
   });
 
   it('refuses to remove something already removed', () => {
