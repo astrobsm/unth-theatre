@@ -78,7 +78,7 @@ async function main() {
 
     const [existingC, existingD] = await Promise.all([
       prisma.surgeryConsumableRequest.findMany({
-        where: { surgeryId: c.id }, select: { name: true },
+        where: { surgeryId: c.id }, select: { name: true, notes: true },
       }),
       prisma.surgeryDrugDressingRequest.findMany({
         where: { surgeryId: c.id }, select: { name: true },
@@ -102,8 +102,25 @@ async function main() {
       console.error(`  ! ${c.id}: mapping failed`, err);
     }
 
-    // The floor is what the case ALREADY HAS, not zero — otherwise this would
-    // compose a second pharmacy list for a case a pharmacist had authored.
+    // ── The floor, and why it is not simply "how many lines are on the case"
+    //
+    // fallbackPacks fills only a side that is EMPTY. Counting every existing
+    // consumable line made that side never empty, because EVERY case carries
+    // the mandatory base pack — some thirty lines of PPE, skin prep and
+    // drapes attached at booking regardless of the operation.
+    //
+    // The first dry run showed exactly that: two cases, "+0 consumable, +6
+    // pharmacy". The pharmacy side was empty so it filled; the consumable
+    // side looked full and was skipped, which would have left an anterior
+    // cervical discectomy and fusion with gowns and gloves and no sutures,
+    // no drain and nothing for the approach.
+    //
+    // The base pack is not an answer to "what does THIS operation need". So
+    // the floor counts only lines that are not base pack, which is what the
+    // booking route does — there haveConsumables is what the booker ticked or
+    // what a confirmed mapping produced, and the base pack is added
+    // separately and never counted.
+    const realConsumables = existingC.filter((r) => r.notes !== BASE_PACK_LABEL).length;
     const composed = fallbackPacks({
       procedureName: c.procedureName,
       subspecialty: c.subspecialty,
@@ -117,7 +134,7 @@ async function main() {
       // Allergy lives on the pre-operative assessment. The generator warns
       // that the choice must be confirmed rather than guessing it here.
       betaLactamAllergy: false,
-      haveConsumables: existingC.length + mapped.consumables.length,
+      haveConsumables: realConsumables + mapped.consumables.length,
       haveDrugs: existingD.length + mapped.drugs.length,
     });
     if (composed.generated) composedFor += 1;
