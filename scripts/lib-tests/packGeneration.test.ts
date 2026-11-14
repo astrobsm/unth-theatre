@@ -286,3 +286,58 @@ describe('the standards behind it', () => {
     });
   });
 });
+
+describe('the cervix and the cervical spine', () => {
+  /**
+   * Found by running the pack backfill dry, against real booked cases.
+   *
+   * "Anterior Cervical Disectomy and Fusion", on the list for 16 November, was
+   * composed a pack containing a VAGINAL PACK, a urethral catheter with
+   * drainage bag, a specimen pot, and a suture set whose own note read
+   * "perineal and superficial skin". It had no spinal set at all.
+   *
+   * The cause was one word. FAMILY_PATTERNS is first-match-wins and the
+   * gynaecological rule is tried before the spinal one, so a bare `cervical`
+   * claimed every cervical spine operation before `discect` or `fusion` was
+   * ever reached. The file already carried the same lesson about `evacuation`,
+   * which had sent a craniotomy a vaginal pack and no bone wax.
+   *
+   * This is the failure that justifies the dry run existing: the counts looked
+   * entirely reasonable (+9 consumable, +6 pharmacy). Only the item names
+   * showed it was nine of the wrong things.
+   */
+  it('sends a cervical spine operation to the spine', () => {
+    expect(familyOf('Anterior Cervical Disectomy and Fusion')).toBe('SPINAL');
+    expect(familyOf('Anterior cervical discectomy and fusion')).toBe('SPINAL');
+    expect(familyOf('Posterior cervical laminectomy')).toBe('SPINAL');
+    expect(familyOf('Cervical spine fixation')).toBe('SPINAL');
+  });
+
+  it('never puts a vaginal pack on one', () => {
+    // The assertion that would have caught it on the ward.
+    const packs = generatePacks({
+      procedureName: 'Anterior Cervical Disectomy and Fusion',
+      subspecialty: 'Neurosurgery',
+      magnitude: 'MAJOR',
+    });
+    const names = packs.consumables.map((c) => c.name.toLowerCase());
+    expect(names.some((n) => n.includes('vaginal'))).toBe(false);
+    expect(names.some((n) => n.includes('urethral catheter'))).toBe(false);
+  });
+
+  it('still sends the cervix to gynaecology', () => {
+    // The rule had to keep working for what it was written for.
+    expect(familyOf('Cervical cerclage')).toBe('GYNAE_VAGINAL');
+    expect(familyOf('McDonald cerclage')).toBe('GYNAE_VAGINAL');
+    expect(familyOf('Cervical biopsy')).toBe('GYNAE_VAGINAL');
+    expect(familyOf('Cervical polypectomy')).toBe('GYNAE_VAGINAL');
+    expect(familyOf('Cervical cone biopsy')).toBe('GYNAE_VAGINAL');
+    expect(familyOf('LLETZ')).toBe('GYNAE_VAGINAL');
+  });
+
+  it('does not claim a neck operation either', () => {
+    // A cervical lymph node biopsy is neither spine nor cervix. It must not be
+    // claimed by the gynaecological rule just for sharing the word.
+    expect(familyOf('Cervical lymph node biopsy')).not.toBe('GYNAE_VAGINAL');
+  });
+});

@@ -87,7 +87,19 @@ const FAMILY_PATTERNS: Array<{ re: RegExp; family: ProcedureFamily }> = [
   // 'evacuation' alone is not gynaecological — a craniotomy for evacuation of
   // a haematoma matched here and would have been sent a vaginal pack and no
   // bone wax. It must carry its uterine context.
-  { re: /\b(evacuation of retained|uterine evacuation|evacuation of the uterus|\bd&c\b|dilatation and curettage|manual vacuum|cervical|colporrhaph|vaginal|marsupial|bartholin)/i, family: 'GYNAE_VAGINAL' },
+  //
+  // AND NEITHER IS 'cervical', FOR THE SAME REASON. The neck has a cervical
+  // spine and the uterus has a cervix, and this rule is tried before SPINAL
+  // below, so the bare word took every one of them. Found by a backfill dry
+  // run: "Anterior Cervical Disectomy and Fusion", booked for 16 November,
+  // was composed a pack with a VAGINAL PACK in it, a urethral catheter, and
+  // a suture set labelled "perineal and superficial skin" — and no spinal
+  // set at all. The operation never reached `discect` or `fusion`.
+  //
+  // 'cervical lymph node biopsy' is a neck operation too, and is left to
+  // fall through rather than be claimed here: the words between 'cervical'
+  // and 'biopsy' keep it out of the adjacency below.
+  { re: /\b(evacuation of retained|uterine evacuation|evacuation of the uterus|\bd&c\b|dilatation and curettage|manual vacuum|cerclage|\blletz\b|\bleep\b|cervical (cerclage|biopsy|suture|polypect|cone|conisation|conization|cautery|encirclage|dilat)|colporrhaph|colposcop|vaginal|marsupial|bartholin)/i, family: 'GYNAE_VAGINAL' },
   { re: /\b(salping|oophor|ectopic|ovarian cystect|tubal)/i, family: 'LAPAROTOMY' },
 
   { re: /\b(arthroplast|hip replacement|knee replacement|hemiarthroplast|prosthe)/i, family: 'ARTHROPLASTY' },
