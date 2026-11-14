@@ -19,6 +19,8 @@ import { safeCreateDraftEstimate } from '@/lib/estimates/autoDraft';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
 import { parseProcedures, serialiseAdditional } from '@/lib/procedurePacks';
 import { buildPackRequests } from '@/lib/packRequests';
+import { fallbackPacks } from '@/lib/packs/fallback';
+import { toConsumableCategory, toDrugType } from '@/lib/packs/enums';
 import { apiError } from '@/lib/apiError';
 import { quoteFor, koboToNaira, isMagnitude } from '@/lib/specialNeeds/pricing';
 import { bookingContactDecision } from '@/lib/patients/contact';
@@ -1293,8 +1295,107 @@ export async function POST(request: NextRequest) {
       console.error('[surgeries] could not build pack requests from the mapping', err);
     }
 
-    const effectiveConsumables = (consumableRequests?.length ? consumableRequests : mapped.consumables);
-    const effectiveDrugs = (drugDressingRequests?.length ? drugDressingRequests : mapped.drugs);
+    // ── The composed standard, where neither supplied a pack ─────────────
+    //
+    // buildPackRequests reads only ProcedurePackMap rows a person has
+    // CONFIRMED, which is right — a name-match suggestion must never reach a
+    // theatre trolley on its own. The consequence was that a case whose
+    // procedure has no confirmed mapping was booked with the mandatory base
+    // pack and NOTHING ELSE: the same PPE, skin prep and drapes for a
+    // cataract and a thoracotomy, and "Pharmacy: nothing requested" on both.
+    // Reported from the ward: "booked cases still have this old bundle
+    // instead of the new one".
+    //
+    // The regenerate route has filled that gap since it was written — it
+    // calls fallbackPacks after the mapping — but BOOKING never did. So the
+    // pack a case got depended on whether somebody later found the Packs
+    // button on the list. Same helper, same arguments, same order as
+    // /api/surgeries/[id]/pack/generate: one way of deciding what a
+    // procedure needs, not two.
+    //
+    // IT IS A FLOOR, NOT AN OVERRIDE. fallbackPacks decides each side on its
+    // own and returns nothing for a side that already has lines, so a pack
+    // the surgeon applied or a mapping a consultant confirmed is never
+    // touched. Every generated line carries its provenance in `notes`, so a
+    // pack provider can tell a composed line from an authored one.
+    const haveConsumables = consumableRequests?.length || mapped.consumables.length;
+    const haveDrugs = drugDressingRequests?.length || mapped.drugs.length;
+    let composed = {
+      consumables: [] as ReturnType<typeof fallbackPacks>['consumables'],
+      drugs: [] as ReturnType<typeof fallbackPacks>['drugs'],
+      generated: false,
+    };
+    try {
+      composed = fallbackPacks({
+        procedureName: validatedData.procedureName,
+        subspecialty: validatedData.subspecialty ?? null,
+        magnitude: validatedData.magnitude,
+        surgeryType: validatedData.surgeryType,
+        additionalProcedures: Array.isArray(validatedData.additionalProcedures)
+          ? validatedData.additionalProcedures.join('\n')
+          : validatedData.additionalProcedures ?? null,
+        patientAge: patient.age ?? null,
+        patientAgeUnit: patient.ageUnit ?? null,
+        // Not inferred. Allergy is recorded on the pre-operative assessment,
+        // not on the patient, and guessing it in either direction is worse
+        // than asking — the generator warns that it must be confirmed.
+        betaLactamAllergy: false,
+        haveConsumables,
+        haveDrugs,
+      });
+    } catch (err) {
+      // Never fails the booking. A case on the list with a thin pack can be
+      // topped up in the morning; a case that was refused cannot.
+      console.error('[surgeries] could not compose the standard pack', err);
+    }
+
+    // Coerced field by field, NOT spread. The standards library carries a
+    // richer vocabulary than these columns — its own category names, dosage,
+    // route — and spreading it hands Prisma enum values the model does not
+    // have, which rejects the whole insert. The regenerate route learned
+    // this the expensive way; the comment there says so.
+    //
+    // Base-pack names are dropped here rather than deduplicated later, so
+    // that a line a SURGEON asked for is never silently removed for
+    // colliding with the base pack — they may want a second one.
+    const basePackNames = new Set(basePackRows.map((r) => r.name.trim().toLowerCase()));
+    const composedConsumables = composed.consumables
+      .filter((c) => c?.name && !basePackNames.has(String(c.name).trim().toLowerCase()))
+      .map((c) => ({
+        templateId: null,
+        name: String(c.name),
+        category: toConsumableCategory(c.category),
+        size: c.size ?? null,
+        unit: c.unit ?? 'piece',
+        quantity: Number(c.quantity) > 0 ? Math.round(Number(c.quantity)) : 1,
+        notes: c.notes ?? null,
+      }));
+    const composedDrugs = composed.drugs
+      .filter((d) => !!d?.name)
+      .map((d) => ({
+        templateId: null,
+        name: String(d.name),
+        // The column is `type`; the standards call it drugType.
+        type: toDrugType(d.drugType ?? d.category),
+        dosage: d.dosage ?? null,
+        route: d.route ?? null,
+        quantity: Number(d.quantity) > 0 ? Math.round(Number(d.quantity)) : 1,
+        unit: d.unit ?? 'vial',
+        notes: d.notes ?? null,
+      }));
+
+    // The composed lists join at the END of the chain, so they are reached
+    // only when nothing a person chose and nothing a consultant confirmed
+    // applies. Everything downstream — the inserts, the template lookup, the
+    // pharmacy notification — then works unchanged, which is the point:
+    // pharmacy is told about a composed list exactly as about an authored
+    // one, because it is just as real to the person packing it.
+    const effectiveConsumables = (consumableRequests?.length
+      ? consumableRequests
+      : (mapped.consumables.length ? mapped.consumables : composedConsumables));
+    const effectiveDrugs = (drugDressingRequests?.length
+      ? drugDressingRequests
+      : (mapped.drugs.length ? mapped.drugs : composedDrugs));
 
     // ── The template names the item, not the client ──────────────────────────
     // The booking form sends a display label beside each templateId, resolved

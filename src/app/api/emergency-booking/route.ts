@@ -9,6 +9,9 @@ import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempote
 import { recordProcedureUse } from '@/lib/procedures/usage';
 import { buildEmergencyAlertMessage } from '@/lib/emergencyAlert';
 import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
+import { buildPackRequests } from '@/lib/packRequests';
+import { fallbackPacks } from '@/lib/packs/fallback';
+import { toConsumableCategory, toDrugType } from '@/lib/packs/enums';
 import { isSurgeonRole } from '@/lib/roleGroups';
 import { reconcileEmergencyBoard } from '@/lib/emergency/ensureBooking';
 import { checkRequiredByTime } from '@/lib/emergency/requiredByTime';
@@ -753,14 +756,86 @@ export async function POST(request: NextRequest) {
       requestedById: session.user.id,
       requestedByName: session.user.name || null,
     }));
-    const extraConsumableRows = consumableRequests.map((c) => ({
+    // ── What the PROCEDURE needs, not just what its size needs ──────────
+    //
+    // An emergency booking used to persist the base pack and whatever the
+    // booker had time to tick, and nothing else: no procedure mapping, no
+    // composed standard. The elective route at least consulted the confirmed
+    // mapping. So the case with the least time to prepare got the least
+    // specific pack — an exploratory laparotomy at two in the morning
+    // arriving with PPE, skin prep and drapes, and "nothing requested" at
+    // pharmacy.
+    //
+    // That is backwards. An emergency is exactly where nobody has twenty
+    // minutes to tick a list, and where a missing drain or an unordered
+    // antibiotic is least recoverable.
+    //
+    // Same two helpers, same order as the elective route and the regenerate
+    // route: a confirmed mapping first, then the composed standard for the
+    // procedures nobody has mapped. Neither may fail the booking — an
+    // emergency that is refused because a pack could not be composed is the
+    // worst outcome available here.
+    let mapped: Awaited<ReturnType<typeof buildPackRequests>> = {
+      consumables: [], drugs: [], packsUsed: [], unmapped: [],
+    };
+    try {
+      mapped = await buildPackRequests(validatedData.procedureName, null);
+    } catch (err) {
+      console.error('[emergency-booking] could not build pack requests from the mapping', err);
+    }
+
+    let composed = {
+      consumables: [] as ReturnType<typeof fallbackPacks>['consumables'],
+      drugs: [] as ReturnType<typeof fallbackPacks>['drugs'],
+    };
+    try {
+      composed = fallbackPacks({
+        procedureName: validatedData.procedureName,
+        // The emergency form calls it the surgical unit; it is the string the
+        // surgery row is given as its subspecialty a few lines above.
+        subspecialty: validatedData.surgicalUnit ?? null,
+        magnitude: validatedData.magnitude,
+        surgeryType: 'EMERGENCY',
+        additionalProcedures: null,
+        patientAge: validatedData.age ?? null,
+        // This form collects a number with no unit, which isPaediatric()
+        // reads as years — its own default. Passing null keeps that one
+        // assumption in one place instead of restating it here.
+        patientAgeUnit: null,
+        // Never inferred: a child gets no filled-in dose and a warning that
+        // the prescriber must calculate it.
+        betaLactamAllergy: false,
+        haveConsumables: consumableRequests.length || mapped.consumables.length,
+        haveDrugs: drugDressingRequests.length || mapped.drugs.length,
+      });
+    } catch (err) {
+      console.error('[emergency-booking] could not compose the standard pack', err);
+    }
+
+    // Base-pack names are dropped from the COMPOSED list only, so a line the
+    // surgeon asked for is never removed for colliding with the base pack.
+    const basePackNames = new Set(basePackRows.map((r) => r.name.trim().toLowerCase()));
+    const composedConsumables = composed.consumables
+      .filter((c) => c?.name && !basePackNames.has(String(c.name).trim().toLowerCase()));
+
+    const effectiveConsumables = consumableRequests.length
+      ? consumableRequests
+      : (mapped.consumables.length ? mapped.consumables : composedConsumables);
+    const effectiveDrugs = drugDressingRequests.length
+      ? drugDressingRequests
+      : (mapped.drugs.length ? mapped.drugs : composed.drugs);
+
+    // Coerced field by field rather than spread: the standards library has a
+    // wider vocabulary than these columns, and an unknown enum value does not
+    // skip a line — it rejects the whole insert and returns a 500.
+    const extraConsumableRows = effectiveConsumables.map((c: any) => ({
       surgeryId: surgery.id,
       templateId: c.templateId || null,
-      name: c.name,
-      category: c.category as any,
+      name: String(c.name),
+      category: toConsumableCategory(c.category) as any,
       size: c.size ?? null,
-      unit: c.unit,
-      quantity: c.quantity,
+      unit: c.unit ?? 'piece',
+      quantity: Number(c.quantity) > 0 ? Math.round(Number(c.quantity)) : 1,
       notes: c.notes ?? null,
       requestedById: session.user.id,
       requestedByName: session.user.name || null,
@@ -786,17 +861,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (drugDressingRequests.length > 0) {
+    // Pharmacy is told about a composed list exactly as about a ticked one,
+    // because it is just as real to the person dispensing it at 2am.
+    if (effectiveDrugs.length > 0) {
       await prisma.surgeryDrugDressingRequest.createMany({
-        data: drugDressingRequests.map((d) => ({
+        data: effectiveDrugs.map((d: any) => ({
           surgeryId: surgery.id,
           templateId: d.templateId || null,
-          name: d.name,
-          type: d.type as any,
+          name: String(d.name),
+          // The column is `type`; the standards library calls it drugType.
+          type: toDrugType(d.type ?? d.drugType ?? d.category) as any,
           dosage: d.dosage ?? null,
           route: d.route ?? null,
-          quantity: d.quantity,
-          unit: d.unit,
+          quantity: Number(d.quantity) > 0 ? Math.round(Number(d.quantity)) : 1,
+          unit: d.unit ?? 'vial',
           notes: d.notes ?? null,
         })),
       });
@@ -812,7 +890,7 @@ export async function POST(request: NextRequest) {
             userId: u.id,
             type: 'STOCK_ALERT' as any,
             title: '🚨 EMERGENCY: New surgical drug/dressing pre-pack',
-            message: `Emergency ${validatedData.procedureName} for ${validatedData.patientName} — ${drugDressingRequests.length} item(s) to pack.`,
+            message: `Emergency ${validatedData.procedureName} for ${validatedData.patientName} — ${effectiveDrugs.length} item(s) to pack.`,
             link: `/dashboard/prescriptions?surgery=${surgery.id}`,
           })),
         });
