@@ -18,9 +18,17 @@ const USER_ROLES = [
   'PLUMBER', 'PLUMBING_SUPERVISOR', 'WATER_SUPPLY_SUPERVISOR',
   'EMERGENCY_LAB_SCIENTIST', 'LABORATORY_STAFF', 'HOUSE_OFFICER',
   'CONSUMABLE_PACK_PROVIDER', 'SCRUB_CARE_PROVIDER',
+  // NOTE: this list has drifted from the UserRole enum and from
+  // ONBOARDING_ROLES -- BOOKING_OFFICER, the clinical heads, the radiology
+  // and laboratory roles and more are all absent, so an admin cannot move
+  // anybody INTO them from here. Not fixed in this change; the ward role is
+  // added so that at least it is not born with the same gap.
+  'WARD_NURSE_IN_CHARGE', 'CLINICAL_HEALTH_ASSISTANT',
 ] as const;
 import OnboardingSubmissionsPanel from '@/components/OnboardingSubmissionsPanel';
 import ContactName from '@/components/ContactName';
+import { isWardPostedRole } from '@/lib/ward/nurseInCharge';
+import { WARDS } from '@/lib/constants';
 // XLSX loaded dynamically when needed (export/import actions)
 
 interface User {
@@ -122,7 +130,7 @@ export default function UsersPage() {
   const [userSearch, setUserSearch] = useState('');
   // Edit-profile modal state.
   const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ username: '', fullName: '', phoneNumber: '', email: '', department: '', vendorId: '' });
+  const [editForm, setEditForm] = useState({ username: '', fullName: '', phoneNumber: '', email: '', department: '', vendorId: '', wardAssignment: '' });
   // The supplier register, for the account-to-supplier link below. Loaded once
   // rather than per modal open: it is short, changes rarely, and fetching it
   // every time would put a request between clicking Edit and seeing the form.
@@ -151,6 +159,7 @@ export default function UsersPage() {
   /** Roles for which "which supplier?" is a meaningful question. */
   const SUPPLIER_ROLES = ['CONSUMABLE_PACK_PROVIDER'];
   const editIsSupplierRole = SUPPLIER_ROLES.includes(editRole.toUpperCase());
+  const editIsWardPosted = isWardPostedRole(editRole.toUpperCase());
   const isAdmin = (session?.user?.role ?? '').toUpperCase() === 'ADMIN';
 
   // The supplier register, fetched once. Only an ADMIN can act on it, so only
@@ -385,6 +394,9 @@ export default function UsersPage() {
           // editing a phone number does not trip the ADMIN-only check on a
           // field they never saw.
           ...(editIsSupplierRole && isAdmin ? { vendorId: editForm.vendorId } : {}),
+          // Sent only when the field was shown, for the same reason: an
+          // editor that saves a field it never displayed clears it.
+          ...(editIsWardPosted ? { wardAssignment: editForm.wardAssignment || null } : {}),
         }),
       });
       const data = await response.json();
@@ -1255,6 +1267,7 @@ export default function UsersPage() {
                           email: user.email || '',
                           department: user.department || '',
                           vendorId: (user as { vendorId?: string | null }).vendorId || '',
+                          wardAssignment: (user as { wardAssignment?: string | null }).wardAssignment || '',
                         });
                       }}
                       className="text-emerald-600 hover:text-emerald-900"
@@ -1393,6 +1406,36 @@ export default function UsersPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
               />
             </div>
+
+            {/* The ward posting. Shown only for the role it means anything
+                for. An unset ward resolves to NO cases rather than to every
+                ward, so a blank here is a nurse who signs in to an empty
+                desk -- correct, and indistinguishable from a broken app from
+                where she is standing. */}
+            {editIsWardPosted && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ward posted to
+                </label>
+                <select
+                  value={editForm.wardAssignment}
+                  onChange={(e) => setEditForm((f) => ({ ...f, wardAssignment: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="">— not set (this account sees no cases) —</option>
+                  {WARDS.map((w) => <option key={w} value={w}>{w}</option>)}
+                  {editForm.wardAssignment
+                    && !(WARDS as readonly string[]).includes(editForm.wardAssignment) && (
+                    <option value={editForm.wardAssignment}>{editForm.wardAssignment}</option>
+                  )}
+                </select>
+                {!editForm.wardAssignment && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Until a ward is set, this account&rsquo;s Ward Desk is empty.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Supplier link.
                 Shown only for the roles it means anything for, and only to an

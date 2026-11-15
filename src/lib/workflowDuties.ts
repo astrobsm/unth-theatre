@@ -491,13 +491,20 @@ export const DUTY_SHEETS: DutySheet[] = [
   // ---------------------------------------------------------------------
   {
     id: 'ward-nurse',
-    title: 'Ward Nurse',
-    // ORM has no ward-nurse role — ward staff work from the call-up printout
-    // rather than from an account. The sheet still matters, because the hour
-    // before theatre is theirs, so it is printed FOR them rather than matched
-    // to a login. (An earlier version listed 'NURSE' and 'WARD_NURSE' here;
-    // neither exists in UserRole, so it silently matched nobody.)
-    roles: [],
+    title: 'Ward Nurse-in-Charge',
+    // This sheet was written for a group with no account. The comment here
+    // used to read "ORM has no ward-nurse role — ward staff work from the
+    // call-up printout rather than from an account", and this was the only
+    // sheet in the file with an empty roles list.
+    //
+    // WARD_NURSE_IN_CHARGE was added on 15 November 2026, so the sheet is now
+    // matched to a login like every other one. The duty that assumed paper —
+    // signing a printout for somebody in the holding area to transcribe — is
+    // rewritten below as the two taps that replace it.
+    //
+    // (An even earlier version listed 'NURSE' and 'WARD_NURSE' here; neither
+    // exists in UserRole, so it silently matched nobody at all.)
+    roles: ['WARD_NURSE_IN_CHARGE'],
     headline: 'The hour before theatre is yours. Almost every late start begins on the ward.',
     duties: [
       {
@@ -518,12 +525,72 @@ export const DUTY_SHEETS: DutySheet[] = [
         why: 'The porter waiting on the ward is the single commonest recorded cause of a late start.',
       },
       {
-        task: 'Sign the call-up printout at handover',
-        when: 'When the patient leaves',
-        why: 'It is the record of who released the patient and when.',
+        task: 'Record when the porter reached the ward, and when the patient left it',
+        when: 'As each one happens',
+        why: 'These two times separate "the porter was slow" from "the ward was not '
+          + 'ready", and nobody can tell those apart afterwards from memory. You enter '
+          + 'them yourself now, instead of writing them on the printout for the holding '
+          + 'area to copy up later.',
+        where: 'Ward Desk',
+        critical: true,
+      },
+      {
+        task: 'Press "patient has gone to theatre" as they leave',
+        when: 'When the patient leaves the ward',
+        why: 'Nothing else in the system records this. Until you press it, the "en '
+          + 'route to theatre" line on the patient journey and on the recovery discharge '
+          + 'summary stays blank, and the theatre cannot tell a patient who is on the '
+          + 'way from one who has not been sent.',
+        where: 'Ward Desk',
+        critical: true,
       },
     ],
     remember: 'When the alert arrives, the clock has already started.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
+    id: 'health-assistant',
+    title: 'Clinical Health Assistant',
+    // Ward support staff, posted to a ward like the nurse-in-charge and
+    // working from the same desk. The sheet is deliberately SHORTER than the
+    // nurse's and stops where the nurse's begins: this sheet never tells the
+    // holder to release a patient, because the app will refuse it.
+    roles: ['CLINICAL_HEALTH_ASSISTANT'],
+    headline: 'You are usually the person actually standing there when the porter arrives. '
+      + 'Nobody else can give those times.',
+    duties: [
+      {
+        task: 'Have the patient bathed, gowned and ready before the porter comes',
+        when: 'After the 60-minute alert',
+        why: 'The porter waiting on the ward is the single commonest recorded cause of a '
+          + 'late start, and it is almost always preparation rather than transport.',
+        critical: true,
+      },
+      {
+        task: 'Record the time the porter reached the ward',
+        when: 'As the porter arrives',
+        why: 'Written down it is a fact; remembered it is an argument. This time and the '
+          + 'next are what separate "the porter was slow" from "the ward was not ready".',
+        where: 'Ward Desk',
+        critical: true,
+      },
+      {
+        task: 'Record the time the patient left the ward',
+        when: 'As the patient leaves',
+        why: 'It is the end of the ward part of the delay and the start of transport. '
+          + 'Without it every minute before the holding area belongs to nobody.',
+        where: 'Ward Desk',
+        critical: true,
+      },
+      {
+        task: 'Tell the nurse-in-charge the patient is ready to be released',
+        when: 'Before the patient leaves',
+        why: 'Releasing a patient to theatre is a nursing handover — identity, consent, '
+          + 'notes — so the app will not let you press it. Your times are still yours.',
+      },
+    ],
+    remember: 'Two times. Nobody else in the hospital can give them.',
   },
 
   // ---------------------------------------------------------------------

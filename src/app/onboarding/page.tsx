@@ -3,6 +3,11 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { ONBOARDING_ROLES, prefixForRole } from '@/lib/onboarding-roles';
+import { isWardPostedRole } from '@/lib/ward/nurseInCharge';
+// The static ward list, not /api/wards: this page is reached before sign-in
+// and that route requires a session. A ward added since (the `wards` table)
+// is set by an administrator on the account afterwards.
+import { WARDS } from '@/lib/constants';
 
 const ROLES = ONBOARDING_ROLES;
 
@@ -54,6 +59,10 @@ type FormState = {
   isContractStaff: boolean;
   password: string;
   confirmPassword: string;
+  // The ward this person is in charge of (only when the role is
+  // WARD_NURSE_IN_CHARGE). Compulsory for that role: the desk is scoped to
+  // this one ward, and an account without it signs in to an empty page.
+  wardAssignment: string;
   // House Officer rotation (only when role === 'HOUSE_OFFICER')
   rotationSpecialty: string;
   rotationStartDate: string;
@@ -65,6 +74,7 @@ const EMPTY: FormState = {
   phoneNumber: '', department: '', staffCode: '', staffId: '', notes: '',
   isContractStaff: false,
   password: '', confirmPassword: '',
+  wardAssignment: '',
   rotationSpecialty: '', rotationStartDate: '', rotationEndDate: '',
 };
 
@@ -124,6 +134,20 @@ export default function StaffOnboardingPage() {
       errs.password = 'Choose a password of at least 6 characters';
     if (data.confirmPassword !== data.password)
       errs.confirmPassword = 'Passwords do not match';
+    /**
+     * The ward is compulsory for a ward nurse-in-charge, and gated HERE in
+     * JavaScript rather than only by the `required` attribute on the select.
+     *
+     * A `required` control the browser cannot focus is not validated and not
+     * reported: the form simply refuses to submit, with "an invalid form
+     * control is not focusable" in the console and nothing on screen. The
+     * block below is conditionally rendered rather than hidden, so the
+     * attribute does work today -- but one refactor that hides it instead
+     * would break the whole form silently, and this check would still hold.
+     */
+    if (isWardPostedRole(data.role) && !data.wardAssignment) {
+      errs.wardAssignment = 'Select the ward you are in charge of';
+    }
     if (data.role === 'HOUSE_OFFICER') {
       if (!data.rotationSpecialty) errs.rotationSpecialty = 'Select your rotation specialty';
       if (!data.rotationStartDate) errs.rotationStartDate = 'Required';
@@ -158,6 +182,9 @@ export default function StaffOnboardingPage() {
           staffId: data.staffId.trim(),
           isContractStaff: data.isContractStaff,
           password: data.password,
+          // Sent only for the role it belongs to, so a nurse who first picked
+          // this role and then changed their mind does not carry a ward.
+          wardAssignment: isWardPostedRole(data.role) ? data.wardAssignment : null,
           rotationSpecialty: data.role === 'HOUSE_OFFICER' ? data.rotationSpecialty : null,
           rotationStartDate: data.role === 'HOUSE_OFFICER' ? data.rotationStartDate : null,
           rotationEndDate:   data.role === 'HOUSE_OFFICER' ? data.rotationEndDate   : null,
@@ -352,6 +379,32 @@ export default function StaffOnboardingPage() {
                 </select>
               </Field>
             </div>
+
+            {isWardPostedRole(data.role) && (
+              <div className="rounded-xl border-2 border-teal-200 bg-teal-50/50 p-4 md:p-5 space-y-4">
+                <div>
+                  <h3 className="font-semibold text-teal-900">Which ward do you work on?</h3>
+                  <p className="text-xs text-teal-800/80 mt-1">
+                    Your Ward Desk shows the theatre cases for this one ward and
+                    nothing else &mdash; so it is the one thing the account cannot work
+                    without. If your ward is not listed, pick &ldquo;OTHERS (SPECIFY)&rdquo; and
+                    say which in the notes at the end; an administrator will set it.
+                  </p>
+                </div>
+                <Field label="Ward *" error={fieldErrors.wardAssignment}>
+                  <select
+                    aria-label="Ward you are in charge of"
+                    className={selectCls}
+                    value={data.wardAssignment}
+                    onChange={e => set('wardAssignment', e.target.value)}
+                    required
+                  >
+                    <option value="">&mdash; select your ward &mdash;</option>
+                    {WARDS.map(w => <option key={w} value={w}>{w}</option>)}
+                  </select>
+                </Field>
+              </div>
+            )}
 
             {data.role === 'HOUSE_OFFICER' && (
               <div className="rounded-xl border-2 border-blue-200 bg-blue-50/50 p-4 md:p-5 space-y-4">

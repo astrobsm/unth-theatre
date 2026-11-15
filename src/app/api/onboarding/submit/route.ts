@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { ROLE_VALUES, prefixForRole } from '@/lib/onboarding-roles';
+import { isWardPostedRole, normaliseWard } from '@/lib/ward/nurseInCharge';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,15 @@ export async function POST(request: NextRequest) {
     // activated (APPROVED) immediately so they can sign in right away.
     const password    = String(body.password ?? '');
 
+    /**
+     * The ward a ward-posted account works on.
+     *
+     * Normalised on the way in because the same ward reaches this database
+     * as "WARD 6B", "Ward 6b" and "ward  6B", and the desk matches the
+     * nurse's posting against Patient.ward, which is free text.
+     */
+    const wardAssignment = normaliseWard(clean(body.wardAssignment, 120));
+
     // House Officer rotation
     const rotationSpecialty = clean(body.rotationSpecialty, 60).toUpperCase();
     const rotationStartRaw  = clean(body.rotationStartDate, 30);
@@ -79,6 +89,19 @@ export async function POST(request: NextRequest) {
       errors.push('Staff ID is required (tick "Contract staff" if you do not have one)');
     if (!password || password.length < 6)
       errors.push('Password is required and must be at least 6 characters');
+
+    /**
+     * Compulsory, and refused rather than defaulted.
+     *
+     * An account created without it signs in, reaches the Ward Desk, and is
+     * shown nothing -- correctly, because an unset ward resolves to no cases
+     * rather than to every ward, but the nurse reads an empty page as a
+     * broken app. Refusing at the point of registration is the only moment
+     * the person who knows the answer is still here to give it.
+     */
+    if (isWardPostedRole(role) && !wardAssignment) {
+      errors.push('Select the ward you work on');
+    }
 
     if (role === 'HOUSE_OFFICER') {
       if (!rotationSpecialty || !VALID_HO_SPECIALTIES.includes(rotationSpecialty))
@@ -179,6 +202,9 @@ export async function POST(request: NextRequest) {
         staffId: finalStaffId,
         status: 'APPROVED',
         approvedAt: new Date(),
+        // Only for the role it belongs to: a ward on a porter's account
+        // would be a scope nothing reads and nobody maintains.
+        wardAssignment: isWardPostedRole(role) ? (wardAssignment || null) : null,
         isFirstLogin: false,
         mustChangePassword: false,
         rotationSpecialty: role === 'HOUSE_OFFICER' ? (rotationSpecialty || null) : null,

@@ -20,6 +20,8 @@ import {
   Syringe,
   Heart,
   Bed,
+  BedDouble,
+  HeartHandshake,
   Pill,
   Droplet,
   FlaskConical,
@@ -275,6 +277,86 @@ const ROLES: Role[] = [
       'Login → Recovery → accept hand-over.',
       'Record vitals every 15 min.',
       'Discharge when Aldrete ≥ 9.',
+    ],
+  },
+  {
+    id: 'WARD_NURSE_IN_CHARGE',
+    label: 'Ward Nurse-in-Charge',
+    group: 'Nursing',
+    icon: BedDouble,
+    color: 'from-cyan-600 to-teal-700',
+    intro:
+      'Every theatre case begins and ends on your ward, and until now the ward had no '
+      + 'account. Two times that you used to write on the call-up printout for somebody '
+      + 'in the holding area to type up later are now yours to enter, and the moment the '
+      + 'patient leaves your ward is something only you can record.',
+    responsibilities: [
+      'Act on the 60-minute alert: patient bathed, gowned, consent signed, notes ready.',
+      'Record the time the theatre porter reached the ward.',
+      'Record the time the patient left the ward.',
+      'Release the patient to theatre once you have checked identity, consent and notes.',
+      'Receive the patient back from recovery.',
+    ],
+    howToUse: [
+      'Login → Ward Desk. You see your ward only, yesterday through the next four days.',
+      'A blue card means the theatre has sent for that patient.',
+      'Enter the two times as they happen → "Save times".',
+      'When the patient goes → "Patient has gone to theatre".',
+    ],
+    cautions: [
+      'Only press "patient has gone" when they have actually left. The theatre reads it '
+        + 'as the patient being checked and on the way.',
+      'If the desk is empty, your ward may not be set on your account — ask an '
+        + 'administrator rather than assuming there are no cases.',
+    ],
+    benefits: [
+      '"The ward was not ready" versus "the porter was late" stops being an argument: '
+        + 'your two times settle it.',
+      'You no longer hand-write times for somebody else to transcribe, and lose them '
+        + 'when the paper goes.',
+      'You can see your ward\'s whole theatre list without ringing the theatre.',
+    ],
+    quickStart: [
+      'Register → choose "Ward Nurse-in-Charge" → pick your ward (compulsory).',
+      'Login → Ward Desk.',
+      'When the theatre sends for a patient, enter the porter time, then the departure '
+        + 'time, then release.',
+    ],
+  },
+  {
+    id: 'CLINICAL_HEALTH_ASSISTANT',
+    label: 'Clinical Health Assistant',
+    group: 'Nursing',
+    icon: HeartHandshake,
+    color: 'from-sky-600 to-cyan-700',
+    intro:
+      'You are usually the person actually standing there when the porter arrives, which '
+      + 'makes you the only person who can give those times truthfully. You share the '
+      + 'Ward Desk with your nurse-in-charge.',
+    responsibilities: [
+      'Have the patient bathed, gowned and ready to move before the porter comes.',
+      'Record the time the porter reached the ward.',
+      'Record the time the patient left the ward.',
+      'Tell the nurse-in-charge when the patient is ready to be released.',
+    ],
+    howToUse: [
+      'Login → Ward Desk. Your ward only.',
+      'Enter the porter time and the departure time as each happens → "Save times".',
+    ],
+    cautions: [
+      'You will not see a "patient has gone to theatre" button, and that is deliberate: '
+        + 'releasing a patient is a nursing handover — identity, consent, notes. Your '
+        + 'times are still yours.',
+      'Enter a time when it happens, not at the end of the shift.',
+    ],
+    benefits: [
+      'The work you already do on the ward finally shows up in the record instead of '
+        + 'disappearing into somebody else\'s handwriting.',
+      'Preparation delays stop being blamed on transport.',
+    ],
+    quickStart: [
+      'Register → choose "Clinical Health Assistant" → pick your ward (compulsory).',
+      'Login → Ward Desk → enter the two times.',
     ],
   },
 

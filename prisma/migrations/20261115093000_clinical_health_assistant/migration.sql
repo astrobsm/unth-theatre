@@ -1,0 +1,25 @@
+-- ============================================================
+-- Clinical Health Assistant: the ward support role
+-- ------------------------------------------------------------
+-- The second half of giving the ward an account. WARD_NURSE_IN_CHARGE (the
+-- migration immediately before this one) is the nurse who releases a patient
+-- to theatre; this is the support staff who prepare the patient, get them
+-- ready to move, and are on the ward when the porter arrives.
+--
+-- Posted to a ward by the same "wardAssignment" column, and sharing the same
+-- Ward Desk. No new column is needed.
+--
+-- WHAT THE TWO ROLES DO NOT SHARE. An assistant may record the two porter
+-- TIMES -- the porter arrived at 08:12, the patient left at 08:20 -- because
+-- those are observations anybody standing on the ward can give truthfully.
+-- An assistant may NOT release a patient: setting PATIENT_EN_ROUTE tells the
+-- theatre this patient is checked and on the way, meaning identity confirmed,
+-- consent signed, notes and films with them. That is a nursing handover.
+--
+-- That split is a judgement about this hospital's division of labour rather
+-- than a technical constraint, and it lives in ONE editable list --
+-- canReleasePatient() in src/lib/ward/nurseInCharge.ts -- so that changing it
+-- is a decision somebody takes rather than a rule nobody can find.
+-- ============================================================
+
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'CLINICAL_HEALTH_ASSISTANT';

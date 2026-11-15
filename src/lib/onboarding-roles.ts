@@ -17,6 +17,16 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   { value: 'CONSULTANT_ANAESTHETIST',  label: 'Consultant Anaesthetist',          prefix: 'CAN' },
   { value: 'SCRUB_NURSE',              label: 'Perioperative Nurse',              prefix: 'SCN' },
   { value: 'RECOVERY_ROOM_NURSE',      label: 'Nurse Anaesthetist',               prefix: 'RRN' },
+  // The ward's own account, added 15 November 2026. Every theatre case
+  // begins and ends on a ward and the ward had no login: the two porter
+  // times on a call-up were handwritten for the holding area to transcribe,
+  // and PATIENT_EN_ROUTE -- read by the journey timeline, the PACU discharge
+  // summary and the holding-area chase -- was written by nothing at all.
+  { value: 'WARD_NURSE_IN_CHARGE',     label: 'Ward Nurse-in-Charge',             prefix: 'WNC' },
+  // Ward support staff, posted to a ward like the nurse-in-charge and
+  // sharing the same desk. They record the porter times; the release of a
+  // patient to theatre stays with the nurse.
+  { value: 'CLINICAL_HEALTH_ASSISTANT', label: 'Clinical Health Assistant',       prefix: 'CHA' },
   { value: 'ANAESTHETIC_TECHNICIAN',   label: 'Anaesthetic Technician',           prefix: 'ANT' },
   { value: 'PHARMACIST',               label: 'Pharmacist',                       prefix: 'PHM' },
   { value: 'EMERGENCY_LAB_SCIENTIST',  label: 'Emergency Lab Scientist',          prefix: 'ELS' },

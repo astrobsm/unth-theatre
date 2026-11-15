@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { UserRole } from "@prisma/client";
 import { validateUsername, normaliseUsername } from "@/lib/usernameRules";
+import { normaliseWard } from "@/lib/ward/nurseInCharge";
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,18 @@ const updateUserSchema = z.object({
   phoneNumber: z.string().trim().optional().nullable(),
   email: z.string().trim().email().optional().nullable(),
   department: z.string().trim().optional().nullable(),
+  /**
+   * The ward a WARD_NURSE_IN_CHARGE is in charge of.
+   *
+   * Sits with the profile fields a THEATRE_MANAGER may correct, not with
+   * role and vendorId. It IS a scope -- it decides whose handovers the
+   * account may record -- but it moves an account between two wards of this
+   * same hospital rather than granting a new kind of access, a nurse moving
+   * ward is ordinary operational work, and every write it enables is stamped
+   * with the account that made it. Holding it to ADMIN would mean a posting
+   * stays wrong over a weekend.
+   */
+  wardAssignment: z.string().trim().max(120).optional().nullable(),
   // Which supplier a provider account belongs to.
   //
   // A COMMERCIAL ACCESS GRANT, not a profile field: it decides whose supply
@@ -146,6 +159,7 @@ export async function PATCH(
       phoneNumber?: string | null;
       email?: string | null;
       department?: string | null;
+      wardAssignment?: string | null;
       vendorId?: string | null;
     } = {};
     if (validatedData.username !== undefined) data.username = validatedData.username;
@@ -160,6 +174,11 @@ export async function PATCH(
     if (body.phoneNumber !== undefined) data.phoneNumber = validatedData.phoneNumber || null;
     if (body.email !== undefined) data.email = validatedData.email || null;
     if (body.department !== undefined) data.department = validatedData.department || null;
+    // Normalised on the way in: the desk matches this against Patient.ward,
+    // which is free text, so "Ward 6b" typed here must find WARD 6B there.
+    if (body.wardAssignment !== undefined) {
+      data.wardAssignment = normaliseWard(validatedData.wardAssignment) || null;
+    }
     // Empty string means "no supplier" and is stored as null, so detaching an
     // account is expressible from a select element.
     if (body.vendorId !== undefined) data.vendorId = validatedData.vendorId || null;
@@ -190,6 +209,7 @@ export async function PATCH(
         phoneNumber: true,
         email: true,
         department: true,
+        wardAssignment: true,
       },
     });
 

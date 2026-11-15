@@ -52,6 +52,33 @@ enum UserRole {
   CONSULTANT_ANAESTHETIST
   SCRUB_NURSE
   RECOVERY_ROOM_NURSE
+  /// The ward's own account in the theatre workflow, added 15 November 2026.
+  ///
+  /// Every case begins and ends on a ward, and the ward had no login. Two
+  /// things in this schema show what that cost. PatientCallUp's
+  /// theatrePorterArrivedAtWardTime / theatrePorterDepartedWardTime /
+  /// wardNurseName say in their own comment that they are "handwritten by
+  /// ward nurse on the printout, then transcribed in the holding area" -- the
+  /// person who knows the times writes them on paper for somebody who was not
+  /// there to type in later. And CallUpStatus.PATIENT_EN_ROUTE with
+  /// patientEnRouteAt are read by the journey timeline, the PACU discharge
+  /// summary and the holding-area chase, but written by NO route in the
+  /// application, because the only honest source is the nurse who sent the
+  /// patient. See src/lib/ward/nurseInCharge.ts.
+  WARD_NURSE_IN_CHARGE
+  /// Ward support staff, added 15 November 2026 beside the nurse-in-charge.
+  ///
+  /// They prepare the patient, get them ready to move and are on the ward
+  /// when the porter arrives, so they are posted to a ward by
+  /// wardAssignment and share the Ward Desk with the nurse.
+  ///
+  /// They may record the two porter TIMES, which are observations anybody
+  /// standing there can give truthfully. They may NOT release a patient to
+  /// theatre: setting PATIENT_EN_ROUTE tells the theatre the patient is
+  /// checked and on the way -- identity, consent, notes -- which is a
+  /// nursing handover. See canReleasePatient() in
+  /// src/lib/ward/nurseInCharge.ts, where that division is one editable list.
+  CLINICAL_HEALTH_ASSISTANT
   THEATRE_STORE_KEEPER
   PORTER
   ANAESTHETIC_TECHNICIAN
@@ -445,6 +472,22 @@ model User {
   vendor                Vendor?              @relation("VendorStaff", fields: [vendorId], references: [id], onDelete: SetNull)
   extension             String? // Internal theatre extension / bleep for roster contact display
   department            String?
+  /// The ONE ward a ward-posted account works on -- WARD_NURSE_IN_CHARGE or
+  /// CLINICAL_HEALTH_ASSISTANT. Null for everybody else, and null for a ward
+  /// account whose posting nobody has set yet.
+  ///
+  /// `department` was the obvious place to put this and is the wrong one: it
+  /// is chosen from a fixed list of departments ("Nursing Department",
+  /// "Anaesthesia"), every existing account already has a real value in it,
+  /// and a ward is not a department.
+  ///
+  /// NULL MEANS "NOBODY HAS SAID WHICH WARD" AND MUST RESOLVE TO NO CASES,
+  /// never to every ward. The permissive reading is the convenient one -- a
+  /// desk that shows all 1,388 cases when the posting is blank looks like it
+  /// is working while handing a ward nurse the whole hospital. wardScopeOf()
+  /// in src/lib/ward/nurseInCharge.ts returns the unset state explicitly so a
+  /// call site cannot read it as "any ward".
+  wardAssignment        String?
   staffCode             String?              @unique // Code for cleaners, porters, and other staff to log duties
   // Live staff availability (P3 workforce board). A single current snapshot per
   // user; self-set or admin-overridden. AVAILABLE | BUSY | IN_THEATRE |

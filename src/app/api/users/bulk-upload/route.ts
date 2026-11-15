@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { isWardPostedRole, normaliseWard } from '@/lib/ward/nurseInCharge';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,10 @@ export async function POST(request: NextRequest) {
           // Departmental clerical staff. Bulk upload matters most for this
           // role: they are onboarded a department at a time, not one at a time.
           'BOOKING_OFFICER',
+          // Ward nurses are onboarded a ward at a time, so this route
+          // matters more for them than the one-at-a-time form does.
+          'WARD_NURSE_IN_CHARGE',
+          'CLINICAL_HEALTH_ASSISTANT',
         ];
 
         if (!validRoles.includes(user.role)) {
@@ -118,6 +123,28 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        /**
+         * A ward-posted account without a ward is an account that works and
+         * shows nothing.
+         *
+         * wardAssignment is nullable and an unset ward resolves to NO cases,
+         * which is the safe reading but an invisible one: import fifty ward
+         * nurses with the column blank and you get fifty accounts that sign
+         * in to an empty desk, with nothing anywhere saying why. The row is
+         * refused instead, while the operator is still looking at the
+         * spreadsheet they can fix.
+         */
+        const wardAssignment = normaliseWard(user.ward || user.wardAssignment) || null;
+        if (isWardPostedRole(user.role) && !wardAssignment) {
+          results.errors.push({
+            row: rowNumber,
+            error: 'A ward-posted role needs a ward. Add a "ward" column '
+              + 'naming the ward this person is in charge of, e.g. WARD 6B.',
+            data: user,
+          });
+          continue;
+        }
+
         // Generate default password (username or custom)
         const defaultPassword = user.password || user.username;
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
@@ -132,6 +159,7 @@ export async function POST(request: NextRequest) {
             role: user.role,
             phoneNumber: user.phoneNumber || null,
             department: user.department || null,
+            wardAssignment,
             staffCode: user.staffCode || null,
             staffId: user.staffId || null,
             status: 'APPROVED', // Auto-approve bulk uploaded users

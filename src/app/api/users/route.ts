@@ -110,6 +110,11 @@ export async function GET(request: NextRequest) {
             // blank one — an editor that silently resets a field it did not
             // display is how a working link gets cleared.
             vendorId: true,
+            // The ward a WARD_NURSE_IN_CHARGE is in charge of, so the admin
+            // screen shows the current posting rather than a blank box. An
+            // editor that does not display a field it then saves is how a
+            // working posting gets cleared by somebody fixing a phone number.
+            wardAssignment: true,
             rotationSpecialty: true,
             createdAt: true,
             approvedBy: true,

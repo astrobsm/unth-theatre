@@ -60,11 +60,16 @@ describe('coverage', () => {
     expect(bogus).toEqual([]);
   });
 
-  it('leaves exactly one sheet unmatched to a login, and it is the ward one', () => {
-    // Ward staff work from the call-up printout, not from an account. The
-    // sheet is printed FOR them. Any OTHER sheet with no roles is a mistake.
+  it('matches EVERY sheet to a login', () => {
+    // This used to allow exactly one exception: "ward staff work from the
+    // call-up printout, not from an account", so the ward sheet was printed
+    // FOR them and matched nobody. WARD_NURSE_IN_CHARGE and
+    // CLINICAL_HEALTH_ASSISTANT were added on 15 November 2026 and the ward
+    // sheets now have holders, so the exception is gone and the invariant is
+    // the stronger one: a sheet nobody is matched to is a sheet nobody is
+    // handed, which is the failure this file exists to catch.
     const unmatched = DUTY_SHEETS.filter((s) => s.roles.length === 0).map((s) => s.id);
-    expect(unmatched).toEqual(['ward-nurse']);
+    expect(unmatched).toEqual([]);
   });
 
   it('finds a sheet for any role somebody can actually log in as', () => {
