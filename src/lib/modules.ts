@@ -277,6 +277,23 @@ export const MODULES: AppModule[] = [
   { id: 'anonymous-tips-review', label: 'Review Anonymous Tips', paths: ['/dashboard/anonymous-tips/view'], defaultRoles: [], category: 'Admin' },
   { id: 'security-reports-review', label: 'Review Security Reports', paths: ['/dashboard/security-reports/view'], defaultRoles: [], category: 'Admin' },
   { id: 'theatre-audit', label: 'Theatre Audit', paths: ['/dashboard/theatre-audit'], defaultRoles: [...ADMIN_VIEWERS], category: 'Admin' },
+
+  // The Theatre Users Committee reviewing a draft policy.
+  //
+  // THIS IS THE OWNER'S SIDE ONLY -- import, the round, invitations,
+  // participation, the proposed changes and the exports. The committee
+  // members who answer do NOT come through here: they open /policy-review,
+  // outside /dashboard, with a token from WhatsApp or with their own
+  // sign-in. Putting the reviewer flow under this path would have had
+  // canAccessPath() refuse a surgeon the one page the general link exists
+  // to give them.
+  //
+  // ADMIN_VIEWERS appear here as OBSERVERS, which this list cannot express:
+  // they may read a synthesis the Chairman has released, and nothing else.
+  // That split is enforced server-side in src/lib/policy/access.ts, which
+  // is also where a named deputy is granted the module one person at a time
+  // rather than by widening this line.
+  { id: 'policy-review', label: 'Policy Review', paths: ['/dashboard/policy-review'], defaultRoles: ['THEATRE_CHAIRMAN', ...ADMIN_VIEWERS], category: 'Admin' },
 ];
 
 /**

@@ -14485,3 +14485,711 @@ model ResearchAccessRequest {
   @@index([status, submittedAt])
   @@map("research_access_requests")
 }
+// ============================================================
+// Policy review — the Theatre Users Committee reviewing a draft policy
+// ------------------------------------------------------------
+// WHAT THIS REPLACES
+//
+// A consolidated draft policy goes to every committee member, their input is
+// harmonised, and a revised version goes to Hospital Management. Until now that
+// happened in a WhatsApp group and a shared document. Two things go wrong there
+// and both are visible in the draft itself.
+//
+// The draft carries around forty values in [square brackets] -- "[11:00]",
+// "[24 hours]", "[80%]", "[number] clinical assistants". Each is an open
+// proposal the committee must settle. In a group chat they are settled by
+// whoever answers last, and nobody can say afterwards how many people actually
+// supported the number that ended up in the policy.
+//
+// And a single patient-safety objection -- one anaesthetist saying a proposed
+// cut-off is unsafe -- reads exactly like any other message, thirty messages
+// back. The majority does not have to overrule it; it simply scrolls away.
+//
+// So: a stance per section, a tally per bracketed value, and minority safety
+// concerns surfaced as their own class rather than averaged away.
+//
+// WHY NOT ConflictDecision. This schema already holds a ten-model consultation
+// engine (ConflictDecision .. ConflictApproval, below) with no application code
+// at all. It is not reused here, and deliberately not deleted either. It models
+// a one-off dispute -- problemStatement, decisionRequired, "CR-2026-000124" --
+// and seven of the tables here have no equivalent in it: a document does not
+// have a problem statement, it has a section tree. Its PATTERNS are reused:
+// version/supersedes so a policy people acted on is never rewritten, an
+// idempotency key so an offline submission cannot arrive twice, and computed
+// statistics held apart from written prose.
+//
+// WHERE A REVIEWER'S PLACE IS KEPT
+//
+// A member opens the link in WhatsApp on a phone, answers six sections, is
+// called away, and finishes on a desktop two days later. That only works if
+// progress is a fact in this database rather than in one browser's storage, so
+// a section response row EXISTS from the moment a stance is chosen, with
+// submittedAt still null. The draft is not a blob beside the answers; the draft
+// IS the answers. See PolicyParticipation for the cursor.
+// ============================================================
+
+enum PolicyDocumentStatus {
+  DRAFT
+  UNDER_REVIEW
+  ANALYSED
+  FINAL
+}
+
+enum PolicySourceFormat {
+  MARKDOWN
+  DOCX
+  PASTED
+}
+
+/// What kind of value a [bracketed] placeholder is asking for. Guessed by the
+/// importer from the text inside the brackets, then correctable by the owner in
+/// the preview -- a guess that cannot be corrected is a guess that silently
+/// mis-types half the decisions the committee has to make.
+enum PolicyDecisionItemType {
+  TIME
+  PERCENTAGE
+  NUMBER
+  DURATION
+  FREE_TEXT
+  CHOICE
+}
+
+enum PolicyRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  ANALYSED
+  FINALISED
+}
+
+/// Who may see individual responses. OWNER_ONLY until the owner releases them:
+/// a head of department reading what another head said about their unit, before
+/// the committee has met, changes what people are willing to write down.
+enum PolicyResultsVisibility {
+  OWNER_ONLY
+  RELEASED_ATTRIBUTED
+  RELEASED_BY_ROLE
+}
+
+enum PolicyStance {
+  AGREE
+  AGREE_WITH_CHANGES
+  DISAGREE
+  NOT_MY_AREA
+}
+
+/// Why somebody is unhappy with a section. PATIENT_SAFETY is first because it
+/// is the one that must never be averaged into a majority -- one person raising
+/// it is reported as its own finding, not as "1 of 12 disagreed".
+enum PolicyConcernType {
+  PATIENT_SAFETY
+  FEASIBILITY
+  RESOURCES
+  LEGAL_OR_DISCIPLINARY
+  CLARITY
+  OTHER
+}
+
+enum PolicyPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// RUNNING through to one of three endings. FAILED_VALIDATION is the important
+/// one: the model returned well-formed JSON that cited a response id which does
+/// not exist, or stance counts that do not match this database. Such a run is
+/// kept and shown as failed. It is never rendered as findings.
+enum PolicyAnalysisStatus {
+  RUNNING
+  VALIDATED
+  FAILED_VALIDATION
+  FAILED_API
+}
+
+enum PolicyChangeType {
+  WORDING
+  VALUE
+  ADD
+  REMOVE
+}
+
+enum PolicySupportStrength {
+  STRONG
+  MODERATE
+  WEAK
+}
+
+enum PolicyOwnerDecision {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EDITED
+  FOR_COMMITTEE
+}
+
+model PolicyDocument {
+  id      String @id @default(uuid())
+  title   String
+  /// The committee's own version string, e.g. "0.2". Text, not a number: the
+  /// document control page says "0.2" and the policy is cited by that.
+  version String
+
+  /// What was uploaded, for the audit trail. The BYTES are deliberately not
+  /// stored. The parsed sections below are the document as far as every screen
+  /// in this module is concerned, and replicating a 2 MB .docx between the two
+  /// nodes would buy nothing that policy_sections does not already hold.
+  sourceFileName String?
+  sourceFormat   PolicySourceFormat
+
+  status PolicyDocumentStatus @default(DRAFT)
+
+  importedAt     DateTime @default(now())
+  importedById   String?
+  importedByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sections PolicySection[]
+  rounds   PolicyReviewRound[]
+
+  /// Sync metadata, maintained by the capture trigger. Declared here ONLY so
+  /// `prisma migrate diff` does not read these columns as drift; the trigger
+  /// owns them and application code must never write them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([status, importedAt])
+  @@map("policy_documents")
+}
+
+model PolicySection {
+  id         String         @id @default(uuid())
+  documentId String
+  document   PolicyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// "5.4", "3.12", "A". Null for the unnumbered Document control block, which
+  /// is why this is nullable rather than defaulted to "" -- an empty string
+  /// sorts and displays as a real section number and it is not one.
+  number String?
+  title  String
+
+  /// Self-relation rather than a depth integer, because the reviewer flow
+  /// renders a parent's subsections inside the parent's step and needs the
+  /// tree, not the level.
+  parentId String?
+  parent   PolicySection?  @relation("PolicySectionTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children PolicySection[] @relation("PolicySectionTree")
+
+  /// Document order within the parent. The committee cites sections by number;
+  /// order is what keeps A-F after 16 and 3.2 after 3.1.
+  order Int @default(0)
+
+  /// Markdown, tables and lists preserved as written. Rendered to React
+  /// elements, never injected as HTML.
+  body String @db.Text
+
+  isAppendix Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  decisionItems PolicyDecisionItem[]
+  responses     PolicySectionResponse[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([documentId, order])
+  @@index([parentId, order])
+  @@map("policy_sections")
+}
+
+model PolicyDecisionItem {
+  id        String        @id @default(uuid())
+  sectionId String
+  section   PolicySection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  /// The placeholder exactly as it appears, brackets included: "[11:00]".
+  placeholder String
+  /// The sentence it sits in. Without this a reviewer is asked to choose a
+  /// value for "[80%]" with no idea what is being measured.
+  surroundingSentence String @db.Text
+
+  type PolicyDecisionItemType
+
+  /// What the draft currently proposes -- the text inside the brackets. The
+  /// committee is accepting or replacing this, so it is kept verbatim.
+  currentValue String
+
+  /// Offered choices, where the type is CHOICE.
+  options Json?
+
+  order Int @default(0)
+
+  /// Set when the owner removes a false positive in the import preview. Kept
+  /// rather than deleted so a re-import does not silently resurrect it, and so
+  /// "the importer found 41, we are asking about 38" is answerable.
+  dismissed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  responses PolicyDecisionItemResponse[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([sectionId, order])
+  @@map("policy_decision_items")
+}
+
+model PolicyReviewRound {
+  id         String         @id @default(uuid())
+  documentId String
+  document   PolicyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// The document version this round reviewed, copied at open time. The
+  /// document may move on; what these people answered about must not.
+  version String
+
+  title String?
+
+  opensAt  DateTime?
+  closesAt DateTime
+
+  status PolicyRoundStatus @default(DRAFT)
+
+  resultsVisibility PolicyResultsVisibility @default(OWNER_ONLY)
+
+  /// Quorum as a percentage of those invited, following ConflictDecision's
+  /// convention. Null means none required -- a policy review is not a vote.
+  quorumPercent Int?
+
+  /// Set when the automatic reminders have gone out, so a cron that runs every
+  /// few minutes within the window does not send one each time.
+  remindedAt48h DateTime?
+  remindedAt12h DateTime?
+
+  closedAt      DateTime?
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  invitations     PolicyInvitation[]
+  participations  PolicyParticipation[]
+  sectionResponses PolicySectionResponse[]
+  itemResponses   PolicyDecisionItemResponse[]
+  generalResponses PolicyGeneralResponse[]
+  analysisRuns    PolicyAnalysisRun[]
+  finalProposals  PolicyFinalProposal[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([status, closesAt])
+  @@index([documentId, status])
+  @@map("policy_review_rounds")
+}
+
+/// One invited reviewer, and THE REVIEWER KEY for everything they say.
+///
+/// There are two kinds of reviewer -- a member with no ORM account who opens a
+/// token link from WhatsApp, and a member who signs in and uses the general
+/// link -- and both must be able to leave and come back. Rather than two
+/// identity paths with two resume behaviours, the signed-in route finds or
+/// creates an invitation row for that user, so every response in this module
+/// hangs off an invitation and there is exactly one way to resume.
+///
+/// THE TOKEN ITSELF IS NEVER STORED, only its SHA-256, following
+/// src/lib/patients/feedbackInvite.ts. A database read cannot open somebody
+/// else's review, and a leaked backup cannot be used to answer in their name.
+model PolicyInvitation {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  /// Matches User.id where the member has an account. TEXT rather than a
+  /// relation, following ConflictStakeholder: most of the committee will be
+  /// invited by name and unit before anybody checks whether they have a login.
+  userId String?
+
+  /// Attribution, as the committee needs it on the record. Responses are
+  /// attributed for accountability; the owner may choose to export by role
+  /// only, which is a presentation setting on the round, not a different store.
+  inviteeName String
+  inviteeRole String?
+  inviteeUnit String?
+  phone       String?
+  email       String?
+
+  tokenHash String @unique
+
+  /// True where this row was created by somebody arriving on the general link
+  /// rather than being invited by the owner. The participation figures must be
+  /// able to say "12 invited, 2 of whom invited themselves".
+  selfEnrolled Boolean @default(false)
+
+  sentAt        DateTime?
+  openedAt      DateTime?
+  submittedAt   DateTime?
+  reminderCount Int       @default(0)
+  remindedAt    DateTime?
+  /// Set to withdraw a link. Checked on every read, so revoking takes effect
+  /// immediately rather than at the next sign-in.
+  revokedAt     DateTime?
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participation    PolicyParticipation?
+  sectionResponses PolicySectionResponse[]
+  itemResponses    PolicyDecisionItemResponse[]
+  generalResponse  PolicyGeneralResponse?
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([roundId, userId])
+  @@index([roundId, submittedAt])
+  @@map("policy_invitations")
+}
+
+/// Where this reviewer had got to. The answer to "exit and return to where he
+/// stopped".
+///
+/// THE CURSOR IS A STEP ID, NEVER AN INDEX. The booking wizard stores an index
+/// and maps it to a name through two hand-maintained arrays that have drifted
+/// out of order, so resuming a booking can land on the wrong step. A stable id
+/// has no mapping to get wrong, and a section inserted later cannot shift
+/// anybody's saved place. An unrecognised id resolves to the first UNANSWERED
+/// section rather than to the beginning.
+model PolicyParticipation {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  invitationId String           @unique
+  invitation   PolicyInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  /// The step they were last on, e.g. "section:<uuid>", "general", "review".
+  currentStepId String?
+
+  startedAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  /// Set when they press Submit. They may still edit until the deadline, and
+  /// each edit after this point is recorded in policy_response_revisions.
+  submittedAt DateTime?
+
+  /// Client-generated, so a submission retried on a flaky connection cannot
+  /// arrive twice. Follows ConflictResponse.idempotencyKey.
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([roundId, submittedAt])
+  @@map("policy_participations")
+}
+
+model PolicySectionResponse {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  invitationId String           @map("invitationId")
+  invitation   PolicyInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  sectionId String
+  section   PolicySection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  stance PolicyStance
+
+  comment         String? @db.Text
+  /// Pre-filled with the current text for editing, so a reviewer proposing
+  /// wording is amending the policy's own sentence rather than writing a fresh
+  /// one that then has to be reconciled with it.
+  proposedWording String? @db.Text
+
+  concernType PolicyConcernType?
+  priority    PolicyPriority?
+
+  /// This row exists as soon as a stance is chosen. Until submittedAt is set it
+  /// is work in progress -- which is what makes the review resumable from a
+  /// different device, and why there is no separate draft blob to fall out of
+  /// step with the answers.
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([roundId, invitationId, sectionId])
+  @@index([roundId, sectionId, stance])
+  @@index([roundId, concernType, priority])
+  @@map("policy_section_responses")
+}
+
+model PolicyDecisionItemResponse {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  invitationId String           @map("invitationId")
+  invitation   PolicyInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  decisionItemId String
+  decisionItem   PolicyDecisionItem @relation(fields: [decisionItemId], references: [id], onDelete: Cascade)
+
+  acceptsCurrent Boolean
+
+  /// Null where they accepted the current value. Stored as text even for a
+  /// time or a percentage: the committee proposes "11:30" and "11:00 on
+  /// Mondays", and coercing that to a type loses the second one.
+  proposedValue String?
+  reason        String? @db.Text
+
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([roundId, invitationId, decisionItemId])
+  @@index([roundId, decisionItemId])
+  @@map("policy_decision_item_responses")
+}
+
+model PolicyGeneralResponse {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  invitationId String           @unique @map("invitationId")
+  invitation   PolicyInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  /// 1-5. Nullable because the general questions are a step a reviewer reaches
+  /// last, and a half-finished review must be storable.
+  overallSupport Int?
+
+  concern1 String? @db.Text
+  concern2 String? @db.Text
+  concern3 String? @db.Text
+
+  /// What would stop this working in their own unit. The most useful field in
+  /// the module and the one a group chat never produces, because nobody asks.
+  barriers        String? @db.Text
+  resourcesNeeded String? @db.Text
+  otherComments   String? @db.Text
+
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([roundId])
+  @@map("policy_general_responses")
+}
+
+/// Append-only history of edits made AFTER a reviewer first submitted.
+///
+/// The round stays open for editing until the deadline, which is right -- a
+/// head of department who reads section 7 again at midnight should be able to
+/// correct themselves. But "editable" must not mean the committee's record of
+/// what somebody said is silently rewritten, particularly where an analysis has
+/// already cited it. So the previous value is kept, once per edit.
+model PolicyResponseRevision {
+  id String @id @default(uuid())
+
+  /// Which table the edited row belongs to: SECTION | DECISION_ITEM | GENERAL.
+  /// A single table rather than three parallel histories; the snapshot carries
+  /// the shape.
+  kind       String
+  /// The edited row's id. Not a foreign key, because this history must outlive
+  /// a tidying of the round it belonged to.
+  responseId String
+
+  roundId      String
+  invitationId String
+
+  /// The row as it stood BEFORE this edit.
+  snapshot Json
+
+  editedAt DateTime @default(now())
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([roundId, editedAt])
+  @@index([responseId, editedAt])
+  @@map("policy_response_revisions")
+}
+
+/// One run of the AI analysis.
+///
+/// WHY THIS IS NOT ConflictAnalysis. That model's own comment records a
+/// deliberate decision: its summary fields are "Written by a PERSON from the
+/// computed findings ... it does not write prose, because a model's summary in
+/// a permanent institutional record cannot be traced to source responses."
+///
+/// That objection is answered here rather than overridden. Every theme, quote
+/// and recommendation in `output` must cite response ids; the server checks
+/// that each cited id exists in this round and that the stance counts the model
+/// reports match this database exactly. A run that fails either check is stored
+/// with status FAILED_VALIDATION and its reasons, and is never rendered as
+/// findings. What survives is traceable to source responses, one claim at a
+/// time -- and it is a RECOMMENDATION, held in its own table, not the record.
+/// The record is PolicyFinalProposal, and only the owner puts anything in it.
+model PolicyAnalysisRun {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  model String
+  /// Which revision of the system prompt produced this. Re-running after the
+  /// prompt is edited must not look like the same analysis.
+  promptVersion String
+
+  /// SHA-256 of the exact policy text and responses sent. Two runs with the
+  /// same hash analysed the same input; a different hash means the committee
+  /// answered more in between.
+  inputSnapshotHash String
+
+  status PolicyAnalysisStatus @default(RUNNING)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  /// The validated per-section and cross-section output.
+  output Json?
+  /// Why a run was refused: fabricated response ids, counts that disagree with
+  /// the database, schema violations. Kept, because a silent retry hides a
+  /// prompt that has started inventing support.
+  validationErrors Json?
+
+  inputTokens  Int?
+  outputTokens Int?
+  /// Estimated, in US cents, from the run's own token usage.
+  costCents    Int?
+
+  runById   String?
+  runByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposedChanges PolicyProposedChange[]
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([roundId, startedAt])
+  @@map("policy_analysis_runs")
+}
+
+model PolicyProposedChange {
+  id            String            @id @default(uuid())
+  analysisRunId String
+  analysisRun   PolicyAnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+
+  /// Null for a change that adds a section rather than amending one.
+  sectionId String?
+
+  type PolicyChangeType
+
+  currentText  String? @db.Text
+  proposedText String  @db.Text
+  rationale    String  @db.Text
+
+  /// The responses this change rests on. Every id is verified to exist in the
+  /// round before the run is accepted, so a proposal can always be traced back
+  /// to the people who asked for it.
+  supportingResponseIds Json
+
+  supportStrength PolicySupportStrength
+
+  /// Set where the change touches a patient-safety provision, a clinical
+  /// threshold, or the right of an anaesthetist or surgeon to decline an unsafe
+  /// case. Such a change may only come from an explicit reviewer proposal and
+  /// is flagged for clinical review rather than quietly applied.
+  clinicalReviewRequired Boolean @default(false)
+
+  ownerDecision PolicyOwnerDecision @default(PENDING)
+  /// The owner's own wording, where they accepted with edits.
+  editedText    String?             @db.Text
+  decidedById   String?
+  decidedByName String?
+  decidedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([analysisRunId, ownerDecision])
+  @@index([sectionId])
+  @@map("policy_proposed_changes")
+}
+
+model PolicyFinalProposal {
+  id      String            @id @default(uuid())
+  roundId String
+  round   PolicyReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  /// "0.3" after the review, "1.0" once Management approves.
+  version String
+
+  /// The revised policy, assembled from ACCEPTED changes only.
+  body String @db.Text
+
+  /// One entry per applied change: what changed, why, and which responses
+  /// supported it. The committee is asked to approve a diff, not a new
+  /// document that arrived from nowhere.
+  changeLog Json
+
+  generatedAt     DateTime @default(now())
+  generatedById   String?
+  generatedByName String?
+
+  approvedById   String?
+  approvedByName String?
+  approvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([roundId, version])
+  @@index([roundId, generatedAt])
+  @@map("policy_final_proposals")
+}

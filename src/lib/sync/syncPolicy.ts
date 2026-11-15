@@ -218,6 +218,33 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'conflict_analyses', cls: 'CLOUD_AUTHORITATIVE', why: 'Recomputed from responses; the cloud has all of them.' },
   { table: 'conflict_approvals', cls: 'CLOUD_AUTHORITATIVE', why: 'An approval chain with two truths is not an approval chain.' },
 
+  // ── The policy review ────────────────────────────────────────────────────
+  // The Theatre Users Committee reviewing a draft policy. The committee
+  // answers on the PUBLIC node, because the link in their WhatsApp is built by
+  // publicSiteUrl() and the theatre node answers on a Tailscale address no
+  // phone can resolve. But the Chairman reads the dashboard from inside the
+  // hospital, where the browser may well be on the theatre node -- and a
+  // dashboard with no responses on it reads as "nobody has answered", not as
+  // "you are looking at the wrong node".
+  //
+  // Writes are single-node in practice, so the cloud owning every row costs
+  // nothing. Only the edit history is APPEND_ONLY, because it is insert-only
+  // and both sides can simply be unioned.
+  { table: 'policy_documents', cls: 'CLOUD_AUTHORITATIVE', why: 'The imported draft. One version of a policy under review, or the committee is reviewing two different documents.' },
+  { table: 'policy_sections', cls: 'CLOUD_AUTHORITATIVE', why: 'The section tree every response points at. A section edited on one node only would orphan the answers given about it elsewhere.' },
+  { table: 'policy_decision_items', cls: 'CLOUD_AUTHORITATIVE', why: 'The bracketed values the committee must settle. Two nodes offering different open values is two different consultations.' },
+  { table: 'policy_review_rounds', cls: 'CLOUD_AUTHORITATIVE', why: 'One review and its deadline. A round closed on one node and open on the other would take answers after the cut-off.' },
+  { table: 'policy_invitations', cls: 'CLOUD_AUTHORITATIVE', why: 'Who was asked, and the hash of their link. Revoking a link must take effect everywhere at once, and the invited count feeds every participation figure.' },
+  { table: 'policy_participations', cls: 'CLOUD_AUTHORITATIVE', why: 'Where each reviewer had got to. The cursor is what lets somebody resume on a different device, so it has to be the same on both nodes.' },
+  { table: 'policy_section_responses', cls: 'CLOUD_AUTHORITATIVE', why: 'What each reviewer said about each section. Written on the public node where the link points; read by the Chairman from inside the hospital.' },
+  { table: 'policy_decision_item_responses', cls: 'CLOUD_AUTHORITATIVE', why: 'Each reviewer on each open value. These are the tallies the final policy quotes, so a node holding only some of them reports a different consensus.' },
+  { table: 'policy_general_responses', cls: 'CLOUD_AUTHORITATIVE', why: 'Overall support, barriers and resources needed, one row per reviewer. Same reasoning as the section responses.' },
+  { table: 'policy_response_revisions', cls: 'APPEND_ONLY', why: 'History of edits made after a reviewer first submitted. Insert-only, so both sides union and no conflict can exist.' },
+  { table: 'policy_analysis_runs', cls: 'CLOUD_AUTHORITATIVE', why: 'Each analysis run with its prompt version and token usage. Recomputed from the responses, and the cloud is where all of them are.' },
+  { table: 'policy_proposed_changes', cls: 'CLOUD_AUTHORITATIVE', why: 'Proposals and the owner decision on each. An acceptance recorded on one node only would drop out of the final policy.' },
+  { table: 'policy_final_proposals', cls: 'CLOUD_AUTHORITATIVE', why: 'The revised policy that goes to Management. Two nodes must never publish different versions of one policy.' },
+
+
   { table: 'users', cls: 'CLOUD_AUTHORITATIVE', why: 'A merged or revoked account must not be resurrected by a stale local copy.' },
 
   // ── The emergency board ──────────────────────────────────────────────────

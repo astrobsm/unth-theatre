@@ -82,6 +82,10 @@
     {
       "path": "/api/maintenance/preop-review-watch",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/policy/reminders",
+      "schedule": "0 */4 * * *"
     }
   ]
 }
