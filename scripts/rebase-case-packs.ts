@@ -71,6 +71,22 @@ const CANCEL_ONLY = process.argv.includes('--cancel-only');
  * A window is the honest middle: recent enough that the case is still being
  * prepared for, old enough to catch one that slipped past its date.
  */
+/**
+ * --surgery <id>: one case, whatever its date.
+ *
+ * The targeted alternative to widening the window. A case scheduled three
+ * weeks ago and never closed is usually a case that HAPPENED and was never
+ * marked complete, and its pack is a record. But some of them are genuinely
+ * still ahead — a case that slipped and is being re-prepared — and only the
+ * person looking at it knows which. The id is in the case page's URL.
+ */
+const surgeryArg = process.argv.indexOf('--surgery');
+const SURGERY_ID = surgeryArg >= 0 ? String(process.argv[surgeryArg + 1] ?? '').trim() : null;
+if (surgeryArg >= 0 && !SURGERY_ID) {
+  console.error('--surgery needs a case id, e.g. --surgery 1a2b3c…');
+  process.exit(1);
+}
+
 const daysArg = process.argv.indexOf('--days');
 const DAYS = daysArg >= 0 ? Number(process.argv[daysArg + 1]) : null;
 if (daysArg >= 0 && (!Number.isFinite(DAYS) || (DAYS as number) < 0)) {
@@ -91,19 +107,29 @@ async function main() {
 
   const cases = await prisma.surgery.findMany({
     where: {
+      // A named case is taken on its own terms: the person asking for it
+      // has looked at it, which is more than a date filter can do. Finished
+      // cases are still refused.
       status: { notIn: ['COMPLETED', 'CANCELLED'] },
-      ...(ALL ? {} : { scheduledDate: { gte: from } }),
+      ...(SURGERY_ID
+        ? { id: SURGERY_ID }
+        : ALL ? {} : { scheduledDate: { gte: from } }),
     },
     select: { id: true, procedureName: true, magnitude: true, scheduledDate: true },
     orderBy: { scheduledDate: 'asc' },
   });
 
-  const scope = ALL
+  const scope = SURGERY_ID
+    ? `one case, ${SURGERY_ID}`
+    : ALL
     ? 'ALL DATES — this rewrites the record of past cases'
     : DAYS !== null
       ? `scheduled from ${from.toISOString().slice(0, 10)} onwards (${DAYS} days back)`
       : 'today onwards';
   console.log(`${cases.length} case(s) in scope (${scope}).`);
+  if (SURGERY_ID && cases.length === 0) {
+    console.log('No such case, or it is already COMPLETED or CANCELLED.');
+  }
   console.log(WRITE ? (CANCEL_ONLY ? 'WRITING (withdrawing, not deleting).\n' : 'WRITING.\n')
     : 'Dry run — nothing will be written. Add --write.\n');
 
