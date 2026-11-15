@@ -99,6 +99,23 @@ const ACTED_ON = ['PACKING', 'PACKED', 'DELIVERED'];
 
 const key = (s: unknown) => String(s ?? '').trim().toLowerCase();
 
+/**
+ * A pack line is identified by NAME AND SIZE, never by name alone.
+ *
+ * The base pack holds three lines called "Syringe" — 10ml, 5ml and 2ml —
+ * and four called "IV cannula" were it not for the colour being in the
+ * name. Keying on the name collapsed the three syringes into one, which did
+ * two things: it reported the 10ml and 5ml rows as permanently needing
+ * their size corrected, and a second --write would have SET ALL THREE TO
+ * 2ml — a theatre asked for thirty 2ml syringes and no 10ml, from a script
+ * whose whole job is to make the pack right.
+ *
+ * Caught by running the script twice and finding it was not idempotent.
+ * The first run was harmless because no syringe rows existed yet to be
+ * mismatched; the second would not have been.
+ */
+const lineId = (name: unknown, size: unknown) => `${key(name)}|${key(size)}`;
+
 async function main() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -143,25 +160,27 @@ async function main() {
     });
 
     const want = resolveBasePack(c.magnitude);
-    const wantByName = new Map(want.map((w) => [key(w.name), w]));
+    const wantById = new Map(want.map((w) => [lineId(w.name, w.size), w]));
 
     // ONLY the base pack. Everything else on the case belongs to somebody.
     const baseRows = rows.filter((r) => r.notes === BASE_PACK_LABEL);
-    const presentNames = new Set(rows.map((r) => key(r.name)));
+    const presentIds = new Set(rows.map((r) => lineId(r.name, r.size)));
 
-    const superseded = baseRows.filter((r) => !wantByName.has(key(r.name)));
+    const superseded = baseRows.filter((r) => !wantById.has(lineId(r.name, r.size)));
     const supersededFree = superseded.filter((r) => !ACTED_ON.includes(String(r.status).toUpperCase())
       && String(r.status).toUpperCase() !== 'CANCELLED');
     const supersededLocked = superseded.filter((r) => ACTED_ON.includes(String(r.status).toUpperCase()));
 
+    // Size is part of the identity now, so a row that matched differs only
+    // in how many and in what unit.
     const wrongQty = baseRows.filter((r) => {
-      const w = wantByName.get(key(r.name));
+      const w = wantById.get(lineId(r.name, r.size));
       if (!w) return false;
       if (String(r.status).toUpperCase() === 'CANCELLED') return false;
-      return r.quantity !== w.quantity || r.unit !== w.unit || (r.size ?? null) !== (w.size ?? null);
+      return r.quantity !== w.quantity || r.unit !== w.unit;
     });
 
-    const missing = want.filter((w) => !presentNames.has(key(w.name)));
+    const missing = want.filter((w) => !presentIds.has(lineId(w.name, w.size)));
 
     if (!supersededFree.length && !wrongQty.length && !missing.length) {
       clean += 1;
@@ -186,8 +205,9 @@ async function main() {
     for (const r of supersededFree) console.log(`          - ${r.quantity} x ${r.name}`);
     for (const w of missing) console.log(`          + ${w.quantity} x ${w.name}${w.size ? ' ' + w.size : ''}`);
     for (const r of wrongQty) {
-      const w = wantByName.get(key(r.name))!;
-      console.log(`          ~ ${r.name}: ${r.quantity} ${r.unit} -> ${w.quantity} ${w.unit}`);
+      const w = wantById.get(lineId(r.name, r.size))!;
+      console.log(`          ~ ${r.name}${r.size ? ' ' + r.size : ''}: `
+        + `${r.quantity} ${r.unit} -> ${w.quantity} ${w.unit}`);
     }
 
     if (!WRITE) continue;
@@ -210,10 +230,12 @@ async function main() {
     }
 
     for (const r of wrongQty) {
-      const w = wantByName.get(key(r.name))!;
+      const w = wantById.get(lineId(r.name, r.size))!;
       await prisma.surgeryConsumableRequest.update({
         where: { id: r.id },
-        data: { quantity: w.quantity, unit: w.unit, size: w.size ?? null },
+        // NOT size. Size is what identified this row; writing it back from a
+        // lookup is how the three syringes became one.
+        data: { quantity: w.quantity, unit: w.unit },
       });
     }
 

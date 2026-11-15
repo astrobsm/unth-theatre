@@ -59,11 +59,31 @@ describe('what it is allowed to touch', () => {
     expect(code).toContain("&& String(r.status).toUpperCase() !== 'CANCELLED'");
   });
 
+  it('identifies a line by name AND size, never by name alone', () => {
+    // The pack holds three lines called "Syringe" - 10ml, 5ml and 2ml. Keying
+    // on the name collapsed them into one, reported two of them as forever
+    // needing correction, and a second --write would have set all three to
+    // 2ml: a theatre asked for thirty 2ml syringes and no 10ml, by a script
+    // whose whole job is to make the pack right. Found by running it twice.
+    expect(code).toContain('const lineId = (name: unknown, size: unknown)');
+    for (const m of ['wantById', 'presentIds']) expect(code).toContain(m);
+    expect(code).not.toContain('wantByName');
+    expect(code).not.toContain('presentNames');
+  });
+
+  it('never writes size back from the lookup it matched on', () => {
+    // Writing the identity back from a lookup is exactly how the three
+    // syringes would have become one.
+    const upd = code.slice(code.indexOf('surgeryConsumableRequest.update('));
+    expect(upd.slice(0, 300)).toContain('data: { quantity: w.quantity, unit: w.unit }');
+    expect(upd.slice(0, 300)).not.toContain('size:');
+  });
+
   it('does not re-add something the case already has under another source', () => {
     // If a surgeon asked for examination gloves by hand, the base pack must
     // not put a second line beside it.
-    expect(code).toContain('const presentNames = new Set(rows.map((r) => key(r.name)));');
-    expect(code).toContain('want.filter((w) => !presentNames.has(key(w.name)))');
+    expect(code).toContain('const presentIds = new Set(rows.map((r) => lineId(r.name, r.size)));');
+    expect(code).toContain('want.filter((w) => !presentIds.has(lineId(w.name, w.size)))');
   });
 
   it('skips cases that are finished', () => {
@@ -101,6 +121,6 @@ describe('the pack it re-bases onto', () => {
     // Examination gloves went from 20 pairs to 1 pack. A line that keeps its
     // name but changes its count would otherwise never be updated.
     expect(code).toContain('r.quantity !== w.quantity || r.unit !== w.unit');
-    expect(code).toContain('data: { quantity: w.quantity, unit: w.unit, size: w.size ?? null }');
+    expect(code).toContain('data: { quantity: w.quantity, unit: w.unit }');
   });
 });
