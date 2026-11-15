@@ -501,11 +501,18 @@ export default function DashboardLayout({
     // walks through happens at Meta rather than here.
     menuItems.push({ href: '/dashboard/settings/whatsapp', icon: MessageSquare, label: 'WhatsApp Reminders', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/admin/procedure-packs', icon: FileSpreadsheet, label: 'Procedure Packs', badge: 'ADMIN' });
+    // PACK REVIEW sits beside the two screens somebody tries first when
+    // asking "does this operation get the right pack?" — and that neither
+    // of them answers. Surgical Packs lists what CAN be applied; Procedure
+    // Packs lists a mapping with nothing confirmed in it. This one shows
+    // what a booking would actually produce.
+    menuItems.push({ href: '/dashboard/admin/pack-preview', icon: Package, label: 'Pack Review', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/estimates', icon: FileSpreadsheet, label: 'Cost Estimates' });
   } else if (['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'].includes(session.user.role)) {
     // Non-admin roles that maintain pack/drug entries can also reach the catalog + packs.
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog' });
     menuItems.push({ href: '/dashboard/admin/surgical-packs', icon: Package, label: 'Surgical Packs' });
+    menuItems.push({ href: '/dashboard/admin/pack-preview', icon: Package, label: 'Pack Review' });
   }
 
   // Live monitoring — visible to admins, theatre manager and chairman
@@ -658,6 +665,7 @@ export default function DashboardLayout({
       '/dashboard/settings/price-master',
       '/dashboard/settings/whatsapp',
       '/dashboard/admin/procedure-packs',
+      '/dashboard/admin/pack-preview',
       '/dashboard/estimates',
       '/dashboard/announcements',
       '/dashboard/unit-booking-letter',
