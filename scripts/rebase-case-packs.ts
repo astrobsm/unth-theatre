@@ -52,6 +52,32 @@ const WRITE = process.argv.includes('--write');
 const ALL = process.argv.includes('--all');
 const CANCEL_ONLY = process.argv.includes('--cancel-only');
 
+/**
+ * --days N: cases scheduled from N days ago onwards.
+ *
+ * NEEDED BECAUSE "not completed" is this database's normal state, not an
+ * exception: 990 of 1,388 cases are neither COMPLETED nor CANCELLED, and
+ * most of those sit on dates already past. So "today onwards" reaches ten
+ * cases and misses the one somebody is actually looking at, while --all
+ * reaches nine hundred and rewrites the pack of every case the theatre has
+ * ever booked and not closed.
+ *
+ * That second one is the real hazard. A past case's pack rows are a RECORD
+ * of what was asked for at the time — the reason the base pack is written
+ * as rows at booking rather than computed on read. Rewriting them says the
+ * theatre was sent syringes it never received, and no later audit can tell
+ * that apart from the truth.
+ *
+ * A window is the honest middle: recent enough that the case is still being
+ * prepared for, old enough to catch one that slipped past its date.
+ */
+const daysArg = process.argv.indexOf('--days');
+const DAYS = daysArg >= 0 ? Number(process.argv[daysArg + 1]) : null;
+if (daysArg >= 0 && (!Number.isFinite(DAYS) || (DAYS as number) < 0)) {
+  console.error('--days needs a number of days, e.g. --days 30');
+  process.exit(1);
+}
+
 /** Statuses where the provider has already acted on the line. */
 const ACTED_ON = ['PACKING', 'PACKED', 'DELIVERED'];
 
@@ -60,17 +86,24 @@ const key = (s: unknown) => String(s ?? '').trim().toLowerCase();
 async function main() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const from = new Date(today);
+  if (DAYS !== null) from.setDate(from.getDate() - (DAYS as number));
 
   const cases = await prisma.surgery.findMany({
     where: {
       status: { notIn: ['COMPLETED', 'CANCELLED'] },
-      ...(ALL ? {} : { scheduledDate: { gte: today } }),
+      ...(ALL ? {} : { scheduledDate: { gte: from } }),
     },
     select: { id: true, procedureName: true, magnitude: true, scheduledDate: true },
     orderBy: { scheduledDate: 'asc' },
   });
 
-  console.log(`${cases.length} case(s) in scope${ALL ? ' (all dates)' : ' (today onwards)'}.`);
+  const scope = ALL
+    ? 'ALL DATES — this rewrites the record of past cases'
+    : DAYS !== null
+      ? `scheduled from ${from.toISOString().slice(0, 10)} onwards (${DAYS} days back)`
+      : 'today onwards';
+  console.log(`${cases.length} case(s) in scope (${scope}).`);
   console.log(WRITE ? (CANCEL_ONLY ? 'WRITING (withdrawing, not deleting).\n' : 'WRITING.\n')
     : 'Dry run — nothing will be written. Add --write.\n');
 
