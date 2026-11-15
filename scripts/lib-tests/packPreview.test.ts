@@ -80,9 +80,13 @@ describe('the magnitude is part of the answer', () => {
     // nothing about the others.
     const minor = generatePacks({ procedureName: 'Exploratory laparotomy', magnitude: 'MINOR' });
     const major = generatePacks({ procedureName: 'Exploratory laparotomy', magnitude: 'MAJOR' });
-    const gauze = (p: typeof minor) =>
-      p.consumables.find((c) => c.name.toLowerCase().includes('gauze'))?.quantity ?? 0;
-    expect(gauze(major)).toBeGreaterThan(gauze(minor));
+    // The gauze bundle left the base pack on 15 November. The laparotomy's
+    // own abdominal packs still scale, and they are a better test anyway:
+    // they come from the FAMILY set, so this also proves the family items
+    // answer to magnitude and not only the base pack.
+    const packs = (p: typeof minor) =>
+      p.consumables.find((c) => c.name.toLowerCase().includes('abdominal packs'))?.quantity ?? 0;
+    expect(packs(major)).toBeGreaterThan(packs(minor));
     expect(resolveBasePack('MAJOR').length).toBeGreaterThan(0);
   });
 

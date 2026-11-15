@@ -6,11 +6,35 @@
 // cannot be accidentally deleted or edited away, and so the exact clinical
 // standard is auditable in git.
 //
-// Quantities scale with operative magnitude (the surgeon picks MAJOR /
-// INTERMEDIATE / MINOR at booking). Where the source standard gives a single
-// number, all three magnitudes carry it; where it gives a range (e.g. 6–8
-// gowns), MINOR takes the low end and MAJOR the high end. The gauze bundle is
-// itself magnitude-specific, per theatre practice.
+// REPLACED ON 15 NOVEMBER, by the list the theatre gave.
+//
+// WHAT THE PACK IS NOW. It is about access and prep, not dress and drape.
+// Masks, caps, gowns, shoe covers, goggles, drapes, swabs, mops, cotton wool
+// and the gauze bundle have gone; syringes, cannulae, water for injection and
+// giving sets have come in. Those last four used to arrive only from the
+// special-needs bundle in specialNeeds/bundle.ts, which is separate. Whatever
+// a particular operation needs by way of drapes or swabs now comes from its
+// family set in packs/standards.ts rather than from every case alike.
+//
+// HOW THE THREE COLUMNS WERE ARRIVED AT. The theatre gave ONE number per line.
+// Those numbers are kept EXACTLY as given in the MAJOR column, so nothing
+// anybody asked for is reduced for a big case. MINOR and INTERMEDIATE taper
+// down from them, and nothing was scaled upwards beyond what was asked for.
+//
+// The taper is not applied to everything, and the exceptions are the point:
+//
+//   A BOTTLE IS A BOTTLE. Povidone-iodine, chlorhexidine, spirit and JIK are
+//   issued as one container whatever the operation, so they do not scale. Nor
+//   does the skin marker, and nor does the pack of examination gloves, which
+//   is a room supply rather than a per-case count.
+//
+//   THE 18G AND 16G CANNULAE DO NOT TAPER. They are the resuscitation sizes.
+//   A minor case that starts bleeding needs them at the moment nobody has
+//   time to send out for one, and they cost very little to carry.
+//
+// SO MINOR AND INTERMEDIATE ARE THIS FILE'S SUGGESTION, NOT THE THEATRE'S
+// INSTRUCTION. Only the MAJOR column is what was actually specified; the other
+// two should be read and corrected.
 
 export type SurgeryMagnitude = 'MAJOR' | 'INTERMEDIATE' | 'MINOR';
 
@@ -51,55 +75,45 @@ interface BasePackLine {
   qty: [number, number, number];
 }
 
-// A gauze bundle whose *item* changes with magnitude (not just its count).
-interface GauzeBundle {
-  category: string;
-  unit: string;
-  nameByMagnitude: Record<SurgeryMagnitude, string>;
-}
-
 const BASE_PACK_LINES: BasePackLine[] = [
-  // PPE
-  { name: 'Surgical face masks', category: 'PPE', unit: 'piece', qty: [20, 20, 20] },
-  { name: 'Surgical caps', category: 'PPE', unit: 'piece', qty: [10, 10, 10] },
-  { name: 'Sterile surgical gowns', category: 'GOWNS_DRAPES', unit: 'piece', qty: [6, 7, 8] },
-  { name: 'Non-sterile disposable gowns', category: 'PPE', unit: 'piece', qty: [2, 3, 4] },
-  { name: 'Sterile latex/nitrile gloves', category: 'GLOVES', unit: 'pairs', qty: [20, 25, 30] },
-  { name: 'Examination gloves', category: 'GLOVES', unit: 'pairs', qty: [20, 20, 20] },
-  { name: 'Protective shoe covers', category: 'PPE', unit: 'pairs', qty: [10, 10, 10] },
-  { name: 'Protective goggles/face shields', category: 'PPE', unit: 'piece', qty: [4, 5, 6] },
-  // Skin prep / antiseptics
+  // Gloves. The examination pack is a room supply and does not scale. Sterile
+  // gloves do: a major case is scrubbed by more people, and a glove is changed
+  // when it is holed rather than at the end.
+  { name: 'Examination gloves', category: 'GLOVES', unit: 'pack', qty: [1, 1, 1] },
+  { name: 'Surgical gloves, sterile', category: 'GLOVES', unit: 'pairs', qty: [4, 6, 8] },
+
+  // Skin prep and antiseptics. One container whatever the operation, so these
+  // are flat by intent rather than by omission.
   { name: 'Povidone-Iodine Solution (10%)', category: 'SKIN_PREP', size: '100 ml', unit: 'bottle', qty: [1, 1, 1] },
   { name: 'Chlorhexidine solution', category: 'SKIN_PREP', size: '500 ml', unit: 'bottle', qty: [1, 1, 1] },
   { name: 'Methylated spirit / 70% Isopropyl alcohol', category: 'SKIN_PREP', size: '100 ml', unit: 'bottle', qty: [1, 1, 1] },
-  { name: 'Sterile water for irrigation', category: 'IRRIGATION', size: '2 litres', unit: 'pack', qty: [1, 1, 1] },
-  { name: 'Skin marker', category: 'OTHER', unit: 'piece', qty: [1, 1, 2] },
+  { name: 'Skin marker', category: 'OTHER', unit: 'piece', qty: [1, 1, 1] },
   { name: 'JIK (hypochlorite)', category: 'CLEANING_SOLUTION', unit: 'bottle', qty: [1, 1, 1] },
-  // Drapes
-  { name: 'Sterile drapes', category: 'GOWNS_DRAPES', unit: 'piece', qty: [4, 6, 8] },
-  { name: 'Fenestrated drapes', category: 'GOWNS_DRAPES', unit: 'piece', qty: [1, 1, 2] },
-  { name: 'Mayo stand cover', category: 'GOWNS_DRAPES', unit: 'piece', qty: [1, 1, 1] },
-  { name: 'Instrument table cover', category: 'GOWNS_DRAPES', unit: 'piece', qty: [2, 2, 2] },
-  // Swabs / dressings
-  { name: 'Gauze swabs (10 × 10 cm)', category: 'STERILE_DRESSINGS', unit: 'piece', qty: [100, 150, 200] },
-  { name: 'Abdominal mops/laparotomy pads', category: 'STERILE_DRESSINGS', unit: 'piece', qty: [10, 15, 20] },
-  { name: 'Cotton wool', category: 'STERILE_DRESSINGS', size: '500 g', unit: 'pack', qty: [1, 1, 1] },
-  { name: 'Combine dressing pads', category: 'STERILE_DRESSINGS', unit: 'piece', qty: [5, 5, 5] },
-  { name: 'Sterile dressing packs', category: 'DRESSING_PACKS', unit: 'pack', qty: [1, 1, 2] },
-  { name: 'Micropore tape', category: 'STERILE_DRESSINGS', unit: 'roll', qty: [2, 2, 2] },
-  { name: 'Zinc oxide tape', category: 'STERILE_DRESSINGS', unit: 'roll', qty: [2, 2, 2] },
-  { name: 'Transparent dressing film', category: 'STERILE_DRESSINGS', unit: 'piece', qty: [2, 2, 2] },
+  { name: 'Zinc oxide tape', category: 'STERILE_DRESSINGS', unit: 'roll', qty: [1, 2, 2] },
+
+  // Syringes. Drawing up, flushing and local infiltration all scale with how
+  // long a case runs and how many drugs are given.
+  { name: 'Syringe', category: 'SYRINGES_NEEDLES', size: '10ml', unit: 'piece', qty: [5, 8, 10] },
+  { name: 'Syringe', category: 'SYRINGES_NEEDLES', size: '5ml', unit: 'piece', qty: [5, 8, 10] },
+  { name: 'Syringe', category: 'SYRINGES_NEEDLES', size: '2ml', unit: 'piece', qty: [5, 8, 10] },
+
+  // IV access. Colour leads the name and the gauge follows, the same
+  // convention as IV_CANNULAE in specialNeeds/standardCatalogue.ts so the two
+  // agree on the shelf. "Ash" is the grey one, 16G; both words are in the name
+  // so the line is recognisable whichever the store says.
+  //
+  // The small sizes taper. The 18G and 16G do not, for the reason at the top
+  // of this file.
+  { name: 'IV cannula, yellow', category: 'CATHETERS_TUBING', size: '24G', unit: 'piece', qty: [1, 2, 2] },
+  { name: 'IV cannula, blue', category: 'CATHETERS_TUBING', size: '22G', unit: 'piece', qty: [1, 2, 2] },
+  { name: 'IV cannula, green', category: 'CATHETERS_TUBING', size: '18G', unit: 'piece', qty: [2, 2, 2] },
+  { name: 'IV cannula, grey (ash)', category: 'CATHETERS_TUBING', size: '16G', unit: 'piece', qty: [2, 2, 2] },
+
+  // Giving sets, and the water the drugs are made up with.
+  { name: 'IV giving set', category: 'CATHETERS_TUBING', unit: 'set', qty: [1, 2, 2] },
+  { name: 'Water for injection', category: 'OTHER', size: '10ml', unit: 'ampoule', qty: [5, 8, 10] },
 ];
 
-const GAUZE_BUNDLE: GauzeBundle = {
-  category: 'STERILE_DRESSINGS',
-  unit: 'bundle',
-  nameByMagnitude: {
-    MINOR: 'Gauze bundle (minor)',
-    INTERMEDIATE: 'Gauze bundle (intermediate)',
-    MAJOR: 'Gauze bundle (major)',
-  },
-};
 
 export interface BasePackItem {
   name: string;
@@ -132,13 +146,6 @@ export function resolveBasePack(magnitude: string | null | undefined): BasePackI
     quantity: l.qty[i],
   }));
 
-  items.push({
-    name: GAUZE_BUNDLE.nameByMagnitude[mag],
-    category: GAUZE_BUNDLE.category,
-    size: null,
-    unit: GAUZE_BUNDLE.unit,
-    quantity: 1,
-  });
 
   return items;
 }

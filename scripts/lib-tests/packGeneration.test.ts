@@ -113,7 +113,10 @@ describe('the consumables draft', () => {
   it('always starts from the mandatory base theatre pack', () => {
     const p = gen();
     expect(p.consumables.some((i) => i.source === 'Mandatory base theatre pack')).toBe(true);
-    expect(names(p.consumables)).toContain('sterile surgical gowns');
+    // Gowns left the base pack on 15 November, when the theatre replaced it
+    // with a list about access and prep rather than dress and drape. Sterile
+    // gloves are the line that is always there now.
+    expect(names(p.consumables)).toContain('surgical gloves, sterile');
   });
 
   it('adds what the approach needs', () => {
@@ -139,8 +142,8 @@ describe('the consumables draft', () => {
   it('scales with operative magnitude', () => {
     const major = gen({ magnitude: 'MAJOR' });
     const minor = gen({ magnitude: 'MINOR' });
-    const gowns = (p: typeof major) => p.consumables.find((i) => /sterile surgical gowns/i.test(i.name))!.quantity;
-    expect(gowns(major)).toBeGreaterThan(gowns(minor));
+    const gloves = (p: typeof major) => p.consumables.find((i) => /surgical gloves, sterile/i.test(i.name))!.quantity;
+    expect(gloves(major)).toBeGreaterThan(gloves(minor));
   });
 
   it('never lists an item and asks for none of it', () => {
@@ -152,11 +155,13 @@ describe('the consumables draft', () => {
   });
 
   it('merges two procedures by the higher quantity, never the sum', () => {
-    // One trip to theatre is one set of drapes.
+    // One trip to theatre is one set of blades. (It used to be one set of
+    // drapes; drapes left the base pack when the theatre replaced it, and
+    // the blades come from the open approach, which both procedures share.)
     const one = gen({ procedureName: 'Excision of tumour' });
     const two = gen({ procedureName: 'Excision of tumour', additionalProcedures: 'Split skin graft to defect' });
-    const drapes = (p: typeof one) => p.consumables.find((i) => i.name === 'Sterile drapes')!.quantity;
-    expect(drapes(two)).toBe(drapes(one));
+    const blades = (p: typeof one) => p.consumables.find((i) => i.name === 'Surgical blade No. 22')!.quantity;
+    expect(blades(two)).toBe(blades(one));
     // But the graft's own items are there.
     expect(names(two.consumables).join(' ')).toMatch(/paraffin gauze/);
     expect(two.warnings.join(' ')).toMatch(/merged by taking the higher/);

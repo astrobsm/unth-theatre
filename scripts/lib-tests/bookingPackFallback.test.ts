@@ -83,7 +83,9 @@ describe('the composed standard is a floor, not an override', () => {
     const major = fallbackPacks({ ...base, magnitude: 'MAJOR', haveConsumables: 0, haveDrugs: 0 });
     const qty = (r: typeof minor, name: string) =>
       r.consumables.find((c) => c.name.toLowerCase().includes(name))?.quantity ?? 0;
-    expect(qty(major, 'gauze')).toBeGreaterThan(qty(minor, 'gauze'));
+    // Abdominal packs rather than gauze: the gauze bundle left the base pack
+    // on 15 November, and a laparotomy's own packs scale from its family set.
+    expect(qty(major, 'abdominal packs')).toBeGreaterThan(qty(minor, 'abdominal packs'));
   });
 
   it('says nothing rather than guessing when there is no procedure', () => {
