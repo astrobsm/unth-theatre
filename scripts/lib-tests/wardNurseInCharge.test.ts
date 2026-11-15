@@ -367,10 +367,21 @@ describe('the ward desk reads its scope from the database', () => {
     expect(api).toContain('cases: [],');
   });
 
-  it('filters the query by ward, case-insensitively', () => {
-    // Patient.ward is free text; an exact match would scope a nurse out of her
-    // own patients, which reads as an empty ward rather than as a mismatch.
-    expect(api).toContain("patient: { ward: { equals: ward, mode: 'insensitive' } }");
+  it('matches the ward with wardsMatch, not with a WHERE clause', () => {
+    // `{ equals: ward, mode: 'insensitive' }` folds case but NOT inner
+    // whitespace, and Patient.ward is free text behind an "OTHERS (SPECIFY)"
+    // option. One typed "WARD  6B" would never match a posting of "WARD 6B",
+    // and the nurse would read the omission as "no cases today".
+    expect(api).toContain('wardsMatch(s.patient?.ward, ward)');
+    expect(api).not.toContain("mode: 'insensitive'");
+  });
+
+  it('uses the SAME comparison on the read and the write path', () => {
+    // Two ways of comparing ward names is a desk that lists a case and then
+    // refuses the handover for it.
+    expect(api).toContain('wardsMatch(');
+    expect(codeOf('src/lib/ward/nurseInCharge.ts'))
+      .toContain('if (!wardsMatch(scope.ward, caseWard))');
   });
 });
 

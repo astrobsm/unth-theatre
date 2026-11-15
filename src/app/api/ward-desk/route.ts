@@ -20,6 +20,7 @@ import {
   normaliseWard,
   isWardPostedRole,
   WARD_ACTIONABLE_SURGERY_STATUSES,
+  wardsMatch,
 } from '@/lib/ward/nurseInCharge';
 
 export const dynamic = 'force-dynamic';
@@ -95,11 +96,27 @@ export async function GET(request: NextRequest) {
     from.setTime(from.getTime() - DAY_MS);
     const to = new Date(from.getTime() + 5 * DAY_MS);
 
-    const surgeries = await prisma.surgery.findMany({
+    /**
+     * The ward is matched in JS, not in the WHERE clause.
+     *
+     * `{ equals: ward, mode: 'insensitive' }` reads like the right thing and
+     * is subtly wrong: it folds case but not inner whitespace. Patient.ward
+     * is free text behind an "OTHERS (SPECIFY)" option, so one typed
+     * "WARD  6B" would never match a posting of "WARD 6B" — and the nurse in
+     * charge of that ward would read the omission as "no cases today" rather
+     * than as a mismatch. A patient invisible to their own ward is the one
+     * failure this desk must not have.
+     *
+     * wardsMatch() normalises both sides, and it is the SAME function the
+     * write path uses to decide whether a case is yours, so the desk cannot
+     * show a case it would then refuse to accept a handover for. The window
+     * is five days, which is tens of rows, so the cost of filtering here is
+     * not worth a second way of comparing ward names.
+     */
+    const inWindow = await prisma.surgery.findMany({
       where: {
         scheduledDate: { gte: from, lte: to },
         status: { in: WARD_ACTIONABLE_SURGERY_STATUSES as unknown as never[] },
-        patient: { ward: { equals: ward, mode: 'insensitive' } },
       },
       select: {
         id: true,
@@ -137,6 +154,8 @@ export async function GET(request: NextRequest) {
       },
       orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }],
     });
+
+    const surgeries = inWindow.filter((s) => wardsMatch(s.patient?.ward, ward));
 
     const cases = surgeries.map((s) => {
       const callUp = s.patientCallUps[0] ?? null;
