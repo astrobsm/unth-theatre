@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { auditChanges } from '@/lib/auditChanges';
+import { bookingStepIdAt, isBookingStepId } from '@/lib/booking/bookingSteps';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,10 +19,16 @@ export const dynamic = 'force-dynamic';
  * has none of the review a finished record gets.
  */
 
-/** Sections, in the order they are completed. */
-const STEPS = ['patient', 'surgery', 'preop', 'consent', 'packs', 'team', 'review'] as const;
-type Step = (typeof STEPS)[number];
-const isStep = (v: unknown): v is Step => typeof v === 'string' && (STEPS as readonly string[]).includes(v);
+/**
+ * Sections, in the order they are completed.
+ *
+ * This used to be a second copy of the list, in a different order from the
+ * form's and with an extra entry the form cannot render. Order never
+ * mattered here -- the check below is membership -- but two hand-maintained
+ * orderings of one list is a trap, and 'review' was a step a draft could be
+ * stored with and then resumed at the wrong end of. One list now, shared
+ * with the page: src/lib/booking/bookingSteps.ts.
+ */
 
 /**
  * A draft is work in progress, not evidence, so it is capped. Without a limit
@@ -60,7 +67,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Nothing to save.' }, { status: 400 });
   }
 
-  const step: Step = isStep(body.step) ? body.step : 'patient';
+  const step: string = isBookingStepId(body.step) ? body.step : bookingStepIdAt(0);
 
   // File payloads are stripped for the same reason as in the audit trail: the
   // consent scan already has somewhere to live, and a draft is saved on every

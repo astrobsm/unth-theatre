@@ -49,6 +49,12 @@ import { notify } from '@/lib/notifications';
 import { bookingGate, isFormUsable, type PriorCase } from '@/lib/bookingGate';
 import PatientContactRequired from '@/components/PatientContactRequired';
 import BookingGateNotice from '@/components/BookingGateNotice';
+import {
+  BOOKING_STEP_LABELS,
+  LAST_BOOKING_STEP,
+  bookingStepIdAt,
+  bookingStepIndexOf,
+} from '@/lib/booking/bookingSteps';
 
 type SurgeryType = 'ELECTIVE' | 'URGENT' | 'EMERGENCY';
 
@@ -302,8 +308,10 @@ export default function NewSurgeryPage() {
   // out of the DOM with FormData — deliberately, because that is what makes it
   // immune to stale React state — so a section that is not mounted is a section
   // whose answers quietly vanish from the booking.
-  const STEP_NAMES = ['Patient', 'Surgery', 'Team', 'Consent & history', 'Safety results', 'Packs & sign-off'];
-  const LAST_STEP = STEP_NAMES.length - 1;
+  // One list, shared with the draft route, so the name this form saves and
+  // the name that route accepts cannot drift apart.
+  const STEP_NAMES = BOOKING_STEP_LABELS;
+  const LAST_STEP = LAST_BOOKING_STEP;
   /**
    * From here the case can be put on the theatre list, with the rest to follow.
    *
@@ -1293,7 +1301,7 @@ export default function NewSurgeryPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            step: ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'][atStep] ?? 'patient',
+            step: bookingStepIdAt(atStep),
             patientId: draft.selectedPatientId || null,
             patientName: patients.find((pt) => pt.id === draft.selectedPatientId)?.name ?? null,
             data: draft,
@@ -1350,7 +1358,7 @@ export default function NewSurgeryPage() {
           new Blob(
             [
               JSON.stringify({
-                step: ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'][step] ?? 'patient',
+                step: bookingStepIdAt(step),
                 patientId: draft.selectedPatientId || null,
                 data: forServer(draft),
               }),
@@ -2508,8 +2516,10 @@ ${pretty} — ${days} days from today.
                 // restore nothing, so "continue where I stopped" landed on
                 // step 3 with every field empty. The saved data was being
                 // written and never read.
-                const i = ['patient', 'surgery', 'team', 'consent', 'preop', 'packs'].indexOf(resumable.step);
-                const atStep = i >= 0 ? i : 0;
+                // Resolved through the shared list, which also sends the one
+                // historical id the form cannot render ('review') to the LAST
+                // step rather than silently back to the first.
+                const atStep = bookingStepIndexOf(resumable.step);
                 if (resumable.data) {
                   applyDraft(resumable.data, atStep);
                 } else {

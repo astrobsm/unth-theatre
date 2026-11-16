@@ -290,7 +290,12 @@ export default function SettingsPage() {
     setCheckingDeadlines(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/deadline-checker?action=check-all');
+      // send=1 because this is a BUTTON an administrator deliberately
+      // pressed. The deadline checker now defaults an administrator to a dry
+      // run, so that opening the URL in a browser inspects rather than issues
+      // formal queries to named staff -- but a press of “Run deadline check”
+      // means run it, and the message below reports what was actually sent.
+      const res = await fetch('/api/deadline-checker?action=check-all&send=1');
       if (res.ok) {
         const data = await res.json();
         setDeadlineCheckResult(data);

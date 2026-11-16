@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authoriseCron } from '@/lib/cronAuth';
 import { AUDIT_AFTER_MS } from '@/lib/deadlineAttention';
 
 export const dynamic = 'force-dynamic';
@@ -238,8 +239,38 @@ async function getRosterSubmissionStatus(now: Date) {
 }
 
 export async function GET(request: NextRequest) {
+  // WHO MAY RUN THIS.
+  //
+  // This endpoint had no authentication of any kind: no CRON_SECRET, no
+  // Vercel check, no session. Anyone who knew the URL could make the Office
+  // of the Chief Medical Director issue a formal disciplinary query to a
+  // named member of staff. Seven sibling maintenance routes were already
+  // guarded; this one was simply missed.
+  //
+  // authoriseCron accepts the CRON_SECRET bearer token, Vercel’s own
+  // scheduler, or a signed-in administrator. It deliberately still runs when
+  // CRON_SECRET is unset, because a check that silently stops the job is how
+  // zero preoperative alerts went out for a month.
+  const auth = await authoriseCron(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      {
+        error: auth.status === 401
+          ? 'Sign in to continue.'
+          : 'Only an administrator or the scheduler may run the deadline checker.',
+      },
+      { status: auth.status ?? 403 },
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
+
+    // An administrator opening this in a browser is INSPECTING, not issuing
+    // queries. The scheduler always sends its credential, so it always acts.
+    // `send=1` is the house convention (see maintenance/preop-alerts).
+    const dryRun = auth.who === 'administrator' && searchParams.get('send') !== '1';
+
     const action = searchParams.get('action') || 'check-all';
     const { startOfDay, endOfDay, now } = getTodayDateRange();
     const currentHour = now.getHours();
@@ -250,6 +281,64 @@ export async function GET(request: NextRequest) {
       action,
       reminders: [],
       queries: [],
+      wouldNotify: [],
+      wouldQuery: [],
+      failures: [],
+      dryRun,
+      who: auth.who,
+    };
+
+    /**
+     * Every write this job makes, in one place.
+     *
+     * It used to call prisma directly inside an empty catch, under the comment
+     * "Notification model may have different fields" — which is not true: the
+     * model has exactly userId, type, title and message. So a reminder that
+     * failed to record left nothing behind at all, on a job whose entire
+     * purpose is to prove somebody was warned before they were queried.
+     *
+     * Defined inside the handler, closing over this request: module-level
+     * state would be shared between concurrent invocations in one instance.
+     */
+    const failures: Array<{ at: string; error: string }> = [];
+    const noteFailure = (e: unknown, at = 'notification') => {
+      const message = e instanceof Error ? e.message : String(e);
+      failures.push({ at, error: message });
+      console.error(`[deadline-checker] ${at} failed`, e);
+    };
+
+    const notify = async (args: {
+      data: { userId: string; title: string; message: string; type: string };
+    }) => {
+      if (dryRun) {
+        results.wouldNotify.push({
+          userId: args.data.userId,
+          title: args.data.title,
+          type: args.data.type,
+        });
+        return;
+      }
+      await prisma.notification.create(args);
+    };
+
+    /**
+     * A formal query from the CMD’s office. The heaviest thing this job does,
+     * so a dry run must not write one — and must still return a reference the
+     * caller can print, because the code downstream quotes it.
+     */
+    const raiseQuery = async (args: { data: Record<string, unknown> }) => {
+      if (dryRun) {
+        results.wouldQuery.push({
+          recipientName: args.data.recipientName,
+          queryType: args.data.queryType,
+          deadlineType: args.data.deadlineType,
+        });
+        return { id: 'dry-run', referenceNumber: 'DRY-RUN (nothing was issued)' };
+      }
+      return prisma.disciplinaryQuery.create(args as never) as unknown as Promise<{
+        id: string;
+        referenceNumber: string;
+      }>;
     };
 
     // ============================================================
@@ -274,7 +363,7 @@ export async function GET(request: NextRequest) {
             for (const person of targetStaff) {
               // Create notification as reminder
               try {
-                await prisma.notification.create({
+                await notify({
                   data: {
                     userId: person.id,
                     title: `⚠️ READINESS REMINDER - ${unit.replace(/_/g, ' ')}`,
@@ -283,7 +372,7 @@ export async function GET(request: NextRequest) {
                   },
                 });
               } catch (e) {
-                // Notification model may have different fields
+                noteFailure(e);
               }
               results.reminders.push({
                 unit,
@@ -299,7 +388,7 @@ export async function GET(request: NextRequest) {
           if (currentHour === 17 && currentMinute < 60) {
             for (const person of targetStaff) {
               try {
-                await prisma.notification.create({
+                await notify({
                   data: {
                     userId: person.id,
                     title: `🚨 FINAL WARNING - ${unit.replace(/_/g, ' ')} Readiness`,
@@ -307,7 +396,7 @@ export async function GET(request: NextRequest) {
                     type: 'READINESS_FINAL_WARNING',
                   },
                 });
-              } catch (e) {}
+              } catch (e) { noteFailure(e); }
               results.reminders.push({
                 unit,
                 userId: person.id,
@@ -334,7 +423,7 @@ export async function GET(request: NextRequest) {
             if (!existingQuery) {
               for (const person of targetStaff) {
                 const deadlineTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0, 0);
-                const query = await prisma.disciplinaryQuery.create({
+                const query = await raiseQuery({
                   data: {
                     referenceNumber: generateRefNumber(),
                     recipientId: person.id,
@@ -359,7 +448,7 @@ export async function GET(request: NextRequest) {
 
                 // Also create a notification
                 try {
-                  await prisma.notification.create({
+                  await notify({
                     data: {
                       userId: person.id,
                       title: `📋 DISCIPLINARY QUERY ISSUED - ${unit.replace(/_/g, ' ')}`,
@@ -367,7 +456,7 @@ export async function GET(request: NextRequest) {
                       type: 'DISCIPLINARY_QUERY',
                     },
                   });
-                } catch (e) {}
+                } catch (e) { noteFailure(e); }
 
                 results.queries.push({
                   unit,
@@ -392,7 +481,7 @@ export async function GET(request: NextRequest) {
         const { delinquent } = await getTheatreSetupStatus(startOfDay, endOfDay);
         for (const roster of delinquent) {
           try {
-            await prisma.notification.create({
+            await notify({
               data: {
                 userId: roster.userId,
                 title: '⚠️ THEATRE SETUP REMINDER',
@@ -400,7 +489,7 @@ export async function GET(request: NextRequest) {
                 type: 'THEATRE_SETUP_REMINDER',
               },
             });
-          } catch (e) {}
+          } catch (e) { noteFailure(e); }
           results.reminders.push({
             unit: 'THEATRE_SETUP',
             userId: roster.userId,
@@ -415,7 +504,7 @@ export async function GET(request: NextRequest) {
         const { delinquent } = await getTheatreSetupStatus(startOfDay, endOfDay);
         for (const roster of delinquent) {
           try {
-            await prisma.notification.create({
+            await notify({
               data: {
                 userId: roster.userId,
                 title: '🚨 FINAL WARNING - Theatre Setup',
@@ -423,7 +512,7 @@ export async function GET(request: NextRequest) {
                 type: 'THEATRE_SETUP_WARNING',
               },
             });
-          } catch (e) {}
+          } catch (e) { noteFailure(e); }
           results.reminders.push({
             unit: 'THEATRE_SETUP',
             userId: roster.userId,
@@ -451,7 +540,7 @@ export async function GET(request: NextRequest) {
 
           if (!existing) {
             const deadlineTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0, 0);
-            const query = await prisma.disciplinaryQuery.create({
+            const query = await raiseQuery({
               data: {
                 referenceNumber: generateRefNumber(),
                 recipientId: roster.userId,
@@ -480,7 +569,7 @@ export async function GET(request: NextRequest) {
             });
 
             try {
-              await prisma.notification.create({
+              await notify({
                 data: {
                   userId: roster.userId,
                   title: '📋 DISCIPLINARY QUERY - Theatre Setup',
@@ -488,7 +577,7 @@ export async function GET(request: NextRequest) {
                   type: 'DISCIPLINARY_QUERY',
                 },
               });
-            } catch (e) {}
+            } catch (e) { noteFailure(e); }
 
             results.queries.push({
               unit: 'THEATRE',
@@ -522,7 +611,7 @@ export async function GET(request: NextRequest) {
             const label = category.replace(/_/g, ' ');
             for (const person of responsible) {
               try {
-                await prisma.notification.create({
+                await notify({
                   data: {
                     userId: person.id,
                     title: isFinalWarning
@@ -534,7 +623,7 @@ export async function GET(request: NextRequest) {
                     type: isFinalWarning ? 'ROSTER_FINAL_WARNING' : 'ROSTER_REMINDER',
                   },
                 });
-              } catch (e) {}
+              } catch (e) { noteFailure(e); }
               results.reminders.push({
                 unit: 'ROSTER',
                 category,
@@ -566,7 +655,7 @@ export async function GET(request: NextRequest) {
               });
               if (existingQuery) continue;
 
-              const query = await prisma.disciplinaryQuery.create({
+              const query = await raiseQuery({
                 data: {
                   referenceNumber: generateRefNumber(),
                   recipientId: person.id,
@@ -590,7 +679,7 @@ export async function GET(request: NextRequest) {
               });
 
               try {
-                await prisma.notification.create({
+                await notify({
                   data: {
                     userId: person.id,
                     title: `📋 MANAGEMENT QUERY ISSUED - ${label} Roster`,
@@ -598,7 +687,7 @@ export async function GET(request: NextRequest) {
                     type: 'DISCIPLINARY_QUERY',
                   },
                 });
-              } catch (e) {}
+              } catch (e) { noteFailure(e); }
 
               results.queries.push({
                 unit: 'ROSTER',
@@ -710,6 +799,15 @@ export async function GET(request: NextRequest) {
         for (const [userId, person] of Array.from(expected.entries())) {
           if (acknowledged.has(userId)) continue;
 
+          if (dryRun) {
+            results.wouldNotify.push({
+              userId,
+              title: `Attention would be raised: ${person.name} (${person.role})`,
+              type: 'EMERGENCY_ALERT_ATTENTION',
+            });
+            continue;
+          }
+
           // The unique index makes this idempotent: a checker running every
           // fifteen minutes raises each deadline once, not ninety-six times.
           const created = await prisma.deadlineAttention.upsert({
@@ -753,9 +851,11 @@ export async function GET(request: NextRequest) {
                   deadlineAt: deadline,
                 },
               });
-            } catch {
+            } catch (e) {
               // The attention record is the thing that matters; a failed bell
-              // must not stop it existing.
+              // must not stop it existing. Recorded rather than discarded,
+              // though: a bell that never rings should be visible somewhere.
+              noteFailure(e, 'systemNotification');
             }
             results.queries.push({
               unit: 'EMERGENCY',
@@ -783,6 +883,14 @@ export async function GET(request: NextRequest) {
         take: 100,
       });
       for (const item of overdue) {
+        if (dryRun) {
+          results.wouldQuery.push({
+            recipientName: item.userName,
+            queryType: 'REFERRED_TO_AUDIT',
+            deadlineType: 'EMERGENCY',
+          });
+          continue;
+        }
         await prisma.deadlineAttention.update({
           where: { id: item.id },
           data: { status: 'IN_AUDIT', movedToAuditAt: now },
@@ -798,6 +906,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    results.failures = failures;
     return NextResponse.json(results);
   } catch (error) {
     console.error('Error in deadline checker:', error);

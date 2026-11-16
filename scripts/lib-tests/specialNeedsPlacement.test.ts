@@ -21,11 +21,12 @@ const picker = readFileSync(
   'utf8',
 );
 
-const STEP_NAMES = (() => {
-  const m = page.match(/const STEP_NAMES = \[(.*?)\]/s);
-  if (!m) throw new Error('STEP_NAMES is gone');
-  return m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
-})();
+// The step LABELS used to be scraped out of the page with a regex here, and
+// the scrape threw if it missed. Nothing in this file ever read the result:
+// it was dead weight that coupled a test about the special-needs picker to a
+// literal array in an unrelated component. When that array moved into
+// src/lib/booking/bookingSteps.ts the scrape failed and took this whole file
+// down with it. Import BOOKING_STEP_LABELS if a label is ever needed here.
 
 describe('the picker is on the step the case is booked from', () => {
   // WRONG TWICE. First on Team-beneath-consent, then on "Packs & sign-off"
