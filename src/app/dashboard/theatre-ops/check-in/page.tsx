@@ -22,6 +22,8 @@ import {
   Loader2,
   MapPin,
   RefreshCw,
+  Send,
+  ThumbsUp,
   UserX,
   Users,
 } from 'lucide-react';
@@ -57,6 +59,19 @@ interface CaseRow {
   myStatus: CheckInStatus | null;
 }
 
+/** What the server says it did, per case, after a chase or a commend. */
+interface TeamMessageResult {
+  ok?: boolean;
+  refused?: boolean;
+  kind?: 'CHASE' | 'COMMEND';
+  message?: string;
+  count?: number;
+  notice?: string;
+  sent?: Array<{ name: string; roleOnCase: string; whatsapp: string | null }>;
+  skipped?: string[];
+  error?: string;
+}
+
 const FIX_NOTE: Record<string, string> = {
   ON_SITE: 'on site',
   OFF_SITE: 'off site',
@@ -71,9 +86,44 @@ export default function TeamCheckInPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
 
+  // Chasing the silent, and thanking the early. Keyed by case, because a
+  // coordinator works down the list and needs to see what each one did.
+  const [messaging, setMessaging] = useState<string | null>(null);
+  const [teamResult, setTeamResult] = useState<Record<string, TeamMessageResult>>({});
+
   // Per-case draft answers for the statuses that need more than a tap.
   const [draft, setDraft] = useState<Record<string, { reason: string; replacementName: string; eta: string }>>({});
 
+
+  /**
+   * Ask the server to message this team.
+   *
+   * WHO IT REACHES IS NOT DECIDED HERE. The browser sends a case and an
+   * intention; the server reads the check-in rows and works out who is
+   * silent, or who confirmed early enough to be worth thanking. Deciding it
+   * here would mean two definitions of "has not answered", and the one on
+   * this side would be the one that drifted.
+   */
+  const messageTeam = async (caseId: string, kind: 'CHASE' | 'COMMEND') => {
+    setMessaging(`${caseId}:${kind}`);
+    setTeamResult((prev) => ({ ...prev, [caseId]: {} }));
+    try {
+      const res = await fetch('/api/theatre-ops/check-in/chase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surgeryId: caseId, kind }),
+      });
+      const body = (await res.json()) as TeamMessageResult;
+      setTeamResult((prev) => ({ ...prev, [caseId]: body }));
+    } catch {
+      setTeamResult((prev) => ({
+        ...prev,
+        [caseId]: { error: 'Could not reach ORM. Nothing was sent.' },
+      }));
+    } finally {
+      setMessaging(null);
+    }
+  };
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -368,6 +418,93 @@ export default function TeamCheckInPage() {
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {/* Chase the silent; thank the early. Both refuse when
+                        unearned, and the refusal says why. */}
+                    {c.team.length > 0 && (
+                      <div className="mt-3 border-t pt-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => messageTeam(c.id, 'CHASE')}
+                            disabled={messaging !== null || c.readiness.silent === 0}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                            title={c.readiness.silent === 0
+                              ? 'Everybody here has already answered.'
+                              : 'WhatsApp the people who have not answered'}
+                          >
+                            {messaging === `${c.id}:CHASE`
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Send className="w-3.5 h-3.5" />}
+                            Chase for check-in
+                            {c.readiness.silent > 0 ? ` (${c.readiness.silent})` : ''}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => messageTeam(c.id, 'COMMEND')}
+                            disabled={messaging !== null}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 disabled:opacity-40"
+                            title="Thank whoever confirmed early enough for the theatre to plan around"
+                          >
+                            {messaging === `${c.id}:COMMEND`
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <ThumbsUp className="w-3.5 h-3.5" />}
+                            Commend early check-in
+                          </button>
+
+                          <span className="text-[11px] text-gray-400">
+                            Asks each person to confirm, and to say if they can start earlier.
+                          </span>
+                        </div>
+
+                        {teamResult[c.id]?.refused && (
+                          <p className="mt-2 rounded-lg bg-gray-50 border border-gray-200 p-2 text-[11px] text-gray-600">
+                            {teamResult[c.id].message}
+                          </p>
+                        )}
+
+                        {teamResult[c.id]?.error && (
+                          <p className="mt-2 rounded-lg bg-red-50 border border-red-200 p-2 text-[11px] text-red-800">
+                            {teamResult[c.id].error}
+                          </p>
+                        )}
+
+                        {teamResult[c.id]?.ok && (
+                          <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+                            <p className="text-[11px] font-semibold text-blue-900">
+                              {teamResult[c.id].kind === 'CHASE' ? 'Chased' : 'Commended'}{' '}
+                              {teamResult[c.id].count} person(s). {teamResult[c.id].notice}
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {(teamResult[c.id].sent ?? []).map((s, i) => (
+                                s.whatsapp ? (
+                                  <a
+                                    key={i}
+                                    href={s.whatsapp}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white"
+                                  >
+                                    <Send className="w-3 h-3" />
+                                    {s.name}
+                                  </a>
+                                ) : (
+                                  <span key={i} className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-500">
+                                    {s.name} — app only
+                                  </span>
+                                )
+                              ))}
+                            </div>
+                            {(teamResult[c.id].skipped ?? []).length > 0 && (
+                              <ul className="mt-1.5 list-disc pl-4 text-[11px] text-amber-800">
+                                {(teamResult[c.id].skipped ?? []).map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
