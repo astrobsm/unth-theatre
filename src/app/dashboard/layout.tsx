@@ -55,6 +55,8 @@ import {
   FileClock,
   ClipboardList,
   FileText,
+  BedDouble,
+  ScrollText,
   Users,
   ArrowLeftRight,
   XCircle,
@@ -361,6 +363,15 @@ export default function DashboardLayout({
     // === INTRA-OPERATIVE ===
     { href: '/dashboard/theatre-reception', icon: ClipboardCheck, label: 'Theatre Reception', badge: 'NEW' },
     { href: '/dashboard/holding-area', icon: UserCheck, label: 'Holding Area' },
+    // Beside the Holding Area on purpose: this is the other end of the same
+    // handover. The ward records the porter times and releases the patient;
+    // the holding area receives them.
+    //
+    // IN THE BASE ARRAY, NOT A ROLE-GATED PUSH. Everything here is filtered
+    // by module access below, so the ward-desk module's own defaultRoles
+    // decide who sees it -- including anybody an administrator grants it to.
+    // A second role list here would be a second thing to keep in step.
+    { href: '/dashboard/ward-desk', icon: BedDouble, label: 'Ward Desk', badge: 'NEW' },
     { href: '/dashboard/holding-area/staffing', icon: UserCheck, label: 'Holding Area Staffing', badge: 'NEW' },
     { href: '/dashboard/checklists', icon: ClipboardList, label: 'WHO Checklists' },
     { href: '/dashboard/equipment-checkout', icon: PackageCheck, label: 'Equipment Checkout' },
@@ -435,6 +446,14 @@ export default function DashboardLayout({
     { href: '/training/downloads.html', icon: GraduationCap, label: 'Training Downloads', badge: 'MP3+PDF', external: true },
     { href: '/role-guide', icon: GraduationCap, label: 'Role Guide', badge: 'GUIDE', external: true },
     { href: '/dashboard/my-celebrations', icon: Cake, label: 'My Special Days', badge: 'NEW' },
+    // The Theatre Users Committee reviewing a draft policy.
+    //
+    // Deliberately NOT in the adminRoles push below: THEATRE_CHAIRMAN is not
+    // in that list, and the Chairman is the one person this module exists
+    // for. In the base array the policy-review module's own roles decide
+    // visibility -- the Chairman, Management as observers, and any deputy
+    // granted the module in /dashboard/admin/access.
+    { href: '/dashboard/policy-review', icon: ScrollText, label: 'Policy Review', badge: 'NEW' },
     { href: '/dashboard/settings', icon: Wrench, label: 'Settings' },
   ];
 
