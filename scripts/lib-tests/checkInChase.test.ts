@@ -251,3 +251,33 @@ describe('the decisions that must not move to the client', () => {
     expect(route).toContain('${surgery.id}:${member.userId}:${kind}:${day}');
   });
 });
+
+describe('the board shows WHEN somebody answered', () => {
+  // "Present" on its own cannot distinguish a confirmation given last night
+  // from one given at 08:58 for a 09:00 list — and only the first is what the
+  // commend button rewards, so the board has to show the difference.
+  const page = read('src/app/dashboard/theatre-ops/check-in/page.tsx');
+
+  it('renders the check-in time against each team member', () => {
+    expect(page).toContain('checked in ${watClock(t.checkedInAt)}');
+  });
+
+  it('reads it back to you on your own case too', () => {
+    // "Did that actually register?" is a real question on one bar of signal.
+    expect(page).toContain('const mineRow = c.team.find((t) => t.isMe)');
+    expect(page).toContain('checked in {watClock(mineRow.checkedInAt)}');
+  });
+
+  it('formats in WAT, through the house helper', () => {
+    // This server runs UTC. A raw time reads an hour out for every member of
+    // staff on the board, and nobody would think to check.
+    expect(page).toContain("import { watClock } from '@/lib/watDay'");
+    expect(page).not.toMatch(/toLocaleTimeString\(/);
+  });
+
+  it('shows nothing where nobody has answered', () => {
+    // The time is conditional on checkedInAt, so a silent row stays silent
+    // rather than rendering "checked in --:--".
+    expect(page).toContain("t.checkedInAt ? ` · checked in");
+  });
+});

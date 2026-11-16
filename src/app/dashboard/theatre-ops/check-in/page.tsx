@@ -28,6 +28,7 @@ import {
   Users,
 } from 'lucide-react';
 import { CHECK_IN_META, CHECK_IN_STATUSES, checkInMeta, type CheckInStatus } from '@/lib/theatreOps/checkIn';
+import { watClock } from '@/lib/watDay';
 
 interface TeamRow {
   userId: string;
@@ -275,9 +276,23 @@ export default function TeamCheckInPage() {
                           </div>
                         </div>
                         {c.myStatus && (
-                          <span className={`text-xs px-2 py-1 rounded-full border ${checkInMeta(c.myStatus).chip}`}>
-                            {checkInMeta(c.myStatus).indicator} {checkInMeta(c.myStatus).label}
-                          </span>
+                          <div className="text-right">
+                            <span className={`text-xs px-2 py-1 rounded-full border ${checkInMeta(c.myStatus).chip}`}>
+                              {checkInMeta(c.myStatus).indicator} {checkInMeta(c.myStatus).label}
+                            </span>
+                            {/* Your own time, read back to you. On a handset
+                                with one bar, "did that actually register?" is a
+                                real question, and a status with no time against
+                                it does not answer it. */}
+                            {(() => {
+                              const mineRow = c.team.find((t) => t.isMe);
+                              return mineRow?.checkedInAt ? (
+                                <div className="mt-1 text-[11px] text-gray-500">
+                                  checked in {watClock(mineRow.checkedInAt)}
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
                         )}
                       </div>
 
@@ -401,6 +416,16 @@ export default function TeamCheckInPage() {
                               <div className="text-gray-500 mt-0.5">{t.roleOnCase}</div>
                               <div className="text-gray-600 mt-0.5">
                                 {meta.label}
+                                {/* WHEN they answered, not only what. A board
+                                    showing just "Present" cannot tell a
+                                    confirmation given last night from one given
+                                    at 08:58 -- and only the first lets a list
+                                    start early.
+
+                                    watClock renders WAT. This server runs UTC,
+                                    so a raw time would read an hour out for
+                                    every member of staff on the board. */}
+                                {t.checkedInAt ? ` · checked in ${watClock(t.checkedInAt)}` : ''}
                                 {t.etaMinutes ? ` · ${t.etaMinutes} min away` : ''}
                               </div>
                               {t.reason && <div className="text-gray-500 mt-0.5 italic">{t.reason}</div>}
