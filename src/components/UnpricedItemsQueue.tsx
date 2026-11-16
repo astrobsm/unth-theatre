@@ -1,21 +1,25 @@
 'use client';
 
 /**
- * Items the booking form is not allowed to offer yet.
+ * Items the theatre issues without knowing what they cost.
  *
- * An item with no price cannot be deposited for. If it were offered at
- * booking, a surgeon would pick it, the quote would be short by whatever it
- * costs, and the family would be asked for the difference at the theatre
- * door with the patient already starved. So the catalogue withholds them and
- * they queue here instead.
+ * These ARE offered at booking and they ARE in the magnitude bundles. They
+ * used not to be: the catalogue withheld anything unpriced so that no
+ * deposit could go out short. What that produced was packs missing whatever
+ * nobody had got round to pricing, discovered in theatre rather than at the
+ * cashier, so the rule was reversed.
  *
- * PRICING ONE HERE PUTS IT BACK. There is no second step and nothing to
- * re-add: the booking form filters on the price, so the moment a figure is
- * saved the item is in the dropdown again.
+ * WHAT IS MISSING IS THE MONEY, NOT THE PACK. Every case carrying one of
+ * these gets a deposit that names it and says plainly that the figure is
+ * not the full amount. The family is asked for the difference later, which
+ * is a bad outcome — just a less dangerous one than an unordered chest
+ * drain.
  *
- * THE COUNT IS THE POINT. It is not a tidy-up list — it is the part of the
- * theatre's catalogue that cannot currently be ordered, and it should be
- * worked down to nothing.
+ * PRICING ONE HERE IS THE WHOLE FIX. The moment a figure is saved, cases
+ * booked afterwards quote it correctly. Nothing else has to be done.
+ *
+ * THE COUNT IS THE POINT. It is not a tidy-up list — it is how much of
+ * every deposit the hospital is currently not collecting.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -105,8 +109,10 @@ export default function UnpricedItemsQueue() {
         setProblem(data?.error ?? 'Could not save that price.');
         return;
       }
-      // Drop it out of the queue: it is now in the booking dropdown, and
-      // leaving it sitting here would suggest there is still something to do.
+      // Drop it out of the queue: cases booked from now on will quote it,
+      // and leaving it sitting here would suggest there is still something
+      // to do. Cases ALREADY booked keep the figure they were given — a
+      // deposit the patient has paid is not rewritten by a price set after.
       setRows((prev) => ({ ...prev, [side]: prev[side].filter((r) => r.id !== id) }));
       setJustPriced((prev) => [...prev, id]);
     } catch {
@@ -127,7 +133,7 @@ export default function UnpricedItemsQueue() {
         </h3>
         {all.length === 0 ? (
           <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
-            Everything here is priced and available at booking.
+            Everything here is priced, so every deposit on this side is the full amount.
           </p>
         ) : (
           <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
@@ -174,10 +180,11 @@ export default function UnpricedItemsQueue() {
       </h2>
 
       <p className="mb-3 text-sm text-gray-600">
-        These are <strong>not offered at booking</strong>. An item with no price cannot be
-        deposited for, and putting one on a case produces a figure the patient is told is
-        incomplete. Give one a price and it is back in the booking list immediately — there is
-        nothing else to do.
+        These are <strong>ordered and issued normally</strong> — they are in the booking list
+        and in the magnitude bundles. What is missing is the money: a case carrying one gets a
+        deposit that names it and says the figure is not the full amount, and somebody asks the
+        family for the difference later. Give one a price and cases booked afterwards quote it
+        correctly — there is nothing else to do.
       </p>
 
       {total > 0 ? (
@@ -185,16 +192,17 @@ export default function UnpricedItemsQueue() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             <strong>
-              {total} item{total === 1 ? '' : 's'} cannot be ordered for a case right now.
+              {total} item{total === 1 ? '' : 's'} can be put on a case but not deposited for.
             </strong>{' '}
-            This includes anything the magnitude bundles would have added automatically, so a
-            case may be carrying less than the theatre expects.
+            Every case that carries one is quoted low by whatever it costs, and the difference
+            is collected at the theatre door or not at all.
           </span>
         </p>
       ) : (
         <p className="mb-4 flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800">
           <Check className="h-4 w-4 shrink-0" />
-          Nothing is waiting. Every item in the catalogue can be ordered and deposited for.
+          Nothing is waiting. Every item in the catalogue is priced, so every deposit is the
+          full amount.
         </p>
       )}
 

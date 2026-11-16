@@ -1161,11 +1161,16 @@ export async function POST(request: NextRequest) {
       const sentBundle = (specialNeeds ?? []).some((n) => n.fromBundle);
       if (!sentBundle && isMagnitude(surgery.magnitude)) {
         const bundle = await prisma.magnitudeBundleItem.findMany({
-          // Priced lines only, matching what the booking form offers. An
-          // unpriced line attached here would reappear as "this is not the
-          // full amount" on a deposit the patient is about to be given,
-          // for an item nobody has decided the cost of.
-          where: { magnitude: surgery.magnitude, item: { unitPrice: { not: null } } },
+          // EVERY LINE THE THEATRE CONFIGURED, PRICED OR NOT.
+          //
+          // This used to take priced lines only, so that no deposit went
+          // out saying "this is not the full amount". What it actually
+          // did was send the case down with a pack short of whatever
+          // nobody had got round to pricing, which was most of the
+          // catalogue. A deposit that declares itself incomplete is the
+          // cheaper failure, and it is one the cashier can act on; a
+          // chest drain that was never ordered is not.
+          where: { magnitude: surgery.magnitude },
           select: { itemId: true, quantity: true },
         });
         const alreadyChosen = new Set((specialNeeds ?? []).map((n) => n.itemId));

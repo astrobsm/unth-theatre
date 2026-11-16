@@ -8,6 +8,13 @@
  * would be added, how many blank prices filled, and how many prices disagree
  * with what somebody has already set in the app.
  *
+ * TWO SHEETS, ONE LIST. The hospital has issued its tariff twice and the
+ * two spell half their items differently — "PDS loop (mass closure)" on
+ * one, "Polydioxanone (PDS-type) 1" on the other. They are merged into one
+ * row per real thing before this screen sees them, because loading them
+ * separately would double the catalogue and leave every bundle pointing at
+ * whichever of the two rows happened to be created first.
+ *
  * DISAGREEMENTS ARE NOT SILENTLY RESOLVED. A pharmacist's correction made
  * last week is more current than a spreadsheet exported months ago, so the
  * ordinary action fills blanks and leaves corrections alone. Overwriting is a
@@ -21,6 +28,14 @@ import { formatNaira, toKobo } from '@/lib/specialNeeds/pricing';
 
 type Preview = {
   list: { total: number; priced: number; unpriced: number; drugs: number; consumables: number };
+  /** What merging the two tariff sheets did, before anything is written. */
+  merge?: {
+    matched2025: number;
+    newIn2026: number;
+    newlyPriced: number;
+    repriced: { name: string; from: string; to: string }[];
+    blankOn2026: number;
+  };
   catalogue: { total: number; priced: number };
   wouldAdd: number;
   wouldPrice: number;
@@ -38,6 +53,7 @@ type Difference = {
 type Result = {
   added: number;
   alreadyPresent: number;
+  matchedBySpelling?: number;
   pricesSet: number;
   pricesAgreed: number;
   pricesDiffering: number;
@@ -114,11 +130,39 @@ export default function PriceListImport() {
       </h2>
 
       <p className="mb-4 text-sm text-gray-600">
-        {preview.list.total} items from the theatre price list, {preview.list.priced} of them with
-        a price. Loading it adds anything the catalogue is missing and fills in prices that have
-        not been set. The catalogue currently holds {preview.catalogue.total} items,{' '}
-        {preview.catalogue.priced} priced.
+        {preview.list.total} items, {preview.list.priced} of them with a price &mdash; the 2025
+        export and the 2026 tariff sheet merged into one row per item. Loading it adds anything
+        the catalogue is missing and fills in prices that have not been set. The catalogue
+        currently holds {preview.catalogue.total} items, {preview.catalogue.priced} priced.
       </p>
+
+      {preview.merge && (
+        <p className="mb-4 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+          <strong className="text-gray-800">How the two sheets were merged.</strong>{' '}
+          {preview.merge.matched2025} line{preview.merge.matched2025 === 1 ? '' : 's'} on the
+          2026 sheet turned out to be something the 2025 export already carried under another
+          spelling, so {preview.merge.matched2025 === 1 ? 'it was' : 'they were'} repriced
+          rather than added again. {preview.merge.newIn2026} are new.{' '}
+          {preview.merge.newlyPriced} get a price for the first time.{' '}
+          {preview.merge.blankOn2026 > 0 && (
+            <>
+              {preview.merge.blankOn2026} are blank or written &ldquo;0.00&rdquo; on the 2026
+              sheet; those are read as <em>not priced yet</em> rather than as free, so no case
+              is quoted at zero for them.{' '}
+            </>
+          )}
+          {preview.merge.repriced.length > 0 && (
+            <>
+              The 2026 figure wins where the two disagree:{' '}
+              {preview.merge.repriced
+                .slice(0, 6)
+                .map((r) => `${r.name} ${naira(r.from)} → ${naira(r.to)}`)
+                .join('; ')}
+              {preview.merge.repriced.length > 6 ? ', and more' : ''}.
+            </>
+          )}
+        </p>
+      )}
 
       <dl className="mb-4 grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg bg-gray-50 p-3">
@@ -193,6 +237,12 @@ export default function PriceListImport() {
           </h3>
           <ul className="space-y-1 text-sm text-gray-700">
             <li>{result.added} item(s) added to the catalogue.</li>
+            {!!result.matchedBySpelling && result.matchedBySpelling > 0 && (
+              <li>
+                {result.matchedBySpelling} were already in the catalogue under a different
+                spelling and were priced in place rather than added again.
+              </li>
+            )}
             <li>{result.pricesSet} price(s) set where there was none.</li>
             <li>{result.pricesAgreed} already matched the list.</li>
             {result.pricesOverwritten > 0 && (

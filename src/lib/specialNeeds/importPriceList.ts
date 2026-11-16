@@ -19,7 +19,9 @@
 // ============================================================
 
 import prisma from '@/lib/prisma';
-import { UNTH_PRICE_LIST, type PricedSeedItem } from './unthPriceList';
+import { type PricedSeedItem } from './unthPriceList';
+import { currentPriceList } from './priceList';
+import { comparisonForm, comparisonSize } from './normalise';
 import { toKobo } from './pricing';
 
 export interface PriceDifference {
@@ -53,6 +55,15 @@ export interface PriceListImportResult {
   codesStamped: number;
   /** Sized variants priced from an undifferentiated list price. */
   pricedByEquivalence: number;
+  /**
+   * Rows the catalogue already held under a different spelling.
+   *
+   * Priced in place rather than added again. Each one of these is a
+   * duplicate that did NOT get created, and the number is worth
+   * showing: it is the difference between a catalogue of six hundred
+   * items and one of nine hundred, half of which nobody picks.
+   */
+  matchedBySpelling: number;
 }
 
 /**
@@ -97,6 +108,21 @@ function naturalKey(category: string, name: string, size?: string | null, brand?
   return `${category}\u0000${name}\u0000${size ?? ''}\u0000${brand ?? ''}`;
 }
 
+/**
+ * The same tuple, reduced to the form two spellings of one item share.
+ *
+ * naturalKey is exact, which is right for the unique index and wrong
+ * for deciding whether the catalogue already holds this thing. "Silk
+ * 3-0" and "Silk 3/0" are one suture to a surgeon and two rows to a
+ * store keeper, and the second one is unpriced, unpicked and charged
+ * for separately. comparisonForm is what the OTHER path at booking
+ * already uses to refuse a duplicate; the import has to agree with it,
+ * or an administrator pressing this button undoes that work in bulk.
+ */
+function spellingKey(category: string, name: string, size?: string | null) {
+  return `${category}\u0000${comparisonForm(name)}\u0000${comparisonSize(size)}`;
+}
+
 /** Same money, to the kobo. Decimal columns and CSV strings never match as strings. */
 function samePrice(a: string | null | undefined, b: string | null | undefined) {
   const ka = toKobo(a ?? null);
@@ -125,8 +151,11 @@ export async function importPriceList(
 
   const byCode = new Map<string, (typeof existing)[number]>();
   const byNatural = new Map<string, (typeof existing)[number]>();
+  const bySpelling = new Map<string, (typeof existing)[number]>();
   existing.forEach((e) => {
     if (e.sourceCode) byCode.set(e.sourceCode, e);
+    const s = spellingKey(e.category, e.name, e.size);
+    if (!bySpelling.has(s)) bySpelling.set(s, e);
     // First writer wins: if the catalogue somehow holds two rows with the
     // same natural key (possible, because Postgres lets NULLs repeat in a
     // unique index), price the one that was created first rather than
@@ -146,6 +175,7 @@ export async function importPriceList(
     differences: [],
     codesStamped: 0,
     pricedByEquivalence: 0,
+    matchedBySpelling: 0,
   };
 
   const missing: PricedSeedItem[] = [];
@@ -155,16 +185,23 @@ export async function importPriceList(
   const toPrice: Plan[] = [];
   const toStampOnly: Plan[] = [];
 
-  UNTH_PRICE_LIST.forEach((item) => {
+  const list = currentPriceList();
+
+  list.forEach((item) => {
     if (!item.unitPrice) result.unpricedOnList += 1;
 
     // Match on the hospital's own code first: it survives a name being
     // corrected. Fall back to the natural key so the FIRST import adopts
     // rows the standard catalogue already seeded instead of duplicating
     // them, and stamps the code onto them for next time.
-    const row =
+    const exact =
       byCode.get(item.code) ??
       byNatural.get(naturalKey(item.category, item.name, item.size ?? null, null));
+
+    // ONLY AFTER BOTH EXACT ROUTES HAVE FAILED. A spelling match is a
+    // judgement; a code or an exact name is a fact, and a fact should
+    // never be overruled by a judgement.
+    const row = exact ?? bySpelling.get(spellingKey(item.category, item.name, item.size ?? null));
 
     if (!row) {
       missing.push(item);
@@ -172,6 +209,7 @@ export async function importPriceList(
     }
 
     result.alreadyPresent += 1;
+    if (!exact) result.matchedBySpelling += 1;
     const stampCode = row.sourceCode !== item.code;
 
     if (!item.unitPrice) {
@@ -276,7 +314,7 @@ export async function importPriceList(
 
   // ── Pass three: the one-to-many prices ───────────────────────────────
   for (const rule of PRICE_EQUIVALENCES) {
-    const listed = UNTH_PRICE_LIST.find((i) => i.code === rule.code);
+    const listed = list.find((i) => i.code === rule.code);
     if (!listed?.unitPrice) continue;
 
     for (const target of rule.appliesTo) {

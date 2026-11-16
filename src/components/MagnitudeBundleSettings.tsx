@@ -345,12 +345,14 @@ export default function MagnitudeBundleSettings() {
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   <strong>
-                    {current.quote.unpricedLines.length} item(s) have no price, so they are NOT
-                    being added to cases at all.
+                    {current.quote.unpricedLines.length} item(s) here have no price, so the
+                    total above is less than the real one.
                   </strong>{' '}
-                  A {MAGNITUDE_LABELS[current.magnitude].toLowerCase()} case currently carries
-                  only the priced lines above. Price them in &ldquo;Items waiting for a
-                  price&rdquo; and they start being issued again straight away.
+                  A {MAGNITUDE_LABELS[current.magnitude].toLowerCase()} case still carries all
+                  of them — the pack is complete and the store is told to pick them. What is
+                  missing is the money: every deposit for a case of this size will say it is
+                  not the full amount until they are priced in &ldquo;Items waiting for a
+                  price&rdquo;.
                 </span>
               </p>
             )}

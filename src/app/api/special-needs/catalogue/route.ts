@@ -51,22 +51,30 @@ export async function GET(request: NextRequest) {
   try {
     const category = request.nextUrl.searchParams.get('category');
 
-    // UNPRICED ITEMS ARE NOT OFFERED AT BOOKING.
+    // AN UNPRICED ITEM IS STILL OFFERED, AND STILL BUNDLED.
     //
-    // An item with no price cannot be deposited for, so putting it on a
-    // case produces a figure the patient is told is incomplete and a
-    // difference somebody asks them for at the theatre door. They are held
-    // in the pricing queue in Settings instead, and the moment the store or
-    // pharmacy prices one it reappears here on its own — nothing has to be
-    // re-added, because this filter is the only thing keeping it out.
+    // This used to withhold them. The reasoning was sound as far as it
+    // went — a case carrying an unpriced line produces a deposit the
+    // patient is told is incomplete — but the cost fell in the wrong
+    // place. Several hundred items sat unpriced, so the magnitude
+    // bundles silently dropped them, and a theatre list went down with a
+    // pack short of things the store had on the shelf. A deposit that
+    // says "this is not the full amount" is a conversation at the
+    // cashier; a chest drain nobody ordered is a conversation in
+    // theatre.
     //
-    // includeUnpriced=1 is for the screens whose whole job is to find them.
-    const includeUnpriced = request.nextUrl.searchParams.get('includeUnpriced') === '1';
+    // So the price no longer decides whether an item can be issued. It
+    // decides what the deposit SAYS: every unpriced line is counted,
+    // carried on the case, named on the quote, and declared as a figure
+    // still to be added. The pricing queue in Settings is now about the
+    // money being right, not about the pack being complete.
+    //
+    // includeUnpriced is accepted and ignored: callers that passed it to
+    // see the whole catalogue now get the whole catalogue either way.
 
     const items = await prisma.specialNeedItem.findMany({
       where: {
         isActive: true,
-        ...(includeUnpriced ? {} : { unitPrice: { not: null } }),
         ...(category && (CATEGORIES as readonly string[]).includes(category)
           ? { category: category as never }
           : {}),
@@ -76,24 +84,24 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       items,
-      // So a caller can say "12 more are waiting to be priced" rather than
-      // leaving a surgeon wondering where an item they know exists has gone.
-      // Counts only what the PICKER would otherwise have shown. Bundled
-      // categories are not offered there whether they are priced or not,
-      // so counting them would tell a surgeon that items are missing from
-      // a list they were never going to appear in.
-      withheldUnpriced: includeUnpriced
-        ? 0
-        : await prisma.specialNeedItem.count({
-            where: {
-              isActive: true,
-              unitPrice: null,
-              category: { notIn: NOT_IN_PICKER as never },
-              ...(category && (CATEGORIES as readonly string[]).includes(category)
-                ? { category: category as never }
-                : {}),
-            },
-          }),
+      // NOT "withheld" any more — nothing is. This is how many of the
+      // items on offer carry no price, so a surgeon can be told that
+      // choosing one is fine and that the deposit will say it is short
+      // rather than being left to wonder why a figure looks low.
+      //
+      // Counted over the PICKER's categories only. The bundled ones
+      // never appear there, priced or not, so including them would
+      // report a shortfall against a list the surgeon cannot see.
+      unpricedOnOffer: await prisma.specialNeedItem.count({
+        where: {
+          isActive: true,
+          unitPrice: null,
+          category: { notIn: NOT_IN_PICKER as never },
+          ...(category && (CATEGORIES as readonly string[]).includes(category)
+            ? { category: category as never }
+            : {}),
+        },
+      }),
     });
   } catch (err) {
     console.error('[special-needs/catalogue] list failed:', err);

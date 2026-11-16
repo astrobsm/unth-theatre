@@ -6,6 +6,11 @@
 //   POST — load it. Fills blank prices by default; overwrites only when
 //          explicitly asked, and the differences were shown first.
 //
+// TWO SHEETS, ONE LIST. The hospital has issued its tariff twice and the
+// two spell half their items differently. They are merged in
+// lib/specialNeeds/priceList.ts before anything here sees them, so that
+// the catalogue gets one row per real thing rather than one per sheet.
+//
 // NOT RUN BY THE BUILD, for the same reason the standard catalogue is not:
 // several hundred rows inserted as a side effect of a deployment turns one
 // bad row into a blocked release, and on this project a failed migration
@@ -16,7 +21,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireRole } from '@/lib/apiMiddleware';
 import { importPriceList } from '@/lib/specialNeeds/importPriceList';
-import { priceListSummary, UNTH_PRICE_LIST } from '@/lib/specialNeeds/unthPriceList';
+import {
+  currentPriceList,
+  currentPriceListSummary,
+  mergeSummary,
+} from '@/lib/specialNeeds/priceList';
+import { comparisonForm, comparisonSize } from '@/lib/specialNeeds/normalise';
 import { toKobo } from '@/lib/specialNeeds/pricing';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +45,9 @@ export async function GET() {
   if (error) return error;
 
   try {
-    const summary = priceListSummary();
+    const summary = currentPriceListSummary();
+    const merge = mergeSummary();
+    const list = currentPriceList();
 
     const existing = await prisma.specialNeedItem.findMany({
       select: { category: true, name: true, size: true, brand: true, unitPrice: true, sourceCode: true },
@@ -48,6 +60,14 @@ export async function GET() {
         e,
       ]),
     );
+    // The same spelling-tolerant index the import uses, so the count
+    // under "would be added" is the number of rows that would really
+    // be created rather than the number of lines on the sheet.
+    const bySpelling = new Map<string, (typeof existing)[number]>();
+    existing.forEach((e) => {
+      const k = `${e.category}\u0000${comparisonForm(e.name)}\u0000${comparisonSize(e.size)}`;
+      if (!bySpelling.has(k)) bySpelling.set(k, e);
+    });
 
     // A DRY RUN, so the button can say what it would do. Counted the same
     // way the import decides, so the preview and the result agree.
@@ -55,10 +75,13 @@ export async function GET() {
     let wouldPrice = 0;
     let wouldDiffer = 0;
 
-    UNTH_PRICE_LIST.forEach((item) => {
+    list.forEach((item) => {
       const row =
         byCode.get(item.code) ??
-        byNatural.get(`${item.category}\u0000${item.name}\u0000${item.size ?? ''}\u0000`);
+        byNatural.get(`${item.category}\u0000${item.name}\u0000${item.size ?? ''}\u0000`) ??
+        bySpelling.get(
+          `${item.category}\u0000${comparisonForm(item.name)}\u0000${comparisonSize(item.size)}`,
+        );
       if (!row) {
         wouldAdd += 1;
         return;
@@ -78,6 +101,13 @@ export async function GET() {
 
     return NextResponse.json({
       list: summary,
+      merge: {
+        matched2025: merge.matched2025,
+        newIn2026: merge.newIn2026,
+        newlyPriced: merge.newlyPriced,
+        repriced: merge.repriced,
+        blankOn2026: merge.blankOn2026,
+      },
       catalogue: { total: inCatalogue, priced: pricedInCatalogue },
       wouldAdd,
       wouldPrice,

@@ -19,6 +19,12 @@
  * Lines the bundle added are shown as such and can be removed. A surgeon
  * taking something out of a standard pack has made a decision, and it is
  * recorded as one rather than silently restored.
+ *
+ * AN ITEM WITH NO PRICE IS STILL OFFERED. It used not to be, and the
+ * result was a dropdown quietly missing most of the catalogue. The price
+ * decides what the deposit SAYS, not whether the theatre may order the
+ * thing — so an unpriced item is listed, marked, and declared on the
+ * quote as a figure still to be added.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -74,8 +80,8 @@ export default function SpecialNeedsPicker({
   const [newSize, setNewSize] = useState('');
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  /// Items the catalogue is holding back because nobody has priced them.
-  const [withheld, setWithheld] = useState(0);
+  /// How many of the items on offer still have no price.
+  const [unpricedOnOffer, setUnpricedOnOffer] = useState(0);
   /// Set when the OTHER path created something with no price yet.
   const [addedUnpriced, setAddedUnpriced] = useState<string | null>(null);
 
@@ -88,7 +94,7 @@ export default function SpecialNeedsPicker({
       }
       const data = await res.json();
       setCatalogue(data.items ?? []);
-      setWithheld(Number(data.withheldUnpriced ?? 0));
+      setUnpricedOnOffer(Number(data.unpricedOnOffer ?? 0));
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -259,23 +265,30 @@ export default function SpecialNeedsPicker({
           <option key={o.id} value={o.id}>
             {describeItem(o)}
             {o.dispensedByPharmacy ? ' · pharmacy' : ''}
+            {/* Said here rather than only on the deposit, so the choice
+                is made knowing it. It is not a warning against picking
+                it: the item is stocked and the case may need it. */}
+            {o.unitPrice == null ? ' · price to be added' : ''}
           </option>
         ))}
       </select>
 
-      {withheld > 0 && (
+      {unpricedOnOffer > 0 && (
         <p className="mt-2 text-xs text-gray-500">
-          {withheld} item{withheld === 1 ? ' is' : 's are'} not listed because{' '}
-          {withheld === 1 ? 'it has' : 'they have'} no price yet. {withheld === 1 ? 'It' : 'They'}{' '}
-          appear here automatically once the store or pharmacy prices{' '}
-          {withheld === 1 ? 'it' : 'them'} in Settings.
+          {unpricedOnOffer} of the items above {unpricedOnOffer === 1 ? 'has' : 'have'} no
+          price yet and {unpricedOnOffer === 1 ? 'is' : 'are'} marked{' '}
+          <em>price to be added</em>. Choosing{' '}
+          {unpricedOnOffer === 1 ? 'it' : 'one'} is fine — the item is ordered and the store
+          is told. The deposit below simply says it is not the full amount until the store
+          or pharmacy prices it in Settings.
         </p>
       )}
 
       {addedUnpriced && (
         <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
-          <strong>{addedUnpriced}</strong> is on this case, but it has no price yet, so the
-          deposit below will not include it. It is now in the store&apos;s pricing queue.
+          <strong>{addedUnpriced}</strong> is on this case and the store will be told to
+          pick it. It has no price yet, so the deposit below does not include it and says
+          so. It is now in the store&apos;s pricing queue.
         </p>
       )}
 
@@ -338,6 +351,11 @@ export default function SpecialNeedsPicker({
                   {item?.dispensedByPharmacy && (
                     <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
                       pharmacy
+                    </span>
+                  )}
+                  {item && item.unitPrice == null && (
+                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                      price to be added
                     </span>
                   )}
                 </span>
