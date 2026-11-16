@@ -16,8 +16,17 @@ import { requirePolicyOwner, requirePolicyViewer } from '@/lib/policy/guard';
 import { runPolicyAnalysis } from '@/lib/policy/analysis/run';
 
 export const dynamic = 'force-dynamic';
-/** Twenty-odd model calls at high effort do not finish in ten seconds. */
-export const maxDuration = 800;
+/**
+ * Sixty seconds, matching every other long route here, because that is the
+ * ceiling the deployment actually allows.
+ *
+ * A twenty-two section policy at high effort does not finish in sixty seconds,
+ * which is why the run is RESUMABLE rather than single-shot: each call analyses
+ * what it can in about forty-five seconds, banks it, and returns `done: false`
+ * with a count. The page calls again until it is done, and a resumed run skips
+ * the sections already analysed so nothing is paid for twice.
+ */
+export const maxDuration = 60;
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const { error, actor } = await requirePolicyViewer();
@@ -106,30 +115,31 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       );
     }
 
-    const running = await prisma.policyAnalysisRun.findFirst({
-      where: { roundId: round.id, status: 'RUNNING' },
-      select: { id: true, startedAt: true },
+    // A RUNNING run is normally this caller coming back for the next slice, so
+    // it must NOT be refused -- that is how the analysis makes progress. What
+    // is refused is a genuinely concurrent request: two slices in flight at
+    // once would double the bill and race each other writing proposed changes.
+    //
+    // `updatedAt` is touched every time a slice banks its findings, so "touched
+    // in the last twenty seconds" means somebody is mid-slice right now, while
+    // a run whose slice finished a moment ago is free to continue.
+    const inFlight = await prisma.policyAnalysisRun.findFirst({
+      where: {
+        roundId: round.id,
+        status: 'RUNNING',
+        updatedAt: { gt: new Date(Date.now() - 20_000) },
+      },
+      select: { id: true },
     });
-    if (running) {
-      // Two concurrent runs would double the bill and race each other writing
-      // proposed changes. Ten minutes is well past the longest honest run.
-      const stale = Date.now() - running.startedAt.getTime() > 10 * 60 * 1000;
-      if (!stale) {
-        return NextResponse.json(
-          { error: 'An analysis is already running for this round. Wait for it to finish.' },
-          { status: 409 },
-        );
-      }
-      await prisma.policyAnalysisRun.update({
-        where: { id: running.id },
-        data: {
-          status: 'FAILED_API',
-          finishedAt: new Date(),
-          validationErrors: {
-            message: 'Abandoned: it was still marked running when a later run started.',
-          } as never,
+    if (inFlight) {
+      return NextResponse.json(
+        {
+          error:
+            'An analysis is already running for this round. Give it a moment — it '
+            + 'continues a few sections at a time.',
         },
-      });
+        { status: 409 },
+      );
     }
 
     const outcome = await runPolicyAnalysis({

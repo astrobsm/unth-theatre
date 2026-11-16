@@ -71,6 +71,23 @@ const CONCURRENCY = 4;
 
 const MAX_TOKENS = 16000;
 
+/**
+ * Stop starting new section calls after this long and hand back, so the caller
+ * can come straight back for the rest.
+ *
+ * WHY THE RUN IS RESUMABLE AT ALL. Every other long route in this project
+ * declares `maxDuration = 60`, which is the ceiling the deployment actually
+ * allows. A twenty-two section policy at high effort does not finish in sixty
+ * seconds, so a single-shot run would be killed on the cloud node every time --
+ * after paying for whatever calls had completed.
+ *
+ * So the per-section pass banks what it has, returns `done: false`, and the
+ * page calls again. A resumed run finds the earlier one by its input snapshot
+ * hash and skips the sections already analysed, so nothing is paid for twice.
+ * It also means the Chairman watches a count climb instead of a spinner.
+ */
+const SOFT_DEADLINE_MS = 45_000;
+
 const maxCents = (): number => {
   const raw = Number(process.env.POLICY_ANALYSIS_MAX_CENTS);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_MAX_CENTS;
@@ -82,7 +99,7 @@ const centsFor = (inputTokens: number, outputTokens: number): number =>
 
 export interface AnalysisOutcome {
   runId: string;
-  status: 'VALIDATED' | 'FAILED_VALIDATION' | 'FAILED_API';
+  status: 'RUNNING' | 'VALIDATED' | 'FAILED_VALIDATION' | 'FAILED_API';
   message: string;
   sectionsAnalysed: number;
   sectionsSkipped: number;
@@ -92,6 +109,9 @@ export interface AnalysisOutcome {
   inputTokens: number;
   outputTokens: number;
   costCents: number;
+  /** False while sections remain; the caller should come straight back. */
+  done: boolean;
+  remaining: number;
 }
 
 interface Usage { inputTokens: number; outputTokens: number }
@@ -150,21 +170,53 @@ export async function runPolicyAnalysis(opts: {
   const client = new Anthropic();
   const snapshot = inputSnapshotHash(inputs);
 
-  const run = await prisma.policyAnalysisRun.create({
-    data: {
+  // Resume the run already under way on this exact input, if there is one. The
+  // hash is what makes that safe: a different hash means the committee answered
+  // more in between, which is a different analysis and starts afresh.
+  const resumable = await prisma.policyAnalysisRun.findFirst({
+    where: {
       roundId: opts.roundId,
-      model: MODEL,
-      promptVersion: PROMPT_VERSION,
-      inputSnapshotHash: snapshot,
       status: 'RUNNING',
-      runById: opts.actorId,
-      runByName: opts.actorName,
+      inputSnapshotHash: snapshot,
+      promptVersion: PROMPT_VERSION,
     },
-    select: { id: true },
+    orderBy: { startedAt: 'desc' },
+    select: { id: true, output: true, inputTokens: true, outputTokens: true },
   });
 
-  const usage: Usage = { inputTokens: 0, outputTokens: 0 };
+  const run = resumable
+    ?? (await prisma.policyAnalysisRun.create({
+      data: {
+        roundId: opts.roundId,
+        model: MODEL,
+        promptVersion: PROMPT_VERSION,
+        inputSnapshotHash: snapshot,
+        status: 'RUNNING',
+        runById: opts.actorId,
+        runByName: opts.actorName,
+      },
+      select: { id: true, output: true, inputTokens: true, outputTokens: true },
+    }));
+
+  const bankedOutput = (run.output ?? null) as
+    | { sections?: SectionAnalysis[]; corrections?: Correction[] }
+    | null;
+  const banked: SectionAnalysis[] = bankedOutput?.sections ?? [];
+  const bankedCorrections: Correction[] = bankedOutput?.corrections ?? [];
+  const alreadyDone = new Set(banked.map((s) => s.section_id));
+
+  // Cost carries forward, so the ceiling bounds the WHOLE analysis rather than
+  // each slice of it. Otherwise a run resumed five times could spend five
+  // times the cap without any single call noticing.
+  const usage: Usage = {
+    inputTokens: run.inputTokens ?? 0,
+    outputTokens: run.outputTokens ?? 0,
+  };
   const ceiling = maxCents();
+  const deadline = Date.now() + SOFT_DEADLINE_MS;
+
+  /** The sections this slice still has to do. */
+  const todo = inputs.filter((i) => !alreadyDone.has(i.sectionId));
 
   const spend = () => centsFor(usage.inputTokens, usage.outputTokens);
   const chargeAndCheck = (u?: { input_tokens?: number; output_tokens?: number } | null) => {
@@ -207,6 +259,8 @@ export async function runPolicyAnalysis(opts: {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       costCents: Math.round(spend()),
+      done: true,
+      remaining: 0,
     };
   };
 
@@ -222,33 +276,44 @@ export async function runPolicyAnalysis(opts: {
       }),
       client.messages.countTokens({
         model: MODEL,
-        messages: [{ role: 'user', content: inputs.map((i) => i.rendered).join('\n\n') }],
+        // Only what is left to do. On a resumed run the sections already
+        // analysed are paid for and banked; counting them again would refuse a
+        // run for a cost it is not about to incur.
+        messages: [{
+          role: 'user',
+          content: (todo.length > 0 ? todo : inputs).map((i) => i.rendered).join('\n\n'),
+        }],
       }),
     ]);
 
-    const estimatedInput = bodyCount.input_tokens + systemCount.input_tokens * inputs.length;
+    const estimatedInput = bodyCount.input_tokens + systemCount.input_tokens * todo.length;
     // A section analysis is a page or two of JSON, not a chapter.
-    const estimatedOutput = 2500 * inputs.length + 6000;
-    const estimate = centsFor(estimatedInput, estimatedOutput);
+    const estimatedOutput = 2500 * todo.length + 6000;
+    // Against what has ALREADY been spent, so the ceiling bounds the whole
+    // analysis and not each slice of it.
+    const estimate = spend() + centsFor(estimatedInput, estimatedOutput);
 
     if (estimate > ceiling) {
       return await fail(
         'FAILED_API',
-        `This run is estimated at about ${(estimate / 100).toFixed(2)} US dollars across `
-        + `${inputs.length} sections, above the ceiling of `
+        `This analysis is estimated at about ${(estimate / 100).toFixed(2)} US dollars `
+        + `across ${inputs.length} section(s), above the ceiling of `
         + `${(ceiling / 100).toFixed(2)}. Raise POLICY_ANALYSIS_MAX_CENTS if that is `
-        + 'acceptable, or close the round and analyse fewer sections at a time. '
-        + 'Nothing was sent.',
+        + 'acceptable. Nothing further was sent.',
         [],
         [],
       );
     }
 
-    // ── Pass 1: per section ────────────────────────────────────────────
+    // ── Pass 1: per section, resumable ─────────────────────────────────
     const allViolations: Violation[] = [];
-    const allCorrections: Correction[] = [];
+    const allCorrections: Correction[] = [...bankedCorrections];
 
-    const analysed = await pooled(inputs, CONCURRENCY, async (input) => {
+    const analysed = await pooled(todo, CONCURRENCY, async (input) => {
+      // Checked before each call rather than after: a call started past the
+      // deadline is a call that gets killed mid-flight and paid for anyway.
+      if (Date.now() > deadline) return undefined;
+
       const response = await client.beta.messages.parse({
         model: MODEL,
         max_tokens: MAX_TOKENS,
@@ -318,7 +383,54 @@ export async function runPolicyAnalysis(opts: {
       );
     }
 
-    const sections = analysed.filter((a): a is SectionAnalysis => a !== null);
+    const sections = [
+      ...banked,
+      ...analysed.filter((a): a is SectionAnalysis => a != null),
+    ];
+
+    // ── Banked before going further ────────────────────────────────────
+    // The per-section pass is the expensive one -- one call per section, and
+    // this policy has twenty-two. If the two cheap passes below are then cut
+    // off (a serverless function timeout, a dropped connection, a restart),
+    // every one of those calls has been paid for and, without this, nothing
+    // would have been stored: the run would sit at RUNNING with a null output
+    // and the Chairman would press the button again and pay twice.
+    //
+    // So the validated findings are written now, with the usage so far. The
+    // status stays RUNNING, so a cut-off run is still visibly incomplete
+    // rather than passing as finished.
+    await prisma.policyAnalysisRun.update({
+      where: { id: run.id },
+      data: {
+        output: { sections, corrections: allCorrections, partial: true } as never,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costCents: Math.round(spend()),
+      },
+    });
+
+    const remaining = inputs.length - sections.length;
+    if (remaining > 0) {
+      // Out of time, not out of work. The status stays RUNNING, the findings so
+      // far are banked, and the caller comes back for the rest.
+      return {
+        runId: run.id,
+        status: 'RUNNING',
+        message:
+          `Analysed ${sections.length} of ${inputs.length} sections so far. `
+          + 'Continuing — nothing already done will be paid for again.',
+        sectionsAnalysed: sections.length,
+        sectionsSkipped: allInputs.length - inputs.length,
+        proposedChanges: 0,
+        corrections: allCorrections,
+        violations: [],
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costCents: Math.round(spend()),
+        done: false,
+        remaining,
+      };
+    }
 
     // ── Pass 2: cross-section consistency ──────────────────────────────
     const crossResponse = await client.beta.messages.parse({
@@ -507,6 +619,8 @@ export async function runPolicyAnalysis(opts: {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       costCents: Math.round(spend()),
+      done: true,
+      remaining: 0,
     };
   } catch (error) {
     if (error instanceof BudgetExceeded) {

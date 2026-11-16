@@ -102,6 +102,9 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   const [notice, setNotice] = useState<string | null>(null);
 
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<
+  { analysed: number; remaining: number; costCents: number } | null
+  >(null);
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -131,19 +134,58 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
 
   useEffect(() => { void load(); }, [load]);
 
+  /**
+   * Drive the run to completion.
+   *
+   * The server analyses what it can in about forty-five seconds, banks it and
+   * returns `done: false` with a count, because the deployment kills a function
+   * at sixty seconds and a twenty-two section policy does not fit. So this
+   * calls again until it is done — and a resumed run skips the sections already
+   * analysed, so no section is paid for twice.
+   *
+   * The loop is bounded. An endless client loop against a paid API is a bill
+   * nobody authorised, so it stops after enough slices to cover any realistic
+   * policy and tells the Chairman to press the button again.
+   */
   const runAnalysis = async () => {
     setRunning(true);
     setError(null);
     setNotice(null);
+    setProgress(null);
+
+    const MAX_SLICES = 20;
     try {
-      const res = await fetch(`/api/policy/rounds/${params.id}/analysis`, { method: 'POST' });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body?.error ?? 'The analysis could not be run.');
+      for (let slice = 0; slice < MAX_SLICES; slice += 1) {
+        const res = await fetch(`/api/policy/rounds/${params.id}/analysis`, { method: 'POST' });
+        const body = await res.json();
+
+        if (!res.ok) {
+          setError(body?.error ?? 'The analysis could not be run.');
+          return;
+        }
+
+        if (body.status === 'RUNNING' && body.done === false) {
+          setProgress({
+            analysed: body.sectionsAnalysed ?? 0,
+            remaining: body.remaining ?? 0,
+            costCents: body.costCents ?? 0,
+          });
+          continue;
+        }
+
+        setProgress(null);
+        setNotice(body.message ?? null);
+        if (body.status !== 'VALIDATED') {
+          setError(body.message ?? 'The analysis was refused.');
+        }
+        await load();
         return;
       }
-      setNotice(body.message ?? null);
-      if (body.status !== 'VALIDATED') setError(body.message ?? 'The analysis was refused.');
+
+      setError(
+        'The analysis is taking an unusual number of passes. What it has done so far is '
+        + 'saved and paid for — press Run again to carry on from there.',
+      );
       await load();
     } catch {
       setError('The analysis could not be run.');
@@ -294,6 +336,30 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
             {run ? 'Run it again' : 'Run the analysis'}
           </button>
         </div>
+
+        {progress && (
+          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <p className="flex items-center gap-2 text-xs font-semibold text-blue-900">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Analysed {progress.analysed} section(s), {progress.remaining} to go
+              {progress.costCents > 0 && ` · ${money(progress.costCents)} so far`}
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-blue-200">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all"
+                style={{
+                  width: `${Math.round(
+                    (progress.analysed / Math.max(1, progress.analysed + progress.remaining)) * 100,
+                  )}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-blue-800">
+              It runs a few sections at a time and keeps what it has done, so leaving this
+              page does not waste anything — come back and press Run to carry on.
+            </p>
+          </div>
+        )}
 
         <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-600">
           <CircleDollarSign className="mt-0.5 h-3.5 w-3.5 shrink-0" />

@@ -630,3 +630,64 @@ describe('the decisions that must not quietly change', () => {
     expect(prompt).toMatch(/PROMPT_VERSION = 'policy-analysis-v\d+'/);
   });
 });
+
+describe('the run survives being cut off, without paying twice', () => {
+  // A twenty-two section policy at high effort does not finish inside the
+  // sixty seconds this deployment allows a function. A single-shot run would
+  // be killed every time on the cloud node, after paying for whatever had
+  // completed. These pin the three things that make that safe.
+
+  const run = codeOf('src/lib/policy/analysis/run.ts');
+  const route = codeOf('src/app/api/policy/rounds/[id]/analysis/route.ts');
+  const page = codeOf('src/app/dashboard/policy-review/[id]/analysis/page.tsx');
+
+  it('declares a duration the deployment actually allows', () => {
+    // Every other long route here says 60. Declaring 800 would either be
+    // refused or silently capped, and the analysis would die mid-run.
+    expect(route).toContain('maxDuration = 60');
+    expect(route).not.toContain('maxDuration = 800');
+  });
+
+  it('banks the expensive pass BEFORE the cheap ones can fail', () => {
+    // The per-section calls are the bill. If the cross-section or synthesis
+    // call is cut off, those must already be stored.
+    // The USE site, not the import at the top of the file — which is what an
+    // earlier version of this test measured, and why it failed on correct code.
+    const bankAt = run.indexOf('partial: true');
+    const crossAt = run.indexOf('system: CROSS_SECTION_PROMPT');
+    expect(bankAt).toBeGreaterThan(0);
+    expect(crossAt).toBeGreaterThan(0);
+    expect(bankAt).toBeLessThan(crossAt);
+  });
+
+  it('resumes the earlier run by its input snapshot, and skips what is done', () => {
+    expect(run).toContain("status: 'RUNNING'");
+    expect(run).toContain('inputSnapshotHash: snapshot');
+    expect(run).toContain('alreadyDone');
+    expect(run).toContain('!alreadyDone.has(i.sectionId)');
+  });
+
+  it('carries the spend forward, so the ceiling bounds the whole analysis', () => {
+    // Otherwise a run resumed five times could spend five times the cap with
+    // no single slice noticing.
+    expect(run).toContain('inputTokens: run.inputTokens ?? 0');
+    expect(run).toContain('spend() + centsFor(');
+  });
+
+  it('stops starting calls past the deadline rather than after', () => {
+    // A call started past the deadline gets killed mid-flight and billed anyway.
+    expect(run).toContain('if (Date.now() > deadline) return undefined;');
+  });
+
+  it('lets the caller come back, but refuses two slices at once', () => {
+    // Refusing a RUNNING run outright would block the very mechanism that
+    // makes progress; allowing concurrency would double the bill.
+    expect(route).toContain('updatedAt: { gt: new Date(Date.now() - 20_000) }');
+    expect(route).toContain('status: 409');
+  });
+
+  it('bounds the client loop, because an endless one spends real money', () => {
+    expect(page).toContain('MAX_SLICES');
+    expect(page).toMatch(/slice < MAX_SLICES/);
+  });
+});
