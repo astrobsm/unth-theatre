@@ -30,12 +30,13 @@ import {
   EARLY_CONFIRM_MINUTES,
   REFUSAL_MESSAGE,
   buildCheckInChaseMessage,
-  buildCheckInCommendMessage,
+  buildCheckInThanksMessage,
   chaseNotificationLine,
-  commendNotificationLine,
-  commendableMembers,
-  minutesAhead,
+  minutesBeforeStart,
+  respondedMembers,
   silentMembers,
+  thanksNotificationLine,
+  thanksToneFor,
   type CaseFacts,
   type ChaseMember,
 } from '@/lib/theatreOps/checkInChase';
@@ -169,10 +170,18 @@ export async function POST(request: NextRequest) {
           { status: 200 },
         );
       }
-      targets = commendableMembers(members, scheduledAt);
+      // EVERYBODY who answered, not only the exemplary. Thanking only the
+      // early leaves the people who most need the nudge about timing
+      // hearing nothing at all -- and the tone below is what keeps the
+      // praise itself earned.
+      targets = respondedMembers(members);
       if (targets.length === 0) {
         return NextResponse.json(
-          { refused: true, reason: 'NOBODY_EARLY', message: REFUSAL_MESSAGE.NOBODY_EARLY },
+          {
+            refused: true,
+            reason: 'NOBODY_RESPONDED',
+            message: REFUSAL_MESSAGE.NOBODY_RESPONDED,
+          },
           { status: 200 },
         );
       }
@@ -182,14 +191,22 @@ export async function POST(request: NextRequest) {
     const senderName = me.name?.trim() || null;
     const day = (surgery.scheduledDate ?? new Date()).toISOString().slice(0, 10);
 
-    const sent: Array<{ name: string; roleOnCase: string; whatsapp: string | null }> = [];
+    const sent: Array<{
+      name: string;
+      roleOnCase: string;
+      whatsapp: string | null;
+      tone?: string;
+    }> = [];
     const skipped: string[] = [];
 
     for (const member of targets) {
-      const ahead = kind === 'COMMEND' ? minutesAhead(member, scheduledAt) ?? 0 : 0;
+      const tone = thanksToneFor(member, scheduledAt);
+      const minutesBefore = minutesBeforeStart(member.checkedInAt, scheduledAt);
       const body = kind === 'CHASE'
         ? buildCheckInChaseMessage({ member, facts, link, note, senderName })
-        : buildCheckInCommendMessage({ member, facts, minutesAhead: ahead, note, senderName });
+        : buildCheckInThanksMessage({
+          member, facts, tone, minutesBefore, note, senderName,
+        });
 
       const wa = member.phoneNumber ? toWhatsAppNumber(member.phoneNumber) : null;
 
@@ -203,7 +220,7 @@ export async function POST(request: NextRequest) {
         body,
         subject: kind === 'CHASE'
           ? chaseNotificationLine(facts)
-          : commendNotificationLine(facts, ahead),
+          : thanksNotificationLine(facts, tone),
         sensitivity: 'OPERATIONAL',
         relatedType: 'SURGERY',
         relatedId: surgery.id,
@@ -215,14 +232,21 @@ export async function POST(request: NextRequest) {
         createdByName: senderName,
       });
 
+      const toneLabel = kind === 'COMMEND' ? tone : undefined;
       if (wa) {
         sent.push({
           name: member.name ?? 'Colleague',
           roleOnCase: member.roleOnCase,
           whatsapp: `https://wa.me/${wa}?text=${encodeURIComponent(body)}`,
+          tone: toneLabel,
         });
       } else {
-        sent.push({ name: member.name ?? 'Colleague', roleOnCase: member.roleOnCase, whatsapp: null });
+        sent.push({
+          name: member.name ?? 'Colleague',
+          roleOnCase: member.roleOnCase,
+          whatsapp: null,
+          tone: toneLabel,
+        });
         skipped.push(
           `${member.name ?? 'Colleague'} (${member.roleOnCase}) has no phone number on file — sent in the app only.`,
         );

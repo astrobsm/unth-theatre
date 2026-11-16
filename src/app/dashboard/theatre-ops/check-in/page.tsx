@@ -68,7 +68,7 @@ interface TeamMessageResult {
   message?: string;
   count?: number;
   notice?: string;
-  sent?: Array<{ name: string; roleOnCase: string; whatsapp: string | null }>;
+  sent?: Array<{ name: string; roleOnCase: string; whatsapp: string | null; tone?: string }>;
   skipped?: string[];
   error?: string;
 }
@@ -470,18 +470,21 @@ export default function TeamCheckInPage() {
                           <button
                             type="button"
                             onClick={() => messageTeam(c.id, 'COMMEND')}
-                            disabled={messaging !== null}
+                            disabled={messaging !== null || c.readiness.assigned - c.readiness.silent === 0}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 disabled:opacity-40"
-                            title="Thank whoever confirmed early enough for the theatre to plan around"
+                            title="Thank everybody who answered. Whoever confirmed early is praised; whoever left it late is thanked and reminded to check in before the start time."
                           >
                             {messaging === `${c.id}:COMMEND`
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <ThumbsUp className="w-3.5 h-3.5" />}
-                            Commend early check-in
+                            Thank those who checked in
+                            {c.readiness.assigned - c.readiness.silent > 0
+                              ? ` (${c.readiness.assigned - c.readiness.silent})`
+                              : ''}
                           </button>
 
                           <span className="text-[11px] text-gray-400">
-                            Asks each person to confirm, and to say if they can start earlier.
+                            Chases only the silent. Thanks everybody who answered, and reminds the late ones to check in before the start time.
                           </span>
                         </div>
 
@@ -515,6 +518,8 @@ export default function TeamCheckInPage() {
                                   >
                                     <Send className="w-3 h-3" />
                                     {s.name}
+                                    {s.tone === 'EARLY_CONFIRMED' ? ' ★' : ''}
+                                    {s.tone === 'LATE_CONFIRMED' ? ' ⏱' : ''}
                                   </a>
                                 ) : (
                                   <span key={i} className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-500">

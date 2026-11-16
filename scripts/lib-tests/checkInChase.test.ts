@@ -7,10 +7,14 @@ import {
   EARLY_CONFIRM_MINUTES,
   REFUSAL_MESSAGE,
   buildCheckInChaseMessage,
-  buildCheckInCommendMessage,
+  buildCheckInThanksMessage,
   commendableMembers,
+  describeLead,
   minutesAhead,
+  minutesBeforeStart,
+  respondedMembers,
   silentMembers,
+  thanksToneFor,
   type CaseFacts,
   type ChaseMember,
 } from '../../src/lib/theatreOps/checkInChase';
@@ -134,7 +138,7 @@ describe('a commendation is earned, not requested', () => {
 
   it('says why it refused, in words somebody can act on', () => {
     expect(REFUSAL_MESSAGE.NOBODY_SILENT).toMatch(/already answered/i);
-    expect(REFUSAL_MESSAGE.NOBODY_EARLY).toMatch(/nobody values/i);
+    expect(REFUSAL_MESSAGE.NOBODY_RESPONDED).toMatch(/nobody to thank/i);
     expect(REFUSAL_MESSAGE.NO_SCHEDULED_TIME).toMatch(/no scheduled time/i);
   });
 });
@@ -189,29 +193,106 @@ describe('the chase message', () => {
   });
 });
 
-describe('the commendation message', () => {
-  it('states how early, in words', () => {
-    const msg = buildCheckInCommendMessage({
-      member: member({ roleOnCase: 'Scrub Nurse' }), facts: FACTS, minutesAhead: 135,
+describe('the thank-you reaches everybody who answered', () => {
+  // Thanking only the exemplary leaves the people who most need the nudge
+  // about timing hearing nothing at all. So everybody who answered is
+  // thanked -- and the TONE is what keeps the praise itself earned.
+
+  const early = member({
+    status: 'PRESENT', checkedInAt: new Date('2026-11-16T06:45:00Z'),
+  });
+  const late = member({
+    status: 'PRESENT', checkedInAt: new Date('2026-11-16T08:55:00Z'),
+  });
+  const declined = member({
+    status: 'UNAVAILABLE', checkedInAt: new Date('2026-11-16T06:00:00Z'),
+  });
+  const after = member({
+    status: 'PRESENT', checkedInAt: new Date('2026-11-16T09:20:00Z'),
+  });
+
+  it('thanks everyone who answered, not only the early', () => {
+    const team = [early, late, declined, member({ status: null })];
+    expect(respondedMembers(team)).toHaveLength(3);
+  });
+
+  it('picks the tone from the record', () => {
+    expect(thanksToneFor(early, NINE_AM)).toBe('EARLY_CONFIRMED');
+    expect(thanksToneFor(late, NINE_AM)).toBe('LATE_CONFIRMED');
+    expect(thanksToneFor(declined, NINE_AM)).toBe('DECLINED');
+  });
+
+  it('praises the early one, and names the benefit', () => {
+    const msg = buildCheckInThanksMessage({
+      member: early, facts: FACTS, tone: 'EARLY_CONFIRMED',
+      minutesBefore: minutesBeforeStart(early.checkedInAt, NINE_AM),
     });
     expect(msg).toContain('2 hours 15 minutes');
-    expect(msg).toContain('Scrub Nurse');
-  });
-
-  it('reads naturally under an hour and on the hour', () => {
-    const under = buildCheckInCommendMessage({ member: member(), facts: FACTS, minutesAhead: 75 });
-    expect(under).toContain('1 hour 15 minutes');
-    const exact = buildCheckInCommendMessage({ member: member(), facts: FACTS, minutesAhead: 120 });
-    expect(exact).toContain('2 hours');
-    expect(exact).not.toContain('2 hours 0');
-  });
-
-  it('names the benefit rather than praising in the abstract', () => {
-    const msg = buildCheckInCommendMessage({ member: member(), facts: FACTS, minutesAhead: 90 });
     expect(msg.toLowerCase()).toContain('start early');
+    expect(msg.toLowerCase()).not.toContain('one request');
+  });
+
+  it('thanks the late one AND asks for earlier next time', () => {
+    // The whole point of widening this: the person who checked in at 08:55
+    // is exactly who needs telling, and under the old rule got nothing.
+    const msg = buildCheckInThanksMessage({
+      member: late, facts: FACTS, tone: 'LATE_CONFIRMED',
+      minutesBefore: minutesBeforeStart(late.checkedInAt, NINE_AM),
+    });
+    expect(msg.toLowerCase()).toContain('thank you');
+    expect(msg).toContain('5 minutes');
+    expect(msg.toLowerCase()).toContain('before');
+    expect(msg).toContain('1 hour');
+  });
+
+  it('says plainly when the answer came AFTER the start time', () => {
+    const msg = buildCheckInThanksMessage({
+      member: after, facts: FACTS, tone: 'LATE_CONFIRMED',
+      minutesBefore: minutesBeforeStart(after.checkedInAt, NINE_AM),
+    });
+    expect(msg).toContain('after');
+    expect(msg).toContain('20 minutes');
+  });
+
+  it('thanks somebody for saying they could NOT come', () => {
+    // Telling the theatre at 06:00 that you are unavailable is more useful
+    // than silence, and is the behaviour least reinforced anywhere else.
+    const msg = buildCheckInThanksMessage({
+      member: declined, facts: FACTS, tone: 'DECLINED',
+      minutesBefore: minutesBeforeStart(declined.checkedInAt, NINE_AM),
+    });
+    expect(msg.toLowerCase()).toContain('thank you');
+    expect(msg.toLowerCase()).toContain('cover');
+    // Told us three hours ahead, so no nudge.
+    expect(msg.toLowerCase()).not.toContain('one request');
+  });
+
+  it('nudges a LATE decline, because the earlier it comes the better', () => {
+    const lateDecline = member({
+      status: 'UNAVAILABLE', checkedInAt: new Date('2026-11-16T08:50:00Z'),
+    });
+    const msg = buildCheckInThanksMessage({
+      member: lateDecline, facts: FACTS, tone: 'DECLINED',
+      minutesBefore: minutesBeforeStart(lateDecline.checkedInAt, NINE_AM),
+    });
+    expect(msg.toLowerCase()).toContain('one request');
+  });
+
+  it('still reserves the praise for those who earned it', () => {
+    // commendableMembers is unchanged and still decides who is EXEMPLARY.
+    expect(commendableMembers([early, late, declined], NINE_AM)
+      .map((m) => m.status)).toEqual(['PRESENT']);
+  });
+
+  it('describes a lead time the way a person would say it', () => {
+    expect(describeLead(135)).toBe('2 hours 15 minutes');
+    expect(describeLead(120)).toBe('2 hours');
+    expect(describeLead(60)).toBe('1 hour');
+    expect(describeLead(45)).toBe('45 minutes');
+    expect(describeLead(1)).toBe('1 minute');
+    expect(describeLead(-20)).toBe('20 minutes');
   });
 });
-
 describe('the decisions that must not move to the client', () => {
   const route = codeOf('src/app/api/theatre-ops/check-in/chase/route.ts');
   const page = codeOf('src/app/dashboard/theatre-ops/check-in/page.tsx');
@@ -220,9 +301,11 @@ describe('the decisions that must not move to the client', () => {
     // The browser sends a case and an intention. Two definitions of "has not
     // answered" is one definition too many.
     expect(route).toContain('silentMembers(members)');
-    expect(route).toContain('commendableMembers(members, scheduledAt)');
+    expect(route).toContain('respondedMembers(members)');
+    expect(route).toContain('thanksToneFor(member, scheduledAt)');
     expect(page).not.toContain('silentMembers');
-    expect(page).not.toContain('commendableMembers');
+    expect(page).not.toContain('respondedMembers');
+    expect(page).not.toContain('thanksToneFor');
   });
 
   it('queues through the comms pipeline rather than sending directly', () => {
