@@ -37,6 +37,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@capacitor/app": "^6.0.3",
     "@capacitor/app-launcher": "^6.0.4",
     "@capacitor/core": "^6.2.1",

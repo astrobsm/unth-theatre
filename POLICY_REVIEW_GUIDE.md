@@ -162,16 +162,90 @@ Release is per round: **Results visibility** on the round page.
 
 ---
 
-## Not built yet
+## 7. The analysis
 
-The AI analysis, the tracked-change decision screen, the final-proposal
-generator and the PDF/CSV exports are the second half of this work. The tables
-they use are already in place, so they arrive without another database change.
+**Analysis & decisions**, from the round page. Press **Run the analysis**.
 
-What exists today collects the committee's responses in a structured, attributed
-form and shows you the counts, the proposals and the safety concerns. That is
-enough to run the meeting; the analysis is there to save you writing the
-synthesis by hand.
+It reads every response, clusters the comments, tallies each bracketed value,
+checks the recommended changes against each other for contradictions, and drafts
+a synthesis. Then it proposes specific changes to specific wording.
+
+Three things to know before you press it.
+
+**It costs money, and it only runs when you press the button.** The policy text
+and the responses go to Anthropic. The run is token-counted first and refused
+outright if it would cost more than the configured ceiling; the cost of the last
+run is shown on the page. Nothing runs on a page load or a schedule.
+
+**No names are sent.** Reviewers are identified to the model by role and unit
+only — "Head of Anaesthesia, Anaesthesia". There is no patient data in this
+module. You can still see who said what inside ORM.
+
+**Every finding is checked against your database before you see it.** Each
+theme, concern, conflict and proposal must cite the responses it rests on, and
+ORM verifies that each cited response exists, that the stance counts match the
+rows exactly, and that no proposal claims more support than it cites. If any of
+that fails, **the whole run is refused**: it is kept, marked as refused, and the
+reasons are listed — but none of it is shown to you as a finding. That is
+deliberate. Invented support reads exactly like real support.
+
+A section with fewer than three engaged reviewers comes back as *insufficient
+input* rather than as a recommendation drawn from one or two voices.
+
+## 8. Accept or reject each change
+
+Each proposal is shown as tracked changes — the current wording beside the
+proposed wording, the reason, and how many responses it rests on. For each one:
+
+- **Accept** — takes it as proposed.
+- **Edit then accept** — your wording goes into the policy, not the model's.
+- **For the meeting** — not a rejection. These collect on an agenda list for the
+  committee to settle in the room.
+- **Reject** — it does not appear in the revised policy.
+
+Anything **flagged "clinical review required"** touches a patient-safety
+provision, a clinical threshold, or the right to decline an unsafe case. ORM adds
+that flag itself when a change rests on a safety concern or its wording is
+clinical — it does not wait for the model to volunteer it. Those should be
+confirmed by a consultant anaesthetist or surgeon before the policy goes to
+Management. ORM will not block you; it will say so.
+
+## 9. Generate the revised policy
+
+Set the version (0.3 after the review, 1.0 once Management approves) and
+**Generate**. The document is built from **accepted changes only**, with a change
+log linking every one to its reason and its supporting responses.
+
+> **If a change could not be applied, the page says so and you must act on it.**
+> A wording change names the text it replaces. If that text has been edited since
+> the analysis ran, the substitution finds nothing — so instead of silently
+> producing a document without your change, ORM counts it, names it in the change
+> log, and tells you to put it in by hand. Do not send the document to Management
+> with unapplied changes outstanding.
+
+## 10. Exports
+
+From the same page:
+
+- **Revised policy + change log** — Markdown, with the approval table.
+- **Synthesis report** — Markdown, stating plainly that it was AI-drafted and
+  automatically checked against the responses.
+- **All responses** — CSV, opens in Excel.
+
+Whether a CSV carries names, roles only, or neither follows the round's results
+visibility setting, not a checkbox on the export.
+
+Both documents are Markdown, which Word opens directly. A true `.docx` writer is
+not in ORM; if you need one, say so.
+
+## Trying it without the committee
+
+`npx tsx scripts/seed-policy-review-demo.ts --yes` creates a demo round with
+twelve invented reviewers — no real names — containing a lone patient-safety
+objection, a genuine Anaesthesia-versus-Laboratory conflict on the upload time,
+and two competing values for one deadline. It prints what a correct analysis must
+say, so you can judge the output against known answers before trusting it on the
+real thing.
 
 ---
 

@@ -31,6 +31,7 @@ import {
   Play,
   Send,
   ShieldAlert,
+  Sparkles,
   Square,
   UserPlus,
   Users,
@@ -307,6 +308,13 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
               <UserPlus className="h-3.5 w-3.5" />
               Invite
             </button>
+            <Link
+              href={`/dashboard/policy-review/${params.id}/analysis`}
+              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Analysis &amp; decisions
+            </Link>
           </div>
         )}
       </header>
