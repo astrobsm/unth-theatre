@@ -29,6 +29,7 @@ import {
   hashPolicyInviteToken,
   inviteExpiryFor,
   policyInviteState,
+  INVITE_PROBLEM_MESSAGE,
   type InviteProblem,
 } from './invite';
 import {
@@ -107,8 +108,16 @@ export async function resolveReviewer(opts: {
     };
   }
 
+  // Neither a token nor a round: this request names no review at all. That is
+  // NOT the same thing as needing to sign in, and pairing the NOT_FOUND code
+  // with a "please sign in" message -- as this did -- tells somebody who
+  // part-copied a link to go and do something that will not help.
   if (!opts.roundId) {
-    return { ok: false, problem: 'NOT_FOUND', message: SIGN_IN_MESSAGE };
+    return {
+      ok: false,
+      problem: 'NOT_FOUND',
+      message: INVITE_PROBLEM_MESSAGE.NOT_FOUND,
+    };
   }
 
   if (!opts.user?.id) {
