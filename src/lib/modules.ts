@@ -94,6 +94,10 @@ export const MODULES: AppModule[] = [
   // a narrow role is that it can be handed out freely.
   { id: 'patients', label: 'Patients', paths: ['/dashboard/patients'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER'], category: 'Patient' },
   { id: 'surgeries', label: 'Surgeries', paths: ['/dashboard/surgeries'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER'], category: 'Patient' },
+  // Planning, before a case is a case. Deliberately open to the same people
+  // who can book one: a plan nobody with booking rights can see is a plan
+  // that gets re-typed into the booking form from a WhatsApp message.
+  { id: 'surgery-drafts', label: 'Planned Cases', paths: ['/dashboard/surgery-drafts'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER'], category: 'Patient' },
   { id: 'cancellations', label: 'Cancellations', paths: ['/dashboard/cancellations'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
 
   // Pre-operative

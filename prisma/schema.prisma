@@ -15193,3 +15193,69 @@ model PolicyFinalProposal {
   @@index([roundId, generatedAt])
   @@map("policy_final_proposals")
 }
+
+/// A case a unit is planning, before it has a date.
+///
+/// Not a surgery. Nothing here is on a list, holds a theatre, picks a pack
+/// or quotes a deposit. Publishing it creates an ordinary Surgery through
+/// the ordinary booking route, and this row then records which one.
+model SurgeryScheduleDraft {
+  id           String @id @default(uuid())
+
+  /// Matches Surgery.unit and SurgicalUnit.name. Text, as everywhere else.
+  unit         String
+  subspecialty String
+
+  /// Null until the patient is registered. Publishing requires it; holding
+  /// the plan does not, because units plan around a person before the
+  /// folder exists.
+  patientId           String?
+  patientName         String?
+  patientFolderNumber String?
+
+  surgeonId   String?
+  surgeonName String?
+
+  procedureName        String
+  additionalProcedures String?
+  indication           String?
+  magnitude            String?
+  surgeryType          String  @default("ELECTIVE")
+  anesthesiaType       String?
+  estimatedDuration    Int     @default(60)
+
+  /// What the unit is aiming for. Advisory: the date booked is chosen at
+  /// the moment of publishing, which is the whole point of the module.
+  targetDate    DateTime?
+  preferredTime String?
+
+  /// LOW | NORMAL | HIGH. How soon the unit wants it, which is a different
+  /// question from ELECTIVE/URGENT/EMERGENCY and is theirs to answer.
+  priority String  @default("NORMAL")
+  notes    String?
+
+  /// DRAFT | PUBLISHED | WITHDRAWN
+  status String @default("DRAFT")
+
+  /// Set when published. A second press cannot make a second case, because
+  /// the draft already names the one it made.
+  publishedSurgeryId String?
+  publishedAt        DateTime?
+  publishedById      String?
+  publishedForDate   DateTime?
+
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([unit, status])
+  @@index([targetDate])
+  @@index([status])
+  @@index([publishedSurgeryId])
+  @@map("surgery_schedule_drafts")
+}

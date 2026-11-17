@@ -310,6 +310,9 @@ export default function DashboardLayout({
     // === PATIENT REGISTRATION & SCHEDULING ===
     { href: '/dashboard/patients', icon: Users, label: 'Patients' },
     { href: '/dashboard/surgeries', icon: Calendar, label: 'Surgeries' },
+    // Before a case is a case. Sits next to Surgeries because that is where
+    // somebody looks when they are thinking about a list.
+    { href: '/dashboard/surgery-drafts', icon: CalendarClock, label: 'Planned Cases', badge: 'NEW' },
     { href: '/dashboard/surgeries/completed', icon: FileText, label: 'Completed Surgeries' },
     { href: '/dashboard/cancellations', icon: XCircle, label: 'Cancellations' },
     // Everyone, not the admin block: anybody can be summoned, and the
@@ -624,6 +627,7 @@ export default function DashboardLayout({
     ] },
     { type: 'group', label: 'Surgeries', icon: Calendar, hrefs: [
       '/dashboard/surgeries',
+      '/dashboard/surgery-drafts',
       '/dashboard/estimates',
       '/dashboard/cancellations',
       '/dashboard/theatre-audit/summonses',
