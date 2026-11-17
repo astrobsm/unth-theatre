@@ -29,7 +29,26 @@
 
 set -euo pipefail
 APP_DIR="${ORM_APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# The natural key differs per table, so this knows the ones it knows and
+# says so about the rest. The argument used to accept anything and then
+# fail inside Postgres with "column i.category does not exist", which reads
+# as a broken database rather than a question the script cannot answer.
 TABLE="${1:-special_need_items}"
+case "$TABLE" in
+  special_need_items)
+    KEY_SQL="lower(btrim(coalesce(i.category::text, ''))) || '|' ||
+       lower(btrim(coalesce(i.name, '')))           || '|' ||
+       lower(btrim(coalesce(i.size, '')))           || '|' ||
+       lower(btrim(coalesce(i.brand, '')))" ;;
+  magnitude_bundle_items)
+    KEY_SQL="lower(btrim(coalesce(i.magnitude::text, ''))) || '|' ||
+       lower(btrim(coalesce(i.\"itemId\", '')))" ;;
+  *)
+    echo "I do not know what makes a row of ${TABLE} the same thing twice." >&2
+    echo "Known: special_need_items, magnitude_bundle_items." >&2
+    echo "Add its natural key to this script rather than guessing one." >&2
+    exit 2 ;;
+esac
 
 if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'
 else B=""; G=""; Y=""; R=""; N=""; fi
@@ -66,11 +85,7 @@ trap cleanup EXIT
 # than two. Tab separates the id from the key because a tab cannot occur in
 # any of these columns.
 read -r -d '' SQL <<SQL || true
-select i.id || E'\t' ||
-       lower(btrim(coalesce(i.category::text, ''))) || '|' ||
-       lower(btrim(coalesce(i.name, '')))           || '|' ||
-       lower(btrim(coalesce(i.size, '')))           || '|' ||
-       lower(btrim(coalesce(i.brand, '')))
+select i.id || E'\t' || ${KEY_SQL}
   from "${TABLE}" i
 SQL
 
