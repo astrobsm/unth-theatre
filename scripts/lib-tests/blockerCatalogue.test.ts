@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   describeBlocker, readFieldProblems, humaniseField, HANDLED_ELSEWHERE, isAuthEndpoint,
+  isAmbientEndpoint,
 } from '../../src/lib/blockers/catalogue';
 
 const refuse = (over: Partial<Parameters<typeof describeBlocker>[0]> = {}) => ({
@@ -353,5 +354,69 @@ describe('raising a block from the form itself', () => {
     try {
       expect(() => raiseBlock({ title: 'x', why: 'y' })).not.toThrow();
     } finally { (globalThis as any).window = prev; }
+  });
+});
+
+describe('requests the person did not make', () => {
+  // A theatre machine showed "The server could not complete this —
+  // something failed on the server, and your entry was not saved" over a
+  // duty sheet, repeatedly. Nothing had been saved and nothing had failed:
+  // the radio had asked the server to voice a line and the server had said
+  // ElevenLabs was not configured, which is not a fault — the key is
+  // optional and the browser voice takes over. The dialog then offered
+  // "Try again", which re-sent a request that could not succeed, so it
+  // returned until the tab was closed.
+
+  it('says nothing when the voice service is not configured', () => {
+    expect(describeBlocker({
+      status: 503, url: '/api/radio/tts', method: 'POST',
+      body: { error: 'ElevenLabs not configured. Set ELEVENLABS_API_KEY env var.' },
+    })).toBeNull();
+  });
+
+  it('says nothing for the radio telemetry nobody typed', () => {
+    ['/api/radio/played', '/api/radio/acknowledge'].forEach((url) => {
+      expect(describeBlocker({ status: 500, url, method: 'POST', body: { error: 'boom' } }))
+        .toBeNull();
+    });
+  });
+
+  it('stays silent even when the device is offline', () => {
+    // The offline branch is otherwise the first thing decided, and
+    // "saved, but not sent yet" is just as wrong about a request nobody
+    // made as "your entry was not saved" is.
+    expect(describeBlocker({
+      status: 0, url: '/api/radio/tts', method: 'POST', body: {}, offline: true,
+    })).toBeNull();
+  });
+
+  it('still speaks up for a button somebody actually pressed', () => {
+    // The line between the two halves. Making an announcement and setting
+    // the volume are deliberate acts, and being told they did not work is
+    // the right answer.
+    ['/api/radio/announce', '/api/radio/volume'].forEach((url) => {
+      const b = describeBlocker({ status: 503, url, method: 'POST', body: { error: 'down' } });
+      expect(b).not.toBeNull();
+      expect(b!.code).toBe('SERVER_ERROR');
+    });
+  });
+
+  it('still explains a genuine failure to save', () => {
+    const b = describeBlocker({
+      status: 500, url: '/api/surgeries', method: 'POST', body: { error: 'boom' },
+    });
+    expect(b!.code).toBe('SERVER_ERROR');
+    expect(b!.why).toContain('was not saved');
+  });
+
+  it('recognises the endpoint through an absolute url', () => {
+    expect(isAmbientEndpoint('https://unth-theatre.link/api/radio/tts')).toBe(true);
+    expect(isAmbientEndpoint('/api/radio/tts')).toBe(true);
+    expect(isAmbientEndpoint('/api/radio/announce')).toBe(false);
+    expect(isAmbientEndpoint('/api/surgeries')).toBe(false);
+  });
+
+  it('does not match a route that merely starts with the same letters', () => {
+    expect(isAmbientEndpoint('/api/radio/ttsx')).toBe(false);
   });
 });

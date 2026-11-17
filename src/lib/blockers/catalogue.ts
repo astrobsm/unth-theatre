@@ -227,6 +227,48 @@ export function isAuthEndpoint(url: string): boolean {
   }
 }
 
+/**
+ * Requests nobody made.
+ *
+ * This dialog says "your entry was not saved", and that sentence is only
+ * true where there was an entry. Some requests are made BY the application,
+ * on its own, while somebody is doing something else entirely: voicing an
+ * announcement, reporting that a track finished, acknowledging one.
+ *
+ * A theatre machine showed this for days. The radio asked the server to
+ * voice a line, the server answered 503 "ElevenLabs not configured" —
+ * which is not a fault, the key is optional and Kokoro is the primary
+ * voice — and a nurse editing a duty sheet was told the server had failed
+ * and her entry was lost. Neither half was true. Worse, the dialog offers
+ * "Try again", and trying again re-sent a request that could never succeed
+ * until somebody set an environment variable, so it came straight back.
+ *
+ * These endpoints stay silent. A failure still logs, and the features
+ * themselves already degrade: the voice falls back to the browser's own,
+ * and an acknowledgement is kept in localStorage and re-sent later. What
+ * is removed is the interruption, not the handling.
+ *
+ * /api/radio/announce and /api/radio/volume are NOT here: somebody pressed
+ * a button for those, and being told it did not work is the right answer.
+ */
+const AMBIENT_ENDPOINTS = [
+  '/api/radio/tts',
+  '/api/radio/played',
+  '/api/radio/acknowledge',
+];
+
+export function isAmbientEndpoint(url: string): boolean {
+  try {
+    const base = typeof window === 'undefined'
+      ? 'http://localhost' : window.location.origin;
+    const path = new URL(url, base).pathname;
+    return AMBIENT_ENDPOINTS.some((a) => path === a || path.startsWith(`${a}/`));
+  } catch {
+    // Not parseable: fall back to the literal prefix rather than guessing.
+    return AMBIENT_ENDPOINTS.some((a) => url.indexOf(a) === 0);
+  }
+}
+
 /** Which module a URL belongs to, for wording and for where to send people. */
 function moduleOf(url: string): string {
   const m = /\/api\/([^/?]+)/.exec(url);
@@ -248,6 +290,11 @@ export function describeBlocker(refusal: Refusal): Blocker | null {
   const fields = readFieldProblems(body);
 
   if (code && HANDLED_ELSEWHERE.has(code)) return null;
+
+  // Before anything else, including the offline branch: a request the
+  // person did not make cannot have lost their work, so there is nothing
+  // to tell them and no reason to take the screen away from them.
+  if (isAmbientEndpoint(url)) return null;
 
   // ---- The device is not on the network ----------------------------------
   if (offline || status === 0) {
