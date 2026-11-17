@@ -40,49 +40,22 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.join(__dirname, '..');
-
-/** KEY=value / KEY="value" out of a dotenv file. Absent file → {}. */
-function readEnvFile(name) {
-  const file = path.join(ROOT, name);
-  if (!fs.existsSync(file)) return {};
-  const out = {};
-  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
-  }
-  return out;
-}
-
-/** Host and database, with the password removed, for logging. */
-function describe(url) {
-  try {
-    const u = new URL(url);
-    return `${u.host}${u.pathname}`;
-  } catch {
-    return '(unparseable url)';
-  }
-}
+// ONE answer to "which database does this node use", shared with everything
+// else that writes to it. See the header of scripts/lib/nodeDatabase.js: a
+// second script resolving it independently is this same bug under a new name.
+const { ROOT, describe, resolveNodeDatabase } = require('./lib/nodeDatabase');
 
 function main() {
-  const localEnv = readEnvFile('.env.local');
-
-  // The app's own precedence: .env.local wins, because that is what Next.js
-  // loads. Anything else here would migrate a database the app never opens.
-  const url =
-    localEnv.DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    readEnvFile('.env').DATABASE_URL ||
-    process.env.POSTGRES_URL;
+  const resolved = resolveNodeDatabase();
+  const url = resolved.url;
 
   if (!url) {
     console.log('[migrate-node-db] No DATABASE_URL anywhere — skipping (build without a database).');
     return;
   }
 
-  const source = localEnv.DATABASE_URL ? '.env.local (this node\'s own database)' : 'ambient environment / .env';
   console.log(`[migrate-node-db] migrating ${describe(url)}`);
-  console.log(`[migrate-node-db] url taken from: ${source}`);
+  console.log(`[migrate-node-db] url taken from: ${resolved.source}`);
 
   // DIRECT_URL is pinned to the same database ONLY when we chose the url
   // ourselves, from .env.local. That is the theatre server's own Postgres,
@@ -95,8 +68,8 @@ function main() {
   // which survives a transaction pooler. Overriding it there fails the build,
   // which is precisely what it did.
   const env = { ...process.env, DATABASE_URL: url };
-  if (localEnv.DATABASE_URL) {
-    env.DIRECT_URL = localEnv.DIRECT_URL || url;
+  if (resolved.isNodeLocal) {
+    env.DIRECT_URL = resolved.directUrl;
   }
 
   execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'db-bootstrap.js')], { stdio: 'inherit', env, cwd: ROOT });
