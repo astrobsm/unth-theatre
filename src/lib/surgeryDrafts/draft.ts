@@ -45,6 +45,16 @@ export interface ScheduleDraft {
   estimatedDuration?: number | null;
   targetDate?: string | Date | null;
   preferredTime?: string | null;
+
+  /** What the unit says the case will need. Requests, not findings. */
+  needBloodTransfusion?: boolean | null;
+  needDiathermy?: boolean | null;
+  needStereo?: boolean | null;
+  needMontrellMattress?: boolean | null;
+  otherSpecialNeeds?: string | null;
+  isDayCase?: boolean | null;
+  postOpDestination?: string | null;
+  location?: string | null;
   priority?: string | null;
   notes?: string | null;
   status: string;
@@ -171,6 +181,26 @@ export function publishPayload(draft: ScheduleDraft, choice: PublishChoice): Rec
     // of the draft that would otherwise be lost, and it is usually the reason
     // the case was planned the way it was.
     remarks: text(draft.notes) || null,
+
+    // WHAT THE CASE NEEDS, CARRIED RATHER THAN RE-ASKED.
+    //
+    // These used to be absent from the plan, so publishing left them for
+    // somebody to enter afterwards in the booking screens — at the moment
+    // they are trying to get a case onto a list, which is the moment they are
+    // least likely to stop and fill in a pack request. The unit stated them a
+    // fortnight ago; the booking route is told what the unit said.
+    //
+    // Still NOT sent: the labs, the consent, the risk scores and the team.
+    // The plan does not hold those, and inventing them here would be
+    // recording as fact things nobody has checked.
+    location: text(draft.location) || null,
+    needBloodTransfusion: Boolean(draft.needBloodTransfusion),
+    needDiathermy: Boolean(draft.needDiathermy),
+    needStereo: Boolean(draft.needStereo),
+    needMontrellMattress: Boolean(draft.needMontrellMattress),
+    otherSpecialNeeds: text(draft.otherSpecialNeeds) || null,
+    isDayCase: Boolean(draft.isDayCase),
+    postOpDestination: text(draft.postOpDestination) || null,
   };
 }
 

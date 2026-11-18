@@ -32,6 +32,7 @@ export const FULL_ACCESS_ROLES = [
 
 // Convenience role groupings used by defaultRoles below.
 import { AUDIT_COMMITTEE_ROLES } from './emergencyEscalation';
+import { PREPARATION_ROLES } from './surgeryDrafts/access';
 
 const CLINICAL_CORE = [
   'CHIEF_MEDICAL_DIRECTOR', 'CMAC', 'DC_MAC',
@@ -97,7 +98,11 @@ export const MODULES: AppModule[] = [
   // Planning, before a case is a case. Deliberately open to the same people
   // who can book one: a plan nobody with booking rights can see is a plan
   // that gets re-typed into the booking form from a WhatsApp message.
-  { id: 'surgery-drafts', label: 'Planned Cases', paths: ['/dashboard/surgery-drafts'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER'], category: 'Patient' },
+  // The preparation roles READ this list and write nothing — the refusal is
+  // on the route (lib/surgeryDrafts/access.ts), not on the menu. They are here
+  // because the point of planning a fortnight ahead is that somebody can order
+  // what the case needs, and they could not see a plan until it was booked.
+  { id: 'surgery-drafts', label: 'Planned Cases', paths: ['/dashboard/surgery-drafts'], defaultRoles: [...CLINICAL_CORE, 'HOUSE_OFFICER', 'BOOKING_OFFICER', ...PREPARATION_ROLES], category: 'Patient' },
   { id: 'cancellations', label: 'Cancellations', paths: ['/dashboard/cancellations'], defaultRoles: CLINICAL_CORE, category: 'Patient' },
 
   // Pre-operative

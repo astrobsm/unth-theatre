@@ -17,6 +17,7 @@ import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/apiMiddleware';
 import { DRAFT_PRIORITIES, DRAFT_STATUSES } from '@/lib/surgeryDrafts/draft';
+import { refuseIfReadOnly } from '@/lib/surgeryDrafts/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +54,28 @@ const draftSchema = z.object({
 
   priority: z.enum(DRAFT_PRIORITIES).default('NORMAL'),
   notes: emptyToNull(z.string()),
+
+  // ── What the case will need ───────────────────────────────────────────
+  // Requests, not findings. The unit saying what to have ready, in the same
+  // words the booking form uses, so publishing hands them straight on rather
+  // than asking again at the moment somebody is trying to book.
+  //
+  // z.boolean(), NOT z.coerce.boolean(). Coercion reads the STRING "false" as
+  // true, so a client that serialised these as text would silently request
+  // blood for every case it sent. The form sends real booleans; anything else
+  // is refused and says so, which is the failure that gets noticed.
+  needBloodTransfusion: z.boolean().default(false),
+  needDiathermy: z.boolean().default(false),
+  needStereo: z.boolean().default(false),
+  needMontrellMattress: z.boolean().default(false),
+  otherSpecialNeeds: emptyToNull(z.string()),
+
+  isDayCase: z.boolean().default(false),
+  postOpDestination: emptyToNull(z.string()),
+
+  // The site, not a theatre. See the model comment for why there is no
+  // theatre here.
+  location: emptyToNull(z.string()),
 });
 
 /** A date-only string from a date input, kept as the date the unit meant. */
@@ -99,6 +122,12 @@ export async function POST(request: NextRequest) {
   const { error, session } = await requireAuth();
   if (error) return error;
 
+  // The pharmacy, the pack provider and the store READ this list so they can
+  // begin preparing; they do not plan operations. Refused here rather than by
+  // hiding the button, because a screen is not a permission.
+  const denied = refuseIfReadOnly((session!.user as { role?: string }).role, 'add a plan');
+  if (denied) return NextResponse.json({ error: denied }, { status: 403 });
+
   try {
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
@@ -133,6 +162,14 @@ export async function POST(request: NextRequest) {
         preferredTime: d.preferredTime,
         priority: d.priority,
         notes: d.notes,
+        needBloodTransfusion: d.needBloodTransfusion,
+        needDiathermy: d.needDiathermy,
+        needStereo: d.needStereo,
+        needMontrellMattress: d.needMontrellMattress,
+        otherSpecialNeeds: d.otherSpecialNeeds,
+        isDayCase: d.isDayCase,
+        postOpDestination: d.postOpDestination,
+        location: d.location,
         status: 'DRAFT',
         createdById: user.id ?? null,
         createdByName: user.name ?? null,

@@ -45,3 +45,20 @@ export function theatreDayBounds(day: Date): { start: Date; end: Date } {
 export function dayKey(day: Date): string {
   return day.toISOString().slice(0, 10);
 }
+
+/**
+ * The theatre day after this one.
+ *
+ * Exists because "am I coming?" is a question worth asking the evening
+ * before, not at eight the next morning. The availability board asked only
+ * about today, so the first chance a surgeon had to say they could not make
+ * a Tuesday list was Tuesday — by which time the theatre has been laid up
+ * and the patient has been starved.
+ *
+ * Plain addition of a day, deliberately: these are UTC instants standing for
+ * WAT midnights, and 24 hours from one is the next, with no daylight saving
+ * anywhere in the region to break it.
+ */
+export function nextDay(day: Date = theatreDay()): Date {
+  return new Date(day.getTime() + 24 * 60 * 60_000);
+}

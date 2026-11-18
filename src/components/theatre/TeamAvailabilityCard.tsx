@@ -27,6 +27,7 @@ import {
   statusLine, summaryLine, type AvailabilityStatus, type TeamAvailabilitySummary,
   type TeamMemberAvailability,
 } from '@/lib/theatre/availability';
+import { dayKey, nextDay } from '@/lib/theatre/day';
 
 interface CaseRow {
   id: string;
@@ -41,6 +42,8 @@ interface CaseRow {
   myRole: string | null;
   myStatus: AvailabilityStatus | null;
   summary: TeamAvailabilitySummary;
+  /** Which of the two days this case is on. Set by this component. */
+  when: 'today' | 'tomorrow';
 }
 
 const CHIP: Record<string, string> = {
@@ -58,14 +61,42 @@ export default function TeamAvailabilityCard() {
   const [eta, setEta] = useState('20');
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Today's list, and tomorrow's.
+   *
+   * TOMORROW IS THE POINT. This asked only about today, so the first chance
+   * somebody had to say they could not make a Tuesday list was Tuesday — by
+   * which time the theatre is laid up, the patient is starved, and the only
+   * remaining options are a late swap or a cancellation. Asked the evening
+   * before, the same answer is a change of plan rather than an incident.
+   *
+   * Two requests rather than a date range on the endpoint: it answers for one
+   * theatre day, every caller of it expects one theatre day, and widening it
+   * would change what the CMD's board and the status screens are asking for
+   * as a side effect of changing this panel.
+   *
+   * They settle independently. If tomorrow's request fails, today's list
+   * still draws — the panel is an aid, and half of it is better than a blank.
+   */
   const load = useCallback(async () => {
+    const fetchDay = async (when: 'today' | 'tomorrow', query: string): Promise<CaseRow[]> => {
+      try {
+        const res = await fetch(`/api/case-availability${query}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        const rows: CaseRow[] = Array.isArray(data.cases) ? data.cases : [];
+        return rows.map((c) => ({ ...c, when }));
+      } catch {
+        return [];
+      }
+    };
+
     try {
-      const res = await fetch('/api/case-availability');
-      if (!res.ok) return;
-      const data = await res.json();
-      setCases(Array.isArray(data.cases) ? data.cases : []);
-    } catch {
-      /* silence: this panel is an aid, not the dashboard */
+      const [today, tomorrow] = await Promise.all([
+        fetchDay('today', ''),
+        fetchDay('tomorrow', `?date=${dayKey(nextDay())}`),
+      ]);
+      setCases([...today, ...tomorrow]);
     } finally {
       setLoaded(true);
     }
@@ -103,7 +134,12 @@ export default function TeamAvailabilityCard() {
     }
   };
 
-  // Nothing on the list, nothing on the dashboard.
+  const todayCount = cases.filter((c) => c.when === 'today').length;
+  const tomorrowCount = cases.length - todayCount;
+
+  // Nothing on either list, nothing on the dashboard. A permanent empty panel
+  // saying "you have no cases" is a thing people learn to scroll past, and
+  // then they scroll past it on the morning it is not empty.
   if (!loaded || cases.length === 0) return null;
 
   return (
@@ -114,11 +150,19 @@ export default function TeamAvailabilityCard() {
         </div>
         <div className="min-w-0">
           <h2 className="text-lg font-bold text-gray-900">
-            You are on {cases.length === 1 ? 'a case' : `${cases.length} cases`} today
+            {/*
+              Says WHICH days, because the panel now carries tomorrow as well
+              and "you are on 3 cases today" would be wrong about two of them.
+            */}
+            You are on {cases.length === 1 ? 'a case' : `${cases.length} cases`}
+            {todayCount > 0 && tomorrowCount > 0
+              ? ' today and tomorrow'
+              : tomorrowCount > 0 ? ' tomorrow' : ' today'}
           </h2>
           <p className="text-sm text-gray-600">
             Say whether you are available. Everyone else on the case sees your answer,
             so nobody has to ring round.
+            {tomorrowCount > 0 && ' Answering the night before is what makes it worth asking.'}
           </p>
         </div>
       </div>
@@ -128,8 +172,20 @@ export default function TeamAvailabilityCard() {
       )}
 
       <div className="mt-4 space-y-4">
-        {cases.map((c) => (
-          <div key={c.id} className="rounded-xl border border-gray-200 p-3">
+        {cases.map((c, i) => (
+          <div key={c.id}>
+            {/*
+              A rule between the days rather than a chip on every row. Today's
+              cases are the ones somebody is about to walk into and must stay
+              first and unqualified; tomorrow's are a different act — a plan
+              being confirmed — and are marked once, where the list turns.
+            */}
+            {c.when === 'tomorrow' && (i === 0 || cases[i - 1].when !== 'tomorrow') && (
+              <p className="mb-2 mt-1 text-xs font-bold uppercase tracking-wide text-blue-700">
+                Tomorrow
+              </p>
+            )}
+            <div className="rounded-xl border border-gray-200 p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900">
@@ -268,6 +324,7 @@ export default function TeamAvailabilityCard() {
                   “Not yet said” is not a refusal — they may be operating, teaching or out of signal.
                 </p>
               )}
+            </div>
             </div>
           </div>
         ))}

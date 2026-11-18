@@ -15231,6 +15231,31 @@ model SurgeryScheduleDraft {
   anesthesiaType       String?
   estimatedDuration    Int     @default(60)
 
+  /// WHAT THE CASE WILL NEED. Requests, not findings: the unit saying what
+  /// to have ready, in the same words the booking form uses, so publishing
+  /// hands them straight to POST /api/surgeries instead of asking for them
+  /// again at the moment somebody is trying to get a case onto a list.
+  ///
+  /// They are also the only reason the pharmacy and the pack provider can do
+  /// anything with a plan. A plan that does not say what it needs tells them
+  /// only that an operation is coming.
+  needBloodTransfusion Boolean @default(false)
+  needDiathermy        Boolean @default(false)
+  needStereo           Boolean @default(false)
+  needMontrellMattress Boolean @default(false)
+  otherSpecialNeeds    String?
+
+  /// Where the patient goes afterwards. A day case nobody knew was a day
+  /// case occupies a bed that had been given away.
+  isDayCase         Boolean @default(false)
+  postOpDestination String?
+
+  /// The site the unit operates at. NOT a theatre -- the booking form
+  /// deliberately stopped letting a booker choose a room, because a unit's
+  /// cases then scattered across three of them. Location is how the unit
+  /// list is filtered, which is why it is asked first.
+  location String?
+
   /// What the unit is aiming for. Advisory: the date booked is chosen at
   /// the moment of publishing, which is the whole point of the module.
   targetDate    DateTime?

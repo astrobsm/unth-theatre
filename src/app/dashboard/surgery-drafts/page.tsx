@@ -17,7 +17,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CalendarDays, Plus, Send, Trash2, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, Plus, Send, Trash2, X, AlertTriangle, CheckCircle2, Eye } from 'lucide-react';
+import ProcedurePicker from '@/components/ProcedurePicker';
+import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
+import { isReadOnlyRole } from '@/lib/surgeryDrafts/access';
 
 import {
   type ScheduleDraft,
@@ -32,26 +35,98 @@ import {
 const MAGNITUDES = ['MAJOR', 'INTERMEDIATE', 'MINOR', 'SUPER_MAJOR'];
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH'];
 
+// EVERY LIST THE BOOKING FORM OFFERS, OFFERED HERE IN THE SAME WORDS.
+//
+// This form was eleven free-text boxes, including one asking for a patient's
+// UUID to be pasted in. Everything it collected had to be checked, corrected
+// or re-chosen when the plan was published, because a typed unit name and a
+// typed surgeon name do not resolve to the rows the booking route needs. The
+// values below are the booking form's own, so what is planned is what is
+// booked.
+const SURGERY_TYPES = [
+  { value: 'ELECTIVE', label: 'Elective' },
+  { value: 'URGENT', label: 'Urgent' },
+  { value: 'EMERGENCY', label: 'Emergency' },
+];
+
+const ANAESTHESIA_TYPES = [
+  { value: 'GENERAL', label: 'General Anaesthesia (GA)' },
+  { value: 'SPINAL', label: 'Spinal' },
+  { value: 'EPIDURAL', label: 'Epidural' },
+  { value: 'COMBINED_SPINAL_EPIDURAL', label: 'Combined Spinal-Epidural (CSE)' },
+  { value: 'REGIONAL', label: 'Regional / Block' },
+  { value: 'SEDATION', label: 'Sedation / MAC' },
+  { value: 'LOCAL', label: 'Local Anaesthesia' },
+];
+
+const POST_OP_DESTINATIONS = [
+  { value: 'GENERAL_WARD', label: 'General Ward' },
+  { value: 'ICU', label: 'Intensive Care Unit (ICU)' },
+  { value: 'HDU', label: 'High Dependency Unit (HDU)' },
+  { value: 'RECOVERY_THEN_WARD', label: 'Recovery, then Ward' },
+  { value: 'DAY_CASE_DISCHARGE', label: 'Day-case discharge (home same day)' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+interface PatientOption {
+  id: string;
+  name: string;
+  folderNumber: string | null;
+  ptNumber: string | null;
+  ward?: string | null;
+}
+
+interface SurgeonOption {
+  id: string;
+  fullName: string;
+  role?: string | null;
+}
+
+interface UnitOption {
+  id: string;
+  name: string;
+  subspecialty: string;
+  location: string;
+}
+
 const emptyForm = {
+  location: '',
   unit: '',
   subspecialty: '',
   patientId: '',
   patientName: '',
   patientFolderNumber: '',
+  surgeonId: '',
   surgeonName: '',
   procedureName: '',
   indication: '',
   magnitude: '',
   surgeryType: 'ELECTIVE',
+  anesthesiaType: '',
   estimatedDuration: '60',
   targetDate: '',
   preferredTime: '',
   priority: 'NORMAL',
   notes: '',
+
+  // What the case will need. Asked here so the pharmacy and the pack
+  // provider can act on the plan, and so publishing does not ask again.
+  needBloodTransfusion: false,
+  needDiathermy: false,
+  needStereo: false,
+  needMontrellMattress: false,
+  otherSpecialNeeds: '',
+  isDayCase: false,
+  postOpDestination: '',
 };
 
 export default function SurgeryDraftsPage() {
-  const { status: authStatus } = useSession();
+  const { data: session, status: authStatus } = useSession();
+  // The pharmacy, the pack provider and the store read this list so they can
+  // begin preparing. The routes refuse their writes (lib/surgeryDrafts/
+  // access.ts); this only stops the page offering what the server will
+  // refuse, which is a kindness rather than a control.
+  const readOnly = isReadOnlyRole((session?.user as { role?: string } | undefined)?.role);
   const [drafts, setDrafts] = useState<ScheduleDraft[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +136,21 @@ export default function SurgeryDraftsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null);
+
+  // The lists every dropdown is drawn from, loaded from the database once.
+  // `unitRows` rather than `units`: the filter at the top of this page
+  // already holds the unit NAMES that have something planned, which is a
+  // different question from which units exist.
+  const [patients, setPatients] = useState<PatientOption[]>([]);
+  const [surgeons, setSurgeons] = useState<SurgeonOption[]>([]);
+  const [unitRows, setUnitRows] = useState<UnitOption[]>([]);
+  const [locations, setLocations] = useState<string[]>([]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [surgeonSearch, setSurgeonSearch] = useState('');
+  // A patient the unit is planning around who is not registered yet. The
+  // whole point of a plan is that it can exist before the folder does, so
+  // this stays — as a deliberate choice, not as the only option.
+  const [unregistered, setUnregistered] = useState(false);
 
   // Which draft's Publish panel is open, and what date/time it is set to.
   const [publishing, setPublishing] = useState<string | null>(null);
@@ -88,6 +178,63 @@ export default function SurgeryDraftsPage() {
   useEffect(() => {
     if (authStatus === 'authenticated') load();
   }, [authStatus, load]);
+
+  /**
+   * The lists behind the dropdowns.
+   *
+   * All four fail quietly and independently. A plan is worth holding even
+   * when the staff list could not be reached, and a page that refused to open
+   * because one lookup timed out would send the unit back to the notebook
+   * this module exists to replace.
+   */
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    const get = async (url: string, take: (d: unknown) => void) => {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (r.ok) take(await r.json());
+      } catch { /* the field falls back to what is typed */ }
+    };
+    void get('/api/patients?limit=200', (d) => {
+      const list = Array.isArray(d) ? d : ((d as { patients?: unknown[] })?.patients ?? []);
+      setPatients(list as PatientOption[]);
+    });
+    void get('/api/users?roles=SURGEON,CONSULTANT_SURGEON&status=APPROVED&slim=1', (d) => {
+      const list = Array.isArray(d) ? d : ((d as { users?: unknown[] })?.users ?? []);
+      setSurgeons((list as SurgeonOption[]).slice().sort(
+        (a, b) => (a.fullName || '').localeCompare(b.fullName || ''),
+      ));
+    });
+    void get('/api/surgical-units?activeOnly=true', (d) => {
+      const list = Array.isArray(d) ? d : ((d as { units?: unknown[] })?.units ?? []);
+      setUnitRows(list as UnitOption[]);
+    });
+    void get('/api/locations', (d) => {
+      if (Array.isArray(d)) setLocations(d as string[]);
+    });
+  }, [authStatus]);
+
+  /** Patients matching what has been typed, capped so the list stays usable. */
+  const visiblePatients = useMemo(() => {
+    const q = patientSearch.trim().toLowerCase();
+    return patients
+      .filter((p) => !q
+        || (p.name || '').toLowerCase().includes(q)
+        || (p.folderNumber || '').toLowerCase().includes(q)
+        || (p.ptNumber || '').toLowerCase().includes(q))
+      .slice(0, 50);
+  }, [patients, patientSearch]);
+
+  const visibleSurgeons = useMemo(() => {
+    const q = surgeonSearch.trim().toLowerCase();
+    return surgeons.filter((x) => !q || (x.fullName || '').toLowerCase().includes(q)).slice(0, 50);
+  }, [surgeons, surgeonSearch]);
+
+  /** The units at the chosen site. No site chosen means all of them. */
+  const visibleUnits = useMemo(
+    () => unitRows.filter((u) => !form.location || u.location === form.location),
+    [unitRows, form.location],
+  );
 
   const save = async () => {
     if (!form.unit.trim() || !form.subspecialty.trim() || !form.procedureName.trim()) {
@@ -228,13 +375,31 @@ export default function SurgeryDraftsPage() {
             a pack until you publish it.
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" /> New plan
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" /> New plan
+          </button>
+        )}
       </div>
+
+      {/*
+        Said rather than left to be inferred from a missing button. Somebody
+        given a screen deliberately should be told what it is for, or the
+        absence of the controls reads as a fault.
+      */}
+      {readOnly && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 flex items-start gap-2">
+          <Eye className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            Every planned case across all units, so you can order and pack ahead of the
+            booking. Plans are written by the unit that owns the case; you cannot change
+            them here.
+          </span>
+        </div>
+      )}
 
       {notice && (
         <div
@@ -260,19 +425,208 @@ export default function SurgeryDraftsPage() {
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h2 className="font-semibold text-gray-900 mb-3">A case the unit is planning</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Unit *" value={form.unit} onChange={(v) => setForm({ ...form, unit: v })} placeholder="e.g. GS Unit I" />
-            <Field label="Subspecialty *" value={form.subspecialty} onChange={(v) => setForm({ ...form, subspecialty: v })} placeholder="e.g. General Surgery" />
-            <Field label="Patient name" value={form.patientName} onChange={(v) => setForm({ ...form, patientName: v })} placeholder="If not yet registered" />
-            <Field label="Folder number" value={form.patientFolderNumber} onChange={(v) => setForm({ ...form, patientFolderNumber: v })} />
-            <Field label="Patient ID (from Patients)" value={form.patientId} onChange={(v) => setForm({ ...form, patientId: v })} placeholder="Needed to publish" />
-            <Field label="Surgeon" value={form.surgeonName} onChange={(v) => setForm({ ...form, surgeonName: v })} />
-            <Field label="Operation *" value={form.procedureName} onChange={(v) => setForm({ ...form, procedureName: v })} />
-            <Field label="Indication" value={form.indication} onChange={(v) => setForm({ ...form, indication: v })} />
-            <Select label="Magnitude" value={form.magnitude} onChange={(v) => setForm({ ...form, magnitude: v })} options={['', ...MAGNITUDES]} />
-            <Select label="Priority" value={form.priority} onChange={(v) => setForm({ ...form, priority: v })} options={PRIORITIES} />
+            {/*
+              WHOSE LIST IT IS. Site first, because the unit list is filtered
+              by it — the same order the booking form asks in, for the same
+              reason: a unit name typed by hand does not resolve to the row
+              the booking route needs, so it had to be re-chosen at publish.
+            */}
+            <Choice
+              label="Site"
+              value={form.location}
+              onChange={(v) => setForm({ ...form, location: v, unit: '', subspecialty: '' })}
+              placeholder="All sites"
+              options={locations.map((l) => ({ value: l, label: l }))}
+            />
+            <Choice
+              label="Unit *"
+              value={form.unit}
+              onChange={(v) => {
+                const u = unitRows.find((x) => x.name === v);
+                setForm({
+                  ...form,
+                  unit: v,
+                  // The unit decides the subspecialty, as it does at booking.
+                  subspecialty: u ? u.subspecialty : form.subspecialty,
+                  location: form.location || (u ? u.location : ''),
+                });
+              }}
+              placeholder={unitRows.length ? 'Choose the unit' : 'Unit list unavailable'}
+              options={visibleUnits.map((u) => ({ value: u.name, label: `${u.name} · ${u.subspecialty}` }))}
+            />
+            <Choice
+              label="Subspecialty *"
+              value={form.subspecialty}
+              onChange={(v) => setForm({ ...form, subspecialty: v })}
+              placeholder="Choose the subspecialty"
+              options={SUBSPECIALTIES.map((x) => ({ value: x, label: x }))}
+            />
+            <Choice
+              label="Surgeon"
+              value={form.surgeonId}
+              onChange={(v) => {
+                const x = surgeons.find((y) => y.id === v);
+                setForm({ ...form, surgeonId: v, surgeonName: x ? x.fullName : '' });
+              }}
+              placeholder={surgeons.length ? 'Choose the surgeon' : 'Staff list unavailable'}
+              search={surgeonSearch}
+              onSearch={setSurgeonSearch}
+              options={visibleSurgeons.map((x) => ({ value: x.id, label: x.fullName }))}
+            />
+          </div>
+
+          {/*
+            THE PATIENT. This asked for a UUID to be pasted into a text box
+            labelled "Patient ID (from Patients)" — which nobody has, so no
+            plan ever carried one, and every plan was therefore short of the
+            one thing publishing insists on.
+          */}
+          <div className="mt-3 rounded-lg border border-gray-200 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-semibold text-gray-900">Patient</span>
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={unregistered}
+                  onChange={(e) => {
+                    setUnregistered(e.target.checked);
+                    // Switching away from a chosen patient clears the id, so a
+                    // plan cannot carry one person's folder under another
+                    // person's typed name.
+                    setForm((prev) => ({
+                      ...prev, patientId: '', patientName: '', patientFolderNumber: '',
+                    }));
+                  }}
+                />
+                Not registered yet
+              </label>
+            </div>
+
+            {unregistered ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Patient name" value={form.patientName} onChange={(v) => setForm({ ...form, patientName: v })} placeholder="As the unit knows them" />
+                  <Field label="Folder or PT number" value={form.patientFolderNumber} onChange={(v) => setForm({ ...form, patientFolderNumber: v })} placeholder="If there is one" />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  The plan is held either way. Register them before publishing, then choose
+                  them here — a case cannot be booked against a name alone.
+                </p>
+              </>
+            ) : (
+              <Choice
+                label="Registered patient"
+                value={form.patientId}
+                onChange={(v) => {
+                  const pt = patients.find((x) => x.id === v);
+                  setForm({
+                    ...form,
+                    patientId: v,
+                    patientName: pt ? pt.name : '',
+                    patientFolderNumber: pt ? (pt.folderNumber || pt.ptNumber || '') : '',
+                  });
+                }}
+                placeholder={patients.length ? 'Search, then choose' : 'Patient list unavailable'}
+                search={patientSearch}
+                onSearch={setPatientSearch}
+                options={visiblePatients.map((pt) => ({
+                  value: pt.id,
+                  label: `${pt.name} · ${pt.folderNumber || pt.ptNumber || 'no number'}${pt.ward ? ` · ${pt.ward}` : ''}`,
+                }))}
+              />
+            )}
+          </div>
+
+          {/* THE OPERATION, from the procedure catalogue the booking form uses. */}
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Operation *</label>
+              <ProcedurePicker
+                subspecialty={form.subspecialty || null}
+                value={form.procedureName}
+                onChange={(v) => setForm((prev) => ({ ...prev, procedureName: v }))}
+              />
+            </div>
+            <Field label="Indication" value={form.indication} onChange={(v) => setForm({ ...form, indication: v })} placeholder="The clinical reason for operating" />
+            <Choice
+              label="Magnitude"
+              value={form.magnitude}
+              onChange={(v) => setForm({ ...form, magnitude: v })}
+              placeholder="Not decided"
+              options={MAGNITUDES.map((m) => ({ value: m, label: m.replace(/_/g, ' ') }))}
+            />
+            <Choice
+              label="Kind of case"
+              value={form.surgeryType}
+              onChange={(v) => setForm({ ...form, surgeryType: v })}
+              options={SURGERY_TYPES}
+            />
+            <Choice
+              label="Proposed anaesthesia"
+              value={form.anesthesiaType}
+              onChange={(v) => setForm({ ...form, anesthesiaType: v })}
+              placeholder="Not decided"
+              options={ANAESTHESIA_TYPES}
+            />
+            <Choice
+              label="Priority"
+              value={form.priority}
+              onChange={(v) => setForm({ ...form, priority: v })}
+              options={PRIORITIES.map((x) => ({ value: x, label: x }))}
+            />
             <Field label="Tentative date" type="date" value={form.targetDate} onChange={(v) => setForm({ ...form, targetDate: v })} />
             <Field label="Preferred start" type="time" value={form.preferredTime} onChange={(v) => setForm({ ...form, preferredTime: v })} />
             <Field label="Expected minutes" type="number" value={form.estimatedDuration} onChange={(v) => setForm({ ...form, estimatedDuration: v })} />
+          </div>
+
+          {/*
+            WHAT THE CASE WILL NEED. The reason the pharmacy and the pack
+            provider can see this screen at all: a plan that does not say what
+            it needs tells them only that an operation is coming. Stated here,
+            a fortnight out, and carried into the booking rather than asked
+            again at the moment somebody is trying to get a case onto a list.
+          */}
+          <div className="mt-3 rounded-lg border border-gray-200 p-3">
+            <p className="text-sm font-semibold text-gray-900 mb-2">What this case will need</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Tick label="Blood transfusion" checked={form.needBloodTransfusion} onChange={(v) => setForm({ ...form, needBloodTransfusion: v })} />
+              <Tick label="Diathermy" checked={form.needDiathermy} onChange={(v) => setForm({ ...form, needDiathermy: v })} />
+              <Tick label="Stereo / microscope" checked={form.needStereo} onChange={(v) => setForm({ ...form, needStereo: v })} />
+              <Tick label="Montrell mattress" checked={form.needMontrellMattress} onChange={(v) => setForm({ ...form, needMontrellMattress: v })} />
+            </div>
+            <div className="mt-2">
+              <Field
+                label="Anything else to have ready"
+                value={form.otherSpecialNeeds}
+                onChange={(v) => setForm({ ...form, otherSpecialNeeds: v })}
+                placeholder="Instruments, implants, a particular consumable"
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Choice
+                label="After theatre"
+                value={form.postOpDestination}
+                onChange={(v) => setForm({ ...form, postOpDestination: v })}
+                placeholder="Not decided"
+                options={POST_OP_DESTINATIONS}
+              />
+              <div className="flex items-end pb-2">
+                <Tick
+                  label="Going home the same day (day case)"
+                  checked={form.isDayCase}
+                  onChange={(v) => setForm({
+                    ...form,
+                    isDayCase: v,
+                    // Offered, not forced: a day case can still be planned to
+                    // recovery-then-ward, and overwriting a chosen
+                    // destination would silently contradict the booker.
+                    postOpDestination: v && !form.postOpDestination
+                      ? 'DAY_CASE_DISCHARGE'
+                      : form.postOpDestination,
+                  })}
+                />
+              </div>
+            </div>
           </div>
           <div className="mt-3">
             <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
@@ -339,7 +693,7 @@ export default function SurgeryDraftsPage() {
             <Section title="With a tentative date">
               {grouped.withDate.map((d) => (
                 <DraftCard
-                  key={d.id} d={d} busy={busy}
+                  key={d.id} d={d} busy={busy} readOnly={readOnly}
                   publishing={publishing === d.id} choice={choice} setChoice={setChoice}
                   onOpenPublish={() => openPublish(d)} onCancelPublish={() => setPublishing(null)}
                   onPublish={() => publish(d)} onWithdraw={() => withdraw(d)} onRemove={() => remove(d)}
@@ -351,7 +705,7 @@ export default function SurgeryDraftsPage() {
             <Section title="No date yet">
               {grouped.noDate.map((d) => (
                 <DraftCard
-                  key={d.id} d={d} busy={busy}
+                  key={d.id} d={d} busy={busy} readOnly={readOnly}
                   publishing={publishing === d.id} choice={choice} setChoice={setChoice}
                   onOpenPublish={() => openPublish(d)} onCancelPublish={() => setPublishing(null)}
                   onPublish={() => publish(d)} onWithdraw={() => withdraw(d)} onRemove={() => remove(d)}
@@ -393,32 +747,92 @@ function Field({
   );
 }
 
-function Select({
-  label, value, onChange, options,
+/**
+ * A dropdown over something the database knows about.
+ *
+ * value and label are separate because half of these choose a ROW — a
+ * patient, a surgeon — and send its id while showing a name. The old helper
+ * took a list of strings, which is why the patient was a box asking for a
+ * UUID to be pasted in.
+ *
+ * WITH AN OPTIONAL SEARCH BOX. There are several hundred patients and a
+ * couple of hundred surgeons, and a dropdown of that length is unusable on a
+ * handset. Where `onSearch` is given, what is typed narrows the list; the
+ * caller does the narrowing, because it also decides how many to show.
+ *
+ * A DROPDOWN THAT CANNOT BE FILLED SAYS SO. When the lookup failed there are
+ * no options, and the placeholder says why rather than presenting an empty
+ * list that reads as "there are none".
+ */
+function Choice({
+  label, value, onChange, options, placeholder, search, onSearch,
 }: {
-  label: string; value: string; onChange: (v: string) => void; options: string[];
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  search?: string;
+  onSearch?: (v: string) => void;
 }) {
+  // The chosen row may be outside the narrowed list — somebody chooses a
+  // patient and then types a different name into the search. Keeping it as an
+  // option stops the select falling back to blank and silently unchoosing
+  // them.
+  const chosenMissing = value !== '' && !options.some((o) => o.value === value);
+
   return (
     <div>
       <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+      {onSearch && (
+        <input
+          type="text"
+          value={search ?? ''}
+          onChange={(e) => onSearch(e.target.value)}
+          placeholder="Search by name…"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-1"
+          autoComplete="off"
+        />
+      )}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       >
+        <option value="">{placeholder ?? '—'}</option>
+        {chosenMissing && <option value={value}>(chosen)</option>}
         {options.map((o) => (
-          <option key={o} value={o}>{o || '—'}</option>
+          <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
     </div>
   );
 }
 
+/** A yes/no the theatre acts on. The label is the whole control. */
+function Tick({
+  label, checked, onChange,
+}: {
+  label: string; checked: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-gray-800">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-gray-300"
+      />
+      {label}
+    </label>
+  );
+}
+
 function DraftCard({
-  d, busy, publishing, choice, setChoice,
+  d, busy, readOnly, publishing, choice, setChoice,
   onOpenPublish, onCancelPublish, onPublish, onWithdraw, onRemove,
 }: {
-  d: ScheduleDraft; busy: boolean; publishing: boolean;
+  d: ScheduleDraft; busy: boolean; readOnly: boolean; publishing: boolean;
   choice: { date: string; time: string };
   setChoice: (c: { date: string; time: string }) => void;
   onOpenPublish: () => void; onCancelPublish: () => void;
@@ -426,6 +840,19 @@ function DraftCard({
 }) {
   const missing = missingForPublish(d);
   const isDraft = d.status === 'DRAFT';
+  const canAct = isDraft && !readOnly;
+
+  // What the unit said to have ready. Shown on the card rather than behind an
+  // edit, because the reader who most needs it is the one who cannot edit it:
+  // the pharmacy and the pack provider see this list in order to order
+  // against it, and a plan whose requirements are one click away is a plan
+  // whose requirements are read the day before.
+  const needs: string[] = [];
+  if (d.needBloodTransfusion) needs.push('blood');
+  if (d.needDiathermy) needs.push('diathermy');
+  if (d.needStereo) needs.push('stereo');
+  if (d.needMontrellMattress) needs.push('Montrell mattress');
+  if (d.otherSpecialNeeds) needs.push(d.otherSpecialNeeds);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -455,10 +882,20 @@ function DraftCard({
             {d.targetDate ? ` · aiming for ${asDateInput(d.targetDate)}` : ''}
             {d.preferredTime ? ` at ${d.preferredTime}` : ''}
           </p>
+          {(needs.length > 0 || d.isDayCase || d.anesthesiaType) && (
+            <p className="text-xs text-gray-700 mt-1">
+              <span className="font-medium">Needs:</span>{' '}
+              {[
+                d.anesthesiaType ? d.anesthesiaType.replace(/_/g, ' ').toLowerCase() : null,
+                ...needs,
+                d.isDayCase ? 'day case' : null,
+              ].filter(Boolean).join(' · ')}
+            </p>
+          )}
           {d.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.notes}</p>}
         </div>
 
-        {isDraft && (
+        {canAct && (
           <div className="flex gap-2 shrink-0">
             <button
               onClick={onOpenPublish}
@@ -478,7 +915,7 @@ function DraftCard({
         )}
       </div>
 
-      {isDraft && missing.length > 0 && (
+      {canAct && missing.length > 0 && (
         <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-3">
           <p className="text-xs font-semibold text-amber-900 mb-1">
             Still needed before this can go on a list
