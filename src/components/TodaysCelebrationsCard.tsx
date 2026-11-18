@@ -14,11 +14,18 @@
  * forgetting. Anything that goes to the whole hospital is a link to the full
  * screen instead: two hundred messages should be sent by somebody who has
  * read them, not by somebody passing their dashboard.
+ *
+ * TWO DIFFERENT ACTS SIT ON THIS ROW. Send is the hospital writing, under its
+ * own number, recorded. WhatsApp opens a chat on YOUR phone with the same
+ * words already written, so the greeting can come from a person -- which is
+ * the one people remember. It stays available after the hospital's message
+ * has gone, because they are not alternatives to each other.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Cake, Check, ChevronRight, Gift, Loader2, PartyPopper } from 'lucide-react';
+import { Cake, Check, ChevronRight, Gift, Loader2, MessageCircle, PartyPopper } from 'lucide-react';
+import { celebrantWhatsAppLink } from '@/lib/celebrations/personalWhatsApp';
 
 interface Occasion {
   key: string;
@@ -31,10 +38,19 @@ interface Occasion {
 
 interface Personal {
   id: string;
+  /** BIRTHDAY | WEDDING_ANNIVERSARY | WORK_ANNIVERSARY | OTHER */
+  kind: string;
+  label: string | null;
   title: string;
+  sinceYear: number | null;
   years: number | null;
   sent: boolean;
-  person: { fullName: string; role: string | null };
+  person: {
+    fullName: string;
+    role: string | null;
+    phone?: string | null;
+    whatsappOptOut?: boolean;
+  };
 }
 
 const roleWords = (role: string | null) => (role || '')
@@ -133,23 +149,44 @@ export default function TodaysCelebrationsCard() {
                   {p.person.role ? ` · ${roleWords(p.person.role)}` : ''}
                 </span>
               </p>
-              {p.sent ? (
-                <span className="flex items-center gap-1 text-xs font-bold text-green-700">
-                  <Check className="h-3.5 w-3.5" /> Sent
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy !== ''}
-                  onClick={() => void send(p.id)}
-                  className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {busy === p.id
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : <Gift className="h-3.5 w-3.5" />}
-                  Send
-                </button>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {(() => {
+                  // Built here rather than on the server so the number is used
+                  // for one thing only: opening a chat the sender then sends.
+                  const chat = celebrantWhatsAppLink(p, on);
+                  return chat.ok ? (
+                    <a
+                      href={chat.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Open WhatsApp and write to ${p.person.fullName} yourself`}
+                      className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      WhatsApp
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-500">{chat.why}</span>
+                  );
+                })()}
+                {p.sent ? (
+                  <span className="flex items-center gap-1 text-xs font-bold text-green-700">
+                    <Check className="h-3.5 w-3.5" /> Sent
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy !== ''}
+                    onClick={() => void send(p.id)}
+                    className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {busy === p.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Gift className="h-3.5 w-3.5" />}
+                    Send
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -21,9 +21,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Cake, CalendarHeart, Check, Clock, Eye, Gift, Loader2, PartyPopper,
+  Cake, CalendarHeart, Check, Clock, Eye, Gift, Loader2, MessageCircle, PartyPopper,
   Send, Sparkles, Users,
 } from 'lucide-react';
+import { celebrantWhatsAppLink } from '@/lib/celebrations/personalWhatsApp';
 
 interface BoardOccasion {
   key: string;
@@ -52,6 +53,9 @@ interface BoardPersonal {
     role: string | null;
     department: string | null;
     hasPhone: boolean;
+    /** For the "write to them yourself" button; see lib/celebrations/personalWhatsApp. */
+    phone?: string | null;
+    whatsappOptOut?: boolean;
   };
 }
 
@@ -360,7 +364,7 @@ export default function CelebrationsPage() {
                       {!p.person.hasPhone && ' · no phone number on file'}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={busyKey !== ''}
@@ -369,6 +373,23 @@ export default function CelebrationsPage() {
                     >
                       <Eye className="h-3.5 w-3.5" /> Preview
                     </button>
+                    {(() => {
+                      // Send is the hospital writing. This is you writing, from
+                      // your own WhatsApp, with the same words already there.
+                      const chat = celebrantWhatsAppLink(p, board.on);
+                      if (!chat.ok) return null;
+                      return (
+                        <a
+                          href={chat.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Open WhatsApp and write to ${p.person.fullName} yourself`}
+                          className="flex items-center gap-1.5 rounded-xl bg-green-600 px-4 py-2 text-xs font-bold text-white hover:bg-green-700"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                        </a>
+                      );
+                    })()}
                     {p.sent ? (
                       <span className="flex items-center gap-1.5 rounded-xl bg-green-50 px-3 py-2 text-xs font-bold text-green-700">
                         <Check className="h-3.5 w-3.5" /> Sent

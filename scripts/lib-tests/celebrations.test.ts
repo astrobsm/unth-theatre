@@ -7,6 +7,7 @@ import {
   buildCelebrationMessage, buildPersonalCelebrationMessage, contributionFor,
   personalTitle, longDay,
 } from '../../src/lib/celebrations/messages';
+import { celebrantWhatsAppLink } from '../../src/lib/celebrations/personalWhatsApp';
 
 // These messages are the hospital being kind to its own staff, and the ways
 // they can be wrong are specific:
@@ -309,5 +310,86 @@ describe('a day the person told us about', () => {
     expect(buildPersonalCelebrationMessage({
       kind: 'BIRTHDAY', date: '2026-07-14', personName: 'Mr I', role: 'PORTER',
     }).length).toBeLessThan(1200);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Writing to the celebrant yourself
+// ---------------------------------------------------------------------------
+
+describe('the WhatsApp button beside a celebrant', () => {
+  const rita = (over: Record<string, unknown> = {}) => ({
+    kind: 'BIRTHDAY',
+    label: null,
+    sinceYear: null,
+    person: {
+      fullName: 'Ngene Rita Anayochi',
+      role: 'SCRUB_NURSE',
+      phone: '08031234567',
+      whatsappOptOut: false,
+    },
+    ...over,
+  });
+
+  it('opens a chat with the number in the international form wa.me needs', () => {
+    const chat = celebrantWhatsAppLink(rita(), '2026-11-18');
+    expect(chat.ok).toBe(true);
+    if (!chat.ok) return;
+    expect(chat.href).toContain('https://wa.me/2348031234567?text=');
+  });
+
+  it('carries the words the hospital itself would send, not an empty chat', () => {
+    const chat = celebrantWhatsAppLink(rita(), '2026-11-18');
+    if (!chat.ok) throw new Error('expected a link');
+    // The same function the dispatcher sends with, so the two cannot drift.
+    expect(chat.message).toBe(
+      buildPersonalCelebrationMessage({
+        kind: 'BIRTHDAY',
+        label: null,
+        date: '2026-11-18',
+        personName: 'Ngene Rita Anayochi',
+        role: 'SCRUB_NURSE',
+        sinceYear: null,
+      }),
+    );
+    expect(chat.message).toContain('Happy birthday');
+    expect(chat.message).toContain('Ngene Rita Anayochi');
+    // It names the work, as every greeting here does.
+    expect(chat.message).toMatch(/swab|sterile/i);
+  });
+
+  it('honours an opt-out, exactly as the automatic send does', () => {
+    const chat = celebrantWhatsAppLink(
+      rita({ person: { ...rita().person, whatsappOptOut: true } }),
+      '2026-11-18',
+    );
+    expect(chat.ok).toBe(false);
+    if (chat.ok) return;
+    expect(chat.why).toMatch(/not to be written to/i);
+  });
+
+  it('says what is missing rather than offering a dead button', () => {
+    const chat = celebrantWhatsAppLink(
+      rita({ person: { ...rita().person, phone: null } }),
+      '2026-11-18',
+    );
+    expect(chat.ok).toBe(false);
+    if (chat.ok) return;
+    expect(chat.why).toMatch(/no phone number/i);
+  });
+
+  it('still offers it once the automatic message has gone', () => {
+    // They are not alternatives: one is the institution writing, the other is
+    // a person. A row that hid this after Send would hide the one that counts.
+    const chat = celebrantWhatsAppLink(rita(), '2026-11-18');
+    expect(chat.ok).toBe(true);
+  });
+
+  it('falls back to a safe kind rather than throwing on an unknown one', () => {
+    const chat = celebrantWhatsAppLink(rita({ kind: 'SOMETHING_NEW', label: 'Call to Bar' }), '2026-11-18');
+    expect(chat.ok).toBe(true);
+    if (!chat.ok) return;
+    expect(chat.message).toContain('Call to Bar');
   });
 });

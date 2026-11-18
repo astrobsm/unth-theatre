@@ -80,7 +80,12 @@ export async function GET(request: NextRequest) {
       },
       select: {
         id: true, kind: true, label: true, month: true, day: true, sinceYear: true,
-        user: { select: { id: true, fullName: true, role: true, phoneNumber: true, department: true } },
+        user: {
+          select: {
+            id: true, fullName: true, role: true, phoneNumber: true,
+            department: true, whatsappOptOut: true,
+          },
+        },
       },
       orderBy: [{ user: { fullName: 'asc' } }],
     });
@@ -100,6 +105,15 @@ export async function GET(request: NextRequest) {
         role: r.user.role ? String(r.user.role) : null,
         department: r.user.department ?? null,
         hasPhone: Boolean(r.user.phoneNumber),
+        // THE NUMBER ITSELF, for the "write to them yourself" button.
+        //
+        // Only on the handful of people whose own day it is, only to the
+        // roles above -- theatre management and the medical directorate --
+        // and only on the day. A wa.me link cannot be built without it, and
+        // the alternative was whoever wanted to send a birthday message
+        // going to look the number up on the staff screen anyway.
+        phone: r.user.phoneNumber ?? null,
+        whatsappOptOut: Boolean(r.user.whatsappOptOut),
       },
     }));
 
