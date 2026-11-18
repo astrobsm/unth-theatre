@@ -143,7 +143,10 @@ function describeBlockers(blockers: Blocker[]): string {
   const worst = [...blockers].sort((a, b) => b.rows - a.rows).slice(0, 3);
   const parts = worst.map((b) => `${b.rows < 0 ? 'some' : b.rows} in ${friendly(b.table)}`);
   const more = blockers.length > worst.length ? `, and ${blockers.length - worst.length} more` : '';
-  return `This account has records against it — ${parts.join(', ')}${more}. Reject it instead of deleting, so the history stays intact.`;
+  // The advice changed when merging arrived. "Reject it instead" left the
+  // duplicate standing on the staff list for ever; merging moves the records
+  // onto the account being kept and then the duplicate can go.
+  return `This account has records against it — ${parts.join(', ')}${more}. Merge it into the account you are keeping rather than deleting it, so the history moves with it.`;
 }
 
 /** Table names a person can read. */

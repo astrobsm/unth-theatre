@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { installPdfTextGuard } from '@/lib/pdfSafeText';
 import { useSession } from 'next-auth/react';
 import { validateUsername, USERNAME_HELP } from '@/lib/usernameRules';
-import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil, MessageCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, KeyRound, Hash, Upload, Download, UserCog, Phone, FileText, Copy, Pencil, MessageCircle, Lock, Merge } from 'lucide-react';
 
 const USER_ROLES = [
   'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
@@ -65,6 +65,65 @@ export default function UsersPage() {
   const [dupGroups, setDupGroups] = useState<any[] | null>(null);
   const [dupLoading, setDupLoading] = useState(false);
 
+  // ---------------------------------------------------------------------
+  // The administrator's own password, asked for at the moment of the act.
+  //
+  // One box serves all three: deleting, merging and renaming. It holds the
+  // password in component state while it is open and clears it on close --
+  // never localStorage, never a ref that outlives the dialogue, and never
+  // reused for the next act.
+  // ---------------------------------------------------------------------
+  const [ask, setAsk] = useState<{
+    title: string;
+    detail: string;
+    confirmLabel: string;
+    /** Returns a message to show in the box, or null when it worked. */
+    run: (password: string) => Promise<string | null>;
+  } | null>(null);
+  const [askPassword, setAskPassword] = useState('');
+  const [askBusy, setAskBusy] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+
+  const closeAsk = () => { setAsk(null); setAskPassword(''); setAskError(null); };
+
+  const openAsk = (next: NonNullable<typeof ask>) => {
+    setAskPassword('');
+    setAskError(null);
+    setAsk(next);
+  };
+
+  const submitAsk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ask || !askPassword) return;
+    setAskBusy(true);
+    setAskError(null);
+    try {
+      const problem = await ask.run(askPassword);
+      // A wrong password leaves the box open with the work still pending;
+      // anything else has already happened and the box goes away.
+      if (problem) { setAskError(problem); return; }
+      closeAsk();
+    } finally {
+      setAskBusy(false);
+    }
+  };
+
+  // Merging: which account of a group is kept, and which are folded in.
+  const [mergeKeep, setMergeKeep] = useState<Record<string, string>>({});
+  const [mergeFold, setMergeFold] = useState<Record<string, string[]>>({});
+  const [mergePreview, setMergePreview] = useState<any | null>(null);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeReport, setMergeReport] = useState<any | null>(null);
+
+  const toggleFold = (gk: string, id: string) =>
+    setMergeFold((prev) => {
+      const current = prev[gk] ?? [];
+      return {
+        ...prev,
+        [gk]: current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+      };
+    });
+
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -84,35 +143,105 @@ export default function UsersPage() {
     }
   };
 
-  /** `force` confirms removal of approved-but-never-used accounts. */
-  const deleteSelected = async (force = false) => {
+  /**
+   * `force` confirms removal of approved-but-never-used accounts.
+   *
+   * The browser confirm() this replaces asked a question anybody can answer
+   * by pressing Enter. The password box asks one only the administrator can.
+   */
+  const deleteSelected = (force = false) => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    const ok = window.confirm(
-      `Delete ${ids.length} account${ids.length === 1 ? '' : 's'}?
-
-` +
-        'Accounts with any record against them will be refused and reported, ' +
-        'so nothing is lost silently. This cannot be undone.'
-    );
-    if (!ok) return;
-    setDeleting(true);
     setDeleteReport(null);
+    openAsk({
+      title: `Delete ${ids.length} account${ids.length === 1 ? '' : 's'}`,
+      detail:
+        'Accounts with any record against them are refused and reported, so nothing is ' +
+        'lost silently. This cannot be undone.',
+      confirmLabel: 'Delete accounts',
+      run: async (password) => {
+        setDeleting(true);
+        try {
+          const res = await fetch('/api/users/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, force, password }),
+          });
+          const data = await res.json();
+          if (!res.ok) return data.error || 'Delete failed';
+          setDeleteReport(data.results || []);
+          setSelectedIds(new Set());
+          await fetchUsers();
+          if (dupGroups) await scanDuplicates();
+          return null;
+        } catch {
+          return 'Delete failed. Nothing was changed.';
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
+  };
+
+  /**
+   * What a merge would move, before it moves anything.
+   *
+   * Read only on the server, so it needs no password. It exists because
+   * "21 in the audit log, 3 in cancellations" is the sentence that tells an
+   * administrator whether they have picked the right account to keep.
+   */
+  const previewMerge = async (gk: string, keepId: string, loseIds: string[]) => {
+    if (loseIds.length === 0) return;
+    setMergeBusy(true);
+    setMergeReport(null);
     try {
-      const res = await fetch('/api/users/delete', {
+      const res = await fetch('/api/users/merge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, force }),
+        body: JSON.stringify({ keepId, loseIds, preview: true }),
       });
       const data = await res.json();
-      if (!res.ok) { alert(data.error || 'Delete failed'); return; }
-      setDeleteReport(data.results || []);
-      setSelectedIds(new Set());
-      await fetchUsers();
-      if (dupGroups) await scanDuplicates();
+      if (!res.ok) { alert(data.error || 'Could not work out what would move'); return; }
+      setMergePreview({ ...data, group: gk, keepId, loseIds });
     } finally {
-      setDeleting(false);
+      setMergeBusy(false);
     }
+  };
+
+  const applyMerge = () => {
+    if (!mergePreview) return;
+    const { keepId, loseIds, keeper } = mergePreview;
+    const many = loseIds.length === 1 ? 'account' : 'accounts';
+    openAsk({
+      title: `Merge ${loseIds.length} ${many} into ${keeper?.fullName ?? 'the kept account'}`,
+      detail:
+        'Everything those accounts recorded is reattributed to the one you are keeping, ' +
+        'and then they are removed. Their saved devices are signed out and will have to ' +
+        'sign in again. This cannot be undone.',
+      confirmLabel: 'Merge accounts',
+      run: async (password) => {
+        setMergeBusy(true);
+        try {
+          const res = await fetch('/api/users/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keepId, loseIds, password }),
+          });
+          const data = await res.json();
+          if (!res.ok) return data.error || 'Merge failed';
+          setMergeReport(data);
+          setMergePreview(null);
+          setMergeFold({});
+          await fetchUsers();
+          await scanDuplicates();
+          return null;
+        } catch {
+          return 'Merge failed. Nothing was changed.';
+        } finally {
+          setMergeBusy(false);
+        }
+      },
+    });
   };
 
   const [loading, setLoading] = useState(true);
@@ -370,48 +499,63 @@ export default function UsersPage() {
     if (usernameChanged) {
       const problem = validateUsername(nextUsername);
       if (problem) { alert(problem); return; }
-      // Changing how somebody signs in is worth one deliberate pause. They will
-      // be locked out of the old name the moment this is saved.
-      const ok = window.confirm(
-        `Change this person's sign-in name from "${originalUsername}" to "${nextUsername}"?\n\n`
-        + 'They must use the new name next time they sign in. Their password is unchanged.',
-      );
-      if (!ok) return;
     }
-    setEditLoading(true);
-    try {
-      const response = await fetch(`/api/users/${editUserId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          // Sent ONLY when edited — see originalUsername above.
-          ...(usernameChanged ? { username: nextUsername } : {}),
-          fullName: editForm.fullName.trim(),
-          phoneNumber: editForm.phoneNumber.trim() || null,
-          email: editForm.email.trim() || null,
-          department: editForm.department.trim() || null,
-          // Sent only when the field was actually shown, so a THEATRE_MANAGER
-          // editing a phone number does not trip the ADMIN-only check on a
-          // field they never saw.
-          ...(editIsSupplierRole && isAdmin ? { vendorId: editForm.vendorId } : {}),
-          // Sent only when the field was shown, for the same reason: an
-          // editor that saves a field it never displayed clears it.
-          ...(editIsWardPosted ? { wardAssignment: editForm.wardAssignment || null } : {}),
-        }),
-      });
-      const data = await response.json();
-      if (response.ok) {
+
+    // ONE save path, with or without a password.
+    //
+    // The password goes only with a sign-in name that is actually changing:
+    // the route asks for it in exactly that case, and correcting somebody's
+    // phone number should not have to stop for it.
+    const save = async (password?: string): Promise<string | null> => {
+      setEditLoading(true);
+      try {
+        const response = await fetch(`/api/users/${editUserId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            // Sent ONLY when edited — see originalUsername above.
+            ...(usernameChanged ? { username: nextUsername, password } : {}),
+            fullName: editForm.fullName.trim(),
+            phoneNumber: editForm.phoneNumber.trim() || null,
+            email: editForm.email.trim() || null,
+            department: editForm.department.trim() || null,
+            // Sent only when the field was actually shown, so a THEATRE_MANAGER
+            // editing a phone number does not trip the ADMIN-only check on a
+            // field they never saw.
+            ...(editIsSupplierRole && isAdmin ? { vendorId: editForm.vendorId } : {}),
+            // Sent only when the field was shown, for the same reason: an
+            // editor that saves a field it never displayed clears it.
+            ...(editIsWardPosted ? { wardAssignment: editForm.wardAssignment || null } : {}),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) return data.error || 'Failed to update profile';
         setEditUserId(null);
         fetchUsers();
-      } else {
-        alert(data.error || 'Failed to update profile');
+        return null;
+      } catch (error) {
+        console.error('Failed to update profile:', error);
+        return 'Failed to update profile';
+      } finally {
+        setEditLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to update profile:', error);
-      alert('Failed to update profile');
-    } finally {
-      setEditLoading(false);
+    };
+
+    if (!usernameChanged) {
+      const problem = await save();
+      if (problem) alert(problem);
+      return;
     }
+
+    openAsk({
+      title: 'Change a sign-in name',
+      detail:
+        `"${originalUsername}" becomes "${nextUsername}". They must use the new name the ` +
+        'next time they sign in; their password is unchanged. Anything already recorded ' +
+        'under the old name stays with this account.',
+      confirmLabel: 'Change sign-in name',
+      run: save,
+    });
   };
 
   const handleAssignStaffCode = async (e: React.FormEvent) => {
@@ -1116,6 +1260,34 @@ export default function UsersPage() {
             </div>
           )}
 
+          {/* What a merge actually did. */}
+          {mergeReport && (
+            <div className="mt-3 rounded-lg border bg-white p-3 text-sm">
+              <div className="font-medium text-gray-900 mb-1">
+                {mergeReport.merged} merged, {mergeReport.refused} refused — {mergeReport.moved}{' '}
+                record{mergeReport.moved === 1 ? '' : 's'} moved
+                {mergeReport.folded > 0
+                  ? `, ${mergeReport.folded} the kept account already had`
+                  : ''}
+                {mergeReport.dropped > 0
+                  ? `, ${mergeReport.dropped} device credential${mergeReport.dropped === 1 ? '' : 's'} removed`
+                  : ''}
+              </div>
+              <ul className="space-y-1 max-h-56 overflow-y-auto">
+                {(mergeReport.results ?? []).map((r: any) => (
+                  <li key={r.id} className={r.ok ? 'text-green-700' : 'text-amber-800'}>
+                    <strong>{r.name || r.id.slice(0, 8)}</strong> —{' '}
+                    {r.ok
+                      ? `${r.moved} record${r.moved === 1 ? '' : 's'} moved${
+                          r.filled?.length ? `, filled in ${r.filled.join(', ')}` : ''
+                        }.`
+                      : r.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Duplicate groups. */}
           {dupGroups && (
             <div className="mt-3 rounded-lg border bg-white p-3 text-sm">
@@ -1130,35 +1302,124 @@ export default function UsersPage() {
                     A shared email or staff code is near proof. A shared <strong>name</strong> is only a
                     hint — plenty of people genuinely share one — so check before removing anything.
                   </p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    <strong>Delete</strong> removes a registration nothing points at.{' '}
+                    <strong>Merge in</strong> is for the other kind: the duplicate that has been
+                    worked under and so cannot be deleted. Everything it recorded moves to the
+                    account you keep, and then it goes.
+                  </p>
                   <div className="space-y-3 max-h-80 overflow-y-auto">
-                    {dupGroups.map((g: any) => (
-                      <div key={g.kind + g.key} className="border rounded-lg p-2">
+                    {dupGroups.map((g: any) => {
+                      // The scan's own suggestion, until an administrator says otherwise.
+                      const gk = `${g.kind}:${g.key}`;
+                      const keepId = mergeKeep[gk] ?? g.keepId;
+                      const folded = (mergeFold[gk] ?? []).filter((id: string) => id !== keepId);
+                      return (
+                      <div key={gk} className="border rounded-lg p-2">
                         <div className="text-xs text-gray-500 mb-1">
                           matched on {g.kind === 'staffCode' ? 'staff code' : g.kind}: <strong>{g.key}</strong>
                         </div>
                         {g.members.map((m: any) => (
-                          <label
-                            key={m.id}
-                            className={`flex items-start gap-2 py-1 ${m.deletable ? 'cursor-pointer' : 'opacity-70'}`}
-                          >
-                            <input
-                              type="checkbox"
-                              disabled={!m.deletable}
-                              checked={selectedIds.has(m.id)}
-                              onChange={() => toggleSelected(m.id)}
-                              className="mt-1 w-4 h-4"
-                            />
-                            <span>
+                          <div key={m.id} className="flex items-start gap-3 py-1 border-t first:border-t-0">
+                            <label className="flex items-center gap-1 text-xs text-gray-600 shrink-0 pt-1">
+                              <input
+                                type="radio"
+                                name={`keep-${gk}`}
+                                checked={keepId === m.id}
+                                onChange={() => setMergeKeep((prev) => ({ ...prev, [gk]: m.id }))}
+                                className="w-4 h-4"
+                              />
+                              Keep
+                            </label>
+                            <label
+                              className={`flex items-center gap-1 text-xs shrink-0 pt-1 ${
+                                keepId === m.id ? 'text-gray-300' : 'text-gray-600 cursor-pointer'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={keepId === m.id || m.id === (session?.user as any)?.id}
+                                checked={folded.includes(m.id)}
+                                onChange={() => toggleFold(gk, m.id)}
+                                className="w-4 h-4"
+                              />
+                              Merge in
+                            </label>
+                            <label
+                              className={`flex items-center gap-1 text-xs shrink-0 pt-1 ${
+                                m.deletable ? 'text-gray-600 cursor-pointer' : 'text-gray-300'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={!m.deletable}
+                                checked={selectedIds.has(m.id)}
+                                onChange={() => toggleSelected(m.id)}
+                                className="w-4 h-4"
+                              />
+                              Delete
+                            </label>
+                            <span className="min-w-0">
                               <span className="font-medium">{m.fullName}</span>{' '}
                               <span className="text-gray-500">
                                 ({m.username}{m.staffCode ? ` · ${m.staffCode}` : ''} · {m.status})
                               </span>
-                              <span className="block text-xs text-gray-500">{m.reason}</span>
+                              <span className="block text-xs text-gray-500">
+                                {keepId === m.id
+                                  ? 'Kept. Anything merged in is reattributed to this account.'
+                                  : m.reason}
+                              </span>
                             </span>
-                          </label>
+                          </div>
                         ))}
+
+                        {folded.length > 0 && (!mergePreview || mergePreview.group !== gk) && (
+                          <button
+                            type="button"
+                            onClick={() => previewMerge(gk, keepId, folded)}
+                            disabled={mergeBusy}
+                            className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            <Merge className="w-3.5 h-3.5" />
+                            {mergeBusy ? 'Looking…' : `Show what merging ${folded.length} would move`}
+                          </button>
+                        )}
+
+                        {mergePreview && mergePreview.group === gk && (
+                          <div className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 p-2">
+                            <div className="text-xs font-medium text-emerald-900 mb-1">
+                              Into {mergePreview.keeper?.fullName} ({mergePreview.keeper?.username}):
+                            </div>
+                            <ul className="space-y-1 text-xs text-emerald-900">
+                              {(mergePreview.plans ?? []).map((p: any) => (
+                                <li key={p.id}>
+                                  <strong>{p.fullName ?? p.id.slice(0, 8)}</strong>
+                                  {p.username ? ` (${p.username})` : ''} — {p.summary}
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={applyMerge}
+                                disabled={mergeBusy}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                              >
+                                Merge, with my password
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setMergePreview(null)}
+                                className="px-3 py-1.5 rounded-lg text-xs border bg-white hover:bg-gray-100"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -1331,6 +1592,62 @@ export default function UsersPage() {
       </div>
 
       {/* Edit Profile Modal */}
+      {/*
+        The one box standing in front of deleting, merging and renaming. It is
+        not a second factor: it is the same password, typed now, by whoever is
+        actually at the keyboard.
+      */}
+      {ask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <form onSubmit={submitAsk} className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-start gap-2">
+              <Lock className="w-5 h-5 text-red-600 mt-0.5 shrink-0" /> {ask.title}
+            </h3>
+            <p className="text-sm text-gray-600">{ask.detail}</p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Your administrator password
+              </label>
+              <input
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                value={askPassword}
+                onChange={(e) => setAskPassword(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Your own password — the one you signed in with. It is checked for this
+                action only and is not kept.
+              </p>
+            </div>
+            {askError && (
+              <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {askError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                disabled={askBusy || !askPassword}
+                className="flex-1 px-4 py-2 rounded-lg font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {askBusy ? 'Working…' : ask.confirmLabel}
+              </button>
+              <button
+                type="button"
+                onClick={closeAsk}
+                disabled={askBusy}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border bg-white hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {editUserId && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <form

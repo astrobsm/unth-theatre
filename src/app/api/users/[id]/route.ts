@@ -6,6 +6,7 @@ import { z } from "zod";
 import { UserRole } from "@prisma/client";
 import { validateUsername, normaliseUsername } from "@/lib/usernameRules";
 import { normaliseWard } from "@/lib/ward/nurseInCharge";
+import { confirmAdminPassword } from "@/lib/users/adminPassword";
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,26 @@ export async function PATCH(
         return NextResponse.json({ error: "User not found" }, { status: 404 });
       }
       previousUsername = target.username;
+
+      // THE ADMINISTRATOR'S OWN PASSWORD, typed now.
+      //
+      // A sign-in name is the credential half of an account: change it and
+      // the person is locked out of the old one and somebody else can be
+      // handed the new one. That is worth more than a session cookie that
+      // was issued hours ago on a machine standing in a corridor.
+      //
+      // Only when the name actually changes. A save that resends the name
+      // it already had -- which is most saves -- asks for nothing.
+      if (previousUsername !== validatedData.username) {
+        const stepUp = await confirmAdminPassword(
+          session.user.id as string,
+          (body as { password?: unknown })?.password,
+          'rename',
+        );
+        if (!stepUp.ok) {
+          return NextResponse.json({ error: stepUp.error }, { status: stepUp.status });
+        }
+      }
 
       // CASE-INSENSITIVELY unique, because that is how sign-in resolves it
       // (findByUsername in @/lib/auth uses mode: "insensitive"). The database

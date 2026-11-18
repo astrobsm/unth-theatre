@@ -13,6 +13,7 @@
 //   * delete an APPROVED account that has ANY record against it
 //   * delete the account making the request
 //   * delete anything with records against it (see lib/users/deletion)
+//   * delete anything at all without the administrator's own password
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -25,6 +26,7 @@ import {
   statusAllowsDeletion,
   type DuplicateCandidate,
 } from '@/lib/users/deletion';
+import { confirmAdminPassword } from '@/lib/users/adminPassword';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  let body: { ids?: string[]; force?: boolean };
+  let body: { ids?: string[]; force?: boolean; password?: string };
   try {
     body = await request.json();
   } catch {
@@ -127,6 +129,12 @@ export async function POST(request: NextRequest) {
   if (ids.length > 100) {
     return NextResponse.json({ error: 'Delete at most 100 accounts at a time.' }, { status: 400 });
   }
+
+  // The password, before anything is read or written. A signed-in session
+  // says the browser was signed in once; this says the person holding the
+  // keyboard knows the password now. See src/lib/users/stepUp.ts.
+  const stepUp = await confirmAdminPassword(auth.me.id, body.password, 'delete');
+  if (!stepUp.ok) return NextResponse.json({ error: stepUp.error }, { status: stepUp.status });
 
   const results: { id: string; name?: string; deleted: boolean; reason: string }[] = [];
 
