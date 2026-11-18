@@ -9,7 +9,7 @@ import { formatAge } from '@/lib/age';
 interface Patient {
   id: string;
   name: string;
-  folderNumber: string;
+  folderNumber: string | null;
   ptNumber: string | null;
   age: number;
   ageUnit?: string;
@@ -56,7 +56,10 @@ export default function PatientsPage() {
 
   const filteredPatients = Array.isArray(patients) ? patients.filter(patient =>
     patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.folderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    // Optional chaining, not a cast. A patient registered on a PT number
+    // alone has no folder number, and .toLowerCase() on it would throw while
+    // somebody is typing in the search box, taking the whole list with it.
+    (patient.folderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
     (patient.ptNumber && patient.ptNumber.toLowerCase().includes(searchTerm.toLowerCase()))
   ) : [];
 
@@ -133,7 +136,7 @@ export default function PatientsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {patient.folderNumber}
+                      {patient.folderNumber || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {patient.ptNumber || '-'}

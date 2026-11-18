@@ -10,7 +10,9 @@ const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ss
 interface Patient {
   id: string;
   name: string;
-  folderNumber: string;
+  // A patient has one of these two, not necessarily the folder number.
+  folderNumber: string | null;
+  ptNumber: string | null;
   ward: string;
 }
 
@@ -75,7 +77,8 @@ export default function NewTransferPage() {
   const filteredPatients = patients.filter(
     (p) =>
       p.name.toLowerCase().includes(searchPatient.toLowerCase()) ||
-      p.folderNumber.toLowerCase().includes(searchPatient.toLowerCase())
+      (p.folderNumber?.toLowerCase().includes(searchPatient.toLowerCase()) ?? false) ||
+      (p.ptNumber?.toLowerCase().includes(searchPatient.toLowerCase()) ?? false)
   );
 
   const locations = [
@@ -131,7 +134,7 @@ export default function NewTransferPage() {
                 <option value="">Select Patient</option>
                 {filteredPatients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
-                    {patient.name} - {patient.folderNumber} (Current: {patient.ward})
+                    {patient.name} - {patient.folderNumber || patient.ptNumber || 'no number'} (Current: {patient.ward})
                   </option>
                 ))}
               </select>

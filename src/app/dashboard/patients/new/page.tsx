@@ -8,6 +8,10 @@ import { notify } from '@/lib/notifications';
 import Link from 'next/link';
 import { WARDS } from '@/lib/constants';
 import { AGE_UNITS, ageInYears, type AgeUnit } from '@/lib/age';
+import {
+  guessNumberKind, splitPatientNumbers, missingNumberProblem, sameNumberTwice,
+  NUMBER_KIND_LABEL, type PatientNumberKind,
+} from '@/lib/patients/patientNumber';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
@@ -73,6 +77,12 @@ interface PatientDraft {
   fields: Record<string, string>;
   /** The scores and dictated text, which live in React state. */
   state: {
+    // The patient number is here rather than in `fields` because it is now a
+    // controlled input: restoring it by writing into the DOM, as the plain
+    // inputs are restored, would be undone by React's next render.
+    patientNumber?: string;
+    numberKind?: PatientNumberKind;
+    otherNumber?: string;
     age?: number;
     ageUnit?: AgeUnit;
     gender?: string;
@@ -106,6 +116,23 @@ export default function NewPatientPage() {
   // different person. Sent with the registration so the server lets it
   // through, and recorded there.
   const [confirmedDifferent, setConfirmedDifferent] = useState(false);
+  // ── The patient's number ────────────────────────────────────────────────
+  // One box, and either kind of number satisfies it. The form used to demand
+  // a folder number and offer the PT number as an extra, which turned away
+  // every patient who arrived from the clinic with a PT card and no folder
+  // number yet. See src/lib/patients/patientNumber.ts.
+  const [patientNumber, setPatientNumber] = useState('');
+  const [numberKind, setNumberKind] = useState<PatientNumberKind>('folder');
+  // Set the moment somebody picks the kind themselves, after which the guess
+  // stops arguing with them. A clerk who says "PT number" about something that
+  // does not look like one has a reason, and a form that changes it back on
+  // the next keystroke is a form people stop trusting.
+  const [kindChosen, setKindChosen] = useState(false);
+  // The second number, for whoever happens to have both — folded away by
+  // default, because the whole point here is that one of them is enough.
+  const [otherNumber, setOtherNumber] = useState('');
+  const [showOther, setShowOther] = useState(false);
+
   // Ward list (built-in defaults + any custom wards created by admins).
   const [wards, setWards] = useState<string[]>([...WARDS]);
   useEffect(() => {
@@ -249,6 +276,7 @@ export default function NewPatientPage() {
       savedAt: new Date().toISOString(),
       fields,
       state: {
+        patientNumber, numberKind, otherNumber,
         age, ageUnit, gender,
         comorbidities, metabolicStatus, otherMedications, assessmentNotes,
         dvtFactors, bleedingFactors, bradenFactors, nutritionalData,
@@ -256,7 +284,8 @@ export default function NewPatientPage() {
         whoRiskClass, asaScore,
       },
     };
-  }, [age, ageUnit, gender, comorbidities, metabolicStatus, otherMedications,
+  }, [patientNumber, numberKind, otherNumber,
+      age, ageUnit, gender, comorbidities, metabolicStatus, otherMedications,
       assessmentNotes, dvtFactors, bleedingFactors, bradenFactors,
       nutritionalData, dDimerDone, dDimerResult, dDimerValue, whoRiskClass, asaScore]);
 
@@ -315,6 +344,36 @@ export default function NewPatientPage() {
 
   const applyDraft = (d: PatientDraft) => {
     const s = d.state ?? ({} as PatientDraft['state']);
+    if (s.patientNumber !== undefined) {
+      setPatientNumber(s.patientNumber);
+      // Restoring the kind counts as choosing it: it was either guessed from a
+      // number that is still there, or corrected by hand, and re-guessing it
+      // now could quietly move a resumed registration into the other column.
+      if (s.numberKind) { setNumberKind(s.numberKind); setKindChosen(true); }
+      if (s.otherNumber !== undefined) {
+        setOtherNumber(s.otherNumber);
+        if (s.otherNumber) setShowOther(true);
+      }
+    } else {
+      // A draft saved by the build before this one, when the two numbers were
+      // two separate boxes and came back through `fields`. They are controlled
+      // inputs now, so the DOM restore below would be undone on the next
+      // render and the number would simply vanish from a resumed form. Rather
+      // than refuse the draft, read it: both boxes are still in `fields` under
+      // exactly the names they always had.
+      const oldFolder = (d.fields?.folderNumber ?? '').trim();
+      const oldPt = (d.fields?.ptNumber ?? '').trim();
+      if (oldFolder) {
+        setPatientNumber(oldFolder);
+        setNumberKind('folder');
+        setKindChosen(true);
+        if (oldPt) { setOtherNumber(oldPt); setShowOther(true); }
+      } else if (oldPt) {
+        setPatientNumber(oldPt);
+        setNumberKind('pt');
+        setKindChosen(true);
+      }
+    }
     if (s.age !== undefined) setAge(s.age);
     if (s.ageUnit) setAgeUnit(s.ageUnit);
     if (s.gender !== undefined) setGender(s.gender);
@@ -476,6 +535,32 @@ export default function NewPatientPage() {
     if (confirmedDifferent) setConfirmedDifferent(false);
   };
 
+  // The one box (and the optional second) as the two columns underneath.
+  const numbers = splitPatientNumbers({
+    typed: patientNumber, kind: numberKind, other: otherNumber,
+  });
+  const otherKind: PatientNumberKind = numberKind === 'folder' ? 'pt' : 'folder';
+  const bothTheSame = sameNumberTwice(numbers);
+
+  const onNumberTyped = (value: string) => {
+    setPatientNumber(value);
+    if (!kindChosen) setNumberKind(guessNumberKind(value));
+    if (duplicate) setDuplicate(null);
+    clearMatches();
+  };
+
+  const onKindChosen = (kind: PatientNumberKind) => {
+    setNumberKind(kind);
+    setKindChosen(true);
+    // The number has just moved to the other column, so whatever was found
+    // about it was found about a different question.
+    if (duplicate) setDuplicate(null);
+    clearMatches();
+  };
+
+  /** Ask about both numbers at once, whichever box was just left. */
+  const checkNumbers = () => checkDuplicate(numbers.folderNumber ?? '', numbers.ptNumber ?? '');
+
   const checkDuplicate = async (folderNumber?: string, ptNumber?: string) => {
     const form = formRef.current;
     const field = (n: string) =>
@@ -535,7 +620,11 @@ export default function NewPatientPage() {
       const fd = new FormData(e.currentTarget);
       const need: string[] = [];
       if (!String(fd.get('name') ?? '').trim()) need.push('the patient name');
-      if (!String(fd.get('folderNumber') ?? '').trim()) need.push('the folder number');
+      // Either number, not specifically the folder number.
+      if (missingNumberProblem({
+        folderNumber: String(fd.get('folderNumber') ?? ''),
+        ptNumber: String(fd.get('ptNumber') ?? ''),
+      })) need.push('a folder number or a PT number');
       if (!age) need.push('the age');
       if (!gender) need.push('the sex');
       if (!String(fd.get('ward') ?? '').trim()) need.push('the ward');
@@ -721,7 +810,8 @@ export default function NewPatientPage() {
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-amber-900">This patient is already registered.</p>
               <p className="text-sm text-amber-800 mt-0.5">
-                <strong>{duplicate.name}</strong> · Folder {duplicate.folderNumber}
+                <strong>{duplicate.name}</strong>
+                {duplicate.folderNumber ? ` · Folder ${duplicate.folderNumber}` : ''}
                 {duplicate.ptNumber ? ` · PT ${duplicate.ptNumber}` : ''} · {duplicate.age} {String(duplicate.ageUnit || 'YEARS').toLowerCase()} · {duplicate.gender}{duplicate.ward ? ` · ${duplicate.ward}` : ''}
               </p>
               <p className="text-xs text-amber-700 mt-1">No need to register again — continue straight to booking a surgery for this patient (their details are imported automatically).</p>
@@ -930,29 +1020,94 @@ export default function NewPatientPage() {
               />
             </div>
 
-            <div>
-              <label className="label">Folder Number *</label>
-              <input
-                type="text"
-                name="folderNumber"
-                required
-                className="input-field"
-                placeholder="e.g., UNTH/2024/001"
-                onChange={() => { if (duplicate) setDuplicate(null); clearMatches(); }}
-                onBlur={(e) => checkDuplicate(e.target.value, undefined)}
-              />
-            </div>
+            {/*
+              ONE NUMBER, EITHER KIND. Two separate boxes, one of them marked
+              required, meant a patient holding a PT card and no folder number
+              could not be registered at all — and a patient who cannot be
+              registered cannot be booked. The columns underneath are still
+              two, filled by the hidden inputs below.
+            */}
+            <div className="md:col-span-2">
+              <label className="label" htmlFor="patientNumber">
+                {NUMBER_KIND_LABEL[numberKind]} *
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                <input
+                  id="patientNumber"
+                  type="text"
+                  required
+                  className="input-field sm:flex-1"
+                  placeholder="e.g., UNTH/2024/001 or PT001234"
+                  value={patientNumber}
+                  onChange={(e) => onNumberTyped(e.target.value)}
+                  onBlur={checkNumbers}
+                />
+                <div
+                  role="group"
+                  aria-label="Which number is this?"
+                  className="flex shrink-0 rounded-lg border border-gray-300 p-1"
+                >
+                  {(['folder', 'pt'] as PatientNumberKind[]).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={numberKind === k}
+                      onClick={() => onKindChosen(k)}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        numberKind === k
+                          ? 'bg-primary-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {k === 'folder' ? 'Folder' : 'PT'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Either one will do. A number beginning with PT is taken as a PT
+                number; tap Folder or PT to say otherwise.
+              </p>
 
-            <div>
-              <label className="label">PT Number</label>
-              <input
-                type="text"
-                name="ptNumber"
-                className="input-field"
-                placeholder="e.g., PT001234"
-                onChange={() => { if (duplicate) setDuplicate(null); clearMatches(); }}
-                onBlur={(e) => checkDuplicate(undefined, e.target.value)}
-              />
+              {showOther ? (
+                <div className="mt-3">
+                  <label className="label" htmlFor="otherNumber">
+                    {NUMBER_KIND_LABEL[otherKind]} <span className="font-normal text-gray-500">(if you have it)</span>
+                  </label>
+                  <input
+                    id="otherNumber"
+                    type="text"
+                    className="input-field"
+                    placeholder={otherKind === 'pt' ? 'e.g., PT001234' : 'e.g., UNTH/2024/001'}
+                    value={otherNumber}
+                    onChange={(e) => {
+                      setOtherNumber(e.target.value);
+                      if (duplicate) setDuplicate(null);
+                      clearMatches();
+                    }}
+                    onBlur={checkNumbers}
+                  />
+                  {bothTheSame && (
+                    <p className="mt-1 text-xs text-amber-700">{bothTheSame}</p>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowOther(true)}
+                  className="mt-2 text-sm font-medium text-primary-700 underline underline-offset-2"
+                >
+                  This patient also has a {NUMBER_KIND_LABEL[otherKind].toLowerCase()}
+                </button>
+              )}
+
+              {/*
+                What the server and the duplicate check actually read. Kept as
+                real form fields so FormData, the offline replay and the draft
+                snapshot all see exactly what they saw before this change.
+              */}
+              <input type="hidden" name="folderNumber" value={numbers.folderNumber ?? ''} />
+              <input type="hidden" name="ptNumber" value={numbers.ptNumber ?? ''} />
             </div>
 
             <div>

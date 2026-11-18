@@ -65,12 +65,12 @@ export async function findRegistrationNearMatches(
     const head = core.slice(0, 4);
     const tail = core.slice(-4);
     for (const fragment of Array.from(new Set([head, tail]))) {
-      add(`regexp_replace(upper("folderNumber"), '[^0-9]', '', 'g') LIKE $?`, `%${fragment}%`);
+      add(`regexp_replace(upper(coalesce("folderNumber", '')), '[^0-9]', '', 'g') LIKE $?`, `%${fragment}%`);
       add(`regexp_replace(upper(coalesce("ptNumber", '')), '[^0-9]', '', 'g') LIKE $?`, `%${fragment}%`);
     }
   }
   for (const loose of looses) {
-    add(`regexp_replace(upper("folderNumber"), '[^A-Z0-9]', '', 'g') = $?`, loose);
+    add(`regexp_replace(upper(coalesce("folderNumber", '')), '[^A-Z0-9]', '', 'g') = $?`, loose);
     add(`regexp_replace(upper(coalesce("ptNumber", '')), '[^A-Z0-9]', '', 'g') = $?`, loose);
   }
   for (const word of words) {

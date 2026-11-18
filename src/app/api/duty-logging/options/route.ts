@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { patientIdentifier } from '@/lib/patients/patientNumber';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
       const p = s.patient;
       if (p && !seen.has(p.id)) {
         seen.add(p.id);
-        patients.push({ id: p.id, name: p.name, folderNumber: p.folderNumber });
+        patients.push({ id: p.id, name: p.name, folderNumber: patientIdentifier(p) });
       }
     }
 

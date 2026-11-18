@@ -64,7 +64,8 @@ function getPeerClient(): PrismaClient | null {
 export interface PeerPatient {
   id: string;
   name: string;
-  folderNumber: string;
+  /** Null when the peer registered this patient on a PT number alone. */
+  folderNumber: string | null;
   ptNumber: string | null;
 }
 
@@ -92,7 +93,8 @@ export async function findPeerPatient(
   const query = client.$queryRawUnsafe<PeerPatient[]>(
     `select id, name, "folderNumber", "ptNumber"
        from patients
-      where ($1 <> '' and regexp_replace(upper("folderNumber"), '\\s', '', 'g') = $1)
+      where ($1 <> '' and "folderNumber" is not null
+             and regexp_replace(upper("folderNumber"), '\\s', '', 'g') = $1)
          or ($2 <> '' and "ptNumber" is not null
              and regexp_replace(upper("ptNumber"), '\\s', '', 'g') = $2)
       limit 1`,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { patientIdentifier } from '@/lib/patients/patientNumber';
 import { triggerRadio, speak3, getOnDutyPortersCleanersWithIds } from '@/lib/radioEvents';
 import { sendPushToUsers, sendPushToRoles } from '@/lib/fcm';
 
@@ -518,7 +519,10 @@ export async function POST(request: NextRequest) {
         data: {
           surgeryId,
           patientName: surgery.patient.name,
-          folderNumber: surgery.patient.folderNumber,
+          // Whichever number this patient was registered on: the slip has
+          // room for one, and a blank on it is a trip to the ward with
+          // nothing to check the patient against.
+          folderNumber: patientIdentifier(surgery.patient),
           ward: surgery.patient.ward,
           age: surgery.patient.age,
           gender: surgery.patient.gender,
@@ -586,7 +590,10 @@ export async function POST(request: NextRequest) {
         data: {
           surgeryId,
           patientName: surgery.patient.name,
-          folderNumber: surgery.patient.folderNumber,
+          // Whichever number this patient was registered on: the slip has
+          // room for one, and a blank on it is a trip to the ward with
+          // nothing to check the patient against.
+          folderNumber: patientIdentifier(surgery.patient),
           ward: surgery.patient.ward,
           age: surgery.patient.age,
           gender: surgery.patient.gender,

@@ -82,7 +82,8 @@ export interface PatientStatement {
   patient: {
     id: string;
     ptNumber: string | null;
-    folderNumber: string;
+    /** Null for a patient registered on a PT number alone. */
+    folderNumber: string | null;
     name: string;
   };
   /** Set when the statement was filtered to one supplier. */

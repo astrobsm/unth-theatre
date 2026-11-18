@@ -1188,7 +1188,14 @@ model MaintenanceAlert {
 
 model Patient {
   id             String   @id @default(uuid())
-  folderNumber   String   @unique
+  // A patient has at least one of these two, and which one is the hospital's
+  // business rather than the form's: a clinic patient arrives with a PT card
+  // and no folder number yet, a ward patient with a folder number and no PT
+  // card. Both are optional HERE and the pair is required in the application
+  // (src/lib/patients/patientNumber.ts), because "at least one of two" is not
+  // a constraint a column can hold. Null, never '', for the one not given —
+  // both are UNIQUE, and '' would collide for every patient after the first.
+  folderNumber   String?  @unique
   ptNumber       String?  @unique
   name           String
   age            Int

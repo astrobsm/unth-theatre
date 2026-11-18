@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { patientIdentifier } from '@/lib/patients/patientNumber';
 import { acknowledgeRadioByMetadata, triggerRadio } from '@/lib/radioEvents';
 import { z } from 'zod';
 
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
         porter2Name: porter2?.fullName,
         patientId: patient.id,
         patientName: patient.name,
-        patientFolderNumber: patient.folderNumber,
+        patientFolderNumber: patientIdentifier(patient),
         fromLocation: validatedData.fromLocation,
         toLocation: validatedData.toLocation,
         transportType: validatedData.transportType,

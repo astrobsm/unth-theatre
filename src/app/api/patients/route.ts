@@ -1,4 +1,5 @@
 import { normaliseIdentifier } from '@/lib/patients/identity';
+import { missingNumberProblem } from '@/lib/patients/patientNumber';
 import { shouldHoldRegistration, summarise } from '@/lib/patients/nearMatch';
 import { findRegistrationNearMatches } from '@/lib/patients/nearMatchQuery';
 import { findPeerPatient } from '@/lib/patients/peerLookup';
@@ -78,8 +79,12 @@ const PICKER_FIELDS = {
 const patientSchema = z.object({
   // Basic Information
   name: z.string().min(1),
-  folderNumber: z.string().min(1),
-  ptNumber: z.string().optional().nullable().transform(val => val || null),
+  // Either one of these, not both and not specifically the folder number.
+  // Trimmed and emptied to NULL here rather than only at the form, because
+  // the offline queue replays through this endpoint too, and a scanner's
+  // trailing space must not become a second patient on either path.
+  folderNumber: z.string().optional().nullable().transform(val => (val ?? '').trim() || null),
+  ptNumber: z.string().optional().nullable().transform(val => (val ?? '').trim() || null),
   age: z.number().int().positive(),
   ageUnit: z.enum(['YEARS', 'MONTHS', 'WEEKS', 'DAYS']).optional().default('YEARS'),
   gender: z.string(),
@@ -140,7 +145,17 @@ const patientSchema = z.object({
   assessmentNotes: z.string().optional().nullable().transform(val => val || null),
   assessedBy: z.string().optional().nullable().transform(val => val || null),
   assessmentDate: z.date().or(z.string().transform((str) => new Date(str))).optional(),
-});
+})
+  // A patient needs a number. WHICH number is the hospital's business: the
+  // column that used to carry that rule (folderNumber NOT NULL) turned away
+  // every patient who arrived with a PT card and no folder number yet.
+  //
+  // Checked here and not only on the form, because the form is not the only
+  // way in — the offline queue replays registrations through this endpoint.
+  .refine((p) => !missingNumberProblem(p), {
+    message: missingNumberProblem({}) ?? 'A patient number is needed.',
+    path: ['folderNumber'],
+  });
 
 export async function GET(request: NextRequest) {
   try {
@@ -257,7 +272,8 @@ export async function POST(request: NextRequest) {
 
     const existing = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
       `select id from patients
-        where ($1 <> '' and regexp_replace(upper("folderNumber"), '\\s', '', 'g') = $1)
+        where ($1 <> '' and "folderNumber" is not null
+               and regexp_replace(upper("folderNumber"), '\\s', '', 'g') = $1)
            or ($2 <> '' and "ptNumber" is not null
                and regexp_replace(upper("ptNumber"), '\\s', '', 'g') = $2)
         limit 1`,
@@ -363,8 +379,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Validation error:', JSON.stringify(error.errors, null, 2));
+      // "Invalid input data" sends somebody hunting through seven sections for
+      // a field it will not name. The rules written in this file say what they
+      // mean, so when one of those is what failed, say it. Zod's own wording
+      // ("Expected string, received null") is kept off the screen: that one is
+      // for the log, and for whoever is sending malformed JSON.
+      const custom = error.errors.find((e) => e.code === 'custom');
       return NextResponse.json(
-        { error: "Invalid input data", details: error.errors },
+        { error: custom?.message || "Invalid input data", details: error.errors },
         { status: 400 }
       );
     }

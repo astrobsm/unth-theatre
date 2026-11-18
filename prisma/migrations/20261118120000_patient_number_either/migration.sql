@@ -1,0 +1,24 @@
+-- =============================================================================
+-- A patient has a number; it need not be the folder number
+-- -----------------------------------------------------------------------------
+-- "folderNumber" has been NOT NULL since the first migration, so registration
+-- could not proceed without one. A patient who comes up from the clinic with a
+-- PT card and no folder number yet could not be put on the system at all — and
+-- a patient who cannot be registered cannot be booked, so the case goes on
+-- paper and is typed in afterwards, or is not.
+--
+-- The column stays UNIQUE. Postgres allows any number of NULLs in a unique
+-- index, so "not recorded" no longer collides with "not recorded", while two
+-- patients still cannot share a folder number.
+--
+-- NOTHING IS DROPPED AND NOTHING IS REWRITTEN. Every existing row keeps the
+-- folder number it has; this only stops the database refusing the rows that
+-- have none. The application now requires a folder number OR a PT number, and
+-- stores NULL rather than '' for the one that was not given — '' in a unique
+-- column would let the first such patient in and refuse the second.
+--
+-- Reversible while no row has a null folder number:
+--   ALTER TABLE "patients" ALTER COLUMN "folderNumber" SET NOT NULL;
+-- =============================================================================
+
+ALTER TABLE "patients" ALTER COLUMN "folderNumber" DROP NOT NULL;

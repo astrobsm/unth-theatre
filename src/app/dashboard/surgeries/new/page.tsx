@@ -64,8 +64,9 @@ const dayName = (d: number) => DAY_NAMES[d] || `Day ${d}`;
 interface Patient {
   id: string;
   name: string;
-  folderNumber: string;
-  ptNumber: string;
+  // A patient has one of these two, not necessarily the folder number.
+  folderNumber: string | null;
+  ptNumber: string | null;
   age: number;
   ageUnit?: string;
   gender: string;
@@ -2380,7 +2381,8 @@ ${pretty} — ${days} days from today.
       (p) =>
         !term ||
         p.name.toLowerCase().includes(term) ||
-        p.folderNumber.toLowerCase().includes(term)
+        (p.folderNumber?.toLowerCase().includes(term) ?? false) ||
+        (p.ptNumber?.toLowerCase().includes(term) ?? false)
     );
 
     const byId = new Map<string, Patient>();

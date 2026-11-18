@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { patientIdentifier } from '@/lib/patients/patientNumber';
 import { PreOpVisitStatus } from '@prisma/client';
 import { clearanceFor } from '@/lib/preopVisitClearance';
 
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
       data: {
         surgeryId,
         patientName: surgery.patient.name,
-        folderNumber: surgery.patient.folderNumber,
+        folderNumber: patientIdentifier(surgery.patient),
         ward: surgery.patient.ward,
         age: surgery.patient.age,
         gender: surgery.patient.gender,

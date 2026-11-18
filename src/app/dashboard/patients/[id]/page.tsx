@@ -24,8 +24,8 @@ import { formatAge } from '@/lib/age';
 
 interface Patient {
   id: string;
-  folderNumber: string;
-  ptNumber?: string;
+  folderNumber?: string | null;
+  ptNumber?: string | null;
   name: string;
   age: number;
   ageUnit?: string;
@@ -176,10 +176,18 @@ export default function PatientDetailPage() {
             <label className="text-sm font-medium text-gray-500">Name</label>
             <p className="text-gray-900 font-semibold text-lg">{patient.name}</p>
           </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500">Folder Number</label>
-            <p className="text-gray-900 font-semibold">{patient.folderNumber}</p>
-          </div>
+          {/*
+            Shown only when there is one. A patient registered on a PT number
+            alone would otherwise get a heading with nothing under it, which
+            reads as a record with its folder number lost rather than one that
+            never had a folder number.
+          */}
+          {patient.folderNumber && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">Folder Number</label>
+              <p className="text-gray-900 font-semibold">{patient.folderNumber}</p>
+            </div>
+          )}
           {patient.ptNumber && (
             <div>
               <label className="text-sm font-medium text-gray-500">PT Number</label>
