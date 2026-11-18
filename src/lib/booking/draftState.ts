@@ -30,6 +30,14 @@ export interface BookingDraft {
   selectedSurgeonId?: string;
   supervisingConsultantIds?: string[];
   assistantIds?: string[];
+  /**
+   * The grade chosen for each assistant, keyed by account id.
+   *
+   * Held beside the ids rather than folded into them so that a draft saved
+   * by an earlier build still restores: it has the ids and no grades, and
+   * each one then falls back to the default for that account's role.
+   */
+  assistantGrades?: Record<string, string>;
 
   // When
   scheduledDate?: string;

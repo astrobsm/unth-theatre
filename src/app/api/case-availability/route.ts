@@ -75,7 +75,7 @@ async function teamsFor(surgeries: SurgeryRow[]) {
     }).catch(() => []),
     prisma.surgicalTeamMember.findMany({
       where: { surgeryId: { in: ids } },
-      select: { surgeryId: true, userId: true, memberName: true, role: true },
+      select: { surgeryId: true, userId: true, memberName: true, role: true, specialNotes: true },
     }).catch(() => []),
     prisma.caseTeamAvailability.findMany({
       where: { surgeryId: { in: ids } },

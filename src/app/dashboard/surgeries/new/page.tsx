@@ -36,6 +36,10 @@ import SurgicalTeamMemberPicker from '@/components/SurgicalTeamMemberPicker';
 import PhoneLink from '@/components/PhoneLink';
 import ConsentFormFields, { emptyConsentForm, isConsentSigned, type ConsentForm } from '@/components/ConsentFormFields';
 import { formatAge } from '@/lib/age';
+import {
+  assistantsAsTeamMembers, gradeForAccountRole, mergeTeamMembers, primaryAssistantId,
+  TEAM_GRADES, type TeamGrade,
+} from '@/lib/surgery/assistants';
 import { queryElectiveTime } from '@/lib/theatreOps/clock';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
@@ -638,12 +642,24 @@ export default function NewSurgeryPage() {
   /// restricting this to consultants would leave the field empty on most
   /// lists and the assistant unrecorded.
   ///
-  /// ONE, not a list, because Surgery.assistantSurgeonId is one column and
-  /// SurgicalTeamRole has no ASSISTANT value. A picker that accepted three
-  /// and stored one would lose two of them silently, which is worse than a
-  /// field that says what it can hold. Further assistants go in the unit
-  /// team below, under their actual grade.
+  /// SEVERAL, because most lists here are done by two or three surgeons.
+  /// This picker used to REPLACE on every choice — it had a search, an Add
+  /// control and removable chips, and held one — so the second and third
+  /// surgeon were either not recorded or put in a different section under a
+  /// grade, with nothing saying they were operating.
+  ///
+  /// Surgery.assistantSurgeonId is still one column and still gets the first
+  /// of them, so the thirty-odd screens that name "the assistant" are
+  /// unchanged. The whole list is written to surgical_team_members, which is
+  /// the table buildCaseTeam() reads and the one the "is this case mine?"
+  /// clause already searches — so every assistant sees the case on their own
+  /// dashboard and can answer for it. See lib/surgery/assistants.ts.
   const [assistantIds, setAssistantIds] = useState<string[]>([]);
+  /// Each assistant's grade, keyed by account id. Defaulted from their
+  /// account role and shown on the chip, because there is no REGISTRAR
+  /// account role in this system to read it from — 194 accounts are plain
+  /// SURGEON, covering registrars and senior registrars alike.
+  const [assistantGrades, setAssistantGrades] = useState<Record<string, TeamGrade>>({});
   const [assistantSearch, setAssistantSearch] = useState('');
   const [assistantPool, setAssistantPool] = useState<Surgeon[]>([]);
   const [consentForm, setConsentForm] = useState<ConsentForm>(emptyConsentForm());
@@ -1194,6 +1210,7 @@ export default function NewSurgeryPage() {
       selectedSurgeonId,
       supervisingConsultantIds,
       assistantIds,
+      assistantGrades,
       scheduledDate,
       scheduledTime,
       estimatedDuration,
@@ -1221,7 +1238,7 @@ export default function NewSurgeryPage() {
     } as BookingDraft;
   }, [
     selectedPatientId, procedureName, extraProcedures, unit, subspecialty,
-    selectedTheatreId, selectedSurgeonId, supervisingConsultantIds, assistantIds,
+    selectedTheatreId, selectedSurgeonId, supervisingConsultantIds, assistantIds, assistantGrades,
     scheduledDate, scheduledTime, estimatedDuration, magnitude, anesthesiaType,
     localAnaestheticId, needBloodTransfusion, otherSpecialNeeds, postOpDestination,
     isDayCase, admissionType, teamMembers, noUnitRegistrar, noUnitSeniorRegistrar, specialNeeds,
@@ -1241,6 +1258,10 @@ export default function NewSurgeryPage() {
     setSelectedSurgeonId(pick(d.selectedSurgeonId, ''));
     setSupervisingConsultantIds(pick(d.supervisingConsultantIds, []));
     setAssistantIds(pick(d.assistantIds, []));
+    // Grades restore alongside the ids. A draft saved by the previous build
+    // has none, and each chip then falls back to the account-role default
+    // rather than to a blank select.
+    setAssistantGrades(pick(d.assistantGrades, {}) as Record<string, TeamGrade>);
     setScheduledDate(pick(d.scheduledDate, ''));
     setScheduledTime(pick(d.scheduledTime, ''));
     setEstimatedDuration(pick(d.estimatedDuration, ''));
@@ -1487,6 +1508,27 @@ export default function NewSurgeryPage() {
             : true,
         ),
     [assistantPool, assistantIds, assistantSearch, selectedSurgeonId],
+  );
+
+  /**
+   * The assistants as people, in the order they were added.
+   *
+   * Built from the pool so the NAME travels with the booking: a team row
+   * holding only an id reads as a blank line on any list printed by a node
+   * that has not yet synced that account, and the list is printed the night
+   * before. Anyone no longer in the pool is dropped rather than stored
+   * nameless.
+   */
+  const chosenAssistants = useMemo(
+    () => assistantIds
+      .map((id) => {
+        const a = assistantPool.find((x) => x.id === id);
+        return a
+          ? { userId: a.id, name: a.fullName, grade: assistantGrades[id] ?? gradeForAccountRole(a.role) }
+          : null;
+      })
+      .filter((a): a is { userId: string; name: string; grade: TeamGrade } => a !== null),
+    [assistantIds, assistantGrades, assistantPool],
   );
 
   const fetchSurgeons = async () => {
@@ -2044,7 +2086,9 @@ ${pretty} — ${days} days from today.
       // against the case with its outstanding items. Withholding it now would
       // silently discard something a clinician had typed.
       preopOverrideReason: preopOverrideReason.trim() || null,
-      assistantSurgeonId: assistantIds[0] ?? null,
+      // The first assistant with an account, for the column every other
+      // screen reads. The rest of them are in teamMembers below.
+      assistantSurgeonId: primaryAssistantId(chosenAssistants),
       magnitude: magnitude || null,
       anesthesiaType: anesthesiaType || null,
       needBloodTransfusion,
@@ -2095,14 +2139,25 @@ ${pretty} — ${days} days from today.
           role: u.role.trim() || null,
         }))
         : [],
-      teamMembers: teamMembers
-        .filter(tm => tm.name.trim() !== '')
-        .map(tm => ({
-          name: tm.name.trim(),
-          role: tm.role,
-          userId: tm.userId || null,
-          staffCode: tm.staffCode || null,
-        })),
+      // THE UNIT TEAM AND THE ASSISTANTS, AS ONE LIST.
+      //
+      // surgical_team_members is what buildCaseTeam() reads and what the
+      // "is this case mine?" clause searches, so every surgeon named here
+      // sees the case on their own dashboard and can answer for it. Merged
+      // rather than concatenated: a registrar who is in the unit team and
+      // also assisting is one person, and asking them twice produces a board
+      // that can contradict itself.
+      teamMembers: mergeTeamMembers(
+        teamMembers
+          .filter(tm => tm.name.trim() !== '')
+          .map(tm => ({
+            name: tm.name.trim(),
+            role: tm.role,
+            userId: tm.userId || null,
+            staffCode: tm.staffCode || null,
+          })),
+        assistantsAsTeamMembers(chosenAssistants),
+      ),
       // Auto-fetched on-duty team (advisory — backend may persist / notify)
       onDutyTeam: onDuty
         ? {
@@ -3161,10 +3216,18 @@ ${pretty} — ${days} days from today.
                 value=""
                 onChange={(e) => {
                   const id = e.target.value;
-                  // Replaces rather than appends: one assistant is what the
-                  // case can record, so picking a second means changing
-                  // your mind, not adding somebody.
-                  if (id) setAssistantIds([id]);
+                  if (!id) return;
+                  // Appends. Picking a second surgeon means a second surgeon
+                  // is operating, which on most lists here is what happened.
+                  setAssistantIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+                  setAssistantGrades((prev) => (
+                    prev[id]
+                      ? prev
+                      : {
+                        ...prev,
+                        [id]: gradeForAccountRole(assistantPool.find((x) => x.id === id)?.role),
+                      }
+                  ));
                   setAssistantSearch('');
                 }}
                 className="input-field"
@@ -3178,20 +3241,42 @@ ${pretty} — ${days} days from today.
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Surgeons, consultants and house officers. The operating surgeon is not listed
-                here. For a second assistant, add them to the unit team below under their grade.
+                Surgeons, consultants and house officers; add as many as are operating. The
+                operating surgeon is not listed here. Each one goes on the case team, so the
+                case appears on their dashboard and they can answer whether they are coming.
               </p>
 
               {assistantIds.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 space-y-2">
                   {assistantIds.map((id) => {
                     const a = assistantPool.find((s) => s.id === id);
                     return (
-                      <span
+                      <div
                         key={id}
-                        className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-medium text-primary-800"
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-800"
                       >
-                        {a?.fullName || 'Unknown'}
+                        <span className="flex-1 min-w-[8rem]">{a?.fullName || 'Unknown'}</span>
+                        {/*
+                          The grade, shown rather than assumed. There is no
+                          REGISTRAR account role to read it from, so this is a
+                          default the booker can correct — and it is printed on
+                          the operation note, so it should not be invented
+                          silently.
+                        */}
+                        <select
+                          value={assistantGrades[id] ?? gradeForAccountRole(a?.role)}
+                          onChange={(e) => setAssistantGrades((prev) => (
+                            { ...prev, [id]: e.target.value as TeamGrade }
+                          ))}
+                          aria-label={`Grade for ${a?.fullName || 'this assistant'}`}
+                          className="rounded-md border border-primary-200 bg-white px-2 py-1 text-xs"
+                        >
+                          {TEAM_GRADES.map((g) => (
+                            <option key={g} value={g}>
+                              {g.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="button"
                           onClick={() => setAssistantIds((prev) => prev.filter((x) => x !== id))}
@@ -3200,12 +3285,22 @@ ${pretty} — ${days} days from today.
                         >
                           <X className="h-3 w-3" />
                         </button>
-                      </span>
+                      </div>
                     );
                   })}
                 </div>
               )}
-              <input type="hidden" name="assistantSurgeonId" value={assistantIds[0] ?? ''} />
+              {/*
+                The first assistant with an account. Thirty-odd screens read
+                this column as "the assistant"; the rest of the list lives in
+                the case team, which is what the dashboards and the
+                availability board actually read.
+              */}
+              <input
+                type="hidden"
+                name="assistantSurgeonId"
+                value={primaryAssistantId(chosenAssistants) ?? ''}
+              />
             </div>
 
             <div>

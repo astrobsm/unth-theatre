@@ -122,7 +122,7 @@ async function consultantDesk(userId: string) {
         patient: { select: { name: true, folderNumber: true, ward: true } },
         surgeonId: true, assistantSurgeonId: true, anesthetistId: true, supervisingConsultantId: true,
         scrubNurseId: true, theatreTechnicianId: true, supervisingConsultantName: true,
-        teamMembers: { select: { userId: true, memberName: true, role: true } },
+        teamMembers: { select: { userId: true, memberName: true, role: true, specialNotes: true } },
         teamCheckIns: { select: { userId: true, status: true } },
         preopAlert: { select: { sentAt: true } },
       },

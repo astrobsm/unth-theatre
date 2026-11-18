@@ -19,6 +19,7 @@
 // ============================================================
 
 import type { TeamMemberAvailability, AvailabilityStatus } from './availability';
+import { withAssistingNote } from '@/lib/surgery/assistants';
 
 /** The named posts on a Surgery row, in the order a team is read out. */
 export const NAMED_POSTS: Array<{ field: string; label: string }> = [
@@ -53,8 +54,20 @@ export interface TeamSource {
   people: Array<{ id: string; fullName: string; phoneNumber?: string | null; role?: string | null }>;
   /** theatre_team_assignments rows, already filtered to removedAt = null. */
   assignments?: Array<{ userId: string; userName?: string | null; role?: string | null }>;
-  /** surgical_team_members rows. */
-  bookedMembers?: Array<{ userId?: string | null; memberName?: string | null; role?: string | null }>;
+  /**
+   * surgical_team_members rows.
+   *
+   * specialNotes is read as well as role, because this table now holds the
+   * assisting surgeons as well as the unit team, and a board that calls a
+   * second operating surgeon "Registrar" has not said the thing the reader
+   * needed. The grade is still shown; "(assisting)" is added to it.
+   */
+  bookedMembers?: Array<{
+    userId?: string | null;
+    memberName?: string | null;
+    role?: string | null;
+    specialNotes?: string | null;
+  }>;
   /** case_team_availability rows for this case. */
   answers?: Array<{
     userId: string;
@@ -100,7 +113,11 @@ export function buildCaseTeam(src: TeamSource): TeamMemberAvailability[] {
 
   NAMED_POSTS.forEach(({ field, label }) => add(src.posts[field], label));
   (src.assignments ?? []).forEach((a) => add(a.userId, roleLabel(a.role), a.userName));
-  (src.bookedMembers ?? []).forEach((m) => add(m.userId, roleLabel(m.role), m.memberName));
+  (src.bookedMembers ?? []).forEach((m) => add(
+    m.userId,
+    withAssistingNote(roleLabel(m.role), m.specialNotes),
+    m.memberName,
+  ));
 
   // The answers, laid over the top. A row for somebody not on the team is
   // ignored rather than shown: they may have been taken off the case after

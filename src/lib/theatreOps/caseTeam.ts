@@ -1,4 +1,5 @@
 import { consultantsOf } from '@/lib/surgery/consultantIds';
+import { withAssistingNote } from '@/lib/surgery/assistants';
 
 // ============================================================
 // Who is on a case
@@ -27,7 +28,7 @@ export const CASE_TEAM_SELECT = {
   surgeon: { select: { fullName: true } },
   assistantSurgeon: { select: { fullName: true } },
   anesthetist: { select: { fullName: true } },
-  teamMembers: { select: { userId: true, memberName: true, role: true } },
+  teamMembers: { select: { userId: true, memberName: true, role: true, specialNotes: true } },
 } as const;
 
 export interface CaseTeamSource {
@@ -42,7 +43,13 @@ export interface CaseTeamSource {
   theatreTechnicianId: string | null;
   supervisingConsultantId: string | null;
   supervisingConsultantName: string | null;
-  teamMembers: { userId: string | null; memberName: string | null; role: string }[];
+  teamMembers: {
+    userId: string | null;
+    memberName: string | null;
+    role: string;
+    /** Says that this person is assisting, not merely in the unit team. */
+    specialNotes?: string | null;
+  }[];
 }
 
 export interface CaseTeamSlot {
@@ -83,7 +90,7 @@ export function caseTeamSlots(s: CaseTeamSource): CaseTeamSlot[] {
     ...s.teamMembers.map((m) => ({
       userId: m.userId,
       name: m.memberName,
-      roleOnCase: humanise(m.role),
+      roleOnCase: withAssistingNote(humanise(m.role), m.specialNotes),
     })),
   ];
 

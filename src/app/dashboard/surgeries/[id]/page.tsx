@@ -21,6 +21,7 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { withAssistingNote } from '@/lib/surgery/assistants';
 import SurgeryPackEditor from '@/components/SurgeryPackEditor';
 
 interface Surgery {
@@ -28,7 +29,9 @@ interface Surgery {
   patient: {
     id: string;
     name: string;
-    folderNumber: string;
+    // Either one; a patient may be registered on a PT number alone.
+    folderNumber: string | null;
+    ptNumber?: string | null;
     age: number;
     gender: string;
     ward: string;
@@ -45,6 +48,23 @@ interface Surgery {
     id: string;
     fullName: string;
   };
+  assistantSurgeon?: {
+    id: string;
+    fullName: string;
+  } | null;
+  /**
+   * The unit team and the assisting surgeons, as one list.
+   *
+   * specialNotes says which are which: a case done by three surgeons records
+   * all three here, and this panel named one of them until it did.
+   */
+  teamMembers?: {
+    id: string;
+    memberName: string | null;
+    role: string;
+    specialNotes: string | null;
+    user?: { id: string; fullName: string } | null;
+  }[];
   procedureName: string;
   indication: string;
   subspecialty: string;
@@ -187,6 +207,43 @@ export default function SurgeryDetailPage() {
     );
   }
 
+  /**
+   * Everybody on the case who is not one of the three named above.
+   *
+   * The assistant column first, because that is the one the rest of the
+   * system reads, then the booked team. Deduplicated on the account id: the
+   * first assistant is written to BOTH the column and the team table, and
+   * naming them twice on the page that is read in the morning is how a reader
+   * concludes there are four surgeons when there are three.
+   */
+  const alsoOnCase: Array<{ key: string; name: string; role: string }> = [];
+  {
+    const seen = new Set<string>();
+    if (surgery.assistantSurgeon) {
+      seen.add(surgery.assistantSurgeon.id);
+      alsoOnCase.push({
+        key: `assistant:${surgery.assistantSurgeon.id}`,
+        name: surgery.assistantSurgeon.fullName,
+        role: 'Assistant surgeon',
+      });
+    }
+    for (const m of surgery.teamMembers ?? []) {
+      const id = m.user?.id ?? null;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      const name = m.user?.fullName || m.memberName;
+      if (!name) continue;
+      alsoOnCase.push({
+        key: `team:${m.id}`,
+        name,
+        role: withAssistingNote(
+          m.role.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase()),
+          m.specialNotes,
+        ),
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -282,7 +339,7 @@ export default function SurgeryDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-500">Folder Number</label>
-                <p className="text-gray-900">{surgery.patient?.folderNumber || 'N/A'}</p>
+                <p className="text-gray-900">{surgery.patient?.folderNumber || surgery.patient?.ptNumber || 'N/A'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Age</label>
@@ -368,6 +425,27 @@ export default function SurgeryDetailPage() {
               </div>
             )}
           </div>
+
+          {/*
+            EVERYBODY ELSE WHO IS OPERATING. This panel named the surgeon, the
+            anaesthetist and the nurse, and stopped — so a case done by three
+            surgeons showed one, and the two who assisted could not be seen by
+            anybody reading the case. They are recorded at booking now, and
+            this is where the reader looks.
+          */}
+          {alsoOnCase.length > 0 && (
+            <div className="mt-6 border-t border-gray-100 pt-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">Also on this case</h3>
+              <ul className="space-y-1">
+                {alsoOnCase.map((m) => (
+                  <li key={m.key} className="text-sm text-gray-900">
+                    <span className="font-medium">{m.name}</span>
+                    <span className="text-gray-500"> — {m.role}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* The other units on a joint case. Shown here rather than buried
               in the notes because an invited surgeon arriving at this page

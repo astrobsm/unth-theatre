@@ -159,6 +159,11 @@ const surgerySchema = z.object({
     role: z.enum(['CONSULTANT', 'SENIOR_REGISTRAR', 'REGISTRAR', 'HOUSE_OFFICER']),
     userId: z.string().nullish(),
     staffCode: z.string().nullish(),
+    // What this person is doing on the case, as against which grade they
+    // hold. Written by the booking form for the assisting surgeons, so a
+    // case operated by three people records all three and says which of
+    // them were assisting. See lib/surgery/assistants.ts.
+    specialNotes: z.string().nullish(),
   })).optional(),
 
   // ── A case two or more units operate on together ──────────────────────
@@ -1059,6 +1064,7 @@ export async function POST(request: NextRequest) {
             // Link to staff record when picked from the database; null otherwise.
             userId: tm.userId || null,
             role: tm.role,
+            specialNotes: tm.specialNotes || null,
           }))
         } : undefined,
 

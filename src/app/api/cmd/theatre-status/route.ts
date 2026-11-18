@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
       surgeryIds.length
         ? prisma.surgicalTeamMember.findMany({
             where: { surgeryId: { in: surgeryIds } },
-            select: { surgeryId: true, userId: true, memberName: true, role: true },
+            select: { surgeryId: true, userId: true, memberName: true, role: true, specialNotes: true },
           }).catch(() => [])
         : [],
       surgeryIds.length
