@@ -520,10 +520,52 @@ export const WHATSAPP_TEMPLATES: TemplateSpec[] = [
       + 'To tell us about this, anonymously: {{feedbackLink}} — it is how we put a stop to it.',
     variables: ['name', 'hospital', 'deposit', 'feedbackLink'],
   },
+
+  {
+    code: 'PATIENT_OPERATION_INFORMATION',
+    metaName: 'orm_patient_operation_information',
+    category: 'UTILITY',
+    language: 'en',
+    // PATIENT_IDENTIFIED, NOT CLINICAL — and that is a statement about these
+    // words, not a convenience. The body names the patient and the hospital
+    // and carries a link. It does not name the operation, the diagnosis, the
+    // reason for it, or any risk. All of that sits behind the link, which is
+    // personal to the patient and expires.
+    //
+    // Written this way because checkSendAllowed refuses CLINICAL content on an
+    // external channel, and because that rule is right: a diagnosis in a
+    // notification shade is read by whoever is holding the phone, and if one
+    // digit of the number was mistyped at booking, by a stranger.
+    sensitivity: 'PATIENT_IDENTIFIED',
+    when: 'Sent to a patient once their operation is booked, so they can read about it '
+      + 'before they are asked to consent. The information itself is behind the link.',
+    metaBody:
+      'Dear {{1}}, a message from {{2}}.\n\n'
+      + 'Before your operation, we would like you to read some information about it: what '
+      + 'it involves, what it should achieve, what the risks are, when to stop eating and '
+      + 'drinking, and what to expect afterwards.\n\n'
+      + 'You can read it here, and save or print it: {{3}}\n\n'
+      + 'Please read it before you are asked to sign a consent form, and bring your '
+      + 'questions with you. It does not replace what your surgeon will tell you.\n\n'
+      + 'If anything is unclear, ask your ward nurse or your surgeon. Nothing will be done '
+      + 'without your permission.',
+    body:
+      'Dear {{name}}, a message from {{hospital}}.\n\n'
+      + 'Before your operation, we would like you to read some information about it: what '
+      + 'it involves, what it should achieve, what the risks are, when to stop eating and '
+      + 'drinking, and what to expect afterwards.\n\n'
+      + 'You can read it here, and save or print it: {{link}}\n\n'
+      + 'Please read it before you are asked to sign a consent form, and bring your '
+      + 'questions with you. It does not replace what your surgeon will tell you.\n\n'
+      + 'If anything is unclear, ask your ward nurse or your surgeon. Nothing will be done '
+      + 'without your permission.',
+    variables: ['name', 'hospital', 'link'],
+  },
 ];
 
 /** The templates addressed to a patient rather than to a member of staff. */
 export const PATIENT_TEMPLATE_CODES = [
+  'PATIENT_OPERATION_INFORMATION',
   'PATIENT_SAFETY_NOTICE',
   'PATIENT_PAYMENT_WARNING',
   'PATIENT_CASE_HOLDING',

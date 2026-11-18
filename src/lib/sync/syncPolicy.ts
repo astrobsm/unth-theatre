@@ -179,6 +179,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'workflow_rules', cls: 'CLOUD_AUTHORITATIVE', why: 'A rule enabled on one node only would fire inconsistently, and the kill switch must work everywhere at once.' },
   { table: 'escalation_policies', cls: 'CLOUD_AUTHORITATIVE', why: 'Who gets escalated to is an institutional decision.' },
   { table: 'feedback_requests', cls: 'APPEND_ONLY', why: 'A request issued and a response submitted are both events; neither is editable.' },
+  { table: 'patient_counselling_issues', cls: 'APPEND_ONLY', why: 'An information sheet issued to a patient is an event with a date and an author. Two nodes issuing two sheets have issued two sheets, and the record of what a patient was told must never be overwritten by the other node.' },
 
   // ── Clinical OCR ─────────────────────────────────────────────────────────
   // These rows carry only metadata and text. The scanned FILE is not in the

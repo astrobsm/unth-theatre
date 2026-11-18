@@ -18,6 +18,7 @@ import { cacheFirstFetch } from '@/lib/offlineDataManager';
 import { patientLabel, patientAgeSex } from '@/lib/patientDisplay';
 import { TableSkeleton } from '@/components/Skeleton';
 import ContactName from '@/components/ContactName';
+import SendInformationButton from '@/components/counselling/SendInformationButton';
 import { bookingLateness, formatBookedAt, formatBookedAtShort } from '@/lib/bookingLateness';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import ReportBlockerButton from '@/components/ReportBlockerButton';
@@ -1464,6 +1465,18 @@ export default function SurgeriesPage() {
                             {surgery.isDayCase
                               ? <DayCaseFlag className="mt-1" />
                               : <InpatientNote className="mt-1" />}
+                            {/* DIRECTLY BENEATH THE NAME, where it was asked
+                                for. Sending somebody their own information is
+                                an act aimed at the person, so it belongs in
+                                the cell that names them rather than among the
+                                case actions further along the row. */}
+                            {surgery.patient?.id && (
+                              <SendInformationButton
+                                className="mt-1.5 print:hidden"
+                                surgeryId={surgery.id}
+                                patientName={surgery.patient?.name}
+                              />
+                            )}
                             <div className={label.notLoaded ? 'text-xs text-amber-600' : 'text-xs text-gray-500'}>
                               {label.identifier}
                               {ageSex && <span className="ml-1 text-gray-400">· {ageSex}</span>}

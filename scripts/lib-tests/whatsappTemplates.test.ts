@@ -156,14 +156,34 @@ describe('WhatsApp templates', () => {
 
   it('gives the patient somewhere to go that needs no login', () => {
     // The staff templates have a button into ORM. A patient has no account, so
-    // theirs carry a feedback link in the body instead — and it is anonymous,
-    // which is the only reason an unhappy patient would use it at all.
+    // theirs must carry a destination in the BODY that opens without one.
     for (const code of PATIENT_TEMPLATE_CODES) {
+      const t = templateByCode(code)!;
+      const hasNoLoginDestination = t.variables.some((v) => /link/i.test(v));
+      expect(hasNoLoginDestination, code).toBe(true);
+      // And a human being to ask, which a link is no substitute for.
+      expect(t.body, code).toMatch(/ward nurse|surgical team|surgeon/i);
+    }
+  });
+
+  it('offers the anonymous route on every template that is a notice about care', () => {
+    // The original rule, kept exactly, for the templates it was written for:
+    // a patient told their operation is delayed or cancelled needs a way to
+    // say something about it, and it has to be anonymous or an unhappy
+    // patient will not use it at all.
+    //
+    // PATIENT_OPERATION_INFORMATION is excluded deliberately. It is not a
+    // notice about care — it exists to carry one link, to the patient's own
+    // information sheet. A second link in the same message competes with the
+    // one the message is for, and Meta's 1024-character body does not have
+    // room for both the invitation to read and the invitation to complain.
+    const NOTICES = (PATIENT_TEMPLATE_CODES as readonly string[])
+      .filter((c) => c !== 'PATIENT_OPERATION_INFORMATION');
+    expect(NOTICES.length).toBeGreaterThan(0);
+    for (const code of NOTICES) {
       const t = templateByCode(code)!;
       expect(t.variables, code).toContain('feedbackLink');
       expect(t.body, code).toMatch(/anonymous/i);
-      // And a human being to ask, which a link is no substitute for.
-      expect(t.body, code).toMatch(/ward nurse|surgical team/i);
     }
   });
 

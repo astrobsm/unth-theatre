@@ -1205,6 +1205,17 @@ model Patient {
   phoneNumber    String? // Patient's own phone number for communication
   caregiverName  String? // Optional next-of-kin / caregiver name
   caregiverPhone String? // Optional caregiver phone number to reach for information
+
+  /// The patient has asked not to be written to on WhatsApp.
+  ///
+  /// Staff have had this since the comms module was built; patients had not,
+  /// because nothing used to be sent to them that they might not want on a
+  /// phone. An information sheet about their own operation is exactly that:
+  /// a shared handset, or a family that reads one's messages, is a real
+  /// reason to decline. Where this is set the sheet is printed and handed
+  /// over instead, and the sender is told why.
+  whatsappOptOut   Boolean   @default(false)
+  whatsappOptOutAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -15206,6 +15217,66 @@ model PolicyFinalProposal {
 /// Not a surgery. Nothing here is on a list, holds a theatre, picks a pack
 /// or quotes a deposit. Publishing it creates an ordinary Surgery through
 /// the ordinary booking route, and this row then records which one.
+model PatientCounsellingIssue {
+  id String @id @default(uuid())
+
+  /// TEXT ids — match Patient.id / Surgery.id. Soft references, like the rest
+  /// of the replicated tables: a hard FK turns a row that has not synced yet
+  /// into a refused insert on the other node.
+  patientId String?
+  surgeryId String?
+
+  /// SHA-256 of the token. The token itself is never stored, so a database
+  /// read cannot open somebody's medical information.
+  tokenHash String   @unique
+  expiresAt DateTime
+
+  /// The operation AS IT STOOD when the sheet was issued. Snapshotted rather
+  /// than read live, because a leaflet is a document given on a date: if the
+  /// case is amended later, the sheet the patient actually read must not
+  /// change under them.
+  procedureName String
+  procedureSlug String?
+  category      String?
+  subspecialty  String?
+  indication    String?
+  unit          String?
+  surgeonName   String?
+  scheduledFor  DateTime?
+
+  /// Which edition of the standard text, and whether operation-specific
+  /// counselling was found: 'procedure' | 'category' | 'none'.
+  leafletVersion String
+  matchedOn      String @default("none")
+
+  /// WHATSAPP | PRINTED | LINK_COPIED
+  channel String @default("WHATSAPP")
+
+  issuedById   String?
+  issuedByName String?
+  issuedAt     DateTime @default(now())
+
+  /// Null means the patient never opened it — which is a fact worth knowing
+  /// before the consent conversation, not an error.
+  openedAt  DateTime?
+  openCount Int       @default(0)
+
+  revokedAt     DateTime?
+  revokedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([surgeryId])
+  @@index([patientId])
+  @@index([expiresAt])
+  @@map("patient_counselling_issues")
+}
+
 model SurgeryScheduleDraft {
   id           String @id @default(uuid())
 
