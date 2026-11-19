@@ -6,6 +6,7 @@
 //   node scripts/local-server/stand-down-blockers.js              what it would do
 //   node scripts/local-server/stand-down-blockers.js --apply      do it
 //   node scripts/local-server/stand-down-blockers.js --attempts 50 --days 30
+//   node scripts/local-server/stand-down-blockers.js --release --apply   retry the rest now
 //   node scripts/local-server/stand-down-blockers.js --restore --apply   undo
 //
 // WHAT THIS IS FOR. The push queue drains strictly oldest-first. An entry the
@@ -47,6 +48,12 @@ const ROOT = path.join(__dirname, '..', '..');
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');
 const RESTORE = args.includes('--restore');
+// Standing the blockers down does not get today's work moving on its own:
+// everything that failed in a batch WITH them also carries a backoff of its
+// own, and waits out the hour it was given for somebody else's fault. This
+// clears that — only for entries below the threshold, so the blockers stay
+// stood down.
+const RELEASE = args.includes('--release');
 
 function flag(name, fallback) {
   const i = args.indexOf(`--${name}`);
@@ -81,6 +88,24 @@ async function main() {
   await client.connect();
 
   try {
+    if (RELEASE) {
+      const { rows } = await client.query(
+        `select count(*)::int as n from sync_journal
+          where ack_at is null and attempts < $1 and next_push_at is not null`,
+        [MIN_ATTEMPTS]);
+      console.log(`${rows[0].n} entr(y/ies) below ${MIN_ATTEMPTS} attempts are waiting out a backoff.`);
+      if (!APPLY) {
+        console.log('Dry run. Add --apply to have them retried on the next cycle.');
+        return;
+      }
+      const res = await client.query(
+        `update sync_journal set next_push_at = null
+          where ack_at is null and attempts < $1 and next_push_at is not null`,
+        [MIN_ATTEMPTS]);
+      console.log(`Released ${res.rowCount}. They go on the next cycle (within a minute or two).`);
+      return;
+    }
+
     if (RESTORE) {
       const { rows } = await client.query(
         `select count(*)::int as n from sync_journal
