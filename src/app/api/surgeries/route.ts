@@ -9,7 +9,7 @@ import { z } from "zod";
 import { generateUniqueSurgeryCode } from "@/lib/surgeryCodes";
 import { buildEmergencyAlertMessage } from "@/lib/emergencyAlert";
 import { jsonWithETag } from "@/lib/etag";
-import { resolveBasePack, BASE_PACK_LABEL } from "@/lib/baseConsumablePack";
+import { resolveBasePack, BASE_PACK_LABEL, needsDrivenPack, NEEDS_PACK_LABEL } from "@/lib/baseConsumablePack";
 import { checkSlot } from "@/lib/theatreOps/scheduling";
 import { isClockTime } from "@/lib/theatreOps/clock";
 import { recordProcedureUse } from "@/lib/procedures/usage";
@@ -90,6 +90,16 @@ const surgerySchema = z.object({
   magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR', 'SUPER_MAJOR']).nullish(),
   anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
   needBloodTransfusion: z.boolean().default(false),
+  // How many units, where the booker said. Null is not zero: a form that did
+  // not ask gave no answer, and the pack rules read null as "transfusion
+  // requested, amount unstated" rather than inventing one.
+  // An empty box is NOT nought units. z.coerce.number() reads '' as 0, which
+  // would say the booker answered "none" when they answered nothing -- the same
+  // trap as z.coerce.boolean() reading the string "false" as true.
+  bloodUnits: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.coerce.number().int().min(0).max(20).nullable(),
+  ).optional(),
   needDiathermy: z.boolean().default(false),
   needStereo: z.boolean().default(false),
   needMontrellMattress: z.boolean().default(false),
@@ -1284,6 +1294,43 @@ export async function POST(request: NextRequest) {
       requestedById: requesterId,
       requestedByName: requesterName,
     }));
+
+    // ── What this case earns from what the booker TICKED ────────────────
+    // Diathermy without a pad and a pencil, or a transfusion without a giving
+    // set, is a tick that drove a line on the theatre list and nothing at all
+    // in the store. Decided in one place (needsDrivenPack) so the preview, the
+    // regenerate button and this route cannot disagree about what a tick buys.
+    const needs = needsDrivenPack({
+      needDiathermy: validatedData.needDiathermy,
+      needBloodTransfusion: validatedData.needBloodTransfusion,
+      bloodUnits: validatedData.bloodUnits ?? null,
+    });
+    const needsConsumableRows = needs.consumables.map((b) => ({
+      surgeryId: surgery.id,
+      templateId: null,
+      name: b.name,
+      category: b.category as any,
+      size: b.size,
+      unit: b.unit,
+      quantity: b.quantity,
+      notes: NEEDS_PACK_LABEL,
+      requestedById: requesterId,
+      requestedByName: requesterName,
+    }));
+    const needsDrugRows = needs.drugs.map((d) => ({
+      surgeryId: surgery.id,
+      templateId: null,
+      name: d.name,
+      type: d.type as any,
+      dosage: d.dosage,
+      route: d.route,
+      quantity: d.quantity,
+      unit: d.unit,
+      notes: NEEDS_PACK_LABEL,
+      requestedById: requesterId,
+      requestedByName: requesterName,
+    }));
+
     // ── Packs from the confirmed procedure mapping ──────────────────────────
     // Fills in what the form did not send. A booker who chose items explicitly is
     // not overridden — they were looking at the patient; the mapping is a default,
@@ -1474,8 +1521,19 @@ export async function POST(request: NextRequest) {
     };
 
     await step('the consumable pack list', () =>
-      prisma.surgeryConsumableRequest.createMany({ data: [...basePackRows, ...extraRows] })
+      prisma.surgeryConsumableRequest.createMany({
+        data: [...basePackRows, ...needsConsumableRows, ...extraRows],
+      })
     );
+
+    // The drugs a tick earns go to PHARMACY, not to the pack provider, who
+    // does not stock them. A line they cannot fill is a line that holds up
+    // the whole pack while somebody works out whose it was.
+    if (needsDrugRows.length) {
+      await step('the drugs this case was booked to need', () =>
+        prisma.surgeryDrugDressingRequest.createMany({ data: needsDrugRows })
+      );
+    }
 
     if (effectiveDrugs && effectiveDrugs.length) {
       // Same reasoning as the consumables above: the template names the drug.
@@ -1665,7 +1723,9 @@ export async function POST(request: NextRequest) {
           status: 'ACTIVE',
           displayOnTv: true,
           bloodRequired: validatedData.needBloodTransfusion,
-          bloodUnits: validatedData.needBloodTransfusion ? 2 : null, // Default 2 units if blood required
+          // The booker's own figure where they gave one. The hard-coded 2 was a
+          // guess printed to the whole theatre as though it were a request.
+          bloodUnits: validatedData.needBloodTransfusion ? (validatedData.bloodUnits ?? 2) : null,
           alertMessage: buildEmergencyAlertMessage({
             patientName: patient.name,
             folderNumber: patient.folderNumber,
@@ -1678,7 +1738,7 @@ export async function POST(request: NextRequest) {
             estimatedStartTime: validatedData.scheduledTime,
             priority: 'CRITICAL',
             bloodRequired: validatedData.needBloodTransfusion,
-            bloodUnits: validatedData.needBloodTransfusion ? 2 : null,
+            bloodUnits: validatedData.needBloodTransfusion ? (validatedData.bloodUnits ?? 2) : null,
             anaesthesiaType: validatedData.anesthesiaType,
           }),
           additionalNotes: `Escalation deadline: ${escalationDeadline.toISOString()}`,

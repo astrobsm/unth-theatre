@@ -112,6 +112,7 @@ const emptyForm = {
   // What the case will need. Asked here so the pharmacy and the pack
   // provider can act on the plan, and so publishing does not ask again.
   needBloodTransfusion: false,
+  bloodUnits: '',
   needDiathermy: false,
   needStereo: false,
   needMontrellMattress: false,
@@ -589,7 +590,27 @@ export default function SurgeryDraftsPage() {
           <div className="mt-3 rounded-lg border border-gray-200 p-3">
             <p className="text-sm font-semibold text-gray-900 mb-2">What this case will need</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <Tick label="Blood transfusion" checked={form.needBloodTransfusion} onChange={(v) => setForm({ ...form, needBloodTransfusion: v })} />
+              <div>
+                <Tick label="Blood transfusion" checked={form.needBloodTransfusion} onChange={(v) => setForm({ ...form, needBloodTransfusion: v })} />
+                {/* How many, not merely whether. The pack a plan implies cannot be
+                    worked out from a tick: one unit needs a giving set, two or more
+                    need the cover for what two or more units do to a patient. */}
+                {form.needBloodTransfusion && (
+                  <div className="mt-1 ml-6 flex items-center gap-2">
+                    <label className="text-xs text-gray-600" htmlFor="draft-blood-units">Units</label>
+                    <input
+                      id="draft-blood-units"
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={form.bloodUnits}
+                      onChange={(e) => setForm({ ...form, bloodUnits: e.target.value })}
+                      placeholder="2"
+                      className="w-20 rounded border border-gray-300 px-2 py-1 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
               <Tick label="Diathermy" checked={form.needDiathermy} onChange={(v) => setForm({ ...form, needDiathermy: v })} />
               <Tick label="Stereo / microscope" checked={form.needStereo} onChange={(v) => setForm({ ...form, needStereo: v })} />
               <Tick label="Montrell mattress" checked={form.needMontrellMattress} onChange={(v) => setForm({ ...form, needMontrellMattress: v })} />
@@ -848,7 +869,7 @@ function DraftCard({
   // against it, and a plan whose requirements are one click away is a plan
   // whose requirements are read the day before.
   const needs: string[] = [];
-  if (d.needBloodTransfusion) needs.push('blood');
+  if (d.needBloodTransfusion) needs.push(d.bloodUnits ? `blood × ${d.bloodUnits}` : 'blood');
   if (d.needDiathermy) needs.push('diathermy');
   if (d.needStereo) needs.push('stereo');
   if (d.needMontrellMattress) needs.push('Montrell mattress');

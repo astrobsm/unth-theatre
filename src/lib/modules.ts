@@ -283,6 +283,12 @@ export const MODULES: AppModule[] = [
   { id: 'late-bookings', label: 'Late Bookings', paths: ['/dashboard/late-bookings'], defaultRoles: [], category: 'Admin' },
   { id: 'booking-performance', label: 'Booking Performance', paths: ['/dashboard/booking-performance'], defaultRoles: [], category: 'Admin' },
   { id: 'duty-performance', label: 'Duty Performance', paths: ['/dashboard/duty-performance'], defaultRoles: [], category: 'Admin' },
+  // What each surgeon, assistant and anaesthetist ACTUALLY did, from the team
+  // confirmed after each case. defaultRoles is empty like its neighbours: this
+  // names individuals against a count of their work, and who may read it is
+  // decided in the route, which also lets any signed-in person read their own
+  // record without being able to read anybody else's.
+  { id: 'operating-record', label: 'Operating Record', paths: ['/dashboard/operating-record'], defaultRoles: [], category: 'Admin' },
   { id: 'anonymous-tips-review', label: 'Review Anonymous Tips', paths: ['/dashboard/anonymous-tips/view'], defaultRoles: [], category: 'Admin' },
   { id: 'security-reports-review', label: 'Review Security Reports', paths: ['/dashboard/security-reports/view'], defaultRoles: [], category: 'Admin' },
   { id: 'theatre-audit', label: 'Theatre Audit', paths: ['/dashboard/theatre-audit'], defaultRoles: [...ADMIN_VIEWERS], category: 'Admin' },

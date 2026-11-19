@@ -80,6 +80,13 @@ const BASE_PACK_LINES: BasePackLine[] = [
   // gloves do: a major case is scrubbed by more people, and a glove is changed
   // when it is holed rather than at the end.
   { name: 'Examination gloves', category: 'GLOVES', unit: 'pack', qty: [1, 1, 1] },
+
+  // Aprons. SIX ON EVERY CASE, flat, by the theatre's instruction of 19
+  // November. They do not taper: the number is about how many people are at
+  // the table and how many times one is changed, not how big the operation
+  // is, and a minor case has a scrub nurse and a circulating nurse the same
+  // as a major one.
+  { name: 'Disposable apron', category: 'PPE', unit: 'piece', qty: [6, 6, 6] },
   { name: 'Surgical gloves, sterile', category: 'GLOVES', unit: 'pairs', qty: [4, 6, 8] },
 
   // Skin prep and antiseptics. One container whatever the operation, so these
@@ -150,5 +157,111 @@ export function resolveBasePack(magnitude: string | null | undefined): BasePackI
   return items;
 }
 
+// ============================================================
+// What a case needs BECAUSE THE BOOKER SAID SO
+// ------------------------------------------------------------
+// Separate from the base pack above, which is what every case gets whatever
+// it is. These lines appear only when the booking form was ticked, and they
+// exist because the ticking was the only thing that happened: a booker said
+// "diathermy" and the pack went out without a pad, because the tick drove a
+// line on the theatre list and nothing in the store.
+//
+// ONE SOURCE, FOUR CALLERS. Booking, emergency booking, the pack preview and
+// the regenerate button all add these from here. The alternative -- each
+// route deciding for itself -- is how a case comes back from theatre with a
+// diathermy pencil the preview never showed.
+//
+// DRUGS GO TO PHARMACY, NOT TO THE PACK PROVIDER. Hydrocortisone, calcium
+// gluconate and tranexamic acid are returned on the `drugs` list rather than
+// the consumable one, because the consumable pack provider does not stock
+// drugs and a line they cannot fill is a line that delays the pack. The
+// hardware -- giving set, syringe, pad, pencil, aprons -- is theirs.
+// ============================================================
+
+export interface CaseNeeds {
+  needDiathermy?: boolean | null;
+  needBloodTransfusion?: boolean | null;
+  /** Units the booker expects to cross-match. Null where it was not asked. */
+  bloodUnits?: number | null;
+}
+
+export interface NeedsDrivenDrug {
+  name: string;
+  type: string;
+  dosage: string | null;
+  route: string | null;
+  quantity: number;
+  unit: string;
+}
+
+export interface NeedsDrivenPack {
+  consumables: BasePackItem[];
+  drugs: NeedsDrivenDrug[];
+  /** Why each block is there, for the line that tells the booker. */
+  reasons: string[];
+}
+
+/**
+ * How many units counts as a transfusion big enough to need the citrate and
+ * fibrinolysis cover.
+ *
+ * Two. Calcium gluconate is there for citrate toxicity, which is a function of
+ * how much stored blood goes in and how fast; tranexamic acid is there because
+ * a case expected to need two units is a case expected to bleed. Below that,
+ * the giving set and the hydrocortisone cover the reaction risk and the rest
+ * would be stock sent out to come back.
+ */
+export const MULTI_UNIT_TRANSFUSION = 2;
+
+/**
+ * The lines a case earns from what the booker ticked.
+ *
+ * Quantities are flat, not tapered by magnitude. A diathermy pad is one pad
+ * whether the operation is minor or super-major, and a patient having two
+ * units of blood needs the same cover either way.
+ */
+export function needsDrivenPack(needs: CaseNeeds | null | undefined): NeedsDrivenPack {
+  const consumables: BasePackItem[] = [];
+  const drugs: NeedsDrivenDrug[] = [];
+  const reasons: string[] = [];
+  if (!needs) return { consumables, drugs, reasons };
+
+  if (needs.needDiathermy) {
+    consumables.push(
+      { name: 'Diathermy pad (patient plate)', category: 'DIATHERMY', size: null, unit: 'piece', quantity: 1 },
+      { name: 'Diathermy pencil', category: 'DIATHERMY', size: null, unit: 'piece', quantity: 1 },
+    );
+    reasons.push('diathermy was requested');
+  }
+
+  if (needs.needBloodTransfusion) {
+    consumables.push(
+      { name: 'Blood giving set', category: 'CATHETERS_TUBING', size: null, unit: 'set', quantity: 1 },
+    );
+    // Cover for a transfusion reaction. One dose, drawn up only if needed.
+    drugs.push(
+      { name: 'Inj. Hydrocortisone', type: 'ANAESTHETIC_ADJUNCT', dosage: '100 mg', route: 'IV', quantity: 1, unit: 'vial' },
+    );
+    reasons.push('blood transfusion was requested');
+
+    const units = typeof needs.bloodUnits === 'number' ? needs.bloodUnits : 0;
+    if (units >= MULTI_UNIT_TRANSFUSION) {
+      consumables.push(
+        { name: 'Syringe', category: 'SYRINGES_NEEDLES', size: '20ml', unit: 'piece', quantity: 1 },
+      );
+      drugs.push(
+        { name: 'Inj. Calcium Gluconate', type: 'ANAESTHETIC_ADJUNCT', dosage: '10% 10 ml', route: 'IV', quantity: 1, unit: 'ampoule' },
+        { name: 'Tranexamic acid', type: 'HAEMOSTATIC', dosage: '500 mg', route: 'IV', quantity: 3, unit: 'ampoule' },
+      );
+      reasons.push(`${units} units of blood were requested`);
+    }
+  }
+
+  return { consumables, drugs, reasons };
+}
+
 /** Human label for the base pack, e.g. for UI headings. */
 export const BASE_PACK_LABEL = 'Mandatory base theatre pack';
+
+/** Where a needs-driven line came from, on the pack sheet. */
+export const NEEDS_PACK_LABEL = 'Added from what this case was booked to need';

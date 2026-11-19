@@ -65,6 +65,12 @@ const draftSchema = z.object({
   // blood for every case it sent. The form sends real booleans; anything else
   // is refused and says so, which is the failure that gets noticed.
   needBloodTransfusion: z.boolean().default(false),
+  // An empty box is not nought units: z.coerce.number() reads '' as 0, which
+  // would record "none" where the unit answered nothing.
+  bloodUnits: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.coerce.number().int().min(0).max(20).nullable(),
+  ).optional(),
   needDiathermy: z.boolean().default(false),
   needStereo: z.boolean().default(false),
   needMontrellMattress: z.boolean().default(false),
@@ -163,6 +169,7 @@ export async function POST(request: NextRequest) {
         priority: d.priority,
         notes: d.notes,
         needBloodTransfusion: d.needBloodTransfusion,
+        bloodUnits: d.needBloodTransfusion ? (d.bloodUnits ?? null) : null,
         needDiathermy: d.needDiathermy,
         needStereo: d.needStereo,
         needMontrellMattress: d.needMontrellMattress,

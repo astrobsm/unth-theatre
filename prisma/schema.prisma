@@ -209,6 +209,21 @@ enum SurgicalTeamRole {
   HOUSE_OFFICER
 }
 
+/// What a person DID on a case, as distinct from their grade.
+///
+/// A consultant who assisted a registrar is a CONSULTANT doing ASSISTANT,
+/// and counting that as a consultant case hides the one thing a training
+/// record exists to show.
+enum ActualTeamRole {
+  PRIMARY_SURGEON
+  ASSISTANT
+  /// Who gave the anaesthetic. The post most often swapped on the morning,
+  /// because the anaesthetic rota is drawn up after the lists are.
+  ANAESTHETIST
+  /// Nurse anaesthetist or anaesthetic technician who assisted.
+  ANAESTHETIC_ASSISTANT
+}
+
 /// The journey a patient takes through a theatre episode.
 ///
 /// Six of these predate the operations-intelligence work and are unchanged.
@@ -1336,6 +1351,10 @@ model Surgery {
   // Requirements
   needICU                 Boolean @default(false)
   needBloodTransfusion    Boolean @default(false)
+  /// How many units the booker expects to cross-match. NULL is not zero: a
+  /// case booked before the form asked gave no answer, and the pack rules read
+  /// null as "transfusion requested, amount unstated".
+  bloodUnits              Int?
   needDiathermy           Boolean @default(false)
   needStereo              Boolean @default(false)
   needMontrellMattress    Boolean @default(false)
@@ -1649,6 +1668,84 @@ model SurgicalTeamMember {
   @@map("surgical_team_members")
 }
 
+
+/// Who ACTUALLY operated, as against who was booked.
+///
+/// A surgery row names the surgeon who was booked. On most lists here that is
+/// the consultant who put the case up, and the person who held the knife was a
+/// senior registrar. Both are true, the record held only the first, and every
+/// figure drawn from surgeonId therefore answered "whose list was this" while
+/// reading as though it answered "who did this".
+///
+/// APPEND-ONLY, IN SETS. One confirmation writes one row per person, sharing a
+/// confirmationId and a confirmedAt. A correction appends a NEW set; nothing is
+/// updated and nothing deleted. The current team is the newest set; the sets
+/// before it are the trail of what was corrected, by whom and when.
+///
+/// The standing rule that the EARLIEST record wins a conflict does not apply
+/// here and must not be applied. That rule governs two nodes holding rival
+/// versions of one booking, where the first is the true one. A later set here
+/// is a human deliberately correcting the earlier, and "first wins" would make
+/// correction impossible -- which is the whole feature.
+///
+/// NO RELATIONS TO Surgery OR User, deliberately, matching
+/// SurgeryScheduleDraft: a hard foreign key turns a row whose parent has not
+/// synced yet into a refused insert on the other node, which is exactly what
+/// stranded a theatre list on 19 November.
+model SurgeryActualTeam {
+  id String @id @default(uuid())
+
+  /// Soft reference to Surgery.id. No FK -- see the note above.
+  surgeryId String
+
+  /// Shared by every row of one confirmation. Makes "the current team" one
+  /// cheap lookup rather than a reconstruction, and keeps a half-written
+  /// correction from ever being read as the answer.
+  confirmationId String
+  confirmedAt    DateTime @default(now())
+  confirmedById  String
+  /// Denormalised on purpose. This records an attestation, and one that cannot
+  /// be read without a working join on the other node is not much of a record.
+  confirmedByName String
+
+  /// Soft reference to User.id. Null for a visiting surgeon with no account:
+  /// they still operated and the case must say so, they simply cannot appear
+  /// on a board keyed on staff.
+  userId     String?
+  memberName String
+  staffCode  String?
+
+  role ActualTeamRole
+
+  /// CONSULTANT | SENIOR_REGISTRAR | REGISTRAR | HOUSE_OFFICER, matching
+  /// SurgicalTeamRole. Text rather than that enum because a grade recorded
+  /// against a finished case is a historical fact and should not shift under
+  /// it if the enum is later extended.
+  grade String?
+
+  /// 0 the operating surgeon, 1 the first assistant, 2 the second. Order
+  /// matters on an operation note and in a logbook: "an assistant" is not the
+  /// same claim as "the first assistant".
+  position Int @default(0)
+
+  /// "Took over at closure", "scrubbed for the second procedure only".
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  /// Sync metadata, maintained by the capture trigger in the sync migration.
+  /// Declared here ONLY so `prisma migrate diff` does not read these columns as
+  /// drift and generate a DROP for them. Application code must never write
+  /// them: the trigger owns them.
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@index([surgeryId, confirmedAt])
+  @@index([userId, confirmedAt])
+  @@index([confirmationId])
+  @@map("surgery_actual_team")
+}
 model SurgeryItem {
   id        String   @id @default(uuid())
   surgeryId String
@@ -15311,6 +15408,9 @@ model SurgeryScheduleDraft {
   /// anything with a plan. A plan that does not say what it needs tells them
   /// only that an operation is coming.
   needBloodTransfusion Boolean @default(false)
+  /// Units expected. Carried through when the plan is published, so the unit
+  /// does not answer the same question twice.
+  bloodUnits           Int?
   needDiathermy        Boolean @default(false)
   needStereo           Boolean @default(false)
   needMontrellMattress Boolean @default(false)

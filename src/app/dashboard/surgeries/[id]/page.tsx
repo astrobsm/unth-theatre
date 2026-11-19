@@ -23,6 +23,7 @@ import {
 import { formatDate } from '@/lib/utils';
 import { withAssistingNote } from '@/lib/surgery/assistants';
 import SurgeryPackEditor from '@/components/SurgeryPackEditor';
+import ActualTeamPanel from '@/components/ActualTeamPanel';
 
 interface Surgery {
   id: string;
@@ -620,6 +621,14 @@ export default function SurgeryDetailPage() {
           not on the surgical team — the component decides that from the API,
           so the rule lives in one place rather than being re-derived here. */}
       <SurgeryPackEditor surgeryId={surgeryId} />
+
+      {/* Who was ACTUALLY in the room, as against who was booked. Shown once the
+          case is under way or closed; on a scheduled case it would only invite a
+          team to be "confirmed" in advance, which is the booking again under a
+          name that claims more than it knows. */}
+      <div className="mt-6">
+        <ActualTeamPanel surgeryId={surgeryId} surgeryStatus={surgery.status} />
+      </div>
     </div>
   );
 }

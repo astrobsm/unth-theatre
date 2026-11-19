@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { buildPackRequests } from '@/lib/packRequests';
-import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
+import { resolveBasePack, BASE_PACK_LABEL, needsDrivenPack, NEEDS_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { canEditPack } from '@/lib/theatreOps/packAmendment';
 import { fallbackPacks } from '@/lib/packs/fallback';
 import { toConsumableCategory, toDrugType } from '@/lib/packs/enums';
@@ -65,6 +65,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         // subspecialty, and no antibiotic dose is put on a child's pack.
         subspecialty: true,
         surgeryType: true,
+        // What the booker ticked. A tick that buys nothing in the store is the
+        // fault this regenerates away for a case booked before the rule existed.
+        needDiathermy: true,
+        needBloodTransfusion: true,
+        bloodUnits: true,
         patient: { select: { age: true, ageUnit: true } },
       },
     });
@@ -124,6 +129,25 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       notes: BASE_PACK_LABEL,
     }));
 
+    const needs = needsDrivenPack(surgery);
+    const needsConsumables = needs.consumables.map((b) => ({
+      name: b.name,
+      category: b.category as never,
+      size: b.size,
+      unit: b.unit,
+      quantity: b.quantity,
+      notes: NEEDS_PACK_LABEL,
+    }));
+    const needsDrugs = needs.drugs.map((d) => ({
+      name: d.name,
+      type: d.type as never,
+      dosage: d.dosage,
+      route: d.route,
+      quantity: d.quantity,
+      unit: d.unit,
+      notes: NEEDS_PACK_LABEL,
+    }));
+
     // Everything already on the case, including withdrawn lines — see the note
     // above about not resurrecting a cancellation.
     const [existingC, existingD] = await Promise.all([
@@ -137,13 +161,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     const haveC = new Set(existingC.map((r) => r.name.trim().toLowerCase()));
     const haveD = new Set(existingD.map((r) => r.name.trim().toLowerCase()));
 
-    const newConsumables = [...basePack, ...mapped.consumables, ...extra.consumables]
+    const newConsumables = [...basePack, ...needsConsumables, ...mapped.consumables, ...extra.consumables]
       .filter((c: any) => c?.name && !haveC.has(String(c.name).trim().toLowerCase()))
       // The mapping and the base pack can name the same item; keep the first.
       .filter((c: any, i, arr) =>
         arr.findIndex((x: any) => String(x.name).trim().toLowerCase() === String(c.name).trim().toLowerCase()) === i);
 
-    const newDrugs = [...mapped.drugs, ...extra.drugs]
+    const newDrugs = [...needsDrugs, ...mapped.drugs, ...extra.drugs]
       .filter((d: any) => d?.name && !haveD.has(String(d.name).trim().toLowerCase()))
       .filter((d: any, i, arr) =>
         arr.findIndex((x: any) => String(x.name).trim().toLowerCase() === String(d.name).trim().toLowerCase()) === i);

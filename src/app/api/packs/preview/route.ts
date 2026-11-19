@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { generatePacks } from '@/lib/packs/generate';
-import { resolveBasePack, BASE_PACK_LABEL, toPackMagnitude } from '@/lib/baseConsumablePack';
+import { resolveBasePack, BASE_PACK_LABEL, toPackMagnitude, needsDrivenPack, NEEDS_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { buildPackRequests } from '@/lib/packRequests';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +78,23 @@ export async function GET(req: NextRequest) {
     source: BASE_PACK_LABEL,
   }));
 
+  // What a tick on the booking form would add. The preview exists so a
+  // reviewer sees the pack the case will actually get; leaving these out
+  // would show a diathermy case without a pad and then issue one.
+  const needs = needsDrivenPack({
+    needDiathermy: sp.get('diathermy') === '1',
+    needBloodTransfusion: sp.get('blood') === '1',
+    bloodUnits: sp.get('bloodUnits') ? Number(sp.get('bloodUnits')) : null,
+  });
+  const needsBase = needs.consumables.map((b) => ({
+    name: b.name,
+    quantity: b.quantity,
+    unit: b.unit,
+    category: b.category,
+    size: b.size,
+    source: NEEDS_PACK_LABEL,
+  }));
+
   // An authored mapping, if one has been CONFIRMED, overrides the composed
   // standard at booking. Reported either way so the reviewer knows which of
   // the two they are looking at.
@@ -123,6 +140,12 @@ export async function GET(req: NextRequest) {
         }
       : { exists: false, confirmed: false },
     base,
+    // What the ticks on the booking form would add on top. Kept as its own
+    // block rather than folded into `base`, because a reviewer checking the
+    // standard pack should be able to see which lines are conditional.
+    needsDriven: needsBase,
+    needsDrivenDrugs: needs.drugs,
+    needsDrivenReasons: needs.reasons,
     // The composed lines minus anything the base pack already carries, which
     // is how the booking route assembles them too.
     consumables: composed.consumables

@@ -48,6 +48,8 @@ export interface ScheduleDraft {
 
   /** What the unit says the case will need. Requests, not findings. */
   needBloodTransfusion?: boolean | null;
+  /** Units expected. Null means the unit did not say, not nought. */
+  bloodUnits?: number | null;
   needDiathermy?: boolean | null;
   needStereo?: boolean | null;
   needMontrellMattress?: boolean | null;
@@ -195,6 +197,12 @@ export function publishPayload(draft: ScheduleDraft, choice: PublishChoice): Rec
     // recording as fact things nobody has checked.
     location: text(draft.location) || null,
     needBloodTransfusion: Boolean(draft.needBloodTransfusion),
+    // Carried through so the unit is not asked the same question twice, and
+    // so the pack the plan implied is the pack the booking raises.
+    bloodUnits:
+      draft.needBloodTransfusion && typeof draft.bloodUnits === 'number'
+        ? draft.bloodUnits
+        : null,
     needDiathermy: Boolean(draft.needDiathermy),
     needStereo: Boolean(draft.needStereo),
     needMontrellMattress: Boolean(draft.needMontrellMattress),

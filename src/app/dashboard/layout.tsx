@@ -471,6 +471,11 @@ export default function DashboardLayout({
     // recognition board nobody opens.
     menuItems.push({ href: '/dashboard/booking-performance', icon: Award, label: 'Booking Performance', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/duty-performance', icon: ClipboardCheck, label: 'Duty Performance', badge: 'NEW' });
+    // Beside the other two boards. This one counts what people actually DID in
+    // theatre rather than whether they filed something on time, and filing it
+    // somewhere else would mean the three figures about one person are read in
+    // three different places.
+    menuItems.push({ href: '/dashboard/operating-record', icon: Users, label: 'Operating Record', badge: 'NEW' });
     menuItems.push({ href: '/dashboard/celebrations', icon: PartyPopper, label: 'Celebrations', badge: 'NEW' });
     // Beside Late Bookings on purpose: the same question asked of a case
     // rather than of a booking time, and the two are read together.
@@ -708,6 +713,7 @@ export default function DashboardLayout({
       '/dashboard/late-bookings',
       '/dashboard/booking-performance',
       '/dashboard/duty-performance',
+      '/dashboard/operating-record',
       '/dashboard/celebrations',
       '/dashboard/case-chase',
       '/dashboard/roster-chase',

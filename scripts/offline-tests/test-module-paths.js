@@ -53,6 +53,10 @@ function loadModules() {
     // branch below throws MODULE_NOT_FOUND, which is how this check silently
     // stopped running at all once modules.ts took a second local import.
     if (id.includes('emergencyEscalation')) return { AUDIT_COMMITTEE_ROLES: [] };
+    // Nor do the pharmacy/pack roles that may watch planned cases. Added when
+    // modules.ts took a THIRD local import and this check died again -- which
+    // is the failure mode the comment above was written about, repeating.
+    if (id.includes('surgeryDrafts/access')) return { PREPARATION_ROLES: [] };
     if (Module.builtinModules.includes(id)) return require(id);
     if (id.startsWith('.')) {
       throw new Error(

@@ -54,6 +54,10 @@ const patchSchema = z.object({
   // plan rather than being asked again at the moment of publishing.
   // z.boolean(), not z.coerce.boolean() — see the create route.
   needBloodTransfusion: z.boolean().optional(),
+  bloodUnits: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.coerce.number().int().min(0).max(20).nullable(),
+  ).optional(),
   needDiathermy: z.boolean().optional(),
   needStereo: z.boolean().optional(),
   needMontrellMattress: z.boolean().optional(),
@@ -146,7 +150,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       // stops a client writing publishedAt or createdById — but it means a
       // field added to the schema and not added HERE is accepted by the
       // validator and then quietly dropped, which is the worst of both.
-      'needBloodTransfusion', 'needDiathermy', 'needStereo', 'needMontrellMattress',
+      'needBloodTransfusion', 'bloodUnits', 'needDiathermy', 'needStereo', 'needMontrellMattress',
       'otherSpecialNeeds', 'isDayCase', 'postOpDestination', 'location',
     ] as const).forEach((k) => {
       if (p[k] !== undefined) data[k] = p[k];

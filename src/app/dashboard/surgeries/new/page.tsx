@@ -597,6 +597,9 @@ export default function NewSurgeryPage() {
   /// react to them, and the bundle is the whole point.
   const [magnitude, setMagnitude] = useState<string>('');
   const [needBloodTransfusion, setNeedBloodTransfusion] = useState(false);
+  // How many units. Empty is NOT nought: it means the booker did not say, and
+  // the pack rules add the single-unit cover rather than inventing an amount.
+  const [bloodUnits, setBloodUnits] = useState('');
   /// Which local anaesthetic, when the anaesthesia is local. NEVER
   /// defaulted: plain and with-adrenaline are not interchangeable.
   const [localAnaestheticId, setLocalAnaestheticId] = useState<string>('');
@@ -1218,6 +1221,7 @@ export default function NewSurgeryPage() {
       anesthesiaType,
       localAnaestheticId,
       needBloodTransfusion,
+      bloodUnits,
       otherSpecialNeeds,
       postOpDestination,
       isDayCase,
@@ -1240,7 +1244,7 @@ export default function NewSurgeryPage() {
     selectedPatientId, procedureName, extraProcedures, unit, subspecialty,
     selectedTheatreId, selectedSurgeonId, supervisingConsultantIds, assistantIds, assistantGrades,
     scheduledDate, scheduledTime, estimatedDuration, magnitude, anesthesiaType,
-    localAnaestheticId, needBloodTransfusion, otherSpecialNeeds, postOpDestination,
+    localAnaestheticId, needBloodTransfusion, bloodUnits, otherSpecialNeeds, postOpDestination,
     isDayCase, admissionType, teamMembers, noUnitRegistrar, noUnitSeniorRegistrar, specialNeeds,
     selectedConsumables, selectedDrugs, consentFile, consentForm, preopOverrideReason,
   ]);
@@ -1269,6 +1273,7 @@ export default function NewSurgeryPage() {
     setAnesthesiaType(pick(d.anesthesiaType, ''));
     setLocalAnaestheticId(pick(d.localAnaestheticId, ''));
     setNeedBloodTransfusion(pick(d.needBloodTransfusion, false));
+    setBloodUnits(pick(d.bloodUnits, ''));
     setOtherSpecialNeeds(pick(d.otherSpecialNeeds, ''));
     setPostOpDestination(pick(d.postOpDestination, ''));
     // Not pick(): a draft saved before this field existed carries
@@ -2092,6 +2097,9 @@ ${pretty} — ${days} days from today.
       magnitude: magnitude || null,
       anesthesiaType: anesthesiaType || null,
       needBloodTransfusion,
+      // Only sent when transfusion is actually ticked. Units left behind by a
+      // change of mind must not raise a pack on their own.
+      bloodUnits: needBloodTransfusion && bloodUnits !== '' ? Number(bloodUnits) : null,
       // What the case asked for by name, plus whatever the magnitude bundle
       // added. Sent as ids and quantities; the server resolves the rest.
       specialNeeds: specialNeeds.map((n) => ({
@@ -3884,16 +3892,43 @@ ${pretty} — ${days} days from today.
           <h2 className="text-xl font-semibold mb-4">Special Needs</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="flex items-center space-x-3 cursor-pointer">
-              <input
-                type="checkbox"
-                name="needBloodTransfusion"
-                checked={needBloodTransfusion}
-                onChange={(e) => setNeedBloodTransfusion(e.target.checked)}
-                className="w-5 h-5 text-primary-600 rounded"
-              />
-              <span className="text-gray-700">Blood Transfusion Required</span>
-            </label>
+            <div>
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="needBloodTransfusion"
+                  checked={needBloodTransfusion}
+                  onChange={(e) => setNeedBloodTransfusion(e.target.checked)}
+                  className="w-5 h-5 text-primary-600 rounded"
+                />
+                <span className="text-gray-700">Blood Transfusion Required</span>
+              </label>
+              {/* HOW MANY, not merely whether. A tick alone cannot decide the
+                  pack: one unit needs a giving set, and two or more need the
+                  cover for what two or more units do to a patient. */}
+              {needBloodTransfusion && (
+                <div className="mt-2 ml-8">
+                  <label className="block text-sm text-gray-600" htmlFor="bloodUnits">
+                    How many units?
+                  </label>
+                  <input
+                    id="bloodUnits"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={bloodUnits}
+                    onChange={(e) => setBloodUnits(e.target.value)}
+                    placeholder="e.g. 2"
+                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    {Number(bloodUnits) >= 2
+                      ? 'Calcium gluconate, tranexamic acid \u00d7 3 and a 20 ml syringe will be added to the pack.'
+                      : 'A blood giving set and hydrocortisone will be added to the pack. From 2 units, calcium gluconate and tranexamic acid are added too.'}
+                  </p>
+                </div>
+              )}
+            </div>
 
             <label className="flex items-center space-x-3 cursor-pointer">
               <input

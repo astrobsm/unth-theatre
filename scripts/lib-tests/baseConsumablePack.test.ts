@@ -1,5 +1,6 @@
 /**
- * The mandatory base pack, as the theatre gave it on 15 November.
+ * The mandatory base pack, as the theatre gave it on 15 November, plus the
+ * aprons it added on 19 November.
  *
  * Every booked case carries this, elective and emergency alike, whatever the
  * operation. It is the one list in the system nobody chooses, so it is the one
@@ -30,6 +31,10 @@ const at = (magnitude: string) => {
 /** What was asked for, verbatim. Quantity, then unit. */
 const AS_GIVEN: [string, number, string][] = [
   ['Examination gloves', 1, 'pack'],
+  // Added 19 November. Flat across all three magnitudes, unlike almost
+  // everything else here: the number is about how many people are at the table
+  // and how often one is changed, not how big the operation is.
+  ['Disposable apron', 6, 'piece'],
   ['Povidone-Iodine Solution (10%) 100 ml', 1, 'bottle'],
   ['Chlorhexidine solution 500 ml', 1, 'bottle'],
   ['Methylated spirit / 70% Isopropyl alcohol 100 ml', 1, 'bottle'],
