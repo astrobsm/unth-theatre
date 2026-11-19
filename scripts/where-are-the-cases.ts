@@ -4,6 +4,7 @@
  *     npx tsx scripts/where-are-the-cases.ts                 # every unit, 30 days
  *     npx tsx scripts/where-are-the-cases.ts Orthopaedics    # one unit or subspecialty
  *     npx tsx scripts/where-are-the-cases.ts Orthopaedics 90 # and a wider window
+ *     npx tsx scripts/where-are-the-cases.ts --queue           # why they are not on the cloud
  *
  * Read only. There is no --apply and there is no write path.
  *
@@ -37,6 +38,52 @@ interface Row {
   subspecialty: string | null;
   day: string;
   cases: bigint | number;
+}
+
+/**
+ * The outbound queue, for the tables a theatre list is made of.
+ *
+ * A case can be perfectly well booked on the node and still be absent from
+ * the cloud, and the screen cannot tell you which. This prints attempts,
+ * when the entry is next due, and the last thing the peer said — the three
+ * facts that separate "the link dropped, it will go on its own" from "a row
+ * the peer will never accept is holding the queue open".
+ */
+async function reportQueue(): Promise<void> {
+  const resolved = resolveCaseDb();
+  process.env.DATABASE_URL = resolved.url;
+  console.log(`Database: ${describeCaseDb(resolved)}`);
+  console.log('');
+
+  const { default: prisma } = await import('../src/lib/prisma');
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{
+      table_name: string; row_id: string; attempts: number;
+      due: string | null; hlc: string; last_error: string | null;
+    }>>(
+      `select table_name, row_id, attempts,
+              to_char(next_push_at, 'YYYY-MM-DD HH24:MI') as due,
+              hlc,
+              left(coalesce(last_error, ''), 90) as last_error
+         from sync_journal
+        where ack_at is null
+        order by hlc
+        limit 40`);
+
+    if (!rows.length) {
+      console.log('Nothing is waiting to go to the cloud.');
+      return;
+    }
+    console.log(`${rows.length} oldest unsent entries (the queue is drained in this order):`);
+    console.log('');
+    for (const r of rows) {
+      console.log(`  ${r.table_name}/${r.row_id.slice(0, 8)}`);
+      console.log(`      attempts ${r.attempts}   next due ${r.due ?? 'now'}`);
+      if (r.last_error) console.log(`      peer said: ${r.last_error}`);
+    }
+  } finally {
+    await prisma.$disconnect().catch(() => { /* closing is best effort */ });
+  }
 }
 
 async function reportCases(): Promise<void> {
@@ -115,7 +162,9 @@ async function reportCases(): Promise<void> {
   }
 }
 
-reportCases().catch((err) => {
+const main = process.argv.includes('--queue') ? reportQueue : reportCases;
+
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
