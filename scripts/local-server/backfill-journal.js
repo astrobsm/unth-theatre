@@ -6,6 +6,8 @@
 //   node scripts/local-server/backfill-journal.js              report only
 //   node scripts/local-server/backfill-journal.js --apply      write the entries
 //   node scripts/local-server/backfill-journal.js --table X    one table
+//   node scripts/local-server/backfill-journal.js --priority    the six that
+//                                                 block a theatre list, fast
 //
 // Enabling a trigger does not backfill history. Every row written before
 // zz_sync_capture was switched on for its table carries sync_version = 0 and
@@ -39,6 +41,26 @@ const ROOT = path.join(__dirname, '..', '..');
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');
 const ONLY_TABLE = (() => { const i = args.indexOf('--table'); return i >= 0 ? args[i + 1] : null; })();
+
+/**
+ * The tables a theatre needs to run the list in front of it.
+ *
+ * --priority scans only these. A full scan compares seventy tables against the
+ * cloud and takes minutes, which is too slow to run on every deploy; these six
+ * take seconds, and they are the ones whose absence stops a case appearing.
+ *
+ * WHY THIS IS RUN AT ALL. On 19 November a theatre list did not reach the
+ * cloud because ONE staff account had been written before capture was enabled
+ * on users. It had no journal entry, so it was never going to be sent, and the
+ * surgery that named them as assistant surgeon failed its foreign key on every
+ * attempt for hours. Nothing was broken; a row simply existed in one place and
+ * nobody knew. Mirrors PRIORITY_TABLES in src/lib/sync/lanes.ts.
+ */
+const PRIORITY_TABLES = [
+  'users', 'patients', 'surgeries',
+  'emergency_surgery_bookings', 'emergency_team_availability', 'theatre_allocations',
+];
+const PRIORITY_ONLY = args.includes('--priority');
 
 function readEnvFile(name) {
   const file = path.join(ROOT, name);
@@ -98,6 +120,7 @@ const show = (u) => { try { const x = new URL(u); return `${x.hostname}${x.pathn
 
     const tables = triggered.map((r) => r.t)
       .filter((t) => (ONLY_TABLE ? t === ONLY_TABLE : true))
+      .filter((t) => (PRIORITY_ONLY ? PRIORITY_TABLES.includes(t) : true))
       .filter((t) => allowed.has(t));
 
     // Columns held back from a payload, per the same table the trigger reads.

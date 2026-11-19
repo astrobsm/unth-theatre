@@ -8,6 +8,15 @@ import { isPermanentApplyFailure, permanentFailureReason } from '@/lib/sync/perm
 export const dynamic = 'force-dynamic';
 
 /**
+ * How long the apply loop may run before it stops and commits what it has.
+ *
+ * Comfortably inside the transaction's own 110s budget, because stopping is
+ * only useful if there is time left to COMMIT. The gap is the margin for the
+ * commit itself and for one entry that turns out to be slower than the rest.
+ */
+const APPLY_BUDGET_MS = 75_000;
+
+/**
  * POST /api/sync/push — accept a batch of changes from the peer node.
  *
  * Every entry is decided by lib/sync/syncPolicy and then applied, ignored or
@@ -97,7 +106,36 @@ export async function POST(req: NextRequest) {
         $transaction: async <T,>(fn: (t: SqlRunner) => Promise<T>) => fn(inline),
       };
 
+      // ALWAYS COMMIT WHAT SUCCEEDED, EVEN IF THE BATCH CANNOT FINISH.
+      //
+      // This loop used to run until it was done or the 110s budget killed the
+      // transaction. When it was killed, EVERYTHING rolled back — including
+      // every entry that had applied perfectly — and the sender, getting no
+      // results, re-sent the identical batch. A batch that cannot finish in
+      // the budget therefore never makes progress, however many times it is
+      // tried.
+      //
+      // On 19 November that was a theatre list. Sixty-five child rows were
+      // waiting on a parent the cloud did not have; each failure cost about a
+      // second, the budget went, and the two surgeries in the same batch —
+      // which would have applied — were rolled back with them. Every cycle,
+      // for hours.
+      //
+      // So: stop while there is still time to commit. Entries not reached get
+      // no result and stay queued, which is the no-loss rule they already
+      // relied on, and the next batch starts where this one stopped. Progress
+      // becomes guaranteed rather than conditional on the whole batch fitting.
+      const startedAt = Date.now();
+      let stoppedEarly = 0;
+
       for (let i = 0; i < sorted.length; i++) {
+        if (Date.now() - startedAt > APPLY_BUDGET_MS) {
+          stoppedEarly = sorted.length - i;
+          console.warn(
+            `[sync/push] stopping after ${i} of ${sorted.length} entries to commit what applied; `
+            + `${stoppedEarly} stay queued for the next batch`);
+          break;
+        }
         const e = sorted[i];
         // A savepoint per entry keeps the property the old loop had for free:
         // one bad entry must not fail the batch. Without it, a single failure
@@ -159,6 +197,8 @@ export async function POST(req: NextRequest) {
     {
       // The client gives up at 120s (REQUEST_TIMEOUT_MS). Finish inside that,
       // so a slow batch returns a partial result rather than a dead connection.
+      // APPLY_BUDGET_MS stops the loop well before this, leaving room to
+      // commit; this remains the backstop for a single pathological entry.
       timeout: 110_000,
       maxWait: 15_000,
     },

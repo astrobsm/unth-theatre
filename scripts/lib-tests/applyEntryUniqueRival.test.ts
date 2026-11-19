@@ -160,10 +160,21 @@ describe('a draft that collides with another user row', () => {
 });
 
 describe('a collision on a table that is not LWW', () => {
-  it('is quarantined rather than resolved by timestamp', async () => {
-    // patients is QUARANTINE class. Two rows claiming one identity on clinical
-    // content is a person's decision, not a comparison's — and it must not be
-    // silently deleted the way a superseded draft is.
+  // THE POLICY CHANGED ON 19 NOVEMBER, and this describe block is the record
+  // of why. It used to assert that such a collision is always a person's
+  // decision. That was right in principle and failed in practice: nobody
+  // decided. One pair sat at the head of the outbound queue from 25 August,
+  // retried 12,488 times, and because the push drains oldest-first it was
+  // loaded into every batch, timed the cloud out, and took a theatre list
+  // down with it.
+  //
+  // The hospital's rule is now: the record that occurred first stands. These
+  // collisions are duplicates rather than disagreements — a backfill
+  // re-creating what the other side already held — so the earlier record is
+  // the one made by the person who was there. See lib/sync/earliestWins.ts.
+
+  it('is still quarantined when neither record says when it was created', async () => {
+    // The rule has nothing to compare, so it stops rather than guessing.
     const entry: JournalEntryWire = {
       ...draft('cloud-patient', '2026-09-07T10:00:00Z-000'),
       table: 'patients',
@@ -177,7 +188,61 @@ describe('a collision on a table that is not LWW', () => {
     const res = await applyEntry(db, entry, 'cloud', 'theatre', new Map());
 
     expect(res.decision).toBe('QUARANTINE');
-    expect(res.reason).toMatch(/unique key/i);
+    expect(res.reason).toMatch(/creation time|person must decide/i);
+    // And still never silently deleted the way a superseded draft is.
     expect(deletes(log)).toHaveLength(0);
+  });
+
+  it('keeps the row already here when it is the earlier one', async () => {
+    const entry: JournalEntryWire = {
+      ...draft('cloud-patient', '2026-09-07T10:00:00Z-000'),
+      table: 'patients',
+      payload: {
+        id: 'cloud-patient', ptNumber: 'PT1', name: 'A',
+        createdAt: '2026-08-26T12:57:27.149Z',
+      },
+    };
+    const { db, log } = fakeDb({
+      rival: {
+        id: 'local-patient', sync_version: 1, sync_hlc: '2026-09-01T10:00:00Z-000',
+        createdAt: '2026-08-25T00:11:11.347Z',
+      },
+      uniqueCols: ['ptNumber'],
+    });
+
+    const res = await applyEntry(db, entry, 'cloud', 'theatre', new Map());
+
+    // The incoming copy is the later one, so it does not take the key.
+    expect(res.decision).toBe('QUARANTINE');
+    expect(res.reason).toMatch(/created first/i);
+    expect(deletes(log)).toHaveLength(0);
+  });
+
+  it('records the displaced row before the earlier one takes its place', async () => {
+    // An automatic rule is only acceptable while it stays readable and
+    // reversible. Both versions go to sync_conflicts, in the same
+    // transaction, BEFORE anything is removed.
+    const entry: JournalEntryWire = {
+      ...draft('cloud-patient', '2026-09-07T10:00:00Z-000'),
+      table: 'patients',
+      payload: {
+        id: 'cloud-patient', ptNumber: 'PT1', name: 'A',
+        createdAt: '2026-08-25T00:11:11.347Z',
+      },
+    };
+    const { db, log } = fakeDb({
+      rival: {
+        id: 'local-patient', sync_version: 1, sync_hlc: '2026-09-01T10:00:00Z-000',
+        createdAt: '2026-08-26T12:57:27.149Z',
+      },
+      uniqueCols: ['ptNumber'],
+    });
+
+    await applyEntry(db, entry, 'cloud', 'theatre', new Map());
+
+    const conflictIdx = log.findIndex((r) => r.sql.includes('sync_conflicts'));
+    const deleteIdx = log.findIndex((r) => /^\s*delete from/i.test(r.sql));
+    expect(conflictIdx).toBeGreaterThanOrEqual(0);
+    expect(deleteIdx).toBeGreaterThan(conflictIdx);
   });
 });

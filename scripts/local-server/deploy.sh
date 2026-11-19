@@ -270,6 +270,25 @@ else
   echo
   echo "  Sync health:"
   as_app "./scripts/local-server/why-not-syncing.sh" 2>/dev/null | sed -n '/2. Push/,/Link state/p' || true
+
+  # ── Rows that exist here and nowhere else ─────────────────────────────────
+  #
+  # A row written before capture was enabled on its table has no journal entry
+  # and never will. It is not queued, not stuck and not reported anywhere: it
+  # simply lives on one node while everything that references it fails on the
+  # other.
+  #
+  # On 19 November that was ONE staff account. A surgery named them as
+  # assistant surgeon, the cloud refused it on the foreign key every time for
+  # hours, and a theatre list did not appear. Nothing was broken and nothing
+  # was visible.
+  #
+  # Six tables, the ones whose absence stops a case appearing, checked on every
+  # deploy and journalled if found. Safe by design: backfill-journal only ever
+  # writes entries for rows the peer does not have.
+  echo ""
+  echo "  Rows on this server that the cloud has never seen:"
+  as_app "node scripts/local-server/backfill-journal.js --priority --apply" 2>/dev/null     | grep -E "exist only on this server|journal entr|journalled" || echo "    (check unavailable)"
 fi
 
 echo

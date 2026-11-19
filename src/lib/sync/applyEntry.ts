@@ -8,6 +8,7 @@
 // ============================================================
 
 import { decide, isSynced, policyFor } from './syncPolicy';
+import { earliestWins } from './earliestWins';
 import type { EntryResult, JournalEntryWire } from './transport';
 
 /** Just enough of Prisma to run raw SQL, so a client or a transaction both fit. */
@@ -155,6 +156,13 @@ export async function applyEntry(
   // that is a person's decision, not a timestamp comparison's.
   let effective = decision;
   let rivalId: string | null = null;
+  // Set when the earliest-wins rule settled this rather than a person: it
+  // changes what the conflict row is FOR. A quarantine asks somebody to
+  // decide; this one records a decision already made, so it is filed closed.
+  let supersededByRule = false;
+  // The row the incoming entry is about to displace, kept so that nothing is
+  // destroyed by an automatic rule.
+  let displacedRival: Record<string, unknown> | null = null;
 
   if (e.op !== 'DELETE' && e.payload) {
     let colsForRival = columnCache.get(e.table);
@@ -180,11 +188,40 @@ export async function applyEntry(
         // or the insert hits the very index this was meant to clear.
         if (effective.action === 'APPLY') rivalId = rival.id;
       } else {
-        effective = {
-          action: 'QUARANTINE',
-          reason: `Row ${rival.id} already holds this row's unique key on a `
-            + `${cls ?? 'unclassified'} table. Two records claim one identity; a person must decide.`,
-        };
+        // THE FIRST RECORD STANDS.
+        //
+        // This used to quarantine every such pair for a person to settle, and
+        // nobody settled them: one sat at the head of the outbound queue from
+        // 25 August to 19 November, retried 12,488 times, loaded into every
+        // batch because the push drains oldest-first, timing the cloud out and
+        // taking a morning's theatre list with it. A decision nobody makes is
+        // not a safe default.
+        //
+        // These collisions are duplicates rather than disagreements — a
+        // backfill re-creating what the other side already held — so the
+        // earlier record is the one made by the person who was there, and it
+        // carries the alert, the notified roles and the anaesthetist. See
+        // lib/sync/earliestWins.ts.
+        const verdict = earliestWins(
+          e.payload as Record<string, unknown>,
+          rival as unknown as Record<string, unknown>,
+        );
+
+        if (!verdict.decided) {
+          effective = { action: 'QUARANTINE', reason: verdict.reason };
+        } else if (verdict.winner === 'existing') {
+          // The row already here is the earlier one. The incoming copy is not
+          // applied — and is recorded, so the decision can be read back.
+          effective = { action: 'QUARANTINE', reason: verdict.reason };
+          supersededByRule = true;
+        } else {
+          // The incoming record is the earlier one, so it takes the key. The
+          // row it displaces is snapshotted into sync_conflicts first, which
+          // is the condition on which deciding by clock is acceptable at all.
+          effective = { action: 'APPLY', reason: verdict.reason };
+          rivalId = rival.id;
+          displacedRival = rival as unknown as Record<string, unknown>;
+        }
       }
     }
   }
@@ -203,10 +240,11 @@ export async function applyEntry(
         `insert into sync_conflicts
            (table_name, row_id, sync_class, incoming, incoming_hlc, incoming_node,
             local_snapshot, local_hlc, reason, status)
-         values ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,'OPEN')`,
+         values ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,$10)`,
         e.table, e.rowId, policyFor(e.table)?.cls ?? 'UNKNOWN',
         JSON.stringify(e.payload ?? {}), e.hlc, e.originNode,
-        JSON.stringify(snap[0]?.row ?? null), local[0]?.sync_hlc ?? null, effective.reason);
+        JSON.stringify(snap[0]?.row ?? null), local[0]?.sync_hlc ?? null, effective.reason,
+        supersededByRule ? 'SUPERSEDED' : 'OPEN');
       await markApplied(tx, e, fromNode, 'QUARANTINE', effective.reason);
     });
     return { id: e.id, decision: 'QUARANTINE', reason: effective.reason };
@@ -228,6 +266,22 @@ export async function applyEntry(
       // suppressed-capture block above, so it does not journal a delete back
       // to a peer that never held this row in the first place.
       if (rivalId) {
+        // KEPT BEFORE IT IS DISPLACED. When the earliest-wins rule decided
+        // this, a row that a person never looked at is about to be replaced —
+        // so both versions are written down first, in the same transaction.
+        // An automatic rule is only acceptable while it remains readable and
+        // reversible, and a deletion nobody can see is neither.
+        if (displacedRival) {
+          await tx.$executeRawUnsafe(
+            `insert into sync_conflicts
+               (table_name, row_id, sync_class, incoming, incoming_hlc, incoming_node,
+                local_snapshot, local_hlc, reason, status)
+             values ($1,$2,$3,$4::jsonb,$5,$6,$7::jsonb,$8,$9,'SUPERSEDED')`,
+            e.table, e.rowId, policyFor(e.table)?.cls ?? 'UNKNOWN',
+            JSON.stringify(e.payload ?? {}), e.hlc, e.originNode,
+            JSON.stringify(displacedRival), null,
+            `${effective.reason} Displaced row ${rivalId} is kept here in full.`);
+        }
         await tx.$executeRawUnsafe(`delete from ${q(e.table)} where id = $1`, rivalId);
       }
       const payload = (e.payload ?? {}) as Record<string, unknown>;
