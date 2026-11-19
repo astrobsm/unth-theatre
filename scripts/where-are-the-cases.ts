@@ -67,9 +67,10 @@ async function reportQueue(): Promise<void> {
 
     const rows = await prisma.$queryRawUnsafe<Array<{
       table_name: string; row_id: string; attempts: number; origin_node: string;
-      due: string | null; hlc: string; last_error: string | null;
+      due: string | null; hlc: string; last_error: string | null; size: string | null;
     }>>(
       `select table_name, row_id, attempts, origin_node,
+              pg_size_pretty(length(payload::text)::bigint) as size,
               to_char(next_push_at, 'YYYY-MM-DD HH24:MI') as due,
               hlc,
               left(coalesce(last_error, ''), 90) as last_error
@@ -86,7 +87,7 @@ async function reportQueue(): Promise<void> {
     console.log('');
     for (const r of rows) {
       console.log(`  ${r.table_name}/${r.row_id.slice(0, 8)}`);
-      console.log(`      attempts ${r.attempts}   next due ${r.due ?? 'now'}   origin ${r.origin_node}`);
+      console.log(`      attempts ${r.attempts}   next due ${r.due ?? 'now'}   payload ${r.size ?? '-'}`);
       if (r.last_error) console.log(`      peer said: ${r.last_error}`);
     }
   } finally {
