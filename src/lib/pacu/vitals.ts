@@ -30,8 +30,23 @@
  * resuscitation is built around — raised NOTHING at all, because 70 is a
  * perfectly good adult pulse.
  *
- * So the heart rate band is chosen by age. Saturation, pain and consciousness
- * are unchanged, because those limits do not move with age.
+ * So the heart rate band is chosen by age, and so is the respiratory rate.
+ * Saturation, pain and consciousness are unchanged, because those limits do
+ * not move with age.
+ *
+ * WHY RESPIRATORY RATE IS CHECKED AT ALL
+ *
+ * It was recorded on every observation and judged by nothing, at any age.
+ * In a child, tachypnoea is the earliest sign of deterioration -- it moves
+ * before the pulse does, and long before the saturation does, because a child
+ * compensates by breathing faster until they can no longer compensate at all.
+ * A recovery room watching pulse and saturation is watching the two numbers
+ * that move last.
+ *
+ * It is the one limit here that fires where nothing fired before, for adults
+ * as well as children, so the band is drawn at the point somebody should be
+ * CALLED rather than at the edge of textbook normal: an adult breathing 22 in
+ * pain is not an event, and one breathing 8 on opioids is.
  */
 
 import { ageInDays, formatAge } from '@/lib/age';
@@ -47,6 +62,13 @@ import { ageInDays, formatAge } from '@/lib/age';
 export const PACU_LIMITS = {
   heartRateLow: 50,
   heartRateHigh: 120,
+  /**
+   * Below 9 is opioid respiratory depression, the thing recovery exists to
+   * catch. Above 25 is the NEWS2 red flag. Between them sits every adult who
+   * is merely sore, and alarming on those is how an alarm stops being heard.
+   */
+  respiratoryRateLow: 9,
+  respiratoryRateHigh: 25,
   oxygenSaturationLow: 92,
   /** Above this is severe pain, not merely uncomfortable. */
   painScoreHigh: 8,
@@ -63,15 +85,25 @@ export interface AgeBand {
   underDays: number;
   heartRateLow: number;
   heartRateHigh: number;
+  respiratoryRateLow: number;
+  respiratoryRateHigh: number;
 }
 
 /**
- * Heart rate bands for the recovery room, youngest first.
+ * Heart and respiratory rate bands for the recovery room, youngest first.
  *
- * Each band runs from the SLEEPING lower limit to the AWAKE upper limit of the
- * standard paediatric ranges (PALS/APLS). That pairing is deliberate: a child
- * in recovery is either still sedated or awake and crying, often both within
- * the hour, and a band drawn from only one of those states alarms on the other.
+ * Each heart rate band runs from the SLEEPING lower limit to the AWAKE upper
+ * limit of the standard paediatric ranges (PALS/APLS). That pairing is
+ * deliberate: a child in recovery is either still sedated or awake and crying,
+ * often both within the hour, and a band drawn from only one of those states
+ * alarms on the other.
+ *
+ * The respiratory bands open the PALS normal ranges outward by about the same
+ * margin, for the same reason and for one more: a crying infant transiently at
+ * 55 is not deteriorating, and an alert on every cry teaches the room to
+ * silence the one that is real. The upper bounds stay at or below the WHO
+ * fast-breathing thresholds (60 under two months, 50 to a year, 40 to five),
+ * so genuine tachypnoea is still caught.
  *
  * Twelve years and over is the adult band unchanged. Adolescents are rated as
  * adults everywhere else in paediatric practice, and a separate adolescent band
@@ -85,6 +117,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     underDays: 28,
     heartRateLow: 90,
     heartRateHigh: 205,
+    respiratoryRateLow: 25,
+    respiratoryRateHigh: 65,
   },
   {
     key: 'INFANT',
@@ -93,6 +127,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     underDays: 365.25,
     heartRateLow: 90,
     heartRateHigh: 180,
+    respiratoryRateLow: 25,
+    respiratoryRateHigh: 60,
   },
   {
     key: 'TODDLER',
@@ -101,6 +137,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     underDays: 3 * 365.25,
     heartRateLow: 80,
     heartRateHigh: 140,
+    respiratoryRateLow: 18,
+    respiratoryRateHigh: 45,
   },
   {
     key: 'PRESCHOOL',
@@ -109,6 +147,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     underDays: 6 * 365.25,
     heartRateLow: 65,
     heartRateHigh: 120,
+    respiratoryRateLow: 16,
+    respiratoryRateHigh: 35,
   },
   {
     key: 'SCHOOL_AGE',
@@ -117,6 +157,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     underDays: 12 * 365.25,
     heartRateLow: 58,
     heartRateHigh: 118,
+    respiratoryRateLow: 14,
+    respiratoryRateHigh: 30,
   },
   {
     key: 'ADULT',
@@ -125,6 +167,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     underDays: Infinity,
     heartRateLow: PACU_LIMITS.heartRateLow,
     heartRateHigh: PACU_LIMITS.heartRateHigh,
+    respiratoryRateLow: PACU_LIMITS.respiratoryRateLow,
+    respiratoryRateHigh: PACU_LIMITS.respiratoryRateHigh,
   },
 ];
 
@@ -180,6 +224,8 @@ export function bandForAge(p?: PatientAge | null): AgeBanding {
 export interface PacuLimits {
   heartRateLow: number;
   heartRateHigh: number;
+  respiratoryRateLow: number;
+  respiratoryRateHigh: number;
   oxygenSaturationLow: number;
   painScoreHigh: number;
 }
@@ -190,6 +236,8 @@ export function limitsForAge(p?: PatientAge | null): PacuLimits & { band: AgeBan
   return {
     heartRateLow: band.heartRateLow,
     heartRateHigh: band.heartRateHigh,
+    respiratoryRateLow: band.respiratoryRateLow,
+    respiratoryRateHigh: band.respiratoryRateHigh,
     // Neither of these moves with age. A desaturation is a desaturation at any
     // age, and a pain score is already scaled 0-10 whichever tool recorded it.
     oxygenSaturationLow: PACU_LIMITS.oxygenSaturationLow,
@@ -204,8 +252,14 @@ export function heartRateRangeText(band: AgeBand): string {
   return `${band.heartRateLow}–${band.heartRateHigh} bpm`;
 }
 
+/** "25–60 /min" — for the hint printed beside the respiratory rate box. */
+export function respiratoryRateRangeText(band: AgeBand): string {
+  return `${band.respiratoryRateLow}–${band.respiratoryRateHigh} /min`;
+}
+
 export interface PacuVitals {
   heartRate?: number | null;
+  respiratoryRate?: number | null;
   oxygenSaturation?: number | null;
   consciousnessLevel?: string | null;
   painScore?: number | null;
@@ -228,14 +282,32 @@ export interface PacuVitals {
  */
 export function abnormalVitalReasons(v: PacuVitals, patient?: PatientAge | null): string[] {
   const out: string[] = [];
-  const { heartRate, oxygenSaturation, consciousnessLevel, painScore } = v;
+  const { heartRate, respiratoryRate, oxygenSaturation, consciousnessLevel, painScore } = v;
   const limits = limitsForAge(patient);
   const paediatric = limits.band.key !== 'ADULT';
 
   if (heartRate != null && (heartRate < limits.heartRateLow || heartRate > limits.heartRateHigh)) {
     const side =
       heartRate < limits.heartRateLow ? `below ${limits.heartRateLow}` : `above ${limits.heartRateHigh}`;
+    // The adult wording is bare, and deliberately so: this alert has been sent
+    // in exactly these words for as long as the recovery room has used the app,
+    // and the band is the only new thing worth naming.
     out.push(paediatric ? `HR ${heartRate} bpm (${side} for ${limits.band.article})` : `HR ${heartRate} bpm`);
+  }
+  if (
+    respiratoryRate != null &&
+    (respiratoryRate < limits.respiratoryRateLow || respiratoryRate > limits.respiratoryRateHigh)
+  ) {
+    const side =
+      respiratoryRate < limits.respiratoryRateLow
+        ? `below ${limits.respiratoryRateLow}`
+        : `above ${limits.respiratoryRateHigh}`;
+    // Unlike the heart rate, this has never raised an alert here for anybody,
+    // so there is no established wording to preserve and every age gets its
+    // bound named. The first time a nurse sees this line she should be able to
+    // tell at a glance whether the app knew how old the patient was.
+    const whose = paediatric ? ` for ${limits.band.article}` : '';
+    out.push(`RR ${respiratoryRate} /min (${side}${whose})`);
   }
   if (oxygenSaturation != null && oxygenSaturation < limits.oxygenSaturationLow) {
     out.push(`SpO2 ${oxygenSaturation}%`);
@@ -274,9 +346,12 @@ export interface StabilityVerdict {
  * that raised most alerts — pulse and saturation — must actually be PRESENT.
  * An empty form is not a well patient.
  *
- * Consciousness and pain are judged only if recorded: they are not always
- * re-taken at the moment of discharge, and demanding them would recreate the
- * original problem in a new place.
+ * Consciousness, pain and respiratory rate are judged only if recorded: they
+ * are not always re-taken at the moment of discharge, and demanding them would
+ * recreate the original problem in a new place. Respiratory rate is on this
+ * side of the line and not the other on purpose -- it is new, and a new
+ * REQUIREMENT to discharge would strand patients whose last observation set
+ * predates it.
  *
  * Takes the same age as the alert that blocked the discharge, because the two
  * must agree. A child cleared by an adult ceiling that the alert never used

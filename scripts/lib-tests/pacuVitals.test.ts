@@ -11,6 +11,7 @@ import {
   bandForAge,
   limitsForAge,
   heartRateRangeText,
+  respiratoryRateRangeText,
 } from '../../src/lib/pacu/vitals';
 
 /**
@@ -219,6 +220,7 @@ describe('a child is not a small adult', () => {
     // and the bounds themselves are sane
     for (const band of PACU_AGE_BANDS) {
       expect(band.heartRateLow).toBeLessThan(band.heartRateHigh);
+      expect(band.respiratoryRateLow).toBeLessThan(band.respiratoryRateHigh);
     }
   });
 
@@ -227,6 +229,121 @@ describe('a child is not a small adult', () => {
     expect(heartRateRangeText(bandForAge(adult).band)).toBe('50\u2013120 bpm');
     expect(bandForAge(infant).ageText).toBe('6 months');
     expect(bandForAge({ age: 1, ageUnit: 'DAYS' }).ageText).toBe('1 day');
+  });
+});
+
+describe('the number that moves first', () => {
+  /**
+   * Respiratory rate was recorded on every single observation and judged by
+   * nothing, at any age.
+   *
+   * In a child it is the EARLIEST sign of deterioration. It moves before the
+   * pulse does and long before the saturation does, because a child
+   * compensates by breathing faster until they can no longer compensate at
+   * all -- at which point the saturation falls off a cliff. A recovery room
+   * watching pulse and saturation is watching the two numbers that move last.
+   *
+   * This is the one limit here that fires where nothing fired before, adults
+   * included, so the bands are drawn where somebody should be CALLED rather
+   * than at the edge of textbook normal.
+   */
+
+  const newborn = { age: 10, ageUnit: 'DAYS' };
+  const infant = { age: 6, ageUnit: 'MONTHS' };
+  const toddler = { age: 2, ageUnit: 'YEARS' };
+  const schoolAge = { age: 8, ageUnit: 'YEARS' };
+  const adult = { age: 45, ageUnit: 'YEARS' };
+
+  it('does not call a normally-breathing child tachypnoeic', () => {
+    // 40 /min is an ordinary infant and a frightening adult. An adult band
+    // applied to a baby would have alarmed on every one of these.
+    expect(isAbnormal({ respiratoryRate: 40 }, newborn)).toBe(false);
+    expect(isAbnormal({ respiratoryRate: 40 }, infant)).toBe(false);
+    expect(isAbnormal({ respiratoryRate: 40 }, toddler)).toBe(false);
+    expect(isAbnormal({ respiratoryRate: 40 }, adult)).toBe(true);
+  });
+
+  it('catches the tachypnoea that is the child deteriorating', () => {
+    expect(isAbnormal({ respiratoryRate: 70 }, newborn)).toBe(true);
+    expect(isAbnormal({ respiratoryRate: 64 }, infant)).toBe(true);
+    expect(isAbnormal({ respiratoryRate: 50 }, toddler)).toBe(true);
+    expect(isAbnormal({ respiratoryRate: 34 }, schoolAge)).toBe(true);
+  });
+
+  it('catches the bradypnoea on both sides of childhood', () => {
+    // An adult at 8 on opioids is the thing recovery exists to catch; a baby
+    // at 20 is the same event wearing different numbers.
+    expect(isAbnormal({ respiratoryRate: 8 }, adult)).toBe(true);
+    expect(isAbnormal({ respiratoryRate: 8 }, infant)).toBe(true);
+    expect(isAbnormal({ respiratoryRate: 20 }, infant)).toBe(true);
+    expect(isAbnormal({ respiratoryRate: 20 }, adult)).toBe(false);
+  });
+
+  it('leaves the merely sore adult alone', () => {
+    // The whole reason the band is not the textbook 12-20. Alarming on a
+    // post-operative adult breathing 22 is how an alarm stops being heard.
+    expect(isAbnormal({ respiratoryRate: 22 }, adult)).toBe(false);
+    expect(isAbnormal({ respiratoryRate: PACU_LIMITS.respiratoryRateHigh }, adult)).toBe(false);
+    expect(isAbnormal({ respiratoryRate: PACU_LIMITS.respiratoryRateLow }, adult)).toBe(false);
+    expect(isAbnormal({ respiratoryRate: 26 }, adult)).toBe(true);
+  });
+
+  it('stays at or under the WHO fast-breathing thresholds', () => {
+    // 60 under two months, 50 to a year, 40 to five. A ceiling above those
+    // would be a band that lets diagnosable tachypnoea through.
+    const band = (p) => bandForAge(p).band;
+    expect(band(newborn).respiratoryRateHigh).toBeLessThanOrEqual(65);
+    expect(band(infant).respiratoryRateHigh).toBeLessThanOrEqual(60);
+    expect(band(toddler).respiratoryRateHigh).toBeLessThanOrEqual(45);
+    expect(isAbnormal({ respiratoryRate: 60 }, { age: 3, ageUnit: 'YEARS' })).toBe(true);
+  });
+
+  it('does not treat a missing rate as an abnormal one', () => {
+    // Every observation recorded before today has no respiratory rate judged
+    // against it. None of them may retro-alarm.
+    expect(isAbnormal({ respiratoryRate: null }, infant)).toBe(false);
+    expect(isAbnormal({ heartRate: 150 }, infant)).toBe(false);
+  });
+
+  it('names the bound, and the band when there is one', () => {
+    expect(abnormalVitalReasons({ respiratoryRate: 70 }, infant)).toEqual([
+      'RR 70 /min (above 60 for an infant)',
+    ]);
+    expect(abnormalVitalReasons({ respiratoryRate: 20 }, infant)).toEqual([
+      'RR 20 /min (below 25 for an infant)',
+    ]);
+    // No band to name for an adult, but the bound is still named: unlike the
+    // heart rate line there is no established wording to preserve here.
+    expect(abnormalVitalReasons({ respiratoryRate: 8 }, adult)).toEqual(['RR 8 /min (below 9)']);
+    expect(abnormalVitalReasons({ respiratoryRate: 30 })).toEqual(['RR 30 /min (above 25)']);
+  });
+
+  it('reports breathing beside the pulse, in the order a nurse reads them', () => {
+    const reasons = abnormalVitalReasons(
+      { heartRate: 220, respiratoryRate: 70, oxygenSaturation: 85, painScore: 10 },
+      infant,
+    );
+    expect(reasons).toEqual([
+      'HR 220 bpm (above 180 for an infant)',
+      'RR 70 /min (above 60 for an infant)',
+      'SpO2 85%',
+      'Severe pain (10/10)',
+    ]);
+  });
+
+  it('blocks a discharge on breathing alone, but never demands the reading', () => {
+    // Judged if recorded, like pain and consciousness. Making it REQUIRED
+    // would strand every patient whose last observation set predates today.
+    const tachypnoeic = { heartRate: 150, respiratoryRate: 70, oxygenSaturation: 98 };
+    expect(stableForDischarge(tachypnoeic, infant).stable).toBe(false);
+    expect(stableForDischarge(tachypnoeic, infant).reasons.join(' ')).toContain('above 60 for an infant');
+
+    expect(stableForDischarge({ heartRate: 150, oxygenSaturation: 98 }, infant).stable).toBe(true);
+  });
+
+  it('prints a range a nurse can read', () => {
+    expect(respiratoryRateRangeText(bandForAge(infant).band)).toBe('25\u201360 /min');
+    expect(respiratoryRateRangeText(bandForAge(adult).band)).toBe('9\u201325 /min');
   });
 });
 describe('the explanation the nurse must give', () => {

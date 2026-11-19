@@ -86,7 +86,7 @@ export async function POST(
     // and two copies of a clinical limit is how the two screens end up
     // disagreeing about the same patient.
     const observed = {
-      heartRate, oxygenSaturation, painScore,
+      heartRate, respiratoryRate, oxygenSaturation, painScore,
       consciousnessLevel: vitalsData.consciousnessLevel,
     };
 

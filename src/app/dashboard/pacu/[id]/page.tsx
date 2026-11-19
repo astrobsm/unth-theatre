@@ -6,7 +6,7 @@ import BackLink from '@/components/BackLink';
 import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
 import { formatAge } from '@/lib/age';
-import { bandForAge, heartRateRangeText } from '@/lib/pacu/vitals';
+import { bandForAge, heartRateRangeText, respiratoryRateRangeText } from '@/lib/pacu/vitals';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 const PACUVitalsTrendChart = dynamic(() => import('@/components/PACUVitalsTrendChart'), { ssr: false });
@@ -538,6 +538,18 @@ export default function PACUAssessmentDetailPage() {
   const typedHr = vitalForm.heartRate.trim();
   const typedHrOutOfBand = typedHr !== '' && hrOutOfBand(Number(typedHr));
 
+  // Respiratory rate used to be recorded and judged by nothing. In a child it
+  // is the first number to move -- before the pulse, long before the
+  // saturation -- because a child compensates by breathing faster until they
+  // cannot compensate at all. Watching only pulse and saturation is watching
+  // the two numbers that move last.
+  const rrOutOfBand = (rr: number | null | undefined) =>
+    rr != null &&
+    Number.isFinite(rr) &&
+    (rr < ageBand.band.respiratoryRateLow || rr > ageBand.band.respiratoryRateHigh);
+  const typedRr = vitalForm.respiratoryRate.trim();
+  const typedRrOutOfBand = typedRr !== '' && rrOutOfBand(Number(typedRr));
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -884,9 +896,12 @@ export default function PACUAssessmentDetailPage() {
                   <p className="text-sm text-gray-600">Temperature</p>
                   <p className="text-lg font-bold">{latestVitals.temperature}°C</p>
                 </div>
-                <div className="border-l-4 border-purple-500 pl-3">
+                <div className={`border-l-4 pl-3 ${rrOutOfBand(latestVitals.respiratoryRate) ? 'border-red-500' : 'border-gray-300'}`}>
                   <p className="text-sm text-gray-600">Resp. Rate</p>
-                  <p className="text-lg font-bold">{latestVitals.respiratoryRate} /min</p>
+                  <p className={`text-lg font-bold ${rrOutOfBand(latestVitals.respiratoryRate) ? 'text-red-700' : ''}`}>
+                    {latestVitals.respiratoryRate} /min
+                  </p>
+                  <p className="text-xs text-gray-500">{respiratoryRateRangeText(ageBand.band)}</p>
                 </div>
                 <div className="border-l-4 border-orange-500 pl-3">
                   <p className="text-sm text-gray-600">Pain Score</p>
@@ -930,7 +945,8 @@ export default function PACUAssessmentDetailPage() {
                   {' \u2014 '}{ageBand.ageText}, {ageBand.band.label}
                 </div>
                 <div className="mt-1">
-                  Red alert outside <strong>{heartRateRangeText(ageBand.band)}</strong>, below 92% SpO
+                  Red alert outside <strong>{heartRateRangeText(ageBand.band)}</strong> or
+                  {' '}<strong>{respiratoryRateRangeText(ageBand.band)}</strong>, below 92% SpO
                   <sub>2</sub>, or above 8/10 pain.
                 </div>
               </div>
@@ -939,8 +955,8 @@ export default function PACUAssessmentDetailPage() {
                 <div className="font-semibold">No age on this record &mdash; adult limits are in use.</div>
                 <div className="mt-1">
                   Add the age to the patient&rsquo;s record. Until then a child is judged by
-                  {' '}{heartRateRangeText(ageBand.band)}, which alarms on a well infant and stays
-                  silent on a sick one.
+                  {' '}{heartRateRangeText(ageBand.band)} and {respiratoryRateRangeText(ageBand.band)},
+                  which alarm on a well infant and stay silent on a sick one.
                 </div>
               </div>
             )}
@@ -1003,10 +1019,19 @@ export default function PACUAssessmentDetailPage() {
                   type="number"
                   value={vitalForm.respiratoryRate}
                   onChange={(e) => setVitalForm({...vitalForm, respiratoryRate: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="16"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                    typedRrOutOfBand ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                  }`}
+                  placeholder={String(
+                    Math.round((ageBand.band.respiratoryRateLow + ageBand.band.respiratoryRateHigh) / 2),
+                  )}
                   required
                 />
+                <p className={`mt-1 text-xs ${typedRrOutOfBand ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                  {typedRrOutOfBand
+                    ? `Outside ${respiratoryRateRangeText(ageBand.band)} for ${ageBand.band.article} \u2014 saving this raises a red alert.`
+                    : `Expected ${respiratoryRateRangeText(ageBand.band)} for ${ageBand.band.article}.`}
+                </p>
               </div>
 
               <div>
@@ -1121,7 +1146,9 @@ export default function PACUAssessmentDetailPage() {
                       <td className={`px-3 py-2 whitespace-nowrap text-sm ${
                         hrOutOfBand(vital.heartRate) ? 'font-semibold text-red-700' : ''
                       }`}>{vital.heartRate}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.respiratoryRate}</td>
+                      <td className={`px-3 py-2 whitespace-nowrap text-sm ${
+                        rrOutOfBand(vital.respiratoryRate) ? 'font-semibold text-red-700' : ''
+                      }`}>{vital.respiratoryRate}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.oxygenSaturation}%</td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.temperature}°C</td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm">
