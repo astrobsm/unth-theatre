@@ -389,10 +389,33 @@ const STUCK_WARN_INTERVAL_MS = 60 * 60 * 1000;
  */
 const warnedStuck = new Map<string, number>();
 
+/**
+ * How often an entry that has stopped making progress is worth retrying.
+ *
+ * WHY THIS EXISTS. The retry took the 200 OLDEST parked entries every cycle
+ * with no backoff at all. On 19 November 325 of them had been failing for
+ * weeks — two records claiming one identity, which no retry can heal — and
+ * being the oldest they filled all 200 places, every cycle, for ever. That is
+ * 200 failing round trips a minute, 0 applied, and it ran BEFORE the push: the
+ * worker spent its whole cycle on them and today's theatre list never reached
+ * the cloud. Fourteen minutes passed without a single completed cycle.
+ *
+ * So an entry past STUCK_AFTER_ATTEMPTS is tried once an hour instead of once
+ * a cycle. It is NOT dropped, NOT resolved and NOT hidden: it stays in
+ * sync_deferred, stays counted, and still heals by itself the moment whatever
+ * it was waiting for arrives. What it no longer does is crowd out the entries
+ * that can still make progress.
+ */
+const STUCK_RETRY_INTERVAL = '1 hour';
+
 async function retryDeferred(node: string): Promise<void> {
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string; from_node: string; entry: JournalEntryWire; attempts: number }>>(
     `select id, from_node, entry, attempts from sync_deferred
-      where resolved_at is null order by first_seen_at limit 200`);
+      where resolved_at is null
+        and (attempts < $1
+             or last_try_at is null
+             or last_try_at < now() - interval '${STUCK_RETRY_INTERVAL}')
+      order by first_seen_at limit 200`, STUCK_AFTER_ATTEMPTS);
   if (!rows.length) return;
 
   let healed = 0;
