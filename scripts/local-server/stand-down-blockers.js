@@ -50,9 +50,20 @@ const APPLY = args.includes('--apply');
 const RESTORE = args.includes('--restore');
 // Standing the blockers down does not get today's work moving on its own:
 // everything that failed in a batch WITH them also carries a backoff of its
-// own, and waits out the hour it was given for somebody else's fault. This
-// clears that — only for entries below the threshold, so the blockers stay
-// stood down.
+// own, and waits out the hour it was given for somebody else's fault.
+//
+// AND CLEARING THE TIMER IS NOT ENOUGH. The worker backs off after ten
+// attempts (PUSH_BACKOFF_AFTER_ATTEMPTS) and the cap is an hour, so an entry
+// sitting at 29 attempts is put straight back on an hourly retry by its very
+// next try — whatever the outcome. Today's cases were released, tried once,
+// and immediately given another hour for a problem that had already been
+// solved.
+//
+// So this resets `attempts` as well. That counter means "how many times has
+// this failed on its own merits", and these failures were not on their own
+// merits: they were batch rejections caused by the blockers. Resetting it
+// restores exactly that meaning. Only entries BELOW the threshold are
+// touched, so the blockers keep their count and stay stood down.
 const RELEASE = args.includes('--release');
 
 function flag(name, fallback) {
@@ -91,18 +102,22 @@ async function main() {
     if (RELEASE) {
       const { rows } = await client.query(
         `select count(*)::int as n from sync_journal
-          where ack_at is null and attempts < $1 and next_push_at is not null`,
+          where ack_at is null and attempts < $1
+            and (next_push_at is not null or attempts > 0)`,
         [MIN_ATTEMPTS]);
-      console.log(`${rows[0].n} entr(y/ies) below ${MIN_ATTEMPTS} attempts are waiting out a backoff.`);
+      console.log(`${rows[0].n} entr(y/ies) below ${MIN_ATTEMPTS} attempts are held back.`);
       if (!APPLY) {
-        console.log('Dry run. Add --apply to have them retried on the next cycle.');
+        console.log('Dry run. Add --apply to clear their backoff AND their failure count,');
+        console.log('so they are retried every cycle rather than once an hour.');
         return;
       }
       const res = await client.query(
-        `update sync_journal set next_push_at = null
-          where ack_at is null and attempts < $1 and next_push_at is not null`,
+        `update sync_journal set next_push_at = null, attempts = 0
+          where ack_at is null and attempts < $1
+            and (next_push_at is not null or attempts > 0)`,
         [MIN_ATTEMPTS]);
-      console.log(`Released ${res.rowCount}. They go on the next cycle (within a minute or two).`);
+      console.log(`Released ${res.rowCount}. Backoff and failure count cleared;`);
+      console.log('they go on the next cycle, and back off again only if they fail on their own.');
       return;
     }
 
