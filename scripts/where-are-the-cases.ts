@@ -139,19 +139,19 @@ async function reportCases(): Promise<void> {
     }
 
     console.log('BY UNIT (what the unit cards will show)');
-    for (const [unit, n] of [...byUnit.entries()].sort((a, b) => b[1] - a[1])) {
+    for (const [unit, n] of Array.from(byUnit.entries()).sort((a, b) => b[1] - a[1])) {
       console.log(`  ${String(n).padStart(4)}  ${unit}`);
     }
 
     console.log('');
     console.log('BY DATE (the list opens on today, and shows only that date)');
     const today = new Date().toISOString().slice(0, 10);
-    for (const [day, n] of [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))) {
+    for (const [day, n] of Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1))) {
       const mark = day === today ? '  <-- today' : '';
       console.log(`  ${day}   ${String(n).padStart(4)} case(s)${mark}`);
     }
 
-    const unassigned = [...byUnit.entries()].filter(([k]) => k.startsWith('(no unit)'));
+    const unassigned = Array.from(byUnit.entries()).filter(([k]) => k.startsWith('(no unit)'));
     if (unassigned.length) {
       console.log('');
       console.log('NOTE: some cases have no unit. On the screen they are grouped under');
