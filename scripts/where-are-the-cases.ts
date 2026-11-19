@@ -57,11 +57,19 @@ async function reportQueue(): Promise<void> {
 
   const { default: prisma } = await import('../src/lib/prisma');
   try {
+    // The node's own id. The push selects `origin_node = <this node>`, so an
+    // entry whose origin does not match is never offered to the peer at all —
+    // and it looks exactly like an entry that is merely backed off.
+    const [me] = await prisma.$queryRawUnsafe<Array<{ node_id: string }>>(
+      'select node_id from sync_node limit 1');
+    console.log(`This node pushes entries whose origin_node = ${me?.node_id ?? '(none)'}`);
+    console.log('');
+
     const rows = await prisma.$queryRawUnsafe<Array<{
-      table_name: string; row_id: string; attempts: number;
+      table_name: string; row_id: string; attempts: number; origin_node: string;
       due: string | null; hlc: string; last_error: string | null;
     }>>(
-      `select table_name, row_id, attempts,
+      `select table_name, row_id, attempts, origin_node,
               to_char(next_push_at, 'YYYY-MM-DD HH24:MI') as due,
               hlc,
               left(coalesce(last_error, ''), 90) as last_error
@@ -78,7 +86,7 @@ async function reportQueue(): Promise<void> {
     console.log('');
     for (const r of rows) {
       console.log(`  ${r.table_name}/${r.row_id.slice(0, 8)}`);
-      console.log(`      attempts ${r.attempts}   next due ${r.due ?? 'now'}`);
+      console.log(`      attempts ${r.attempts}   next due ${r.due ?? 'now'}   origin ${r.origin_node}`);
       if (r.last_error) console.log(`      peer said: ${r.last_error}`);
     }
   } finally {
