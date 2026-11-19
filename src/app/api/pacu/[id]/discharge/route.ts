@@ -91,7 +91,9 @@ export async function POST(
         orderBy: { recordedAt: 'desc' },
       });
 
-      const verdict = stableForDischarge(latest);
+      // The same age the alert used. A child cleared by an adult ceiling the
+      // alert never applied would be the latch bug again in a new place.
+      const verdict = stableForDischarge(latest, assessment.patient);
       if (!verdict.stable) {
         return NextResponse.json(
           {

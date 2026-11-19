@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       surgeonName: true,
       anesthesiaType: true,
       actualEndTime: true,
-      patient: { select: { id: true, name: true, folderNumber: true, ward: true, age: true, gender: true } },
+      patient: { select: { id: true, name: true, folderNumber: true, ward: true, age: true, ageUnit: true, gender: true } },
     },
     orderBy: [{ scheduledTime: 'asc' }],
   });

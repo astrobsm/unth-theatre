@@ -125,6 +125,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // THE AGE IS A CLINICAL SETTING, NOT A LABEL.
+    //
+    // Every heart rate limit this patient will be judged against for the next
+    // few hours is chosen from their age, so an age that is wrong in the
+    // register is a monitor left on the wrong limits for the whole of
+    // recovery. The commonest way it goes wrong is a baby of three MONTHS
+    // entered as 3 — which then buys a three-year-old's ceiling of 140 for an
+    // infant who should have 180, and alarms all afternoon.
+    //
+    // The recovery nurse is the last person to see the child before those
+    // limits start firing, so she can correct it here. It writes back to the
+    // patient record, because a correction that lives only on this form fixes
+    // nothing: the alerts read the patient.
+    const AGE_UNITS = ['YEARS', 'MONTHS', 'WEEKS', 'DAYS'];
+    const rawAge = String(body.patientAge ?? '').trim();
+    const correctedAge = rawAge !== '' && Number.isFinite(Number(rawAge)) ? Math.trunc(Number(rawAge)) : null;
+    const rawUnit = String(body.patientAgeUnit ?? '').toUpperCase();
+    const correctedUnit = AGE_UNITS.includes(rawUnit) ? rawUnit : null;
+
+    if (correctedAge !== null && correctedAge >= 0) {
+      const current = await prisma.patient.findUnique({
+        where: { id: patientId },
+        select: { age: true, ageUnit: true },
+      });
+      const unit = correctedUnit ?? current?.ageUnit ?? 'YEARS';
+      if (current && (current.age !== correctedAge || (current.ageUnit ?? 'YEARS') !== unit)) {
+        await prisma.patient.update({
+          where: { id: patientId },
+          data: { age: correctedAge, ageUnit: unit },
+        });
+        console.log(
+          `[pacu] age corrected at recovery admission for patient ${patientId}: `
+          + `${current.age} ${current.ageUnit ?? 'YEARS'} -> ${correctedAge} ${unit}`,
+        );
+      }
+    }
     // Create initial assessment with only valid fields
     const assessmentData: any = {
       surgery: {

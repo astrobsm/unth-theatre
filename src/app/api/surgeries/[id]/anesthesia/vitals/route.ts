@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+// The age bands live in the PACU library because that is where they were
+// first needed, not because they stop at the recovery room door. A child's
+// safe heart rate does not change when the trolley moves, and two copies of
+// a clinical limit is how theatre and recovery end up disagreeing about the
+// same patient on the same afternoon.
+import { limitsForAge } from '@/lib/pacu/vitals';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +33,10 @@ export async function POST(
 
     // Find the anesthesia record
     const anesthesiaRecord = await prisma.anesthesiaMonitoringRecord.findUnique({
-      where: { surgeryId: id }
+      where: { surgeryId: id },
+      // The patient comes with the record because the alert thresholds below
+      // are chosen from the age.
+      include: { patient: { select: { age: true, ageUnit: true } } },
     });
 
     if (!anesthesiaRecord) {
@@ -103,10 +112,19 @@ export async function POST(
     if (body.systolicBP && body.systolicBP > 180) {
       alerts.push('HYPERTENSION');
     }
-    if (body.heartRate && body.heartRate < 50) {
+    // BRADYCARDIA AND TACHYCARDIA ARE AGE-DEPENDENT, AND THESE WERE NOT.
+    //
+    // Hard-coded 50 and 120 are an adult's. Under anaesthesia a healthy
+    // six-month-old sits around 150 and raised TACHYCARDIA on every single
+    // reading, while the same infant at 70 -- bradycardic to the point where
+    // paediatric resuscitation begins -- raised nothing, because 70 is a fine
+    // adult pulse. An alarm that cries wolf all afternoon is an alarm that is
+    // silent when it counts.
+    const limits = limitsForAge(anesthesiaRecord.patient);
+    if (body.heartRate && body.heartRate < limits.heartRateLow) {
       alerts.push('BRADYCARDIA');
     }
-    if (body.heartRate && body.heartRate > 120) {
+    if (body.heartRate && body.heartRate > limits.heartRateHigh) {
       alerts.push('TACHYCARDIA');
     }
     if (body.spo2 && body.spo2 < 90) {

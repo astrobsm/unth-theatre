@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { isOfflineQueued, OFFLINE_SAVED_MESSAGE } from '@/lib/offlineResponse';
 import { notify } from '@/lib/notifications';
+import { AGE_UNITS, formatAge } from '@/lib/age';
+import { bandForAge, heartRateRangeText } from '@/lib/pacu/vitals';
 
 interface Surgery {
   id: string;
@@ -22,6 +24,9 @@ interface Surgery {
     name: string;
     folderNumber: string;
     age: number;
+    /// YEARS | MONTHS | WEEKS | DAYS. Without it a baby of 3 months reads as 3
+    /// years, and every alert limit in recovery is chosen from that number.
+    ageUnit?: string | null;
     gender: string;
     ward?: string | null;
   };
@@ -79,6 +84,7 @@ export default function NewPACUAssessment() {
     endOfSurgery: '',
     estimatedBloodLoss: '',
     patientAge: '',
+    patientAgeUnit: 'YEARS',
     patientGender: '',
     specialConditions: '',
   });
@@ -130,6 +136,7 @@ export default function NewPACUAssessment() {
               ? String(s.intraOperativeRecord.estimatedBloodLoss)
               : prev.estimatedBloodLoss,
           patientAge: s.patient?.age != null ? String(s.patient.age) : prev.patientAge,
+          patientAgeUnit: s.patient?.ageUnit || prev.patientAgeUnit,
           patientGender: s.patient?.gender || prev.patientGender,
         }));
       })
@@ -194,6 +201,26 @@ export default function NewPACUAssessment() {
 
   const selected = surgeries.find((s) => s.id === selectedSurgeryId) ?? null;
 
+  // WHICH LIMITS THIS PATIENT WILL BE JUDGED BY, SHOWN BEFORE THE FIRST
+  // OBSERVATION IS WRITTEN.
+  //
+  // A healthy six-month-old runs at 150 bpm and tripped the adult ceiling of
+  // 120 every time, so paediatric alerts in this room had become noise. The
+  // nurse can now see the band in advance, which is the difference between an
+  // alert she expects and one she learns to dismiss.
+  const typedAge = intraOp.patientAge.trim();
+  const ageBand = bandForAge({
+    age: typedAge === '' ? null : Number(typedAge),
+    ageUnit: intraOp.patientAgeUnit,
+  });
+  const isPaediatric = ageBand.band.key !== 'ADULT';
+  const typedHr = formData.heartRateOnAdmission.trim();
+  const admissionHr = typedHr === '' ? null : Number(typedHr);
+  const admissionHrOutOfRange =
+    admissionHr !== null &&
+    Number.isFinite(admissionHr) &&
+    (admissionHr < ageBand.band.heartRateLow || admissionHr > ageBand.band.heartRateHigh);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -231,6 +258,11 @@ export default function NewPACUAssessment() {
           catheterInSitu: formData.catheterInSitu,
           nauseaPresent: formData.nauseaPresent,
           vomitingOccurred: formData.vomitingOccurred,
+          // Sent at the top level as well as inside the handover JSON: the
+          // route writes it back to the patient, because the alert limits are
+          // read from the patient record and not from this form.
+          patientAge: typedAge === '' ? undefined : typedAge,
+          patientAgeUnit: intraOp.patientAgeUnit,
           intraOpSummary: JSON.stringify(intraOp),
         })
       });
@@ -359,6 +391,9 @@ export default function NewPACUAssessment() {
               <div><strong>Surgery completed.</strong> Ready to admit to recovery.</div>
               {selected.surgeonName && <div>Surgeon: {selected.surgeonName}</div>}
               {selected.patient?.ward && <div>Ward: {selected.patient.ward}</div>}
+              <div>
+                Age: {formatAge(selected.patient?.age, selected.patient?.ageUnit)} / {selected.patient?.gender || '—'}
+              </div>
             </div>
           )}
         </div>
@@ -466,14 +501,31 @@ export default function NewPACUAssessment() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Patient age</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={intraOp.patientAge}
-                    onChange={(e) => setIntraOp({ ...intraOp, patientAge: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Age"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={intraOp.patientAge}
+                      onChange={(e) => setIntraOp({ ...intraOp, patientAge: e.target.value })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="Age"
+                      aria-label="Patient age"
+                    />
+                    <select
+                      value={intraOp.patientAgeUnit}
+                      onChange={(e) => setIntraOp({ ...intraOp, patientAgeUnit: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      aria-label="Age unit"
+                    >
+                      {AGE_UNITS.map((u) => (
+                        <option key={u.value} value={u.value}>{u.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Days, weeks and months are kept as entered &mdash; a baby of 3 months is not 3 years.
+                    Correcting this updates the patient&rsquo;s record, because the recovery alert limits read it.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Patient gender</label>
@@ -607,7 +659,36 @@ export default function NewPACUAssessment() {
 
             <div className="border-t pt-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Vital Signs on Admission</h3>
-              
+
+              {ageBand.known ? (
+                <div
+                  className={`mb-4 rounded-lg border p-3 text-sm ${
+                    isPaediatric
+                      ? 'border-sky-300 bg-sky-50 text-sky-900'
+                      : 'border-gray-200 bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <div className="font-semibold">
+                    {isPaediatric ? 'Paediatric limits in use' : 'Adult limits in use'}
+                    {' \u2014 '}{ageBand.ageText}, {ageBand.band.label}
+                  </div>
+                  <div className="mt-1">
+                    A heart rate outside <strong>{heartRateRangeText(ageBand.band)}</strong> raises a red
+                    alert for this patient. Oxygen saturation below 92% and pain above 8/10 do so at
+                    every age.
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="font-semibold">No age recorded &mdash; adult limits will be used.</div>
+                  <div className="mt-1">
+                    Enter the age in the handover summary above. Without it a child is judged by an
+                    adult&rsquo;s heart rate limits ({heartRateRangeText(ageBand.band)}), which alarms on a
+                    well infant and stays silent on a sick one.
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -617,9 +698,16 @@ export default function NewPACUAssessment() {
                     type="number"
                     value={formData.heartRateOnAdmission}
                     onChange={(e) => setFormData({...formData, heartRateOnAdmission: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="75"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                      admissionHrOutOfRange ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    }`}
+                    placeholder={String(Math.round((ageBand.band.heartRateLow + ageBand.band.heartRateHigh) / 2))}
                   />
+                  <p className={`mt-1 text-xs ${admissionHrOutOfRange ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                    {admissionHrOutOfRange
+                      ? `Outside ${heartRateRangeText(ageBand.band)} for ${ageBand.band.article} \u2014 this will raise a red alert.`
+                      : `Expected ${heartRateRangeText(ageBand.band)} for ${ageBand.band.article}.`}
+                  </p>
                 </div>
 
                 <div>

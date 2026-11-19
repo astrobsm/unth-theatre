@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { isAbnormal, describeAbnormal } from '@/lib/pacu/vitals';
+import { isAbnormal, describeAbnormal, bandForAge } from '@/lib/pacu/vitals';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,25 +89,34 @@ export async function POST(
       heartRate, oxygenSaturation, painScore,
       consciousnessLevel: vitalsData.consciousnessLevel,
     };
-    const abnormalVitals = isAbnormal(observed);
 
-    if (abnormalVitals) {
-      // Get assessment details
-      const assessment = await prisma.pACUAssessment.findUnique({
-        where: { id: params.id },
-        include: {
-          patient: true,
-          surgery: {
-            include: {
-              surgeon: true,
-              anesthetist: true
-            }
+    // THE PATIENT IS LOADED BEFORE THE RULE RUNS, not after it fires.
+    //
+    // This lookup used to sit INSIDE `if (abnormalVitals)`, because the only
+    // thing it was wanted for was addressing the notifications. The rule itself
+    // needs the patient now: 150 bpm is an emergency in a man of fifty and an
+    // ordinary afternoon for a six-month-old, and nothing but the age tells
+    // those apart. Judging first and reading the patient afterwards is exactly
+    // how every infant in this recovery room came to be flagged.
+    const assessment = await prisma.pACUAssessment.findUnique({
+      where: { id: params.id },
+      include: {
+        patient: true,
+        surgery: {
+          include: {
+            surgeon: true,
+            anesthetist: true
           }
         }
-      });
+      }
+    });
 
+    const banding = bandForAge(assessment?.patient);
+    const abnormalVitals = isAbnormal(observed, assessment?.patient);
+
+    if (abnormalVitals) {
       if (assessment) {
-        const alertDescription = describeAbnormal(observed);
+        const alertDescription = describeAbnormal(observed, assessment.patient);
 
         // Create red alert
         await prisma.pACURedAlert.create({
@@ -172,7 +181,18 @@ export async function POST(
 
     return NextResponse.json({
       vitalSigns,
-      alert: abnormalVitals ? 'Red alert triggered for abnormal vitals' : null
+      alert: abnormalVitals ? 'Red alert triggered for abnormal vitals' : null,
+      // Which limits these observations were judged against. The recovery
+      // nurse should never have to guess whether the app knew it was looking
+      // at a child.
+      ageBand: {
+        key: banding.band.key,
+        label: banding.band.label,
+        heartRateLow: banding.band.heartRateLow,
+        heartRateHigh: banding.band.heartRateHigh,
+        ageKnown: banding.known,
+        ageText: banding.ageText,
+      },
     }, { status: 201 });
 
   } catch (error) {

@@ -28,6 +28,37 @@ export function formatAge(age: number | null | undefined, ageUnit?: string | nul
 }
 
 /**
+ * Convert an age + unit into DAYS.
+ *
+ * ageInYears() floors everything under a year to 0, which is right for a risk
+ * calculator and wrong for anything that has to tell a newborn from an
+ * eleven-month-old. A baby's safe heart rate is not the same on day two as it
+ * is at ten months, so the recovery room needs the resolution that years
+ * throw away.
+ *
+ * A year is 365.25 days and a month 30.4375, so that `1 YEARS` and
+ * `12 MONTHS` land on the same day and an age given in years never falls just
+ * short of its own band boundary.
+ *
+ * Returns null when there is no age to convert. Null is not zero: a missing
+ * age must not read as a newborn.
+ */
+export function ageInDays(age: number | null | undefined, ageUnit?: string | null): number | null {
+  if (age === null || age === undefined || Number.isNaN(age) || age < 0) return null;
+  switch ((ageUnit || 'YEARS').toUpperCase()) {
+    case 'MONTHS':
+      return age * 30.4375;
+    case 'WEEKS':
+      return age * 7;
+    case 'DAYS':
+      return age;
+    case 'YEARS':
+    default:
+      return age * 365.25;
+  }
+}
+
+/**
  * Convert an age + unit into whole years for numeric risk calculators.
  * Anything below a year resolves to 0 (lowest age bracket).
  */

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import BackLink from '@/components/BackLink';
 import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
+import { formatAge } from '@/lib/age';
+import { bandForAge, heartRateRangeText } from '@/lib/pacu/vitals';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 const PACUVitalsTrendChart = dynamic(() => import('@/components/PACUVitalsTrendChart'), { ssr: false });
@@ -64,6 +66,10 @@ interface PACUAssessment {
     name: string;
     folderNumber: string;
     age: number;
+    /// YEARS | MONTHS | WEEKS | DAYS. The heart rate limits this patient is
+    /// judged against are chosen from the pair, so the unit is not cosmetic:
+    /// without it a baby of 3 months is read as a child of 3.
+    ageUnit?: string | null;
     gender: string;
     ward: string;
   };
@@ -516,6 +522,22 @@ export default function PACUAssessmentDetailPage() {
   const latestVitals = assessment.vitalSigns[0];
   const timeInPACU = Math.floor((new Date().getTime() - new Date(assessment.admissionTime).getTime()) / 60000);
 
+  // THE LIMITS THIS PATIENT IS ACTUALLY JUDGED BY.
+  //
+  // Every heart rate on this page used to be read against an adult's 50-120,
+  // so a well six-month-old at 150 bpm raised a red alert and an infant at 70
+  // -- bradycardic to the point of arrest -- raised none. The band comes from
+  // the same function the alert and the discharge check use, so what the
+  // nurse is shown and what the server decides can never drift apart.
+  const ageBand = bandForAge(assessment.patient);
+  const isPaediatric = ageBand.band.key !== 'ADULT';
+  const hrOutOfBand = (hr: number | null | undefined) =>
+    hr != null &&
+    Number.isFinite(hr) &&
+    (hr < ageBand.band.heartRateLow || hr > ageBand.band.heartRateHigh);
+  const typedHr = vitalForm.heartRate.trim();
+  const typedHrOutOfBand = typedHr !== '' && hrOutOfBand(Number(typedHr));
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -591,7 +613,7 @@ export default function PACUAssessmentDetailPage() {
           </div>
           <div>
             <span className="text-gray-600">Age/Gender:</span>
-            <p className="font-medium">{assessment.patient?.age || 'N/A'}y / {assessment.patient?.gender || 'N/A'}</p>
+            <p className="font-medium">{formatAge(assessment.patient?.age, assessment.patient?.ageUnit)} / {assessment.patient?.gender || 'N/A'}</p>
           </div>
           <div>
             <span className="text-gray-600">Ward:</span>
@@ -700,7 +722,7 @@ export default function PACUAssessmentDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Age/Gender:</span>
-                <span className="font-medium">{assessment.patient?.age || 'N/A'}y / {assessment.patient?.gender || 'N/A'}</span>
+                <span className="font-medium">{formatAge(assessment.patient?.age, assessment.patient?.ageUnit)} / {assessment.patient?.gender || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Ward:</span>
@@ -847,9 +869,12 @@ export default function PACUAssessmentDetailPage() {
                   <p className="text-sm text-gray-600">Blood Pressure</p>
                   <p className="text-lg font-bold">{latestVitals.systolicBP}/{latestVitals.diastolicBP} mmHg</p>
                 </div>
-                <div className="border-l-4 border-red-500 pl-3">
+                <div className={`border-l-4 pl-3 ${hrOutOfBand(latestVitals.heartRate) ? 'border-red-500' : 'border-gray-300'}`}>
                   <p className="text-sm text-gray-600">Heart Rate</p>
-                  <p className="text-lg font-bold">{latestVitals.heartRate} bpm</p>
+                  <p className={`text-lg font-bold ${hrOutOfBand(latestVitals.heartRate) ? 'text-red-700' : ''}`}>
+                    {latestVitals.heartRate} bpm
+                  </p>
+                  <p className="text-xs text-gray-500">{heartRateRangeText(ageBand.band)}</p>
                 </div>
                 <div className="border-l-4 border-green-500 pl-3">
                   <p className="text-sm text-gray-600">SpO2</p>
@@ -887,7 +912,38 @@ export default function PACUAssessmentDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Record New Vital Signs */}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Record Vital Signs</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Record Vital Signs</h2>
+
+            {/* Which limits these observations will be judged against, stated
+                before the nurse writes them rather than explained after an
+                alert she did not expect. */}
+            {ageBand.known ? (
+              <div
+                className={`mb-4 rounded-lg border p-3 text-sm ${
+                  isPaediatric
+                    ? 'border-sky-300 bg-sky-50 text-sky-900'
+                    : 'border-gray-200 bg-gray-50 text-gray-700'
+                }`}
+              >
+                <div className="font-semibold">
+                  {isPaediatric ? 'Paediatric limits in use' : 'Adult limits in use'}
+                  {' \u2014 '}{ageBand.ageText}, {ageBand.band.label}
+                </div>
+                <div className="mt-1">
+                  Red alert outside <strong>{heartRateRangeText(ageBand.band)}</strong>, below 92% SpO
+                  <sub>2</sub>, or above 8/10 pain.
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-semibold">No age on this record &mdash; adult limits are in use.</div>
+                <div className="mt-1">
+                  Add the age to the patient&rsquo;s record. Until then a child is judged by
+                  {' '}{heartRateRangeText(ageBand.band)}, which alarms on a well infant and stays
+                  silent on a sick one.
+                </div>
+              </div>
+            )}
             <form onSubmit={recordVitalSigns} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -926,10 +982,17 @@ export default function PACUAssessmentDetailPage() {
                   type="number"
                   value={vitalForm.heartRate}
                   onChange={(e) => setVitalForm({...vitalForm, heartRate: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="75"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                    typedHrOutOfBand ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                  }`}
+                  placeholder={String(Math.round((ageBand.band.heartRateLow + ageBand.band.heartRateHigh) / 2))}
                   required
                 />
+                <p className={`mt-1 text-xs ${typedHrOutOfBand ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                  {typedHrOutOfBand
+                    ? `Outside ${heartRateRangeText(ageBand.band)} for ${ageBand.band.article} \u2014 saving this raises a red alert.`
+                    : `Expected ${heartRateRangeText(ageBand.band)} for ${ageBand.band.article}.`}
+                </p>
               </div>
 
               <div>
@@ -1055,7 +1118,9 @@ export default function PACUAssessmentDetailPage() {
                       <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
                         {vital.systolicBP}/{vital.diastolicBP}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.heartRate}</td>
+                      <td className={`px-3 py-2 whitespace-nowrap text-sm ${
+                        hrOutOfBand(vital.heartRate) ? 'font-semibold text-red-700' : ''
+                      }`}>{vital.heartRate}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.respiratoryRate}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.oxygenSaturation}%</td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm">{vital.temperature}°C</td>
