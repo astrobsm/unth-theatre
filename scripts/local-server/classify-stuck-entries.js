@@ -109,7 +109,17 @@ function norm(v) {
   return s;
 }
 
+// --full prints every field, untruncated.
+//
+// WHY IT MATTERS. The summary is for triage; a clinical decision is not
+// triage. Somebody asked to choose between a CANCELLED record and a COMPLETED
+// one for the same operation, and "… and 4 more columns" is not a basis for
+// that choice — the hidden four could be the times, the surgeon or the
+// outcome. If a person is being asked to decide, they see all of it.
+const FULL = args.includes('--full');
+
 const trunc = (v, n = 48) => {
+  if (FULL) return v === null ? 'NULL' : String(v);
   const s = v === null ? 'NULL' : String(v);
   return s.length > n ? `${s.slice(0, n)}…` : s;
 };
@@ -237,11 +247,13 @@ const trunc = (v, n = 48) => {
         console.log(`\n${v.table_name}/${v.row_id}  (${v.verdict}, ${v.attempts} attempts)`);
         if (v.rivalId) console.log(`  cloud row under the same surgeryId: ${v.rivalId}`);
         if (!v.diffs.length) { console.log('  no field-level differences'); continue; }
-        for (const d of v.diffs.slice(0, 12)) {
+        for (const d of (FULL ? v.diffs : v.diffs.slice(0, 12))) {
           console.log(`  ${d.column.padEnd(24)} local=${trunc(d.local)}`);
           console.log(`  ${''.padEnd(24)} cloud=${trunc(d.cloud)}`);
         }
-        if (v.diffs.length > 12) console.log(`  … and ${v.diffs.length - 12} more columns`);
+        if (!FULL && v.diffs.length > 12) {
+          console.log(`  … and ${v.diffs.length - 12} more columns (--full shows them)`);
+        }
       }
     } else {
       const needDetail = (byVerdict.get('DIFFERENT')?.length ?? 0) + (byVerdict.get('RIVAL_ROW')?.length ?? 0);
