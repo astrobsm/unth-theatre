@@ -288,7 +288,7 @@ else
   # writes entries for rows the peer does not have.
   echo ""
   echo "  Rows on this server that the cloud has never seen:"
-  as_app "node scripts/local-server/backfill-journal.js --priority --apply" 2>/dev/null     | grep -E "exist only on this server|journal entr|journalled" || echo "    (check unavailable)"
+  as_app "node scripts/local-server/backfill-journal.js --priority --apply" 2>/dev/null     | grep -E "exist only on this server|journal entr|journalled|FAILED" || echo "    (no output — the check did not run)"
 fi
 
 echo
