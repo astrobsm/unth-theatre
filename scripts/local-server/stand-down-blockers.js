@@ -7,6 +7,8 @@
 //   node scripts/local-server/stand-down-blockers.js --apply      do it
 //   node scripts/local-server/stand-down-blockers.js --attempts 50 --days 30
 //   node scripts/local-server/stand-down-blockers.js --release --apply   retry the rest now
+//   node scripts/local-server/stand-down-blockers.js --first surgeries,surgical_team_members --apply
+//                                                   send those alone, hold the rest a day
 //   node scripts/local-server/stand-down-blockers.js --restore --apply   undo
 //
 // WHAT THIS IS FOR. The push queue drains strictly oldest-first. An entry the
@@ -65,6 +67,18 @@ const RESTORE = args.includes('--restore');
 // restores exactly that meaning. Only entries BELOW the threshold are
 // touched, so the blockers keep their count and stay stood down.
 const RELEASE = args.includes('--release');
+// Send one or two tables AHEAD of everything else.
+//
+// The cloud rejects a whole batch when it cannot finish it in time, and the
+// batch only shrinks by trial and error — so a queue of ninety entries can
+// fail repeatedly while the two that matter sit inside it. Holding the rest
+// back for a day leaves today's cases alone in a batch small enough to
+// succeed, and the rest follow once they are through.
+const FIRST = (() => {
+  const i = args.indexOf('--first');
+  if (i < 0) return null;
+  return (args[i + 1] ?? '').split(',').map((t) => t.trim()).filter(Boolean);
+})();
 
 function flag(name, fallback) {
   const i = args.indexOf(`--${name}`);
@@ -99,6 +113,36 @@ async function main() {
   await client.connect();
 
   try {
+    if (FIRST && FIRST.length) {
+      const { rows: going } = await client.query(
+        `select table_name, count(*)::int as n from sync_journal
+          where ack_at is null and table_name = any($1::text[])
+          group by 1 order by 1`, [FIRST]);
+      const { rows: holding } = await client.query(
+        `select count(*)::int as n from sync_journal
+          where ack_at is null and attempts < $1 and not (table_name = any($2::text[]))`,
+        [MIN_ATTEMPTS, FIRST]);
+
+      console.log(`Going first: ${going.map((g) => `${g.n} ${g.table_name}`).join(', ') || 'nothing'}`);
+      console.log(`Held back for a day: ${holding[0].n} entr(y/ies)`);
+      if (!APPLY) {
+        console.log('');
+        console.log('Dry run. Add --apply.');
+        return;
+      }
+      await client.query(
+        `update sync_journal set next_push_at = now() + interval '1 day'
+          where ack_at is null and attempts < $1 and not (table_name = any($2::text[]))`,
+        [MIN_ATTEMPTS, FIRST]);
+      const res = await client.query(
+        `update sync_journal set next_push_at = null, attempts = 0
+          where ack_at is null and table_name = any($1::text[]) and attempts < $2`,
+        [FIRST, MIN_ATTEMPTS]);
+      console.log(`Cleared ${res.rowCount} to go on the next cycle, alone.`);
+      console.log('Release the rest afterwards with --release --apply.');
+      return;
+    }
+
     if (RELEASE) {
       const { rows } = await client.query(
         `select count(*)::int as n from sync_journal
