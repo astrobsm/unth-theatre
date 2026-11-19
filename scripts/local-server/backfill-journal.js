@@ -220,4 +220,21 @@ const show = (u) => { try { const x = new URL(u); return `${x.hostname}${x.pathn
     await l.end().catch(() => {});
     await c.end().catch(() => {});
   }
-})().catch((e) => { console.error('\nFAILED:', e.message, '\n'); process.exit(1); });
+})().catch((e) => {
+  // SAY WHAT WENT WRONG. This printed e.message alone, and a pg error whose
+  // message is empty -- a constraint it could not resolve, a role without
+  // rights -- produced the line "FAILED:" and nothing after it. That is how
+  // the stranded-row check added to deploy.sh reported "(check unavailable)"
+  // with no way to tell why. A failure that cannot describe itself costs more
+  // time than the fault it reports.
+  const bits = [
+    e && e.message,
+    e && e.code && `code ${e.code}`,
+    e && e.detail,
+    e && e.hint,
+    e && e.routine && `routine ${e.routine}`,
+  ].filter(Boolean);
+  console.error('\nFAILED:', bits.length ? bits.join(' | ') : String(e));
+  if (e && e.stack) console.error(e.stack.split('\n').slice(0, 4).join('\n'));
+  process.exit(1);
+});
