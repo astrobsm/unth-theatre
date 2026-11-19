@@ -82,9 +82,9 @@ export async function GET(req: NextRequest) {
   // reviewer sees the pack the case will actually get; leaving these out
   // would show a diathermy case without a pad and then issue one.
   const needs = needsDrivenPack({
-    needDiathermy: sp.get('diathermy') === '1',
-    needBloodTransfusion: sp.get('blood') === '1',
-    bloodUnits: sp.get('bloodUnits') ? Number(sp.get('bloodUnits')) : null,
+    needDiathermy: searchParams.get('diathermy') === '1',
+    needBloodTransfusion: searchParams.get('blood') === '1',
+    bloodUnits: searchParams.get('bloodUnits') ? Number(searchParams.get('bloodUnits')) : null,
   });
   const needsBase = needs.consumables.map((b) => ({
     name: b.name,

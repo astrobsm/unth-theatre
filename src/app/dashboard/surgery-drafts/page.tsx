@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { CalendarDays, Plus, Send, Trash2, X, AlertTriangle, CheckCircle2, Eye } from 'lucide-react';
 import ProcedurePicker from '@/components/ProcedurePicker';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
@@ -122,6 +123,7 @@ const emptyForm = {
 };
 
 export default function SurgeryDraftsPage() {
+  const searchParams = useSearchParams();
   const { data: session, status: authStatus } = useSession();
   // The pharmacy, the pack provider and the store read this list so they can
   // begin preparing. The routes refuse their writes (lib/surgeryDrafts/
@@ -134,6 +136,12 @@ export default function SurgeryDraftsPage() {
   const [filterUnit, setFilterUnit] = useState('');
   const [filterStatus, setFilterStatus] = useState('DRAFT');
   const [showForm, setShowForm] = useState(false);
+  // Which plan the form is editing, or null for a new one. A plan is a
+  // fortnight-long intention that changes -- the date moves, the consultant
+  // swaps, the patient finally gets a folder number -- and without this the
+  // only way to change one was to delete it and retype it, which loses the
+  // plan's history and everything the pharmacy had already read off it.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null);
@@ -244,18 +252,29 @@ export default function SurgeryDraftsPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch('/api/surgery-drafts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+      // Editing an existing plan amends it in place rather than making a
+      // second one. The PATCH route copies a whitelist of fields, so a plan
+      // keeps its id, its creator and its place in the pharmacy's reading.
+      const res = await fetch(
+        editingId ? `/api/surgery-drafts/${editingId}` : '/api/surgery-drafts',
+        {
+          method: editingId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        },
+      );
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e.error || 'could not save');
       }
-      setForm({ ...emptyForm });
-      setShowForm(false);
-      setNotice({ kind: 'ok', text: 'Plan saved. It is not on any list until it is published.' });
+      const amended = !!editingId;
+      closeForm();
+      setNotice({
+        kind: 'ok',
+        text: amended
+          ? 'Plan updated. It is still not on any list until it is published.'
+          : 'Plan saved. It is not on any list until it is published.',
+      });
       load();
     } catch (e) {
       setNotice({ kind: 'bad', text: e instanceof Error ? e.message : 'Could not save the plan.' });
@@ -263,6 +282,111 @@ export default function SurgeryDraftsPage() {
       setSaving(false);
     }
   };
+
+  /** Open the form on an existing plan, filled in. */
+  const openEdit = (d: ScheduleDraft) => {
+    setEditingId(d.id);
+    setForm({
+      ...emptyForm,
+      location: d.location ?? '',
+      unit: d.unit ?? '',
+      subspecialty: d.subspecialty ?? '',
+      patientId: d.patientId ?? '',
+      patientName: d.patientName ?? '',
+      patientFolderNumber: d.patientFolderNumber ?? '',
+      surgeonId: d.surgeonId ?? '',
+      surgeonName: d.surgeonName ?? '',
+      procedureName: d.procedureName ?? '',
+      indication: d.indication ?? '',
+      magnitude: d.magnitude ?? '',
+      surgeryType: d.surgeryType ?? 'ELECTIVE',
+      anesthesiaType: d.anesthesiaType ?? '',
+      estimatedDuration: d.estimatedDuration != null ? String(d.estimatedDuration) : '60',
+      targetDate: asDateInput(d.targetDate),
+      preferredTime: d.preferredTime ?? '',
+      priority: d.priority ?? 'NORMAL',
+      notes: d.notes ?? '',
+      needBloodTransfusion: !!d.needBloodTransfusion,
+      bloodUnits: d.bloodUnits != null ? String(d.bloodUnits) : '',
+      needDiathermy: !!d.needDiathermy,
+      needStereo: !!d.needStereo,
+      needMontrellMattress: !!d.needMontrellMattress,
+      otherSpecialNeeds: d.otherSpecialNeeds ?? '',
+      isDayCase: !!d.isDayCase,
+      postOpDestination: d.postOpDestination ?? '',
+    });
+    // A plan written against a bare name opens with the name showing, so the
+    // person who came back from registering the patient can see what they
+    // typed a fortnight ago while they search for the folder.
+    setUnregistered(!d.patientId && !!d.patientName);
+    setPatientSearch(d.patientName ?? '');
+    setSurgeonSearch('');
+    setShowForm(true);
+    setNotice(null);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm({ ...emptyForm });
+    setUnregistered(false);
+    setPatientSearch('');
+  };
+
+  // COMING BACK FROM REGISTERING THE PATIENT.
+  //
+  // The blocker on a plan written against a bare name used to say "find them
+  // in Patients, or register them" and stop there, so the unit left the page,
+  // registered the patient, came back, scrolled for the plan, reopened it and
+  // searched for the folder they had just created. Four of those five steps
+  // are the app's to do.
+  //
+  // The registration form already carries a returnTo and appends the new
+  // patientId to it, so the link out carries the plan's id and the journey
+  // back lands on that plan with the patient attached and Publish lit.
+  const [returned, setReturned] = useState(false);
+  useEffect(() => {
+    if (returned || loading) return;
+    const planId = searchParams?.get('plan');
+    if (!planId) return;
+    const d = drafts.find((x) => x.id === planId);
+    if (!d) return;
+    setReturned(true);
+    openEdit(d);
+
+    const newPatientId = searchParams?.get('patientId');
+    if (!newPatientId) return;
+
+    // Fetched by id rather than looked up in the dropdown list: that list is
+    // capped at 200 and a patient registered a minute ago may not be in it.
+    void (async () => {
+      let name = '';
+      let folder = '';
+      try {
+        const r = await fetch(`/api/patients/${newPatientId}`, { cache: 'no-store' });
+        if (r.ok) {
+          const pt = await r.json();
+          name = pt?.name ?? '';
+          folder = pt?.folderNumber || pt?.ptNumber || '';
+        }
+      } catch { /* the id is what matters; the name is a courtesy */ }
+      setForm((prev) => ({
+        ...prev,
+        patientId: newPatientId,
+        patientName: name || prev.patientName,
+        patientFolderNumber: folder || prev.patientFolderNumber,
+      }));
+      setUnregistered(false);
+      setPatientSearch(name);
+      setNotice({
+        kind: 'ok',
+        text: `${name || 'The patient'} is registered and attached to this plan. Save it, and Publish is one click.`,
+      });
+    })();
+    // openEdit is stable enough for this one-shot; `returned` guards re-entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returned, loading, drafts, searchParams]);
 
   const openPublish = (d: ScheduleDraft) => {
     const defaults = publishDefaults(d);
@@ -355,10 +479,57 @@ export default function SurgeryDraftsPage() {
     }
   };
 
-  const grouped = useMemo(() => {
-    const withDate = drafts.filter((d) => d.targetDate);
-    const noDate = drafts.filter((d) => !d.targetDate);
-    return { withDate, noDate };
+  // BY UNIT, because a unit is who acts on a plan.
+  //
+  // These were grouped by whether somebody had guessed a date, which answers
+  // a question nobody asks: "with a tentative date" mixed four units' cases
+  // into one column, so a consultant looking for their own list read every
+  // card on the page to find three of them, and the pharmacy reading the same
+  // page could not tell whose preparation was whose.
+  //
+  // Within a unit the order still has the date in it -- dated cases first and
+  // soonest first, then the undated -- so the ordering that was being used as
+  // a grouping survives as what it actually was.
+  const byUnit = useMemo(() => {
+    const map = new Map<string, ScheduleDraft[]>();
+    for (const d of drafts) {
+      const key = (d.unit || '').trim() || 'No unit named';
+      const list = map.get(key);
+      if (list) list.push(d);
+      else map.set(key, [d]);
+    }
+
+    const time = (v: string | Date | null | undefined) => {
+      if (!v) return Number.POSITIVE_INFINITY;
+      const t = new Date(v).getTime();
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+    };
+
+    return Array.from(map.entries())
+      .map(([unit, list]) => {
+        const cases = list.slice().sort((a, b) => {
+          const d = time(a.targetDate) - time(b.targetDate);
+          if (d !== 0) return d;
+          // Then the ones that cannot be published yet, so the work the unit
+          // still has to do is at the top of its own card rather than buried
+          // under the cases that are ready.
+          const am = missingForPublish(a).length > 0 ? 0 : 1;
+          const bm = missingForPublish(b).length > 0 ? 0 : 1;
+          if (am !== bm) return am - bm;
+          return (a.procedureName || '').localeCompare(b.procedureName || '');
+        });
+        return {
+          unit,
+          cases,
+          ready: cases.filter((c) => c.status === 'DRAFT' && missingForPublish(c).length === 0).length,
+          blocked: cases.filter((c) => c.status === 'DRAFT' && missingForPublish(c).length > 0).length,
+          dated: cases.filter((c) => c.targetDate).length,
+        };
+      })
+      // Busiest unit first. A unit with eleven planned cases has more to look
+      // at than one with a single case, and alphabetical order would put the
+      // single case above it every time.
+      .sort((a, b) => b.cases.length - a.cases.length || a.unit.localeCompare(b.unit));
   }, [drafts]);
 
   if (authStatus === 'loading') return <div className="p-6 text-gray-500">Loading…</div>;
@@ -378,7 +549,9 @@ export default function SurgeryDraftsPage() {
         </div>
         {!readOnly && (
           <button
-            onClick={() => setShowForm((s) => !s)}
+            // Always a BLANK form. Toggling the old way would reopen whatever
+            // plan was last being edited under a button that says New.
+            onClick={() => (showForm ? closeForm() : (setEditingId(null), setForm({ ...emptyForm }), setShowForm(true)))}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
           >
             <Plus className="w-4 h-4" /> New plan
@@ -668,9 +841,9 @@ export default function SurgeryDraftsPage() {
               disabled={saving}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
             >
-              {saving ? 'Saving…' : 'Save plan'}
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Save plan'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg border border-gray-300 text-sm">
+            <button onClick={closeForm} className="px-4 py-2 rounded-lg border border-gray-300 text-sm">
               Cancel
             </button>
           </div>
@@ -709,43 +882,62 @@ export default function SurgeryDraftsPage() {
           <p className="text-sm mt-1">Add a case your unit intends to do, with or without a date.</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {grouped.withDate.length > 0 && (
-            <Section title="With a tentative date">
-              {grouped.withDate.map((d) => (
+        <div className="space-y-5">
+          {byUnit.map((g) => (
+            <UnitCard key={g.unit} unit={g.unit} total={g.cases.length} ready={g.ready} blocked={g.blocked}>
+              {g.cases.map((d) => (
                 <DraftCard
                   key={d.id} d={d} busy={busy} readOnly={readOnly}
                   publishing={publishing === d.id} choice={choice} setChoice={setChoice}
                   onOpenPublish={() => openPublish(d)} onCancelPublish={() => setPublishing(null)}
                   onPublish={() => publish(d)} onWithdraw={() => withdraw(d)} onRemove={() => remove(d)}
+                  onEdit={() => openEdit(d)}
                 />
               ))}
-            </Section>
-          )}
-          {grouped.noDate.length > 0 && (
-            <Section title="No date yet">
-              {grouped.noDate.map((d) => (
-                <DraftCard
-                  key={d.id} d={d} busy={busy} readOnly={readOnly}
-                  publishing={publishing === d.id} choice={choice} setChoice={setChoice}
-                  onOpenPublish={() => openPublish(d)} onCancelPublish={() => setPublishing(null)}
-                  onPublish={() => publish(d)} onWithdraw={() => withdraw(d)} onRemove={() => remove(d)}
-                />
-              ))}
-            </Section>
-          )}
+            </UnitCard>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * One unit's planned cases, with the count that unit actually cares about.
+ *
+ * The counts are on the header rather than inside, because the reader who
+ * most needs them is scrolling past: a theatre manager wants to know which
+ * unit has four cases stuck behind an unregistered patient without opening
+ * four cards to find out.
+ */
+function UnitCard({
+  unit, total, ready, blocked, children,
+}: {
+  unit: string; total: number; ready: number; blocked: number;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{title}</h2>
-      <div className="space-y-3">{children}</div>
-    </div>
+    <section className="rounded-xl border border-gray-200 bg-gray-50/60 overflow-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-3">
+        <h2 className="font-semibold text-gray-900">{unit}</h2>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-gray-700">
+            {total} planned
+          </span>
+          {ready > 0 && (
+            <span className="rounded-full bg-green-100 px-2.5 py-0.5 font-medium text-green-800">
+              {ready} ready to publish
+            </span>
+          )}
+          {blocked > 0 && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-800">
+              {blocked} still needs something
+            </span>
+          )}
+        </div>
+      </header>
+      <div className="space-y-3 p-3 sm:p-4">{children}</div>
+    </section>
   );
 }
 
@@ -851,13 +1043,14 @@ function Tick({
 
 function DraftCard({
   d, busy, readOnly, publishing, choice, setChoice,
-  onOpenPublish, onCancelPublish, onPublish, onWithdraw, onRemove,
+  onOpenPublish, onCancelPublish, onPublish, onWithdraw, onRemove, onEdit,
 }: {
   d: ScheduleDraft; busy: boolean; readOnly: boolean; publishing: boolean;
   choice: { date: string; time: string };
   setChoice: (c: { date: string; time: string }) => void;
   onOpenPublish: () => void; onCancelPublish: () => void;
   onPublish: () => void; onWithdraw: () => void; onRemove: () => void;
+  onEdit: () => void;
 }) {
   const missing = missingForPublish(d);
   const isDraft = d.status === 'DRAFT';
@@ -926,6 +1119,9 @@ function DraftCard({
             >
               <Send className="w-3.5 h-3.5" /> Publish
             </button>
+            <button onClick={onEdit} disabled={busy} className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm">
+              Edit
+            </button>
             <button onClick={onWithdraw} disabled={busy} className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm">
               Withdraw
             </button>
@@ -943,7 +1139,42 @@ function DraftCard({
           </p>
           <ul className="text-xs text-amber-800 space-y-0.5 list-disc pl-4">
             {missing.map((m) => (
-              <li key={m.field}>{m.say}</li>
+              <li key={m.field}>
+                {m.say}
+                {/* THE WAY OUT, NOT JUST THE PROBLEM.
+                    This said "find them in Patients, or register them" and
+                    stopped, so the unit left the page, registered the patient,
+                    came back, scrolled for the plan, reopened it and searched for
+                    the folder they had just created. The link carries this plan's
+                    id, and the registration form hands back the new patient id,
+                    so the journey ends on this plan with the patient attached. */}
+                {m.field === 'patientId' && (
+                  <span className="block mt-1 space-x-3">
+                    <a
+                      href={`/dashboard/patients/new?returnTo=${encodeURIComponent(`/dashboard/surgery-drafts?plan=${d.id}`)}`}
+                      className="font-semibold text-amber-900 underline"
+                    >
+                      Register this patient
+                    </a>
+                    <button
+                      type="button"
+                      onClick={onEdit}
+                      className="font-semibold text-amber-900 underline"
+                    >
+                      Attach an existing folder
+                    </button>
+                  </span>
+                )}
+                {m.field !== 'patientId' && (
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    className="ml-2 font-semibold text-amber-900 underline"
+                  >
+                    Fix it
+                  </button>
+                )}
+              </li>
             ))}
           </ul>
           <p className="text-xs text-amber-700 mt-2">

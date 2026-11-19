@@ -49,6 +49,10 @@ export interface BookingDraft {
   anesthesiaType?: string;
   localAnaestheticId?: string;
   needBloodTransfusion?: boolean;
+  /** How many units, as the box holds it. A STRING, because an empty box is
+   *  not nought units -- it means the booker has not answered, and a number
+   *  type would have to pick a value to stand for that. */
+  bloodUnits?: string;
   otherSpecialNeeds?: string;
   postOpDestination?: string;
   /** Kept for drafts written before admissionType existed. Derived from
