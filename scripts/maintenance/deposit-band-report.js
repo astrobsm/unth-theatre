@@ -115,105 +115,120 @@ async function main() {
   };
 
   // ---- 3. What a case of each magnitude actually carried, priced ------------
-  // surgery_special_needs is the itemised list the deposit is computed from:
-  // the magnitude bundle plus the surgeon's additions. It is the closest thing
-  // the records hold to "what this case consumed".
-  const needs = await prisma.surgerySpecialNeed.findMany({
-    select: {
-      surgeryId: true, itemId: true, quantity: true, fromBundle: true,
-      surgery: { select: { magnitude: true, status: true } },
-    },
-  });
+  // Aggregated IN THE DATABASE rather than pulled into node.
+  //
+  // The first version of this read every surgery_special_needs row with its
+  // surgery and summed them here. On this dataset that did not return inside
+  // five minutes, which for a report somebody runs before a committee meeting
+  // is the same as not working. One grouped query per case, then order
+  // statistics over a few thousand rows, is the same answer in seconds.
+  //
+  // NULLIF on the price is what keeps an unpriced line out of the sum instead
+  // of contributing zero, and the COUNT beside it is how many were left out.
+  const perCaseRows = await prisma.$queryRawUnsafe(`
+    SELECT
+      COALESCE(NULLIF(UPPER(s."magnitude"), ''), '(not recorded)') AS magnitude,
+      n."surgeryId"                                   AS surgery_id,
+      COUNT(*)                                        AS lines,
+      COUNT(*) FILTER (WHERE i."unitPrice" IS NULL)   AS unpriced_lines,
+      COALESCE(SUM(
+        CASE WHEN i."unitPrice" IS NOT NULL AND i."dispensedByPharmacy" = false
+             THEN i."unitPrice" * n."quantity" END), 0) AS consumable_naira,
+      COALESCE(SUM(
+        CASE WHEN i."unitPrice" IS NOT NULL AND i."dispensedByPharmacy" = true
+             THEN i."unitPrice" * n."quantity" END), 0) AS pharmacy_naira
+    FROM "surgery_special_needs" n
+    JOIN "surgeries" s          ON s."id" = n."surgeryId"
+    LEFT JOIN "special_need_items" i ON i."id" = n."itemId"
+    GROUP BY 1, 2
+  `);
 
-  const perCase = new Map(); // surgeryId -> accumulator
-  const itemFrequency = new Map(); // `${magnitude}::${name}` -> count
-  for (const n of needs) {
-    const magnitude = (n.surgery?.magnitude ?? '').toUpperCase() || '(not recorded)';
-    let acc = perCase.get(n.surgeryId);
-    if (!acc) {
-      acc = {
-        magnitude,
-        status: n.surgery?.status ?? null,
-        consumableKobo: 0, pharmacyKobo: 0,
-        lines: 0, unpricedLines: 0,
-      };
-      perCase.set(n.surgeryId, acc);
-    }
-    acc.lines += 1;
+  const perCase = perCaseRows.map((r) => ({
+    magnitude: r.magnitude,
+    lines: Number(r.lines),
+    unpricedLines: Number(r.unpriced_lines),
+    consumableKobo: Math.round(Number(r.consumable_naira) * 100),
+    pharmacyKobo: Math.round(Number(r.pharmacy_naira) * 100),
+  }));
 
-    const item = priceById.get(n.itemId);
-    const unit = item ? toKobo(item.unitPrice) : null;
-    if (unit === null) {
-      acc.unpricedLines += 1;
-    } else if (item.dispensedByPharmacy) {
-      acc.pharmacyKobo += unit * n.quantity;
-    } else {
-      acc.consumableKobo += unit * n.quantity;
-    }
-
-    if (item) {
-      const key = `${magnitude}::${item.name}`;
-      itemFrequency.set(key, (itemFrequency.get(key) ?? 0) + 1);
-    }
-  }
+  // The items that come up most often in each band, by name only.
+  const commonRows = await prisma.$queryRawUnsafe(`
+    SELECT
+      COALESCE(NULLIF(UPPER(s."magnitude"), ''), '(not recorded)') AS magnitude,
+      i."name"                AS item,
+      COUNT(DISTINCT n."surgeryId") AS cases,
+      i."unitPrice"           AS unit_price
+    FROM "surgery_special_needs" n
+    JOIN "surgeries" s          ON s."id" = n."surgeryId"
+    JOIN "special_need_items" i ON i."id" = n."itemId"
+    GROUP BY 1, 2, 4
+    ORDER BY 1, 3 DESC
+  `);
 
   out.bands = [];
   for (const m of [...MAGNITUDES, '(not recorded)']) {
-    const cases = [...perCase.values()].filter((c) => c.magnitude === m);
+    const cases = perCase.filter((c) => c.magnitude === m);
     if (!cases.length) {
-      out.bands.push({ magnitude: m, cases: 0, note: 'No case in the records carries this magnitude with an itemised list.' });
+      out.bands.push({
+        magnitude: m, cases: 0,
+        note: 'No case in the records carries this magnitude with an itemised list.',
+      });
       continue;
     }
     // A case with ANY unpriced line produces a total that is knowingly short.
-    // Counted separately rather than silently included — this is the whole
+    // Counted separately rather than silently included -- this is the whole
     // reason the figures below can or cannot be trusted.
     const complete = cases.filter((c) => c.unpricedLines === 0);
-    const totals = complete.map((c) => c.consumableKobo + c.pharmacyKobo);
+    const totalLines = cases.reduce((s2, c) => s2 + c.lines, 0);
+    const unpriced = cases.reduce((s2, c) => s2 + c.unpricedLines, 0);
 
     out.bands.push({
       magnitude: m,
       cases: cases.length,
       casesFullyPriced: complete.length,
       medianLines: stats(cases.map((c) => c.lines))?.median ?? null,
-      unpricedLineShare: (() => {
-        const total = cases.reduce((s, c) => s + c.lines, 0);
-        const un = cases.reduce((s, c) => s + c.unpricedLines, 0);
-        return total ? Math.round((un / total) * 100) : 0;
-      })(),
-      totalKobo: stats(totals),
+      unpricedLineShare: totalLines ? Math.round((unpriced / totalLines) * 100) : 0,
+      totalKobo: stats(complete.map((c) => c.consumableKobo + c.pharmacyKobo)),
       consumableKobo: stats(complete.map((c) => c.consumableKobo)),
       pharmacyKobo: stats(complete.map((c) => c.pharmacyKobo)),
-      commonestItems: [...itemFrequency.entries()]
-        .filter(([k]) => k.startsWith(`${m}::`))
-        .sort((a, b) => b[1] - a[1])
+      commonestItems: commonRows
+        .filter((r) => r.magnitude === m)
         .slice(0, 12)
-        .map(([k, v]) => ({ item: k.split('::')[1], cases: v })),
+        .map((r) => ({
+          item: r.item,
+          cases: Number(r.cases),
+          unitPrice: r.unit_price === null ? null : String(r.unit_price),
+        })),
     });
   }
 
   // ---- 4. Deposits the app has actually asked for --------------------------
-  const deposits = await prisma.caseDepositStatus.findMany({
-    select: {
-      magnitude: true, consumableSubtotal: true, pharmacySubtotal: true,
-      consumableContingency: true,
-    },
-  });
+  const depositRows = await prisma.$queryRawUnsafe(`
+    SELECT
+      COALESCE(NULLIF(UPPER("magnitude"), ''), '(not recorded)') AS magnitude,
+      COUNT(*) AS rows,
+      COUNT(*) FILTER (WHERE "consumableSubtotal" IS NOT NULL) AS with_amount,
+      COALESCE("consumableSubtotal", 0)
+        + COALESCE("pharmacySubtotal", 0)
+        + COALESCE("consumableContingency", 0) AS total_naira
+    FROM "case_deposit_status"
+    GROUP BY 1, 4
+  `);
   const depositBands = new Map();
-  for (const d of deposits) {
-    const m = (d.magnitude ?? '').toUpperCase() || '(not recorded)';
-    const total = (toKobo(d.consumableSubtotal) ?? 0)
-      + (toKobo(d.pharmacySubtotal) ?? 0)
-      + (toKobo(d.consumableContingency) ?? 0);
-    if (!depositBands.has(m)) depositBands.set(m, []);
-    if (total > 0) depositBands.get(m).push(total);
+  let depositRowCount = 0;
+  for (const d of depositRows) {
+    depositRowCount += Number(d.rows);
+    const kobo = Math.round(Number(d.total_naira) * 100);
+    if (kobo <= 0) continue;
+    if (!depositBands.has(d.magnitude)) depositBands.set(d.magnitude, []);
+    for (let i = 0; i < Number(d.rows); i += 1) depositBands.get(d.magnitude).push(kobo);
   }
   out.depositsAsked = {
-    rows: deposits.length,
+    rows: depositRowCount,
     byMagnitude: [...depositBands.entries()].map(([magnitude, v]) => ({
       magnitude, withAnAmount: v.length, kobo: stats(v),
     })),
   };
-
   // ---- 5. The pack lists, which are the other source of truth --------------
   const consumableLines = await prisma.surgeryConsumableRequest.count();
   const drugLines = await prisma.surgeryDrugDressingRequest.count();
