@@ -34,6 +34,9 @@ import {
 } from '../../src/lib/sync/transport';
 import { applyEntry, type TxRunner } from '../../src/lib/sync/applyEntry';
 import { PRIORITY_BATCH, BULK_BATCH, type Lane } from '../../src/lib/sync/lanes';
+import {
+  freshDirection, isDue, noteSuccess, noteFailure, nextWakeMs, combinedState,
+} from '../../src/lib/sync/direction';
 
 const PEER_URL = (process.env.SYNC_PEER_URL ?? '').replace(/\/+$/, '');
 const TOKEN = process.env.SYNC_SERVICE_TOKEN ?? '';
@@ -50,7 +53,26 @@ const db = prisma as unknown as TxRunner;
 const columnCache = new Map<string, Set<string>>();
 
 let stopping = false;
-let consecutiveErrors = 0;
+
+/**
+ * PUSH AND PULL KEEP THEIR OWN CLOCKS.
+ *
+ * They shared one failure counter and one sleep, so a fault in either
+ * direction stalled both -- and the one that mattered was the push: a case
+ * booked in theatre sat in the journal while the worker served a backoff
+ * earned by the cloud being briefly unreachable for a READ.
+ *
+ * On 19 November a momentary `fetch failed` put the next attempt 893 seconds
+ * away, fifteen minutes in which the theatre list could not leave the
+ * building, over a link that had come back inside a second.
+ *
+ * The within-a-cycle half of this was already fixed: a failing push no longer
+ * unwinds the cycle before the pull is attempted. This is the between-cycles
+ * half. See src/lib/sync/direction.ts for why the backoff itself is right and
+ * only the charging of it was wrong.
+ */
+const pushState = freshDirection();
+const pullState = freshDirection();
 
 /**
  * How many entries to attempt per push, adjusted by what happens.
@@ -627,39 +649,66 @@ async function cycle(): Promise<void> {
   // stalled direction became two: the push threw, the cycle unwound, and the
   // pull was never attempted — so for two and a half hours nothing came DOWN
   // from the cloud either, for a fault that had nothing to do with the
-  // downward direction. The error is held and rethrown after the pull has had
-  // its turn, so the backoff and the alerting still see it.
+  // downward direction.
+  //
+  // Each direction is now attempted only when IT is due, and a failure is
+  // charged only to the direction that failed. A permanent fault is rethrown
+  // so the loop can stop the worker; a retryable one never leaves this
+  // function, because the other direction still has a turn to take.
+  const startedAt = Date.now();
   shrankThisCycle = false;
+
   let pushed = { sent: 0, failed: true };
-  let pushError: unknown = null;
-  try {
-    pushed = await push(node);
-  } catch (e) {
-    pushError = e;
-    const message = e instanceof Error ? e.message : String(e);
-    console.warn(`[sync] ${message} — continuing to the pull so the other direction keeps moving`);
+  if (isDue(pushState, startedAt)) {
+    try {
+      pushed = await push(node);
+      noteSuccess(pushState, Date.now(), INTERVAL_MS);
+      // Only claim a good push when there actually was one. Stamping
+      // last_push_ok_at after a failure is how a stalled queue reads as
+      // healthy. The error columns carry the PULL's state, so a well push
+      // and a sick pull is a thing the status row can say.
+      const other = combinedState(pushState, pullState);
+      await prisma.$executeRawUnsafe(
+        `insert into sync_state (peer_node, last_push_at, last_push_ok_at, consecutive_errors, last_error)
+         values ('cloud', now(), now(), $1, $2)
+         on conflict (peer_node) do update set
+           last_push_at = now(), last_push_ok_at = now(),
+           consecutive_errors = $1, last_error = $2, updated_at = now()`,
+        other.failures, other.lastError);
+    } catch (e) {
+      const permanent = await recordDirectionFailure('push', pushState, e);
+      if (permanent) throw permanent;
+    }
   }
 
   // Before the pull: a parent applied last cycle unblocks its children now.
   await retryDeferred(node);
 
-  // PRIORITY FIRST, every cycle.
-  //
-  // In steady state this lane is empty and costs one cheap request. It only
-  // matters after an outage — which is precisely when a theatre is standing
-  // at a screen wondering where its list is.
-  //
-  // Failure here must not cost the bulk pull: the lesson already learnt when
-  // a failing push starved the pull for two and a half hours.
-  let pulledPriority = 0;
-  try {
-    pulledPriority = await pull(node, 'priority');
-  } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    console.warn(`[sync] priority pull failed: ${m} — continuing to the bulk lane`);
+  let pulled = 0;
+  if (isDue(pullState, Date.now())) {
+    try {
+      // PRIORITY FIRST, every cycle.
+      //
+      // In steady state this lane is empty and costs one cheap request. It
+      // only matters after an outage — which is precisely when a theatre is
+      // standing at a screen wondering where its list is.
+      //
+      // Failure here must not cost the bulk pull: the lesson already learnt
+      // when a failing push starved the pull for two and a half hours.
+      let pulledPriority = 0;
+      try {
+        pulledPriority = await pull(node, 'priority');
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.warn(`[sync] priority pull failed: ${m} — continuing to the bulk lane`);
+      }
+      pulled = pulledPriority + await pull(node, 'bulk');
+      noteSuccess(pullState, Date.now(), INTERVAL_MS);
+    } catch (e) {
+      const permanent = await recordDirectionFailure('pull', pullState, e);
+      if (permanent) throw permanent;
+    }
   }
-
-  const pulled = pulledPriority + await pull(node, 'bulk');
 
   // Say how we are, outward.
   //
@@ -673,69 +722,89 @@ async function cycle(): Promise<void> {
   // beacon that could break the sync would be worse than no beacon.
   void reportHealth(node).catch(() => { /* saying nothing is not a sync failure */ });
 
-  // Only claim a good push when there actually was one. Stamping
-  // last_push_ok_at after a failure is how a stalled queue reads as healthy.
-  if (!pushError) {
-    await prisma.$executeRawUnsafe(
-      `insert into sync_state (peer_node, last_push_at, last_push_ok_at, consecutive_errors, last_error)
-       values ('cloud', now(), now(), 0, null)
-       on conflict (peer_node) do update set
-         last_push_at = now(), last_push_ok_at = now(),
-         consecutive_errors = 0, last_error = null, updated_at = now()`);
+  if (pushed.sent || pulled) console.log(`[sync] pushed ${pushed.sent}, applied ${pulled}`);
+}
+
+/**
+ * Record a failure against ONE direction and decide when it may try again.
+ *
+ * Returns the error when it is permanent, so the caller can stop the worker;
+ * null when it is worth retrying, in which case the other direction carries
+ * on untouched — which is the entire point.
+ */
+async function recordDirectionFailure(
+  direction: 'push' | 'pull',
+  state: typeof pushState,
+  e: unknown,
+): Promise<unknown | null> {
+  const message = e instanceof Error ? e.message : String(e);
+  const status = (e as { status?: number | null }).status ?? null;
+
+  if (!isRetryable(status, e)) {
+    // A bad token or a protocol mismatch fails identically forever, in both
+    // directions. Retrying would hide it behind a queue that never drains.
+    return e;
   }
 
-  if (pushed.sent || pulled) console.log(`[sync] pushed ${pushed.sent}, applied ${pulled}`);
+  // A push that SHRANK is about to send a different, smaller request rather
+  // than repeat a failed one, so it gets a short wait. Exponential backoff
+  // answers "the peer is struggling"; it is the wrong answer to "we sent too
+  // much", and applying it there means the batch takes fifteen-minute steps
+  // to find a size that works while the queue keeps growing.
+  const shrank = direction === 'push' && shrankThisCycle;
+  const waitMs = shrank ? SHRINK_RETRY_MS : backoffMs(state.failures + 1);
 
-  // Rethrown after the pull, so the loop's backoff and the operator-facing
-  // error state behave exactly as before.
-  if (pushError) throw pushError;
+  noteFailure(state, Date.now(), waitMs, message);
+
+  const seconds = Math.round(waitMs / 1000);
+  if (shrank) {
+    console.warn(`[sync] ${direction} failed: ${message} — retrying smaller in ${seconds}s (batch now ${pushBatchSize})`);
+  } else {
+    const other = direction === 'push' ? 'pull' : 'push';
+    const otherState = direction === 'push' ? pullState : pushState;
+    const otherNote = otherState.failures === 0
+      ? `; the ${other} is unaffected and keeps its own schedule`
+      : `; the ${other} is also failing (${otherState.failures})`;
+    console.warn(
+      `[sync] ${direction} failed: ${message} — retrying the ${direction} in ${seconds}s `
+      + `(${direction} failure ${state.failures})${otherNote}`,
+    );
+  }
+
+  const combined = combinedState(pushState, pullState);
+  await prisma.$executeRawUnsafe(
+    `insert into sync_state (peer_node, consecutive_errors, last_error, next_attempt_at)
+     values ('cloud', $1, $2, $3)
+     on conflict (peer_node) do update set
+       consecutive_errors = $1, last_error = $2, next_attempt_at = $3, updated_at = now()`,
+    combined.failures, (combined.lastError ?? message).slice(0, 500),
+    // The real due time rather than now(): an operator asking why nothing is
+    // moving is asking when it will move, and now() never answered that.
+    new Date(state.nextAttemptAt));
+
+  return null;
 }
 
 async function loop(): Promise<void> {
   while (!stopping) {
-    let waitMs = INTERVAL_MS;
     try {
       await cycle();
-      consecutiveErrors = 0;
     } catch (e) {
-      consecutiveErrors++;
+      // Only a PERMANENT failure reaches here now. Everything retryable was
+      // recorded against its own direction inside the cycle, so the other
+      // direction keeps its schedule instead of inheriting this one's.
       const status = (e as { status?: number | null }).status ?? null;
       const message = e instanceof Error ? e.message : String(e);
-
-      await prisma.$executeRawUnsafe(
-        `insert into sync_state (peer_node, consecutive_errors, last_error, next_attempt_at)
-         values ('cloud', $1, $2, now())
-         on conflict (peer_node) do update set
-           consecutive_errors = $1, last_error = $2, updated_at = now()`,
-        consecutiveErrors, message.slice(0, 500));
-
-      if (!isRetryable(status, e)) {
-        // A bad token or a protocol mismatch fails identically forever.
-        // Retrying would hide it behind a queue that never drains, so stop and
-        // let the service manager surface it. Nothing is lost: the journal
-        // keeps every unacknowledged entry.
-        console.error(`[sync] permanent failure (HTTP ${status}): ${message}`);
-        console.error('[sync] stopping. Nothing was lost; fix the cause and restart.');
-        process.exitCode = 1;
-        return;
-      }
-
-      if (shrankThisCycle) {
-        // We are not repeating a failed request, we are attempting a smaller
-        // one. Exponential backoff answers "the peer is struggling"; it is the
-        // wrong answer to "we sent too much", and applying it here means the
-        // batch takes fifteen-minute steps to find a size that works while the
-        // queue keeps growing. A short wait converges in minutes instead.
-        waitMs = SHRINK_RETRY_MS;
-        console.warn(`[sync] ${message} — retrying smaller in ${Math.round(waitMs / 1000)}s (batch now ${pushBatchSize})`);
-      } else {
-        waitMs = backoffMs(consecutiveErrors);
-        console.warn(`[sync] ${message} — retrying in ${Math.round(waitMs / 1000)}s (failure ${consecutiveErrors})`);
-      }
+      console.error(`[sync] permanent failure (HTTP ${status}): ${message}`);
+      console.error('[sync] stopping. Nothing was lost; fix the cause and restart.');
+      process.exitCode = 1;
+      return;
     }
 
     if (ONCE) return;
-    await new Promise((r) => setTimeout(r, waitMs));
+    // Until the SOONER of the two directions is due. A healthy push keeps its
+    // ordinary minute while the pull serves a fifteen-minute backoff.
+    await new Promise((r) => setTimeout(r, nextWakeMs(pushState, pullState, Date.now(), INTERVAL_MS)));
   }
 }
 
