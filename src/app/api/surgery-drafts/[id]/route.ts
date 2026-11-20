@@ -68,6 +68,14 @@ const patchSchema = z.object({
 
   // Recording a publish, or withdrawing.
   status: z.enum(['DRAFT', 'PUBLISHED', 'WITHDRAWN']).optional(),
+  /**
+   * Why the date moved, or why the plan came off the list.
+   *
+   * Not a field of the plan: an instruction to this handler about how to
+   * record the change it is being asked to make. Pulled out of the
+   * whitelist below for exactly that reason.
+   */
+  changeReason: z.string().trim().max(500).optional(),
   publishedSurgeryId: emptyToNull(z.string()).optional(),
   publishedForDate: emptyToNull(z.string()).optional(),
 });
@@ -158,6 +166,42 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const target = toDate(p.targetDate);
     if (target !== undefined) data.targetDate = target;
+
+    // ── A PLAN THAT MOVED, OR CAME OFF ──────────────────────────────────
+    //
+    // A plan whose date has gone past looks exactly like one that is still
+    // true, so it used to age on the list being counted as "planned" by the
+    // unit card and by the pharmacy reading ahead. Answering it is now a
+    // thing the unit is asked to do, and the answer is kept.
+    //
+    // The reason is required by the CLIENT, not here. A plan moved by a
+    // script, a backfill or a future caller that has no human to ask must
+    // still be able to move; what this guarantees is that when a reason IS
+    // given it is recorded, dated and attributed, and that the count and the
+    // original date are maintained whether or not anybody explained.
+    const movedDate =
+      target !== undefined
+      && target !== null
+      && existing.targetDate
+      && target.getTime() !== existing.targetDate.getTime();
+    const cameOff = p.status === 'WITHDRAWN' && existing.status !== 'WITHDRAWN';
+    const reason = (p.changeReason ?? '').trim();
+    const changedBy = (session!.user as { name?: string; email?: string });
+    const changedByName = changedBy.name || changedBy.email || null;
+
+    if (movedDate) {
+      data.rescheduleCount = (existing.rescheduleCount ?? 0) + 1;
+      // Set once and never overwritten, so the slippage is measured from
+      // where it started rather than from the last excuse.
+      if (!existing.originalTargetDate) data.originalTargetDate = existing.targetDate;
+    }
+
+    if (movedDate || cameOff) {
+      data.lastChangeKind = cameOff ? 'WITHDRAWN' : 'RESCHEDULED';
+      data.lastChangeAt = new Date();
+      data.lastChangeByName = changedByName;
+      if (reason) data.lastChangeReason = reason;
+    }
     const forDate = toDate(p.publishedForDate);
     if (forDate !== undefined) data.publishedForDate = forDate;
 
@@ -167,6 +211,38 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     const draft = await prisma.surgeryScheduleDraft.update({ where: { id: params.id }, data });
+
+    // The row carries the LATEST reason, for the card. The log carries every
+    // one of them, for the question the card cannot answer: how many times
+    // has this slipped, and what was said each time. Same arrangement
+    // surgeries uses for completion.
+    // Only with a real user id: AuditLog.userId is NOT NULL with a hard foreign
+    // key to users, and inventing one would be a row that cannot insert -- the
+    // exact shape of fault that stranded a theatre list on 19 November.
+    if ((movedDate || cameOff) && user.id) {
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'UPDATE',
+          tableName: 'surgery_schedule_drafts',
+          recordId: params.id,
+          changes: JSON.stringify({
+            kind: cameOff ? 'WITHDRAWN' : 'RESCHEDULED',
+            reason: reason || null,
+            from: existing.targetDate,
+            to: cameOff ? null : target,
+            rescheduleCount: draft.rescheduleCount,
+            by: changedByName,
+          }),
+        },
+      }).catch((e) => {
+        // The change itself is done and must not be undone by a failure to
+        // describe it. Said out loud rather than swallowed, because a trail
+        // that quietly stops being written is worse than one that is absent.
+        console.error('[surgery-drafts] change made but not logged:', e);
+      });
+    }
+
     return NextResponse.json({ draft });
   } catch (err) {
     console.error('[surgery-drafts] update failed:', err);

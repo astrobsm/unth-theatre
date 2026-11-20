@@ -26,6 +26,10 @@ import { isReadOnlyRole } from '@/lib/surgeryDrafts/access';
 import {
   type ScheduleDraft,
   missingForPublish,
+  overdueState,
+  slippageNote,
+  planChangeReasonProblem,
+  newPlanDateProblem,
   publishDefaults,
   publishIdempotencyKey,
   publishPayload,
@@ -142,6 +146,16 @@ export default function SurgeryDraftsPage() {
   // only way to change one was to delete it and retype it, which loses the
   // plan's history and everything the pharmacy had already read off it.
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The plan whose missing details are being filled in before publishing.
+  // Publish is never disabled now: a button that cannot be pressed teaches
+  // nothing, and the person pressing it is the person who can supply what
+  // is missing.
+  const [completing, setCompleting] = useState<ScheduleDraft | null>(null);
+  const [fill, setFill] = useState({
+    patientId: '', patientName: '', patientFolderNumber: '',
+    surgeonId: '', surgeonName: '', indication: '', procedureName: '',
+  });
+  const [fillError, setFillError] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null);
@@ -387,6 +401,115 @@ export default function SurgeryDraftsPage() {
     // openEdit is stable enough for this one-shot; `returned` guards re-entry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returned, loading, drafts, searchParams]);
+
+  /**
+   * Publish was pressed on a plan that is not ready.
+   *
+   * It used to be disabled, with a tooltip saying "Something is still
+   * missing" and an amber panel underneath listing what. That is two places
+   * to read and nowhere to act: the person had to open Edit, find the four
+   * fields among twenty, fill them, save, and press Publish again.
+   *
+   * Now the press opens exactly the fields that are missing, and nothing
+   * else. Supply them and the case goes on the list in the same breath.
+   */
+  const openCompletion = (d: ScheduleDraft) => {
+    setCompleting(d);
+    setFillError('');
+    setPatientSearch(d.patientName ?? '');
+    setSurgeonSearch('');
+    setFill({
+      patientId: d.patientId ?? '',
+      patientName: d.patientName ?? '',
+      patientFolderNumber: d.patientFolderNumber ?? '',
+      surgeonId: d.surgeonId ?? '',
+      surgeonName: d.surgeonName ?? '',
+      indication: d.indication ?? '',
+      procedureName: d.procedureName ?? '',
+    });
+  };
+
+  /** Save what was filled in, then go straight on to choosing the date. */
+  const saveCompletion = async () => {
+    if (!completing) return;
+    setBusy(true);
+    setFillError('');
+    try {
+      const res = await fetch(`/api/surgery-drafts/${completing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fill),
+      });
+      const saved = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFillError(saved.error || 'Could not save those details.');
+        return;
+      }
+      const updated: ScheduleDraft = saved.draft ?? { ...completing, ...fill };
+
+      // Still not ready? Say which, and stay put rather than opening a date
+      // box for a case that cannot be booked.
+      const stillMissing = missingForPublish(updated);
+      if (stillMissing.length > 0) {
+        setFillError(stillMissing.map((m) => m.say).join(' '));
+        setCompleting(updated);
+        await load();
+        return;
+      }
+
+      setCompleting(null);
+      await load();
+      openPublish(updated);
+    } catch {
+      setFillError('A network error stopped this saving. Nothing was changed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * A plan whose date has gone past: moved, or taken off the list, with the
+   * reason recorded either way.
+   */
+  const resolveOverdue = async (
+    d: ScheduleDraft,
+    choice: { kind: 'MOVE'; date: string; reason: string } | { kind: 'DROP'; reason: string },
+  ): Promise<string | null> => {
+    const reasonProblem = planChangeReasonProblem(choice.reason);
+    if (reasonProblem) return reasonProblem;
+    if (choice.kind === 'MOVE') {
+      const dateProblem = newPlanDateProblem(choice.date);
+      if (dateProblem) return dateProblem;
+    }
+
+    setBusy(true);
+    try {
+      const body = choice.kind === 'MOVE'
+        ? { targetDate: choice.date, changeReason: choice.reason }
+        : { status: 'WITHDRAWN', changeReason: choice.reason };
+      const res = await fetch(`/api/surgery-drafts/${d.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        return e.error || 'Could not save that change.';
+      }
+      await load();
+      setNotice({
+        kind: 'ok',
+        text: choice.kind === 'MOVE'
+          ? 'Moved, and the reason recorded.'
+          : 'Taken off the list, and the reason recorded.',
+      });
+      return null;
+    } catch {
+      return 'A network error stopped this saving. Nothing was changed.';
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const openPublish = (d: ScheduleDraft) => {
     const defaults = publishDefaults(d);
@@ -892,12 +1015,191 @@ export default function SurgeryDraftsPage() {
                   onOpenPublish={() => openPublish(d)} onCancelPublish={() => setPublishing(null)}
                   onPublish={() => publish(d)} onWithdraw={() => withdraw(d)} onRemove={() => remove(d)}
                   onEdit={() => openEdit(d)}
+                  onComplete={() => openCompletion(d)}
+                  onResolveOverdue={(c) => resolveOverdue(d, c)}
                 />
               ))}
             </UnitCard>
           ))}
         </div>
       )}
+
+      {/* WHAT PUBLISH ASKS FOR WHEN THE PLAN IS NOT READY.
+
+          Only the fields that are actually missing. The whole fault being
+          fixed is that the person had to go and find four fields among
+          twenty in the edit form, so showing them all again here would be
+          the same fault in a smaller window. */}
+      {completing && (() => {
+        const want = new Set(missingForPublish(completing).map((m) => m.field));
+        return (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl mt-10">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Before this goes on a list</h2>
+                  <p className="text-sm text-gray-600">
+                    {completing.procedureName || 'This case'} needs a little more before it can be booked.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCompleting(null)}
+                  className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {want.has('patientId') && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Patient <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={patientSearch}
+                      onChange={(e) => setPatientSearch(e.target.value)}
+                      placeholder="Search by name, folder or PT number"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <select
+                      value={fill.patientId}
+                      onChange={(e) => {
+                        const pt = patients.find((x) => x.id === e.target.value);
+                        setFill({
+                          ...fill,
+                          patientId: e.target.value,
+                          patientName: pt?.name ?? fill.patientName,
+                          patientFolderNumber: pt?.folderNumber || pt?.ptNumber || '',
+                        });
+                      }}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      aria-label="Patient"
+                    >
+                      <option value="">Choose the folder…</option>
+                      {visiblePatients.map((pt) => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.name}{pt.folderNumber ? ` · ${pt.folderNumber}` : ''}{pt.ptNumber ? ` · ${pt.ptNumber}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {/* The way out when the folder does not exist yet. Carries
+                        this plan's id, so registering ends back on it. */}
+                    <p className="mt-1 text-xs text-gray-600">
+                      Not registered yet?{' '}
+                      <a
+                        className="font-semibold text-blue-700 underline"
+                        href={`/dashboard/patients/new?returnTo=${encodeURIComponent(`/dashboard/surgery-drafts?plan=${completing.id}`)}`}
+                      >
+                        Register this patient
+                      </a>
+                    </p>
+                  </div>
+                )}
+
+                {want.has('surgeonName') && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Surgeon <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={surgeonSearch}
+                      onChange={(e) => setSurgeonSearch(e.target.value)}
+                      placeholder="Search by name"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <select
+                      value={fill.surgeonId}
+                      onChange={(e) => {
+                        const sg = surgeons.find((x) => x.id === e.target.value);
+                        setFill({
+                          ...fill,
+                          surgeonId: e.target.value,
+                          surgeonName: sg?.fullName ?? fill.surgeonName,
+                        });
+                      }}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      aria-label="Surgeon"
+                    >
+                      <option value="">Choose a surgeon…</option>
+                      {visibleSurgeons.map((sg) => (
+                        <option key={sg.id} value={sg.id}>{sg.fullName}</option>
+                      ))}
+                    </select>
+                    {/* A visiting surgeon has no account here and still operates. */}
+                    <input
+                      type="text"
+                      value={fill.surgeonName}
+                      onChange={(e) => setFill({ ...fill, surgeonName: e.target.value, surgeonId: '' })}
+                      placeholder="or type the name"
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      aria-label="Surgeon name"
+                    />
+                  </div>
+                )}
+
+                {want.has('procedureName') && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Operation <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={fill.procedureName}
+                      onChange={(e) => setFill({ ...fill, procedureName: e.target.value })}
+                      placeholder="What is being done"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+
+                {want.has('indication') && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Indication <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={fill.indication}
+                      onChange={(e) => setFill({ ...fill, indication: e.target.value })}
+                      placeholder="The clinical reason for operating"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {fillError && (
+                <p className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-800">
+                  {fillError}
+                </p>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={saveCompletion}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  {busy ? 'Saving…' : 'Save and choose the date'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompleting(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -910,6 +1212,127 @@ export default function SurgeryDraftsPage() {
  * unit has four cases stuck behind an unregistered patient without opening
  * four cards to find out.
  */
+
+/**
+ * A plan whose date has gone past, asking what happened.
+ *
+ * Three answers, and the third is the Publish button already on the card: the
+ * case may simply have been done and not yet put on a list. So this offers the
+ * two that are NOT already offered, and says the third out loud rather than
+ * leaving somebody to work out that publishing is still available.
+ *
+ * A REASON IS REQUIRED for both. The whole value of asking is the answer: a
+ * date that moves with no reason recorded is the state this exists to end,
+ * where the list says next Thursday and nobody can tell whether that is a
+ * decision or a drift.
+ */
+function OverduePanel({
+  d, daysPast, busy, onResolve,
+}: {
+  d: ScheduleDraft;
+  daysPast: number;
+  busy: boolean;
+  onResolve: (
+    choice: { kind: 'MOVE'; date: string; reason: string } | { kind: 'DROP'; reason: string },
+  ) => Promise<string | null>;
+}) {
+  const [mode, setMode] = useState<'none' | 'MOVE' | 'DROP'>('none');
+  const [date, setDate] = useState('');
+  const [reason, setReason] = useState('');
+  const [problem, setProblem] = useState('');
+
+  const submit = async () => {
+    const result = mode === 'MOVE'
+      ? await onResolve({ kind: 'MOVE', date, reason })
+      : await onResolve({ kind: 'DROP', reason });
+    if (result) setProblem(result);
+    // On success the list reloads and this card is replaced, so there is
+    // nothing to reset.
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border-2 border-orange-300 bg-orange-50 p-3">
+      <p className="text-xs font-semibold text-orange-900">
+        This was planned for {asDateInput(d.targetDate)}, {daysPast} day{daysPast === 1 ? '' : 's'} ago.
+      </p>
+      <p className="mt-1 text-xs text-orange-800">
+        It is still counted as planned by this unit and by the pharmacy reading ahead.
+        If it was done, use Publish above to put it on the list for the day it happened.
+      </p>
+
+      {mode === 'none' && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => { setMode('MOVE'); setProblem(''); }}
+            className="px-3 py-1.5 rounded-lg border border-orange-400 bg-white text-xs font-medium text-orange-900"
+          >
+            Move to a new date
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('DROP'); setProblem(''); }}
+            className="px-3 py-1.5 rounded-lg border border-orange-400 bg-white text-xs font-medium text-orange-900"
+          >
+            Take it off the list
+          </button>
+        </div>
+      )}
+
+      {mode !== 'none' && (
+        <div className="mt-2 space-y-2">
+          {mode === 'MOVE' && (
+            <div>
+              <label className="block text-xs font-medium text-orange-900 mb-1" htmlFor={`newdate-${d.id}`}>
+                New planned date
+              </label>
+              <input
+                id={`newdate-${d.id}`}
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-orange-900 mb-1" htmlFor={`reason-${d.id}`}>
+              {mode === 'MOVE' ? 'Why is it moving?' : 'Why is it coming off?'}
+            </label>
+            <input
+              id={`reason-${d.id}`}
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={mode === 'MOVE'
+                ? 'e.g. patient not optimised, theatre list full'
+                : 'e.g. operated elsewhere, patient declined'}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          {problem && <p className="text-xs font-semibold text-red-700">{problem}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy}
+              className="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold disabled:opacity-50"
+            >
+              {mode === 'MOVE' ? 'Move it' : 'Take it off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('none'); setProblem(''); }}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 function UnitCard({
   unit, total, ready, blocked, children,
 }: {
@@ -1043,7 +1466,7 @@ function Tick({
 
 function DraftCard({
   d, busy, readOnly, publishing, choice, setChoice,
-  onOpenPublish, onCancelPublish, onPublish, onWithdraw, onRemove, onEdit,
+  onOpenPublish, onCancelPublish, onPublish, onWithdraw, onRemove, onEdit, onComplete, onResolveOverdue,
 }: {
   d: ScheduleDraft; busy: boolean; readOnly: boolean; publishing: boolean;
   choice: { date: string; time: string };
@@ -1051,8 +1474,14 @@ function DraftCard({
   onOpenPublish: () => void; onCancelPublish: () => void;
   onPublish: () => void; onWithdraw: () => void; onRemove: () => void;
   onEdit: () => void;
+  onComplete: () => void;
+  onResolveOverdue: (
+    choice: { kind: 'MOVE'; date: string; reason: string } | { kind: 'DROP'; reason: string },
+  ) => Promise<string | null>;
 }) {
   const missing = missingForPublish(d);
+  const overdue = overdueState(d);
+  const slipped = slippageNote(d);
   const isDraft = d.status === 'DRAFT';
   const canAct = isDraft && !readOnly;
 
@@ -1095,7 +1524,20 @@ function DraftCard({
             {d.unit} · {d.subspecialty}
             {d.targetDate ? ` · aiming for ${asDateInput(d.targetDate)}` : ''}
             {d.preferredTime ? ` at ${d.preferredTime}` : ''}
+            {/* A case moved once is an ordinary reschedule. A case moved four
+                times is a different thing, and the only place that showed was
+                in somebody's memory. */}
+            {slipped ? ` · ${slipped}` : ''}
           </p>
+          {d.lastChangeReason && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              <span className="font-medium">
+                {d.lastChangeKind === 'WITHDRAWN' ? 'Taken off:' : 'Moved:'}
+              </span>{' '}
+              {d.lastChangeReason}
+              {d.lastChangeByName ? ` — ${d.lastChangeByName}` : ''}
+            </p>
+          )}
           {(needs.length > 0 || d.isDayCase || d.anesthesiaType) && (
             <p className="text-xs text-gray-700 mt-1">
               <span className="font-medium">Needs:</span>{' '}
@@ -1111,10 +1553,21 @@ function DraftCard({
 
         {canAct && (
           <div className="flex gap-2 shrink-0">
+            {/* NEVER DISABLED.
+
+                It was greyed out whenever anything was missing, with a tooltip
+                saying "Something is still missing" and a panel underneath
+                listing what. That is two places to read and nowhere to act: the
+                person had to open Edit, find four fields among twenty, fill
+                them, save, and come back. A button that cannot be pressed
+                teaches nothing, and the person pressing it is exactly the
+                person who can supply what is missing. */}
             <button
-              onClick={onOpenPublish}
-              disabled={busy || missing.length > 0}
-              title={missing.length ? 'Something is still missing' : 'Choose a date and put it on the list'}
+              onClick={missing.length ? onComplete : onOpenPublish}
+              disabled={busy}
+              title={missing.length
+                ? 'Fill in what is missing and put it on the list'
+                : 'Choose a date and put it on the list'}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-medium disabled:opacity-40"
             >
               <Send className="w-3.5 h-3.5" /> Publish
@@ -1131,6 +1584,16 @@ function DraftCard({
           </div>
         )}
       </div>
+
+      {/* THE DATE HAS GONE PAST.
+
+          A plan behind its date looks exactly like one that is still true, so
+          it aged on the list being counted as "planned" by the unit card and
+          by the pharmacy reading ahead. Overdue is a QUESTION, not a verdict:
+          the case may have been done and not yet published, it may be moving
+          to next week, or it may be off. All three are ordinary. What is not
+          ordinary is leaving it unanswered. */}
+      {canAct && overdue.overdue && <OverduePanel d={d} daysPast={overdue.daysPast} busy={busy} onResolve={onResolveOverdue} />}
 
       {canAct && missing.length > 0 && (
         <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-3">

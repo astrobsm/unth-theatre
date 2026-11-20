@@ -60,6 +60,15 @@ export interface ScheduleDraft {
   priority?: string | null;
   notes?: string | null;
   status: string;
+
+  /** The first date ever promised, set the first time the date moves. */
+  originalTargetDate?: string | Date | null;
+  rescheduleCount?: number | null;
+  /** RESCHEDULED | WITHDRAWN */
+  lastChangeKind?: string | null;
+  lastChangeReason?: string | null;
+  lastChangeAt?: string | Date | null;
+  lastChangeByName?: string | null;
   publishedSurgeryId?: string | null;
   publishedAt?: string | Date | null;
   publishedForDate?: string | Date | null;
@@ -219,6 +228,129 @@ export function validatePublishChoice(choice: PublishChoice): string | null {
   if (Number.isNaN(d.getTime())) return 'That date cannot be read.';
   if (!isClockTime(choice.scheduledTime)) {
     return 'Give the start time as HH:MM on a 24-hour clock, for example 09:00.';
+  }
+  return null;
+}
+
+// ============================================================
+// When the planned date has gone past
+// ------------------------------------------------------------
+// A plan whose date is behind us looks exactly like one that is still true.
+// So it aged on the list: not operated, not withdrawn, not moved, and counted
+// as "planned" the whole time by the unit card and by the pharmacy reading
+// ahead. The unit that wrote it knew it had slipped. Nobody else did.
+//
+// Overdue is a question, not a verdict. The case may have been done and not
+// yet published, it may be moving to next week, or it may be off. All three
+// are ordinary; what is not ordinary is leaving it unanswered.
+// ============================================================
+
+/**
+ * Today, at midnight, in LOCAL terms.
+ *
+ * A plan for today is not overdue at nine in the morning, and comparing a
+ * date-only target against `new Date()` would make it so for every case after
+ * the first minute of the day. This machine and the theatre server run on WAT,
+ * so building the boundary in UTC would move it by an hour and make a case
+ * overdue an hour before midnight.
+ */
+function startOfToday(now: Date): Date {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+}
+
+export interface OverdueState {
+  overdue: boolean;
+  /** Whole days the date is behind. 0 when not overdue. */
+  daysPast: number;
+}
+
+/**
+ * Has this plan's date gone past?
+ *
+ * Only a plan can be overdue. A published one is a booked case and lives on
+ * the theatre list; a withdrawn one was answered already. A plan with no date
+ * is not late for anything -- it is an intention without a day, which is a
+ * legitimate state this module has always allowed.
+ */
+export function overdueState(
+  draft: Pick<ScheduleDraft, 'status' | 'targetDate'>,
+  now: Date = new Date(),
+): OverdueState {
+  if (draft.status !== 'DRAFT' || !draft.targetDate) return { overdue: false, daysPast: 0 };
+  const target = draft.targetDate instanceof Date ? draft.targetDate : new Date(draft.targetDate);
+  if (Number.isNaN(target.getTime())) return { overdue: false, daysPast: 0 };
+
+  const today = startOfToday(now);
+  const day = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 0, 0, 0, 0);
+  if (day.getTime() >= today.getTime()) return { overdue: false, daysPast: 0 };
+
+  return {
+    overdue: true,
+    daysPast: Math.round((today.getTime() - day.getTime()) / 86_400_000),
+  };
+}
+
+/** The shortest reason worth recording. */
+export const PLAN_CHANGE_REASON_MIN = 5;
+
+/**
+ * The reason a plan moved or came off, or null when it will do.
+ *
+ * Required, because the whole value of asking is the answer. A date that
+ * moves with no reason recorded is the state this feature exists to end: the
+ * list says next Thursday and nobody can tell whether that is a decision or a
+ * drift.
+ */
+export function planChangeReasonProblem(reason: string | null | undefined): string | null {
+  const t = (reason ?? '').trim();
+  if (!t) return 'Say why. A date that moves with no reason recorded is a date nobody can rely on.';
+  if (t.length < PLAN_CHANGE_REASON_MIN) {
+    return `Give a fuller reason (at least ${PLAN_CHANGE_REASON_MIN} characters).`;
+  }
+  return null;
+}
+
+/**
+ * "moved 3 times · first promised 10 Nov", or null for a plan that has not
+ * slipped.
+ *
+ * A case moved once is an ordinary reschedule. A case moved four times is a
+ * different thing entirely, and the only place that showed was in somebody's
+ * memory.
+ */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function slippageNote(draft: ScheduleDraft): string | null {
+  const moves = draft.rescheduleCount ?? 0;
+  if (moves <= 0) return null;
+  const parts = [`moved ${moves} time${moves === 1 ? '' : 's'}`];
+  const first = draft.originalTargetDate
+    ? (draft.originalTargetDate instanceof Date
+        ? draft.originalTargetDate
+        : new Date(draft.originalTargetDate))
+    : null;
+  if (first && !Number.isNaN(first.getTime())) {
+    // Formatted here rather than by toLocaleDateString, which follows the
+    // RUNTIME locale: this machine prints "Nov 10" and the theatre server
+    // prints "10 Nov" for the same plan. A card whose date order depends on
+    // which box rendered it is a card two people read differently.
+    parts.push(`first promised ${first.getDate()} ${MONTHS[first.getMonth()]}`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * What the new date must satisfy.
+ *
+ * Not in the past, because the fault being fixed is a plan with a date behind
+ * it, and answering "when?" with another date behind it answers nothing.
+ */
+export function newPlanDateProblem(date: string, now: Date = new Date()): string | null {
+  if (!date) return 'Choose the new date.';
+  const d = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return 'That date cannot be read.';
+  if (d.getTime() < startOfToday(now).getTime()) {
+    return 'That date has already passed. Choose today or later.';
   }
   return null;
 }

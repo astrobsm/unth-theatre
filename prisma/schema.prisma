@@ -15447,6 +15447,26 @@ model SurgeryScheduleDraft {
   publishedById      String?
   publishedForDate   DateTime?
 
+  /// WHEN THE PLANNED DATE GOES PAST.
+  ///
+  /// A plan whose date has gone is indistinguishable on screen from one that
+  /// is still true, so it ages on the list being counted as "planned" by the
+  /// unit card and by the pharmacy reading ahead. An overdue plan now asks to
+  /// be moved or taken off, and either way to say why.
+  ///
+  /// The first date ever promised. Set the first time the date moves and
+  /// never overwritten, so slippage is measured from where it started rather
+  /// than from the last excuse.
+  originalTargetDate DateTime?
+  rescheduleCount    Int       @default(0)
+  /// RESCHEDULED | WITHDRAWN. Text, not an enum: a label on a planning row
+  /// rather than a clinical state, and the set grows the first time somebody
+  /// wants a third option.
+  lastChangeKind     String?
+  lastChangeReason   String?
+  lastChangeAt       DateTime?
+  lastChangeByName   String?
+
   createdById   String?
   createdByName String?
   createdAt     DateTime @default(now())
