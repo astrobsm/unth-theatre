@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import InlineRegister, { type RegisteredPatient } from '@/components/patients/InlineRegister';
 import { CalendarDays, Plus, Send, Trash2, X, AlertTriangle, CheckCircle2, Eye } from 'lucide-react';
 import ProcedurePicker from '@/components/ProcedurePicker';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
@@ -156,6 +157,7 @@ export default function SurgeryDraftsPage() {
     surgeonId: '', surgeonName: '', indication: '', procedureName: '',
   });
   const [fillError, setFillError] = useState('');
+  const [registerInModal, setRegisterInModal] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null);
@@ -416,6 +418,7 @@ export default function SurgeryDraftsPage() {
   const openCompletion = (d: ScheduleDraft) => {
     setCompleting(d);
     setFillError('');
+    setRegisterInModal(false);
     setPatientSearch(d.patientName ?? '');
     setSurgeonSearch('');
     setFill({
@@ -509,6 +512,33 @@ export default function SurgeryDraftsPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * A patient has just been registered (or an existing folder was chosen
+   * instead of making a second one). Attach them and carry on planning.
+   *
+   * The checkbox comes OFF, because the answer to "not registered yet" is now
+   * no. Leaving it ticked would keep a registered patient under a heading
+   * that says they are not, and the next person to open the plan would
+   * reasonably register them again.
+   */
+  const attachRegistered = (pt: RegisteredPatient) => {
+    setUnregistered(false);
+    setPatientSearch(pt.name);
+    setForm((prev) => ({
+      ...prev,
+      patientId: pt.id,
+      patientName: pt.name,
+      patientFolderNumber: pt.folderNumber || pt.ptNumber || '',
+    }));
+    // Freshly registered patients are not in the list this page loaded on
+    // mount, and the chooser reads from that list. Added here so the name
+    // shows immediately rather than after a reload.
+    setPatients((prev) => (prev.some((x) => x.id === pt.id)
+      ? prev
+      : [{ id: pt.id, name: pt.name, folderNumber: pt.folderNumber ?? null, ptNumber: pt.ptNumber ?? null }, ...prev]));
+    setNotice({ kind: 'ok', text: `${pt.name} is registered and attached. Carry on with the plan.` });
   };
 
   const openPublish = (d: ScheduleDraft) => {
@@ -801,14 +831,36 @@ export default function SurgeryDraftsPage() {
 
             {unregistered ? (
               <>
+                {/* WHAT THE UNIT KNOWS, AND THEN THE REGISTRATION ITSELF.
+
+                    These two boxes used to be the whole of it, under a sentence
+                    saying "register them before publishing, then choose them
+                    here". So the unit typed a name, saved a plan that could not
+                    be booked, went to Patients, registered, came back, found the
+                    plan, opened it, and searched for the folder it had just
+                    made. Six steps, five of which the app could do.
+
+                    They are kept, because a plan written against a name alone is
+                    still a legitimate plan -- a unit may be planning around
+                    somebody who is not in the hospital yet, and that was the
+                    reason this checkbox exists. The registration below is
+                    offered, not demanded. */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Patient name" value={form.patientName} onChange={(v) => setForm({ ...form, patientName: v })} placeholder="As the unit knows them" />
                   <Field label="Folder or PT number" value={form.patientFolderNumber} onChange={(v) => setForm({ ...form, patientFolderNumber: v })} placeholder="If there is one" />
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  The plan is held either way. Register them before publishing, then choose
-                  them here — a case cannot be booked against a name alone.
+                  The plan is held either way. A case cannot be booked against a name
+                  alone, so register them here and the plan is ready to publish.
                 </p>
+
+                <div className="mt-3">
+                  <InlineRegister
+                    initialName={form.patientName}
+                    initialNumber={form.patientFolderNumber}
+                    onRegistered={attachRegistered}
+                  />
+                </div>
               </>
             ) : (
               <Choice
@@ -1088,15 +1140,39 @@ export default function SurgeryDraftsPage() {
                     </select>
                     {/* The way out when the folder does not exist yet. Carries
                         this plan's id, so registering ends back on it. */}
-                    <p className="mt-1 text-xs text-gray-600">
-                      Not registered yet?{' '}
-                      <a
-                        className="font-semibold text-blue-700 underline"
-                        href={`/dashboard/patients/new?returnTo=${encodeURIComponent(`/dashboard/surgery-drafts?plan=${completing.id}`)}`}
-                      >
-                        Register this patient
-                      </a>
-                    </p>
+                    {/* Registered right here, for the same reason the plan form
+                        does it: sending somebody away mid-publish to come back
+                        and find their own plan is five steps the app can take. */}
+                    {!registerInModal ? (
+                      <p className="mt-1 text-xs text-gray-600">
+                        Not registered yet?{' '}
+                        <button
+                          type="button"
+                          onClick={() => setRegisterInModal(true)}
+                          className="font-semibold text-blue-700 underline"
+                        >
+                          Register them now
+                        </button>
+                      </p>
+                    ) : (
+                      <div className="mt-2">
+                        <InlineRegister
+                          initialName={completing.patientName ?? ''}
+                          initialNumber={completing.patientFolderNumber ?? ''}
+                          onCancel={() => setRegisterInModal(false)}
+                          onRegistered={(pt) => {
+                            setRegisterInModal(false);
+                            attachRegistered(pt);
+                            setFill((prev) => ({
+                              ...prev,
+                              patientId: pt.id,
+                              patientName: pt.name,
+                              patientFolderNumber: pt.folderNumber || pt.ptNumber || '',
+                            }));
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
