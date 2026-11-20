@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants';
 import { availabilityMeta } from '@/lib/staffAvailability';
+import CasePacksButton from '@/components/CasePacksButton';
 import { watDay, watToday } from '@/lib/watDay';
 import { getNemlMedicationCategories } from '@/lib/neml-as-medication-categories';
 import {
@@ -1938,6 +1939,47 @@ export default function EmergencyBookingPage() {
                         </p>
                       </div>
                     )}
+
+                    {/*
+                      The packs, on the emergency card.
+
+                      The editor has existed for months, one navigation away on
+                      the case detail page, which on this board means nobody
+                      opened it. An emergency is exactly the case where the
+                      surgeon has to see what was asked for, change it, and ask
+                      the two people holding it up to get on with it -- and the
+                      only thing that was reachable from here was the team chase.
+
+                      Gated on surgeryId. The booking route creates the surgery
+                      at booking time, so this is set for anything booked through
+                      it; an older row without one is said out loud rather than
+                      shown as a button that opens an empty list.
+                    */}
+                    <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-3">
+                      {booking.surgeryId ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CasePacksButton
+                            surgeryId={booking.surgeryId}
+                            procedureName={booking.procedureName}
+                            patientName={booking.patientName}
+                            status={booking.status}
+                            emergency
+                            priority={booking.priority}
+                            requiredBy={booking.requiredByTime ?? null}
+                            triggerClassName="inline-flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700"
+                          />
+                          <span className="text-xs text-purple-900">
+                            View and change the consumable and pharmacy packs, and chase the
+                            provider and pharmacy.
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-purple-900">
+                          No case record is linked to this booking yet, so there is no pack to
+                          show. Packs appear here once the case record exists.
+                        </p>
+                      )}
+                    </div>
 
                     {/* ACTION BUTTONS ROW */}
                     <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-gray-200">

@@ -23,15 +23,30 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Package, Loader2, X, Sparkles, AlertTriangle } from 'lucide-react';
 import SurgeryPackEditor from '@/components/SurgeryPackEditor';
+import PackChasePanel from '@/components/PackChasePanel';
 
 interface Props {
   surgeryId: string;
   procedureName?: string;
   patientName?: string;
   status?: string;
+  /** Styling for the trigger, so an emergency card can make it a real button. */
+  triggerClassName?: string;
+  /**
+   * Emergency context, when the case came from one. It changes the chase
+   * message rather than the editor: a provider reading "EMERGENCY, required
+   * by 10:00" behaves differently from one reading a list of items, and the
+   * required-by time is the single most useful line in it.
+   */
+  emergency?: boolean;
+  priority?: string | null;
+  requiredBy?: string | null;
 }
 
-export default function CasePacksButton({ surgeryId, procedureName, patientName, status }: Props) {
+export default function CasePacksButton({
+  surgeryId, procedureName, patientName, status,
+  triggerClassName, emergency = false, priority = null, requiredBy = null,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState<{ c: number; d: number } | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -86,7 +101,7 @@ export default function CasePacksButton({ surgeryId, procedureName, patientName,
         type="button"
         onClick={() => setOpen(true)}
         title="Consumable and pharmacy packs for this case"
-        className={`inline-flex items-center gap-1 font-semibold ${
+        className={triggerClassName ?? `inline-flex items-center gap-1 font-semibold ${
           empty && !closed ? 'text-amber-700 hover:text-amber-900' : 'text-purple-600 hover:text-purple-800'
         }`}
       >
@@ -138,6 +153,24 @@ export default function CasePacksButton({ surgeryId, procedureName, patientName,
                       {error}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Chasing sits ABOVE the editor on purpose. Somebody opening
+                  this dialog on an emergency is usually not there to add an
+                  item -- they are there because the pack has not arrived, and
+                  the thing they need is at the top rather than past two
+                  lists. */}
+              {!closed && (
+                <div className="mb-4">
+                  <PackChasePanel
+                    key={editorKey}
+                    surgeryId={surgeryId}
+                    emergency={emergency}
+                    priority={priority}
+                    requiredBy={requiredBy}
+                    onChased={loadCounts}
+                  />
                 </div>
               )}
 
