@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import OxygenStatusPanel from '@/components/oxygen/OxygenStatusPanel';
 import { 
   Activity, 
   AlertTriangle, 
@@ -153,6 +154,16 @@ export default function OxygenControlPage() {
         <p className="text-gray-600 mt-1">
           Real-time oxygen supply monitoring and alert system
         </p>
+      </div>
+
+      {/*
+        The same panel theatre sees, deliberately. The supervisor reading a
+        gentler account of their own day than the anaesthetist is reading is
+        exactly how the 10 o'clock posting goes missing without anybody
+        noticing -- and this is also where requests from theatre are answered.
+      */}
+      <div className="mb-6">
+        <OxygenStatusPanel title="Posted status and requests from theatre" />
       </div>
 
       {/* Active Red Alerts - Prominent Display */}

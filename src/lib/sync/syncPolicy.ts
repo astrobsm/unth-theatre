@@ -449,6 +449,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'maintenance_alerts', cls: 'LWW', why: 'Alert state for an inventory item; acknowledged and cleared in place.' },
   { table: 'maintenance_logs', cls: 'LWW', why: 'Work done on an item, edited as the job progresses.' },
   { table: 'oxygen_readiness_reports', cls: 'LWW', why: 'Oxygen supply readiness for the day; latest statement stands.' },
+  { table: 'oxygen_status_comments', cls: 'LWW', why: 'A request from theatre and the oxygen room answer to it, held as one exchange. The answer is written over the request in place and is the later, correct intent for that row; it is not a rival version of it, so first-wins does not apply.' },
   { table: 'patient_feedback', cls: 'LWW', why: 'Feedback and its triage state. Two nodes triaging one row is rare; the later decision is the operative one.' },
   { table: 'plumbing_water_status', cls: 'LWW', why: 'Current plumbing state; a status board, not a ledger.' },
   { table: 'power_fuel_consumption', cls: 'LWW', why: 'Fuel logged against a power-house status, corrected in place.' },

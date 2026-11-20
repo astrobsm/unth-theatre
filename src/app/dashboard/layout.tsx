@@ -404,6 +404,7 @@ export default function DashboardLayout({
     { href: '/dashboard/power-house/status', icon: Zap, label: 'Power Status' },
     { href: '/dashboard/power-house/maintenance', icon: Settings, label: 'Power Maintenance' },
     { href: '/dashboard/power-house/readiness', icon: Flame, label: 'Power Readiness' },
+    { href: '/dashboard/oxygen-status', icon: Wind, label: 'Oxygen Status', badge: 'NEW' },
     { href: '/dashboard/oxygen-control', icon: Wind, label: 'Oxygen Control' },
     { href: '/dashboard/cssd/inventory', icon: Shield, label: 'CSSD Inventory' },
     { href: '/dashboard/cssd/sterilization', icon: Activity, label: 'Sterilization' },
@@ -736,6 +737,7 @@ export default function DashboardLayout({
       '/dashboard/imprest/duties',
     ] },
     { type: 'group', label: 'Theatre Annex', icon: Building2, hrefs: [
+      '/dashboard/oxygen-status',
       '/dashboard/oxygen-control',
       '/dashboard/meals/order',
       '/dashboard/plumbing-water-supply',

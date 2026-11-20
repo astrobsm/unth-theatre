@@ -208,6 +208,15 @@ export const MODULES: AppModule[] = [
   { id: 'cssd', label: 'CSSD', paths: ['/dashboard/cssd'], defaultRoles: ['CSSD_STAFF', 'CSSD_SUPERVISOR'], category: 'Facility' },
   { id: 'laundry', label: 'Laundry', paths: ['/dashboard/laundry', '/dashboard/laundry-supervisor'], defaultRoles: ['LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR', 'SCRUB_CARE_PROVIDER'], category: 'Facility' },
   { id: 'oxygen-control', label: 'Oxygen Control', paths: ['/dashboard/oxygen-control', '/dashboard/oxygen-supervisor'], defaultRoles: ['OXYGEN_UNIT_SUPERVISOR'], category: 'Facility' },
+  // Read-only, and open to every role on purpose. oxygen-control above is
+  // the oxygen room's WORKSPACE -- filing reports, raising alerts -- and is
+  // correctly scoped to them. But "is there oxygen in Theatre 2 right now"
+  // is not a workspace question: it is asked by the surgeon deciding whether
+  // to start, the anaesthetic technician setting up, the recovery nurse and
+  // the porter who just wheeled a cylinder past a dead outlet. Scoping the
+  // ANSWER to the people who already know it is how a theatre sets up
+  // against a posting that went stale three hours ago.
+  { id: 'oxygen-status', label: 'Oxygen Status', paths: ['/dashboard/oxygen-status'], defaultRoles: ['*'], category: 'Facility' },
   { id: 'works-supervisor', label: 'Works Supervisor', paths: ['/dashboard/works-supervisor'], defaultRoles: ['WORKS_SUPERVISOR', 'PLUMBER', 'POWER_PLANT_OPERATOR'], category: 'Facility' },
 
   // The page has existed since 27 August and was reachable only by typing the

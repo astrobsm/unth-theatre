@@ -6492,6 +6492,56 @@ model OxygenAlert {
   @@map("oxygen_alerts")
 }
 
+/// Theatre answering the oxygen room.
+///
+/// OxygenReadinessReport is a broadcast with no reply channel: the room
+/// that cannot see the theatre writes a pressure, and the theatre that
+/// cannot answer reads it hours later. This is the way back -- a technician
+/// at the outlet asking whether a posting still holds, or asking for an
+/// adjustment, and the oxygen room answering with an outcome.
+///
+/// NO RELATIONS, deliberately. See the migration: a hard foreign key turns a
+/// row whose parent has not synced into a refused insert on the other node.
+/// reportedAt, authorName and answeredByName are denormalised for the same
+/// reason -- this has to be readable where the join does not yet resolve.
+model OxygenStatusComment {
+  id String @id @default(uuid())
+
+  /// Null when nothing had been posted at all, which is the most urgent
+  /// case there is and must not be refused for want of a parent.
+  reportId   String?
+  reportedAt DateTime?
+
+  theatreName String?
+  setupLogId  String?
+
+  /// CONFIRM_REQUEST | ADJUSTMENT_REQUEST | OBSERVATION
+  kind String
+  body String?
+
+  authorId   String?
+  authorName String
+  authorRole String?
+
+  /// OPEN | ANSWERED
+  status String @default("OPEN")
+
+  answeredAt     DateTime?
+  answeredById   String?
+  answeredByName String?
+  /// CONFIRMED | ADJUSTED | DECLINED
+  answerOutcome  String?
+  answerBody     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([reportId])
+  @@index([createdAt])
+  @@map("oxygen_status_comments")
+}
+
 // ============================================
 // DISCIPLINARY QUERY SYSTEM
 // Auto-generated queries for deadline non-compliance

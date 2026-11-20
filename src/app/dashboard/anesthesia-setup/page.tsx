@@ -7,6 +7,7 @@ import { THEATRES, FACILITY_COORDS, haversineDistanceKm } from '@/lib/constants'
 import { assessFix } from '@/lib/theatreOps/geofence';
 import TheatreSetupDeclaration from '@/components/TheatreSetupDeclaration';
 import { outstandingChecks } from '@/lib/theatreOps/setupCertification';
+import OxygenStatusPanel from '@/components/oxygen/OxygenStatusPanel';
 
 /**
  * The longest the technician waits for a position before the setup is logged
@@ -568,6 +569,22 @@ export default function AnesthesiaSetupPage() {
               </span>
             </p>
           </div>
+
+          {/*
+            The oxygen position, above the checklist that contains "gas Supply".
+
+            Ticking that box has until now been an act of faith: the technician
+            reads a gauge on the wall and has no way to know what the oxygen
+            room posted, how old the posting is, or whether anybody has looked
+            at the manifold since breakfast. This puts the posting, its age and
+            a way to answer it in front of the person at the exact moment they
+            are declaring the theatre's gases ready.
+          */}
+          <OxygenStatusPanel
+            theatreName={currentSetupLog.theatreName}
+            setupLogId={currentSetupLog.id}
+            title="Oxygen status for this setup"
+          />
 
           {/* Equipment Checklist */}
           <div className="card">
