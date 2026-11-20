@@ -35,6 +35,7 @@ import TodaysCelebrationsCard from '@/components/TodaysCelebrationsCard';
 import MyAnaesthesiaCasesCard from '@/components/anaesthesia/MyCasesCard';
 import MyDutyRecordCard from '@/components/duty/MyDutyRecordCard';
 import JointCasesCard from '@/components/surgery/JointCasesCard';
+import UnitPlannedCasesCard from '@/components/surgery/UnitPlannedCasesCard';
 
 interface DashboardStats {
   totalSurgeries: number;
@@ -224,6 +225,14 @@ export default function DashboardPage() {
       {/* Beneath the operational cards, above the navigation. A birthday is
           not more urgent than a list, and it is more important than a link. */}
       <TodaysCelebrationsCard />
+
+      {/* What each unit is planning, a fortnight before it is booked.
+          Directly above the personal board, because it is the one card here
+          that is about work not yet on anybody's list — below the cards that
+          carry today's deadlines and above the ones that summarise what is
+          already arranged. Renders nothing for roles it is not for, and
+          nothing on a day with no plans anywhere. */}
+      <UnitPlannedCasesCard />
 
       <PersonalBoard />
 
