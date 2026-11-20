@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import InlineRegister, { type RegisteredPatient } from '@/components/patients/InlineRegister';
+import { unitsForSite } from '@/lib/theatre/sites';
 import { CalendarDays, Plus, Send, Trash2, X, AlertTriangle, CheckCircle2, Eye } from 'lucide-react';
 import ProcedurePicker from '@/components/ProcedurePicker';
 import { SUBSPECIALTIES } from '@/lib/procedures/catalogue';
@@ -255,9 +256,18 @@ export default function SurgeryDraftsPage() {
     return surgeons.filter((x) => !q || (x.fullName || '').toLowerCase().includes(q)).slice(0, 50);
   }, [surgeons, surgeonSearch]);
 
-  /** The units at the chosen site. No site chosen means all of them. */
+  /**
+   * The units at the chosen site. No site chosen means all of them, and
+   * neither does A&E: it is the twenty-four-hour emergency theatre and takes
+   * cases from EVERY surgical unit, so narrowing to the handful whose home is
+   * recorded as A&E left this dropdown empty and the form uncompletable.
+   *
+   * The booking form already knew this. It knew it as a private function
+   * inside a 3,000-line page, which is how the two forms came to disagree
+   * about the same hospital.
+   */
   const visibleUnits = useMemo(
-    () => unitRows.filter((u) => !form.location || u.location === form.location),
+    () => unitsForSite(unitRows, form.location),
     [unitRows, form.location],
   );
 

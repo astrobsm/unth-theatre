@@ -41,6 +41,7 @@ import {
   TEAM_GRADES, type TeamGrade,
 } from '@/lib/surgery/assistants';
 import { queryElectiveTime } from '@/lib/theatreOps/clock';
+import { isAneLocation } from '@/lib/theatre/sites';
 import { NoPaperPrescriptionWarning } from '@/components/NoPaperPrescriptionWarning';
 import SurgicalPackPicker, { type PackPickerPayload } from '@/components/SurgicalPackPicker';
 import ProcedurePicker from '@/components/ProcedurePicker';
@@ -232,12 +233,6 @@ const CURRENT_MEDICATION_OPTIONS: string[] = [
   'Herbal / traditional medications',
 ];
 
-// A&E (Accident & Emergency) theatre is the 24/7 emergency location with two
-// suites (North Wing & South Wing) and receives cases from every surgical unit.
-function isAneLocation(loc: string): boolean {
-  const l = (loc || '').toLowerCase();
-  return l.includes('a&e') || l.includes('a & e') || l.includes('accident');
-}
 
 export default function NewSurgeryPage() {
   const router = useRouter();
