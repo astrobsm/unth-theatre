@@ -33,9 +33,15 @@ import {
   ShieldAlert,
   Sparkles,
   Square,
+  CalendarClock,
   UserPlus,
   Users,
 } from 'lucide-react';
+import {
+  EXTENSION_PRESETS, DEFAULT_EXTENSION_HOURS, presetLabel,
+  extendFrom, deadlinePassed, extensionProblem, deadlineText,
+  toLocalInputValue, fromLocalInputValue, describeExtension, extensionPayload,
+} from '@/lib/policy/extend';
 
 interface Participation {
   invited: number; selfEnrolled: number; opened: number; inProgress: number;
@@ -124,6 +130,15 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
   const [copied, setCopied] = useState<string | null>(null);
 
   const [showInvite, setShowInvite] = useState(false);
+  /**
+   * The extend panel.
+   *
+   * Held open as its own state rather than a prompt() because the owner has
+   * to SEE the date they are about to set. A deadline typed blind into a
+   * browser dialog is how a round gets reopened into last week.
+   */
+  const [showExtend, setShowExtend] = useState(false);
+  const [newClose, setNewClose] = useState('');
   const [bulk, setBulk] = useState('');
   const [newLinks, setNewLinks] = useState<NewLink[] | null>(null);
 
@@ -172,6 +187,14 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Open the panel pre-filled with the 48 hours that always gets asked for. */
+  const openExtend = (closesAt: string) => {
+    setNewClose(toLocalInputValue(
+      extendFrom(new Date(closesAt), new Date(), DEFAULT_EXTENSION_HOURS),
+    ));
+    setShowExtend(true);
   };
 
   const copy = async (text: string, tag: string) => {
@@ -279,10 +302,21 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
 
         {viewer.isOwner && (
           <div className="flex flex-wrap gap-2">
+            {/*
+              Reopening a LAPSED round goes through the extend panel, because
+              the API refuses `reopen` without a new closing date -- rightly:
+              every personal link expires with the round, so reopening on the
+              old deadline hands every member an EXPIRED page. This button used
+              to send the bare action and could therefore never succeed on the
+              one round anybody ever wants to reopen.
+            */}
             {!isOpen ? (
               <button
                 type="button"
-                onClick={() => act({ action: round.status === 'CLOSED' ? 'reopen' : 'open' })}
+                onClick={() => {
+                  if (round.status === 'CLOSED') openExtend(round.closesAt);
+                  else act({ action: 'open' });
+                }}
                 disabled={busy}
                 className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
               >
@@ -300,6 +334,22 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                 Close it
               </button>
             )}
+
+            {/*
+              An OPEN round whose deadline has merely lapsed needs the date
+              moved and nothing else -- sending `reopen` for one is refused
+              with "That round is already open". Its reviewers are being shown
+              an EXPIRED page right now, so the control has to be here too.
+            */}
+            <button
+              type="button"
+              onClick={() => openExtend(round.closesAt)}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-60"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+              {deadlinePassed(new Date(round.closesAt), new Date()) ? 'Give it more time' : 'Change the deadline'}
+            </button>
             <button
               type="button"
               onClick={() => setShowInvite((s) => !s)}
@@ -338,6 +388,97 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
       )}
 
       {/* ── Invite ─────────────────────────────────────────────────────── */}
+      {/*
+        Giving the round more time.
+
+        Three things this panel does that the bare button could not:
+        it SHOWS the date being set, it offers the 48 hours that is what
+        actually gets asked for, and it sends the right shape -- `reopen`
+        plus a date for a CLOSED round, a date alone for one that is still
+        OPEN but lapsed. Getting that pair the wrong way round is refused by
+        the API, which is why one function decides it rather than the JSX.
+      */}
+      {viewer.isOwner && showExtend && (
+        <section className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-4">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold text-sky-900">
+            <CalendarClock className="h-4 w-4" />
+            {deadlinePassed(new Date(round.closesAt), new Date())
+              ? 'Reopen the review'
+              : 'Change the closing date'}
+          </h2>
+          <p className="mt-1 text-xs text-sky-900">
+            Closed {deadlineText(new Date(round.closesAt))}. Every personal link expires
+            with the round, so the new date moves all of them too — nobody has to be
+            re-invited and no link already sent on WhatsApp stops working.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {EXTENSION_PRESETS.map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setNewClose(toLocalInputValue(
+                  extendFrom(new Date(round.closesAt), new Date(), h),
+                ))}
+                className="rounded-full border border-sky-300 bg-white px-3 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100"
+              >
+                +{presetLabel(h)}
+              </button>
+            ))}
+          </div>
+
+          <label className="mt-3 block text-xs font-semibold text-sky-900" htmlFor="policy-new-close">
+            Closes at
+          </label>
+          <input
+            id="policy-new-close"
+            type="datetime-local"
+            value={newClose}
+            onChange={(e) => setNewClose(e.target.value)}
+            className="mt-1 rounded-lg border border-sky-300 px-3 py-2 text-sm"
+          />
+
+          {(() => {
+            const parsed = fromLocalInputValue(newClose);
+            const problem = extensionProblem({ closesAt: parsed, now: new Date() });
+            return (
+              <>
+                {problem ? (
+                  <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-900">
+                    <AlertTriangle className="mt-px h-3.5 w-3.5 flex-shrink-0" />
+                    {problem}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-sky-900">
+                    {describeExtension(new Date(round.closesAt), parsed!, new Date())}
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy || !!problem}
+                    onClick={async () => {
+                      await act(extensionPayload({ status: round.status, closesAt: parsed! }));
+                      setShowExtend(false);
+                    }}
+                    className="rounded-lg bg-sky-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {busy ? 'Saving…' : 'Set the new closing date'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowExtend(false)}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </section>
+      )}
+
       {viewer.isOwner && showInvite && (
         <div className="mb-5 rounded-xl border border-slate-300 bg-white p-4">
           <p className="text-sm font-semibold text-slate-900">Invite committee members</p>

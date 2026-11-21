@@ -168,11 +168,11 @@ function priceFor(item: { name: string; size?: string | null }): {
    */
   const wantedTokens = new Set(key(item.name, item.size).split(' '));
   let best: { kobo: number; listed: string; score: number } | null = null;
-  for (const [, v] of prices) {
+  for (const v of Array.from(prices.values())) {
     if (v.sized) continue;
     if (v.tokens.size < 2) continue;
     let subset = true;
-    for (const t of v.tokens) if (!wantedTokens.has(t)) { subset = false; break; }
+    for (const t of Array.from(v.tokens)) if (!wantedTokens.has(t)) { subset = false; break; }
     if (!subset) continue;
     // The longest candidate that is still wholly contained in the request is
     // the most specific one, and the least likely to be a coincidence.
@@ -194,10 +194,10 @@ function priceFor(item: { name: string; size?: string | null }): {
    */
   let widest: { kobo: number; listed: string; score: number } | null = null;
   if (wantedTokens.size >= 2) {
-    for (const [, v] of prices) {
+    for (const v of Array.from(prices.values())) {
       if (v.sized) continue;
       let subset = true;
-      for (const t of wantedTokens) if (!v.tokens.has(t)) { subset = false; break; }
+      for (const t of Array.from(wantedTokens)) if (!v.tokens.has(t)) { subset = false; break; }
       if (!subset) continue;
       // The SHORTEST sheet row containing the whole request is the closest fit.
       if (!widest || v.tokens.size < widest.score) {

@@ -151,20 +151,20 @@ function priceFor(item: { name: string; size?: string | null }): number | null {
 
   const wanted = new Set(key(item.name, item.size).split(' '));
   let best: { kobo: number; score: number } | null = null;
-  for (const [, v] of prices) {
+  for (const v of Array.from(prices.values())) {
     if (v.sized || v.tokens.size < 2) continue;
     let subset = true;
-    for (const t of v.tokens) if (!wanted.has(t)) { subset = false; break; }
+    for (const t of Array.from(v.tokens)) if (!wanted.has(t)) { subset = false; break; }
     if (subset && (!best || v.tokens.size > best.score)) best = { kobo: v.kobo, score: v.tokens.size };
   }
   if (best) return best.kobo;
 
   if (wanted.size >= 2) {
     let widest: { kobo: number; score: number } | null = null;
-    for (const [, v] of prices) {
+    for (const v of Array.from(prices.values())) {
       if (v.sized) continue;
       let subset = true;
-      for (const t of wanted) if (!v.tokens.has(t)) { subset = false; break; }
+      for (const t of Array.from(wanted)) if (!v.tokens.has(t)) { subset = false; break; }
       if (subset && (!widest || v.tokens.size < widest.score)) widest = { kobo: v.kobo, score: v.tokens.size };
     }
     if (widest) return widest.kobo;
