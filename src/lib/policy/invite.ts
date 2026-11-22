@@ -157,78 +157,14 @@ export function policyInviteState(
   return { ok: true };
 }
 
-/**
- * The closing date as the committee reads it.
- *
- * Africa/Lagos explicitly. The cloud node runs in UTC, so formatting in the
- * server's own zone would put "Thursday 19 November 2026, 22:59" in a WhatsApp
- * message whose deadline is 23:59 — an hour that members would plan around.
- */
-export function formatClosing(closesAt: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Africa/Lagos',
-  })
-    .format(closesAt)
-    .replace(/,\s*(\d{2}:\d{2})$/, ', $1');
-}
-
-export interface InviteMessageInput {
-  url: string;
-  closesAt: Date;
-  /** Who the message is signed by. */
-  signatory?: string | null;
-  signatoryTitle?: string | null;
-  policyTitle?: string | null;
-}
-
-/**
- * The message that carries the link.
- *
- * WHY THE SIGNATORY IS A PARAMETER. The committee's Chairman signs this, and
- * his name is on the draft policy. It is not hardcoded here: a person's name
- * baked into a library is wrong the day the committee elects somebody else, and
- * this repository keeps real officers' names in configuration rather than in
- * source. The round carries it; the default is the office, not the person.
- */
-export function buildPolicyInviteMessage(input: InviteMessageInput): string {
-  const title = input.policyTitle?.trim()
-    || 'the consolidated draft policy on theatre booking, pre-operative '
-      + 'preparation, investigations and cancellation';
-  const signatory = input.signatory?.trim() || '';
-  const signatoryTitle = input.signatoryTitle?.trim()
-    || 'Chairman, Theatre Users Committee, UNTH';
-
-  const lines = [
-    '*THEATRE OPERATIONAL FLOW POLICY – REVIEW ON ORM*',
-    '',
-    'Dear Colleague,',
-    '',
-    `${title[0].toUpperCase()}${title.slice(1)} is now open for your review on ORM.`,
-    '',
-    'Please review each section relevant to your unit, respond to the proposed '
-    + 'times and targets in [brackets], and add any comments or alternative wording.',
-    '',
-    `*Your review link:* ${input.url}`,
-    `*Closing date:* ${formatClosing(input.closesAt)}`,
-    '*Time needed:* about 20–30 minutes',
-    '',
-    'You can stop at any point and come back to the same link — it reopens '
-    + 'where you left off, and nothing you have typed is lost.',
-    '',
-    'All responses will be analysed and harmonised into the final recommendation '
-    + 'to Management. Thank you for your contribution.',
-    '',
-  ];
-
-  if (signatory !== '') lines.push(`*${signatory}*`);
-  lines.push(signatoryTitle);
-
-  return lines.join('\n');
-}
+// The wording lives in ./messages.ts, which stays free of node built-ins so
+// the owner’s Remind button can render these strings in the browser. This
+// file imports node:crypto, so importing it from a client component would
+// break the page bundle. Re-exported here, unchanged, for server callers.
+export {
+  formatClosing,
+  salutationFor,
+  buildPolicyInviteMessage,
+  buildPolicyReminderMessage,
+} from './messages';
+export type { InviteMessageInput, ReminderMessageInput } from './messages';

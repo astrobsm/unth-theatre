@@ -347,7 +347,12 @@ describe('the message that carries the link', () => {
       version: '0.3',
       signatory: 'Prof. Chairman',
       signatoryTitle: 'Chairman, Theatre Users Committee',
+      signerName: 'Prof. Augustine Okeke',
     });
+    // Addressed by name, like the invitation and the reminder. A member written
+    // to twice as 'Prof. Okeke' and then asked to SIGN by a message with no name
+    // at all reads the third one as an automated circular.
+    expect(m).toContain('Dear Prof. Okeke,');
     expect(m).toContain('version 0.3');
     expect(m).toContain('You reviewed this draft');
     expect(m).toContain('do not forward it');

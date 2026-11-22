@@ -221,6 +221,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const url = policySignUrl(token);
       const message = buildSignoffMessage({
         url,
+        signerName: row.signerName,
         policyTitle: round.document?.title ?? null,
         version: outcome.version,
         signatory: parsed.data.signatory ?? null,
@@ -321,6 +322,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const url = policySignUrl(token);
     const message = buildSignoffMessage({
       url,
+      signerName: row.signerName,
       policyTitle: round?.document?.title ?? null,
       version: outcome?.version ?? row.outcomeVersion ?? '—',
     });

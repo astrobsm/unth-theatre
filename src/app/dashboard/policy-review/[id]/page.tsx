@@ -16,7 +16,7 @@
  * part the committee quotes.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -36,6 +36,7 @@ import {
   CalendarClock,
   KeyRound,
   Ban,
+  BellRing,
   RotateCcw,
   UserPlus,
   Users,
@@ -44,6 +45,10 @@ import {
   reissueRisk, reissueWarning, needsConfirmation,
   bulkReissueTargets, bulkReissueSentence,
 } from '@/lib/policy/reissue';
+// From ./messages, not ./invite: invite.ts imports node:crypto and this is a
+// client component, so importing it here would break the page bundle.
+import { buildPolicyReminderMessage } from '@/lib/policy/messages';
+import { whatsappLink } from '@/lib/whatsapp';
 import {
   EXTENSION_PRESETS, DEFAULT_EXTENSION_HOURS, presetLabel,
   extendFrom, deadlinePassed, extensionProblem, deadlineText,
@@ -82,6 +87,8 @@ interface Invitation {
   phone: string | null; email: string | null; selfEnrolled: boolean;
   sentAt: string | null; openedAt: string | null; submittedAt: string | null;
   revokedAt: string | null; reminderCount: number;
+  /** Sections answered so far, from the invitations endpoint. */
+  answered?: number;
   participation: { lastSeenAt: string; currentStepId: string | null } | null;
 }
 
@@ -158,6 +165,18 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
    * show which.
    */
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  /**
+   * The member whose reminder is being composed.
+   *
+   * The message is built in the browser and handed to the Chairman to send
+   * himself -- Copy, or straight into WhatsApp. That is deliberately different
+   * from the bulk chase, which QUEUES through queueMessage so the send policy,
+   * the kill switch and the audit trail all apply. One is “I will message Prof
+   * Okeke now”; the other is a chase of everybody.
+   */
+  const [remindId, setRemindId] = useState<string | null>(null);
+  const [totalSections, setTotalSections] = useState(0);
+  const [remindNotice, setRemindNotice] = useState<string | null>(null);
   const [showBulkReissue, setShowBulkReissue] = useState(false);
 
   const load = useCallback(async () => {
@@ -174,7 +193,11 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
 
       if ((body as RoundData).viewer.isOwner) {
         const inv = await fetch(`/api/policy/rounds/${params.id}/invitations`, { cache: 'no-store' });
-        if (inv.ok) setInvitations((await inv.json()).invitations ?? []);
+        if (inv.ok) {
+          const payload = await inv.json();
+          setInvitations(payload.invitations ?? []);
+          setTotalSections(payload.totalSections ?? 0);
+        }
       }
     } catch {
       setError('Could not load the round.');
@@ -311,6 +334,53 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
       setError('Could not issue a new link.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * The reminder for one member.
+   *
+   * IT CANNOT CARRY THEIR LINK. Only the SHA-256 of each token is stored, so
+   * no screen can rebuild somebody’s personal URL -- the message points at the
+   * one they already have and offers a replacement, which is also the polite
+   * form. Where a member has genuinely lost theirs, “New link” beside their
+   * name mints one.
+   */
+  const reminderFor = (i: Invitation): string => buildPolicyReminderMessage({
+    inviteeName: i.inviteeName,
+    policyTitle: data?.round.document?.title ?? null,
+    closesAt: new Date(data?.round.closesAt ?? Date.now()),
+    answered: i.answered ?? 0,
+    totalSections,
+  });
+
+  /** Queue a chase to everybody who has not submitted. */
+  const remindEveryone = async () => {
+    setBusy(true);
+    setError(null);
+    setRemindNotice(null);
+    try {
+      const res = await fetch(`/api/policy/reminders?round=${params.id}`, { method: 'POST' });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body?.error ?? 'Could not queue the reminders.');
+        return;
+      }
+      // The skipped count is reported rather than hidden: it is almost always
+      // members with no phone number and no account, which is something only
+      // the Chairman can fix.
+      setRemindNotice(
+        `Queued ${body.queued} reminder(s) to the ${body.nonResponders} member(s) who `
+        + 'have not submitted.'
+        + (body.skipped > 0
+          ? ` ${body.skipped} could not be sent — no phone number or ORM account on file.`
+          : ''),
+      );
+      await load();
+    } catch {
+      setError('Could not queue the reminders.');
     } finally {
       setBusy(false);
     }
@@ -977,6 +1047,12 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
               half-way through a review it otherwise reads as if it will disturb
               everybody.
             */}
+            {remindNotice && (
+              <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900">
+                {remindNotice}
+              </p>
+            )}
+
             {invitations.length > 0 && (
               <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                 {!showBulkReissue ? (
@@ -985,15 +1061,32 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                       Lost the links? They are stored as hashes and cannot be shown again —
                       but a fresh one can be issued for anybody who has not opened theirs.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowBulkReissue(true)}
-                      disabled={busy || bulkReissueTargets(invitations).length === 0}
-                      className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                    >
-                      <KeyRound className="h-3.5 w-3.5" />
-                      Issue fresh links
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowBulkReissue(true)}
+                        disabled={busy || bulkReissueTargets(invitations).length === 0}
+                        className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Issue fresh links
+                      </button>
+                      {/*
+                        The bulk chase QUEUES through queueMessage, so the send
+                        policy, the kill switch and the audit trail all apply.
+                        The per-member button beside each name instead hands over
+                        the text for the Chairman to send himself.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => void remindEveryone()}
+                        disabled={busy || invitations.every((i) => i.submittedAt || i.revokedAt)}
+                        className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                      >
+                        <BellRing className="h-3.5 w-3.5" />
+                        Remind non-responders
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -1039,7 +1132,8 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                   </thead>
                   <tbody>
                     {invitations.map((i) => (
-                      <tr key={i.id} className="border-t border-slate-100">
+                      <Fragment key={i.id}>
+                      <tr className="border-t border-slate-100">
                         <td className="px-3 py-2">
                           <p className="font-medium text-slate-900">{i.inviteeName}</p>
                           {i.inviteeRole && <p className="text-[11px] text-slate-500">{i.inviteeRole}</p>}
@@ -1058,6 +1152,9 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                           ) : i.openedAt ? (
                             <span className="text-amber-700">
                               in progress
+                              {totalSections > 0 && (i.answered ?? 0) > 0
+                                ? ` · ${i.answered} of ${totalSections} sections`
+                                : ''}
                               {i.participation?.lastSeenAt
                                 ? ` · last seen ${dateTime(i.participation.lastSeenAt)}`
                                 : ''}
@@ -1096,6 +1193,22 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                             </div>
                           ) : (
                             <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              {/*
+                                Offered only where there is something to chase. A
+                                Remind button beside somebody who has already
+                                submitted is an invitation to send a pointless
+                                message to a head of department.
+                              */}
+                              {!i.submittedAt && !i.revokedAt && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRemindId(remindId === i.id ? null : i.id)}
+                                  className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700"
+                                >
+                                  <BellRing className="h-3 w-3" />
+                                  Remind
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1134,6 +1247,57 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                           )}
                         </td>
                       </tr>
+
+                      {/*
+                        The composed reminder, shown in full before it is sent.
+                        The Chairman is about to message a head of department; he
+                        should see the words, not trust a button labelled Remind.
+                      */}
+                      {remindId === i.id && (
+                        <tr className="bg-slate-50">
+                          <td colSpan={4} className="px-3 py-3">
+                            <p className="text-[11px] font-semibold text-slate-700">
+                              Reminder for {i.inviteeName}
+                            </p>
+                            <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 font-sans text-[11px] leading-relaxed text-slate-800">
+                              {reminderFor(i)}
+                            </pre>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => copy(reminderFor(i), `rem-${i.id}`)}
+                                className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium"
+                              >
+                                {copied === `rem-${i.id}` ? <Check className="h-3 w-3" /> : <ClipboardCopy className="h-3 w-3" />}
+                                Copy message
+                              </button>
+                              {i.phone ? (
+                                <a
+                                  href={whatsappLink(i.phone, reminderFor(i)) ?? '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white"
+                                >
+                                  <Send className="h-3 w-3" />
+                                  Send on WhatsApp
+                                </a>
+                              ) : (
+                                <span className="text-[11px] text-slate-500">
+                                  No phone number on file — copy the message instead.
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setRemindId(null)}
+                                className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700"
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

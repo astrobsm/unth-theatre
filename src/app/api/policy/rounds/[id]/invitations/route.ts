@@ -58,6 +58,23 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   const { error, actor } = await requirePolicyOwner();
   if (error || !actor) return error;
 
+  // How far each member has got. The Remind button says so in the message,
+  // and the list shows it, because "7 of 22" is the difference between
+  // chasing somebody who is working on it and chasing somebody who is not.
+  const [answeredRows, totalSections] = await Promise.all([
+    prisma.policySectionResponse.groupBy({
+      by: ['invitationId'],
+      where: { roundId: params.id },
+      _count: { _all: true },
+    }),
+    prisma.policySection.count({
+      where: { document: { rounds: { some: { id: params.id } } } },
+    }),
+  ]);
+  const answeredBy = new Map<string, number>(
+    answeredRows.map((a) => [a.invitationId, a._count._all]),
+  );
+
   const invitations = await prisma.policyInvitation.findMany({
     where: { roundId: params.id },
     orderBy: [{ inviteeUnit: 'asc' }, { inviteeName: 'asc' }],
@@ -82,7 +99,16 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     },
   });
 
-  return NextResponse.json({ invitations }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(
+    {
+      invitations: invitations.map((i) => ({
+        ...i,
+        answered: answeredBy.get(i.id) ?? 0,
+      })),
+      totalSections,
+    },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -157,6 +183,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const url = policyInviteUrl(token);
       const message = buildPolicyInviteMessage({
         url,
+        inviteeName: row.inviteeName,
         closesAt: round.closesAt,
         policyTitle: round.document?.title ?? null,
         signatory: parsed.data.signatory ?? null,
@@ -236,6 +263,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const url = policyInviteUrl(token);
     const message = buildPolicyInviteMessage({
       url,
+      inviteeName: invitation.inviteeName,
       closesAt: invitation.round.closesAt,
       policyTitle: invitation.round.document?.title ?? null,
       signatory: parsed.data.signatory ?? null,

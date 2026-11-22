@@ -29,7 +29,7 @@ import prisma from '@/lib/prisma';
 import { authoriseCron } from '@/lib/cronAuth';
 import { queueMessage } from '@/lib/comms/send';
 import { requirePolicyOwner } from '@/lib/policy/guard';
-import { formatClosing } from '@/lib/policy/invite';
+import { buildPolicyReminderMessage } from '@/lib/policy/invite';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,34 +45,36 @@ interface Chased {
   nonResponders: number;
 }
 
+/**
+ * The wording now lives in src/lib/policy/invite.ts, beside the invitation
+ * it chases, and is shared with the owner's per-member Remind button.
+ *
+ * It was private to this file, which was fine while the scheduled job was
+ * the only caller. A second copy written for a button is how a committee
+ * starts receiving two differently-worded reminders about one review -- and
+ * the one a member reads would depend on whether a cron or a person sent it.
+ *
+ * The builder also addresses them properly ("Dear Prof. Okeke") and
+ * acknowledges sections already answered, neither of which this knew how to
+ * do: it opened "Dear <whole name as typed>" and told somebody who had
+ * answered seven sections that nothing had been received.
+ */
 function reminderBody(opts: {
   name: string;
   policyTitle: string | null;
   closesAt: Date;
   window: Window;
   hoursLeft: number;
+  answered?: number;
+  totalSections?: number;
 }): string {
-  const title = opts.policyTitle?.trim() || 'the theatre operational flow policy';
-  const urgency = opts.window === '12h'
-    ? `*Closing in about ${Math.max(1, Math.round(opts.hoursLeft))} hours.*`
-    : `*Closing ${formatClosing(opts.closesAt)}.*`;
-
-  return [
-    '*THEATRE POLICY REVIEW — REMINDER*',
-    '',
-    `Dear ${opts.name},`,
-    '',
-    `The Theatre Users Committee has not yet received your review of ${title}.`,
-    urgency,
-    '',
-    'Please open the review link from the earlier message in this chat. It reopens '
-    + 'where you left off, so anything you have already answered is still there, and '
-    + 'you may skip any section outside your area.',
-    '',
-    'If you cannot find the link, reply here and the Secretariat will send you a new one.',
-    '',
-    'Theatre Users Committee, UNTH',
-  ].join('\n');
+  return buildPolicyReminderMessage({
+    inviteeName: opts.name,
+    policyTitle: opts.policyTitle,
+    closesAt: opts.closesAt,
+    answered: opts.answered ?? 0,
+    totalSections: opts.totalSections ?? 0,
+  });
 }
 
 /**
@@ -94,6 +96,22 @@ async function chase(roundId: string, window: Window, actorName?: string): Promi
   const nonResponders = await prisma.policyInvitation.findMany({
     where: { roundId, submittedAt: null, revokedAt: null },
     select: { id: true, inviteeName: true, phone: true, userId: true },
+  });
+
+  // How far each has got, so the chase can acknowledge work already done.
+  // Telling somebody who has answered seven sections that nothing has been
+  // received reads as though it was not noticed, and is the quickest way to
+  // lose them for the rest of the round.
+  const answeredRows = await prisma.policySectionResponse.groupBy({
+    by: ['invitationId'],
+    where: { roundId },
+    _count: { _all: true },
+  });
+  const answeredBy = new Map<string, number>(
+    answeredRows.map((a) => [a.invitationId, a._count._all]),
+  );
+  const totalSections = await prisma.policySection.count({
+    where: { document: { rounds: { some: { id: roundId } } } },
   });
 
   const hoursLeft = (round.closesAt.getTime() - Date.now()) / HOUR;
@@ -123,6 +141,8 @@ async function chase(roundId: string, window: Window, actorName?: string): Promi
         closesAt: round.closesAt,
         window,
         hoursLeft,
+        answered: answeredBy.get(invitee.id) ?? 0,
+        totalSections,
       }),
       sensitivity: 'OPERATIONAL',
       relatedType: 'POLICY_REVIEW_ROUND',

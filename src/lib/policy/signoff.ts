@@ -29,6 +29,7 @@
 
 import crypto from 'crypto';
 import { publicSiteUrl } from '@/lib/patients/publicLink';
+import { salutationFor } from './messages';
 
 export function newSignoffToken(): { token: string; tokenHash: string } {
   const token = crypto.randomBytes(32).toString('base64url');
@@ -240,17 +241,28 @@ export function signoffSentence(s: SignoffSummary): string {
   return parts.join(' ');
 }
 
-/** The WhatsApp message that carries a signing link. */
+/**
+ * The WhatsApp message that carries a signing link.
+ *
+ * Addressed by name, through the same salutationFor() the invitation and the
+ * reminder use. A member who has just been written to twice as “Prof. Okeke”
+ * and is then asked to sign a policy by a message opening with no name at all
+ * reads the third one as an automated circular -- which is the last thing a
+ * request for a signature should look like.
+ */
 export function buildSignoffMessage(opts: {
   url: string;
   policyTitle: string | null;
   version: string;
+  /** The participant, as the invitation recorded them. */
+  signerName?: string | null;
   signatory?: string | null;
   signatoryTitle?: string | null;
 }): string {
   const lines = [
-    'UNIVERSITY OF NIGERIA TEACHING HOSPITAL, ITUKU-OZALLA',
-    'Theatre Users Committee',
+    '*THEATRE POLICY — FOR YOUR SIGNATURE*',
+    '',
+    `Dear ${salutationFor(opts.signerName)},`,
     '',
     `The review of ${opts.policyTitle ?? 'the theatre policy'} is complete, and the `
     + `revised document (version ${opts.version}) is ready for your signature.`,
@@ -259,11 +271,12 @@ export function buildSignoffMessage(opts: {
     + 'opens the revised policy and the record of what the committee changed and '
     + 'why. You can read it in full before signing.',
     '',
-    opts.url,
+    `*Your personal signing link:* ${opts.url}`,
     '',
-    'The link is personal to you. Please do not forward it — a colleague signing '
-    + 'from your link would be recorded as you.',
+    '*This link is individual to you.* Please do not forward it — a colleague '
+    + 'signing from your link would be recorded as you.',
   ];
+
   if (opts.signatory) {
     lines.push('', opts.signatory + (opts.signatoryTitle ? `\n${opts.signatoryTitle}` : ''));
   }
