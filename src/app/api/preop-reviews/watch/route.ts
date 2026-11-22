@@ -50,6 +50,10 @@ import {
   reviewWatchState, handbackDeadline, reviewDeadline, bookedTooLateToReview,
   type ReviewWatchInput,
 } from '@/lib/anaesthesia/reviewWatch';
+import {
+  buildHodBriefing, briefingProblem, briefingSummary, splitForBriefing,
+  type BriefCase,
+} from '@/lib/anaesthesia/hodBriefing';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +89,30 @@ const MAY_RECORD_ABSENCE = [
   'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
 ];
 
+/**
+ * Who may write the whole day's unreviewed list to the head of department.
+ *
+ * Management and the chairman, not the head of anaesthesia themselves --
+ * this is a letter TO that post, and a post that writes to itself is a
+ * letter nobody acts on. The head of surgery is in because the surgical
+ * list is the party left exposed by a morning of unreviewed cases.
+ */
+const MAY_BRIEF_HOD = [
+  'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
+  'HEAD_OF_SURGERY', 'CMAC', 'DC_MAC',
+];
+
+/**
+ * Who may NAME the head of anaesthesia.
+ *
+ * ADMIN alone, because naming them is a role change and PATCH
+ * /api/users/[id] -- the one place in this system that changes a role --
+ * allows ADMIN and nobody else. Listed here so the button matches the rule
+ * that will actually be applied, rather than appearing for somebody who
+ * will then be refused.
+ */
+const MAY_ASSIGN_HOD = ['ADMIN'];
+
 const WATCHED = ['SCHEDULED', 'IN_HOLDING_AREA', 'READY_FOR_THEATRE'] as const;
 
 /** A WAT wall-clock time, as "16:40". The deadlines are all Enugu time. */
@@ -103,19 +131,20 @@ function tomorrow(): string {
   return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
-export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { searchParams } = new URL(request.url);
-  const dayParam = searchParams.get('day');
-  const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : tomorrow();
+/**
+ * THE BOARD, BUILT ONCE.
+ *
+ * GET renders it and the head-of-department briefing reads it. Pulled into
+ * one function rather than written twice, because the only thing worse than
+ * a board that is wrong is a briefing to the head of department that
+ * disagrees with the board it was sent from -- and two hand-maintained
+ * copies of a state machine disagree eventually. The booking wizard in this
+ * same repository keeps two orderings of one step list and they are already
+ * transposed.
+ */
+async function boardFor(day: string, now: Date, viewerId: string) {
   const { start, end } = watDayRange(day);
-  const now = new Date();
 
-  try {
     const surgeries = await prisma.surgery.findMany({
       where: { scheduledDate: { gte: start, lt: end }, status: { in: [...WATCHED] } },
       orderBy: [{ unit: 'asc' }, { scheduledTime: 'asc' }],
@@ -248,20 +277,39 @@ export async function GET(request: NextRequest) {
         state: reviewWatchState(input, now),
         bookedTooLate: bookedTooLateToReview(input),
         // "Mine" now follows the people who are actually expected to do it.
-        mine: reviewers.reviewers.some((r) => r.userId === session.user.id)
-          || s.anesthetistId === session.user.id
-          || a?.reassignedToId === session.user.id,
+        mine: reviewers.reviewers.some((r) => r.userId === viewerId)
+          || s.anesthetistId === viewerId
+          || a?.reassignedToId === viewerId,
       };
     });
+
+    return { cases, rosterPublished: rosterRows.length > 0 };
+}
+
+export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const dayParam = searchParams.get('day');
+  const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : tomorrow();
+  const now = new Date();
+
+  try {
+    const { cases, rosterPublished } = await boardFor(day, now, session.user.id);
 
     return NextResponse.json({
       day,
       handbackBy: handbackDeadline(`${day}T00:00:00.000Z`),
       reviewBy: reviewDeadline(`${day}T00:00:00.000Z`),
-      rosterPublished: rosterRows.length > 0,
+      rosterPublished,
       canReassign: MAY_REASSIGN.includes(session.user.role),
       canChase: MAY_CHASE.includes(session.user.role),
       canRecordAbsence: MAY_RECORD_ABSENCE.includes(session.user.role),
+      canBriefHod: MAY_BRIEF_HOD.includes(session.user.role),
+      canAssignHod: MAY_ASSIGN_HOD.includes(session.user.role),
       cases,
     });
   } catch (error) {
@@ -283,6 +331,134 @@ export async function POST(request: NextRequest) {
 
   const surgeryId = typeof body.surgeryId === 'string' ? body.surgeryId : '';
   const action = String(body.action ?? '');
+
+  /**
+   * THE WHOLE DAY, TO THE HEAD OF DEPARTMENT.
+   *
+   * Handled before the per-case guard below, because this one is about the
+   * board rather than about a case -- it carries a day, not a surgeryId.
+   *
+   * The list is recomputed here from the database through the same
+   * boardFor() the screen is drawn from. Never taken from the request: a
+   * client that could name the cases could write to the head of department
+   * about reviews that exist, and a briefing that names one doctor wrongly
+   * is the last briefing from this system anybody reads.
+   */
+  if (action === 'brief-hod') {
+    if (!MAY_BRIEF_HOD.includes(session.user.role)) {
+      return NextResponse.json(
+        {
+          error: 'Only theatre management, the chairman or the head of surgery can '
+            + 'write the day\u2019s unreviewed list to the head of department.',
+        },
+        { status: 403 },
+      );
+    }
+
+    const asked = typeof body.day === 'string' ? body.day : '';
+    const briefDay = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : tomorrow();
+    const at = new Date();
+
+    const { cases } = await boardFor(briefDay, at, session.user.id);
+    const brief: BriefCase[] = cases.map((c) => ({
+      patientName: c.patient?.name ?? null,
+      folderNumber: c.patient?.folderNumber ?? null,
+      procedureName: c.procedureName,
+      scheduledTime: c.scheduledTime,
+      unit: c.unit,
+      surgeonName: c.surgeonName,
+      state: c.state,
+      reviewers: c.expectedReviewers.map((r) => ({ name: r.fullName, grade: r.grade })),
+      reassignedToName: c.reassignedToName,
+      handedBackAt: c.handedBackAt ? String(c.handedBackAt) : null,
+      handedBackReason: c.handedBackReason,
+      patientAbsentByName: c.patientAbsentByName,
+      patientAbsentReason: c.patientAbsentReason,
+    }));
+
+    // Nothing to send is an answer, not a failure. A briefing sent on a day
+    // when every case has a review is how these stop being read.
+    const problem = briefingProblem(brief);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+
+    const hods = await prisma.user.findMany({
+      where: { role: 'HEAD_OF_ANAESTHESIA', status: 'APPROVED' },
+      select: { id: true, fullName: true, phoneNumber: true },
+    });
+
+    const common = {
+      day: briefDay,
+      handbackBy: handbackDeadline(`${briefDay}T00:00:00.000Z`),
+      reviewBy: reviewDeadline(`${briefDay}T00:00:00.000Z`),
+      cases: brief,
+      senderName: session.user.name ?? null,
+      senderRole: 'Theatre Management',
+      now: at,
+    };
+
+    const whatsapp: { id: string; name: string; number: string | null; text: string }[] = [];
+    for (const h of hods) {
+      const text = buildHodBriefing({ ...common, hodName: h.fullName });
+      // In-app first, so the briefing exists whether or not WhatsApp opens.
+      await prisma.notification.create({
+        data: {
+          userId: h.id,
+          type: 'PREOP_REVIEW_WATCH',
+          title: 'Unreviewed cases on tomorrow\u2019s list',
+          message: text,
+          link: '/dashboard/preop-reviews/watch',
+        },
+      }).catch(() => undefined);
+      await pushToUsers([h.id], {
+        title: 'Unreviewed cases need a reviewer named',
+        body: briefingSummary(brief),
+        url: '/dashboard/preop-reviews/watch',
+      }).catch(() => undefined);
+      whatsapp.push({ id: h.id, name: h.fullName, number: h.phoneNumber, text });
+    }
+
+    /*
+      NOBODY HOLDS THE POST.
+
+      Said out loud rather than reported as a send. Every HOD notification
+      in this route -- hand-backs, ward absences, and now this -- is written
+      to whoever holds HEAD_OF_ANAESTHESIA, so when no account does, all of
+      them have been going nowhere quietly. The text is still returned so it
+      can be sent by hand, and the answer names the cure.
+    */
+    const text = hods.length > 0
+      ? whatsapp[0].text
+      : buildHodBriefing({ ...common, hodName: null });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'PREOP_REVIEW_HOD_BRIEFED',
+        tableName: 'preop_review_assignments',
+        recordId: briefDay,
+        changes: JSON.stringify({
+          day: briefDay,
+          summary: briefingSummary(brief),
+          unreviewed: splitForBriefing(brief).unreviewed.length,
+          sentTo: hods.map((h) => ({ id: h.id, name: h.fullName })),
+        }),
+      },
+    }).catch(() => undefined);
+
+    return NextResponse.json({
+      message: hods.length > 0
+        ? `Written to ${hods.map((h) => h.fullName).join(', ')}. ${briefingSummary(brief)}`
+        : 'NOBODY holds the Head of Anaesthesia post, so this reached no inbox. '
+          + 'The message is below to send by hand \u2014 and use \u201cName the Head of '
+          + 'Anaesthesia\u201d above, because hand-backs and ward-absence notices have '
+          + 'been going nowhere for the same reason.',
+      whatsapp,
+      text,
+      noHod: hods.length === 0,
+      summary: briefingSummary(brief),
+    });
+  }
+
   if (!surgeryId) return NextResponse.json({ error: 'Which case?' }, { status: 400 });
 
   const surgery = await prisma.surgery.findUnique({

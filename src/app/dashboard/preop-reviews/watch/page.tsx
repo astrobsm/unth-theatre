@@ -21,7 +21,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, BedDouble, CheckCircle2, Clock, Loader2, MessageCircle, UserCheck, UserX,
+  AlertTriangle, BedDouble, CheckCircle2, Clock, Loader2, MessageCircle, Megaphone,
+  ShieldCheck, UserCheck, UserX,
 } from 'lucide-react';
 import { whatsappLink } from '@/lib/whatsapp';
 import { requestFix } from '@/lib/geo/requestFix';
@@ -86,7 +87,20 @@ interface Board {
   canReassign: boolean;
   canChase?: boolean;
   canRecordAbsence?: boolean;
+  /** May write the whole day's unreviewed list to the head of department. */
+  canBriefHod?: boolean;
+  /** May name who holds the Head of Anaesthesia post. ADMIN only. */
+  canAssignHod?: boolean;
   cases: Case[];
+}
+
+/** A staff row as /api/users?slim=1 returns it. */
+interface StaffRow {
+  id: string;
+  fullName: string;
+  role?: string | null;
+  phoneNumber?: string | null;
+  department?: string | null;
 }
 
 const STATE: Record<string, { label: string; cls: string }> = {
@@ -133,6 +147,23 @@ export default function PreopWatchPage() {
     { surgeryId: string; who: { name: string; href: string | null }[] } | null
   >(null);
 
+  /**
+   * NAMING THE HEAD OF DEPARTMENT, and writing to them.
+   *
+   * These are two halves of one problem. Every head-of-department notice
+   * this board sends -- a hand-back, a ward absence, and now the day's
+   * unreviewed list -- is addressed to whoever holds HEAD_OF_ANAESTHESIA.
+   * When no account holds it, all of them go nowhere, and they go nowhere
+   * silently. So the button that writes to the post sits next to the button
+   * that fills it, and the first one says plainly when the second is needed.
+   */
+  const [hodOpen, setHodOpen] = useState(false);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [hodPick, setHodPick] = useState('');
+  const [briefing, setBriefing] = useState<
+    { who: { name: string; href: string | null }[]; text: string; noHod: boolean } | null
+  >(null);
+
   const load = useCallback(async (d: string) => {
     setLoading(true);
     setError(null);
@@ -149,7 +180,33 @@ export default function PreopWatchPage() {
     }
   }, []);
 
+  /**
+   * The anaesthetists, and whoever currently holds the headship.
+   *
+   * One request for both: the holders are simply the rows whose role is
+   * already HEAD_OF_ANAESTHESIA, and asking separately would let the two
+   * lists disagree about who exists.
+   */
+  const loadStaff = useCallback(async () => {
+    try {
+      const qs = new URLSearchParams({
+        roles: 'HEAD_OF_ANAESTHESIA,CONSULTANT_ANAESTHETIST,ANAESTHETIST',
+        status: 'APPROVED', slim: '1', limit: '200',
+      });
+      const r = await fetch(`/api/users?${qs.toString()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      const rows: StaffRow[] = Array.isArray(d) ? d : (d.users ?? []);
+      setStaff(rows);
+    } catch { /* the panel says it could not read the list */ }
+  }, []);
+
   useEffect(() => { void load(''); }, [load]);
+
+  useEffect(() => {
+    if (!board?.canAssignHod && !board?.canBriefHod) return;
+    void loadStaff();
+  }, [board?.canAssignHod, board?.canBriefHod, loadStaff]);
 
   useEffect(() => {
     if (!board?.canReassign) return;
@@ -160,6 +217,94 @@ export default function PreopWatchPage() {
         : []))
       .catch(() => undefined);
   }, [board?.canReassign]);
+
+  const hodHolders = staff.filter((u) => (u.role ?? '') === 'HEAD_OF_ANAESTHESIA');
+
+  /**
+   * Name the Head of Anaesthesia.
+   *
+   * Through PATCH /api/users/[id], which is the ONE place in this system
+   * that changes a role -- it is ADMIN-only, it refuses a self-change, and
+   * it audits. A second role-writing path here would be a second set of
+   * those rules to keep in step, and they would not stay in step.
+   */
+  const assignHod = async () => {
+    const chosen = staff.find((u) => u.id === hodPick);
+    if (!chosen) { setError('Choose who is to hold the post.'); return; }
+
+    // Said before it happens, because it is not additive: this system gives a
+    // person ONE role, so naming them head replaces the one they have.
+    const ok = window.confirm(
+      `Name ${chosen.fullName} as Head of Anaesthesia?\n\n`
+      + `Their role changes from ${(chosen.role ?? 'their current role').replace(/_/g, ' ')} `
+      + 'to HEAD OF ANAESTHESIA. They will receive every hand-back, every ward-absence '
+      + 'notice and every unreviewed-list briefing from this board.\n\n'
+      + 'A person holds one role in this system, so this replaces the one they have. '
+      + 'It can be changed back on the Users screen.',
+    );
+    if (!ok) return;
+
+    setBusy('hod');
+    setError(null);
+    setNote(null);
+    try {
+      const r = await fetch(`/api/users/${chosen.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'HEAD_OF_ANAESTHESIA' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(j.error ?? 'That role change was refused.'); return; }
+      setNote(`${chosen.fullName} now holds the Head of Anaesthesia post, and will `
+        + 'receive hand-backs, ward-absence notices and the unreviewed list.');
+      setHodPick('');
+      await loadStaff();
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Write the day's unreviewed list to the head of department.
+   *
+   * The server recomputes the list and writes the message; nothing about it
+   * is composed here. A browser that could name the cases could write to a
+   * head of department about reviews that exist, and a briefing that names
+   * one doctor wrongly is the last one anybody reads.
+   */
+  const briefHod = async () => {
+    setBusy('brief');
+    setError(null);
+    setNote(null);
+    setBriefing(null);
+    try {
+      const r = await fetch('/api/preop-reviews/watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'brief-hod', day: board?.day ?? day }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setError(j.error ?? 'Could not send that.'); return; }
+
+      const who = (j.whatsapp ?? []).map(
+        (w: { name: string; number: string | null; text: string }) => ({
+          name: w.name,
+          href: whatsappLink(w.number, w.text),
+        }),
+      );
+      setBriefing({ who, text: j.text ?? '', noHod: Boolean(j.noHod) });
+      setNote(j.message ?? 'Written.');
+
+      const first = who.find((w: { href: string | null }) => w.href);
+      if (first?.href) window.open(first.href, '_blank', 'noopener,noreferrer');
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   /**
    * Chase the people who were expected to review and did not.
@@ -332,6 +477,129 @@ export default function PreopWatchPage() {
           </span>
         )}
       </div>
+
+      {board && (board.canAssignHod || board.canBriefHod) && (
+        <div className="rounded-2xl bg-white p-3 ring-1 ring-gray-200">
+          <div className="flex flex-wrap items-center gap-2">
+            {board.canAssignHod && (
+              <button
+                type="button"
+                onClick={() => setHodOpen((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {hodHolders.length > 0 ? 'Change the Head of Anaesthesia' : 'Name the Head of Anaesthesia'}
+              </button>
+            )}
+            {board.canBriefHod && (
+              <button
+                type="button"
+                onClick={() => void briefHod()}
+                disabled={busy === 'brief' || unreviewed === 0}
+                title={unreviewed === 0
+                  ? 'Every case on this day has a review. There is nothing to report.'
+                  : 'Write every unreviewed case, and who was expected to review it, to the head of department'}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {busy === 'brief'
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Megaphone className="h-4 w-4" />}
+                Report unreviewed cases to the HOD
+              </button>
+            )}
+            <span className="text-xs text-gray-500">
+              {hodHolders.length > 0
+                ? `Head of Anaesthesia: ${hodHolders.map((h) => h.fullName).join(', ')}`
+                : 'No account holds the Head of Anaesthesia post — hand-backs and ward-absence notices currently reach nobody.'}
+            </span>
+          </div>
+
+          {hodOpen && board.canAssignHod && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3">
+              <p className="text-xs text-gray-600">
+                The head of department is who this board hands a case back TO, who is told
+                when a patient is not in the ward, and who receives the unreviewed list.
+                A person holds one role in this system, so naming somebody here
+                <strong> replaces the role they have</strong>; it can be changed back on
+                the Users screen.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <select
+                  value={hodPick}
+                  onChange={(e) => setHodPick(e.target.value)}
+                  className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Choose an anaesthetist…</option>
+                  {staff.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName}
+                      {u.role ? ` — ${u.role.replace(/_/g, ' ')}` : ''}
+                      {u.phoneNumber ? '' : ' (no phone number)'}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void assignHod()}
+                  disabled={busy === 'hod' || !hodPick}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {busy === 'hod'
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <ShieldCheck className="h-4 w-4" />}
+                  Name as Head of Anaesthesia
+                </button>
+              </div>
+              {staff.length === 0 && (
+                <p className="mt-2 text-xs text-amber-800">
+                  No approved anaesthetist accounts came back, so there is nobody to name.
+                </p>
+              )}
+            </div>
+          )}
+
+          {briefing && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3">
+              {/*
+                The hand-off stays on screen rather than being fired and
+                forgotten: a browser blocks every pop-up but the first, and a
+                briefing that silently failed to open is worse than one that
+                was never sent, because the sender believes it went.
+              */}
+              {briefing.who.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {briefing.who.map((w) => (w.href ? (
+                    <a
+                      key={w.name}
+                      href={w.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" /> Send to {w.name}
+                    </a>
+                  ) : (
+                    <span key={w.name} className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs text-amber-900">
+                      {w.name} has no phone number on file — it is in their ORM inbox only
+                    </span>
+                  )))}
+                </div>
+              )}
+              {briefing.noHod && (
+                <p className="text-xs text-red-800">
+                  Nobody holds the post, so this reached no inbox. Copy the message below,
+                  then name a head of department so the next one lands by itself.
+                </p>
+              )}
+              <textarea
+                readOnly
+                value={briefing.text}
+                className="mt-2 h-40 w-full rounded-lg border border-gray-300 p-2 font-mono text-[11px] text-gray-800"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {board && !board.rosterPublished && (
         <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
