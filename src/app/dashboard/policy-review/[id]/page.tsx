@@ -37,6 +37,7 @@ import {
   KeyRound,
   Ban,
   BellRing,
+  Search,
   RotateCcw,
   UserPlus,
   Users,
@@ -48,6 +49,11 @@ import {
 // From ./messages, not ./invite: invite.ts imports node:crypto and this is a
 // client component, so importing it here would break the page bundle.
 import { buildPolicyReminderMessage } from '@/lib/policy/messages';
+import {
+  describeDirectory, selectableEntries, selectionProblem, describeSelection,
+  filterEntries, inviteeFromUser,
+  type DirectoryUser,
+} from '@/lib/policy/directory';
 import { whatsappLink } from '@/lib/whatsapp';
 import {
   EXTENSION_PRESETS, DEFAULT_EXTENSION_HOURS, presetLabel,
@@ -154,6 +160,23 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
   const [showExtend, setShowExtend] = useState(false);
   const [newClose, setNewClose] = useState('');
   const [bulk, setBulk] = useState('');
+  /**
+   * Inviting from the ORM directory.
+   *
+   * The pasted list stays -- it is still the right answer for somebody with
+   * no ORM account -- but picking from the directory is the default, because
+   * it carries `userId`. Without that the same head of department invited by
+   * name and then arriving through the general link is two invitations and
+   * two counts in every participation figure.
+   */
+  const [inviteMode, setInviteMode] = useState<'directory' | 'paste'>('directory');
+  const [dirQuery, setDirQuery] = useState('');
+  const [dirRole, setDirRole] = useState('');
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirLoading, setDirLoading] = useState(false);
+  const [dirSearched, setDirSearched] = useState(false);
+  const [picked, setPicked] = useState<Record<string, DirectoryUser>>({});
+  const [hideInvited, setHideInvited] = useState(true);
   const [newLinks, setNewLinks] = useState<NewLink[] | null>(null);
   /**
    * Replacing a lost link.
@@ -268,6 +291,77 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
       setTimeout(() => setCopied(null), 1800);
     } catch {
       setError('Could not copy — select the text and copy it by hand.');
+    }
+  };
+
+  /**
+   * Search the ORM directory.
+   *
+   * APPROVED accounts only. A PENDING account's phone number is one nobody
+   * has verified, and an unverified number is worse than none at all when it
+   * is carrying a personal link that records answers under somebody's name --
+   * the same rule the oxygen room lookup uses.
+   */
+  const searchDirectory = async () => {
+    setDirLoading(true);
+    setError(null);
+    try {
+      const qs = new URLSearchParams({ status: 'APPROVED', slim: '1', limit: '100' });
+      if (dirQuery.trim()) qs.set('q', dirQuery.trim());
+      if (dirRole.trim()) qs.set('role', dirRole.trim());
+      const res = await fetch(`/api/users?${qs.toString()}`, { cache: 'no-store' });
+      if (!res.ok) {
+        setError('Could not search the directory.');
+        return;
+      }
+      const body = await res.json();
+      const rows: DirectoryUser[] = Array.isArray(body) ? body : (body.users ?? []);
+      setDirUsers(rows);
+      setDirSearched(true);
+    } catch {
+      setError('Could not search the directory.');
+    } finally {
+      setDirLoading(false);
+    }
+  };
+
+  const togglePick = (u: DirectoryUser) => {
+    setPicked((prev) => {
+      const next = { ...prev };
+      if (next[u.id]) delete next[u.id];
+      else next[u.id] = u;
+      return next;
+    });
+  };
+
+  /** Invite everybody ticked, as accounts rather than as typed names. */
+  const inviteFromDirectory = async () => {
+    const selected = Object.values(picked);
+    const problem = selectionProblem(selected);
+    if (problem) { setError(problem); return; }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/invitations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitees: selected.map(inviteeFromUser) }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body?.error ?? 'Could not create the invitations.');
+        return;
+      }
+      setNewLinks(body.created ?? []);
+      setPicked({});
+      setShowInvite(false);
+      await load();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setError('Could not create the invitations.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -707,10 +801,200 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
       {viewer.isOwner && showInvite && (
         <div className="mb-5 rounded-xl border border-slate-300 bg-white p-4">
           <p className="text-sm font-semibold text-slate-900">Invite committee members</p>
-          <p className="mt-1 text-xs text-slate-600">
+
+          {/*
+            Two ways in, and the directory is the default.
+
+            Picking from ORM carries the account id onto the invitation, which
+            is what lets a member arrive later through the general link and be
+            recognised as the same person -- the unique index on
+            (roundId, userId) enforces it. A pasted name has no account id, so
+            the same head of department invited by name and then signing in
+            counts twice in every participation figure.
+
+            The pasted list stays, because somebody with no ORM account still
+            has to be invitable, and most of this committee's guests are.
+          */}
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setInviteMode('directory')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                inviteMode === 'directory'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-300 bg-white text-slate-700'
+              }`}
+            >
+              From the ORM directory
+            </button>
+            <button
+              type="button"
+              onClick={() => setInviteMode('paste')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                inviteMode === 'paste'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-300 bg-white text-slate-700'
+              }`}
+            >
+              Paste a list
+            </button>
+          </div>
+
+          {inviteMode === 'directory' && (() => {
+            const entries = filterEntries(
+              describeDirectory(dirUsers, invitations),
+              { hideInvited },
+            );
+            const selected = Object.values(picked);
+            return (
+              <div className="mt-3">
+                <p className="text-xs text-slate-600">
+                  Search the staff directory and tick the members to invite. Their name,
+                  role, unit and phone number come from their ORM record, so nothing is
+                  retyped — a wrong digit in a phone number means the invitation is never
+                  delivered and every reminder goes to a stranger.
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input
+                    type="text"
+                    value={dirQuery}
+                    onChange={(e) => setDirQuery(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void searchDirectory(); }}
+                    placeholder="Name, username or staff code"
+                    className="min-w-[12rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={dirRole}
+                    onChange={(e) => setDirRole(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void searchDirectory(); }}
+                    placeholder="Role (optional), e.g. CONSULTANT_SURGEON"
+                    className="min-w-[12rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void searchDirectory()}
+                    disabled={dirLoading}
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {dirLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                    Search
+                  </button>
+                </div>
+
+                <label className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={hideInvited}
+                    onChange={(e) => setHideInvited(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  Hide members already invited to this round
+                </label>
+
+                {dirSearched && entries.length === 0 && (
+                  <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500">
+                    Nobody matched. Try part of a surname, or clear the role box — only
+                    APPROVED accounts are offered, because a pending account&rsquo;s phone
+                    number is one nobody has verified.
+                  </p>
+                )}
+
+                {entries.length > 0 && (
+                  <ul className="mt-3 max-h-72 space-y-1 overflow-auto rounded-lg border border-slate-200 p-1">
+                    {entries.map((e) => (
+                      <li key={e.id}>
+                        <label
+                          className={`flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-xs ${
+                            e.alreadyInvited ? 'opacity-60' : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4"
+                            disabled={e.alreadyInvited}
+                            checked={Boolean(picked[e.id])}
+                            onChange={() => togglePick(e)}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="font-medium text-slate-900">{e.fullName}</span>
+                            <span className="text-slate-500">
+                              {e.role ? ` · ${e.role.replace(/_/g, ' ')}` : ''}
+                              {e.department ? ` · ${e.department}` : ''}
+                            </span>
+                            {/*
+                              A missing number is a warning, never a refusal: plenty
+                              of heads of department are reached through a secretary.
+                              What must not happen is inviting them believing a
+                              reminder will chase them.
+                            */}
+                            {e.note && (
+                              <span
+                                className={`block text-[11px] ${
+                                  e.alreadyInvited ? 'text-slate-500' : 'text-amber-800'
+                                }`}
+                              >
+                                {e.note}
+                              </span>
+                            )}
+                          </span>
+                          {e.reachable && (
+                            <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                              {e.phoneNumber}
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {entries.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next: Record<string, DirectoryUser> = { ...picked };
+                        for (const e of selectableEntries(entries)) next[e.id] = e;
+                        setPicked(next);
+                      }}
+                      className="rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700"
+                    >
+                      Select all shown
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPicked({})}
+                      className="rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700"
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                )}
+
+                <p className="mt-2 text-xs text-slate-700">{describeSelection(selected)}</p>
+
+                <button
+                  type="button"
+                  onClick={() => void inviteFromDirectory()}
+                  disabled={busy || selected.length === 0}
+                  className="mt-2 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Create links for {selected.length || 'the'} selected
+                </button>
+              </div>
+            );
+          })()}
+
+          {inviteMode === 'paste' && (
+          <>
+          <p className="mt-3 text-xs text-slate-600">
             One person per line: <code className="rounded bg-slate-100 px-1">Name | Role | Unit | Phone</code>.
             Role, unit and phone may be left out, but the phone is what makes the WhatsApp
-            button work.
+            button work. Use this for somebody with no ORM account — anybody who has one
+            should be picked from the directory, so their invitation carries it.
           </p>
           <textarea
             value={bulk}
@@ -728,6 +1012,8 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Create links
           </button>
+          </>
+          )}
         </div>
       )}
 
