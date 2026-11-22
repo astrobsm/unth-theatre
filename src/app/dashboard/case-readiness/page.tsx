@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { canNotifyPatientAboutPacks } from '@/lib/packs/patientPayNotice';
 import Link from 'next/link';
 import {
   CalendarDays,
@@ -28,6 +29,22 @@ function todayInputValue() {
 }
 
 type Contact = { name: string; phone: string | null; role?: string | null };
+
+interface PatientContactPayload {
+  patient: { name: string; folderNumber: string | null };
+  contact: {
+    owner: 'PATIENT' | 'CAREGIVER';
+    ownerLabel: string;
+    asRecorded: string;
+    tel: string;
+    whatsapp: string | null;
+    whatsappShort: string | null;
+  } | null;
+  outstanding: { consumable: number; pharmacy: number };
+  problem: string | null;
+  message: string | null;
+  shortMessage: string | null;
+}
 type PackSummary = {
   prescribed: boolean;
   total: number;
@@ -184,6 +201,47 @@ export default function CaseReadinessPage() {
   const [error, setError] = useState<string | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [unitFilter, setUnitFilter] = useState<string | null>(null);
+  /**
+   * The patient whose contact panel is open.
+   *
+   * Fetched on click, never carried in the board payload: the board is open
+   * wide because knowing a case is not ready is operational, and a patient’s
+   * personal number is not the same thing. The server gates it by role again
+   * and records every disclosure.
+   */
+  const [contactFor, setContactFor] = useState<string | null>(null);
+  const [contact, setContact] = useState<PatientContactPayload | null>(null);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [showFullNotice, setShowFullNotice] = useState(false);
+  const [copiedNotice, setCopiedNotice] = useState(false);
+
+  /** Gated in the browser for the look of the thing; enforced on the server. */
+  const mayContactPatient = canNotifyPatientAboutPacks(session?.user?.role);
+
+  const openPatientContact = async (surgeryId: string) => {
+    if (contactFor === surgeryId) { setContactFor(null); return; }
+    setContactFor(surgeryId);
+    setContact(null);
+    setContactError(null);
+    setShowFullNotice(false);
+    setContactBusy(true);
+    try {
+      const res = await fetch(`/api/surgeries/${surgeryId}/patient-contact`, {
+        cache: 'no-store',
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setContactError(body?.error ?? 'Could not look up that patient.');
+        return;
+      }
+      setContact(body as PatientContactPayload);
+    } catch {
+      setContactError('Could not look up that patient.');
+    } finally {
+      setContactBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -399,7 +457,25 @@ export default function CaseReadinessPage() {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-semibold text-gray-900">{c.patientName}</span>
+                  {/*
+                    Clickable only for the consumable office, the theatre
+                    pharmacy and theatre management. For everybody else it stays
+                    plain text -- the board is open wide because knowing a case
+                    is not ready is operational, while a patient's personal
+                    number is not. The server checks the role again regardless.
+                  */}
+                  {mayContactPatient ? (
+                    <button
+                      type="button"
+                      onClick={() => void openPatientContact(c.id)}
+                      className="text-lg font-semibold text-gray-900 underline decoration-dotted underline-offset-4 hover:text-emerald-700"
+                      title="Show this patient's phone number and the payment notice"
+                    >
+                      {c.patientName}
+                    </button>
+                  ) : (
+                    <span className="text-lg font-semibold text-gray-900">{c.patientName}</span>
+                  )}
                   {c.folderNumber && <span className="text-xs text-gray-400">#{c.folderNumber}</span>}
                   {c.allReady ? (
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -407,6 +483,105 @@ export default function CaseReadinessPage() {
                     <AlertTriangle className="h-5 w-5 text-red-500" />
                   )}
                 </div>
+                {mayContactPatient && contactFor === c.id && (
+                  <div className="mt-2 w-full rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3">
+                    {contactBusy && (
+                      <p className="text-xs text-emerald-900">Looking up the patient…</p>
+                    )}
+                    {contactError && (
+                      <p className="text-xs font-medium text-red-700">{contactError}</p>
+                    )}
+
+                    {contact && contact.problem && (
+                      <p className="text-xs font-medium text-amber-900">{contact.problem}</p>
+                    )}
+
+                    {contact && !contact.problem && contact.contact && (
+                      <>
+                        <p className="text-xs font-bold text-emerald-900">
+                          {contact.contact.asRecorded}
+                        </p>
+                        {/*
+                          Whose phone it is, said out loud. patientContact()
+                          falls back to the next of kin, and somebody reading a
+                          payment demand addressed to a patient they are not is
+                          how a hospital looks careless.
+                        */}
+                        <p className="mt-0.5 text-[11px] text-emerald-800">
+                          Answers: {contact.contact.ownerLabel}
+                        </p>
+                        <p className="mt-1 text-[11px] text-emerald-900">
+                          Outstanding: {contact.outstanding.consumable} consumable ·{' '}
+                          {contact.outstanding.pharmacy} pharmacy
+                        </p>
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <a
+                            href={contact.contact.tel}
+                            className="rounded bg-emerald-700 px-2.5 py-1 text-[11px] font-semibold text-white"
+                          >
+                            Call
+                          </a>
+                          {contact.contact.whatsapp && (
+                            <a
+                              href={contact.contact.whatsapp}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white"
+                            >
+                              WhatsApp — full notice
+                            </a>
+                          )}
+                          {contact.contact.whatsappShort && (
+                            <a
+                              href={contact.contact.whatsappShort}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded border border-emerald-600 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-800"
+                            >
+                              WhatsApp — short
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(contact.message ?? '');
+                                setCopiedNotice(true);
+                                setTimeout(() => setCopiedNotice(false), 1800);
+                              } catch {
+                                setContactError('Could not copy — open the notice and copy it by hand.');
+                              }
+                            }}
+                            className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
+                          >
+                            {copiedNotice ? 'Copied' : 'Copy notice'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowFullNotice((v) => !v)}
+                            className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
+                          >
+                            {showFullNotice ? 'Hide the notice' : 'Read the notice first'}
+                          </button>
+                        </div>
+
+                        {/*
+                          The sender can read it before it goes. This message
+                          tells a patient their operation depends on paying, and
+                          explains why what they bought outside cannot be used --
+                          not something to send unseen.
+                        */}
+                        {showFullNotice && (
+                          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded border border-emerald-200 bg-white p-2 font-sans text-[11px] leading-relaxed text-gray-800">
+                            {contact.message}
+                          </pre>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 <div className="mt-0.5 text-sm text-gray-600">
                   {c.procedureName} · <span className="font-medium">{c.unit}</span>
                   {c.location ? ` · ${c.location}` : ''} · {c.scheduledTime}
