@@ -1083,6 +1083,10 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                     <p className="text-xs text-slate-600">
                       Lost the links? They are stored as hashes and cannot be shown again —
                       but a fresh one can be issued for anybody who has not opened theirs.
+                      <strong className="font-semibold">
+                        {' '}A fresh link replaces the old one, so any link already sent to
+                        that member stops working and they must be sent the new one.
+                      </strong>
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button

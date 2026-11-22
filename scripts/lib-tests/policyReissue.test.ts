@@ -32,9 +32,22 @@ const invite = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('what reissuing would cost this member', () => {
-  it('is free for somebody who never opened their link', () => {
+  it('still warns for somebody who has not opened theirs', () => {
+    // THE BUG THIS ENCODES, found on 22 November when a committee member
+    // opened their link from WhatsApp and was told it was not recognised.
+    //
+    // Not having OPENED a link is not the same as not HAVING one. Every
+    // invitation is minted and sent in the same moment, so a member who has
+    // not yet got round to tapping it is still holding a working link. The
+    // bulk action replaced exactly those tokens, on the reasoning that there
+    // was nothing to break, and the first anybody learned of it was a dead
+    // link in a WhatsApp thread.
     expect(reissueRisk(invite())).toBe('NEVER_OPENED');
-    expect(reissueWarning('NEVER_OPENED')).toBeNull();
+    expect(reissueWarning('NEVER_OPENED')).toContain('stops that one working');
+    expect(reissueWarning('NEVER_OPENED'))
+      .toContain('not the same as not having it');
+    // Still no confirmation step: this is the common case and the warning is
+    // on the button and in the bulk panel, where it is read before pressing.
     expect(needsConfirmation('NEVER_OPENED')).toBe(false);
   });
 
@@ -113,19 +126,24 @@ describe('who the bulk action touches', () => {
 });
 
 describe('the sentence on the bulk panel', () => {
-  it('names both what it does and what it leaves alone', () => {
+  it('names what it does, what it breaks, and what it leaves alone', () => {
     const s = bulkReissueSentence([
       invite(), invite(), invite(),
       invite({ openedAt: new Date() }),
     ]);
     expect(s).toContain('3 members');
+    expect(s).toContain('existing link stops working');
     expect(s).toContain('left alone');
   });
 
-  it('says nothing is disturbed when nobody has opened theirs', () => {
+  it('still states the consequence when nobody has opened theirs', () => {
+    // It used to say "Nothing anybody is already using is touched" here --
+    // true of USING, false of HOLDING, and the difference cost a committee
+    // member a working link.
     const s = bulkReissueSentence([invite(), invite()]);
     expect(s).toContain('2 members');
-    expect(s).toContain('Nothing anybody is already using is touched');
+    expect(s).toContain('existing link stops working');
+    expect(s).not.toContain('Nothing anybody is already using');
   });
 
   it('counts one member as one, not "1 members"', () => {

@@ -63,7 +63,16 @@ export function reissueRisk(invite: InviteStateLike): ReissueRisk {
 export function reissueWarning(risk: ReissueRisk): string | null {
   switch (risk) {
     case 'NEVER_OPENED':
-      return null;
+      // NOT "nothing to break", which is what this used to say, and it was
+      // wrong in the way that matters. Not having OPENED a link is not the
+      // same as not HAVING one: every invitation is minted and sent at the
+      // same moment, so a member who has not got round to tapping it is
+      // still holding it in their WhatsApp. Replacing it kills that link,
+      // and the first they learn of it is "this review link is not one we
+      // recognise" when they finally open the message. That happened.
+      return 'If this member has already been sent their link, replacing it stops '
+        + 'that one working — they will need the new one. Not having opened a link '
+        + 'is not the same as not having it.';
     case 'OPENED':
       return 'This member has already opened their link, so they have it. '
         + 'A new link stops the old one working — send them the new one.';
@@ -119,8 +128,17 @@ export function bulkReissueSentence(invites: InviteStateLike[]): string {
   const one = safe === 1;
   const head = `Issues a fresh link for the ${one ? 'one member' : `${safe} members`} `
     + `who ${one ? 'has' : 'have'} not opened theirs yet.`;
-  if (held === 0) return `${head} Nothing anybody is already using is touched.`;
 
-  return `${head} The ${held === 1 ? 'one who has' : `${held} who have`} already opened `
-    + `theirs ${held === 1 ? 'is' : 'are'} left alone — replace those one at a time.`;
+  // The consequence, stated every time. The previous wording -- "nothing
+  // anybody is already using is touched" -- was true of USING and false of
+  // HOLDING, and committee members who had been sent a link but had not yet
+  // tapped it were left with a dead one and no way to know why.
+  const consequence = ` ${one ? 'Their' : 'Their'} existing link stops working `
+    + `at once, so ${one ? 'they' : 'they'} must be sent the new one.`;
+
+  if (held === 0) return `${head}${consequence}`;
+
+  return `${head}${consequence} The ${held === 1 ? 'one who has' : `${held} who have`} `
+    + `already opened theirs ${held === 1 ? 'is' : 'are'} left alone — replace those `
+    + 'one at a time.';
 }

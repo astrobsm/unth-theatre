@@ -111,6 +111,20 @@ interface ReviewState {
 
 interface Refusal { ok: false; problem: string; message: string }
 
+/**
+ * The verdict, as a heading.
+ *
+ * Written for somebody holding a phone in a corridor, not for the developer
+ * who knows what NOT_FOUND means.
+ */
+const REFUSAL_TITLE: Record<string, string> = {
+  NOT_FOUND: 'We do not recognise this link',
+  REVOKED: 'This link has been withdrawn',
+  EXPIRED: 'The review has closed',
+  ROUND_NOT_OPEN: 'The review has not opened yet',
+  SIGN_IN_REQUIRED: 'Please sign in to continue',
+};
+
 interface SectionAnswer {
   stance: Stance | null;
   comment: string;
@@ -501,8 +515,24 @@ export default function PolicyReviewPage() {
   if (refusal) {
     return (
       <Shell>
-        <Notice tone="amber" icon={<AlertTriangle className="h-5 w-5" />} title="This review link">
+        {/*
+          The heading names the problem. It used to read just "This review
+          link", which says nothing and leaves somebody standing in a
+          corridor on mobile data to parse a paragraph for the verdict.
+        */}
+        <Notice
+          tone="amber"
+          icon={<AlertTriangle className="h-5 w-5" />}
+          title={REFUSAL_TITLE[refusal.problem] ?? 'This review link cannot be opened'}
+        >
           {refusal.message}
+          {refusal.problem === 'NOT_FOUND' && (
+            <p className="mt-2 font-medium">
+              If more than one link has been sent to you, please open the one from the
+              most recent message — an earlier link stops working as soon as a new one
+              is issued.
+            </p>
+          )}
         </Notice>
       </Shell>
     );
