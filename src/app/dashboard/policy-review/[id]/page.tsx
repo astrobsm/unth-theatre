@@ -208,6 +208,29 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
 
   useEffect(() => { void load(); }, [load]);
 
+  /**
+   * Keep the participation figures live while the page is open.
+   *
+   * These counts are what the Chairman watches during a round, and until now
+   * they were whatever they had been when the page was opened -- a response
+   * submitted five minutes ago stayed invisible until a manual refresh.
+   *
+   * Thirty seconds, and only while the tab is actually visible: a forgotten
+   * tab polling all night on a theatre handset is somebody else battery and
+   * somebody else data.
+   */
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    const timer = setInterval(tick, 30_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [load]);
+
   const act = async (payload: Record<string, unknown>) => {
     setBusy(true);
     setError(null);

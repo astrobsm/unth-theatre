@@ -24,8 +24,10 @@ import {
   CircleDollarSign,
   Download,
   FileCheck2,
+  Activity,
   FileText,
   Gavel,
+  RefreshCw,
   PenLine,
   KeyRound,
   RotateCcw,
@@ -39,6 +41,34 @@ import {
 } from 'lucide-react';
 
 import PolicyMarkdown from '@/components/policy/PolicyMarkdown';
+
+interface LivePreview {
+  coverage: {
+    invited: number; submitted: number; percent: number;
+    enoughForAnalysis: boolean; needed: number;
+  };
+  banner: string;
+  summary: string;
+  sections: Array<{
+    sectionId: string; number: string | null; title: string;
+    agree: number; agreeWithChanges: number; disagree: number; notMyArea: number;
+    answered: number; patientSafety: number; highPriority: number;
+    signal: 'THIN' | 'SETTLED' | 'CONTESTED' | 'DIVIDED'; signalLabel: string;
+  }>;
+  decisionItems: Array<{
+    decisionItemId: string; sectionNumber: string | null; placeholder: string;
+    currentValue: string; answered: number;
+    leading: {
+      value: string; support: number; isCurrent: boolean;
+      margin: number; contested: boolean; answered: boolean;
+    };
+  }>;
+  analysis: {
+    hasRun: boolean; newSince: number; stale: boolean; message: string;
+    lastRunAt: string | null; submittedAtRun: number | null; suggestRerun: boolean;
+  };
+  generatedAt: string;
+}
 
 interface Signoff {
   id: string;
@@ -136,6 +166,17 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   { analysed: number; remaining: number; costCents: number } | null
   >(null);
   const [editing, setEditing] = useState<Record<string, string>>({});
+  /**
+   * The live picture, recomputed from the responses on every poll.
+   *
+   * Free and exact: no model, no spend, and it cannot be wrong about a count.
+   * This is what “real time” means here -- the paid AI synthesis stays on the
+   * Chairman’s click, because it costs money per press and eighteen members
+   * would otherwise mean eighteen runs where only the last is ever read.
+   */
+  const [live, setLive] = useState<LivePreview | null>(null);
+  const [liveAt, setLiveAt] = useState<Date | null>(null);
+  const [showAllSections, setShowAllSections] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
@@ -361,6 +402,40 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
     }
   };
 
+  const loadLive = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/preview`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      setLive(await res.json());
+      setLiveAt(new Date());
+    } catch {
+      // A failed poll must leave the last good picture on screen rather than
+      // blanking it: a momentary drop on theatre wifi is not news.
+    }
+  }, [params.id]);
+
+  /**
+   * Poll while the page is open and visible.
+   *
+   * Thirty seconds, and only when the tab is actually being looked at. The
+   * endpoint is cheap, but a forgotten tab polling all night on a theatre
+   * handset is somebody’s battery and somebody’s data.
+   */
+  useEffect(() => {
+    void loadLive();
+    const tick = () => {
+      if (document.visibilityState === 'visible') void loadLive();
+    };
+    const timer = setInterval(tick, 30_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [loadLive]);
+
   /** Who has signed, and where each signature stands against the current text. */
   const loadSignoffs = useCallback(async () => {
     try {
@@ -484,6 +559,163 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
         <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
           {notice}
         </div>
+      )}
+
+      {/*
+        The live picture, recomputed on every poll.
+
+        This is what updates as responses are submitted. It costs nothing and
+        cannot be wrong about a count, because it IS the counts -- the paid AI
+        synthesis below stays on the Chairman's click, since it spends real
+        money per press and eighteen members would mean eighteen runs where
+        only the last is ever read.
+      */}
+      {live && (
+        <section className="mt-5 rounded-xl border-2 border-indigo-200 bg-indigo-50/40 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-bold text-indigo-900">
+              <Activity className="h-4 w-4" />
+              Live preview — updates as responses arrive
+            </h2>
+            <button
+              type="button"
+              onClick={() => void loadLive()}
+              className="flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-1 text-[11px] font-medium text-indigo-800"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </button>
+          </div>
+
+          {/*
+            The banner always says what the picture rests on. A provisional
+            reading that does not announce itself gets quoted in a meeting as
+            though the committee had finished.
+          */}
+          <p className="mt-2 rounded-lg border border-indigo-200 bg-white p-2 text-xs font-semibold text-indigo-900">
+            {live.banner}
+          </p>
+          <p className="mt-2 text-xs text-slate-700">{live.summary}</p>
+          {liveAt && (
+            <p className="mt-1 text-[10px] text-slate-500">
+              Recomputed at {liveAt.getHours().toString().padStart(2, '0')}:
+              {liveAt.getMinutes().toString().padStart(2, '0')}:
+              {liveAt.getSeconds().toString().padStart(2, '0')} · refreshes every 30s
+            </p>
+          )}
+
+          {/* Where the stored AI analysis stands against what has come in since. */}
+          <div
+            className={`mt-3 rounded-lg border p-2 text-xs ${
+              live.analysis.stale
+                ? 'border-amber-300 bg-amber-50 text-amber-900'
+                : 'border-slate-200 bg-white text-slate-700'
+            }`}
+          >
+            {live.analysis.message}
+          </div>
+
+          {live.sections.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Sections, worst first
+              </p>
+              <ul className="mt-1 space-y-1">
+                {(showAllSections ? live.sections : live.sections.slice(0, 6)).map((sec) => (
+                  <li
+                    key={sec.sectionId}
+                    className="flex flex-wrap items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  >
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                        sec.signal === 'DIVIDED' ? 'bg-rose-100 text-rose-800'
+                          : sec.signal === 'CONTESTED' ? 'bg-amber-100 text-amber-900'
+                            : sec.signal === 'THIN' ? 'bg-slate-100 text-slate-600'
+                              : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {sec.signalLabel}
+                    </span>
+                    <span className="font-medium text-slate-900">
+                      {sec.number ? `${sec.number} ` : ''}{sec.title}
+                    </span>
+                    <span className="ml-auto text-[11px] text-slate-500">
+                      {sec.agree} agree · {sec.agreeWithChanges} with changes ·{' '}
+                      {sec.disagree} disagree
+                      {sec.patientSafety > 0 && (
+                        <span className="ml-1 font-bold text-rose-700">
+                          · {sec.patientSafety} safety
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {live.sections.length > 6 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllSections((v) => !v)}
+                  className="mt-1 text-[11px] font-semibold text-indigo-800 underline"
+                >
+                  {showAllSections
+                    ? 'Show fewer'
+                    : `Show all ${live.sections.length} sections`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {live.decisionItems.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Open values — what is winning so far
+              </p>
+              <ul className="mt-1 space-y-1">
+                {live.decisionItems.slice(0, 8).map((d) => (
+                  <li
+                    key={d.decisionItemId}
+                    className="flex flex-wrap items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  >
+                    <span className="font-mono text-[11px] text-slate-600">
+                      {d.sectionNumber ? `${d.sectionNumber} ` : ''}{d.placeholder}
+                    </span>
+                    {d.leading.answered ? (
+                      <>
+                        <span className="font-semibold text-slate-900">
+                          {d.leading.value}
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          {d.leading.support} in favour
+                          {d.leading.isCurrent ? ' (the drafted value)' : ' (a proposal)'}
+                        </span>
+                        {/*
+                          A one-vote gap or a tie is flagged rather than
+                          presented as a result: settling an open value on that
+                          basis would be inventing a committee decision.
+                        */}
+                        {d.leading.contested && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+                            {d.leading.margin === 0 ? 'tied' : 'close'}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">nobody has answered yet</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {live.analysis.suggestRerun && (
+            <p className="mt-3 text-[11px] text-slate-600">
+              Enough has changed to be worth running the AI synthesis below
+              {live.analysis.hasRun ? ' again' : ''}. It is never run automatically —
+              each run spends money on the hospital&rsquo;s account.
+            </p>
+          )}
+        </section>
       )}
 
       {/* ── Run ─────────────────────────────────────────────────────────── */}
