@@ -275,3 +275,190 @@ export function buildShortPayMessage(input: PayNoticeInput): string {
     'bought to the pharmacy first. This is for patient safety.',
   ].join('');
 }
+
+// ============================================================
+// THE CONSUMABLE DEPOSIT -- where it is paid, and what to bring back
+// ------------------------------------------------------------
+// The message above tells a patient that items are outstanding and which
+// office to settle them at. It does not tell them the one thing that decides
+// whether the case goes ahead on the morning: that the deposit is paid at the
+// CONSUMABLE SHOP AT THE EMERGENCY, that it is set by the CATEGORY the
+// operation falls into rather than by a list of items, and that the receipt
+// has to come back to the theatre in the patient's hand on the day.
+//
+// That last part is not administrative tidiness. The theatre has no till and
+// no view of the shop's book; the receipt IS how the theatre knows the pack
+// was paid for. A patient who paid and threw the paper away arrives in the
+// same position as a patient who did not pay, and the argument happens at the
+// door with the list already running.
+// ============================================================
+
+/** The magnitude a case was booked under -- the "procedure category". */
+export type ProcedureCategory = 'MINOR' | 'INTERMEDIATE' | 'MAJOR' | 'SUPER_MAJOR';
+
+const CATEGORY_LABELS: Record<ProcedureCategory, string> = {
+  MINOR: 'MINOR',
+  INTERMEDIATE: 'INTERMEDIATE',
+  MAJOR: 'MAJOR',
+  SUPER_MAJOR: 'SUPER MAJOR',
+};
+
+/**
+ * The category in the words the shop uses, or null when the case does not
+ * carry one.
+ *
+ * Null is answered in the message rather than guessed at. A patient told to
+ * pay the MAJOR deposit for an INTERMEDIATE case has been given a figure by
+ * this hospital that this hospital will then refuse, and they paid it on our
+ * word.
+ */
+export function procedureCategoryLabel(
+  value: string | null | undefined,
+): string | null {
+  const key = (value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return (CATEGORY_LABELS as Record<string, string>)[key] ?? null;
+}
+
+/** Where the consumable deposit is actually paid. One place, named once. */
+export const CONSUMABLE_SHOP = 'the CONSUMABLE SHOP at the EMERGENCY';
+
+export interface DepositNoticeInput {
+  patientName: string;
+  /** Whose phone this is going to. */
+  owner: ContactOwner;
+  procedureName?: string | null;
+  /** The booked magnitude. Unknown is fine and is said out loud. */
+  category?: string | null;
+  scheduledAt?: Date | string | null;
+  senderName?: string | null;
+  senderOffice?: string | null;
+}
+
+/**
+ * The sentence naming what to pay for.
+ *
+ * Separated out because it is the one line that changes with the case, and
+ * the one most likely to be read on its own in a notification preview.
+ */
+export function depositCategorySentence(category: string | null | undefined): string {
+  const label = procedureCategoryLabel(category);
+  if (label) {
+    return `Pay the consumable deposit for a *${label}* procedure -- that is the `
+      + 'category your operation is booked under. The shop will confirm the amount.';
+  }
+  // No magnitude on the case. Said plainly: the shop can work it out from the
+  // operation, and a figure invented here is a figure the patient would be
+  // turned away over.
+  return 'Pay the consumable deposit for the category your operation falls under. '
+    + 'Tell them the operation you are booked for and they will tell you the '
+    + 'category and the amount.';
+}
+
+/**
+ * The message sent when the patient's number is tapped on the theatre list.
+ *
+ * Shorter than buildPatientPayMessage on purpose. That one is sent by the
+ * office chasing a pack that is already prescribed and itemised; this one is
+ * sent to somebody who may not yet know there is anything to pay at all, and
+ * its whole job is to get four things done in order: go there, pay by
+ * category, keep the paper, bring the paper.
+ */
+export function buildConsumableDepositMessage(input: DepositNoticeInput): string {
+  const toPatient = input.owner === 'PATIENT';
+  const name = input.patientName.trim() || 'the patient';
+  const day = dayText(input.scheduledAt);
+  const procedure = (input.procedureName ?? '').trim();
+
+  const lines: string[] = [
+    '*UNIVERSITY OF NIGERIA TEACHING HOSPITAL, ITUKU-OZALLA*',
+    'Theatre Complex',
+    '',
+  ];
+
+  if (toPatient) {
+    lines.push(`Good day, ${name}.`, '');
+    lines.push(
+      'You are on the theatre list for surgery'
+      + (procedure ? ` (${procedure})` : '')
+      + (day ? ` on ${day}` : '')
+      + '.',
+    );
+  } else {
+    lines.push('Good day.', '');
+    lines.push(
+      `${name} is on the theatre list for surgery`
+      + (procedure ? ` (${procedure})` : '')
+      + (day ? ` on ${day}` : '')
+      + '. This message is for you as the person we can reach.',
+    );
+  }
+
+  lines.push(
+    '',
+    '*THERE ARE MATERIALS FOR THE SURGERY TO BE PAID FOR*',
+    '',
+    `1. Go to ${CONSUMABLE_SHOP}.`,
+    `2. ${depositCategorySentence(input.category)}`,
+    '3. *KEEP THE EVIDENCE OF PAYMENT.* Do not leave the receipt at home and do '
+    + 'not throw it away.',
+    '4. *BRING THAT RECEIPT TO THE THEATRE ON THE DAY OF THE SURGERY.*',
+    '',
+    'The theatre has no way of seeing the shop’s records from inside. The '
+    + 'receipt is how we know the pack has been paid for, so a case can be held '
+    + 'at the door over a payment that was actually made. Please settle it '
+    + (day ? `before ${day}` : 'before the day of surgery')
+    + ' rather than on the morning.',
+    '',
+    '*MATERIALS BOUGHT OUTSIDE CANNOT BE USED*',
+    '',
+    'Anything bought outside this hospital cannot be used in the theatre unless '
+    + 'the theatre pharmacy supplied it, or has checked it first. This is not '
+    + 'about money: for an item from outside we cannot tell whether it is '
+    + 'genuine, whether it has really expired, whether it was kept at the right '
+    + 'temperature, whether its sterile wrapping is still intact, or which batch '
+    + 'it came from. During an operation those are not small risks, and the risk '
+    + `falls on ${toPatient ? 'you' : name}.`,
+    '',
+    'If something has already been bought outside, please do not throw it away '
+    + 'and do not bring it straight to the theatre on the day — bring it to the '
+    + 'theatre pharmacy beforehand and the pharmacist will say what can be '
+    + 'accepted.',
+    '',
+    'If paying is difficult, please come and tell us early rather than on the '
+    + 'morning of surgery. We would far rather help sort it out in advance than '
+    + 'send you home from the theatre door.',
+    '',
+  );
+
+  const office = input.senderOffice?.trim() || 'Theatre Consumable Office';
+  if (input.senderName?.trim()) lines.push(`— ${input.senderName.trim()}, ${office}`);
+  else lines.push(`— ${office}`);
+  lines.push('UNTH Ituku-Ozalla Theatre Complex');
+
+  return lines.join('\n');
+}
+
+/**
+ * One-screen version, for a phone that will not scroll and for reading out on
+ * a call.
+ *
+ * It keeps the four instructions and drops the explanation, because a caller
+ * gives that in their own words and the four steps are what has to survive.
+ */
+export function buildShortDepositMessage(input: DepositNoticeInput): string {
+  const toPatient = input.owner === 'PATIENT';
+  const name = input.patientName.trim() || 'the patient';
+  const day = dayText(input.scheduledAt);
+  const label = procedureCategoryLabel(input.category);
+
+  return [
+    'UNTH Theatre: ',
+    toPatient ? 'you have' : `${name} has`,
+    ' materials for surgery',
+    day ? ` on ${day}` : '',
+    ' still to be paid for. Please go to the consumable shop at the Emergency and pay the consumable deposit for ',
+    label ? `a ${label} procedure` : 'the category of the operation',
+    '. Keep the receipt and bring it to the theatre on the day of the surgery. ',
+    'Materials bought outside cannot be used unless the theatre pharmacy supplied or checked them.',
+  ].join('');
+}

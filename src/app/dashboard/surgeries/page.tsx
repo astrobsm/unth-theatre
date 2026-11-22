@@ -61,6 +61,15 @@ interface Surgery {
   /** Who booked the case, with the role and number needed to reach them. */
   bookedBy?: { id: string | null; name: string | null; role: string | null; phone: string | null } | null;
   procedureName: string;
+  /**
+   * The procedure CATEGORY -- MAJOR, INTERMEDIATE, MINOR, SUPER_MAJOR.
+   *
+   * Already selected by GET /api/surgeries and simply never declared here.
+   * It is what the consumable deposit is set by, so the message sent to a
+   * patient from this page can name the category instead of telling them to
+   * go and find out.
+   */
+  magnitude?: string | null;
   indication?: string;
   scheduledDate: string;
   scheduledTime: string;
@@ -1450,7 +1459,30 @@ export default function SurgeriesPage() {
                               {label.notLoaded || !surgery.patient?.id ? (
                                 label.name
                               ) : (
-                                <ContactName type="patient" id={surgery.patient.id} name={label.name} />
+                                /*
+                                  Tapping the patient's name brings up their
+                                  number, and tapping the number now sends the
+                                  payment message rather than opening an empty
+                                  chat. The four instructions in it -- go to the
+                                  consumable shop at the Emergency, pay by the
+                                  category of the operation, keep the receipt,
+                                  bring the receipt on the day -- are the ones
+                                  cases get held at the door over, and they are
+                                  exactly the ones that get dropped when they
+                                  are typed out by hand on a phone.
+                                */
+                                <ContactName
+                                  type="patient"
+                                  id={surgery.patient.id}
+                                  name={label.name}
+                                  payNotice={{
+                                    patientName: surgery.patient.name,
+                                    procedureName: surgery.procedureName,
+                                    category: surgery.magnitude ?? null,
+                                    scheduledAt: surgery.scheduledDate,
+                                    senderName: session?.user?.name ?? null,
+                                  }}
+                                />
                               )}
                             </div>
                             {/* DIRECTLY UNDER THE NAME, in the patient column.

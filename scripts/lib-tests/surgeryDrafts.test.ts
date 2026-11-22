@@ -230,3 +230,70 @@ describe('the table is registered for replication', () => {
     expect(sql).toMatch(/"targetDate"\s+TIMESTAMP\(3\),/);
   });
 });
+
+describe('a published plan comes off the planned list', () => {
+  /**
+   * The fault this covers, in the words it was reported in: cases booked for
+   * 23 November, on the theatre list, and still sitting in Planned cases
+   * marked "ready to publish".
+   *
+   * Publishing was two calls from the browser -- book the case, then PATCH the
+   * plan to PUBLISHED -- and the second was sent without its answer ever being
+   * read. Anything that stopped it (a dropped connection between the two, a
+   * refusal, a 500) left the case real and the plan still showing a Publish
+   * button. The obvious response is to press it again, and before this the
+   * second press booked the patient twice whenever the date had been nudged,
+   * because the idempotency key is tied to the date.
+   */
+  it('tells the booking route which plan it came from', () => {
+    const body = publishPayload(full(), { scheduledDate: '2026-11-26', scheduledTime: '09:00' });
+    expect(body.fromDraftId).toBe('draft-1');
+  });
+
+  it('keeps that out of the spread the booking route hands to Prisma', () => {
+    // fromDraftId is an instruction to the handler, not a column. Left in the
+    // spread it reaches prisma.surgery.create() and fails the WHOLE booking
+    // with "Unknown argument" -- the trap deferOutstanding already fell into
+    // once, which broke booking outright.
+    const route = codeOf('src/app/api/surgeries/route.ts');
+    expect(route).toContain('fromDraftId: _fromDraftId');
+  });
+
+  it('marks the plan inside the request that created the case', () => {
+    const route = codeOf('src/app/api/surgeries/route.ts');
+    expect(route).toContain('prisma.surgeryScheduleDraft.updateMany');
+    expect(route).toContain('draftMarked');
+  });
+
+  it('never lets a plan that would not close fail a booking that worked', () => {
+    // The case is created and real. Refusing a 201 because a list did not
+    // tidy itself would be a far worse answer than an untidy list.
+    const route = codeOf('src/app/api/surgeries/route.ts');
+    const marker = route.indexOf('prisma.surgeryScheduleDraft.updateMany');
+    expect(marker).toBeGreaterThan(-1);
+    expect(route.slice(marker - 400, marker + 1200)).toContain('catch');
+  });
+
+  it('adopts the case that is already there instead of booking it twice', () => {
+    const route = codeOf('src/app/api/surgeries/route.ts');
+    expect(route).toContain('alreadyBooked');
+  });
+
+  it('reads the answer to the fallback PATCH rather than sending and forgetting', () => {
+    const page = codeOf('src/app/dashboard/surgery-drafts/page.tsx');
+    expect(page).toContain('patch?.ok');
+  });
+
+  it('takes the card off the list the moment it is marked', () => {
+    // Rather than only after the reload comes back. On a weak connection that
+    // round trip is seconds long, and a card still showing a Publish button
+    // is an invitation to press it again.
+    const page = codeOf('src/app/dashboard/surgery-drafts/page.tsx');
+    expect(page).toContain("setDrafts((prev) => prev.filter((x) => x.id !== d.id))");
+  });
+
+  it('says so out loud when the plan would not close', () => {
+    const page = codeOf('src/app/dashboard/surgery-drafts/page.tsx');
+    expect(page).toContain('do not book it again');
+  });
+});

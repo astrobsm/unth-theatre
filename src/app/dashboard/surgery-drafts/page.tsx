@@ -591,21 +591,65 @@ export default function SurgeryDraftsPage() {
         throw new Error(created.error || 'The case could not be booked.');
       }
 
-      await fetch(`/api/surgery-drafts/${d.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'PUBLISHED',
-          publishedSurgeryId: created.id,
-          publishedForDate: choice.date,
-        }),
-      });
+      /**
+       * TAKING THE PLAN OFF THE PLANNED LIST.
+       *
+       * The booking route now does this itself, in the same request, and
+       * says so with draftMarked. This call is the fallback for the one
+       * case it cannot cover: an idempotent replay returns the stored
+       * response without ever reaching the marking code.
+       *
+       * Its answer is READ. It used to be sent and forgotten, so anything
+       * that stopped it left the case booked and the plan still sitting
+       * here with a Publish button on it -- which is exactly what was
+       * reported: cases on the 23 November list still showing as 'ready to
+       * publish'. A plan that will not come off the list is now said out
+       * loud instead of being left for somebody to notice.
+       */
+      let marked = created.draftMarked === true;
+      if (!marked) {
+        const patch = await fetch(`/api/surgery-drafts/${d.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'PUBLISHED',
+            publishedSurgeryId: created.id,
+            publishedForDate: choice.date,
+          }),
+        }).catch(() => null);
+        marked = Boolean(patch?.ok);
+      }
 
       setPublishing(null);
-      setNotice({
-        kind: 'ok',
-        text: `Booked for ${choice.date} at ${choice.time}. It is now on the surgery schedule for that date.`,
-      });
+
+      if (marked) {
+        // Gone from this list immediately, rather than after the reload
+        // below comes back. On a weak connection that round trip is seconds
+        // long, and a card that is still there with a Publish button on it
+        // is an invitation to press it again.
+        setDrafts((prev) => prev.filter((x) => x.id !== d.id));
+        setNotice({
+          kind: 'ok',
+          text: created.alreadyBooked
+            // The booking route found this patient's case already on the
+            // list for that day and closed the plan against it rather than
+            // booking a second one. Said plainly: "Booked" would be a lie
+            // about a case the theatre has had for days.
+            ? 'This case was already on the surgery schedule for that day, so no second '
+              + 'booking was made. The plan has now been closed against it and has come '
+              + 'off the planned list.'
+            : `Booked for ${choice.date} at ${choice.time}. It is now on the surgery schedule for that date, `
+              + 'and it has come off the planned list.',
+        });
+      } else {
+        setNotice({
+          kind: 'bad',
+          text: `The case IS booked for ${choice.date} at ${choice.time} — do not book it again. `
+            + 'What failed is marking the plan as published, so it is still showing below. '
+            + 'Press Publish on it once more when the connection is back; the booking will '
+            + 'not be repeated.',
+        });
+      }
       load();
     } catch (e) {
       setNotice({ kind: 'bad', text: e instanceof Error ? e.message : 'Could not publish.' });

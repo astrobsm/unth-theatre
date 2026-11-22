@@ -174,6 +174,23 @@ export function publishIdempotencyKey(draftId: string, scheduledDate: string): s
  */
 export function publishPayload(draft: ScheduleDraft, choice: PublishChoice): Record<string, unknown> {
   return {
+    /**
+     * THE PLAN THIS CASE CAME FROM, so the booking route can close the
+     * plan in the same request that opens the case.
+     *
+     * Publishing used to be two calls from the browser: book the case,
+     * then PATCH the plan to PUBLISHED. The second call was sent without
+     * its answer ever being read, so anything that stopped it -- a dropped
+     * network between the two, a refusal, a 500 -- left a case on the
+     * theatre list and the plan still sitting in Planned cases with a
+     * Publish button on it. That is what was reported: cases booked for
+     * 23 November still listed as 'ready to publish'.
+     *
+     * The PATCH is still sent as a fallback, because an idempotent replay
+     * returns the stored response without reaching the marking code. But
+     * the ordinary path is now one request that cannot half-finish.
+     */
+    fromDraftId: draft.id,
     patientId: text(draft.patientId),
     surgeonId: text(draft.surgeonId) || null,
     surgeonName: text(draft.surgeonName),

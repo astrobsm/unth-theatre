@@ -87,6 +87,15 @@ const surgerySchema = z.object({
     .min(5, 'A case takes at least 5 minutes')
     .max(24 * 60, 'That is longer than a day'),
   surgeryType: z.enum(['ELECTIVE', 'URGENT', 'EMERGENCY']).default('ELECTIVE'),
+  /**
+   * The planned case this booking came from, when it came from one.
+   *
+   * Nothing about the booking depends on it. It is here so the plan can be
+   * marked published in the SAME request that created the case, instead of
+   * in a second call from the browser whose answer nobody read -- which is
+   * how cases ended up booked and still showing in Planned cases.
+   */
+  fromDraftId: z.string().trim().min(1).nullish(),
   magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR', 'SUPER_MAJOR']).nullish(),
   anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
   needBloodTransfusion: z.boolean().default(false),
@@ -502,6 +511,83 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    /**
+     * A PLAN WHOSE CASE IS ALREADY ON THE LIST.
+     *
+     * Publishing used to be two calls, and the second one -- the one that
+     * takes the plan off Planned cases -- was sent without its answer being
+     * read. Anything that stopped it left the case booked and the plan still
+     * sitting there with a Publish button on it. Pressing that button is the
+     * obvious thing to do, and before this it would book the patient a second
+     * time whenever the date had been nudged, because the idempotency key is
+     * tied to the date.
+     *
+     * So a booking that names its plan first asks whether that plan's case
+     * already exists: the same patient, the same operation, the same day. If
+     * it does, that case is returned and the plan is closed against it. No
+     * second row, no second pack, no second patient on the morning list.
+     *
+     * Scoped to the fromDraftId path on purpose. A typed booking that happens
+     * to look like another one is a different question -- it has its own
+     * duplicate check further down, with its own allowDuplicate override --
+     * and this must not quietly start answering it.
+     */
+    if (validatedData.fromDraftId) {
+      const plan = await prisma.surgeryScheduleDraft.findUnique({
+        where: { id: validatedData.fromDraftId },
+        select: { id: true, publishedSurgeryId: true },
+      });
+
+      const planDay = new Date(validatedData.scheduledDate);
+      const dayFrom = new Date(planDay); dayFrom.setHours(0, 0, 0, 0);
+      const dayTo = new Date(planDay); dayTo.setHours(23, 59, 59, 999);
+
+      const already = plan?.publishedSurgeryId
+        ? await prisma.surgery.findFirst({
+          where: { id: plan.publishedSurgeryId, status: { notIn: ['CANCELLED'] } },
+        })
+        : await prisma.surgery.findFirst({
+          where: {
+            patientId: validatedData.patientId,
+            procedureName: validatedData.procedureName,
+            scheduledDate: { gte: dayFrom, lte: dayTo },
+            status: { notIn: ['CANCELLED'] },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+      if (already) {
+        // Close the plan against the case that is already there. updateMany
+        // so a plan that has gone missing between the two reads is a no-op
+        // rather than a throw.
+        let marked = false;
+        try {
+          await prisma.surgeryScheduleDraft.updateMany({
+            where: { id: validatedData.fromDraftId },
+            data: {
+              status: 'PUBLISHED',
+              publishedSurgeryId: already.id,
+              publishedForDate: already.scheduledDate,
+              publishedAt: new Date(),
+              publishedById: session.user.id ?? null,
+            },
+          });
+          marked = true;
+        } catch (e) {
+          console.error('[surgeries] could not close the plan against its existing case:', e);
+        }
+
+        return NextResponse.json({
+          ...already,
+          draftMarked: marked,
+          // So the page can say "it was already booked" rather than
+          // "booked", which would be a second message about a case the
+          // theatre has had on its list for days.
+          alreadyBooked: true,
+        }, { status: 200 });
+      }
+    }
+
     // EVERY key left in `surgeryData` is spread into prisma.surgery.create().
     // A field that the form sends but the Surgery model does not have must be
     // pulled out HERE, or Prisma rejects the whole call with
@@ -534,6 +620,11 @@ export async function POST(request: NextRequest) {
       hbSampleAt,
       deferOutstanding: _deferOutstanding,
       allowDuplicate: _allowDuplicate,
+      // An instruction to this handler, like the two above: which planned
+      // case to close once the booking exists. NOT a column on surgeries,
+      // so it has to come out of the spread or prisma.surgery.create()
+      // rejects the whole call with "Unknown argument".
+      fromDraftId: _fromDraftId,
       ...surgeryData
     } = validatedData;
 
@@ -1785,6 +1876,47 @@ export async function POST(request: NextRequest) {
       createdByName: (session?.user as { name?: string } | undefined)?.name ?? null,
     });
 
+    /**
+     * THE PLAN COMES OFF THE PLANNED LIST, HERE, NOW.
+     *
+     * Awaited, because the whole point is that the plan does not outlive
+     * the booking by even one page load. Never able to fail the booking:
+     * the case is created and real, and refusing a 201 over a list that
+     * did not tidy itself would be a far worse answer. What did happen is
+     * reported in the response as draftMarked, so the page can fall back
+     * to its PATCH rather than quietly leaving the plan there.
+     *
+     * Guarded on status: a plan already marked PUBLISHED is left exactly as
+     * it was, so a replay or a second press cannot rewrite which case it
+     * produced.
+     */
+    let draftMarked: boolean | null = null;
+    if (validatedData.fromDraftId) {
+      draftMarked = false;
+      try {
+        const marked = await prisma.surgeryScheduleDraft.updateMany({
+          where: { id: validatedData.fromDraftId, status: { not: 'PUBLISHED' } },
+          data: {
+            status: 'PUBLISHED',
+            publishedSurgeryId: surgery.id,
+            publishedForDate: surgery.scheduledDate,
+            publishedAt: new Date(),
+            publishedById: session.user.id ?? null,
+          },
+        });
+        // Nought rows is not a failure: it means the plan was already
+        // published, which is the state the caller wanted anyway.
+        draftMarked = true;
+        if (marked.count === 0) {
+          console.warn('[surgeries] plan %s was already published', validatedData.fromDraftId);
+        }
+      } catch (e) {
+        // Said out loud. A plan that silently stays on the list is the
+        // exact fault this block exists to end.
+        console.error('[surgeries] case booked but the plan was not marked published:', e);
+      }
+    }
+
     // The case IS booked. Say so, and say plainly what did not complete
     // alongside it, rather than choosing between a lie and a 500.
     //
@@ -1801,9 +1933,10 @@ export async function POST(request: NextRequest) {
         }
       : {};
 
+    const draftBody = draftMarked === null ? {} : { draftMarked };
     const responseBody = warnings.length
-      ? { ...surgery, ...outstandingBody, warnings }
-      : { ...surgery, ...outstandingBody };
+      ? { ...surgery, ...outstandingBody, ...draftBody, warnings }
+      : { ...surgery, ...outstandingBody, ...draftBody };
 
     await rememberResult(idemKey, 201, responseBody, 'POST /api/surgeries');
     return NextResponse.json(responseBody, { status: 201 });

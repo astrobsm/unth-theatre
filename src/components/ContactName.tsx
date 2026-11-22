@@ -14,8 +14,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Loader2, UserRound, MessageCircle } from 'lucide-react';
-import { whatsappChatLink } from '@/lib/whatsapp';
+import { X, Loader2, UserRound, MessageCircle, Phone } from 'lucide-react';
+import { whatsappChatLink, whatsappLink } from '@/lib/whatsapp';
+import { buildConsumableDepositMessage } from '@/lib/packs/patientPayNotice';
 
 interface Contact {
   label: string;
@@ -34,14 +35,38 @@ interface ContactInfo {
   contacts: Contact[];
 }
 
+/**
+ * What a tapped number should SAY, when there is something to say.
+ *
+ * Without this the popover opens a blank WhatsApp chat, which puts the whole
+ * message on whoever tapped it -- and the thing that has to be said is four
+ * specific instructions in a specific order (go to the consumable shop at the
+ * Emergency, pay by category, keep the receipt, bring the receipt). Typed out
+ * by hand on a phone, step three and four are the ones that get dropped, and
+ * they are the ones the case is held at the door over.
+ *
+ * Optional, and absent everywhere else: a staff member's number opens a plain
+ * chat exactly as it did before.
+ */
+export interface PayNotice {
+  patientName: string;
+  procedureName?: string | null;
+  /** The booked magnitude -- MAJOR, INTERMEDIATE, MINOR, SUPER_MAJOR. */
+  category?: string | null;
+  scheduledAt?: string | Date | null;
+  senderName?: string | null;
+}
+
 interface Props {
   type: 'patient' | 'user';
   name: string;
   id?: string;
   className?: string;
+  /** When given, each number offers the payment message and a call. */
+  payNotice?: PayNotice | null;
 }
 
-export default function ContactName({ type, name, id, className }: Props) {
+export default function ContactName({ type, name, id, className, payNotice }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<ContactInfo | null>(null);
@@ -145,23 +170,74 @@ export default function ContactName({ type, name, id, className }: Props) {
             <div className="text-amber-600 text-xs py-1">{error}</div>
           ) : info && info.contacts.length > 0 ? (
             <ul className="space-y-1.5">
-              {info.contacts.map((c, i) => (
-                <li key={i}>
-                  <a
-                    href={whatsappChatLink(c.phone) || `tel:${c.phone.replace(/\s+/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Chat on WhatsApp"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-800 font-medium"
-                  >
-                    <MessageCircle className="w-4 h-4 flex-shrink-0" />
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[11px] text-green-600 leading-tight">{c.label}: {c.name}</span>
-                      <span className="block truncate">{c.phone}</span>
-                    </span>
-                  </a>
-                </li>
-              ))}
+              {info.contacts.map((c, i) => {
+                const tel = `tel:${c.phone.replace(/\s+/g, '')}`;
+                /*
+                  WHO THE NUMBER BELONGS TO CHANGES THE WORDING. The contacts
+                  route returns the patient's own number and the caregiver's
+                  under different labels, and "you have materials to pay for"
+                  sent to somebody's son is wrong in a way that makes the
+                  hospital look careless. Anything that is not the patient's
+                  own line is written about them in the third person.
+                */
+                const owner = c.label.trim().toUpperCase() === 'PATIENT'
+                  ? 'PATIENT' as const
+                  : 'CAREGIVER' as const;
+                const payLink = payNotice
+                  ? whatsappLink(c.phone, buildConsumableDepositMessage({
+                    patientName: payNotice.patientName,
+                    owner,
+                    procedureName: payNotice.procedureName ?? null,
+                    category: payNotice.category ?? null,
+                    scheduledAt: payNotice.scheduledAt ?? null,
+                    senderName: payNotice.senderName ?? null,
+                  }))
+                  : null;
+                return (
+                  <li key={i}>
+                    <a
+                      href={payLink || whatsappChatLink(c.phone) || tel}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={payLink
+                        ? 'Send the payment and safety message on WhatsApp'
+                        : 'Chat on WhatsApp'}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-800 font-medium"
+                    >
+                      <MessageCircle className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[11px] text-green-600 leading-tight">{c.label}: {c.name}</span>
+                        <span className="block truncate">{c.phone}</span>
+                      </span>
+                    </a>
+                    {/*
+                      CALLING IS THE OTHER HALF OF THE ASK, and on these phones
+                      it is often the half that works: a number with no WhatsApp
+                      on it still rings. Shown as its own control rather than as
+                      a fallback inside the link above, because a fallback only
+                      helps the person who already knows it is there.
+                    */}
+                    {payNotice && (
+                      <div className="mt-1 flex gap-1.5">
+                        <a
+                          href={tel}
+                          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-100"
+                        >
+                          <Phone className="h-3 w-3" /> Call
+                        </a>
+                        <a
+                          href={whatsappChatLink(c.phone) || tel}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-200"
+                        >
+                          Blank chat
+                        </a>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <div className="text-gray-500 text-xs py-1">No phone number on file.</div>
