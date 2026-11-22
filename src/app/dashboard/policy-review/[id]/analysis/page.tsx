@@ -26,6 +26,11 @@ import {
   FileCheck2,
   FileText,
   Gavel,
+  PenLine,
+  KeyRound,
+  RotateCcw,
+  ClipboardCopy,
+  Send,
   Loader2,
   Pencil,
   ShieldAlert,
@@ -34,6 +39,30 @@ import {
 } from 'lucide-react';
 
 import PolicyMarkdown from '@/components/policy/PolicyMarkdown';
+
+interface Signoff {
+  id: string;
+  signerName: string;
+  signerRole: string | null;
+  signerUnit: string | null;
+  outcomeVersion: string | null;
+  sentAt: string | null;
+  openedAt: string | null;
+  revokedAt: string | null;
+  signedAt: string | null;
+  signedName: string | null;
+  standing: 'SIGNED' | 'STALE' | 'AWAITING' | 'WITHDRAWN';
+  standingLabel: string;
+}
+
+interface NewSignLink {
+  signoffId: string;
+  signerName: string;
+  url: string;
+  message: string;
+  whatsapp: string | null;
+  alreadySent?: boolean;
+}
 
 type Decision = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EDITED' | 'FOR_COMMITTEE';
 
@@ -109,6 +138,22 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+
+  /**
+   * Signatures on the revised policy.
+   *
+   * `newSignLinks` holds links the server has just returned. They are shown
+   * ONCE -- only each token's hash is stored -- so this state is the only
+   * chance to copy them, exactly as the review invitations work.
+   */
+  const [signoffs, setSignoffs] = useState<Signoff[]>([]);
+  const [signSentence, setSignSentence] = useState<string>('');
+  const [signEligible, setSignEligible] = useState(0);
+  const [signMissing, setSignMissing] = useState(0);
+  const [newSignLinks, setNewSignLinks] = useState<NewSignLink[] | null>(null);
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
+  const [copiedSign, setCopiedSign] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [version, setVersion] = useState('0.3');
@@ -313,6 +358,93 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
       setPdfError(e instanceof Error ? e.message : 'Could not build the PDF.');
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  /** Who has signed, and where each signature stands against the current text. */
+  const loadSignoffs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/signoffs`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      const body = await res.json();
+      setSignoffs(body.signoffs ?? []);
+      setSignSentence(body.sentence ?? '');
+      setSignEligible(body.eligible ?? 0);
+      setSignMissing(body.missingLinks ?? 0);
+    } catch {
+      // A failure here must not blank the analysis screen.
+    }
+  }, [params.id]);
+
+  useEffect(() => { void loadSignoffs(); }, [loadSignoffs]);
+
+  /** Issue signing links to every participant who does not have one. */
+  const sendForSignature = async () => {
+    setSignBusy(true);
+    setSignError(null);
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/signoffs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setSignError(body?.error ?? 'Could not create the signing links.');
+        return;
+      }
+      setNewSignLinks(body.created ?? []);
+      await loadSignoffs();
+    } catch {
+      setSignError('Could not create the signing links.');
+    } finally {
+      setSignBusy(false);
+    }
+  };
+
+  const changeSignoff = async (signoffId: string, action: 'reissue' | 'revoke' | 'restore') => {
+    setSignBusy(true);
+    setSignError(null);
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/signoffs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signoffId, action }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setSignError(body?.error ?? 'Could not change that signing link.');
+        return;
+      }
+      if (action === 'reissue') {
+        setNewSignLinks((prev) => [
+          ...(prev ?? []).filter((l) => l.signoffId !== body.signoffId),
+          {
+            signoffId: body.signoffId,
+            signerName: body.signerName,
+            url: body.url,
+            message: body.message,
+            whatsapp: body.whatsapp ?? null,
+          },
+        ]);
+      }
+      await loadSignoffs();
+    } catch {
+      setSignError('Could not change that signing link.');
+    } finally {
+      setSignBusy(false);
+    }
+  };
+
+  const copySign = async (text: string, tag: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedSign(tag);
+      setTimeout(() => setCopiedSign(null), 1800);
+    } catch {
+      setSignError('Could not copy — select the text and copy it by hand.');
     }
   };
 
@@ -818,6 +950,195 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
             <p className="mt-2 text-[11px] font-medium text-rose-700">{pdfError}</p>
           )}
         </div>
+      </section>
+
+      {/*
+        Signatures on the revised policy.
+
+        The round used to end at a recommendation nobody had endorsed, with the
+        endorsement happening in a WhatsApp thread. Only the members who
+        SUBMITTED a review are asked: a signature list padded with people who
+        never opened the draft tells Management the committee agreed when most
+        of it never looked.
+      */}
+      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+          <PenLine className="h-4 w-4" />
+          Signatures on the revised policy
+        </h2>
+        <p className="mt-1 text-xs text-slate-600">
+          {signSentence || 'Nobody has been asked to sign this document yet.'}
+        </p>
+
+        {newSignLinks && newSignLinks.length > 0 && (
+          <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3">
+            <p className="flex items-center gap-2 text-xs font-bold text-amber-900">
+              <ShieldAlert className="h-4 w-4" />
+              Copy these links now — they cannot be shown again
+            </p>
+            <ul className="mt-2 space-y-2">
+              {newSignLinks.map((l) => (
+                <li key={l.signoffId} className="rounded-lg border border-amber-200 bg-white p-2">
+                  <p className="text-xs font-semibold text-slate-900">{l.signerName}</p>
+                  {l.alreadySent ? (
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Already has a signing link — no second one was created.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mt-0.5 break-all font-mono text-[10px] text-slate-600">{l.url}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void copySign(l.url, `u-${l.signoffId}`)}
+                          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-medium"
+                        >
+                          {copiedSign === `u-${l.signoffId}` ? <Check className="h-3 w-3" /> : <ClipboardCopy className="h-3 w-3" />}
+                          Copy link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copySign(l.message, `m-${l.signoffId}`)}
+                          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-medium"
+                        >
+                          {copiedSign === `m-${l.signoffId}` ? <Check className="h-3 w-3" /> : <ClipboardCopy className="h-3 w-3" />}
+                          Copy message
+                        </button>
+                        {l.whatsapp && (
+                          <a
+                            href={l.whatsapp}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white"
+                          >
+                            <Send className="h-3 w-3" />
+                            Send on WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setNewSignLinks(null)}
+              className="mt-2 text-[11px] font-semibold text-amber-900 underline"
+            >
+              I have copied them
+            </button>
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void sendForSignature()}
+            disabled={signBusy || signEligible === 0}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            {signBusy ? 'Working…' : 'Send for signature'}
+          </button>
+          {signMissing > 0 && signoffs.length > 0 && (
+            <span className="text-[11px] font-medium text-amber-800">
+              {signMissing} participant(s) submitted later and have no link yet.
+            </span>
+          )}
+          {signEligible === 0 && (
+            <span className="text-[11px] text-slate-500">
+              Nobody has submitted a review, so there is nobody to ask.
+            </span>
+          )}
+        </div>
+
+        {signError && (
+          <p className="mt-2 text-[11px] font-medium text-rose-700">{signError}</p>
+        )}
+
+        {signoffs.length > 0 && (
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full text-xs">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Participant</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">State</th>
+                  <th className="px-3 py-2 text-right font-semibold text-slate-700">Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signoffs.map((sg) => (
+                  <tr key={sg.id} className="border-t border-slate-100">
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-slate-900">{sg.signerName}</p>
+                      {(sg.signerRole || sg.signerUnit) && (
+                        <p className="text-[11px] text-slate-500">
+                          {[sg.signerRole, sg.signerUnit].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {/*
+                        STALE is called out in amber rather than folded into
+                        "signed": it is the one state that looks like agreement
+                        and is not. They signed words that have since changed.
+                      */}
+                      <span
+                        className={
+                          sg.standing === 'SIGNED' ? 'font-medium text-emerald-700'
+                            : sg.standing === 'STALE' ? 'font-medium text-amber-800'
+                              : sg.standing === 'WITHDRAWN' ? 'text-rose-700'
+                                : 'text-slate-500'
+                        }
+                      >
+                        {sg.standingLabel}
+                      </span>
+                      {sg.signedName && (
+                        <p className="text-[11px] text-slate-500">as {sg.signedName}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void changeSignoff(sg.id, 'reissue')}
+                          disabled={signBusy}
+                          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-medium text-slate-700 disabled:opacity-50"
+                          title="Issue a new link. Any signature already given is kept."
+                        >
+                          <KeyRound className="h-3 w-3" />
+                          New link
+                        </button>
+                        {sg.revokedAt ? (
+                          <button
+                            type="button"
+                            onClick={() => void changeSignoff(sg.id, 'restore')}
+                            disabled={signBusy}
+                            className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-medium text-slate-700 disabled:opacity-50"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Restore
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void changeSignoff(sg.id, 'revoke')}
+                            disabled={signBusy}
+                            className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-medium text-rose-700 disabled:opacity-50"
+                          >
+                            <Ban className="h-3 w-3" />
+                            Withdraw
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {!run && (

@@ -21,6 +21,10 @@ import {
   rosterTableRows, ROSTER_COLUMNS,
 } from '@/lib/policy/roster';
 import { renderChangeLog, type ChangeLogEntry } from '@/lib/policy/finalProposal';
+import {
+  outcomeFingerprint, signatureStanding, standingLabel,
+  signoffSummary, signoffSentence,
+} from '@/lib/policy/signoff';
 
 export const dynamic = 'force-dynamic';
 
@@ -341,6 +345,32 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ? (proposal.changeLog as unknown as ChangeLogEntry[])
         : [];
 
+      // The committee's own signatures, as collected through the signing links.
+      //
+      // Each is reported against the fingerprint of the text it was given on, so
+      // a signature on an earlier draft is named as such rather than appearing
+      // on this document as though it endorsed these words. That distinction is
+      // the only thing that makes a signature page worth printing.
+      const signoffRows = await prisma.policySignoff.findMany({
+        where: { roundId: round.id },
+        orderBy: [{ signedAt: 'asc' }, { signerName: 'asc' }],
+        select: {
+          signerName: true, signerRole: true, signerUnit: true,
+          signedAt: true, signedName: true, signedFingerprint: true, revokedAt: true,
+        },
+      });
+      const currentFingerprint = outcomeFingerprint(proposal.body);
+      const withStanding = signoffRows.map((r) => ({
+        ...r,
+        standing: signatureStanding({
+          revokedAt: r.revokedAt,
+          signedAt: r.signedAt,
+          signedFingerprint: r.signedFingerprint,
+          currentFingerprint,
+        }),
+      }));
+      const signSummary = signoffSummary(withStanding.map((r) => r.standing));
+
       const md = [
         proposal.body,
         '',
@@ -349,6 +379,29 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         '## Change log',
         '',
         renderChangeLog(log),
+        '',
+        '## Endorsement by the Theatre Users Committee',
+        '',
+        signoffSentence(signSummary),
+        '',
+        ...(withStanding.length === 0
+          ? ['_The revised policy has not been sent out for signature yet._']
+          : [
+            '| Member | Signed as | Date | Standing |',
+            '| --- | --- | --- | --- |',
+            ...withStanding.map((r) => {
+              const who = [r.signerName, [r.signerRole, r.signerUnit]
+                .filter((v) => (v ?? '').trim() !== '').join(', ')]
+                .filter((v) => v !== '').join(' — ');
+              const day = r.signedAt ? r.signedAt.toISOString().slice(0, 10) : '—';
+              return `| ${who.replace(/\|/g, '\\|')} | ${(r.signedName ?? '—').replace(/\|/g, '\\|')} `
+                + `| ${day} | ${standingLabel(r.standing)} |`;
+            }),
+          ]),
+        '',
+        '> A signature is recorded against the exact text that was on screen when',
+        '> it was given. Any member shown as having signed an earlier version must',
+        '> sign again before that endorsement applies to this document.',
         '',
         '## Approval',
         '',

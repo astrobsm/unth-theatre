@@ -15359,6 +15359,67 @@ model PolicyFinalProposal {
   @@map("policy_final_proposals")
 }
 
+/// A participant signing the reviewed policy.
+///
+/// The round used to end at a recommendation nobody had endorsed; the
+/// endorsement happened in a WhatsApp thread. Only members who SUBMITTED a
+/// review are asked, because a signature list padded with people who never
+/// opened the draft tells Management the committee agreed when most of it
+/// never looked.
+///
+/// No relations: roundId, invitationId and finalProposalId are soft
+/// references, following every replicated table added since the 19 November
+/// stranding. A foreign key whose parent has not yet synced is a refused
+/// insert, retried for ever.
+model PolicySignoff {
+  id      String @id @default(uuid())
+  roundId String
+
+  /// Matches PolicyInvitation.id. One sign-off per participant per round.
+  invitationId String
+
+  /// Denormalised when the link was issued, so the signature page still
+  /// reads correctly if the invitation is later edited or withdrawn. A
+  /// signature list that silently re-labels itself is not a record.
+  signerName String
+  signerRole String?
+  signerUnit String?
+
+  /// Which published outcome they were asked to sign.
+  finalProposalId String?
+  outcomeVersion  String?
+
+  tokenHash String @unique
+
+  sentAt    DateTime?
+  openedAt  DateTime?
+  revokedAt DateTime?
+
+  /// The signature itself. signedName is what they typed; signatureImage is
+  /// what they drew.
+  signedAt       DateTime?
+  signedName     String?
+  signatureImage String?   @db.Text // base64 PNG data URL of the drawn signature
+
+  /// SHA-256 of the normalised text that was signed. A mismatch against the
+  /// current final proposal means this signature stands against an EARLIER
+  /// version, and it is reported as such rather than carried onto words
+  /// nobody agreed to.
+  signedFingerprint String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([roundId, invitationId])
+  @@index([roundId])
+  @@index([signedAt])
+  @@map("policy_signoffs")
+}
+
 /// A case a unit is planning, before it has a date.
 ///
 /// Not a surgery. Nothing here is on a list, holds a theatre, picks a pack

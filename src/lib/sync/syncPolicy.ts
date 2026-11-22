@@ -244,6 +244,7 @@ export const TABLE_POLICIES: TablePolicy[] = [
   { table: 'policy_analysis_runs', cls: 'CLOUD_AUTHORITATIVE', why: 'Each analysis run with its prompt version and token usage. Recomputed from the responses, and the cloud is where all of them are.' },
   { table: 'policy_proposed_changes', cls: 'CLOUD_AUTHORITATIVE', why: 'Proposals and the owner decision on each. An acceptance recorded on one node only would drop out of the final policy.' },
   { table: 'policy_final_proposals', cls: 'CLOUD_AUTHORITATIVE', why: 'The revised policy that goes to Management. Two nodes must never publish different versions of one policy.' },
+  { table: 'policy_signoffs', cls: 'CLOUD_AUTHORITATIVE', why: 'Each participant signature on the revised policy, with the fingerprint of the text they signed. The signing links point at the public node while the Chairman reads the list from inside the hospital, and a signature recorded on one node only would leave the endorsement page disagreeing with itself.' },
 
 
   { table: 'users', cls: 'CLOUD_AUTHORITATIVE', why: 'A merged or revoked account must not be resurrected by a stale local copy.' },
