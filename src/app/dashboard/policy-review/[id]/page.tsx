@@ -34,9 +34,16 @@ import {
   Sparkles,
   Square,
   CalendarClock,
+  KeyRound,
+  Ban,
+  RotateCcw,
   UserPlus,
   Users,
 } from 'lucide-react';
+import {
+  reissueRisk, reissueWarning, needsConfirmation,
+  bulkReissueTargets, bulkReissueSentence,
+} from '@/lib/policy/reissue';
 import {
   EXTENSION_PRESETS, DEFAULT_EXTENSION_HOURS, presetLabel,
   extendFrom, deadlinePassed, extensionProblem, deadlineText,
@@ -141,6 +148,17 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
   const [newClose, setNewClose] = useState('');
   const [bulk, setBulk] = useState('');
   const [newLinks, setNewLinks] = useState<NewLink[] | null>(null);
+  /**
+   * Replacing a lost link.
+   *
+   * `confirmId` holds the one invitation whose replacement needs saying out
+   * loud first -- a member who already has a working link. It is a separate
+   * piece of state rather than a window.confirm() because the warning differs
+   * per member (opened / submitted / withdrawn) and a browser dialog cannot
+   * show which.
+   */
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [showBulkReissue, setShowBulkReissue] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -250,6 +268,120 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
       await load();
     } catch {
       setError('Could not create the invitations.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * A fresh link for one member. The old one stops working immediately.
+   *
+   * The result goes into the SAME shown-once panel the invite flow uses, so
+   * there is one place on this page where a link is ever displayed and one
+   * set of copy buttons to learn. The page scrolls to it, because a link that
+   * appears above the fold the owner is looking at is a link nobody copies --
+   * and this one cannot be shown again either.
+   */
+  const reissue = async (invitationId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/invitations`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationId, action: 'reissue' }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body?.error ?? 'Could not issue a new link.');
+        return;
+      }
+      setNewLinks((prev) => [
+        ...(prev ?? []).filter((l) => l.invitationId !== body.invitationId),
+        {
+          invitationId: body.invitationId,
+          inviteeName: body.inviteeName,
+          url: body.url,
+          message: body.message,
+          whatsapp: body.whatsapp ?? null,
+        },
+      ]);
+      setConfirmId(null);
+      await load();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setError('Could not issue a new link.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Withdraw a member, or put them back. */
+  const setInviteState = async (invitationId: string, action: 'revoke' | 'restore') => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/invitations`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationId, action }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body?.error ?? 'Could not change that invitation.');
+        return;
+      }
+      await load();
+    } catch {
+      setError('Could not change that invitation.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Fresh links for everybody who never opened theirs.
+   *
+   * Sequential rather than Promise.all: each one is a token write, the list is
+   * at most the committee's size, and a partial failure half way through a
+   * parallel burst leaves the owner unable to tell which links are now live.
+   */
+  const bulkReissue = async () => {
+    const targets = bulkReissueTargets(invitations);
+    if (targets.length === 0) return;
+
+    setBusy(true);
+    setError(null);
+    const made: NewLink[] = [];
+    try {
+      for (const t of targets) {
+        const res = await fetch(`/api/policy/rounds/${params.id}/invitations`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invitationId: t.id, action: 'reissue' }),
+        });
+        if (!res.ok) continue;
+        const body = await res.json();
+        made.push({
+          invitationId: body.invitationId,
+          inviteeName: body.inviteeName,
+          url: body.url,
+          message: body.message,
+          whatsapp: body.whatsapp ?? null,
+        });
+      }
+      if (made.length === 0) {
+        setError('Could not issue the new links.');
+        return;
+      }
+      if (made.length < targets.length) {
+        setError(`Only ${made.length} of ${targets.length} links could be issued. `
+          + 'The ones below are live; try the rest again from the list.');
+      }
+      setNewLinks(made);
+      setShowBulkReissue(false);
+      await load();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setBusy(false);
     }
@@ -833,6 +965,63 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
               <Eye className="h-4 w-4" />
               Who was invited
             </h2>
+
+            {/*
+              Replacing links in bulk.
+
+              This is the case that actually happens: eleven names are pasted in,
+              eleven links appear in the amber panel, the panel is dismissed and
+              the links are gone -- they are stored only as hashes, so no screen
+              and no query can show them again. The button covers exactly the
+              members holding nothing, and says so, because over a roster that is
+              half-way through a review it otherwise reads as if it will disturb
+              everybody.
+            */}
+            {invitations.length > 0 && (
+              <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                {!showBulkReissue ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-slate-600">
+                      Lost the links? They are stored as hashes and cannot be shown again —
+                      but a fresh one can be issued for anybody who has not opened theirs.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkReissue(true)}
+                      disabled={busy || bulkReissueTargets(invitations).length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      Issue fresh links
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">Issue fresh links</p>
+                    <p className="mt-1 text-xs text-slate-700">
+                      {bulkReissueSentence(invitations)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void bulkReissue()}
+                        disabled={busy}
+                        className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        {busy ? 'Issuing…' : `Issue ${bulkReissueTargets(invitations).length} link(s)`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowBulkReissue(false)}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {invitations.length === 0 ? (
               <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-xs text-slate-500">
                 Nobody is invited yet.
@@ -845,6 +1034,7 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">Member</th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">Unit</th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">State</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700">Link</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -874,6 +1064,73 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                             </span>
                           ) : (
                             <span className="text-slate-500">not opened</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right align-top">
+                          {confirmId === i.id ? (
+                            // The warning for THIS member, not a generic one. What is at
+                            // stake differs: an unopened link costs nothing to replace, a
+                            // submitted member's link is how they would revise before the
+                            // deadline.
+                            <div className="inline-block max-w-xs rounded-lg border border-amber-300 bg-amber-50 p-2 text-left">
+                              <p className="text-[11px] text-amber-900">
+                                {reissueWarning(reissueRisk(i))}
+                              </p>
+                              <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => void reissue(i.id)}
+                                  disabled={busy}
+                                  className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
+                                >
+                                  Replace it
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmId(null)}
+                                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700"
+                                >
+                                  Keep
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (needsConfirmation(reissueRisk(i))) setConfirmId(i.id);
+                                  else void reissue(i.id);
+                                }}
+                                disabled={busy}
+                                className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 disabled:opacity-50"
+                                title={reissueWarning(reissueRisk(i)) ?? 'Issue a new link for this member'}
+                              >
+                                <KeyRound className="h-3 w-3" />
+                                New link
+                              </button>
+                              {i.revokedAt ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void setInviteState(i.id, 'restore')}
+                                  disabled={busy}
+                                  className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 disabled:opacity-50"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  Restore
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => void setInviteState(i.id, 'revoke')}
+                                  disabled={busy}
+                                  className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-rose-700 disabled:opacity-50"
+                                >
+                                  <Ban className="h-3 w-3" />
+                                  Withdraw
+                                </button>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>

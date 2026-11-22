@@ -16,6 +16,7 @@
 import prisma from '@/lib/prisma';
 
 import { attributionFor, type Attribution, type PolicyResultsVisibilityLike } from './access';
+import type { RosterInput } from './roster';
 
 export interface Participation {
   invited: number;
@@ -315,4 +316,69 @@ export async function flaggedCommentsFor(opts: {
       attributedTo: displayContributor(r.invitation, attribution),
       updatedAt: r.updatedAt.toISOString(),
     }));
+}
+
+/**
+ * Every invited member and how far each got, for the exported analysis.
+ *
+ * DELIBERATELY NOT participationFor(). That one filters revokedAt: null
+ * because it computes percentages for the dashboard. A roster must list
+ * everybody who was ASKED, withdrawals included and named as such -- the
+ * document is read to find out who did not respond, and an invitee quietly
+ * missing from the table is the one error in it nobody can detect.
+ *
+ * Names are resolved here through displayContributor() against the round own
+ * visibility setting, so a roster can never carry a name the round has not
+ * released.
+ */
+export async function rosterFor(
+  roundId: string,
+  attribution: Attribution,
+): Promise<{ rows: RosterInput[]; totalSections: number }> {
+  const round = await prisma.policyReviewRound.findUniqueOrThrow({
+    where: { id: roundId },
+    select: { documentId: true },
+  });
+
+  const invitations = await prisma.policyInvitation.findMany({
+    where: { roundId },
+    select: {
+      id: true,
+      inviteeName: true,
+      inviteeRole: true,
+      inviteeUnit: true,
+      openedAt: true,
+      submittedAt: true,
+      revokedAt: true,
+      selfEnrolled: true,
+    },
+  });
+
+  // One grouped count rather than a query per member: the committee is small,
+  // but this runs inside an export that already holds the whole round in
+  // memory, and N+1 here would be eleven round trips for one column.
+  const answered = await prisma.policySectionResponse.groupBy({
+    by: ['invitationId'],
+    where: { roundId },
+    _count: { _all: true },
+  });
+  const answeredBy = new Map<string, number>(
+    answered.map((a) => [a.invitationId, a._count._all]),
+  );
+
+  const totalSections = await prisma.policySection.count({
+    where: { documentId: round.documentId },
+  });
+
+  return {
+    totalSections,
+    rows: invitations.map((i) => ({
+      contributor: displayContributor(i, attribution),
+      openedAt: i.openedAt,
+      submittedAt: i.submittedAt,
+      revokedAt: i.revokedAt,
+      selfEnrolled: i.selfEnrolled,
+      answered: answeredBy.get(i.id) ?? 0,
+    })),
+  };
 }

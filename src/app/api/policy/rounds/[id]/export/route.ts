@@ -15,7 +15,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requirePolicyViewer } from '@/lib/policy/guard';
 import { attributionFor } from '@/lib/policy/access';
-import { displayContributor } from '@/lib/policy/owner';
+import { displayContributor, rosterFor } from '@/lib/policy/owner';
+import {
+  withLevels, rosterSummary, rosterSentence, rosterMarkdown,
+  rosterTableRows, ROSTER_COLUMNS,
+} from '@/lib/policy/roster';
 import { renderChangeLog, type ChangeLogEntry } from '@/lib/policy/finalProposal';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +53,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (error || !actor) return error;
 
   try {
-    const format = new URL(request.url).searchParams.get('format') ?? 'responses';
+    const sp = new URL(request.url).searchParams;
+    const format = sp.get('format') ?? 'responses';
+    // `as` picks the carrier, `format` picks the document. Keeping them apart
+    // means the PDF and the Markdown are the same document built from one set
+    // of figures, rather than two formats that can drift.
+    const as = (sp.get('as') ?? 'md').toLowerCase();
 
     const round = await prisma.policyReviewRound.findUnique({
       where: { id: params.id },
@@ -203,6 +212,40 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       };
       const s = output.synthesis ?? {};
 
+      // The roster travels WITH the findings. Management's first question of
+      // any committee recommendation is how much of the committee stood behind
+      // it, and before this it was answerable only from a screen in the app
+      // that nobody holding the report could reach.
+      const { rows, totalSections } = await rosterFor(round.id, attribution);
+      const roster = withLevels(rows);
+      const summary = rosterSummary(roster);
+
+      // The PDF is drawn in the browser -- jsPDF's default export is not a
+      // constructor under Node, and institutionalPdf.ts is shared with the
+      // estimate document, so it is not being reshaped for this. The client
+      // asks for the same document as JSON and draws it on the letterhead.
+      if (as === 'json') {
+        return NextResponse.json({
+          title: round.document?.title ?? 'Theatre policy',
+          version: round.version,
+          closesAt: round.closesAt.toISOString(),
+          model: run.model,
+          promptVersion: run.promptVersion,
+          runAt: run.startedAt?.toISOString() ?? null,
+          attribution,
+          synthesis: s,
+          inconsistencies: output.crossSection?.inconsistencies ?? [],
+          roster: {
+            columns: ROSTER_COLUMNS,
+            rows: rosterTableRows(roster, totalSections),
+            totalSections,
+            summary,
+            sentence: rosterSentence(summary),
+          },
+          filenameStem: `${name}-synthesis-${stamp}`,
+        }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+
       const md = [
         `# ${round.document?.title ?? 'Theatre policy'} — review synthesis`,
         '',
@@ -256,6 +299,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ...(s.for_the_meeting?.length
           ? s.for_the_meeting.map((f) => `- ${f}`)
           : ['_Nothing outstanding._']),
+        '',
+        '## Who was invited, and who took part',
+        '',
+        rosterSentence(summary),
+        '',
+        rosterMarkdown(roster, totalSections),
+        '',
+        '> Participation counts submitted reviews only. Opening the link is not',
+        '> counted as taking part, and withdrawn invitations are listed but left',
+        '> out of the rate.',
         '',
       ].join('\n');
 
@@ -311,8 +364,58 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return asFile(md, 'text/markdown', `${name}-v${proposal.version}-${stamp}.md`);
     }
 
+    // -- The roster on its own --------------------------------------
+    //
+    // The same table the synthesis carries, for the meeting papers and for
+    // the covering memo, where the findings are not wanted but the question
+    // "who was consulted" always is.
+    if (format === 'roster') {
+      const { rows, totalSections } = await rosterFor(round.id, attribution);
+      const roster = withLevels(rows);
+      const summary = rosterSummary(roster);
+
+      await audit('exported participation roster');
+
+      if (as === 'csv') {
+        const out: unknown[][] = [[...ROSTER_COLUMNS]];
+        for (const r of rosterTableRows(roster, totalSections)) out.push(r);
+        return asFile(csv(out), 'text/csv', `${name}-participation-${stamp}.csv`);
+      }
+
+      if (as === 'json') {
+        return NextResponse.json({
+          title: round.document?.title ?? 'Theatre policy',
+          version: round.version,
+          closesAt: round.closesAt.toISOString(),
+          attribution,
+          roster: {
+            columns: ROSTER_COLUMNS,
+            rows: rosterTableRows(roster, totalSections),
+            totalSections,
+            summary,
+            sentence: rosterSentence(summary),
+          },
+          filenameStem: `${name}-participation-${stamp}`,
+        }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+
+      const md = [
+        `# ${round.document?.title ?? 'Theatre policy'} — participation`,
+        '',
+        `Version under review: ${round.version}`,
+        `Round closed: ${round.closesAt.toISOString().slice(0, 10)}`,
+        '',
+        rosterSentence(summary),
+        '',
+        rosterMarkdown(roster, totalSections),
+        '',
+      ].join('\n');
+
+      return asFile(md, 'text/markdown', `${name}-participation-${stamp}.md`);
+    }
+
     return NextResponse.json(
-      { error: 'Unknown format. Use responses, synthesis or final.' },
+      { error: 'Unknown format. Use responses, synthesis, roster or final.' },
       { status: 400 },
     );
   } catch (err) {

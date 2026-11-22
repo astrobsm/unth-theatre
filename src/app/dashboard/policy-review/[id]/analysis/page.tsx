@@ -24,6 +24,7 @@ import {
   CircleDollarSign,
   Download,
   FileCheck2,
+  FileText,
   Gavel,
   Loader2,
   Pencil,
@@ -106,6 +107,8 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   { analysed: number; remaining: number; costCents: number } | null
   >(null);
   const [editing, setEditing] = useState<Record<string, string>>({});
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [version, setVersion] = useState('0.3');
@@ -268,6 +271,50 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
 
   const counted = (decision: Decision) => changes.filter((c) => c.ownerDecision === decision).length;
   const synthesis = run?.output?.synthesis;
+
+  /**
+   * The synthesis on the hospital letterhead.
+   *
+   * Two steps on purpose. The route decides what the document SAYS -- it
+   * applies the round’s attribution setting, builds the roster and writes the
+   * audit entry -- and hands back the figures as JSON. This only draws them.
+   * So the PDF cannot show a name the Markdown would have withheld, and the
+   * two carriers cannot drift apart.
+   *
+   * jsPDF is imported here rather than at the top of the file so it stays out
+   * of the page bundle until somebody asks for a document; the estimate screen
+   * does the same. It matters on a theatre phone.
+   */
+  const downloadSynthesisPdf = async () => {
+    setPdfBusy(true);
+    setPdfError(null);
+    try {
+      const res = await fetch(
+        `/api/policy/rounds/${params.id}/export?format=synthesis&as=json`,
+        { cache: 'no-store' },
+      );
+      const body = await res.json();
+      if (!res.ok) {
+        setPdfError(body?.error ?? 'Could not build the PDF.');
+        return;
+      }
+
+      const { buildSynthesisPdf, synthesisFileName } = await import(
+        '@/lib/policy/synthesisPdf'
+      );
+      const blob = await buildSynthesisPdf(body);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = synthesisFileName(body);
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : 'Could not build the PDF.');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -717,21 +764,59 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-          {[
-            ['final', 'Revised policy + change log'],
-            ['synthesis', 'Synthesis report'],
-            ['responses', 'All responses (CSV)'],
-          ].map(([format, label]) => (
+        {/*
+          Markdown AND pdf, from one set of figures.
+
+          Markdown is what the next draft is written from -- it diffs and it
+          pastes. It is the wrong thing to hand a Chief Medical Director, so the
+          same document is also drawn on the hospital letterhead. The PDF is
+          built in the browser from `as=json` because jsPDF's default export is
+          not a constructor under Node; see src/lib/policy/synthesisPdf.ts.
+        */}
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Download
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void downloadSynthesisPdf()}
+              disabled={pdfBusy}
+              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              {pdfBusy ? 'Building…' : 'Synthesis (PDF)'}
+            </button>
+            {[
+              ['synthesis', 'Synthesis (Markdown)'],
+              ['final', 'Revised policy + change log (Markdown)'],
+              ['roster', 'Participation roster (Markdown)'],
+              ['responses', 'All responses (CSV)'],
+            ].map(([format, label]) => (
+              <a
+                key={format}
+                href={`/api/policy/rounds/${params.id}/export?format=${format}`}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {label}
+              </a>
+            ))}
             <a
-              key={format}
-              href={`/api/policy/rounds/${params.id}/export?format=${format}`}
+              href={`/api/policy/rounds/${params.id}/export?format=roster&as=csv`}
               className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700"
             >
               <Download className="h-3.5 w-3.5" />
-              {label}
+              Participation roster (CSV)
             </a>
-          ))}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-500">
+            Every download names each invited member and how far they got, and is
+            recorded in the audit trail.
+          </p>
+          {pdfError && (
+            <p className="mt-2 text-[11px] font-medium text-rose-700">{pdfError}</p>
+          )}
         </div>
       </section>
 
