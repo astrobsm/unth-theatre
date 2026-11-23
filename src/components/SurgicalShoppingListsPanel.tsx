@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { isNarcotic } from '@/lib/narcotics';
 import { whatsappChatLink } from '@/lib/whatsapp';
+import DepositPanel, { type CollectionRow, type DepositRow } from '@/components/deposits/DepositPanel';
+import { categoryLabel } from '@/lib/deposits/depositBands';
 
 type PackStatus = 'REQUESTED' | 'PACKING' | 'PACKED' | 'DELIVERED' | 'CANCELLED';
 
@@ -54,7 +56,8 @@ interface DDRequest {
     theatreLocation?: string | null;
     scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
     surgeryType?: string | null;
-    patient: { name: string; folderNumber?: string | null };
+    magnitude?: string | null;
+    patient: { name: string; folderNumber?: string | null; ward?: string | null };
   };
 }
 
@@ -62,6 +65,12 @@ interface Props {
   fromDate: string; // YYYY-MM-DD
   toDate: string;
   canPack: boolean;
+  /**
+   * Whether this viewer may record the pharmacy deposit and sign drugs out.
+   * Separate from canPack: packing a box and saying money changed hands are
+   * different authorities, and the API checks the second one itself.
+   */
+  canRecordDeposits?: boolean;
 }
 
 const STATUS_FILTERS: { value: PackStatus | 'ALL'; label: string }[] = [
@@ -82,8 +91,14 @@ const statusBadgeClass = (s: PackStatus) => {
   }
 };
 
-export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }: Props) {
+export default function SurgicalShoppingListsPanel({
+  fromDate, toDate, canPack, canRecordDeposits = false,
+}: Props) {
   const [items, setItems] = useState<DDRequest[]>([]);
+  // Deposits for the whole range, fetched once rather than once per card.
+  const [bands, setBands] = useState<Record<string, string | null> | null>(null);
+  const [deposits, setDeposits] = useState<DepositRow[]>([]);
+  const [collections, setCollections] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<PackStatus | 'ALL'>('ALL');
@@ -163,6 +178,37 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
       setBusy(b => ({ ...b, [id]: false }));
     }
   };
+
+  /**
+   * The money, for every case on screen.
+   *
+   * Keyed on the surgery ids actually listed rather than on a date, because
+   * this panel takes a RANGE and the deposits endpoint takes a day. Asking by
+   * id also means a case that falls outside the pharmacy's date window but is
+   * still on this list cannot quietly lose its payment panel.
+   */
+  const loadDeposits = useCallback(async () => {
+    const ids = Array.from(new Set(items.map((i) => i.surgeryId))).filter(Boolean);
+    if (!ids.length) {
+      setDeposits([]);
+      setCollections([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/surgery-deposits?surgeryIds=${ids.join(',')}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      const d = await res.json();
+      setBands(d.settings ?? null);
+      setDeposits(d.deposits ?? []);
+      setCollections(d.collections ?? []);
+    } catch {
+      /* the lists still render; only the money panel goes quiet */
+    }
+  }, [items]);
+
+  useEffect(() => { void loadDeposits(); }, [loadDeposits]);
 
   return (
     <section className="bg-white rounded-lg shadow-sm mb-6 overflow-hidden border border-blue-100">
@@ -272,6 +318,23 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
                       <div className="text-xs text-gray-500 mt-0.5">
                         Scheduled: {dt.toLocaleDateString()}{surgery.scheduledTime ? ` · ${surgery.scheduledTime}` : ''}
                       </div>
+                      {/* Where the patient is, and how big the operation is.
+                          The first says which ward to send to, the second is
+                          what the deposit band is read from. */}
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="inline-flex items-center rounded border border-teal-300 bg-teal-50 px-2 py-0.5 font-semibold text-teal-900">
+                          Ward: {surgery.patient.ward || 'not recorded'}
+                        </span>
+                        {categoryLabel(surgery.magnitude) ? (
+                          <span className="inline-flex items-center rounded border border-indigo-300 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-900">
+                            {categoryLabel(surgery.magnitude)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-900">
+                            No operative magnitude on this booking
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs">
                         <div className="text-blue-900">
                           <span className="font-semibold">Theatre:</span> {theatreName}
@@ -304,6 +367,20 @@ export default function SurgicalShoppingListsPanel({ fromDate, toDate, canPack }
                   </div>
                   <span className="text-xs text-gray-500 whitespace-nowrap">{gItems.length} item{gItems.length === 1 ? '' : 's'}</span>
                 </button>
+
+                {/* Outside the header button on purpose: a button inside a
+                    button is invalid, and every click in here would collapse
+                    the card instead of recording a payment. */}
+                <DepositPanel
+                  surgeryId={surgery.id}
+                  magnitude={surgery.magnitude ?? null}
+                  kind="PHARMACY"
+                  settings={bands}
+                  deposit={deposits.find((d) => d.surgeryId === surgery.id && d.kind === 'PHARMACY') ?? null}
+                  collections={collections.filter((c) => c.surgeryId === surgery.id)}
+                  canWrite={canRecordDeposits}
+                  onChanged={loadDeposits}
+                />
 
                 {isOpen && (
                   <div className="mt-3 overflow-x-auto">

@@ -14400,9 +14400,14 @@ model TheatreSetting {
   minorConsumableFee        Decimal? @db.Decimal(12, 2)
   intermediateConsumableFee Decimal? @db.Decimal(12, 2)
   majorConsumableFee        Decimal? @db.Decimal(12, 2)
+  /// SUPER MAJOR was missing until 23 November 2026, so the heaviest cases in
+  /// the theatre -- the ones with the largest deposit -- were the ones with no
+  /// band at all, and the screen said "not set" for every one of them.
+  superMajorConsumableFee   Decimal? @db.Decimal(12, 2)
   minorPharmacyFee          Decimal? @db.Decimal(12, 2)
   intermediatePharmacyFee   Decimal? @db.Decimal(12, 2)
   majorPharmacyFee          Decimal? @db.Decimal(12, 2)
+  superMajorPharmacyFee     Decimal? @db.Decimal(12, 2)
 
   updatedAt     DateTime @updatedAt
   updatedById   String?
@@ -15592,4 +15597,119 @@ model SurgeryScheduleDraft {
   @@index([status])
   @@index([publishedSurgeryId])
   @@map("surgery_schedule_drafts")
+}
+
+/// =============================================================================
+/// What a patient was asked to pay for one case, and whether they have.
+/// -----------------------------------------------------------------------------
+/// TWO ROWS PER CASE AT MOST: the consumable deposit (surgical pack AND
+/// anaesthetic consumables) and the pharmacy deposit (surgical drugs AND
+/// anaesthetic drugs). That is how the hospital prices it -- one figure each,
+/// by operative magnitude -- so a third row would be a number nobody at the
+/// counter is collecting.
+///
+/// THE BAND IS SNAPSHOTTED. expectedAmount and magnitudeAtPricing record what
+/// was in force when the deposit was raised. Reading the live tariff instead
+/// would silently rewrite what a patient was told to pay the moment an
+/// administrator edits Settings, and a receipt in a patient's hand would stop
+/// matching the record.
+///
+/// NO FOREIGN KEY on surgeryId, like every replicated table added since the 19
+/// November stranding: a FK whose parent has not yet synced is not a delayed
+/// insert, it is a refused one, retried for ever.
+/// =============================================================================
+model SurgeryDeposit {
+  id        String @id @default(uuid())
+  surgeryId String
+
+  /// CONSUMABLE | PHARMACY. See src/lib/deposits/depositBands.ts.
+  kind String
+
+  /// REQUESTED | PAID | COLLECTED | WAIVED. Forwards only; canAdvance() owns
+  /// the rule and the API refuses anything else by name.
+  status String @default("REQUESTED")
+
+  /// The band, and the magnitude it was read from, as they stood when raised.
+  expectedAmount     Decimal? @db.Decimal(12, 2)
+  magnitudeAtPricing String?
+
+  /// The payment itself. amountPaid is kept separate from expectedAmount
+  /// because part payments happen and a row that stores only "paid" cannot
+  /// show the shortfall to the person who has to chase it.
+  amountPaid         Decimal?  @db.Decimal(12, 2)
+  receiptNumber      String?
+  paidAt             DateTime?
+  paidRecordedById   String?
+  paidRecordedByName String?
+
+  /// A deposit the hospital decided not to collect. Recorded, never silent.
+  waivedAt     DateTime?
+  waivedById   String?
+  waivedByName String?
+  waivedReason String?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([surgeryId, kind])
+  @@index([surgeryId])
+  @@index([status])
+  @@map("surgery_deposits")
+}
+
+/// =============================================================================
+/// Who carried the pack away.
+/// -----------------------------------------------------------------------------
+/// One payment is collected in two parts by two different people: the scrub
+/// nurse signs for the surgical half, the anaesthetist on the case signs for
+/// the anaesthetic half. "The theatre collected it" is not a name anybody can
+/// be asked about afterwards, and the anaesthetic half is where the controlled
+/// drugs are.
+///
+/// collectedByName is a SNAPSHOT as well as a link. A staff member can be
+/// renamed, deactivated or merged, and a handover record that then reads
+/// "unknown user" is not a record of who took the drugs.
+/// =============================================================================
+model SurgeryPackCollection {
+  id        String @id @default(uuid())
+  surgeryId String
+
+  /// SURGICAL_CONSUMABLES | ANAESTHETIC_CONSUMABLES | SURGICAL_DRUGS |
+  /// ANAESTHETIC_DRUGS. One row per stream per case.
+  stream String
+
+  /// Which deposit this half belongs to: CONSUMABLE | PHARMACY. Denormalised
+  /// so the ward desk can answer "is the pharmacy half out?" without owning a
+  /// copy of the stream-to-deposit mapping.
+  kind String
+
+  /// The person who took it.
+  collectedById   String?
+  collectedByName String?
+  /// SCRUB_NURSE | ANAESTHETIST -- the entitlement, not the account's role.
+  collectorKind   String?
+  collectedAt     DateTime?
+
+  /// Who stood at the counter and recorded it. Rarely the same person.
+  recordedById   String?
+  recordedByName String?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncVersion Int     @default(0) @map("sync_version")
+  syncOrigin  String? @map("sync_origin")
+  syncHlc     String? @map("sync_hlc")
+
+  @@unique([surgeryId, stream])
+  @@index([surgeryId])
+  @@map("surgery_pack_collections")
 }

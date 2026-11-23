@@ -25,9 +25,11 @@ const FEE_FIELDS = [
   'minorConsumableFee',
   'intermediateConsumableFee',
   'majorConsumableFee',
+  'superMajorConsumableFee',
   'minorPharmacyFee',
   'intermediatePharmacyFee',
   'majorPharmacyFee',
+  'superMajorPharmacyFee',
 ] as const;
 
 /** Ensure the singleton exists, so no caller has to cope with its absence. */

@@ -16,9 +16,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   BedDouble, RefreshCw, AlertTriangle, CheckCircle2, Clock, Send,
-  Save, UserCheck, Info,
+  Save, UserCheck, Info, Banknote, Package, Stethoscope,
 } from 'lucide-react';
 import { WARD_DESK_DUTIES, canReleasePatient } from '@/lib/ward/nurseInCharge';
+import { categoryLabel, naira, depositView, type DepositKind } from '@/lib/deposits/depositBands';
 
 interface CallUp {
   id: string;
@@ -55,14 +56,38 @@ interface WardCase {
   location: string | null;
   surgeonName: string | null;
   callUp: CallUp | null;
+
+  /** Read-only on this page. The ward never records a payment. */
+  deposits: {
+    kind: string;
+    status: string;
+    expectedAmount: string | null;
+    amountPaid: string | null;
+    receiptNumber: string | null;
+    paidAt: string | null;
+  }[];
+  collections: { stream: string; collectedByName: string | null; collectedAt: string | null }[];
+  consumables: { total: number; ready: number };
+  drugs: { total: number; ready: number };
+  review: {
+    anaesthetist: string | null;
+    reassigned: boolean;
+    reviewedAt: string | null;
+    handedBack: boolean;
+    patientAbsent: boolean;
+    lapsed: boolean;
+  } | null;
 }
 
 interface DeskResponse {
   ward: string | null;
-  viewingAs: 'own' | 'chosen' | 'none';
+  viewingAs: 'own' | 'chosen' | 'all' | 'none';
+  canChooseWard?: boolean;
   nurseName?: string;
   role?: string;
   reason?: string;
+  date?: string | null;
+  settings?: Record<string, string | null> | null;
   cases: WardCase[];
 }
 
@@ -96,9 +121,112 @@ const dayLabel = (iso: string): string => {
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
+
+/**
+ * The four things a ward nurse used to find out by telephone.
+ *
+ * Has the deposit been paid, are the consumables packed, are the drugs
+ * packed, and has the anaesthetist seen the patient -- plus who that
+ * anaesthetist is, because "an anaesthetist will come" is not a name anybody
+ * can ring at eight in the evening.
+ *
+ * READ-ONLY, DELIBERATELY. The ward does not record payments and does not
+ * pack anything. Showing a control here that the API would refuse would be a
+ * lie; showing the facts is the whole job.
+ *
+ * NOT PAID IS SHOWN IN RED, AND SO IS NOT REVIEWED. Both stop a patient going
+ * to theatre, and a nurse scanning twenty cards needs the two that will be
+ * turned away at the door to be the two that catch the eye.
+ */
+function WardReadiness({
+  c, settings,
+}: {
+  c: WardCase;
+  settings: Record<string, string | null> | null;
+}) {
+  const chip = (tone: 'good' | 'bad' | 'wait', text: string, Icon: any, title?: string) => (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 font-semibold ${
+        tone === 'good'
+          ? 'border-green-300 bg-green-50 text-green-900'
+          : tone === 'bad'
+            ? 'border-red-300 bg-red-50 text-red-900'
+            : 'border-amber-300 bg-amber-50 text-amber-900'
+      }`}
+    >
+      <Icon className="h-3 w-3" /> {text}
+    </span>
+  );
+
+  const money = (kind: DepositKind, label: string) => {
+    const row = c.deposits.find((d) => d.kind === kind) ?? null;
+    const status = (row?.status ?? 'REQUESTED') as any;
+    const view = depositView(settings, kind, c.magnitude, status);
+    const amount = row?.amountPaid ?? row?.expectedAmount ?? (view.expected != null ? String(view.expected) : null);
+    const shown = amount == null ? '' : ` ${naira(Number(amount))}`;
+
+    if (status === 'COLLECTED') return chip('good', `${label} collected`, Banknote);
+    if (status === 'PAID') {
+      return chip('good', `${label} paid${shown}`, Banknote,
+        row?.receiptNumber ? `Receipt ${row.receiptNumber}` : 'No receipt number recorded');
+    }
+    if (status === 'WAIVED') return chip('wait', `${label} waived`, Banknote);
+    return chip('bad', `${label} NOT PAID${shown}`, Banknote,
+      view.noAmountReason ?? 'The patient has not paid this deposit yet.');
+  };
+
+  const supplies = (n: { total: number; ready: number }, label: string) => {
+    if (n.total === 0) return chip('wait', `No ${label} list`, Package, `Nothing was selected at booking.`);
+    if (n.ready >= n.total) return chip('good', `${label} ready (${n.ready}/${n.total})`, Package);
+    return chip('bad', `${label} ${n.ready}/${n.total} packed`, Package);
+  };
+
+  const review = () => {
+    const r = c.review;
+    if (!r) return chip('wait', 'No review assigned', Stethoscope, 'Nobody has been named to review this patient.');
+    const who = r.anaesthetist ? ` — ${r.anaesthetist}${r.reassigned ? ' (reassigned)' : ''}` : ' — nobody named';
+    if (r.reviewedAt) return chip('good', `Reviewed${who}`, Stethoscope);
+    if (r.patientAbsent) return chip('bad', `Patient not found in ward${who}`, Stethoscope,
+      'The anaesthetist attended and the patient was not here. This is NOT a review.');
+    if (r.lapsed) return chip('bad', `Review LAPSED${who}`, Stethoscope);
+    if (r.handedBack) return chip('bad', `Handed back — awaiting a replacement`, Stethoscope);
+    return chip('bad', `Not reviewed${who}`, Stethoscope);
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+      {money('CONSUMABLE', 'Consumables')}
+      {money('PHARMACY', 'Pharmacy')}
+      {supplies(c.consumables, 'Consumables')}
+      {supplies(c.drugs, 'Drugs')}
+      {review()}
+    </div>
+  );
+}
+
+/** YYYY-MM-DD for the handset's own day, not UTC's. */
+function todayValue(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 export default function WardDeskPage() {
   const [data, setData] = useState<DeskResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  /**
+   * Which ward and which day.
+   *
+   * Both empty by default, which means "whatever the server decides" — a
+   * posted nurse's own ward and the rolling five-day window. A ward nurse
+   * never sees these controls; they exist for the administrator and the
+   * theatre manager, who have no posting of their own.
+   */
+  const [wardChoice, setWardChoice] = useState<string>('');
+  const [dateChoice, setDateChoice] = useState<string>('');
+  const [wardList, setWardList] = useState<string[]>([]);
   const [forms, setForms] = useState<Record<string, FormState>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +235,10 @@ export default function WardDeskPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/ward-desk');
+      const qs = new URLSearchParams();
+      if (wardChoice) qs.set('ward', wardChoice);
+      if (dateChoice) qs.set('date', dateChoice);
+      const res = await fetch(`/api/ward-desk${qs.toString() ? `?${qs}` : ''}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Could not load your ward');
       setData(json as DeskResponse);
@@ -131,9 +262,19 @@ export default function WardDeskPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [wardChoice, dateChoice]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The ward list, for the chooser. Fetched once; it is a short static list.
+  useEffect(() => {
+    let alive = true;
+    void fetch('/api/wards')
+      .then((r) => (r.ok ? r.json() : { wards: [] }))
+      .then((j) => alive && setWardList(Array.isArray(j?.wards) ? j.wards : []))
+      .catch(() => { /* the chooser falls back to All wards only */ });
+    return () => { alive = false; };
+  }, []);
 
   const patch = async (callUpId: string, extra: Record<string, unknown>, note: string) => {
     const f = forms[callUpId] ?? { arrived: '', departed: '', nurseName: '', notes: '' };
@@ -181,11 +322,33 @@ export default function WardDeskPage() {
               <h2 className="font-semibold text-amber-900">No ward is set on your account</h2>
               <p className="text-sm text-amber-900/90 mt-2">{data.reason}</p>
               <p className="text-sm text-amber-900/80 mt-3">
-                This page is empty on purpose. It would be easy to show you every
-                ward in the hospital instead, and that is exactly what must not
-                happen: you would be recording handovers for patients who are not
-                yours.
+                {data.canChooseWard
+                  ? 'Your account is not posted to a ward, so there is no ward this desk belongs to. Choose one below, or look at every ward at once.'
+                  : 'This page is empty on purpose. It would be easy to show you every ward in the hospital instead, and that is exactly what must not happen: you would be recording handovers for patients who are not yours.'}
               </p>
+
+              {/* An administrator used to be shown this explanation and given
+                  nothing to do about it. The restriction is on POSTED nurses,
+                  who never reach this branch. */}
+              {data.canChooseWard && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <select
+                    value={wardChoice}
+                    onChange={(e) => setWardChoice(e.target.value)}
+                    className="rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Choose a ward…</option>
+                    <option value="ALL">All wards</option>
+                    {wardList.map((w) => <option key={w} value={w}>{w}</option>)}
+                  </select>
+                  <button
+                    onClick={() => setWardChoice('ALL')}
+                    className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+                  >
+                    Show every ward
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -208,7 +371,9 @@ export default function WardDeskPage() {
             <BedDouble className="w-8 h-8 text-teal-600" /> Ward Desk
           </h1>
           <p className="text-gray-600 mt-1">
-            {data?.ward ? (
+            {data?.viewingAs === 'all' ? (
+              <>Theatre cases in <b>every ward</b></>
+            ) : data?.ward ? (
               <>
                 Theatre cases for <b>{data.ward}</b>
                 {data.viewingAs === 'chosen' && (
@@ -218,15 +383,58 @@ export default function WardDeskPage() {
             ) : (
               'Loading your ward…'
             )}
+            {data?.date ? <> on <b>{data.date}</b></> : <> · yesterday to four days ahead</>}
           </p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Ward and day. A posted nurse never sees the ward control --
+              canChooseWard is decided by the server from the ROLE, not from
+              the presence of a posting, so a nurse cannot reach another
+              ward's handovers by clearing their own. */}
+          {data?.canChooseWard && (
+            <select
+              value={wardChoice}
+              onChange={(e) => setWardChoice(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              title="Which ward to look at"
+            >
+              <option value="">My ward</option>
+              <option value="ALL">All wards</option>
+              {wardList.map((w) => <option key={w} value={w}>{w}</option>)}
+            </select>
+          )}
+          <input
+            type="date"
+            value={dateChoice}
+            onChange={(e) => setDateChoice(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            title="Show one day"
+          />
+          {dateChoice && (
+            <button
+              onClick={() => setDateChoice('')}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Clear date
+            </button>
+          )}
+          {!dateChoice && (
+            <button
+              onClick={() => setDateChoice(todayValue())}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Today only
+            </button>
+          )}
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </div>
 
       {awaitingWard.length > 0 && (
@@ -259,11 +467,13 @@ export default function WardDeskPage() {
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <BedDouble className="w-12 h-12 text-gray-300 mx-auto" />
           <p className="mt-3 text-gray-700 font-medium">
-            No theatre cases booked for {data?.ward} in this window.
+            No theatre cases booked for {data?.viewingAs === 'all' ? 'any ward' : data?.ward}
+            {data?.date ? ` on ${data.date}` : ' in this window'}.
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Yesterday through the next four days. A case booked for later appears
-            here as its date comes round.
+            {data?.date
+              ? 'One day is shown. Clear the date to see yesterday through the next four days.'
+              : 'Yesterday through the next four days. A case booked for later appears here as its date comes round.'}
           </p>
         </div>
       ) : (
@@ -295,11 +505,25 @@ export default function WardDeskPage() {
                     <div className="text-xs text-gray-500 mt-1">
                       <b>{dayLabel(c.scheduledDate)}</b> {c.scheduledTime} · {c.unit}
                       {c.surgeonName && <> · {c.surgeonName}</>}
-                      {c.magnitude && <> · {c.magnitude.toLowerCase()}</>}
                       {c.surgeryType !== 'ELECTIVE' && (
                         <span className="ml-1 font-semibold text-red-700">{c.surgeryType}</span>
                       )}
                     </div>
+                    {/* The ward is printed on the card as well as in the
+                        heading, because "All wards" is now a real view and a
+                        card with no ward on it would be unplaceable. */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="inline-flex items-center rounded border border-teal-300 bg-teal-50 px-2 py-0.5 font-semibold text-teal-900">
+                        {c.ward || 'Ward not recorded'}
+                      </span>
+                      {categoryLabel(c.magnitude) && (
+                        <span className="inline-flex items-center rounded border border-indigo-300 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-900">
+                          {categoryLabel(c.magnitude)}
+                        </span>
+                      )}
+                    </div>
+
+                    <WardReadiness c={c} settings={data?.settings ?? null} />
                   </div>
                   <div className="text-right text-xs">
                     {!cu ? (

@@ -847,6 +847,13 @@ export default function PrescriptionsPage() {
         fromDate={selectedDate}
         toDate={selectedDate}
         canPack={['PHARMACIST', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(((session?.user as any)?.role) || '')}
+        /* Mirrors PHARMACY_WRITERS in /api/surgery-deposits, which is the
+           authority. Packing a box and recording that money changed hands are
+           different permissions and the head of pharmacy holds the second. */
+        canRecordDeposits={[
+          'PHARMACIST', 'HEAD_OF_PHARMACY', 'THEATRE_STORE_KEEPER',
+          'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR',
+        ].includes(((session?.user as any)?.role) || '')}
       />
 
       {/* Post-Operative Prescriptions — sent from the surgeon's post-op notes */}

@@ -358,8 +358,23 @@ describe('the ward desk reads its scope from the database', () => {
   });
 
   it('confines a ward nurse to her own ward whatever the query string says', () => {
-    expect(api).toContain('if (isWardPostedRole(me.role))');
-    expect(api).toContain('ward = scope.ward;');
+    // On 23 November the desk gained a ward chooser, for ADMINISTRATORS. This
+    // test is what stops that chooser reaching ward nurses, so it now checks
+    // the BEHAVIOUR of the posted branch rather than one spelling of the call
+    // that opens it: the branch must be decided by isWardPostedRole, must
+    // assign the posting, and must not read the query string at all.
+    expect(api).toContain('isWardPostedRole(me.role)');
+
+    const start = api.indexOf('if (posted) {');
+    expect(start).toBeGreaterThan(-1);
+    const branch = api.slice(start, api.indexOf('} else if', start));
+
+    expect(branch).toContain('ward = scope.ward;');
+    expect(branch).toContain("viewingAs = 'own'");
+    // The two names the query string arrives under. Neither may be consulted
+    // here, or a nurse could read another ward's handovers.
+    expect(branch).not.toContain('asked');
+    expect(branch).not.toContain('wantsAll');
   });
 
   it('returns no cases when there is no ward, rather than all of them', () => {

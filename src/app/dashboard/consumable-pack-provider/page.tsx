@@ -4,6 +4,24 @@ import { useSession } from "next-auth/react";
 import { Package, RefreshCw, CheckCircle2, AlertTriangle, Megaphone, MessageCircle } from "lucide-react";
 import { whatsappChatLink } from "@/lib/whatsapp";
 import SurgeryCodeLookup from "@/components/SurgeryCodeLookup";
+import DepositPanel, { type CollectionRow, type DepositRow } from "@/components/deposits/DepositPanel";
+import { categoryLabel } from "@/lib/deposits/depositBands";
+
+/**
+ * Who may record a payment or sign a pack out.
+ *
+ * Mirrors CONSUMABLE_WRITERS in /api/surgery-deposits, which is the authority.
+ * A control hidden here that the API would have allowed is a nuisance; a
+ * control shown here that the API refuses is a lie, so the two lists have to
+ * stay the same and the API is the one that matters.
+ */
+const DEPOSIT_WRITERS = [
+  "CONSUMABLE_PACK_PROVIDER",
+  "THEATRE_STORE_KEEPER",
+  "THEATRE_MANAGER",
+  "ADMIN",
+  "SYSTEM_ADMINISTRATOR",
+];
 
 function todayInputValue() {
   const now = new Date();
@@ -47,6 +65,7 @@ interface Item {
     surgeon?: { id: string; fullName: string; phoneNumber?: string | null } | null;
     scrubNurse?: { fullName: string; phoneNumber?: string | null } | null;
     circulatingNurse?: { fullName: string; phoneNumber?: string | null } | null;
+    magnitude?: string | null;
     patient: {
       id?: string;
       name: string;
@@ -54,6 +73,7 @@ interface Item {
       phoneNumber?: string | null;
       caregiverName?: string | null;
       caregiverPhone?: string | null;
+      ward?: string | null;
     };
   };
 }
@@ -67,6 +87,27 @@ export default function ConsumablePackProviderPage() {
   // Search by patient PT / folder number (also matches patient name).
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+
+  // Deposits and collections for the whole day, fetched once rather than once
+  // per card. Thirty cases on a list would otherwise be thirty requests.
+  const [bands, setBands] = useState<Record<string, string | null> | null>(null);
+  const [deposits, setDeposits] = useState<DepositRow[]>([]);
+  const [collections, setCollections] = useState<CollectionRow[]>([]);
+
+  const canRecordDeposits = DEPOSIT_WRITERS.includes((session?.user as any)?.role ?? "");
+
+  async function loadDeposits() {
+    try {
+      const r = await fetch(`/api/surgery-deposits?date=${selectedDate}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      setBands(d.settings ?? null);
+      setDeposits(d.deposits ?? []);
+      setCollections(d.collections ?? []);
+    } catch {
+      /* the cards still list the items; only the money panel goes quiet */
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -83,7 +124,7 @@ export default function ConsumablePackProviderPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, [selectedDate]);
+  useEffect(() => { load(); void loadDeposits(); }, [selectedDate]);
 
   const grouped = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -253,6 +294,36 @@ export default function ConsumablePackProviderPage() {
                 </div>
                 <div className="font-semibold text-lg">{g.surgery.patient?.name}{g.surgery.patient?.folderNumber ? ` (${g.surgery.patient?.folderNumber})` : ""}</div>
                 <div className="text-sm text-gray-700">{g.surgery.procedureName} — {g.surgery.surgeonName}</div>
+
+                {/* Where the patient is, and how big the operation is. The
+                    first says where to send a runner; the second is what the
+                    deposit band is read from. Both were being asked for by
+                    telephone. */}
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2 py-0.5 font-semibold text-teal-900">
+                    Ward: {g.surgery.patient?.ward || "not recorded"}
+                  </span>
+                  {categoryLabel(g.surgery.magnitude) ? (
+                    <span className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-900">
+                      {categoryLabel(g.surgery.magnitude)}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-900">
+                      No operative magnitude on this booking
+                    </span>
+                  )}
+                </div>
+
+                <DepositPanel
+                  surgeryId={g.surgery.id}
+                  magnitude={g.surgery.magnitude ?? null}
+                  kind="CONSUMABLE"
+                  settings={bands}
+                  deposit={deposits.find((d) => d.surgeryId === g.surgery.id && d.kind === "CONSUMABLE") ?? null}
+                  collections={collections.filter((c) => c.surgeryId === g.surgery.id)}
+                  canWrite={canRecordDeposits}
+                  onChanged={loadDeposits}
+                />
 
                 {/* Hand the pack to the scrub nurse assigned to this theatre */}
                 <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs">

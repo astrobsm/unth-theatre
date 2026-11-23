@@ -54,8 +54,15 @@ export async function GET(req: NextRequest) {
               phoneNumber: true,
               caregiverName: true,
               caregiverPhone: true,
+              // The ward the patient is actually lying on. The pack provider
+              // has to know where to send a runner, and until now "which
+              // ward?" was answered by telephone.
+              ward: true,
             },
           },
+          // The operative magnitude: what the deposit band is read from. The
+          // counter cannot tell a patient what to pay without it.
+          magnitude: true,
           procedureName: true,
           scheduledDate: true,
           scheduledTime: true,

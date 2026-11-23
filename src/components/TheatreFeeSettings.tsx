@@ -22,19 +22,30 @@ type Settings = {
   minorConsumableFee: string | null;
   intermediateConsumableFee: string | null;
   majorConsumableFee: string | null;
+  superMajorConsumableFee: string | null;
   minorPharmacyFee: string | null;
   intermediatePharmacyFee: string | null;
   majorPharmacyFee: string | null;
+  superMajorPharmacyFee: string | null;
   updatedByName?: string | null;
 };
 
+/**
+ * SUPER MAJOR was missing until 23 November 2026, which meant the heaviest
+ * cases in the theatre -- the ones carrying the largest deposit -- were the
+ * only ones with no band at all. The order here is smallest to largest, so a
+ * typing slip that puts a minor figure in a major box is visible as a number
+ * that goes the wrong way.
+ */
 const FEES: { key: keyof Settings; label: string; group: 'Consumables' | 'Pharmacy' }[] = [
   { key: 'minorConsumableFee', label: 'Minor', group: 'Consumables' },
   { key: 'intermediateConsumableFee', label: 'Intermediate', group: 'Consumables' },
   { key: 'majorConsumableFee', label: 'Major', group: 'Consumables' },
+  { key: 'superMajorConsumableFee', label: 'Super major', group: 'Consumables' },
   { key: 'minorPharmacyFee', label: 'Minor', group: 'Pharmacy' },
   { key: 'intermediatePharmacyFee', label: 'Intermediate', group: 'Pharmacy' },
   { key: 'majorPharmacyFee', label: 'Major', group: 'Pharmacy' },
+  { key: 'superMajorPharmacyFee', label: 'Super major', group: 'Pharmacy' },
 ];
 
 export default function TheatreFeeSettings({ canEdit }: { canEdit: boolean }) {
@@ -111,8 +122,10 @@ export default function TheatreFeeSettings({ canEdit }: { canEdit: boolean }) {
       ) : (
         <>
           <p className="text-sm text-gray-600 mb-4">
-            What a patient pays up front, by the size of the operation. Leave a box empty if the
-            amount has not been decided — the booking form will say so rather than asking for
+            What a patient pays up front, by the size of the operation. The consumable deposit
+            covers the surgical pack <b>and</b> the anaesthetic consumables; the pharmacy deposit
+            covers the surgical drugs <b>and</b> the anaesthetic drugs. Leave a box empty if the
+            amount has not been decided — the counter will say so rather than asking for
             nothing.
           </p>
 

@@ -9,6 +9,17 @@
  * old ward until the nurse signed out and in again — and the nurse would have
  * no way to tell. One extra user lookup per request is the cost of the ward
  * being right now rather than eventually.
+ *
+ * A POSTED NURSE IS STILL CONFINED TO THEIR POSTING. What changed on 23
+ * November is the other half: an administrator or theatre manager, who has no
+ * posting at all, may now name a ward or ask for ALL of them. That is not a
+ * loosening of the nurse's scope — `isWardPostedRole` still decides, and a
+ * ward nurse asking for ?ward=ALL gets their own ward exactly as before.
+ *
+ * WHAT A NURSE NEEDS TO KNOW BEFORE SENDING A PATIENT. Four things used to be
+ * answered by telephone and are now on the card: has the deposit been paid,
+ * are the consumables and the drugs packed, has the anaesthetist reviewed the
+ * patient, and who that anaesthetist is.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -22,11 +33,15 @@ import {
   WARD_ACTIONABLE_SURGERY_STATUSES,
   wardsMatch,
 } from '@/lib/ward/nurseInCharge';
+import { allFeeFields } from '@/lib/deposits/depositBands';
 
 export const dynamic = 'force-dynamic';
 
 /** Nigeria (WAT) is UTC+1 with no DST. */
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The sentinel for "every ward", which only an unposted account may ask for. */
+const ALL_WARDS = 'ALL';
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,53 +63,78 @@ export async function GET(request: NextRequest) {
      * Whose ward.
      *
      * A ward-posted account — nurse-in-charge or health assistant — is confined
-     * to their posting. A theatre manager or administrator reaching this page
-     * has no posting at all and would otherwise see an empty desk that looks
-     * broken; they may name a ward with ?ward=, and are told plainly that is
-     * what is happening.
+     * to their posting, and nothing in the query string changes that. Anyone
+     * else reaching this page is an administrator or a manager: they may name
+     * a ward, or ALL, and are told plainly which they are looking at.
      */
-    const asked = normaliseWard(request.nextUrl.searchParams.get('ward'));
+    const rawAsked = (request.nextUrl.searchParams.get('ward') ?? '').trim();
+    const wantsAll = rawAsked.toUpperCase() === ALL_WARDS;
+    const asked = wantsAll ? null : normaliseWard(rawAsked);
     const scope = wardScopeOf(me);
-    let ward: string;
-    let viewingAs: 'own' | 'chosen' | 'none';
+    const posted = isWardPostedRole(me.role);
 
-    if (isWardPostedRole(me.role)) {
+    let ward: string | null;
+    let viewingAs: 'own' | 'chosen' | 'all' | 'none';
+
+    if (posted) {
       if (!scope.assigned) {
         return NextResponse.json({
-          ward: null, viewingAs: 'none', reason: scope.reason, cases: [],
+          ward: null, viewingAs: 'none', reason: scope.reason, cases: [], canChooseWard: false,
         });
       }
       // Their own ward, whatever the query string says.
       ward = scope.ward;
       viewingAs = 'own';
-    } else if (scope.assigned) {
-      ward = scope.ward;
-      viewingAs = 'own';
+    } else if (wantsAll) {
+      ward = null;
+      viewingAs = 'all';
     } else if (asked) {
       ward = asked;
       viewingAs = 'chosen';
+    } else if (scope.assigned) {
+      ward = scope.ward;
+      viewingAs = 'own';
     } else {
+      // An unposted account that has not chosen yet. NOT an error, and not a
+      // dead end: the client is told it may choose, and offers the list.
       return NextResponse.json({
         ward: null,
         viewingAs: 'none',
-        reason: 'Your account has no ward, so choose one to look at.',
+        canChooseWard: true,
+        reason: 'Your account has no ward of its own. Choose a ward, or look at every ward at once.',
         cases: [],
       });
     }
 
     /**
-     * The window: yesterday to three days ahead.
+     * The window.
      *
-     * Not "today": a case on this morning's list that has not gone yet is the
-     * one the nurse is standing next to, and a case due tomorrow is the one
-     * they are preparing for tonight. Yesterday is included because a ward
-     * handover written up the next morning is still worth having — that is the
-     * work this desk exists to replace.
+     * A named date is one day: that is what a nurse asking "who is going
+     * tomorrow?" means. With no date the window is yesterday to three days
+     * ahead — a case on this morning's list that has not gone yet is the one
+     * the nurse is standing next to, a case due tomorrow is the one they are
+     * preparing for tonight, and yesterday is included because a handover
+     * written up the next morning is still worth having.
      */
-    const from = new Date();
-    from.setHours(0, 0, 0, 0);
-    from.setTime(from.getTime() - DAY_MS);
-    const to = new Date(from.getTime() + 5 * DAY_MS);
+    const dateParam = (request.nextUrl.searchParams.get('date') ?? '').trim();
+    let from: Date;
+    let to: Date;
+    let singleDay = false;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      const start = new Date(`${dateParam}T00:00:00`);
+      if (!isNaN(start.getTime())) {
+        from = start;
+        to = new Date(`${dateParam}T23:59:59.999`);
+        singleDay = true;
+      }
+    }
+    if (!singleDay) {
+      from = new Date();
+      from.setHours(0, 0, 0, 0);
+      from.setTime(from.getTime() - DAY_MS);
+      to = new Date(from.getTime() + 5 * DAY_MS);
+    }
 
     /**
      * The ward is matched in JS, not in the WHERE clause.
@@ -110,12 +150,12 @@ export async function GET(request: NextRequest) {
      * wardsMatch() normalises both sides, and it is the SAME function the
      * write path uses to decide whether a case is yours, so the desk cannot
      * show a case it would then refuse to accept a handover for. The window
-     * is five days, which is tens of rows, so the cost of filtering here is
-     * not worth a second way of comparing ward names.
+     * is five days at most, which is tens of rows, so the cost of filtering
+     * here is not worth a second way of comparing ward names.
      */
     const inWindow = await prisma.surgery.findMany({
       where: {
-        scheduledDate: { gte: from, lte: to },
+        scheduledDate: { gte: from!, lte: to! },
         status: { in: WARD_ACTIONABLE_SURGERY_STATUSES as unknown as never[] },
       },
       select: {
@@ -155,10 +195,82 @@ export async function GET(request: NextRequest) {
       orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }],
     });
 
-    const surgeries = inWindow.filter((s) => wardsMatch(s.patient?.ward, ward));
+    // viewingAs 'all' keeps every case, including those whose patient has no
+    // ward recorded at all — those are precisely the ones somebody needs to go
+    // and fix, and hiding them is how they stay unfixed.
+    const surgeries = ward === null ? inWindow : inWindow.filter((s) => wardsMatch(s.patient?.ward, ward));
+    const ids = surgeries.map((s) => s.id);
+
+    /**
+     * Everything the ward reads but does not write, in one round of queries
+     * rather than one round per case. A thirty-case day would otherwise be a
+     * hundred and twenty round trips, and this page is opened on a handset
+     * over hospital wifi.
+     */
+    const [deposits, collections, consumables, drugs, reviews, settingsRow] = await Promise.all([
+      ids.length ? prisma.surgeryDeposit.findMany({ where: { surgeryId: { in: ids } } }) : [],
+      ids.length ? prisma.surgeryPackCollection.findMany({ where: { surgeryId: { in: ids } } }) : [],
+      ids.length
+        ? prisma.surgeryConsumableRequest.findMany({
+            where: { surgeryId: { in: ids } },
+            select: { surgeryId: true, status: true },
+          })
+        : [],
+      ids.length
+        ? prisma.surgeryDrugDressingRequest.findMany({
+            where: { surgeryId: { in: ids } },
+            select: { surgeryId: true, status: true },
+          })
+        : [],
+      ids.length
+        ? prisma.preopReviewAssignment.findMany({
+            where: { surgeryId: { in: ids } },
+            select: {
+              surgeryId: true,
+              expectedReviewerName: true,
+              reassignedToName: true,
+              reviewedAt: true,
+              handedBackAt: true,
+              patientAbsentAt: true,
+              lapsedAt: true,
+            },
+          })
+        : [],
+      prisma.theatreSetting.upsert({
+        where: { id: 'singleton' },
+        create: { id: 'singleton' },
+        update: {},
+      }),
+    ]);
+
+    const settings: Record<string, string | null> = {};
+    for (const f of allFeeFields()) {
+      const v = (settingsRow as unknown as Record<string, unknown>)[f] as { toString(): string } | null;
+      settings[f] = v == null ? null : v.toString();
+    }
+
+    const depBy = new Map<string, (typeof deposits)[number][]>();
+    for (const d of deposits) {
+      if (!depBy.has(d.surgeryId)) depBy.set(d.surgeryId, []);
+      depBy.get(d.surgeryId)!.push(d);
+    }
+    const colBy = new Map<string, (typeof collections)[number][]>();
+    for (const c of collections) {
+      if (!colBy.has(c.surgeryId)) colBy.set(c.surgeryId, []);
+      colBy.get(c.surgeryId)!.push(c);
+    }
+    const reviewBy = new Map(reviews.map((r) => [r.surgeryId, r]));
+
+    /** Ready / total, counting a cancelled line as neither. */
+    const tally = (rows: { surgeryId: string; status: string }[], id: string) => {
+      const mine = rows.filter((r) => r.surgeryId === id && r.status !== 'CANCELLED');
+      const done = mine.filter((r) => r.status === 'PACKED' || r.status === 'DELIVERED').length;
+      return { total: mine.length, ready: done };
+    };
 
     const cases = surgeries.map((s) => {
       const callUp = s.patientCallUps[0] ?? null;
+      const r = reviewBy.get(s.id) ?? null;
       return {
         surgeryId: s.id,
         patientName: s.patient?.name ?? 'Unknown',
@@ -177,6 +289,42 @@ export async function GET(request: NextRequest) {
         unit: s.unit,
         location: s.location,
         surgeonName: s.surgeon?.fullName || s.surgeonName || null,
+
+        /** Money. Read-only here: the ward never records a payment. */
+        deposits: (depBy.get(s.id) ?? []).map((d) => ({
+          kind: d.kind,
+          status: d.status,
+          expectedAmount: d.expectedAmount == null ? null : d.expectedAmount.toString(),
+          amountPaid: d.amountPaid == null ? null : d.amountPaid.toString(),
+          receiptNumber: d.receiptNumber,
+          paidAt: d.paidAt ? d.paidAt.toISOString() : null,
+        })),
+        collections: (colBy.get(s.id) ?? []).map((c) => ({
+          stream: c.stream,
+          collectedByName: c.collectedByName,
+          collectedAt: c.collectedAt ? c.collectedAt.toISOString() : null,
+        })),
+
+        /** Supplies. "6 of 7 packed" is what the ward actually asks. */
+        consumables: tally(consumables, s.id),
+        drugs: tally(drugs, s.id),
+
+        /**
+         * The anaesthesia review. A reassignment outranks the roster name:
+         * the person who will actually come is the one the ward should be
+         * expecting, and telephoning the original name wastes an evening.
+         */
+        review: r
+          ? {
+              anaesthetist: r.reassignedToName || r.expectedReviewerName || null,
+              reassigned: Boolean(r.reassignedToName),
+              reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
+              handedBack: Boolean(r.handedBackAt),
+              patientAbsent: Boolean(r.patientAbsentAt),
+              lapsed: Boolean(r.lapsedAt),
+            }
+          : null,
+
         // Null until the theatre sends for the patient. The ward can do nothing
         // but look until then, which is itself worth showing.
         callUp: callUp
@@ -202,10 +350,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ward,
       viewingAs,
+      canChooseWard: !posted,
       nurseName: me.fullName,
       role: me.role,
-      from: from.toISOString(),
-      to: to.toISOString(),
+      date: singleDay ? dateParam : null,
+      from: from!.toISOString(),
+      to: to!.toISOString(),
+      settings,
       cases,
     });
   } catch (error: any) {

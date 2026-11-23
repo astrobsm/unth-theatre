@@ -38,7 +38,10 @@ export async function GET(req: NextRequest) {
       surgery: {
         select: {
           id: true,
-          patient: { select: { name: true, folderNumber: true } },
+          // ward says where the drugs go; magnitude says what the patient
+          // pays. Both were missing, and both were being asked for by phone.
+          patient: { select: { name: true, folderNumber: true, ward: true } },
+          magnitude: true,
           procedureName: true,
           scheduledDate: true,
           scheduledTime: true,

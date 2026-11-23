@@ -125,6 +125,8 @@ export const TABLE_POLICIES: TablePolicy[] = [
   // sync_deferred forever — which is exactly how the notifications backlog
   // happened, and the mistake is only ever made once per relationship.
   { table: 'surgery_consumable_requests', cls: 'LWW', why: 'A supply line for one case. Status walks REQUESTED to PACKED; the latest state is the true one, and withdrawals are recorded as CANCELLED rather than deleted.' },
+  { table: 'surgery_deposits', cls: 'LWW', why: 'What one patient was asked to pay for one case and whether they have. Status walks REQUESTED to PAID to COLLECTED and never backwards without a person, so the latest state is the true one. The deposit is taken at the consumable shop on the theatre node while the ward reads it from the cloud, and a payment recorded on one node only holds a paid patient at the theatre door.' },
+  { table: 'surgery_pack_collections', cls: 'LWW', why: 'Who carried the surgical or the anaesthetic half of a pack away, named rather than recorded as "theatre". One row per case per half, rewritten only when a handover is corrected, so last-writer-wins is the whole of the rule. It must reach both nodes because the anaesthetic half holds the controlled drugs and the audit of those cannot have a hole in it.' },
   { table: 'surgery_drug_dressing_requests', cls: 'LWW', why: 'The pharmacy half of the same list, with the same lifecycle.' },
   { table: 'surgical_consumable_templates', cls: 'LWW', why: 'Reference data, and the parent of every consumable request. Must travel or its children cannot be inserted.' },
   { table: 'surgical_drug_dressing_templates', cls: 'LWW', why: 'Reference data, and the parent of every drug or dressing request.' },
