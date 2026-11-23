@@ -13,13 +13,19 @@
  * THE THREE WAYS TO STOP BEING REMEMBERED. Unticked, revoked, lapsed. They
  * are separate fields on purpose, and each one on its own has to be enough.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  MAX_SESSIONS_PER_STAFF,
   PROFILE_ONE_VISIT, PROFILE_REMEMBERED, REMEMBERED_SESSION_SECONDS, REMEMBER_DAYS,
   SESSION_SECONDS, deviceLabel, expiryFrom, grantFor, isRemembered, normaliseMac,
   rememberedUntil, type EnrolledDevice,
 } from '../../src/lib/hotspot/devices';
+
+const ROOT = join(__dirname, '..', '..');
+const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
 
 const NOW = new Date('2026-11-02T09:00:00.000Z');
 
@@ -189,5 +195,87 @@ describe('recognising your own phone in a list', () => {
     for (const ua of [null, 'iPad', 'Windows NT 10.0', 'Macintosh; Intel Mac OS X']) {
       expect(deviceLabel(ua, mac)).toContain('E4F5');
     }
+  });
+});
+
+describe('two sessions per member of staff', () => {
+  /**
+   * A MikroTik hotspot user profile gives one session per username unless
+   * somebody says otherwise -- `shared-users` defaults to 1 -- so before this
+   * a registrar who opened the portal on a tablet knocked their own phone off
+   * the network, usually without understanding why. The work here is a phone
+   * on the ward and a laptop the notes are written on.
+   *
+   * Not unlimited, for the same reason the enrolment expires: a hospital
+   * password travels. A cap of two is what makes that show up, as somebody's
+   * own device being logged out, rather than quietly serving a waiting room.
+   */
+  it('is two', () => {
+    expect(MAX_SESSIONS_PER_STAFF).toBe(2);
+  });
+
+  it('is in the grant for a remembered device', () => {
+    expect(grantFor(device(), NOW).sessionLimit).toBe(2);
+  });
+
+  it('is the SAME for a device nobody asked to remember', () => {
+    // Somebody who did not tick "keep me signed in" has not asked for fewer
+    // devices, and a cap that moved with an unrelated choice would be
+    // impossible to explain at the moment it bit them.
+    expect(grantFor(null, NOW).sessionLimit).toBe(2);
+    expect(grantFor(device({ revokedAt: NOW }), NOW).sessionLimit).toBe(2);
+  });
+
+  it('does not disturb the session lengths it sits beside', () => {
+    expect(grantFor(device(), NOW).sessionSeconds).toBe(REMEMBERED_SESSION_SECONDS);
+    expect(grantFor(null, NOW).sessionSeconds).toBe(SESSION_SECONDS);
+  });
+});
+
+describe('the router is told the same number', () => {
+  const rsc = read('deploy/mikrotik/hotspot-setup.rsc');
+
+  it('sets shared-users on every profile a login can land on', () => {
+    // Three, and the default one matters most: when RADIUS_HOTSPOT_PROFILES is
+    // not set the bridge names no profile at all, and every login lands there.
+    // Comment lines are excluded: the block explaining the setting names it
+    // too, and a test that counted prose would pass on a file where somebody
+    // had written about shared-users without setting it.
+    const set = rsc.split('\n')
+      .filter((l) => !l.trimStart().startsWith('#') && l.includes('shared-users=2'));
+    expect(set.length).toBe(5);
+  });
+
+  it('sets it on the default profile', () => {
+    expect(rsc).toMatch(/find where default=yes\].*shared-users=2/);
+  });
+
+  it('sets it on both named profiles', () => {
+    for (const name of [PROFILE_REMEMBERED, PROFILE_ONE_VISIT]) {
+      const lines = rsc.split('\n').filter((l) => l.includes(name) && l.includes('user profile'));
+      expect(lines.length).toBe(3);
+      // add and set; the `find where name=` line is the guard.
+      expect(lines.filter((l) => l.includes('shared-users=2')).length).toBe(2);
+    }
+  });
+
+  it('matches the constant rather than a number somebody typed twice', () => {
+    expect(rsc).toContain(`shared-users=${MAX_SESSIONS_PER_STAFF}`);
+  });
+});
+
+describe('the bridge returns it too', () => {
+  const bridge = read('scripts/local-server/radius-bridge.ts');
+
+  it('sends Port-Limit from the grant, not from a literal', () => {
+    // Belt and braces for a router whose profiles were never re-provisioned.
+    // RouterOS honours it inconsistently for hotspot, which is why the profile
+    // is still what does the work -- but both read one constant, so they can
+    // never disagree about the answer.
+    expect(bridge).toContain('ATTR_PORT_LIMIT, grant.sessionLimit');
+  });
+
+  it('uses the RFC number for Port-Limit', () => {
+    expect(read('src/lib/radius/packet.ts')).toContain('ATTR_PORT_LIMIT = 62');
   });
 });

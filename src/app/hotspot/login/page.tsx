@@ -311,6 +311,25 @@ function PortalForm() {
             </span>
           </label>
 
+          {/*
+            SAID BEFORE IT BITES SOMEBODY.
+
+            The router allows two devices on one staff account at a time --
+            a phone and a laptop, which is what the work actually looks
+            like. A third signs the oldest one out, and without this line
+            that arrives as the Wi-Fi mysteriously dropping on the handset
+            in somebody's pocket, which reads as a fault in the network
+            rather than as the rule it is. The number comes from
+            MAX_SESSIONS_PER_STAFF; it is written in words here because a
+            notice that says "2" and a router that allows 3 is worse than
+            no notice.
+          */}
+          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            You can be signed in on <strong>two devices</strong> at once — your
+            phone and a laptop, say. Signing in on a third signs out whichever
+            has been connected longest.
+          </p>
+
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-3 flex gap-2">
               <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />

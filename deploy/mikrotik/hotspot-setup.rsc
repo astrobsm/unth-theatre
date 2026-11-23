@@ -97,7 +97,25 @@ set [find where default=yes] use-radius=yes login-by=http-pap,cookie html-direct
 # typed it into Winbox once, and nothing recorded that. A router reset, a
 # replacement unit, or a second site would have lost it silently — with the
 # login-by=cookie line above still present and apparently correct.
-set [find where default=yes] add-mac-cookie=yes mac-cookie-timeout=1d
+#
+# shared-users=2 -- HOW MANY DEVICES ONE MEMBER OF STAFF MAY HOLD AT ONCE.
+#
+# This is the setting that actually enforces it, and MikroTik's default is 1.
+# One means a registrar who opens the portal on a tablet knocks their own
+# phone off the network, usually without understanding why; the work here is
+# a phone on the ward and a laptop the notes are written on, so it is two.
+#
+# Not unlimited, for the same reason the enrolment expires: a hospital
+# password travels -- read out across a desk, typed into a relative's handset,
+# left in a WhatsApp message. A cap of two is what makes that show up, as
+# somebody's own device being logged out, instead of quietly serving a
+# waiting room.
+#
+# The number lives in src/lib/hotspot/devices.ts as MAX_SESSIONS_PER_STAFF and
+# a test holds this file to it. Set on ALL THREE profiles, including this
+# default one: when RADIUS_HOTSPOT_PROFILES is not set the bridge names no
+# profile, and every login lands here.
+set [find where default=yes] add-mac-cookie=yes mac-cookie-timeout=1d shared-users=2
 
 # --- 4c. "Keep this phone signed in to the Wi-Fi" ---------------------------
 # Staff asked to sign in to the network once and have the phone rejoin by
@@ -125,18 +143,18 @@ set [find where default=yes] add-mac-cookie=yes mac-cookie-timeout=1d
 # any session is currently on cannot be removed, so re-running this file in
 # working hours would fail on the remove and leave the rest unapplied.
 :if ([:len [/ip hotspot user profile find where name="orm-remembered"]] = 0) do={
-  /ip hotspot user profile add name="orm-remembered" add-mac-cookie=yes mac-cookie-timeout=90d comment="ORM - staff who asked to stay signed in"
+  /ip hotspot user profile add name="orm-remembered" add-mac-cookie=yes mac-cookie-timeout=90d shared-users=2 comment="ORM - staff who asked to stay signed in"
 } else={
-  /ip hotspot user profile set [find where name="orm-remembered"] add-mac-cookie=yes mac-cookie-timeout=90d comment="ORM - staff who asked to stay signed in"
+  /ip hotspot user profile set [find where name="orm-remembered"] add-mac-cookie=yes mac-cookie-timeout=90d shared-users=2 comment="ORM - staff who asked to stay signed in"
 }
 
 # And the other half of the choice. A device here is authorised for this visit
 # and forgotten afterwards — the shared handsets in theatre, and anybody who
 # unticked the box. add-mac-cookie=no is the entire point of the profile.
 :if ([:len [/ip hotspot user profile find where name="orm-one-visit"]] = 0) do={
-  /ip hotspot user profile add name="orm-one-visit" add-mac-cookie=no comment="ORM - shared devices, not remembered"
+  /ip hotspot user profile add name="orm-one-visit" add-mac-cookie=no shared-users=2 comment="ORM - shared devices, not remembered"
 } else={
-  /ip hotspot user profile set [find where name="orm-one-visit"] add-mac-cookie=no comment="ORM - shared devices, not remembered"
+  /ip hotspot user profile set [find where name="orm-one-visit"] add-mac-cookie=no shared-users=2 comment="ORM - shared devices, not remembered"
 }
 
 # --- 5. Cache ---------------------------------------------------------------

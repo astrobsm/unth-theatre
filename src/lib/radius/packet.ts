@@ -32,6 +32,17 @@ export const ATTR_NAS_IP_ADDRESS = 4;
 export const ATTR_REPLY_MESSAGE = 18;
 export const ATTR_CALLING_STATION_ID = 31; // the client's MAC, as MikroTik sends it
 export const ATTR_SESSION_TIMEOUT = 27;
+/**
+ * Port-Limit (RFC 2865 §5.42): how many simultaneous sessions this
+ * username may hold.
+ *
+ * RouterOS honours it reliably for PPP and inconsistently for hotspot --
+ * reports across versions go both ways. It is sent anyway, because it
+ * costs one attribute and covers a router whose hotspot user profiles were
+ * never re-provisioned; `shared-users` on the profile is what actually
+ * enforces the cap. Both read one constant, so they cannot disagree.
+ */
+export const ATTR_PORT_LIMIT = 62;
 export const ATTR_MESSAGE_AUTHENTICATOR = 80;
 export const ATTR_VENDOR_SPECIFIC = 26;
 

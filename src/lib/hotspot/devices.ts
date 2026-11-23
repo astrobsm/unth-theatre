@@ -86,6 +86,33 @@ export const PROFILE_REMEMBERED = 'orm-remembered';
 export const PROFILE_ONE_VISIT = 'orm-one-visit';
 
 /**
+ * HOW MANY DEVICES ONE MEMBER OF STAFF MAY BE SIGNED IN ON AT ONCE.
+ *
+ * Two, because that is what the work actually looks like: the phone in a
+ * pocket on the ward and the laptop or tablet the notes are written on.
+ * One is what a MikroTik hotspot gives you if nobody says otherwise --
+ * `shared-users` on a user profile defaults to 1 -- and one means a
+ * registrar who opens the portal on a tablet knocks their own phone off
+ * the network, usually without understanding why.
+ *
+ * NOT unlimited, and the reason is the same reason the enrolment expires.
+ * A hospital password travels: it is read out across a desk, typed into a
+ * relative's handset, kept in a WhatsApp message. A cap of two is the
+ * difference between a credential that is shared with a colleague and one
+ * that is quietly serving a waiting room, and it is low enough that the
+ * sharing shows up as somebody's own device being logged out.
+ *
+ * WHERE IT IS ENFORCED. On the router, by `shared-users` on each hotspot
+ * user profile -- see deploy/mikrotik/hotspot-setup.rsc, which a test
+ * holds to this number. The bridge also returns it as Port-Limit, which
+ * SOME RouterOS versions honour and others ignore for hotspot; it is sent
+ * because it costs nothing and covers a router whose profiles were never
+ * re-provisioned, but the profile is what actually does the work. Neither
+ * can disagree with the other, because both read this constant.
+ */
+export const MAX_SESSIONS_PER_STAFF = 2;
+
+/**
  * A MAC address in the one form everything here compares.
  *
  * MikroTik writes it as `A4:B1:C2:D3:E4:F5` in the portal URL and sends the
@@ -142,6 +169,8 @@ export interface NetworkGrant {
   sessionSeconds: number;
   profile: string;
   remembered: boolean;
+  /** How many devices this account may hold at once. See the constant. */
+  sessionLimit: number;
 }
 
 export function grantFor(
@@ -153,6 +182,7 @@ export function grantFor(
       sessionSeconds: REMEMBERED_SESSION_SECONDS,
       profile: PROFILE_REMEMBERED,
       remembered: true,
+      sessionLimit: MAX_SESSIONS_PER_STAFF,
     }
     : {
       // Unchanged from before any of this existed, which is the point: a
@@ -160,6 +190,11 @@ export function grantFor(
       sessionSeconds: SESSION_SECONDS,
       profile: PROFILE_ONE_VISIT,
       remembered: false,
+      // The SAME limit either way. A person who did not tick "keep me
+      // signed in" has not asked for fewer devices, and a cap that moved
+      // with an unrelated choice would be impossible to explain at the
+      // moment it bit somebody.
+      sessionLimit: MAX_SESSIONS_PER_STAFF,
     };
 }
 

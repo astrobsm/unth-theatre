@@ -39,6 +39,7 @@ import {
   ATTR_MESSAGE_AUTHENTICATOR,
   ATTR_REPLY_MESSAGE,
   ATTR_SESSION_TIMEOUT,
+  ATTR_PORT_LIMIT,
   ATTR_USER_NAME,
   ATTR_USER_PASSWORD,
   MIKROTIK_GROUP,
@@ -207,6 +208,11 @@ async function handle(packet: ReturnType<typeof decodePacket>, raw: Buffer): Pro
   // to a device somebody asked to be remembered.
   const seconds = grant.remembered ? grant.sessionSeconds : SESSION_TIMEOUT_SECONDS;
   const attributes = [attribute(ATTR_SESSION_TIMEOUT, seconds)];
+
+  // How many devices this person may hold at once. The router's own
+  // shared-users is what enforces it; this covers a router whose profiles
+  // were never re-provisioned, and both read the same constant.
+  attributes.push(attribute(ATTR_PORT_LIMIT, grant.sessionLimit));
   // The profile is what carries mac-cookie-timeout, and mac-cookie-timeout is
   // the single setting that decides how long the router recognises a device
   // for. Everything else here is bookkeeping around that one attribute.
