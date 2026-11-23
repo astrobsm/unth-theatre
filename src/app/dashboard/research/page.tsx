@@ -13,6 +13,7 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { exportToExcel, exportToCSV, exportMultiSheetExcel } from '@/lib/exportUtils';
+import { readJson } from '@/lib/http/readJson';
 
 // Charts load on demand — chart.js is ~250 KB and this page is usable (query
 // builder, filters, exports) long before a chart is rendered.
@@ -128,9 +129,12 @@ export default function ResearchPage() {
 
   // -------- Load selector metadata once --------
   useEffect(() => {
+    // Still swallowed: these only fill the filter dropdowns, and a page that
+    // refused to open because a select could not be populated would be worse
+    // than one with fewer choices in it.
     fetch('/api/research?meta=1')
-      .then((r) => r.json())
-      .then((m) => { if (!m.error) setMeta(m); })
+      .then((r) => readJson<any>(r, 'load the filter lists'))
+      .then((m) => setMeta(m))
       .catch(() => {});
   }, []);
 
@@ -141,7 +145,15 @@ export default function ResearchPage() {
       const qs = new URLSearchParams();
       Object.entries(filters).forEach(([k, v]) => { if (v) qs.set(k, v); });
       const res = await fetch(`/api/research?${qs.toString()}`);
-      const json = await res.json();
+      /*
+        readJson rather than res.json(), because res.json() on the platform's
+        own HTML error page throws "Unexpected token '<', "<!DOCTYPE "... is
+        not valid JSON" -- a message that names JSON for a fault that has
+        nothing to do with JSON, and leaves out the one number (the status)
+        that would say which fault it was. A report that is simply too large
+        now says so, and says to set a date range.
+      */
+      const json = await readJson<any>(res, 'load the analytics');
       if (json.error) throw new Error(json.error);
       setData(json);
     } catch (e: any) {
@@ -350,7 +362,10 @@ export default function ResearchPage() {
       };
       if (test.type) body.test = test;
       const res = await fetch('/api/research', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const json = await res.json();
+      // Same reasoning as the dashboard: the query builder reads MORE cases
+      // than the dashboard does, so it is the likelier of the two to meet a
+      // platform error page.
+      const json = await readJson<any>(res, 'run the query');
       if (json.error) throw new Error(json.error);
       setQbResult(json);
     } catch (e: any) {

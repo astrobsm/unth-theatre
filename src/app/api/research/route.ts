@@ -115,7 +115,47 @@ function weekKey(d: Date): string {
 function fetchSurgeries(scopedWhere: any) {
   return prisma.surgery.findMany({
     where: scopedWhere,
-    include: {
+    /**
+     * SELECT, NOT INCLUDE, and this is the whole reason the dashboard broke.
+     *
+     * `include` adds relations WITHOUT narrowing the scalars, so every one
+     * of the Surgery model's ~150 columns came back for every row -- consent
+     * text, comorbidity lists, remarks, the lot. With no dates set the page
+     * asks for every surgery ever booked, so the query grew with the theatre
+     * until it stopped fitting in a request: the function ran out of time or
+     * memory, the platform answered with its own HTML error page, and the
+     * browser reported the first thing it met -- "Unexpected token '<',
+     * "<!DOCTYPE "... is not valid JSON". A message about JSON for a fault
+     * that had nothing to do with JSON.
+     *
+     * These nineteen scalars are exactly what toRow() and surgeryDuration()
+     * read, and nothing else is used anywhere below. Anything added to the
+     * row shape has to be added here too -- which is the point: a projection
+     * that must be maintained is a projection somebody notices, and `include`
+     * was the version that silently grew.
+     */
+    select: {
+      id: true,
+      scheduledDate: true,
+      createdAt: true,
+      status: true,
+      surgeryType: true,
+      subspecialty: true,
+      unit: true,
+      location: true,
+      surgeonId: true,
+      surgeonName: true,
+      anesthetistId: true,
+      anesthesiaType: true,
+      complexityScore: true,
+      complexityClass: true,
+      // The four timestamps surgeryDuration() falls through, in its order.
+      estimatedDuration: true,
+      knifeOnSkinTime: true,
+      surgeryEndTime: true,
+      actualStartTime: true,
+      actualEndTime: true,
+
       patient: { select: { age: true, gender: true, ward: true } },
       surgeon: { select: { fullName: true } },
       anesthetist: { select: { fullName: true } },
