@@ -306,15 +306,60 @@ export default function ResearchPage() {
       ],
       theme: 'grid', headStyles: { fillColor: [34, 197, 94] },
     });
-    const surg = (data.surgeonPerformance || []).slice(0, 20).map((s: any) => [
-      s.surgeon, s.cases, Math.round(s.avgDuration), Math.round(s.avgComplexity), `${Math.round(s.cancellationRate)}%`,
+    // EVERY surgeon, not the first twenty.
+    //
+    // This table used to be cut at 20 rows while the screen and the Excel
+    // export both showed the whole list, and nothing in the PDF said it had
+    // been cut. A page headed "Surgeon performance" that stops after the
+    // twentieth name reads as the entire theatre, and the names it drops are
+    // the low-volume ones -- exactly the people a performance review is
+    // supposed to be able to see. autoTable paginates on its own, so the only
+    // thing the full list costs is paper.
+    //
+    // The columns now match the on-screen table, so the printed report and the
+    // dashboard cannot disagree about a surgeon.
+    const surg = (data.surgeonPerformance || []).map((s: any) => [
+      s.surgeon,
+      s.cases,
+      Math.round(s.avgDuration),
+      Math.round(s.avgBloodLoss),
+      Math.round(s.avgComplexity),
+      `${Math.round(s.cancellationRate * 10) / 10}%`,
+      `${Math.round(s.emergencyRatio * 10) / 10}%`,
     ]);
     if (surg.length) {
+      const after = (doc as any).lastAutoTable?.finalY ?? 36;
+      doc.setFontSize(11);
+      // Say the count out loud. Somebody holding the paper can then tell a
+      // complete list from a truncated one without counting rows.
+      doc.text(`Surgeon performance — all ${surg.length} surgeon${surg.length === 1 ? '' : 's'}`, 14, after + 10);
+      doc.setFontSize(10);
       autoTable(doc, {
-        head: [['Surgeon', 'Cases', 'Avg dur (min)', 'Avg complexity', 'Cancel %']],
-        body: surg, theme: 'striped', headStyles: { fillColor: [139, 92, 246] },
+        startY: after + 14,
+        head: [['Surgeon', 'Cases', 'Avg dur (min)', 'Avg blood loss (mL)', 'Avg complexity', 'Cancel %', 'Emergency %']],
+        body: surg,
+        theme: 'striped',
+        headStyles: { fillColor: [139, 92, 246] },
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        columnStyles: { 0: { cellWidth: 52 } },
       });
     }
+
+    // The surgeon list runs over several pages now. A loose sheet from a long
+    // table is unplaceable without a page number.
+    const pageCount = doc.getNumberOfPages();
+    doc.setTextColor(128, 128, 128);
+    doc.setFontSize(8);
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.text(
+        `Theatre Research & Analytics - Page ${i} of ${pageCount}`,
+        doc.internal.pageSize.getWidth() / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'center' },
+      );
+    }
+    doc.setTextColor(0);
     doc.save(`theatre-research-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
