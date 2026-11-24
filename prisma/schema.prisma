@@ -15001,6 +15001,23 @@ model PolicyInvitation {
 
   tokenHash String @unique
 
+  /// The hash of the link this member held BEFORE the current one, where a
+  /// reminder minted them a fresh link.
+  ///
+  /// WHY A SECOND LIVE HASH EXISTS. A reminder now carries the member's link,
+  /// which means minting one, because the token itself is never stored. Simply
+  /// replacing tokenHash would kill the link sitting in their WhatsApp from the
+  /// original invitation -- and they would learn that by tapping it and being
+  /// told it is not recognised. That happened once already, which is why
+  /// src/lib/policy/reissue.ts spells the hazard out. So the previous hash
+  /// stays valid and both messages work.
+  ///
+  /// IT IS NOT A LOOPHOLE IN WITHDRAWAL. revokedAt is checked per INVITATION,
+  /// not per token, so withdrawing a member closes both links at once; and the
+  /// explicit "New link" reissue clears this column, because the point of that
+  /// action is that the old link stops working.
+  priorTokenHash String? @unique
+
   /// True where this row was created by somebody arriving on the general link
   /// rather than being invited by the owner. The participation figures must be
   /// able to say "12 invited, 2 of whom invited themselves".

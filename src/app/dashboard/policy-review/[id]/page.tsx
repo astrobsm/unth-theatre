@@ -191,13 +191,21 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
   /**
    * The member whose reminder is being composed.
    *
-   * The message is built in the browser and handed to the Chairman to send
-   * himself -- Copy, or straight into WhatsApp. That is deliberately different
-   * from the bulk chase, which QUEUES through queueMessage so the send policy,
-   * the kill switch and the audit trail all apply. One is “I will message Prof
-   * Okeke now”; the other is a chase of everybody.
+   * The message is handed to the Chairman to send himself -- Copy, or straight
+   * into WhatsApp. That is deliberately different from the bulk chase, which
+   * QUEUES through queueMessage so the send policy, the kill switch and the
+   * audit trail all apply. One is “I will message Prof Okeke now”; the other is
+   * a chase of everybody.
+   *
+   * IT IS NOW COMPOSED BY THE SERVER, because the reminder carries the member's
+   * link and a browser cannot mint one -- only the token's SHA-256 is stored.
+   * The local builder is kept as the fallback for when that call fails: it
+   * produces the same message minus the link, pointing at the one they already
+   * have, which is strictly better than an empty panel.
    */
   const [remindId, setRemindId] = useState<string | null>(null);
+  const [remindComposed, setRemindComposed] = useState<Record<string, string>>({});
+  const [remindBusy, setRemindBusy] = useState<string | null>(null);
   const [totalSections, setTotalSections] = useState(0);
   const [remindNotice, setRemindNotice] = useState<string | null>(null);
   const [showBulkReissue, setShowBulkReissue] = useState(false);
@@ -457,13 +465,12 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
   };
 
   /**
-   * The reminder for one member.
+   * The reminder for one member, without a link.
    *
-   * IT CANNOT CARRY THEIR LINK. Only the SHA-256 of each token is stored, so
-   * no screen can rebuild somebody’s personal URL -- the message points at the
-   * one they already have and offers a replacement, which is also the polite
-   * form. Where a member has genuinely lost theirs, “New link” beside their
-   * name mints one.
+   * THE FALLBACK, not the normal path. A browser cannot mint a link -- only the
+   * token’s SHA-256 is stored -- so this wording points at the link the member
+   * already holds. It is what is shown while the server is composing, and what
+   * is left if that call fails.
    */
   const reminderFor = (i: Invitation): string => buildPolicyReminderMessage({
     inviteeName: i.inviteeName,
@@ -472,6 +479,45 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
     answered: i.answered ?? 0,
     totalSections,
   });
+
+  /** What to show in the panel: the server’s version where we have it. */
+  const reminderText = (i: Invitation): string => remindComposed[i.id] ?? reminderFor(i);
+
+  /**
+   * Open the panel for one member, and ask the server to compose the message.
+   *
+   * The link in it is FRESH, and the one the member already holds goes on
+   * working -- the server keeps the previous hash alive on purpose. So opening
+   * this panel is not a withdrawal of anything, which is the difference between
+   * it and “New link”.
+   */
+  const openReminder = async (i: Invitation) => {
+    if (remindId === i.id) {
+      setRemindId(null);
+      return;
+    }
+    setRemindId(i.id);
+    if (remindComposed[i.id]) return;
+
+    setRemindBusy(i.id);
+    try {
+      const res = await fetch(`/api/policy/rounds/${params.id}/invitations`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationId: i.id, action: 'remind-link' }),
+      });
+      if (!res.ok) return;
+      const body = await res.json();
+      if (typeof body?.message === 'string') {
+        setRemindComposed((prev) => ({ ...prev, [i.id]: body.message }));
+      }
+    } catch {
+      // The linkless wording is already on screen. Saying nothing is right
+      // here: the Chairman has a sendable message either way.
+    } finally {
+      setRemindBusy(null);
+    }
+  };
 
   /** Queue a chase to everybody who has not submitted. */
   const remindEveryone = async () => {
@@ -1515,7 +1561,7 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                               {!i.submittedAt && !i.revokedAt && (
                                 <button
                                   type="button"
-                                  onClick={() => setRemindId(remindId === i.id ? null : i.id)}
+                                  onClick={() => void openReminder(i)}
                                   className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700"
                                 >
                                   <BellRing className="h-3 w-3" />
@@ -1571,14 +1617,31 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                           <td colSpan={4} className="px-3 py-3">
                             <p className="text-[11px] font-semibold text-slate-700">
                               Reminder for {i.inviteeName}
+                              {remindBusy === i.id && (
+                                <span className="ml-2 font-normal text-slate-500">
+                                  composing a link…
+                                </span>
+                              )}
                             </p>
                             <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 font-sans text-[11px] leading-relaxed text-slate-800">
-                              {reminderFor(i)}
+                              {reminderText(i)}
                             </pre>
+                            {/*
+                              Said out loud, because the Chairman has been
+                              taught by the “New link” button to expect that a
+                              fresh link kills the old one. This one does not.
+                            */}
+                            {remindComposed[i.id] && (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                This message carries a new link. The one already in
+                                their WhatsApp goes on working, so nothing is broken
+                                by sending it.
+                              </p>
+                            )}
                             <div className="mt-2 flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                onClick={() => copy(reminderFor(i), `rem-${i.id}`)}
+                                onClick={() => copy(reminderText(i), `rem-${i.id}`)}
                                 className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium"
                               >
                                 {copied === `rem-${i.id}` ? <Check className="h-3 w-3" /> : <ClipboardCopy className="h-3 w-3" />}
@@ -1586,7 +1649,7 @@ export default function PolicyRoundPage({ params }: { params: { id: string } }) 
                               </button>
                               {i.phone ? (
                                 <a
-                                  href={whatsappLink(i.phone, reminderFor(i)) ?? '#'}
+                                  href={whatsappLink(i.phone, reminderText(i)) ?? '#'}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white"

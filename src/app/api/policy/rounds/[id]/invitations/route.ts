@@ -18,10 +18,12 @@ import prisma from '@/lib/prisma';
 import { requirePolicyOwner } from '@/lib/policy/guard';
 import {
   buildPolicyInviteMessage,
+  buildPolicyReminderMessage,
   inviteExpiryFor,
   newPolicyInviteToken,
   policyInviteUrl,
 } from '@/lib/policy/invite';
+import { mintReminderLink } from '@/lib/policy/reminderLink';
 import { whatsappLink } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
@@ -44,7 +46,12 @@ const postSchema = z.object({
 
 const patchSchema = z.object({
   invitationId: z.string().min(1),
-  action: z.enum(['revoke', 'restore', 'reissue']),
+  // 'remind-link' composes the chase and mints a link for it WITHOUT killing
+  // the one the member already holds. 'reissue' is the deliberate
+  // replacement, and does kill it. Two actions because they are two
+  // different decisions, and collapsing them would make every reminder a
+  // withdrawal of the previous link.
+  action: z.enum(['revoke', 'restore', 'reissue', 'remind-link']),
   signatory: z.string().max(200).nullish(),
   signatoryTitle: z.string().max(200).nullish(),
 });
@@ -251,13 +258,56 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ ok: true, revoked: false });
     }
 
+    // The reminder: composed here rather than in the browser, because the
+    // browser cannot mint a link. The member's existing link stays valid --
+    // this is a chase, not a withdrawal -- and the message carries a fresh one
+    // so there is something to tap without going to look for Tuesday's
+    // message. remindedAt is NOT written: nothing has been sent yet, the
+    // Chairman is only reading what would go.
+    if (parsed.data.action === 'remind-link') {
+      const minted = await mintReminderLink(invitation.id);
+      const [answered, totalSections] = await Promise.all([
+        prisma.policySectionResponse.count({
+          where: { roundId: params.id, invitationId: invitation.id },
+        }),
+        prisma.policySection.count({
+          where: { document: { rounds: { some: { id: params.id } } } },
+        }),
+      ]);
+
+      const message = buildPolicyReminderMessage({
+        inviteeName: invitation.inviteeName,
+        policyTitle: invitation.round.document?.title ?? null,
+        closesAt: invitation.round.closesAt,
+        answered,
+        totalSections,
+        signatory: parsed.data.signatory ?? null,
+        signatoryTitle: parsed.data.signatoryTitle ?? null,
+        url: minted?.url ?? null,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        invitationId: invitation.id,
+        inviteeName: invitation.inviteeName,
+        url: minted?.url ?? null,
+        message,
+        whatsapp: whatsappLink(invitation.phone, message),
+      });
+    }
+
     // Reissue: a new token, and the old link stops working the moment this is
     // written. Anything the member already answered is untouched — the
     // responses hang off the invitation, not off the token.
+    //
+    // priorTokenHash is CLEARED here, which is the difference between this and
+    // a reminder. A reminder keeps the previous link alive so nobody is locked
+    // out; this action exists precisely to stop the old link working, and
+    // leaving a hash behind would quietly defeat it.
     const { token, tokenHash } = newPolicyInviteToken();
     await prisma.policyInvitation.update({
       where: { id: invitation.id },
-      data: { tokenHash, revokedAt: null, sentAt: new Date() },
+      data: { tokenHash, priorTokenHash: null, revokedAt: null, sentAt: new Date() },
     });
 
     const url = policyInviteUrl(token);

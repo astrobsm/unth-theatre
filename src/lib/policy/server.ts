@@ -70,6 +70,15 @@ const SIGN_IN_MESSAGE =
  *
  * A token is looked up BY HASH -- the token itself is never stored, so a
  * database read cannot open somebody else's review.
+ *
+ * TWO HASHES ARE ACCEPTED, and that is deliberate. A reminder carries the
+ * member's link, which means minting a fresh one; the hash it replaced is kept
+ * in priorTokenHash so the original invitation still sitting in their WhatsApp
+ * goes on working. Without that, a chase would silently break the link it was
+ * chasing them to use. Withdrawal is unaffected -- revokedAt is a property of
+ * the INVITATION, so policyInviteState() refuses both links together -- and the
+ * explicit "New link" reissue clears priorTokenHash, because stopping the old
+ * link is the whole point of that action.
  */
 export async function resolveReviewer(opts: {
   token?: string | null;
@@ -80,8 +89,12 @@ export async function resolveReviewer(opts: {
   const now = opts.now ?? new Date();
 
   if (opts.token) {
-    const invitation = await prisma.policyInvitation.findUnique({
-      where: { tokenHash: hashPolicyInviteToken(opts.token) },
+    const hash = hashPolicyInviteToken(opts.token);
+    const invitation = await prisma.policyInvitation.findFirst({
+      // findFirst rather than findUnique: both columns are unique, so at most
+      // one row can match either, but Prisma cannot express an OR over two
+      // unique columns in a findUnique.
+      where: { OR: [{ tokenHash: hash }, { priorTokenHash: hash }] },
       include: { round: true },
     });
 

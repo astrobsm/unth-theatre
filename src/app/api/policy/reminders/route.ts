@@ -15,13 +15,15 @@
  * Notification rows inside swallowing catch blocks, so a reminder that fails
  * leaves nothing behind. Reported separately.
  *
- * THE REMINDER CANNOT CARRY THE MEMBER'S LINK, and that is a consequence of
- * hashing it rather than an oversight. Only the SHA-256 of each token is
- * stored, so there is no query that can rebuild somebody's personal URL — not
- * for this job and not for anyone with a database backup. So the reminder
- * points them at the message they already have. Where a member has genuinely
- * lost theirs, the Chairman reissues it from the round page, which mints a new
- * token and invalidates the old one.
+ * THE REMINDER CARRIES THE MEMBER'S LINK. It cannot be read back -- only the
+ * SHA-256 of each token is stored, on purpose -- so one is MINTED per member,
+ * with the link it replaces left working (PolicyInvitation.priorTokenHash, see
+ * src/lib/policy/reminderLink.ts). A chase whose whole point is "please go and
+ * do this" must not be the thing that breaks the link in their WhatsApp.
+ *
+ * MINT, THEN QUEUE, THEN ROLL BACK IF REFUSED. queueMessage() may decline --
+ * the kill switch, the duplicate window -- and a link rotated for a message
+ * that never went is a record that is simply wrong, so it is put back.
  */
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -30,6 +32,7 @@ import { authoriseCron } from '@/lib/cronAuth';
 import { queueMessage } from '@/lib/comms/send';
 import { requirePolicyOwner } from '@/lib/policy/guard';
 import { buildPolicyReminderMessage } from '@/lib/policy/invite';
+import { mintReminderLink } from '@/lib/policy/reminderLink';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +70,7 @@ function reminderBody(opts: {
   hoursLeft: number;
   answered?: number;
   totalSections?: number;
+  url?: string | null;
 }): string {
   return buildPolicyReminderMessage({
     inviteeName: opts.name,
@@ -74,6 +78,7 @@ function reminderBody(opts: {
     closesAt: opts.closesAt,
     answered: opts.answered ?? 0,
     totalSections: opts.totalSections ?? 0,
+    url: opts.url ?? null,
   });
 }
 
@@ -96,6 +101,9 @@ async function chase(roundId: string, window: Window, actorName?: string): Promi
   const nonResponders = await prisma.policyInvitation.findMany({
     where: { roundId, submittedAt: null, revokedAt: null },
     select: { id: true, inviteeName: true, phone: true, userId: true },
+    // Still no tokenHash here. The link comes from mintReminderLink(), which
+    // reads and writes it inside one helper; selecting a hash into this scope
+    // would only put it in reach of a log line.
   });
 
   // How far each has got, so the chase can acknowledge work already done.
@@ -128,6 +136,12 @@ async function chase(roundId: string, window: Window, actorName?: string): Promi
       continue;
     }
 
+    // A link they can tap, with the one they already hold left working. If
+    // minting fails -- the row went while this loop was running -- the chase
+    // still goes out, pointing at the link they have, rather than being
+    // dropped for want of a URL.
+    const minted = await mintReminderLink(invitee.id);
+
     const result = await queueMessage({
       channel: invitee.phone ? 'WHATSAPP' : 'IN_APP',
       priority: window === '12h' ? 'HIGH' : 'NORMAL',
@@ -143,7 +157,12 @@ async function chase(roundId: string, window: Window, actorName?: string): Promi
         hoursLeft,
         answered: answeredBy.get(invitee.id) ?? 0,
         totalSections,
+        url: minted?.url ?? null,
       }),
+      // Still OPERATIONAL: no patient is named. The body now carries a
+      // credential, but the three values this field takes classify PATIENT
+      // data, and inventing a fourth here would mean a value the send policy
+      // does not know how to weigh.
       sensitivity: 'OPERATIONAL',
       relatedType: 'POLICY_REVIEW_ROUND',
       relatedId: round.id,
@@ -154,8 +173,16 @@ async function chase(roundId: string, window: Window, actorName?: string): Promi
       createdByName: actorName ?? 'Scheduled reminder',
     });
 
-    if (result.queued) queued += 1;
-    else skipped += 1;
+    if (result.queued) {
+      queued += 1;
+    } else {
+      skipped += 1;
+      // Nothing was sent, so the link was rotated for nothing. Harmless --
+      // the previous one still works -- but the record should say what is
+      // true, and a suppressed duplicate must not consume a token every time
+      // the cron runs.
+      if (minted) await minted.rollback();
+    }
 
     await prisma.policyInvitation.update({
       where: { id: invitee.id },

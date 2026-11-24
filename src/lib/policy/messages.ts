@@ -169,14 +169,19 @@ export function buildPolicyInviteMessage(input: InviteMessageInput): string {
  * for a button is how a committee starts receiving two differently-worded
  * reminders about the same review.
  *
- * SHORT, deliberately. A chase that restates the whole invitation is a chase
- * nobody reads to the end of, and it reads as though the first message is
- * being resent because they were not trusted to have read it.
+ * VERY SHORT, and that is the Chairman’s instruction rather than a style
+ * preference. This goes to heads of department who have already had the full
+ * invitation; a chase that restates it is a chase nobody reads to the end of.
+ * So it is four short paragraphs: the apology for intruding, why this member’s
+ * own opinion is being asked for, the link, and the date.
  *
- * IT CANNOT CARRY THEIR LINK, and that is a consequence of hashing the token
- * rather than an oversight: only the SHA-256 is stored, so no query can
- * rebuild somebody’s personal URL. The message therefore points at the one
- * they already have and offers a replacement, which is also the polite form.
+ * IT CAN CARRY THEIR LINK, which took a change elsewhere rather than here.
+ * Only the SHA-256 of a token is stored, so no query rebuilds a personal URL
+ * — the caller mints a fresh one and KEEPS THE PREVIOUS ONE WORKING
+ * (PolicyInvitation.priorTokenHash), because a member who taps the original
+ * invitation still sitting in their WhatsApp must not be told their link is
+ * unrecognised. Where no url is passed — any caller that cannot mint — the
+ * message falls back to pointing at the link they already hold.
  */
 export interface ReminderMessageInput {
   inviteeName?: string | null;
@@ -188,6 +193,14 @@ export interface ReminderMessageInput {
   now?: Date;
   signatory?: string | null;
   signatoryTitle?: string | null;
+  /**
+   * Their personal review link, where the caller was able to mint one.
+   *
+   * Omitted rather than faked when it is not available: a reminder that
+   * pointed at a link it had guessed would send a head of department to a
+   * page telling them their link is not recognised.
+   */
+  url?: string | null;
 }
 
 export function buildPolicyReminderMessage(input: ReminderMessageInput): string {
@@ -196,27 +209,38 @@ export function buildPolicyReminderMessage(input: ReminderMessageInput): string 
   const hoursLeft = (input.closesAt.getTime() - now.getTime()) / (60 * 60 * 1000);
   const answered = input.answered ?? 0;
   const total = input.totalSections ?? 0;
+  const url = (input.url ?? '').trim();
+
+  // “your opinion on Theatre Booking and Pre-operative Preparation Policy”
+  // wants an article; “on the theatre operational flow policy”, the default,
+  // already has one. Decided by the case of the first letter, which is the only
+  // signal there is: a document title is typed in Title Case, the fallback
+  // phrase is not.
+  const namedTitle = /^[A-Z]/.test(title) ? `the ${title}` : title;
 
   const lines = [
     '*THEATRE POLICY REVIEW — REMINDER*',
     '',
     `Dear ${salutationFor(input.inviteeName)},`,
     '',
+    // THE OPENING, IN THIS ORDER, and the order is the point. The apology for
+    // the intrusion comes before anything is asked of them; the request that
+    // follows is for their own professional judgement, not for a form to be
+    // filled. These are consultants being written to by their own hospital.
+    'We are sorry to intrude on your time. Hospital Management sincerely pleads '
+    + `for your opinion on ${namedTitle}, based on your professional experience `
+    + 'here, so that we can produce a robust policy to guide our practice in the '
+    + 'theatre.',
+    '',
   ];
 
-  // Acknowledging work already done, where there is some. Telling somebody
-  // who has answered seven sections that nothing has been received reads as
-  // though it was not noticed, and is the quickest way to lose them.
-  if (answered > 0) {
-    lines.push(
-      `May I kindly follow up on your review of ${title}. You have completed `
-      + `${answered}${total > 0 ? ` of ${total}` : ''} section`
-      + `${answered === 1 ? '' : 's'}, and your response has not yet been submitted.`,
-    );
+  // The link itself, which is the whole reason this message is worth sending.
+  if (url !== '') {
+    lines.push(`*Your personal review link:* ${url}`);
   } else {
     lines.push(
-      `May I kindly follow up on your review of ${title}. Your response has not `
-      + 'yet reached the Committee.',
+      'Please use the personal link sent to you earlier in this chat. If you no '
+      + 'longer have it, reply here and a new one will be sent to you.',
     );
   }
 
@@ -224,28 +248,36 @@ export function buildPolicyReminderMessage(input: ReminderMessageInput): string 
     // Never “the deadline has passed” full stop: that tells somebody holding a
     // working link not to bother, and the Chairman can still extend the round.
     lines.push(
-      '',
-      '*The closing date has passed, but the round is still open.* Your input can '
-      + 'still be included if it reaches us shortly.',
+      '*The closing date has passed, but the round is still open* — your input '
+      + 'can still be included if it reaches us shortly.',
     );
   } else if (hoursLeft <= 24) {
     lines.push(
-      '',
       `*Closing in about ${Math.max(1, Math.round(hoursLeft))} hours* — `
       + `${formatClosing(input.closesAt)}.`,
     );
   } else {
-    lines.push('', `*Closing ${formatClosing(input.closesAt)}.*`);
+    lines.push(`*Closing ${formatClosing(input.closesAt)}.*`);
+  }
+
+  // Acknowledging work already done, where there is some. Telling somebody who
+  // has answered seven sections that nothing has been received reads as though
+  // it was not noticed, and is the quickest way to lose them.
+  if (answered > 0) {
+    lines.push(
+      '',
+      `You have completed ${answered}${total > 0 ? ` of ${total}` : ''} section`
+      + `${answered === 1 ? '' : 's'} — the link reopens where you stopped.`,
+    );
   }
 
   lines.push(
     '',
-    'Please use the personal link sent to you earlier in this chat — it reopens '
-    + 'exactly where you stopped, and you may skip any section outside your area. '
-    + 'If you no longer have it, reply here and a new one will be sent to you.',
-    '',
-    'Your contribution matters to the recommendation that goes to Management. '
-    + 'Thank you for your time.',
+    // “The link above” only where there is one. Saying it when the message is
+    // the fallback wording would point them at nothing.
+    url !== ''
+      ? 'Kindly use the link above to make your contribution. Thank you.'
+      : 'Kindly make your contribution when you can. Thank you.',
     '',
   );
 
