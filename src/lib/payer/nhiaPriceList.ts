@@ -390,6 +390,51 @@ export const NHIA_PRICE_LIST: NhiaItem[] = [
   full('NHIA-28-02-24', 'Latex/examination gloves', 'Consumables', undefined, undefined, 'unit', 192),
   full('NHIA-28-02-25', 'Water for injection', 'Consumables', undefined, undefined, 'unit', 85),
 
+
+  // ── 12.3 Diuretics (frusemide is on every theatre's list) ───────────────
+  full('NHIA-12-03-03', 'Frusemide', 'Diuretics', 'Tablet', '40mg', 'tab', 29),
+  full('NHIA-12-03-04', 'Frusemide', 'Diuretics', 'Injection', '10mg/ml in 2ml', 'amp', 240),
+  full('NHIA-12-03-07', 'Spironolactone', 'Diuretics', 'Tablet', '25mg', 'tab', 86),
+  full('NHIA-12-03-10', 'Torsemide', 'Diuretics', 'Injection', '10mg/ml', 'injection', 616),
+  full('NHIA-12-03-13', 'Torsemide', 'Diuretics', 'Injection', '20mg', 'injection', 1088),
+
+  // ── 14. Dermatological: the wound-care half a theatre actually uses ─────
+  full('NHIA-14-01-01', 'Acyclovir', 'Dermatological', 'Cream', '5%', 'tube', 1941),
+  full('NHIA-14-01-02', 'Framycetin', 'Dermatological', 'Gauze dressing', '1%', 'gauze', 342),
+  full('NHIA-14-01-03', 'Gentamicin', 'Dermatological', 'Ointment', '0.30%', 'tube', 680),
+  full('NHIA-14-01-04', 'Gentian violet', 'Dermatological', 'Aqueous solution', '0.50%', '60mls', 397),
+  full('NHIA-14-01-05', 'Iodine', 'Dermatological', 'Tincture', undefined, '60mls', 392),
+  full('NHIA-14-01-06', 'Mupirocin', 'Dermatological', 'Ointment', '2% w/w', 'tube', 3584),
+  full('NHIA-14-01-07', 'Neomycin-Bacitracin', 'Dermatological', 'Ointment and cream', 'neomycin 5mg + bacitracin 500 units/g', 'tube', 354),
+  full('NHIA-14-01-08', 'Neomycin-Bacitracin', 'Dermatological', 'Powder', 'neomycin 5mg + bacitracin 250 units/g', 'tin', 506),
+  full('NHIA-14-01-10', 'Silver sulphadiazine', 'Dermatological', 'Cream', '1%', 'tube', 2414),
+  full('NHIA-14-02-07', 'Hydrocortisone', 'Dermatological', 'Cream', '1%', 'tube', 1126),
+  full('NHIA-14-06-01', 'Clotrimazole', 'Dermatological', 'Cream', '1%', 'tube', 704),
+  full('NHIA-14-06-12', 'Nystatin', 'Dermatological', 'Cream/ointment', '100,000 units', 'tube', 1027),
+
+  // ── 15.2 Nose drugs ──────────────────────────────────────────────────────
+  full('NHIA-15-02-09', 'Xylometazoline', 'Nose drugs', 'Nasal drops', '0.25%', '10mls', 2147),
+  full('NHIA-15-02-10', 'Xylometazoline', 'Nose drugs', 'Nasal drops', '0.50%', '10mls', 2175),
+
+  // ── 16.4 Purgatives and lubricants ──────────────────────────────────────
+  full('NHIA-16-04-03', 'Liquid paraffin', 'Lubricants', 'Emulsion, oral', '5mg/10ml', '100mls', 810),
+
+  // ── 24.1 Anti-asthmatics, for the airway ────────────────────────────────
+  full('NHIA-24-01-01', 'Aminophylline', 'Anti-asthmatics', 'Injection', '25mg/ml in 10ml', 'amp', 781),
+  full('NHIA-24-01-04', 'Epinephrine (Adrenaline)', 'Anti-asthmatics', 'Injection', '1mg/ml (1 in 1000) in 1ml', 'amp', 921),
+  full('NHIA-24-01-05', 'Hydrocortisone', 'Anti-asthmatics', 'Injection', '100mg/vial', 'vial', 927),
+  full('NHIA-24-01-07', 'Salbutamol', 'Anti-asthmatics', 'Tablets', '2mg, 4mg (sulphate)', 'tab', 27),
+  full('NHIA-24-01-09', 'Salbutamol', 'Anti-asthmatics', 'Aerosol', '0.1mg/metered dose', 'spray', 7313),
+  full('NHIA-24-01-10', 'Salbutamol', 'Anti-asthmatics', 'Nebule', '2.5mg', 'nebule', 647),
+  full('NHIA-24-01-11', 'Salbutamol', 'Anti-asthmatics', 'Nebule', '5mg', 'nebule', 1464),
+  full('NHIA-24-01-12', 'Salbutamol', 'Anti-asthmatics', 'Injection', '500ug/ml', 'amp', 715),
+
+  // ── 25. Vitamins ─────────────────────────────────────────────────────────
+  full('NHIA-25-01-03', 'Ascorbic acid', 'Vitamins', 'Tablets', '100mg', 'tab', 12),
+  full('NHIA-25-01-09', 'Folic acid', 'Vitamins', 'Tablet', '5 mg', 'tab', 8),
+  full('NHIA-25-01-22', 'Vitamin B complex', 'Vitamins', 'Injection', undefined, 'vial', 641),
+  full('NHIA-25-01-24', 'Vitamins B1+B6+B12', 'Vitamins', 'Injection', '100mg+100mg+1000mcg', 'amp', 415),
+
   // ── 29-36: PARTIAL COVERAGE. The Authority's note: 50:50 enrolee:NHIA ────
   partial('NHIA-29-00-01', 'Meropenem', 'Antibacterials (partial)', 'Injection', '1g', 'injection', 13176),
   partial('NHIA-29-00-02', 'Meropenem', 'Antibacterials (partial)', 'Injection', '500mg', 'injection', 7564),

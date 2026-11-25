@@ -143,10 +143,37 @@ describe('matching a catalogue name to the list', () => {
   });
 
   it('refuses a name it has never heard of', () => {
-    for (const name of ['Hera wound gel', 'Mesh, heavyweight', 'Sofratulle', '']) {
+    // Genuinely not on the Authority's list: a proprietary wound gel, a
+    // mesh, a haemostat, an inhalational agent it does not carry.
+    for (const name of ['Hera wound gel', 'Mesh, heavyweight', 'Surgicel', 'Sevoflurane', 'Bone wax', '']) {
       expect(matchNhia(name).how, name).toBe('NONE');
       expect(matchNhia(name).item, name).toBeNull();
     }
+  });
+
+  it('knows the trade names this theatre writes on a pack', () => {
+    // Sofratulle IS framycetin gauze, and the Authority lists it under the
+    // generic. An alias is a clinical equivalence somebody can check, which
+    // is the only kind this file is allowed to hold.
+    expect(matchNhia('Sofratulle Gauze (Framycetin)').item?.name).toBe('Framycetin');
+    expect(matchNhia('Dermazine cream').item?.name).toBe('Silver sulphadiazine');
+    expect(matchNhia('Fortum (1g)').item?.name).toBe('Ceftazidime');
+  });
+
+  it('pulls the medicine out of a line written for a trolley', () => {
+    // "Paracetamol 1 g IV (100 ml) (1 g IV)" is how a catalogue writes it;
+    // "Paracetamol" is how the Authority does. 19 of 90 pharmacy items
+    // matched before this worked.
+    expect(matchNhia('Paracetamol 1 g IV (100 ml) (1 g IV)').item?.name).toBe('Paracetamol');
+    expect(matchNhia("Ringer's Lactate (1 L)").item?.name).toBe("Ringer's lactate");
+    expect(matchNhia('Gentamicin 80 mg (Ampoule) (80 mg IV stat)').item?.name).toBe('Gentamycin');
+    expect(matchNhia('Metronidazole 500 mg / 100 ml IV (500 mg IV stat)').item?.name).toBe('Metronidazole');
+  });
+
+  it('still will not let a strength turn one drug into another', () => {
+    // Stripping "1 g" from a name must never strip the name as well.
+    expect(matchNhia('Amoxicillin-Clavulanate 1.2 g IV').item?.name).toContain('Clavulanic');
+    expect(matchNhia('Amoxicillin-Clavulanate 1.2 g IV').item?.name).not.toBe('Amoxycillin');
   });
 
   it('does not match a name made only of form words', () => {
@@ -219,56 +246,41 @@ describe('what a partially covered line tells the family', () => {
   });
 });
 
-describe('the copy the server script reads', () => {
-  const json = JSON.parse(
-    fs.readFileSync(path.join(process.cwd(), 'scripts/maintenance/nhia-price-list.json'), 'utf8'),
+describe('the script that writes the flags', () => {
+  const script = fs.readFileSync(
+    path.join(process.cwd(), 'scripts/maintenance/apply-nhia-coverage.ts'), 'utf8',
   );
 
-  it('is in step with the TypeScript', () => {
-    // apply-nhia-coverage.js runs under plain node on the theatre server and
-    // cannot import TypeScript. This is the test that stops the two copies
-    // of a clinical list drifting apart.
-    expect(json.version).toBe(NHIA_LIST_VERSION);
-    expect(json.source).toBe(NHIA_LIST_SOURCE);
-    expect(json.items).toHaveLength(NHIA_PRICE_LIST.length);
-    expect(json.items.map((i: { code: string }) => i.code))
-      .toEqual(NHIA_PRICE_LIST.map((i) => i.code));
-    for (const item of NHIA_PRICE_LIST) {
-      const row = json.items.find((i: { code: string }) => i.code === item.code);
-      expect(row.name, item.code).toBe(item.name);
-      expect(row.coverage, item.code).toBe(item.coverage);
-      expect(row.price ?? undefined, item.code).toBe(item.price);
-    }
-    expect(json.aliases).toEqual(NHIA_ALIASES);
-  });
-
-  it('normalises names the same way on both sides', () => {
-    // The script re-implements normaliseDrugName in plain JavaScript because
-    // it cannot import it. If the two diverge, the server matches a
-    // different set of items from the one the tests check.
-    const script = fs.readFileSync(
-      path.join(process.cwd(), 'scripts/maintenance/apply-nhia-coverage.js'), 'utf8',
-    );
-    expect(script).toContain("replace(/['’`]/g, '')");
-    expect(script).toContain('replace(/[(),.;:/');
-    expect(script).toContain('FORM_WORDS');
-    expect(script).toContain('Must stay identical to normaliseDrugName');
+  it('uses the application’s own matcher, not a copy of it', () => {
+    // The first version re-implemented normaliseDrugName in plain JavaScript
+    // so it could run without a TypeScript runtime. That is two copies of a
+    // clinical rule kept in step by hand, and it lasted one afternoon.
+    expect(script).toContain("from '../../src/lib/payer/nhiaMatch'");
+    expect(script).toContain('matchNhia(row.name, row.strength)');
+    expect(script).not.toContain('FORM_WORDS');
+    expect(script).not.toContain('function normalise');
   });
 
   it('changes nothing without being told to', () => {
-    const script = fs.readFileSync(
-      path.join(process.cwd(), 'scripts/maintenance/apply-nhia-coverage.js'), 'utf8',
-    );
     expect(script).toContain("const APPLY = process.argv.includes('--apply')");
     expect(script).toContain('Nothing changed.');
+    expect(script).toContain('re-run with --apply');
   });
 
   it('never unsets a flag a pharmacist set by hand', () => {
     // They have the circular in front of them and this file does not.
-    const script = fs.readFileSync(
-      path.join(process.cwd(), 'scripts/maintenance/apply-nhia-coverage.js'), 'utf8',
-    );
-    expect(script).toContain('alreadySetByHand');
+    expect(script).toContain('keptByHand');
     expect(script).toContain('covered by hand, kept');
+  });
+
+  it('leaves an unmatched item exactly where it is', () => {
+    // An unmatched item costs a minute of attention; a wrongly matched one
+    // costs a cancelled case.
+    expect(script).toContain('no match, left as it is');
+    expect(script).toContain('--unmatched');
+  });
+
+  it('says that booked cases are not re-routed', () => {
+    expect(script).toContain('Cases already booked are NOT re-routed');
   });
 });

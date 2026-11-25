@@ -63,7 +63,6 @@ export const NHIA_ALIASES: Record<string, string> = {
   'ringer lactate': 'ringers lactate',
   'ringers lactate solution': 'ringers lactate',
   'dextrose saline': 'dextrose sodium chloride',
-  'darrows solution': 'darrows solution',
   'water for inj': 'water for injection',
   wfi: 'water for injection',
   // Products named for what they are
@@ -76,6 +75,35 @@ export const NHIA_ALIASES: Record<string, string> = {
   'giving set': 'infusion set',
   'branula': 'iv cannula',
   cannula: 'iv cannula',
+  // Combinations, which a catalogue writes one way and the Authority another.
+  'amoxicillin clavulanate': 'amoxycillin plus clavulanic acid co amoxiclav',
+  'amoxycillin clavulanate': 'amoxycillin plus clavulanic acid co amoxiclav',
+  'co amoxiclav': 'amoxycillin plus clavulanic acid co amoxiclav',
+  'augmentin': 'amoxycillin plus clavulanic acid co amoxiclav',
+  'fortum': 'ceftazidime',
+  'furosemide': 'frusemide',
+  'lasix': 'frusemide',
+  'dextrose water': 'glucose dextrose',
+  'dextrous water': 'glucose dextrose',
+  'dextrose': 'glucose dextrose',
+  'glucose': 'glucose dextrose',
+  'd w': 'glucose dextrose',
+  'dextrous saline': 'dextrose sodium chloride',
+  'd s': 'dextrose sodium chloride',
+  'darrow': 'darrows solution',
+  'kcl': 'potassium chloride',
+  'sofratulle gauze': 'framycetin',
+  'sofratulle': 'framycetin',
+  'sulfratulle gauze': 'framycetin',
+  'bactigras': 'framycetin',
+  'silver sulfadiazine cream': 'silver sulphadiazine',
+  'silver sulfadiazine': 'silver sulphadiazine',
+  'dermazine cream': 'silver sulphadiazine',
+  'dermazine': 'silver sulphadiazine',
+  'otrivine xylometazoline': 'xylometazoline',
+  'otrivine': 'xylometazoline',
+  'gentamicin ear eye cream': 'gentamicin',
+  'plain xylocaine lidocaine 2 plain urology': 'lidocaine',
 };
 
 /** Lowercase, strip punctuation and dosage-form words; keep strengths. */
@@ -87,7 +115,9 @@ export function normaliseDrugName(raw: string | null | undefined): string {
     // would ever type into a catalogue.
     .replace(/['’`]/g, '')
     .replace(/[(),.;:/\\[\]{}"]/g, ' ')
-    .replace(/[+]/g, ' ')
+    // Hyphen and plus become spaces, so "Povidone-iodine" and "Povidone
+    // iodine" are one name and "Co-trimoxazole" survives on both sides.
+    .replace(/[-+\u2013\u2014]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (base === '') return '';
@@ -95,6 +125,78 @@ export function normaliseDrugName(raw: string | null | undefined): string {
   // A name that is NOTHING but form words ("injection") keeps its words, so
   // it fails to match rather than matching the empty string.
   return (kept.length ? kept : base.split(' ')).join(' ').trim();
+}
+
+
+/**
+ * Pulling the medicine out of a catalogue line.
+ *
+ * THIS IS WHERE THE MATCH RATE LIVES. A catalogue here does not say
+ * "Paracetamol". It says "Paracetamol 1 g IV (100 ml) (1 g IV)", because the
+ * line was written to be read by a nurse at a trolley. The NHIA list says
+ * "Paracetamol" with the strength in its own column, because it was written
+ * to be read by an accountant. Measured on this hospital's catalogue, 19 of
+ * 90 pharmacy items matched before this function existed.
+ *
+ * THE STRENGTH IS NOT THROWN AWAY, it is moved. Everything stripped out of
+ * the name is handed back as a strength hint and used to choose between
+ * rows of the same drug -- which is the only safe way to do this, because
+ * "Ceftriaxone 1g" and "Ceftriaxone 250mg" are different lines at different
+ * prices.
+ *
+ * WHAT IT REFUSES TO DO is touch a word that could be part of a drug's name.
+ * Only bracketed asides, and tokens that are a NUMBER followed by a unit,
+ * are removed. "Vitamin B Complex" keeps its B; "Lidocaine 2%" loses only
+ * the 2%.
+ */
+/** A unit, standing alone. "1 g" is two tokens; "1g" is one. Both go. */
+const UNIT_WORD = new Set([
+  '%', 'mg', 'mcg', 'g', 'kg', 'ml', 'mls', 'l', 'litre', 'litres', 'iu',
+  'unit', 'units', 'mmol', 'mu', 'w/v', 'v/v', 'strength',
+]);
+const NUMBER = /^\d+(?:[.,]\d+)?%?$/;
+const NUMBER_WITH_UNIT =
+  /^\d+(?:[.,]\d+)?\s*(?:%|mg|mcg|g|kg|ml|mls|l|litre|litres|iu|units?|mmol|mu)$/;
+const DOSE_WORDS = new Set([
+  'stat', 'daily', 'bd', 'tds', 'qds', 'prn', 'per', 'case', 'max', 'titrate',
+  'apply', 'topically', 'cycles', 'min', 'each', 'bp', 'bpc',
+]);
+
+export function splitNameAndStrength(
+  raw: string | null | undefined,
+): { name: string; strength: string } {
+  const text = String(raw ?? '');
+  // Everything in brackets is an aside: a presentation, a dose, an
+  // instruction. None of it is the medicine's name.
+  const asides: string[] = [];
+  const withoutAsides = text.replace(/\(([^()]*)\)/g, (_m, inner: string) => {
+    asides.push(String(inner));
+    return ' ';
+  });
+
+  const words = withoutAsides.split(/[\s/]+/).map((w) => w.trim()).filter(Boolean);
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const bare = words[i].replace(/[(),.;:]+$/g, '');
+    const low = bare.toLowerCase();
+    const nextLow = (words[i + 1] ?? '').replace(/[(),.;:]+$/g, '').toLowerCase();
+
+    // "1 g", "1.2 g", "100 ml" — a number and the unit after it, together.
+    if (NUMBER.test(low) && UNIT_WORD.has(nextLow)) {
+      dropped.push(bare, words[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (NUMBER_WITH_UNIT.test(low) || NUMBER.test(low)) { dropped.push(bare); continue; }
+    if (DOSE_WORDS.has(low)) { dropped.push(bare); continue; }
+    kept.push(words[i]);
+  }
+
+  // A line that is NOTHING but numbers and units keeps its original text, so
+  // it fails to match rather than matching the empty string.
+  const name = kept.join(' ').trim() || text.trim();
+  return { name, strength: [...dropped, ...asides].join(' ').trim() };
 }
 
 export type MatchHow = 'EXACT' | 'ALIAS' | 'NONE';
@@ -133,29 +235,68 @@ export function matchNhia(
   name: string | null | undefined,
   strength?: string | null,
 ): NhiaMatch {
-  const key = normaliseDrugName(name);
-  if (key === '') return NO_MATCH;
+  const whole = normaliseDrugName(name);
+  if (whole === '') return NO_MATCH;
 
-  let how: MatchHow = 'EXACT';
-  let rows = BY_NAME.get(key);
+  // THREE ATTEMPTS, narrowest first, and none of them guesses.
+  //   1. the name exactly as the catalogue writes it
+  //   2. that name under a spelling this file knows
+  //   3. the name with its strengths and bracketed asides moved aside
+  // The third is what makes "Paracetamol 1 g IV (100 ml)" find paracetamol,
+  // and the strength it removed is used below to choose between rows.
+  const split = splitNameAndStrength(name);
+  const stripped = normaliseDrugName(split.name);
+  const hint = [strength ?? '', split.strength].join(' ').trim();
 
-  if (!rows) {
-    const alias = NHIA_ALIASES[key];
-    if (alias) {
-      rows = BY_NAME.get(normaliseDrugName(alias));
-      how = 'ALIAS';
-    }
+  // CANDIDATES FROM EVERY ROUTE, UNIONED, and then narrowed. Taking the
+  // first route that returns anything was wrong in a way the Authority's own
+  // document causes: it spells the gentamicin INJECTION "Gentamycin" at
+  // 6.7 and the ointment "Gentamicin" at 14.1. An exact match on the
+  // catalogue's "Gentamicin 80 mg (Ampoule)" therefore found the ointment
+  // and stopped, and never tried the alias that leads to the injection.
+  // An alias asserts the two names are the same drug, so rows reached
+  // through it belong in the same pile, and the strength decides.
+  const candidates = new Map<string, NhiaItem>();
+  let how: MatchHow = 'NONE';
+  const take = (rows: NhiaItem[] | undefined, via: MatchHow) => {
+    if (!rows) return;
+    for (const r of rows) if (!candidates.has(r.code)) candidates.set(r.code, r);
+    if (how === 'NONE' || (how === 'ALIAS' && via === 'EXACT')) how = via;
+  };
+
+  take(BY_NAME.get(whole), 'EXACT');
+  if (NHIA_ALIASES[whole]) take(BY_NAME.get(normaliseDrugName(NHIA_ALIASES[whole])), 'ALIAS');
+  if (stripped !== whole) {
+    take(BY_NAME.get(stripped), 'EXACT');
+    if (NHIA_ALIASES[stripped]) take(BY_NAME.get(normaliseDrugName(NHIA_ALIASES[stripped])), 'ALIAS');
   }
-  if (!rows || rows.length === 0) return NO_MATCH;
+
+  const rows = Array.from(candidates.values());
+  if (rows.length === 0) return NO_MATCH;
   if (rows.length === 1) return { how, item: rows[0], alternatives: rows };
 
-  const want = String(strength ?? '').toLowerCase().replace(/\s+/g, '');
+  // Narrowed against the strength AND the form and presentation, because
+  // "80 mg (Ampoule)" tells the two gentamicins apart where the strength
+  // alone does not.
+  const want = hint.toLowerCase().replace(/\s+/g, '');
   if (want !== '') {
+    const describes = (r: NhiaItem) =>
+      [r.strength, r.form, r.presentation].filter(Boolean).join(' ')
+        .toLowerCase().replace(/\s+/g, '');
     const narrowed = rows.filter((r) => {
-      const have = String(r.strength ?? '').toLowerCase().replace(/\s+/g, '');
-      return have !== '' && (have.includes(want) || want.includes(have));
+      const have = describes(r);
+      if (have === '') return false;
+      if (have.includes(want) || want.includes(have)) return true;
+      // Or any single word of the hint naming this row's form: "ampoule",
+      // "vial", "tube". One word is enough where the rest is a dose.
+      return hint.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
+        .some((w) => have.includes(w));
     });
     if (narrowed.length === 1) return { how, item: narrowed[0], alternatives: rows };
+    if (narrowed.length > 1) {
+      const cheapestOf = [...narrowed].sort((a, b) => (a.price ?? 0) - (b.price ?? 0))[0];
+      return { how, item: cheapestOf, alternatives: rows };
+    }
   }
 
   // Several strengths and nothing to choose between them. The CHEAPEST is
