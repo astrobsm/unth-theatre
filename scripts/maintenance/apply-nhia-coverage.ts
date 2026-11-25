@@ -48,6 +48,14 @@ import { matchNhia } from '../../src/lib/payer/nhiaMatch';
 const ROOT = process.cwd();
 const APPLY = process.argv.includes('--apply');
 const SHOW_UNMATCHED = process.argv.includes('--unmatched');
+/**
+ * Print every pair before anything is written.
+ *
+ * THE POINT OF A DRY RUN IS TO BE READ. A count of 189 matches says nothing
+ * about whether any of them is right; the pairs do, and a pharmacist can
+ * scan them faster than any test can prove them.
+ */
+const SHOW_MATCHES = process.argv.includes('--matches');
 
 function readEnv(key: string): string | null {
   for (const file of ['.env.local', '.env']) {
@@ -115,6 +123,20 @@ async function main() {
     console.log(`  no match, left as it is  ${unmatched.length}`);
     if (keptByHand.length) {
       console.log(`  covered by hand, kept    ${keptByHand.length}  (somebody knew something this list does not)`);
+    }
+
+    if (SHOW_MATCHES && matched.length) {
+      console.log('\n  What it matched — read this before --apply:');
+      for (const { row, m } of matched) {
+        const item = m.item!;
+        const flag = item.coverage === 'PARTIAL' ? ' [PARTIAL]'
+          : item.coverage === 'EXCLUDED' ? ' [EXCLUDED]' : '';
+        const via = m.how === 'ALIAS' ? ' (via a known spelling)' : '';
+        console.log(`    ${row.name}`);
+        console.log(`      -> ${item.code}  ${item.name}`
+          + `${item.strength ? ` ${item.strength}` : ''}`
+          + `${item.price != null ? `  ₦${item.price.toLocaleString()}` : ''}${flag}${via}`);
+      }
     }
 
     if (SHOW_UNMATCHED && unmatched.length) {
