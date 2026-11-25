@@ -4,7 +4,10 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import {
-  changeSummary, checkAddition, checkRemoval, canEditPack,
+  changeSummary, checkAddition, checkRemoval, checkQuantityChange,
+  quantityChanged, quantityChangeLabel, canEditPack,
+  MAX_PACK_QUANTITY, MAX_UNIT_LENGTH,
+  type ChangedLine,
 } from '@/lib/theatreOps/packAmendment';
 import { pushToUsers } from '@/lib/pushAll';
 
@@ -12,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET  /api/surgeries/[id]/pack   — both lists, withdrawn lines included
- * POST /api/surgeries/[id]/pack   — add, remove, and submit the changes
+ * POST /api/surgeries/[id]/pack   — add, remove, change a quantity, and submit
  *
  * The consumables and pharmacy lists were fixed at booking. A surgeon who
  * changed their mind afterwards had no way to say so, so the change happened
@@ -40,6 +43,23 @@ const changeSchema = z.object({
     list: z.enum(['CONSUMABLE', 'PHARMACY']),
     id: z.string().min(1),
     reason: z.string(),
+  })).optional(),
+  /**
+   * How many, and of what unit.
+   *
+   * IN PLACE, and that is the difference between this and the swap the screen
+   * also offers. A swap is staged as a withdrawal plus an addition because it
+   * changes the ITEM, and a row that quietly becomes a different drug is how
+   * the wrong thing is carried to theatre. Eight pairs of gloves instead of
+   * one is the same item; withdrawing it would tell the provider something
+   * was cancelled when nothing was.
+   */
+  change: z.array(z.object({
+    list: z.enum(['CONSUMABLE', 'PHARMACY']),
+    id: z.string().min(1),
+    quantity: z.number().int().min(1).max(MAX_PACK_QUANTITY).optional(),
+    unit: z.string().min(1).max(MAX_UNIT_LENGTH).optional(),
+    reason: z.string().optional(),
   })).optional(),
   /** Notify the providers that the list has changed. */
   submit: z.boolean().optional(),
@@ -102,6 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     let notice = false;
     const added: Array<{ id: string; name: string; quantity: number; status: string }> = [];
     const removed: Array<{ id: string; name: string; quantity: number; status: string }> = [];
+    const changed: Array<ChangedLine & { id: string }> = [];
 
     // ---- Removals, validated before anything is written --------------------
     for (const r of input.remove ?? []) {
@@ -173,14 +194,76 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     }
 
+    // ---- Quantity and unit, changed in place ------------------------------
+    // Last, so that a request which also adds and removes has settled those
+    // first: a line this loop reads has not just been withdrawn by the loop
+    // above without the change seeing it.
+    for (const c of input.change ?? []) {
+      const row = c.list === 'CONSUMABLE'
+        ? await prisma.surgeryConsumableRequest.findUnique({ where: { id: c.id } })
+        : await prisma.surgeryDrugDressingRequest.findUnique({ where: { id: c.id } });
+
+      if (!row || row.surgeryId !== params.id) {
+        problems.push('An item to change does not belong to this case.');
+        continue;
+      }
+
+      const verdict = checkQuantityChange({
+        currentStatus: row.status,
+        currentQuantity: row.quantity,
+        currentUnit: row.unit,
+        quantity: c.quantity ?? null,
+        unit: c.unit ?? null,
+        byId: userId,
+        byRole: role,
+      });
+      if (!verdict.ok) { problems.push(`${row.name}: ${verdict.problem}`); continue; }
+
+      // Resubmitting a line nobody actually changed is a no-op, not an error.
+      // Reporting it would bury the one problem that mattered under two that
+      // did not.
+      if (!quantityChanged({
+        currentQuantity: row.quantity,
+        currentUnit: row.unit,
+        quantity: c.quantity ?? null,
+        unit: c.unit ?? null,
+      })) continue;
+
+      notice = notice || verdict.requiresProviderNotice;
+
+      const toQty = c.quantity ?? row.quantity;
+      const toUnit = (c.unit ?? row.unit ?? '').trim() || row.unit;
+      const label = quantityChangeLabel(row.quantity, row.unit, toQty, toUnit);
+
+      const data = {
+        quantity: toQty,
+        unit: toUnit,
+        // The FIRST value only. A second correction must not overwrite what
+        // the list said at booking, which is the thing a provider who picked
+        // against the original needs to see.
+        originalQuantity: row.originalQuantity ?? row.quantity,
+        originalUnit: row.originalUnit ?? row.unit,
+        quantityChangedAt: new Date(),
+        quantityChangedById: userId,
+        quantityChangeReason: (c.reason ?? '').trim() || null,
+      };
+
+      if (c.list === 'CONSUMABLE') {
+        await prisma.surgeryConsumableRequest.update({ where: { id: c.id }, data });
+      } else {
+        await prisma.surgeryDrugDressingRequest.update({ where: { id: c.id }, data });
+      }
+      changed.push({ id: row.id, name: row.name, change: label });
+    }
+
     const caseLabel = `${surgery.patient?.name ?? 'Patient'}${
       surgery.patient?.folderNumber ? ` (${surgery.patient.folderNumber})` : ''} · ${surgery.procedureName}`;
-    const summary = changeSummary(added, removed, caseLabel);
+    const summary = changeSummary(added, removed, caseLabel, changed);
 
     // ---- Tell the providers ------------------------------------------------
     // Only when something actually changed. Resubmitting an unchanged list to
     // a provider's phone is how a notification channel stops being read.
-    if (input.submit && (added.length || removed.length)) {
+    if (input.submit && (added.length || removed.length || changed.length)) {
       const providers = await prisma.user.findMany({
         where: {
           role: { in: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST', 'THEATRE_STORE_KEEPER'] },
@@ -209,18 +292,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         changes: JSON.stringify({
           added: added.map((a) => ({ id: a.id, name: a.name, quantity: a.quantity })),
           removed: removed.map((r) => ({ id: r.id, name: r.name })),
+          // Both sides of every quantity change, because the audit trail is
+          // where "who put 80 pairs of gloves on this case" is answered.
+          changed: changed.map((c) => ({ id: c.id, name: c.name, change: c.change })),
           reasons: {
             added: (input.add ?? []).map((a) => a.reason),
             removed: (input.remove ?? []).map((r) => r.reason),
+            changed: (input.change ?? []).map((c) => c.reason ?? ''),
           },
           by: { userId, role },
-          notifiedProviders: !!input.submit && (added.length > 0 || removed.length > 0),
+          notifiedProviders: !!input.submit
+            && (added.length > 0 || removed.length > 0 || changed.length > 0),
         }),
       },
     }).catch(() => {});
 
     return NextResponse.json({
-      added, removed, summary,
+      added, removed, changed, summary,
       requiresProviderNotice: notice,
       // Reported rather than thrown: a request that adds three items and gets
       // one wrong should apply the two that were right, and say which failed.

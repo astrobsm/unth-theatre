@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Package, Pill, Plus, Trash2, Send, AlertTriangle, ChevronDown, ChevronRight,
-  Repeat2, X,
+  Repeat2, X, Minus, Pencil,
 } from 'lucide-react';
-import { MIN_PACK_REASON } from '@/lib/theatreOps/packAmendment';
+import {
+  MIN_PACK_REASON, MAX_PACK_QUANTITY, unitsFor,
+} from '@/lib/theatreOps/packAmendment';
 import {
   groupConsumables,
   groupPharmacy,
@@ -40,6 +42,12 @@ interface PackLine {
   addedAfterBooking?: boolean | null;
   additionReason?: string | null;
   removalReason?: string | null;
+  /** What the list said at BOOKING, where the quantity has been corrected
+   *  since. Shown on the line, because a provider who picked against the
+   *  original needs to see what moved under them. */
+  originalQuantity?: number | null;
+  originalUnit?: string | null;
+  quantityChangeReason?: string | null;
 }
 
 type ListKind = 'CONSUMABLE' | 'PHARMACY';
@@ -90,6 +98,24 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
   const [swaps, setSwaps] = useState<Record<string, { list: ListKind; to: string }>>({});
   /** Which line is currently showing its alternatives. */
   const [swapOpen, setSwapOpen] = useState<string | null>(null);
+
+  /**
+   * HOW MANY, and of what unit.
+   *
+   * Asked for directly: a pack is composed from a standard and the standard
+   * is an average, so the commonest thing a surgeon wants to say about a line
+   * is not "remove it" but "eight of these, not one".
+   *
+   * STAGED IN PLACE, unlike a swap. A swap is a withdrawal plus an addition
+   * because it changes the ITEM; this changes only the count of the same
+   * item, and withdrawing a line to re-add it would tell the pack provider
+   * that something was cancelled when nothing was.
+   */
+  const [quantities, setQuantities] = useState<
+    Record<string, { list: ListKind; quantity: number; unit: string; reason: string }>
+  >({});
+  /** Which line is currently showing its quantity control. */
+  const [qtyOpen, setQtyOpen] = useState<string | null>(null);
   /** Alternatives by `${list}:${group}`, fetched once and kept. */
   const [options, setOptions] = useState<Record<string, string[]>>({});
   const [optionsLoading, setOptionsLoading] = useState<string | null>(null);
@@ -143,7 +169,8 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
 
   useEffect(() => { load(); }, [load]);
 
-  const staged = additions.length + Object.keys(removals).length + Object.keys(swaps).length;
+  const staged = additions.length + Object.keys(removals).length
+    + Object.keys(swaps).length + Object.keys(quantities).length;
   // Removing no longer waits on a reason, and a swap writes its own on both
   // sides — each naming the other item, which is what the provider needs and
   // all they need. Adding still asks: it is the rarer action, it costs the
@@ -183,6 +210,18 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
               };
             }),
           ],
+          // Quantity and unit, corrected in place. No reason is required --
+          // following removal rather than addition, because correcting a
+          // number a standard supplied is the ordinary business of this
+          // screen and a sentence demanded for each one is what stops people
+          // correcting them.
+          change: Object.entries(quantities).map(([id, q]) => ({
+            list: q.list,
+            id,
+            quantity: q.quantity,
+            unit: q.unit,
+            ...(q.reason.trim() ? { reason: q.reason.trim() } : {}),
+          })),
           remove: [
             ...Object.entries(removals).map(([id, r]) => ({
               list: r.list, id, reason: r.reason.trim(),
@@ -210,6 +249,8 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
       setAdditions([]);
       setSwaps({});
       setSwapOpen(null);
+      setQuantities({});
+      setQtyOpen(null);
       setRemovals({});
       await load();
     } catch {
@@ -237,6 +278,15 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
             <div className="flex items-start justify-between gap-2">
               <span className={withdrawn || markedForRemoval ? 'line-through' : ''}>
                 {l.quantity} × {l.name}{l.unit ? ` (${l.unit})` : ''}
+                {/* What it said at booking, where that is not what it says
+                    now. The provider may have picked against the original. */}
+                {l.originalQuantity != null
+                  && (l.originalQuantity !== l.quantity
+                    || (l.originalUnit ?? '') !== (l.unit ?? '')) && (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
+                    was {l.originalQuantity}{l.originalUnit ? ` ${l.originalUnit}` : ''}
+                  </span>
+                )}
                 {l.addedAfterBooking && (
                   <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-800">
                     added after booking
@@ -268,6 +318,29 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
                   >
                     <Repeat2 className="h-4 w-4" />
                   </button>
+                  {/* HOW MANY. Beside change-the-item and remove-it,
+                      because it is the third thing anybody wants to do to a
+                      line and the only one that previously required doing
+                      the other two in sequence. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQtyOpen((cur) => (cur === l.id ? null : l.id));
+                      setQuantities((prev) => (prev[l.id] ? prev : {
+                        ...prev,
+                        [l.id]: {
+                          list: kind,
+                          quantity: l.quantity,
+                          unit: String(l.unit ?? (kind === 'PHARMACY' ? 'vial' : 'piece')),
+                          reason: '',
+                        },
+                      }));
+                    }}
+                    className="text-emerald-700"
+                    title="Change how many, or the unit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() =>
@@ -292,6 +365,134 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
             {!withdrawn && l.additionReason && (
               <p className="mt-1 text-xs italic text-gray-600">Added: {l.additionReason}</p>
             )}
+
+            {/* Staged quantity change, shown on the line it changes. */}
+            {quantities[l.id]
+              && (quantities[l.id].quantity !== l.quantity
+                || quantities[l.id].unit !== String(l.unit ?? ''))
+              && qtyOpen !== l.id && (
+              <p className="mt-1 flex items-center gap-2 text-xs font-medium text-emerald-800">
+                <Pencil className="h-3 w-3" />
+                {l.quantity}{l.unit ? ` ${l.unit}` : ''} → {quantities[l.id].quantity}
+                {quantities[l.id].unit ? ` ${quantities[l.id].unit}` : ''}
+                <button
+                  type="button"
+                  className="text-gray-500"
+                  title="Undo this change"
+                  onClick={() => setQuantities((p) => {
+                    const next = { ...p };
+                    delete next[l.id];
+                    return next;
+                  })}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </p>
+            )}
+
+            {/*
+              The quantity control.
+              A STEPPER AND A BOX, not a box alone. Most corrections are "one
+              more" or "one fewer" and a thumb on a phone finds a 40px button
+              faster than a number field; the field stays for 8 and for 24.
+              The unit is a list rather than free text, so two lines of the
+              same item cannot end up counted in "pair" and "pairs" -- but it
+              carries whatever this line already says, because the catalogue
+              holds units this list has never heard of and refusing to save
+              would turn a quantity correction into a dead end.
+            */}
+            {qtyOpen === l.id && canEdit && !withdrawn && quantities[l.id] && (() => {
+              const q = quantities[l.id];
+              const set = (patch: Partial<typeof q>) =>
+                setQuantities((p) => ({ ...p, [l.id]: { ...p[l.id], ...patch } }));
+              const units = Array.from(new Set([
+                ...(l.unit ? [String(l.unit)] : []),
+                ...unitsFor(kind),
+              ]));
+              return (
+                <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded border border-emerald-300 bg-white p-1.5 text-emerald-800 disabled:opacity-40"
+                      disabled={q.quantity <= 1}
+                      aria-label={`One fewer ${l.name}`}
+                      onClick={() => set({ quantity: Math.max(1, q.quantity - 1) })}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_PACK_QUANTITY}
+                      inputMode="numeric"
+                      className="w-20 rounded border border-emerald-300 px-2 py-1 text-center text-sm"
+                      aria-label={`How many ${l.name}`}
+                      value={q.quantity}
+                      onChange={(e) => {
+                        const n = Number.parseInt(e.target.value, 10);
+                        set({ quantity: Number.isFinite(n) ? n : 1 });
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="rounded border border-emerald-300 bg-white p-1.5 text-emerald-800 disabled:opacity-40"
+                      disabled={q.quantity >= MAX_PACK_QUANTITY}
+                      aria-label={`One more ${l.name}`}
+                      onClick={() => set({ quantity: Math.min(MAX_PACK_QUANTITY, q.quantity + 1) })}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                    <select
+                      className="rounded border border-emerald-300 px-2 py-1 text-sm"
+                      aria-label={`Unit for ${l.name}`}
+                      value={q.unit}
+                      onChange={(e) => set({ unit: e.target.value })}
+                    >
+                      {units.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+
+                  {(q.quantity < 1 || q.quantity > MAX_PACK_QUANTITY) && (
+                    <p className="mt-1 text-xs font-medium text-red-700">
+                      Between 1 and {MAX_PACK_QUANTITY}.
+                    </p>
+                  )}
+
+                  <input
+                    className="input-field mt-2 text-sm"
+                    placeholder="Optional — anything the pack provider should know"
+                    value={q.reason}
+                    onChange={(e) => set({ reason: e.target.value })}
+                  />
+
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                      disabled={q.quantity < 1 || q.quantity > MAX_PACK_QUANTITY}
+                      onClick={() => setQtyOpen(null)}
+                    >
+                      Done
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700"
+                      onClick={() => {
+                        setQuantities((p) => {
+                          const next = { ...p };
+                          delete next[l.id];
+                          return next;
+                        });
+                        setQtyOpen(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Staged swap, shown on the line it changes. */}
             {swaps[l.id] && (

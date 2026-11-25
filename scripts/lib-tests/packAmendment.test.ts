@@ -7,13 +7,22 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import fs from 'fs';
+import path from 'path';
+
 import {
+  MAX_PACK_QUANTITY,
+  MAX_UNIT_LENGTH,
   MIN_PACK_REASON,
   activeLines,
   canEditPack,
   changeSummary,
   checkAddition,
+  checkQuantityChange,
   checkRemoval,
+  quantityChangeLabel,
+  quantityChanged,
+  unitsFor,
 } from '../../src/lib/theatreOps/packAmendment';
 
 const REASON = 'Switching to a lightweight mesh for this repair.';
@@ -156,5 +165,205 @@ describe('what the provider is asked for', () => {
 
   it('says plainly when a resubmission changed nothing', () => {
     expect(changeSummary([], [], 'Theatre 2 · Hernia repair')).toContain('no changes');
+  });
+});
+
+
+/**
+ * CHANGING HOW MANY, asked for directly on 25 November 2026.
+ *
+ * A pack is composed from a standard and the standard is an average, so the
+ * commonest thing a surgeon wants to say about a line is not "remove it" but
+ * "eight of these, not one". Before this the only way to say it was to
+ * withdraw the line and add it again -- two decisions in the provider's
+ * notification where there was only one, and the connection between them
+ * lost.
+ */
+describe('changing how many, and of what unit', () => {
+  const LINE = { currentStatus: 'REQUESTED', currentQuantity: 1, currentUnit: 'pair' };
+
+  it('lets the surgical team change a quantity', () => {
+    const r = checkQuantityChange({ ...LINE, quantity: 8, ...BY });
+    expect(r.ok).toBe(true);
+    expect(r.problem).toBeNull();
+  });
+
+  it('asks for no reason, unlike adding', () => {
+    // Following removal rather than addition. Correcting a number a standard
+    // supplied is the ordinary business of this screen; a sentence demanded
+    // for each one is what stops people correcting them at all.
+    expect(checkQuantityChange({ ...LINE, quantity: 8, ...BY }).ok).toBe(true);
+  });
+
+  it('refuses anybody outside the surgical team', () => {
+    // Including the pack provider. Spotting that a number looks wrong is not
+    // the same as deciding what a case needs.
+    for (const role of ['CONSUMABLE_PACK_PROVIDER', 'PORTER', 'CLEANER']) {
+      const r = checkQuantityChange({ ...LINE, quantity: 8, byId: 'u1', byRole: role });
+      expect(r.ok, role).toBe(false);
+    }
+  });
+
+  it('lets a house officer change one', () => {
+    // They do most of the booking, and since 25 November they hold a
+    // surgeon's access. Through roleAllowed, so inheritance is seen.
+    expect(checkQuantityChange({ ...LINE, quantity: 8, byId: 'u1', byRole: 'HOUSE_OFFICER' }).ok)
+      .toBe(true);
+  });
+
+  it('will not change a line that has been withdrawn', () => {
+    const r = checkQuantityChange({ ...LINE, currentStatus: 'CANCELLED', quantity: 8, ...BY });
+    expect(r.ok).toBe(false);
+    expect(r.problem).toContain('withdrawn');
+  });
+
+  it('catches the missed keystroke', () => {
+    // 80 pairs typed for 8 is a plausible slip on this screen and reaches
+    // the store as a real order.
+    const r = checkQuantityChange({ ...LINE, quantity: MAX_PACK_QUANTITY + 1, ...BY });
+    expect(r.ok).toBe(false);
+    expect(r.problem).toContain(String(MAX_PACK_QUANTITY));
+  });
+
+  it('refuses a fraction, a zero and a negative', () => {
+    for (const q of [0, -3, 2.5]) {
+      expect(checkQuantityChange({ ...LINE, quantity: q, ...BY }).ok, String(q)).toBe(false);
+    }
+  });
+
+  it('refuses a blank unit and a sentence pretending to be one', () => {
+    expect(checkQuantityChange({ ...LINE, unit: '   ', ...BY }).ok).toBe(false);
+    expect(checkQuantityChange({ ...LINE, unit: 'x'.repeat(MAX_UNIT_LENGTH + 1), ...BY }).ok)
+      .toBe(false);
+  });
+
+  it('accepts a unit the standard list has never heard of', () => {
+    // The catalogue holds units these lists do not name. Refusing to save
+    // because a line already says "500ml bag" would turn a quantity
+    // correction into a dead end.
+    expect(checkQuantityChange({ ...LINE, unit: '500ml bag', ...BY }).ok).toBe(true);
+  });
+
+  it('tells the provider when the item was already being picked', () => {
+    for (const status of ['PACKING', 'PACKED', 'DELIVERED']) {
+      const r = checkQuantityChange({ ...LINE, currentStatus: status, quantity: 8, ...BY });
+      expect(r.ok, status).toBe(true);
+      expect(r.requiresProviderNotice, status).toBe(true);
+    }
+    expect(checkQuantityChange({ ...LINE, quantity: 8, ...BY }).requiresProviderNotice).toBe(false);
+  });
+
+  it('treats a line nobody actually changed as a no-op, not an error', () => {
+    // Reporting "nothing was changed" for a line nobody meant to change
+    // would bury the one problem that mattered under two that did not.
+    expect(quantityChanged({ currentQuantity: 1, currentUnit: 'pair', quantity: 1, unit: 'pair' }))
+      .toBe(false);
+    expect(quantityChanged({ currentQuantity: 1, currentUnit: 'pair', quantity: 8 })).toBe(true);
+    expect(quantityChanged({ currentQuantity: 1, currentUnit: 'pair', unit: 'pairs' })).toBe(true);
+  });
+
+  it('offers units that suit the list it is on', () => {
+    expect(unitsFor('PHARMACY')).toContain('vial');
+    expect(unitsFor('PHARMACY')).not.toContain('metre');
+    expect(unitsFor('CONSUMABLE')).toContain('pair');
+    expect(unitsFor('CONSUMABLE')).not.toContain('ampoule');
+  });
+
+  it('reads as the change it is', () => {
+    expect(quantityChangeLabel(1, 'pair', 8, 'pairs')).toBe('1 pair \u2192 8 pairs');
+    expect(quantityChangeLabel(2, null, 1, null)).toBe('2 \u2192 1');
+  });
+
+  it('names the change in the provider\u2019s notification', () => {
+    // "2 changed" does not tell somebody on a phone whether to walk back to
+    // the store. "Surgical gloves 1 pair -> 8 pairs" does.
+    const s = changeSummary([], [], 'Theatre 2 \u00b7 Hernia repair', [
+      { name: 'Surgical gloves', change: '1 pair \u2192 8 pairs' },
+    ]);
+    expect(s).toContain('1 quantity changed');
+    expect(s).toContain('Surgical gloves 1 pair \u2192 8 pairs');
+    expect(s).not.toContain('no changes');
+  });
+
+  it('still says plainly when a resubmission changed nothing', () => {
+    expect(changeSummary([], [], 'Theatre 2', [])).toContain('no changes');
+  });
+});
+
+/**
+ * The route, read as source.
+ *
+ * Two properties that cannot be seen from the pure core and would both be
+ * silent failures: that a quantity change is written IN PLACE rather than
+ * staged as a withdrawal-and-add, and that the value the list carried at
+ * booking survives a second correction.
+ */
+describe('the pack route applies a quantity change in place', () => {
+  const route = fs.readFileSync(
+    path.join(process.cwd(), 'src/app/api/surgeries/[id]/pack/route.ts'), 'utf8',
+  );
+
+  it('accepts a change list beside add and remove', () => {
+    expect(route).toContain('change: z.array(');
+    expect(route).toContain('checkQuantityChange({');
+  });
+
+  it('updates the row rather than cancelling it', () => {
+    const block = route.slice(
+      route.indexOf('for (const c of input.change ?? [])'),
+      route.indexOf('const caseLabel ='),
+    );
+    expect(block).toContain('prisma.surgeryConsumableRequest.update');
+    expect(block).toContain('prisma.surgeryDrugDressingRequest.update');
+    // A quantity change must never read as a withdrawal: the provider has
+    // not been told to put anything back.
+    expect(block).not.toContain("status: 'CANCELLED'");
+  });
+
+  it('keeps the first value, not the most recent one', () => {
+    const block = route.slice(
+      route.indexOf('for (const c of input.change ?? [])'),
+      route.indexOf('const caseLabel ='),
+    );
+    expect(block).toContain('originalQuantity: row.originalQuantity ?? row.quantity');
+    expect(block).toContain('originalUnit: row.originalUnit ?? row.unit');
+  });
+
+  it('tells the providers when only a quantity moved', () => {
+    expect(route).toContain('added.length || removed.length || changed.length');
+    expect(route).toContain('changeSummary(added, removed, caseLabel, changed)');
+  });
+
+  it('records both sides in the audit trail', () => {
+    // Where "who put 80 pairs of gloves on this case" is answered.
+    expect(route).toContain('changed: changed.map((c) => ({ id: c.id, name: c.name, change: c.change }))');
+  });
+});
+
+/** The screen, read as source: the control exists and is staged, not saved. */
+describe('the pack editor offers the control', () => {
+  const ui = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/SurgeryPackEditor.tsx'), 'utf8',
+  );
+
+  it('has a quantity control beside change-the-item and remove-it', () => {
+    expect(ui).toContain('Change how many, or the unit');
+    expect(ui).toContain('setQtyOpen');
+  });
+
+  it('stages it with the rest rather than saving per keystroke', () => {
+    // A provider's phone buzzing four times while somebody edits a list is
+    // how a notification channel stops being read.
+    expect(ui).toContain('change: Object.entries(quantities).map');
+    expect(ui).toContain('Object.keys(quantities).length');
+  });
+
+  it('shows what the line said at booking once it has moved', () => {
+    expect(ui).toContain('was {l.originalQuantity}');
+  });
+
+  it('holds the stepper to the same ceiling the route enforces', () => {
+    expect(ui).toContain('MAX_PACK_QUANTITY');
+    expect(ui).not.toMatch(/max=\{999\}/);
   });
 });

@@ -9089,6 +9089,24 @@ model SurgeryConsumableRequest {
   removedAt         DateTime?
   removalReason     String?
 
+  /// HOW MANY, CORRECTED AFTER BOOKING.
+  ///
+  /// A pack is composed from a standard and the standard is an average: this
+  /// case needs eight pairs of gloves rather than one, or a 500 mL bag rather
+  /// than two 100 mL ones. Until now the only way to say so was to withdraw
+  /// the line and add it again, which reads to the pack provider as two
+  /// different decisions and loses the fact that it is the same item.
+  ///
+  /// THE FIRST VALUE IS KEPT, not overwritten, and only the first: these
+  /// record what the list said when it was booked, so a provider who picked
+  /// against the original can see what moved under them. A second correction
+  /// leaves originalQuantity alone.
+  originalQuantity     Int?
+  originalUnit         String?
+  quantityChangedAt    DateTime?
+  quantityChangedById  String?
+  quantityChangeReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -9125,6 +9143,24 @@ model SurgeryDrugDressingRequest {
   removedById       String?
   removedAt         DateTime?
   removalReason     String?
+
+  /// HOW MANY, CORRECTED AFTER BOOKING.
+  ///
+  /// A pack is composed from a standard and the standard is an average: this
+  /// case needs eight pairs of gloves rather than one, or a 500 mL bag rather
+  /// than two 100 mL ones. Until now the only way to say so was to withdraw
+  /// the line and add it again, which reads to the pack provider as two
+  /// different decisions and loses the fact that it is the same item.
+  ///
+  /// THE FIRST VALUE IS KEPT, not overwritten, and only the first: these
+  /// record what the list said when it was booked, so a provider who picked
+  /// against the original can see what moved under them. A second correction
+  /// leaves originalQuantity alone.
+  originalQuantity     Int?
+  originalUnit         String?
+  quantityChangedAt    DateTime?
+  quantityChangedById  String?
+  quantityChangeReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

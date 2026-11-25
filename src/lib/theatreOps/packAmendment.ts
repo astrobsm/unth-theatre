@@ -128,6 +128,162 @@ export function checkAddition(input: AdditionInput): PackChangeCheck {
   return { ok: true, problem: null, requiresProviderNotice: late };
 }
 
+// ------------------------------------------------------------
+// How many, and of what
+// ------------------------------------------------------------
+
+/**
+ * The units the two lists are counted in.
+ *
+ * OFFERED, NOT ENFORCED. The catalogue already holds units these lists do not
+ * name -- a template written years ago says "sachet" or "500ml bag" -- and
+ * refusing to save a line because its existing unit is not on this list would
+ * turn a quantity correction into a dead end. So the control offers these
+ * plus whatever the line already says, and the check below only insists the
+ * unit is short and not blank.
+ */
+export const CONSUMABLE_UNITS = [
+  'piece', 'pieces', 'pair', 'pairs', 'pack', 'packs', 'box', 'roll',
+  'bottle', 'set', 'sachet', 'metre',
+];
+
+export const PHARMACY_UNITS = [
+  'vial', 'vials', 'ampoule', 'ampoules', 'dose', 'doses', 'tablet', 'tablets',
+  'capsule', 'bottle', 'bag', 'sachet', 'tube', 'mL',
+];
+
+export const unitsFor = (list: 'CONSUMABLE' | 'PHARMACY'): string[] =>
+  (list === 'PHARMACY' ? PHARMACY_UNITS : CONSUMABLE_UNITS);
+
+/**
+ * The most of anything one case may ask for.
+ *
+ * A ceiling, not a clinical limit. It is here to catch the missed keystroke --
+ * 80 pairs of gloves typed for 8, 100 vials for 10 -- which on this screen is
+ * a plausible slip and reaches the store as a real order. Anything genuinely
+ * above it is a standing supply request, not a pack line.
+ */
+export const MAX_PACK_QUANTITY = 999;
+
+/** The longest a unit may be. "pairs" is five; a sentence is not a unit. */
+export const MAX_UNIT_LENGTH = 24;
+
+export interface QuantityChangeInput {
+  currentStatus: string;
+  currentQuantity: number;
+  currentUnit?: string | null;
+  /** Omitted leaves the quantity alone. */
+  quantity?: number | null;
+  /** Omitted leaves the unit alone. */
+  unit?: string | null;
+  byId?: string | null;
+  byRole?: string | null;
+}
+
+/**
+ * May this line's quantity or unit be corrected, and does anybody need telling?
+ *
+ * WHY THIS IS NOT A WITHDRAWAL AND A RE-ADD. That is how a SWAP is staged, and
+ * deliberately so: cefazolin becoming ceftriaxone is a different drug, and a
+ * row that quietly turns into one is how the wrong thing is carried to
+ * theatre. Changing how many there are of the same item is the opposite case
+ * -- the item is identical -- and withdrawing it to re-add it would tell the
+ * provider that something was cancelled when nothing was.
+ *
+ * NO REASON IS REQUIRED, following removal rather than addition. Correcting a
+ * number a standard supplied is the ordinary business of this screen, and a
+ * sentence demanded for each one is what makes people stop correcting them.
+ * The box is offered and sent when it is filled in.
+ */
+export function checkQuantityChange(input: QuantityChangeInput): PackChangeCheck {
+  const status = String(input.currentStatus ?? '').toUpperCase();
+  const acted = ACTED_ON.includes(status);
+
+  if (status === 'CANCELLED') {
+    return {
+      ok: false,
+      problem: 'That item has been withdrawn from the list. Add it again if it is needed.',
+      requiresProviderNotice: false,
+    };
+  }
+  if (!canEditPack(input.byRole)) {
+    return {
+      ok: false,
+      problem: 'Only the surgical team may change what a case is packed with.',
+      requiresProviderNotice: acted,
+    };
+  }
+  if (!input.byId) {
+    return {
+      ok: false,
+      problem: 'The person making the change must be identified.',
+      requiresProviderNotice: acted,
+    };
+  }
+
+  const wantsQuantity = input.quantity !== undefined && input.quantity !== null;
+  const unit = input.unit === undefined || input.unit === null ? null : String(input.unit).trim();
+  const wantsUnit = unit !== null;
+
+  if (!wantsQuantity && !wantsUnit) {
+    return { ok: false, problem: 'Nothing was changed.', requiresProviderNotice: false };
+  }
+  if (wantsQuantity) {
+    const q = input.quantity as number;
+    if (!Number.isInteger(q) || q < 1) {
+      return { ok: false, problem: 'Give a whole quantity of at least one.', requiresProviderNotice: acted };
+    }
+    if (q > MAX_PACK_QUANTITY) {
+      return {
+        ok: false,
+        problem: `${q} is more than one case can ask for. The most is ${MAX_PACK_QUANTITY}.`,
+        requiresProviderNotice: acted,
+      };
+    }
+  }
+  if (wantsUnit) {
+    if (unit === '') {
+      return { ok: false, problem: 'A unit cannot be blank.', requiresProviderNotice: acted };
+    }
+    if (unit.length > MAX_UNIT_LENGTH) {
+      return { ok: false, problem: 'That unit is too long to be a unit.', requiresProviderNotice: acted };
+    }
+  }
+
+  return { ok: true, problem: null, requiresProviderNotice: acted };
+}
+
+/**
+ * Has anything actually changed?
+ *
+ * Kept apart from the check above so that resubmitting an unchanged line is
+ * not an ERROR -- it is a no-op, and the API skips it silently. Reporting
+ * "nothing was changed" for a line nobody meant to change would bury the one
+ * problem that mattered in a list of three that did not.
+ */
+export function quantityChanged(input: {
+  currentQuantity: number;
+  currentUnit?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+}): boolean {
+  const q = input.quantity ?? input.currentQuantity;
+  const u = (input.unit ?? input.currentUnit ?? '').trim();
+  return q !== input.currentQuantity || u !== String(input.currentUnit ?? '').trim();
+}
+
+/** "1 piece -> 8 pairs", for the provider's notification and the line itself. */
+export function quantityChangeLabel(
+  fromQty: number,
+  fromUnit: string | null | undefined,
+  toQty: number,
+  toUnit: string | null | undefined,
+): string {
+  const left = `${fromQty}${fromUnit ? ` ${fromUnit}` : ''}`;
+  const right = `${toQty}${toUnit ? ` ${toUnit}` : ''}`;
+  return `${left} \u2192 ${right}`;
+}
+
 export interface PackLine {
   id: string;
   name: string;
@@ -147,10 +303,17 @@ export function activeLines(lines: PackLine[]): PackLine[] {
  * Written as a sentence rather than a diff because it is read on a phone by
  * somebody deciding whether to walk back to the store.
  */
+export interface ChangedLine {
+  name: string;
+  /** Already rendered, e.g. "1 piece \u2192 8 pairs". */
+  change: string;
+}
+
 export function changeSummary(
   added: PackLine[],
   removed: PackLine[],
   caseLabel: string,
+  changed: ChangedLine[] = [],
 ): string {
   const parts: string[] = [];
   if (added.length) {
@@ -158,6 +321,16 @@ export function changeSummary(
   }
   if (removed.length) {
     parts.push(`${removed.length} withdrawn (${removed.map((r) => r.name).join(', ')})`);
+  }
+  // Quantities last, and spelled out rather than counted. A provider reading
+  // this on a phone is deciding whether to walk back to the store, and
+  // "2 changed" does not answer that where "Surgical gloves 1 pair -> 8 pairs"
+  // does.
+  if (changed.length) {
+    parts.push(
+      `${changed.length} quantit${changed.length === 1 ? 'y' : 'ies'} changed `
+      + `(${changed.map((c) => `${c.name} ${c.change}`).join(', ')})`,
+    );
   }
   if (parts.length === 0) return `${caseLabel}: pack list resubmitted with no changes.`;
   return `${caseLabel}: ${parts.join('; ')}.`;
