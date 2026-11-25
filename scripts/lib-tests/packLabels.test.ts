@@ -195,7 +195,37 @@ describe('the editor on the case page', () => {
     // a time.
     expect(EDITOR).toContain('CONSUMABLE_CATEGORY_OPTIONS');
     expect(EDITOR).toContain('DRUG_TYPE_OPTIONS');
-    expect(EDITOR).toContain("...(a.list === 'CONSUMABLE' ? { category: a.group } : { type: a.group }),");
+    // The payload carries it, for both lists. Checked as behaviour rather
+    // than as one spelling of a ternary, because on 25 November the same
+    // expression also began carrying the size.
+    const add = EDITOR.slice(EDITOR.indexOf('...additions.map((a) => ('), EDITOR.indexOf('// The replacement half'));
+    expect(add).toContain('category: a.group');
+    expect(add).toContain('type: a.group');
+  });
+
+  it('starts a new item in the section it was added from', () => {
+    // The control that was missing. Adding a second size of syringe meant
+    // scrolling to the foot of the page and picking "Syringes & needles" out
+    // of a list of fifteen, having just been looking at it -- which is how
+    // five new lines all ended up under Other.
+    expect(EDITOR).toContain('addRow(kind, s.key)');
+    expect(EDITOR).toContain('Add to {s.label}');
+    // And the row is rendered inside that section, not in a panel at the
+    // bottom of the page.
+    expect(EDITOR).toContain('pending.map(({ a, i }) => renderAddRow(a, i))');
+  });
+
+  it('offers the catalogue before it offers a text box', () => {
+    // The add form was four free-text boxes, and the reasons people typed
+    // for their own additions were "couldn't select it above" and "not in
+    // the options" -- a screen telling you about itself.
+    expect(EDITOR).toContain('PackCataloguePicker');
+    expect(EDITOR).toContain('Not in the catalogue');
+    // Choosing a row fills the line in, section and size included.
+    const pick = EDITOR.slice(EDITOR.indexOf('onPick={(c) => setAddition'), EDITOR.indexOf('onPick={(c) => setAddition') + 400);
+    for (const field of ['templateId: c.id', 'name: c.name', 'size: c.size', 'unit: c.unit', 'group: c.group']) {
+      expect(pick, field).toContain(field);
+    }
   });
 
   it('opens its sections rather than hiding the list behind clicks', () => {
@@ -203,7 +233,10 @@ describe('the editor on the case page', () => {
     // state of a freshly loaded pack is every section visible. The question
     // this screen answers most often is "what is on the list".
     expect(EDITOR).toContain('const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});');
-    expect(EDITOR).toContain('const shut = !!collapsed[id];');
+    // Absent means open. The second clause is newer: a section holding a
+    // half-filled new item may not be shut, because hiding the form would
+    // leave Submit refusing for a reason nobody can see.
+    expect(EDITOR).toContain('const shut = !!collapsed[id] && pending.length === 0;');
   });
 
   it('says on a shut section that something was withdrawn from it', () => {
@@ -238,13 +271,35 @@ describe('changing a line rather than deleting and retyping it', () => {
   it('narrows the alternatives to the line’s own kind', () => {
     // The whole catalogue would mean scrolling past gauze to change an
     // antibiotic, and would let a swap move a line into a section where it
-    // does not belong.
-    expect(EDITOR).toContain('/api/admin/drug-dressing-templates?type=');
-    expect(EDITOR).toContain('/api/admin/consumable-templates?category=');
+    // does not belong. Narrowed by FILTER now rather than by a per-section
+    // fetch: the catalogue is loaded once and whole, because fetching per
+    // section is what made it cheap to throw the sizes away.
+    expect(EDITOR).toContain('.filter((c) => c.group === group)');
+    expect(EDITOR).toContain('/api/admin/drug-dressing-templates?activeOnly=true');
+    expect(EDITOR).toContain('/api/admin/consumable-templates?activeOnly=true');
+  });
+
+  it('keeps the catalogue’s rows, so the sizes survive', () => {
+    // THE BUG THIS REPLACED. The old loader kept `Array.from(new Set(names))`
+    // -- deduplicated by NAME -- so a surgeon changing a syringe was offered
+    // one choice called "Syringe", and three lines on one case all read
+    // "8 × Syringe (piece)". Gloves at 7 and 7.5 collapsed the same way.
+    const loader = EDITOR.slice(EDITOR.indexOf('const loadCatalogue'), EDITOR.indexOf('const load = useCallback'));
+    expect(loader).toContain('size:');
+    expect(loader).not.toContain('new Set(');
+    // And a size reaches the server on the replacement.
+    const swapAdd = EDITOR.slice(EDITOR.indexOf('// The replacement half'), EDITOR.indexOf('// Quantity, unit and size'));
+    expect(swapAdd).toContain('size: s.to.size');
+    expect(swapAdd).toContain('dosage: s.to.size');
   });
 
   it('does not offer the item as its own replacement', () => {
-    expect(EDITOR).toContain('choices = list.filter((n) => n.toLowerCase() !== l.name.trim().toLowerCase())');
+    // Same name AND same size. A DIFFERENT size of the same item is a real
+    // choice -- it is the commonest one on this screen -- and excluding it
+    // by name alone is what forced three staged swaps to say which syringe
+    // was which.
+    expect(EDITOR).toContain("!(c.name.toLowerCase() === l.name.trim().toLowerCase()");
+    expect(EDITOR).toContain("&& (c.size ?? '') === size)");
   });
 
   it('stages a swap as a withdrawal AND an addition, not a rewrite', () => {
@@ -252,16 +307,23 @@ describe('changing a line rather than deleting and retyping it', () => {
     // becomes a different drug is how somebody carries cefazolin to a theatre
     // that is expecting ceftriaxone — so the old line stays, struck through,
     // exactly as every other withdrawal does.
-    expect(EDITOR).toContain('reason: `Changed to ${s.to}`');
+    expect(EDITOR).toContain('reason: `Changed to ${itemLabel(s.to)}`');
     expect(EDITOR).toContain("reason: `Changed from ${was?.name ?? 'the previous item'}`");
   });
 
   it('keeps the replacement in the same section and quantity', () => {
     // A swap changes the AGENT, not how much or where it belongs. Reshuffling
     // the list would hide what actually changed.
-    expect(EDITOR).toContain('quantity: was?.quantity ?? 1');
-    expect(EDITOR).toContain("? { category: was?.category ?? 'OTHER' }");
-    expect(EDITOR).toContain(": { type: was?.type ?? 'OTHER' }");
+    //
+    // The quantity is still inherited from the line being replaced. The
+    // SECTION now comes from the catalogue row rather than from the old line,
+    // which is the same section by construction -- the choices offered are
+    // filtered to `c.group === group` -- and is the only way the replacement
+    // can carry its own size with it.
+    expect(EDITOR).toContain('quantity: was?.quantity ?? s.to.defaultQuantity');
+    expect(EDITOR).toContain('{ category: s.to.group, size: s.to.size }');
+    expect(EDITOR).toContain('{ type: s.to.group, dosage: s.to.size }');
+    expect(EDITOR).toContain('.filter((c) => c.group === group)');
   });
 
   it('counts a staged swap as a change to be submitted', () => {

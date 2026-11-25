@@ -12,6 +12,7 @@ import path from 'path';
 
 import {
   MAX_PACK_QUANTITY,
+  MAX_SIZE_LENGTH,
   MAX_UNIT_LENGTH,
   MIN_PACK_REASON,
   activeLines,
@@ -270,8 +271,43 @@ describe('changing how many, and of what unit', () => {
   });
 
   it('reads as the change it is', () => {
-    expect(quantityChangeLabel(1, 'pair', 8, 'pairs')).toBe('1 pair \u2192 8 pairs');
-    expect(quantityChangeLabel(2, null, 1, null)).toBe('2 \u2192 1');
+    expect(quantityChangeLabel(
+      { quantity: 1, unit: 'pair' },
+      { quantity: 8, unit: 'pairs' },
+    )).toBe('1 pair \u2192 8 pairs');
+    expect(quantityChangeLabel({ quantity: 2 }, { quantity: 1 })).toBe('2 \u2192 1');
+    // And the size, because "8 x Syringe" says nothing a storekeeper can act on.
+    expect(quantityChangeLabel(
+      { quantity: 8, unit: 'piece', size: '5 mL' },
+      { quantity: 10, unit: 'piece', size: '10 mL' },
+    )).toBe('8 piece (5 mL) \u2192 10 piece (10 mL)');
+  });
+
+  it('changes the size, which is most of the point', () => {
+    // A case carried three lines reading "8 x Syringe (piece)" and the only
+    // way to say which was 2 mL and which was 10 mL was to stage three swaps.
+    expect(checkQuantityChange({ ...LINE, size: '7.5', ...BY }).ok).toBe(true);
+    expect(quantityChanged({
+      currentQuantity: 1, currentUnit: 'pair', currentSize: '7', size: '7.5',
+    })).toBe(true);
+    expect(quantityChanged({
+      currentQuantity: 1, currentUnit: 'pair', currentSize: '7', size: '7',
+    })).toBe(false);
+  });
+
+  it('lets a size be cleared, and leaves it alone when nothing is said', () => {
+    // The one place in this module where blank means something. A line that
+    // should never have carried a size needs a way to say so; omitting the
+    // field has to go on meaning "leave it".
+    expect(quantityChanged({ currentQuantity: 1, currentSize: '7', size: '' })).toBe(true);
+    expect(quantityChanged({ currentQuantity: 1, currentSize: '7' })).toBe(false);
+    expect(checkQuantityChange({ ...LINE, size: '', ...BY }).ok).toBe(true);
+  });
+
+  it('refuses a sentence pretending to be a size', () => {
+    const r = checkQuantityChange({ ...LINE, size: 'x'.repeat(MAX_SIZE_LENGTH + 1), ...BY });
+    expect(r.ok).toBe(false);
+    expect(r.problem).toContain('too long');
   });
 
   it('names the change in the provider\u2019s notification', () => {
@@ -347,8 +383,21 @@ describe('the pack editor offers the control', () => {
   );
 
   it('has a quantity control beside change-the-item and remove-it', () => {
-    expect(ui).toContain('Change how many, or the unit');
+    expect(ui).toContain('Change how many, the unit or the size');
+    expect(ui).toContain('Change how many, the unit or the dose');
     expect(ui).toContain('setQtyOpen');
+  });
+
+  it('shows the size on the line, which it never used to', () => {
+    // The column existed on the row the whole time and nothing displayed it,
+    // so three different syringes read identically.
+    expect(ui).toContain('const sizeOf =');
+    expect(ui).toContain("{size !== '' && (");
+  });
+
+  it('sends the size with a change, to whichever column holds it', () => {
+    const body = ui.slice(ui.indexOf('change: Object.entries(quantities)'), ui.indexOf('remove: ['));
+    expect(body).toContain('size: q.size.trim()');
   });
 
   it('stages it with the rest rather than saving per keystroke', () => {

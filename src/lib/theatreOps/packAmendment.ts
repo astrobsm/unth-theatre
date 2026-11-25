@@ -168,14 +168,61 @@ export const MAX_PACK_QUANTITY = 999;
 /** The longest a unit may be. "pairs" is five; a sentence is not a unit. */
 export const MAX_UNIT_LENGTH = 24;
 
+/**
+ * The longest a size or a dose may be.
+ *
+ * "7.5", "10 mL", "3/0 on a 26mm needle", "1 g IV stat" — roomier than a
+ * unit, because a dose is written the way it is prescribed, and still short
+ * enough that a sentence cannot hide in it.
+ */
+export const MAX_SIZE_LENGTH = 48;
+
+/**
+ * SIZE IS NOT A DETAIL ON THIS SCREEN, it is most of the point.
+ *
+ * Three lines reading "8 × Syringe (piece)" are not three lines about the
+ * same thing: they are 2 mL, 5 mL and 10 mL, and a list that cannot say so
+ * sends somebody to the store to guess. The same for gloves at 7 and at 7.5,
+ * which are not interchangeable on a hand.
+ *
+ * It is carried on the row (SurgeryConsumableRequest.size), and for the
+ * pharmacy list the equivalent is the dose
+ * (SurgeryDrugDressingRequest.dosage). One concept, two column names,
+ * because the two tables were written for two different vocabularies.
+ */
+export interface PackLineFacts {
+  quantity: number;
+  unit?: string | null;
+  /** size for a consumable, dose for a pharmacy line. */
+  size?: string | null;
+}
+
+/** "8 piece (10 mL)" — one line's countable facts, as a person reads them. */
+export function packLineFacts(f: PackLineFacts): string {
+  const unit = (f.unit ?? '').trim();
+  const size = (f.size ?? '').trim();
+  return `${f.quantity}${unit ? ` ${unit}` : ''}${size ? ` (${size})` : ''}`;
+}
+
 export interface QuantityChangeInput {
   currentStatus: string;
   currentQuantity: number;
   currentUnit?: string | null;
+  /** The line's current size, or dose on the pharmacy list. */
+  currentSize?: string | null;
   /** Omitted leaves the quantity alone. */
   quantity?: number | null;
   /** Omitted leaves the unit alone. */
   unit?: string | null;
+  /**
+   * Omitted leaves the size alone; an empty string CLEARS it.
+   *
+   * The distinction is deliberate and it is the only place in this file
+   * where blank means something. A line that should never have carried a
+   * size needs a way to say so, and "undefined means leave it, '' means
+   * remove it" is the only shape that offers both through one field.
+   */
+  size?: string | null;
   byId?: string | null;
   byRole?: string | null;
 }
@@ -224,9 +271,20 @@ export function checkQuantityChange(input: QuantityChangeInput): PackChangeCheck
   const wantsQuantity = input.quantity !== undefined && input.quantity !== null;
   const unit = input.unit === undefined || input.unit === null ? null : String(input.unit).trim();
   const wantsUnit = unit !== null;
+  // Not `?? null`: an empty string is a request to CLEAR the size, which is
+  // different from not mentioning it.
+  const wantsSize = input.size !== undefined && input.size !== null;
+  const size = wantsSize ? String(input.size).trim() : null;
 
-  if (!wantsQuantity && !wantsUnit) {
+  if (!wantsQuantity && !wantsUnit && !wantsSize) {
     return { ok: false, problem: 'Nothing was changed.', requiresProviderNotice: false };
+  }
+  if (wantsSize && (size as string).length > MAX_SIZE_LENGTH) {
+    return {
+      ok: false,
+      problem: 'That size is too long. Put the detail in the note instead.',
+      requiresProviderNotice: acted,
+    };
   }
   if (wantsQuantity) {
     const q = input.quantity as number;
@@ -264,24 +322,30 @@ export function checkQuantityChange(input: QuantityChangeInput): PackChangeCheck
 export function quantityChanged(input: {
   currentQuantity: number;
   currentUnit?: string | null;
+  currentSize?: string | null;
   quantity?: number | null;
   unit?: string | null;
+  size?: string | null;
 }): boolean {
   const q = input.quantity ?? input.currentQuantity;
   const u = (input.unit ?? input.currentUnit ?? '').trim();
-  return q !== input.currentQuantity || u !== String(input.currentUnit ?? '').trim();
+  const s = (input.size === undefined || input.size === null
+    ? (input.currentSize ?? '')
+    : input.size).trim();
+  return q !== input.currentQuantity
+    || u !== String(input.currentUnit ?? '').trim()
+    || s !== String(input.currentSize ?? '').trim();
 }
 
-/** "1 piece -> 8 pairs", for the provider's notification and the line itself. */
-export function quantityChangeLabel(
-  fromQty: number,
-  fromUnit: string | null | undefined,
-  toQty: number,
-  toUnit: string | null | undefined,
-): string {
-  const left = `${fromQty}${fromUnit ? ` ${fromUnit}` : ''}`;
-  const right = `${toQty}${toUnit ? ` ${toUnit}` : ''}`;
-  return `${left} \u2192 ${right}`;
+/**
+ * "1 pair \u2192 8 pairs (7.5)", for the provider's notification and the line.
+ *
+ * Both sides in full rather than only what moved. The provider is deciding
+ * whether to walk back to the store, and "now 8" without "was 1" leaves them
+ * counting what is already on the trolley.
+ */
+export function quantityChangeLabel(from: PackLineFacts, to: PackLineFacts): string {
+  return `${packLineFacts(from)} \u2192 ${packLineFacts(to)}`;
 }
 
 export interface PackLine {

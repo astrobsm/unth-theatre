@@ -6,7 +6,7 @@ import { z } from 'zod';
 import {
   changeSummary, checkAddition, checkRemoval, checkQuantityChange,
   quantityChanged, quantityChangeLabel, canEditPack,
-  MAX_PACK_QUANTITY, MAX_UNIT_LENGTH,
+  MAX_PACK_QUANTITY, MAX_UNIT_LENGTH, MAX_SIZE_LENGTH,
   type ChangedLine,
 } from '@/lib/theatreOps/packAmendment';
 import { pushToUsers } from '@/lib/pushAll';
@@ -31,12 +31,20 @@ const changeSchema = z.object({
   add: z.array(z.object({
     list: z.enum(['CONSUMABLE', 'PHARMACY']),
     name: z.string().min(1),
-    quantity: z.number().int().min(1),
-    unit: z.string().optional(),
+    quantity: z.number().int().min(1).max(MAX_PACK_QUANTITY),
+    unit: z.string().max(MAX_UNIT_LENGTH).optional(),
     category: z.string().optional(),
     type: z.string().optional(),
-    dosage: z.string().nullish(),
-    route: z.string().nullish(),
+    /**
+     * WHICH ONE. Three lines reading "Syringe" are 2 mL, 5 mL and 10 mL, and
+     * a list that cannot say so sends somebody to the store to guess. The
+     * column existed on the consumables table and nothing ever wrote to it.
+     */
+    size: z.string().max(MAX_SIZE_LENGTH).nullish(),
+    dosage: z.string().max(MAX_SIZE_LENGTH).nullish(),
+    route: z.string().max(40).nullish(),
+    /** The catalogue row this came from, where it came from the catalogue. */
+    templateId: z.string().nullish(),
     reason: z.string(),
   })).optional(),
   remove: z.array(z.object({
@@ -59,6 +67,12 @@ const changeSchema = z.object({
     id: z.string().min(1),
     quantity: z.number().int().min(1).max(MAX_PACK_QUANTITY).optional(),
     unit: z.string().min(1).max(MAX_UNIT_LENGTH).optional(),
+    /**
+     * The size, or the dose on the pharmacy list. Not `.min(1)`: an empty
+     * string CLEARS a size that should never have been there, which a line
+     * needs a way to say. Omitting the field leaves it alone.
+     */
+    size: z.string().max(MAX_SIZE_LENGTH).optional(),
     reason: z.string().optional(),
   })).optional(),
   /** Notify the providers that the list has changed. */
@@ -165,8 +179,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const row = await prisma.surgeryConsumableRequest.create({
           data: {
             surgeryId: params.id,
+            templateId: a.templateId || null,
             name: a.name.trim(),
             category: (a.category as never) ?? 'OTHER',
+            size: (a.size ?? '').trim() || null,
             unit: a.unit ?? 'piece',
             quantity: a.quantity,
             requestedById: userId,
@@ -180,9 +196,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const row = await prisma.surgeryDrugDressingRequest.create({
           data: {
             surgeryId: params.id,
+            templateId: a.templateId || null,
             name: a.name.trim(),
             type: (a.type as never) ?? 'OTHER',
-            dosage: a.dosage ?? null,
+            // The pharmacy list calls it a dose, the consumables list calls
+            // it a size. The screen asks once; either column may arrive.
+            dosage: (a.dosage ?? a.size ?? '').trim() || null,
             route: a.route ?? null,
             unit: a.unit ?? 'vial',
             quantity: a.quantity,
@@ -208,12 +227,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         continue;
       }
 
+      // One concept, two column names: a consumable has a size, a pharmacy
+      // line has a dose. The screen asks once and this is where it lands.
+      const currentSize = c.list === 'CONSUMABLE'
+        ? (row as { size?: string | null }).size ?? null
+        : (row as { dosage?: string | null }).dosage ?? null;
+
       const verdict = checkQuantityChange({
         currentStatus: row.status,
         currentQuantity: row.quantity,
         currentUnit: row.unit,
+        currentSize,
         quantity: c.quantity ?? null,
         unit: c.unit ?? null,
+        size: c.size,
         byId: userId,
         byRole: role,
       });
@@ -225,19 +252,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!quantityChanged({
         currentQuantity: row.quantity,
         currentUnit: row.unit,
+        currentSize,
         quantity: c.quantity ?? null,
         unit: c.unit ?? null,
+        size: c.size,
       })) continue;
 
       notice = notice || verdict.requiresProviderNotice;
 
       const toQty = c.quantity ?? row.quantity;
       const toUnit = (c.unit ?? row.unit ?? '').trim() || row.unit;
-      const label = quantityChangeLabel(row.quantity, row.unit, toQty, toUnit);
+      const toSize = c.size === undefined ? currentSize : (c.size.trim() || null);
+      const label = quantityChangeLabel(
+        { quantity: row.quantity, unit: row.unit, size: currentSize },
+        { quantity: toQty, unit: toUnit, size: toSize },
+      );
 
       const data = {
         quantity: toQty,
         unit: toUnit,
+        ...(c.list === 'CONSUMABLE' ? { size: toSize } : { dosage: toSize }),
         // The FIRST value only. A second correction must not overwrite what
         // the list said at booking, which is the thing a provider who picked
         // against the original needs to see.
