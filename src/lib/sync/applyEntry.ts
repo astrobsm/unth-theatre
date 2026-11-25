@@ -7,7 +7,10 @@
 // hardest to notice: one side quarantining where the other overwrites.
 // ============================================================
 
-import { decide, isSynced, policyFor } from './syncPolicy';
+import { decide, isSynced, keyIsIdentity, policyFor } from './syncPolicy';
+
+/** The node name the cloud journals under, as decide() already uses it. */
+const CLOUD_NODE = 'cloud';
 import { earliestWins } from './earliestWins';
 import type { EntryResult, JournalEntryWire } from './transport';
 
@@ -175,7 +178,32 @@ export async function applyEntry(
 
     if (rival) {
       const cls = policyFor(e.table)?.cls;
-      if (cls === 'LWW') {
+
+      // ── The same record, minted twice ──────────────────────────────────
+      //
+      // For a handful of tables the natural key IS the identity: one cursor
+      // per invitation, one response per reviewer per section. Two rows with
+      // that key are not two records disagreeing, they are one record that
+      // was created on both nodes. So the authoritative node's copy takes
+      // the key and the duplicate is displaced.
+      //
+      // ONCE PER ROW. After this the two sides hold the same id, the next
+      // update finds no rival, and the stream of conflicts stops rather than
+      // being filed more tidily. Measured before the fix: 12,964 parked
+      // conflicts from four policy tables, about 2,200 a day, burying the
+      // nine that were somebody's actual decision.
+      //
+      // The displaced row is snapshotted below exactly as every other
+      // automatic displacement is, so nothing is destroyed unreadably.
+      if (cls === 'CLOUD_AUTHORITATIVE' && keyIsIdentity(e.table)
+          && e.originNode === CLOUD_NODE) {
+        effective = {
+          action: 'APPLY',
+          reason: `Same record under two ids in "${e.table}"; the authoritative copy takes the key.`,
+        };
+        rivalId = rival.id;
+        displacedRival = rival as unknown as Record<string, unknown>;
+      } else if (cls === 'LWW') {
         effective = decide(
           {
             table: e.table, op: e.op, baseVersion: e.baseVersion, hlc: e.hlc,

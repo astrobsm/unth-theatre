@@ -573,6 +573,63 @@ export interface LocalRowState {
  * conflict test is exact rather than heuristic: a change conflicts if and only
  * if the version it was derived from is no longer the version we hold.
  */
+
+/**
+ * Tables where the NATURAL KEY is the identity and the row id is incidental.
+ *
+ * WHAT THIS IS FOR, measured. On 25 November the theatre server held 13,023
+ * parked conflicts. 12,964 of them were four policy-review tables, accruing
+ * at about 2,200 a day since the round opened on 19 November, and every one
+ * said the same thing: "row X already holds this row's unique key".
+ *
+ * Both nodes had independently created a row for the same reviewer. The row
+ * counts matched exactly on the two databases -- one participation per
+ * invitation on each -- but the ids differed, so every single update the
+ * cloud made to its copy collided with the local copy, was quarantined, and
+ * came back again on the next keystroke. A dozen reviewers produced thousands
+ * of conflicts, and the genuine ones (one surgery, one user, seven PACU
+ * assessments) were buried under them where nobody would ever find them.
+ *
+ * WHAT THE FIX SAYS. For these tables a row IS its natural key: one cursor
+ * per invitation, one response per reviewer per section. Two rows with the
+ * same key are not two records in disagreement, they are one record that was
+ * minted twice. So when the AUTHORITATIVE node sends one, it takes the key
+ * and the local duplicate is displaced -- snapshotted into sync_conflicts
+ * first, as every automatic displacement in this layer is, because a rule
+ * that destroys something unreadably is not acceptable however right it is.
+ *
+ * IT HAPPENS ONCE PER ROW, which is the point. After the displacement both
+ * sides hold the same id, so the next update finds no rival and applies
+ * cleanly. The stream stops rather than being filed more tidily.
+ *
+ * WHY users, surgeries AND THE REST ARE NOT HERE, and must not be added
+ * casually. Displacing a local row means DELETING it. For a user that means
+ * deleting an account other rows point at -- which fails on a foreign key, or
+ * worse, succeeds. For a surgery it means deleting a booking somebody made.
+ * This list is only for tables where the two rows are provably the same
+ * record, the loser carries nothing that the winner does not, and the
+ * authoritative node is the one people actually write through.
+ */
+export const KEY_IS_IDENTITY: Record<string, string> = {
+  policy_participations:
+    'One cursor per invitation. Where each reviewer had got to, rewritten on every '
+    + 'navigation; the losing copy holds an older position and nothing else.',
+  policy_section_responses:
+    'One response per reviewer per section. The reviewers answer through the public '
+    + 'link, so the cloud copy is the one they typed into.',
+  policy_general_responses:
+    'One row per reviewer: overall support, barriers, resources. Same reasoning as the '
+    + 'section responses, and the same single authoritative writer.',
+  policy_decision_item_responses:
+    'One answer per reviewer per open value. These are the tallies the final policy '
+    + 'quotes, and they are only ever written on the node the links point at.',
+};
+
+/** May a row arriving from the authoritative node take this key by force? */
+export function keyIsIdentity(table: string): boolean {
+  return Object.prototype.hasOwnProperty.call(KEY_IS_IDENTITY, table);
+}
+
 export function decide(
   change: IncomingChange,
   local: LocalRowState | null,
