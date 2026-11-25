@@ -31,7 +31,8 @@
     "test:all": "npm run test:offline && npm run test:imprest && npm run test:stock && npm run test:billing && npm run test:lib",
     "test:stock": "node scripts/stock-tests/run-all.js",
     "test:billing": "node scripts/billing-tests/run-all.js",
-    "test:lib": "node scripts/lib-tests/run-all.js"
+    "test:lib": "node scripts/lib-tests/run-all.js",
+    "nhia:export": "tsx scripts/maintenance/export-nhia-list.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

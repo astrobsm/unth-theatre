@@ -40,6 +40,18 @@ export interface RoutableItem {
   coveredByNHIA?: boolean | null;
   coveredByCEmONC?: boolean | null;
   /**
+   * Covered, but only in part.
+   *
+   * Sections 29-36 of the NHIA Medicines Price List are a 50:50 split with
+   * the enrolee -- a few named brands are 50:30:20 with the manufacturer,
+   * and the enrolee's share is still 20-50%. The line goes to the NHIA desk
+   * either way, because the scheme is paying something, but the family has
+   * to be told they owe a share and told EARLY. Meropenem at thirteen
+   * thousand naira is half a month's income for most of this hospital's
+   * patients, and finding out at the theatre door is finding out too late.
+   */
+  nhiaPartial?: boolean | null;
+  /**
    * False where the line was typed by hand and matched no catalogue row.
    *
    * It is a separate fact from "not covered". Both route the same way, but
@@ -108,7 +120,16 @@ export function routeItem(
   const { covered, known } = coverageOf(payer, item);
 
   if (covered) {
-    return { routedTo: 'NHIA_PHARMACY', coverageNote: null, needsCoverageReview: false };
+    return {
+      routedTo: 'NHIA_PHARMACY',
+      // Said on a covered line only when the patient still owes something.
+      // A note on every covered line would make the words invisible on the
+      // ones that cost a family money.
+      coverageNote: item.nhiaPartial
+        ? `Covered by ${scheme} in part only \u2014 the patient pays a share. Tell the family before the day.`
+        : null,
+      needsCoverageReview: false,
+    };
   }
 
   // Said plainly, and said now. The family finds out either way, and the

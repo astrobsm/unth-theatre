@@ -9107,6 +9107,20 @@ model SurgicalConsumableTemplate {
   /// costs money.
   coveredByNHIA   Boolean                    @default(false)
   coveredByCEmONC Boolean                    @default(false)
+
+  /// The row this was matched to in the NHIA Medicines Price List, where it
+  /// was matched to one. Kept so a coverage flag can be traced to a document
+  /// rather than to somebody's memory of a circular.
+  nhiaCode    String?
+  /// The Authority's reimbursement price in naira. NOT what the hospital pays
+  /// or charges: it is what the scheme owes, and nothing here bills from it.
+  nhiaPrice   Decimal? @db.Decimal(12, 2)
+  /// Partial coverage. The Authority's own note on sections 29-36 is a 50:50
+  /// split with the enrolee, so the patient still pays a share and has to be
+  /// told. Covered is still true -- the line goes to the NHIA desk -- but the
+  /// note on it says what the family owes.
+  nhiaPartial Boolean  @default(false)
+
   isActive        Boolean                    @default(true)
   sortOrder       Int                        @default(0)
   notes           String?
@@ -9143,6 +9157,20 @@ model SurgicalDrugDressingTemplate {
   /// the NHIA pharmacist as coverage is confirmed.
   coveredByNHIA   Boolean                  @default(false)
   coveredByCEmONC Boolean                  @default(false)
+
+  /// The row this was matched to in the NHIA Medicines Price List, where it
+  /// was matched to one. Kept so a coverage flag can be traced to a document
+  /// rather than to somebody's memory of a circular.
+  nhiaCode    String?
+  /// The Authority's reimbursement price in naira. NOT what the hospital pays
+  /// or charges: it is what the scheme owes, and nothing here bills from it.
+  nhiaPrice   Decimal? @db.Decimal(12, 2)
+  /// Partial coverage. The Authority's own note on sections 29-36 is a 50:50
+  /// split with the enrolee, so the patient still pays a share and has to be
+  /// told. Covered is still true -- the line goes to the NHIA desk -- but the
+  /// note on it says what the family owes.
+  nhiaPartial Boolean  @default(false)
+
   unit            String                   @default("vial")
   specialty       String? // Subspecialty hint, null = applies to all
   isControlled    Boolean                  @default(false)

@@ -62,12 +62,17 @@ export async function applyRoutingToSurgery(
   const factsFor = (
     list: PackListKind,
     row: { templateId: string | null; name: string },
-    template: { coveredByNHIA: boolean; coveredByCEmONC: boolean } | undefined,
+    template: {
+      coveredByNHIA: boolean; coveredByCEmONC: boolean; nhiaPartial?: boolean;
+    } | undefined,
   ): RoutableItem => ({
     list,
     name: row.name,
     coveredByNHIA: template?.coveredByNHIA ?? null,
     coveredByCEmONC: template?.coveredByCEmONC ?? null,
+    // Partial cover still routes to the scheme's counter; what changes is
+    // that the line carries a note saying the family owes a share.
+    nhiaPartial: template?.nhiaPartial ?? false,
     // A line with no template behind it was typed by hand. Not the same fact
     // as "not covered": nobody has classified it, which is why it goes on
     // the NHIA Pharmacy's review list rather than silently to the patient.
@@ -86,7 +91,7 @@ export async function applyRoutingToSurgery(
   const consumableTemplates = consumableTemplateIds.length
     ? await prisma.surgicalConsumableTemplate.findMany({
       where: { id: { in: consumableTemplateIds } },
-      select: { id: true, coveredByNHIA: true, coveredByCEmONC: true },
+      select: { id: true, coveredByNHIA: true, coveredByCEmONC: true, nhiaPartial: true },
     })
     : [];
   const consumableById = new Map(consumableTemplates.map((t) => [t.id, t]));
@@ -125,7 +130,7 @@ export async function applyRoutingToSurgery(
   const drugTemplates = drugTemplateIds.length
     ? await prisma.surgicalDrugDressingTemplate.findMany({
       where: { id: { in: drugTemplateIds } },
-      select: { id: true, coveredByNHIA: true, coveredByCEmONC: true },
+      select: { id: true, coveredByNHIA: true, coveredByCEmONC: true, nhiaPartial: true },
     })
     : [];
   const drugById = new Map(drugTemplates.map((t) => [t.id, t]));
