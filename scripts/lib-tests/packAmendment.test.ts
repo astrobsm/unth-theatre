@@ -416,3 +416,73 @@ describe('the pack editor offers the control', () => {
     expect(ui).not.toMatch(/max=\{999\}/);
   });
 });
+
+
+/**
+ * WHY A SUBMIT OF THIRTY-SIX CHANGES COULD NOT BE SENT.
+ *
+ * Every "+ Add to ..." creates a blank row, and the gate was
+ * `additions.every(a => a.name.trim() && ...)`. A blank row has no name, so
+ * one stray tap -- half a screen away, with an empty reason box and
+ * therefore no per-row warning either -- turned the button grey and left a
+ * warning that named nothing. Reported from a real case.
+ *
+ * Two rules came out of it, and both are pinned here: a row nobody filled in
+ * is DROPPED rather than blocking, and a row that genuinely is not ready is
+ * NAMED.
+ */
+describe('a half-finished new item must not silently block the rest', () => {
+  const ui = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/SurgeryPackEditor.tsx'), 'utf8',
+  );
+
+  it('drops a row nobody filled in instead of refusing the whole list', () => {
+    expect(ui).toContain('const isUntouched = (a: NewItem) =>');
+    expect(ui).toContain('const realAdditions = additions.filter((a) => !isUntouched(a));');
+    // And it is realAdditions that is sent, and realAdditions that is counted.
+    expect(ui).toContain('...realAdditions.map((a) => ({');
+    expect(ui).toContain('const staged = realAdditions.length');
+  });
+
+  it('says which row is holding the list up, and why', () => {
+    // The old warning was "A new item needs a reason" with no row named.
+    expect(ui).toContain('const addProblem = (a: NewItem): string | null =>');
+    for (const reason of ['no item chosen', 'it needs a reason', 'the quantity is out of range']) {
+      expect(ui, reason).toContain(reason);
+    }
+    expect(ui).toContain('cannot be sent yet');
+  });
+
+  it('does not disable the button, so pressing it always explains', () => {
+    // A disabled button with a generic warning IS the bug. It is now
+    // disabled only while saving, or when there is nothing at all to send.
+    expect(ui).toContain('disabled={saving || (staged === 0 && blocking.length === 0)}');
+    expect(ui).not.toContain('disabled={saving || !readyToSend}');
+    // And pressing it with a bad row returns early rather than posting.
+    const guard = ui.slice(ui.indexOf('const submit = async ()'), ui.indexOf('setSaving(true);'));
+    expect(guard).toContain('if (blocking.length > 0)');
+    expect(guard).toContain('scrollIntoView');
+  });
+
+  it('lets one reason serve a batch of new items', () => {
+    // Adding ten items to one case should not mean typing the same sentence
+    // ten times -- which is how "Additional" and "not in the options" end up
+    // in a permanent record.
+    expect(ui).toContain('Use this reason for the other new items');
+    // It fills the EMPTY ones and does not overwrite a reason already given.
+    // Sliced from the comment that opens the block: the click handler sits
+    // ABOVE the label in the JSX.
+    const copy = ui.slice(
+      ui.indexOf('Adding ten items to one case'),
+      ui.indexOf('Use this reason for the other new items'),
+    );
+    expect(copy).toContain('x.reason.trim().length < MIN_PACK_REASON');
+    expect(copy).toContain('{ ...x, reason: a.reason }');
+  });
+
+  it('still refuses a new item that has no reason at all', () => {
+    // The rule itself is unchanged. Only the way it refuses has changed.
+    expect(ui).toContain('MIN_PACK_REASON');
+    expect(ui).toContain('const readyToSend = blocking.length === 0;');
+  });
+});

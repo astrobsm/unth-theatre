@@ -251,16 +251,74 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
 
   useEffect(() => { load(); }, [load]);
 
-  const staged = additions.length + Object.keys(removals).length
+  /**
+   * A row nobody actually filled in.
+   *
+   * THIS IS WHAT KILLED A SUBMIT OF THIRTY-SIX CHANGES. Every "+ Add to
+   * …" creates a blank row, and a blank row has no name, so the old
+   * `additions.every(a => a.name.trim() && …)` was false and the button
+   * went dead — with a warning that said "a new item needs a reason" and
+   * named nothing. A tap nobody followed through, half a screen away, with
+   * an empty reason box and therefore no per-row warning either, silently
+   * held the whole list hostage.
+   *
+   * An untouched row is not an error. It is a row somebody opened and did
+   * not use, and it is DROPPED at submit rather than blocking it.
+   */
+  const isUntouched = (a: NewItem) =>
+    a.name.trim() === '' && a.reason.trim() === '' && a.size.trim() === '' && !a.templateId;
+
+  /** The additions that will actually be sent. */
+  const realAdditions = additions.filter((a) => !isUntouched(a));
+
+  /**
+   * Rows that were started and cannot be sent, each with its own reason.
+   *
+   * Removing no longer waits on a reason, and a swap writes its own on both
+   * sides — each naming the other item, which is what the provider needs
+   * and all they need. Adding still asks: it is the rarer action, it costs
+   * the hospital money, and nobody downstream can guess why a line
+   * appeared. But the refusal has to say WHICH row and WHY, or it is not a
+   * rule, it is a dead button.
+   */
+  const addProblem = (a: NewItem): string | null => {
+    if (!a.name.trim()) return 'no item chosen';
+    if (a.quantity < 1 || a.quantity > MAX_PACK_QUANTITY) return 'the quantity is out of range';
+    const n = a.reason.trim().length;
+    if (n < MIN_PACK_REASON) {
+      return n === 0
+        ? 'it needs a reason'
+        : `the reason is ${n} character${n === 1 ? '' : 's'}, and needs ${MIN_PACK_REASON}`;
+    }
+    return null;
+  };
+
+  const blocking = additions
+    .map((a, i) => ({ a, i, problem: isUntouched(a) ? null : addProblem(a) }))
+    .filter((x) => x.problem !== null) as { a: NewItem; i: number; problem: string }[];
+
+  const staged = realAdditions.length + Object.keys(removals).length
     + Object.keys(swaps).length + Object.keys(quantities).length;
-  // Removing no longer waits on a reason, and a swap writes its own on both
-  // sides — each naming the other item, which is what the provider needs and
-  // all they need. Adding still asks: it is the rarer action, it costs the
-  // hospital money, and nobody downstream can guess why a line appeared.
-  const readyToSend =
-    additions.every((a) => a.name.trim() && a.quantity >= 1 && a.reason.trim().length >= MIN_PACK_REASON);
+  const readyToSend = blocking.length === 0;
 
   const submit = async () => {
+    // THE BUTTON NO LONGER GOES DEAD SILENTLY. Pressing it with a row that
+    // cannot be sent names the row and scrolls to it, instead of leaving
+    // somebody to hunt thirty-six staged changes for the one that is
+    // holding the rest.
+    if (blocking.length > 0) {
+      setMessage(
+        `${blocking.length} new item${blocking.length === 1 ? '' : 's'} cannot be sent yet — `
+        + blocking
+          .map(({ a, problem }) => `${a.name.trim() || groupLabel(a.list, a.group)}: ${problem}`)
+          .join('; ')
+        + '.',
+      );
+      const first = document.getElementById(`pack-add-${blocking[0].i}`);
+      first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     setSaving(true);
     setMessage('');
     try {
@@ -269,7 +327,9 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           add: [
-            ...additions.map((a) => ({
+            // realAdditions, not additions: a row somebody opened and never
+            // used is dropped here rather than being sent as a nameless item.
+            ...realAdditions.map((a) => ({
               list: a.list,
               name: a.name.trim(),
               quantity: a.quantity,
@@ -389,6 +449,8 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
    */
   const renderAddRow = (a: NewItem, i: number) => {
     const rows = catalogue[a.list];
+    const untouched = isUntouched(a);
+    const problem = untouched ? null : addProblem(a);
     // Sizes the catalogue knows for the item that has been chosen, so a size
     // is picked rather than spelled three different ways across one list.
     const sizes = Array.from(new Set(
@@ -399,10 +461,21 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
     const units = Array.from(new Set([a.unit, ...unitsFor(a.list)].filter(Boolean)));
 
     return (
-      <div key={`add-${i}`} className="mt-2 rounded-lg border border-indigo-300 bg-indigo-50 p-2">
+      <div
+        key={`add-${i}`}
+        id={`pack-add-${i}`}
+        className={`mt-2 rounded-lg border p-2 ${
+          problem ? 'border-amber-400 bg-amber-50' : 'border-indigo-300 bg-indigo-50'
+        }`}
+      >
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-indigo-900">
+          <p className={`text-xs font-semibold ${problem ? 'text-amber-900' : 'text-indigo-900'}`}>
             New {a.list === 'CONSUMABLE' ? 'consumable' : 'pharmacy item'}
+            {untouched && (
+              <span className="ml-1 font-normal text-gray-500">
+                — nothing chosen yet, so it will be ignored
+              </span>
+            )}
           </p>
           <button
             type="button"
@@ -555,10 +628,32 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
           value={a.reason}
           onChange={(e) => setAddition(i, { reason: e.target.value })}
         />
-        {a.name.trim() !== '' && a.reason.trim().length < MIN_PACK_REASON && (
-          <p className="mt-1 text-xs text-amber-700">
-            A new item needs a reason — the provider cannot guess why a line appeared.
+        {problem && (
+          <p className="mt-1 text-xs font-medium text-amber-800">
+            This item cannot be sent yet: {problem}.
+            {problem === 'it needs a reason' || problem.startsWith('the reason is')
+              ? ' The provider cannot guess why a line appeared.'
+              : ''}
           </p>
+        )}
+
+        {/* Adding ten items to one case should not mean typing the same
+            sentence ten times. Offered only where there is something to
+            copy, and it fills the EMPTY boxes rather than overwriting a
+            reason somebody has already written. */}
+        {a.reason.trim().length >= MIN_PACK_REASON
+          && additions.some((x, j) => j !== i && !isUntouched(x) && x.reason.trim().length < MIN_PACK_REASON) && (
+          <button
+            type="button"
+            className="mt-1 text-xs font-medium text-indigo-700 underline"
+            onClick={() => setAdditions((p) => p.map((x) => (
+              !isUntouched(x) && x.reason.trim().length < MIN_PACK_REASON
+                ? { ...x, reason: a.reason }
+                : x
+            )))}
+          >
+            Use this reason for the other new items
+          </button>
         )}
       </div>
     );
@@ -1052,21 +1147,52 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
         <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800">{message}</div>
       )}
 
-      {canEdit && staged > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+      {canEdit && (staged > 0 || blocking.length > 0) && (
+        <div className="mt-4">
+          {/*
+            NOT DISABLED WHEN SOMETHING IS WRONG. A disabled button is the
+            whole complaint: thirty-six staged changes, a grey button and a
+            warning naming no row. Pressing it now names every row that is
+            holding the list up and scrolls to the first.
+          */}
           <button
             onClick={submit}
-            disabled={saving || !readyToSend}
+            disabled={saving || (staged === 0 && blocking.length === 0)}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            title={readyToSend ? 'Send the changes and notify the providers' : `A NEW item needs a reason of at least ${MIN_PACK_REASON} characters`}
+            title={readyToSend
+              ? 'Send the changes and notify the providers'
+              : 'Some new items are not ready — press to see which'}
           >
             <Send className="h-4 w-4" />
             {saving ? 'Sending…' : `Submit ${staged} change${staged === 1 ? '' : 's'} and notify providers`}
           </button>
-          {!readyToSend && (
-            <span className="inline-flex items-center gap-1 text-sm text-amber-700">
-              <AlertTriangle className="h-4 w-4" /> A new item needs a reason. Removing and changing do not.
-            </span>
+
+          {blocking.length > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+              <p className="flex items-center gap-1 font-medium">
+                <AlertTriangle className="h-4 w-4" />
+                {blocking.length} new item{blocking.length === 1 ? '' : 's'} cannot be sent yet.
+                Everything else is ready.
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {blocking.map(({ a, i, problem }) => (
+                  <li key={`blk-${i}`}>
+                    <button
+                      type="button"
+                      className="text-left underline"
+                      onClick={() => document.getElementById(`pack-add-${i}`)
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                    >
+                      {a.name.trim() || `Untitled item in ${groupLabel(a.list, a.group)}`}
+                    </button>
+                    {' — '}{problem}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs">
+                Removing a line and changing a quantity need no reason. Only a NEW item does.
+              </p>
+            </div>
           )}
         </div>
       )}

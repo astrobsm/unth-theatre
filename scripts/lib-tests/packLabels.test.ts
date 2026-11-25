@@ -198,7 +198,10 @@ describe('the editor on the case page', () => {
     // The payload carries it, for both lists. Checked as behaviour rather
     // than as one spelling of a ternary, because on 25 November the same
     // expression also began carrying the size.
-    const add = EDITOR.slice(EDITOR.indexOf('...additions.map((a) => ('), EDITOR.indexOf('// The replacement half'));
+    const add = EDITOR.slice(
+      EDITOR.indexOf('...realAdditions.map((a) => ('),
+      EDITOR.indexOf('// The replacement half'),
+    );
     expect(add).toContain('category: a.group');
     expect(add).toContain('type: a.group');
   });
@@ -340,9 +343,14 @@ describe('changing a line rather than deleting and retyping it', () => {
 describe('removing a line no longer waits on a reason', () => {
   it('does not block the submit on removals', () => {
     // readyToSend tests the additions only now.
-    const ready = EDITOR.slice(EDITOR.indexOf('const readyToSend'), EDITOR.indexOf('const readyToSend') + 400);
-    expect(ready).toContain('additions.every');
-    expect(ready).not.toContain('Object.values(removals).every');
+    // The gate is over the ADDITIONS only -- removals and quantity changes
+    // never enter it. Expressed through `blocking`, which is built from
+    // `additions` and nothing else, so that the refusal can name the row.
+    const gate = EDITOR.slice(EDITOR.indexOf('const blocking ='), EDITOR.indexOf('const staged ='));
+    expect(gate).toContain('additions');
+    expect(gate).not.toContain('removals');
+    expect(gate).not.toContain('quantities');
+    expect(EDITOR).toContain('const readyToSend = blocking.length === 0;');
   });
 
   it('still offers the box, because the provider does read it', () => {
@@ -352,6 +360,8 @@ describe('removing a line no longer waits on a reason', () => {
 
   it('no longer tells the user that every change needs a reason', () => {
     expect(EDITOR).not.toContain('Every change needs a reason.');
-    expect(EDITOR).toContain('A new item needs a reason. Removing and changing do not.');
+    expect(EDITOR).toContain(
+      'Removing a line and changing a quantity need no reason. Only a NEW item does.',
+    );
   });
 });
