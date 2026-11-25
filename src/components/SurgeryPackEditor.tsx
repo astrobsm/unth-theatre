@@ -8,6 +8,7 @@ import {
 import {
   MIN_PACK_REASON, MAX_PACK_QUANTITY, MAX_SIZE_LENGTH, unitsFor,
 } from '@/lib/theatreOps/packAmendment';
+import { FULFILMENT_LABEL, type FulfilmentUnit } from '@/lib/payer/routing';
 import {
   groupConsumables,
   groupPharmacy,
@@ -63,6 +64,14 @@ interface PackLine {
   addedAfterBooking?: boolean | null;
   additionReason?: string | null;
   removalReason?: string | null;
+  /** Which counter is picking this line. The booking team sees all three,
+   *  which is the combined view: one list, each line saying where it went. */
+  routedTo?: FulfilmentUnit | null;
+  /** "Not covered by NHIA. Patient pays." Said early, on the ward, rather
+   *  than at the theatre door with the patient already gowned. */
+  coverageNote?: string | null;
+  reassignedFrom?: FulfilmentUnit | null;
+  reassignReason?: string | null;
   /** What the list said at BOOKING, where the quantity has been corrected
    *  since. Shown on the line, because a provider who picked against the
    *  original needs to see what moved under them. */
@@ -700,6 +709,20 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
                     added after booking
                   </span>
                 )}
+                {/* WHERE IT WENT. The surgeon's combined view: one list, each
+                    line saying which counter is picking it. Only shown where
+                    it is not the counter that has always picked that kind of
+                    line, so a private case reads exactly as it did before. */}
+                {l.routedTo && l.routedTo !== (kind === 'PHARMACY' ? 'THEATRE_PHARMACY' : 'CONSUMABLE_PACK') && (
+                  <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-900">
+                    {FULFILMENT_LABEL[l.routedTo]}
+                  </span>
+                )}
+                {l.reassignedFrom && (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
+                    Reassigned from {FULFILMENT_LABEL[l.reassignedFrom]}
+                  </span>
+                )}
                 {!withdrawn && l.status !== 'REQUESTED' && (
                   <span className="ml-2 text-xs uppercase text-gray-500">{l.status}</span>
                 )}
@@ -773,6 +796,16 @@ export default function SurgeryPackEditor({ surgeryId }: { surgeryId: string }) 
             )}
             {!withdrawn && l.additionReason && (
               <p className="mt-1 text-xs italic text-gray-600">Added: {l.additionReason}</p>
+            )}
+            {/* The family finds out either way. The ward the evening before
+                is a better place to hear it than the theatre door. */}
+            {!withdrawn && l.coverageNote && (
+              <p className="mt-1 text-xs font-medium text-amber-800">{l.coverageNote}</p>
+            )}
+            {!withdrawn && l.reassignReason && (
+              <p className="mt-1 text-xs italic text-amber-800">
+                Sent on: {l.reassignReason}
+              </p>
             )}
 
             {/* Staged quantity, unit or size change, on the line it changes. */}

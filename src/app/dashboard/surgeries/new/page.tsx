@@ -10,6 +10,10 @@ import {
   type BookingDraft,
 } from '@/lib/booking/draftState';
 import {
+  BOOKABLE_PAYER_CATEGORIES, PAYER_DESCRIPTION, PAYER_LABEL,
+  PAYER_REQUIRED_MESSAGE, isInsuredPayer,
+} from '@/lib/payer/categories';
+import {
   ADMISSION_TYPE_OPTIONS,
   ADMISSION_MISSING_MESSAGE,
   admissionTypeChosen,
@@ -590,6 +594,17 @@ export default function NewSurgeryPage() {
   /// Controlled now, because the consumable bundle is derived from them.
   /// Left uncontrolled they would still submit correctly but nothing could
   /// react to them, and the bundle is the whole point.
+  /**
+   * WHO PAYS. Required, and never defaulted.
+   *
+   * It decides which counter this case's drugs and consumables are sent to,
+   * so a guess here is a trolley that goes to the wrong room rather than a
+   * figure on a bill. There is no pre-selected option for the same reason
+   * the magnitude has none: a default is an answer nobody gave.
+   */
+  const [payerCategory, setPayerCategory] = useState<string>('');
+  const [payerSchemeId, setPayerSchemeId] = useState<string>('');
+  const [payerIsNyscCorps, setPayerIsNyscCorps] = useState(false);
   const [magnitude, setMagnitude] = useState<string>('');
   const [needBloodTransfusion, setNeedBloodTransfusion] = useState(false);
   // How many units. Empty is NOT nought: it means the booker did not say, and
@@ -1212,6 +1227,9 @@ export default function NewSurgeryPage() {
       scheduledDate,
       scheduledTime,
       estimatedDuration,
+      payerCategory,
+      payerSchemeId,
+      payerIsNyscCorps,
       magnitude,
       anesthesiaType,
       localAnaestheticId,
@@ -1238,7 +1256,8 @@ export default function NewSurgeryPage() {
   }, [
     selectedPatientId, procedureName, extraProcedures, unit, subspecialty,
     selectedTheatreId, selectedSurgeonId, supervisingConsultantIds, assistantIds, assistantGrades,
-    scheduledDate, scheduledTime, estimatedDuration, magnitude, anesthesiaType,
+    scheduledDate, scheduledTime, estimatedDuration,
+    payerCategory, payerSchemeId, payerIsNyscCorps, magnitude, anesthesiaType,
     localAnaestheticId, needBloodTransfusion, bloodUnits, otherSpecialNeeds, postOpDestination,
     isDayCase, admissionType, teamMembers, noUnitRegistrar, noUnitSeniorRegistrar, specialNeeds,
     selectedConsumables, selectedDrugs, consentFile, consentForm, preopOverrideReason,
@@ -1264,6 +1283,9 @@ export default function NewSurgeryPage() {
     setScheduledDate(pick(d.scheduledDate, ''));
     setScheduledTime(pick(d.scheduledTime, ''));
     setEstimatedDuration(pick(d.estimatedDuration, ''));
+    setPayerCategory(pick(d.payerCategory, ''));
+    setPayerSchemeId(pick(d.payerSchemeId, ''));
+    setPayerIsNyscCorps(pick(d.payerIsNyscCorps, false));
     setMagnitude(pick(d.magnitude, ''));
     setAnesthesiaType(pick(d.anesthesiaType, ''));
     setLocalAnaestheticId(pick(d.localAnaestheticId, ''));
@@ -1968,6 +1990,35 @@ ${pretty} — ${days} days from today.
       }
     }
 
+    // WHO PAYS, checked here as well as on the server.
+    //
+    // The select carries `required`, so the browser normally catches it --
+    // but this form submits from more than one place and a draft restored
+    // without the field would otherwise reach the server and come back as a
+    // validation error against a form the surgeon had already finished.
+    // Said in the same words the API uses, so the two cannot drift.
+    if (!payerCategory) {
+      setLoading(false);
+      setError(PAYER_REQUIRED_MESSAGE);
+      raiseBlock({
+        code: 'NO_PAYER_CATEGORY',
+        title: 'Who pays for this case is not set',
+        why: 'It decides which pharmacy receives the drugs and consumables for this case. '
+          + 'An insured patient\u2019s covered items go to the NHIA Pharmacy; everything else goes '
+          + 'where it has always gone. Unanswered, the list reaches the wrong counter on the morning.',
+        fields: [{
+          name: 'payerCategory',
+          label: 'Payer category',
+          message: 'NHIA, NHIS, CEmONC or Private.',
+        }],
+        fixes: [
+          { kind: 'field', label: 'Take me to it', field: 'payerCategory' },
+          { kind: 'close', label: 'Close' },
+        ],
+      });
+      return;
+    }
+
     // The procedure now comes from the picker, whose hidden input the browser
     // cannot mark required. Checked here so an empty one fails on the form
     // rather than as a server error after everything else was filled in.
@@ -2089,6 +2140,11 @@ ${pretty} — ${days} days from today.
       // The first assistant with an account, for the column every other
       // screen reads. The rest of them are in teamMembers below.
       assistantSurgeonId: primaryAssistantId(chosenAssistants),
+      // Who pays. Sent as typed: the server refuses an empty one, and the
+      // form refuses before it gets that far.
+      payerCategory,
+      payerSchemeId: payerSchemeId.trim() || null,
+      payerIsNyscCorps,
       magnitude: magnitude || null,
       anesthesiaType: anesthesiaType || null,
       needBloodTransfusion,
@@ -3695,6 +3751,78 @@ ${pretty} — ${days} days from today.
                 glove and gown counts scale with this.
               </p>
             </div>
+          </div>
+
+          {/*
+            WHO PAYS.
+            Placed beside the magnitude because the two together decide what
+            is packed and where it is packed FROM. It is not a billing
+            question: an insured patient's covered items go to the NHIA
+            Pharmacy and the rest go where they have always gone, so a wrong
+            answer here is a trolley at the wrong counter on the morning.
+            No default, for the same reason the magnitude has none.
+          */}
+          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3">
+            <label className="label" htmlFor="payerCategory">Payer category *</label>
+            <select
+              id="payerCategory"
+              name="payerCategory"
+              required
+              value={payerCategory}
+              onChange={(e) => setPayerCategory(e.target.value)}
+              className="input-field"
+            >
+              <option value="" disabled>Select who pays…</option>
+              {BOOKABLE_PAYER_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{PAYER_LABEL[c]}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-600">
+              {payerCategory
+                ? PAYER_DESCRIPTION[payerCategory as keyof typeof PAYER_DESCRIPTION]
+                : 'Decides which pharmacy receives this case\u2019s drugs and consumables.'}
+            </p>
+
+            {/* Only for the schemes. A private patient has no enrolee number
+                and asking for one is a box somebody will type a dash into. */}
+            {isInsuredPayer(payerCategory as never) && (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="payerSchemeId">
+                    Enrolee / scheme ID <span className="font-normal text-gray-500">(optional)</span>
+                  </label>
+                  <input
+                    id="payerSchemeId"
+                    name="payerSchemeId"
+                    className="input-field"
+                    maxLength={60}
+                    placeholder="As printed on the card"
+                    value={payerSchemeId}
+                    onChange={(e) => setPayerSchemeId(e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    The card is often at home. Leave it blank rather than send the case back.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2 pt-7">
+                  <input
+                    id="payerIsNyscCorps"
+                    name="payerIsNyscCorps"
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={payerIsNyscCorps}
+                    onChange={(e) => setPayerIsNyscCorps(e.target.checked)}
+                  />
+                  <label htmlFor="payerIsNyscCorps" className="text-sm text-gray-800">
+                    NYSC corps member
+                    <span className="block text-xs text-gray-500">
+                      Corps members are covered under the NHIA, and the number they carry is
+                      not the one a pharmacist expects to see.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

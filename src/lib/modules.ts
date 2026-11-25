@@ -111,7 +111,16 @@ export const MODULES: AppModule[] = [
   { id: 'anaesthetist-board', label: 'Anaesthetist Review Board', paths: ['/dashboard/anaesthetist-board'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
   { id: 'preop-reviews', label: 'Pre-op Reviews', paths: ['/dashboard/preop-reviews'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'SURGEON', 'CONSULTANT_SURGEON'], category: 'Pre-Op' },
   { id: 'prescription-approvals', label: 'Consultant Anaesthetist Prescription Approval', paths: ['/dashboard/prescription-approvals'], defaultRoles: ['CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
-  { id: 'prescriptions', label: 'Pharmacy', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
+  // Renamed from "Pharmacy" on 25 November 2026, when the NHIA desk was
+  // added. A LABEL CHANGE ONLY: the module id, the path and every row of
+  // history stay as they are, because renaming the id would orphan the
+  // module grants already written against it on real accounts.
+  { id: 'prescriptions', label: 'Theatre Pharmacy', paths: ['/dashboard/prescriptions'], defaultRoles: ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'PHARMACIST'], category: 'Pre-Op' },
+  // The scheme's own counter. Modelled on the Theatre Pharmacy screen and
+  // deliberately separate from it: it holds different stock, answers to the
+  // NHIA rather than to the theatre, and is the only unit that may decide
+  // what the scheme will not carry.
+  { id: 'nhia-pharmacy', label: 'NHIA Pharmacy', paths: ['/dashboard/nhia-pharmacy'], defaultRoles: ['NHIA_PHARMACY', 'HEAD_OF_PHARMACY'], category: 'Pre-Op' },
   { id: 'blood-bank', label: 'Blood Bank', paths: ['/dashboard/blood-bank'], defaultRoles: ['BLOODBANK_STAFF', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER'], category: 'Pre-Op' },
   { id: 'anesthesia-setup', label: 'Anesthesia Setup', paths: ['/dashboard/anesthesia-setup'], defaultRoles: ['ANAESTHETIC_TECHNICIAN', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'], category: 'Pre-Op' },
   // Beside the setup screen it reports on, and granted to the technicians
@@ -286,7 +295,7 @@ export const MODULES: AppModule[] = [
 
   // Admin-only modules (cannot be granted; gated separately)
   { id: 'users', label: 'User Management', paths: ['/dashboard/users'], defaultRoles: [], category: 'Admin' },
-  { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },
+  { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST', 'NHIA_PHARMACY'], category: 'Admin' },
   { id: 'surgical-packs', label: 'Surgical Packs', paths: ['/dashboard/admin/surgical-packs'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },
   { id: 'disciplinary-queries', label: 'Disciplinary Queries', paths: ['/dashboard/disciplinary-queries'], defaultRoles: [], category: 'Admin' },
   { id: 'late-bookings', label: 'Late Bookings', paths: ['/dashboard/late-bookings'], defaultRoles: [], category: 'Admin' },

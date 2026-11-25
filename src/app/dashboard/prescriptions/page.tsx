@@ -687,11 +687,22 @@ export default function PrescriptionsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
           <Pill className="h-8 w-8" />
-          Pharmacy
+          Theatre Pharmacy
         </h1>
         <p className="text-gray-600 mt-2">
           Pack and prepare medications for upcoming surgeries (includes emergency prescriptions). Click a prescriber’s
           name to see their phone number.
+        </p>
+        {/*
+          Renamed from "Pharmacy" on 25 November 2026, when the NHIA desk was
+          added. Said here rather than left to be worked out: a pharmacist who
+          opens this page and finds a case missing needs to know there is now
+          a second counter it may have gone to.
+        */}
+        <p className="mt-1 text-sm text-gray-500">
+          An insured patient’s covered items go to the NHIA Pharmacy and will not appear here.
+          Anything that desk cannot supply is sent on, and arrives tagged
+          &ldquo;Reassigned from NHIA Pharmacy&rdquo; with the reason.
         </p>
       </div>
 

@@ -28,7 +28,8 @@ export const ONBOARDING_ROLES: RoleDef[] = [
   // patient to theatre stays with the nurse.
   { value: 'CLINICAL_HEALTH_ASSISTANT', label: 'Clinical Health Assistant',       prefix: 'CHA' },
   { value: 'ANAESTHETIC_TECHNICIAN',   label: 'Anaesthetic Technician',           prefix: 'ANT' },
-  { value: 'PHARMACIST',               label: 'Pharmacist',                       prefix: 'PHM' },
+  { value: 'PHARMACIST',               label: 'Theatre Pharmacist',               prefix: 'PHM' },
+  { value: 'NHIA_PHARMACY',            label: 'NHIA Pharmacy',                    prefix: 'NHP' },
   { value: 'EMERGENCY_LAB_SCIENTIST',  label: 'Emergency Lab Scientist',          prefix: 'ELS' },
   { value: 'LABORATORY_STAFF',         label: 'Laboratory Staff',                 prefix: 'LAB' },
   { value: 'BLOODBANK_STAFF',          label: 'Blood Bank Staff',                 prefix: 'BBS' },

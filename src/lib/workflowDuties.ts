@@ -737,8 +737,46 @@ export const DUTY_SHEETS: DutySheet[] = [
 
   // ---------------------------------------------------------------------
   {
+    id: 'nhia-pharmacy',
+    title: 'NHIA Pharmacy',
+    roles: ['NHIA_PHARMACY'],
+    headline:
+      'What the scheme will not carry has to be said early. Said at the theatre door, it is the family finding out with the patient already gowned.',
+    duties: [
+      {
+        task: 'Work through the day\u2019s insured cases and confirm what the scheme covers',
+        when: 'The day before the list',
+        why: 'An item sent to you and left sitting is an item nobody else is picking. The theatre reads silence as ready.',
+        where: 'NHIA Pharmacy',
+        critical: true,
+      },
+      {
+        task: 'Send on anything the scheme will not carry, with the reason',
+        when: 'As soon as you know',
+        why: 'The Theatre Pharmacy and the pack providers cannot pick what they have not been told about, and the family needs time to find the money.',
+        where: 'NHIA Pharmacy',
+        critical: true,
+      },
+      {
+        task: 'Review items the catalogue has never classified',
+        when: 'Weekly',
+        why: 'An unclassified item is treated as not covered, so every one of them is a patient paying for something the scheme may well have carried.',
+        where: 'NHIA Pharmacy',
+      },
+      {
+        task: 'Keep the coverage flags current as the scheme changes',
+        when: 'Whenever a circular arrives',
+        why: 'The routing is only as good as the flags. A stale list sends covered items to a counter that will charge the patient for them.',
+        where: 'Surgical Catalog',
+      },
+    ],
+    remember: 'An item you have not answered is an item nobody is picking.',
+  },
+
+  // ---------------------------------------------------------------------
+  {
     id: 'pharmacy',
-    title: 'Pharmacy',
+    title: 'Theatre Pharmacy',
     roles: ['PHARMACIST'],
     headline: 'A pack that is not ready is a case that does not start.',
     duties: [
@@ -746,7 +784,7 @@ export const DUTY_SHEETS: DutySheet[] = [
         task: 'Dispense against the code the patient presents',
         when: 'On presentation',
         why: 'The code ties the drugs to the case. Dispensing without it leaves the case unbilled and the stock unaccounted for.',
-        where: 'Pharmacy',
+        where: 'Theatre Pharmacy',
         critical: true,
       },
       {
@@ -759,7 +797,7 @@ export const DUTY_SHEETS: DutySheet[] = [
         task: 'Keep the controlled drug register current',
         when: 'At every issue',
         why: 'It is a statutory record, and the register report is generated from exactly what you enter.',
-        where: 'Pharmacy',
+        where: 'Theatre Pharmacy',
         critical: true,
       },
       {

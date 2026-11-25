@@ -52,7 +52,12 @@ export async function POST(request: NextRequest) {
           'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
           'THEATRE_STORE_KEEPER', 'PORTER', 'ANAESTHETIC_TECHNICIAN',
           'BIOMEDICAL_ENGINEER', 'CLEANER', 'PROCUREMENT_OFFICER',
-          'PHARMACIST', 'BLOODBANK_STAFF',
+          'PHARMACIST',
+          // The NHIA desk. Its own role rather than a flag on the theatre
+          // pharmacist: it answers to the scheme, holds different stock, and
+          // is the only unit allowed to decide what the scheme will not carry.
+          'NHIA_PHARMACY',
+          'BLOODBANK_STAFF',
           'CSSD_STAFF', 'CSSD_SUPERVISOR',
           'LAUNDRY_STAFF', 'LAUNDRY_SUPERVISOR',
           'PLUMBER', 'PLUMBING_SUPERVISOR',

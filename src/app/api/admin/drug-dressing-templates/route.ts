@@ -26,6 +26,9 @@ const upsertSchema = z.object({
   defaultDosage: z.string().optional().nullable(),
   defaultRoute: z.string().optional().nullable(),
   defaultQuantity: z.number().int().min(1).default(1),
+  // What the scheme covers. See the note on the consumables route.
+  coveredByNHIA: z.boolean().default(false),
+  coveredByCEmONC: z.boolean().default(false),
   unit: z.string().default("vial"),
   specialty: z.string().optional().nullable(),
   isControlled: z.boolean().default(false),

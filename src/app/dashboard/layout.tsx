@@ -328,7 +328,12 @@ export default function DashboardLayout({
     { href: '/dashboard/preop-reviews', icon: Syringe, label: 'Pre-op Reviews' },
     { href: '/dashboard/preop-reviews/watch', icon: UserCheck, label: "Tomorrow's Reviews", badge: 'NEW' },
     { href: '/dashboard/prescription-approvals', icon: Shield, label: 'Consultant Anaesthetist Prescription Approval', badge: 'NEW' },
-    { href: '/dashboard/prescriptions', icon: FileText, label: 'Pharmacy' },
+    { href: '/dashboard/prescriptions', icon: FileText, label: 'Theatre Pharmacy' },
+    // The scheme's own counter, added 25 November 2026. A separate entry
+    // rather than a tab on the one above: the two desks hold different
+    // stock and a pharmacist needs to see at a glance which one they are
+    // looking at.
+    { href: '/dashboard/nhia-pharmacy', icon: FileText, label: 'NHIA Pharmacy' },
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
     { href: '/dashboard/setup-chase', icon: Wrench, label: 'Theatre Setup Checks', badge: 'NEW' },
@@ -679,6 +684,7 @@ export default function DashboardLayout({
     { type: 'single', href: '/dashboard/recovery-chase' },
     { type: 'group', label: 'Pharmacy', icon: Pill, hrefs: [
       '/dashboard/prescriptions',
+      '/dashboard/nhia-pharmacy',
       '/announcement-display/pharmacy',
       '/dashboard/medication-tracking',
     ] },

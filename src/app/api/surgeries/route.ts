@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from "@/lib/idempotency";
 import { pushToUsers } from "@/lib/pushAll";
+import { PAYER_REQUIRED_MESSAGE } from '@/lib/payer/categories';
+import { applyRoutingToSurgery } from '@/lib/payer/applyRouting';
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
@@ -97,6 +99,30 @@ const surgerySchema = z.object({
    */
   fromDraftId: z.string().trim().min(1).nullish(),
   magnitude: z.enum(['MAJOR', 'INTERMEDIATE', 'MINOR', 'SUPER_MAJOR']).nullish(),
+
+  /**
+   * WHO PAYS. Required, and there is no default.
+   *
+   * It is not a billing field. It decides which counter the drug and
+   * consumable lists are SENT to, so an unanswered one is a trolley nobody
+   * is picking rather than an invoice to correct later. UNSPECIFIED is a
+   * fact about cases booked before the question existed and is deliberately
+   * not offered here -- a required field with an escape hatch is not
+   * required.
+   *
+   * EMERGENCY BOOKINGS DO NOT COME THROUGH THIS ROUTE and are left
+   * UNSPECIFIED by the column default. Asking a registrar at three in the
+   * morning which scheme the patient is on, before the case can be entered,
+   * would be a worse failure than routing it the way everything routed last
+   * week.
+   */
+  payerCategory: z.enum(['NHIA', 'NHIS', 'CEmONC', 'PRIVATE'], {
+    required_error: PAYER_REQUIRED_MESSAGE,
+    invalid_type_error: PAYER_REQUIRED_MESSAGE,
+  }),
+  /** Optional: the card is often at home, and that must not stop a booking. */
+  payerSchemeId: z.string().trim().max(60).nullish(),
+  payerIsNyscCorps: z.boolean().default(false),
   anesthesiaType: z.enum(['GENERAL', 'SPINAL', 'EPIDURAL', 'COMBINED_SPINAL_EPIDURAL', 'LOCAL', 'REGIONAL', 'SEDATION']).nullish(),
   needBloodTransfusion: z.boolean().default(false),
   // How many units, where the booker said. Null is not zero: a form that did
@@ -1098,6 +1124,12 @@ export async function POST(request: NextRequest) {
         // see the bookedById comment in schema.prisma.
         bookedById: (session.user as any).id ?? null,
         bookedByName: (session.user as any).fullName || (session.user as any).name || null,
+        // Who said who pays, and when. The routing is computed from it, so
+        // this is the first thing to look at when a pack list turns up at
+        // the wrong counter. payerCategory itself arrives in surgeryData.
+        payerSetAt: new Date(),
+        payerSetById: (session.user as any).id ?? null,
+        payerSetByName: (session.user as any).fullName || (session.user as any).name || null,
         // Normalised through the same parser the merge logic uses, so a repeated
         // or blank entry cannot reach the record.
         additionalProcedures: serialiseAdditional(
@@ -1716,6 +1748,25 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.warn("Pack-provider notification skipped", e);
       }
+    }
+
+    // ---- Which counter picks each line -----------------------------------
+    //
+    // AFTER every pack row exists, and through the one service, so booking,
+    // editing and a corrected payer category cannot disagree about where a
+    // line should go. A private case routes exactly as it did before this
+    // existed, which is why this is safe to run unconditionally.
+    //
+    // GUARDED: the booking is already committed by this point. A routing
+    // that fails leaves every line where the column default put it -- the
+    // pack providers for consumables, the Theatre Pharmacy for drugs, which
+    // is where they went last week -- and that is a recoverable state. A 500
+    // here would tell a surgeon their booking failed when it did not, and
+    // they would book it again.
+    try {
+      await applyRoutingToSurgery(surgery.id);
+    } catch (e) {
+      console.warn('Pack routing skipped for', surgery.id, e);
     }
 
     // Log the action.

@@ -53,6 +53,16 @@ interface Consumable {
   unit: string;
   specialty?: string | null;
   defaultQuantity: number;
+  /**
+   * Covered by the scheme, and therefore routed to the NHIA Pharmacy for an
+   * insured patient.
+   *
+   * FALSE UNTIL SOMEBODY SAYS OTHERWISE. Nobody has told this application
+   * what the NHIA actually covers, and a wrong `true` sends the item to a
+   * counter that will refuse it with the patient already on the list.
+   */
+  coveredByNHIA?: boolean;
+  coveredByCEmONC?: boolean;
   isActive: boolean;
   sortOrder: number;
   notes?: string | null;
@@ -68,6 +78,9 @@ interface Drug {
   unit: string;
   specialty?: string | null;
   isControlled: boolean;
+  /** See the note on Consumable. */
+  coveredByNHIA?: boolean;
+  coveredByCEmONC?: boolean;
   isActive: boolean;
   sortOrder: number;
   notes?: string | null;
@@ -84,16 +97,24 @@ const DRUG_TYPES: DrugType[] = [
   'WOUND_DRESSING_AGENT', 'ANTISEPTIC', 'HAEMOSTATIC', 'OTHER',
 ];
 
-const ADMIN_ROLES = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'CONSUMABLE_PACK_PROVIDER'];
+// NHIA_PHARMACY is here because the coverage flags are theirs to maintain:
+// the routing is only as good as the flags, and a desk that cannot correct
+// them watches covered items go to a counter that charges the patient.
+const ADMIN_ROLES = [
+  'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER',
+  'CONSUMABLE_PACK_PROVIDER', 'NHIA_PHARMACY',
+];
 
 const blankConsumable = (): Consumable => ({
   name: '', category: 'OTHER', size: '', unit: 'piece', specialty: '',
-  defaultQuantity: 1, isActive: true, sortOrder: 0, notes: '',
+  defaultQuantity: 1, coveredByNHIA: false, coveredByCEmONC: false,
+  isActive: true, sortOrder: 0, notes: '',
 });
 
 const blankDrug = (): Drug => ({
   name: '', type: 'OTHER', defaultDosage: '', defaultRoute: '',
   defaultQuantity: 1, unit: 'vial', specialty: '', isControlled: false,
+  coveredByNHIA: false, coveredByCEmONC: false,
   isActive: true, sortOrder: 0, notes: '',
 });
 
@@ -520,6 +541,7 @@ function ConsumableTable({ items, canEdit, onEdit, onDelete }: {
             <th className="px-4 py-2">Unit</th>
             <th className="px-4 py-2">Default Qty</th>
             <th className="px-4 py-2">Specialty</th>
+            <th className="px-4 py-2" title="Routed to the NHIA Pharmacy for an insured patient">Scheme</th>
             <th className="px-4 py-2">Status</th>
             {canEdit && <th className="px-4 py-2 text-right">Actions</th>}
           </tr>
@@ -533,6 +555,11 @@ function ConsumableTable({ items, canEdit, onEdit, onDelete }: {
               <td className="px-4 py-2">{c.unit}</td>
               <td className="px-4 py-2">{c.defaultQuantity}</td>
               <td className="px-4 py-2">{c.specialty || 'all'}</td>
+              <td className="px-4 py-2 whitespace-nowrap">
+                {c.coveredByNHIA && <span className="mr-1 rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800">NHIA</span>}
+                {c.coveredByCEmONC && <span className="rounded bg-teal-100 px-1.5 py-0.5 text-xs font-medium text-teal-800">CEmONC</span>}
+                {!c.coveredByNHIA && !c.coveredByCEmONC && <span className="text-xs text-gray-400">patient pays</span>}
+              </td>
               <td className="px-4 py-2">
                 {c.isActive
                   ? <span className="text-green-700 text-xs font-medium">Active</span>
@@ -651,6 +678,35 @@ function ConsumableForm({ data, onChange }: { data: Consumable; onChange: (d: Co
       <Field label="Notes" htmlFor="cf-notes">
         <textarea id="cf-notes" title="Notes" value={data.notes || ''} onChange={(e) => set({ notes: e.target.value })} rows={2} className="w-full px-3 py-2 border rounded-lg" />
       </Field>
+      {/*
+        WHAT THE SCHEME COVERS, and therefore where an insured patient's copy
+        of this item is sent. Ticking it moves the item to the NHIA Pharmacy
+        for NHIA, NHIS and CEmONC patients; leaving it alone sends it where
+        it goes today. A private patient is unaffected either way.
+      */}
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+        <p className="text-sm font-medium text-emerald-900">Covered by the scheme</p>
+        <p className="mb-1 text-xs text-emerald-900">
+          Ticked, an insured patient’s copy of this item goes to the NHIA Pharmacy.
+          Left alone it goes where it goes today, and the family is told the patient pays.
+        </p>
+        <label className="mr-4 inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={!!data.coveredByNHIA}
+            onChange={(e) => set({ coveredByNHIA: e.target.checked })}
+          />
+          NHIA (and NHIS)
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={!!data.coveredByCEmONC}
+            onChange={(e) => set({ coveredByCEmONC: e.target.checked })}
+          />
+          CEmONC
+        </label>
+      </div>
       <label className="inline-flex items-center gap-2 text-sm">
         <input type="checkbox" checked={data.isActive} onChange={(e) => set({ isActive: e.target.checked })} />
         Active (visible in booking form)
@@ -704,6 +760,36 @@ function DrugForm({ data, onChange }: { data: Drug; onChange: (d: Drug) => void 
           Active (visible in booking form)
         </label>
       </div>
+      {/*
+        WHAT THE SCHEME COVERS, and therefore where an insured patient's copy
+        of this item is sent. Ticking it moves the item to the NHIA Pharmacy
+        for NHIA, NHIS and CEmONC patients; leaving it alone sends it where
+        it goes today. A private patient is unaffected either way.
+      */}
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+        <p className="text-sm font-medium text-emerald-900">Covered by the scheme</p>
+        <p className="mb-1 text-xs text-emerald-900">
+          Ticked, an insured patient’s copy of this item goes to the NHIA Pharmacy.
+          Left alone it goes where it goes today, and the family is told the patient pays.
+        </p>
+        <label className="mr-4 inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={!!data.coveredByNHIA}
+            onChange={(e) => set({ coveredByNHIA: e.target.checked })}
+          />
+          NHIA (and NHIS)
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={!!data.coveredByCEmONC}
+            onChange={(e) => set({ coveredByCEmONC: e.target.checked })}
+          />
+          CEmONC
+        </label>
+      </div>
+
     </>
   );
 }

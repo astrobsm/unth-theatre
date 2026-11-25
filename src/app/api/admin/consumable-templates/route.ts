@@ -34,6 +34,10 @@ const upsertSchema = z.object({
   unit: z.string().default("piece"),
   specialty: z.string().optional().nullable(),
   defaultQuantity: z.number().int().min(1).default(1),
+  // What the scheme covers. Maintained by an administrator or the NHIA
+  // Pharmacy as circulars arrive; false until somebody says otherwise.
+  coveredByNHIA: z.boolean().default(false),
+  coveredByCEmONC: z.boolean().default(false),
   isActive: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
   notes: z.string().optional().nullable(),

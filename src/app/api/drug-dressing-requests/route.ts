@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { triggerRadio } from "@/lib/radioEvents";
+import { unitsVisibleTo } from "@/lib/payer/routing";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,19 @@ export async function GET(req: NextRequest) {
   const where: any = {};
   if (surgeryId) where.surgeryId = surgeryId;
   if (status) where.status = status;
+
+  // ── Each counter sees only its own lines ────────────────────────────────
+  // Since 25 November an insured patient's covered items are routed to the
+  // NHIA Pharmacy, so this queue must stop showing them or two counters pick
+  // the same item. unitsVisibleTo() answers from the ROLE: a provider sees
+  // their own unit, and the booking team -- who own the case -- see all
+  // three, which is what makes the surgeon's combined view work without a
+  // second endpoint.
+  const visible = unitsVisibleTo((session.user as { role?: string }).role ?? null);
+  if (visible.length > 0 && visible.length < 3) {
+    where.routedTo = { in: visible };
+  }
+
   if (fromDate || toDate) {
     where.surgery = {
       scheduledDate: {

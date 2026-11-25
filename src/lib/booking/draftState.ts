@@ -44,6 +44,13 @@ export interface BookingDraft {
   scheduledTime?: string;
   estimatedDuration?: string;
 
+  // Who pays. Carried in the draft like everything else, so a booking
+  // started on the ward and finished at the desk does not lose the answer
+  // and ask for it twice.
+  payerCategory?: string;
+  payerSchemeId?: string;
+  payerIsNyscCorps?: boolean;
+
   // How
   magnitude?: string;
   anesthesiaType?: string;

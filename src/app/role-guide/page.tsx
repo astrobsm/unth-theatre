@@ -407,7 +407,7 @@ const ROLES: Role[] = [
     icon: Pill,
     color: 'from-emerald-600 to-green-700',
     intro:
-      'See incoming prescriptions before the patient arrives. Emergency prescriptions are announced loudly on the Pharmacy TV until you mark them packed.',
+      'See incoming prescriptions before the patient arrives. Emergency prescriptions are announced loudly on the Theatre Pharmacy TV until you mark them packed.',
     responsibilities: [
       'Pack, dispense and document all theatre drugs.',
       'Monitor controlled-drug register entries.',
@@ -415,8 +415,8 @@ const ROLES: Role[] = [
       'Flag near-expiry and out-of-stock items.',
     ],
     howToUse: [
-      'Pharmacy Dashboard → "Inbox" of prescriptions sorted by urgency.',
-      'Open Pharmacy Announcement TV on the wall screen.',
+      'Theatre Pharmacy → "Inbox" of prescriptions sorted by urgency.',
+      'Open the Theatre Pharmacy Announcement TV on the wall screen.',
       'Tap "Pack" → confirm items → "Dispensed" when collected.',
       'Stock → adjust on receipt of supplies.',
     ],
@@ -431,11 +431,48 @@ const ROLES: Role[] = [
     ],
     quickStart: [
       'Cast /announcement-display/pharmacy on a wall TV.',
-      'Login → Pharmacy → process Inbox top-down.',
+      'Login → Theatre Pharmacy → process Inbox top-down.',
     ],
   },
 
   // ─── Blood Bank ────────────────────────────────────────────────
+  {
+    id: 'NHIA_PHARMACY',
+    label: 'NHIA Pharmacy',
+    group: 'Pharmacy',
+    icon: Pill,
+    color: 'from-teal-600 to-emerald-700',
+    intro:
+      'The scheme\u2019s own counter. Every covered item for an insured patient reaches you before it reaches anybody else, and what you cannot supply you send on \u2014 with a reason the receiving unit can read.',
+    responsibilities: [
+      'Work through the day\u2019s insured cases and confirm what the scheme covers.',
+      'Send on anything the scheme will not carry, naming the reason.',
+      'Review items the catalogue has never classified \u2014 each one is a patient paying for something the scheme may well cover.',
+      'Keep the coverage flags current as the scheme\u2019s circulars change.',
+    ],
+    howToUse: [
+      'NHIA Pharmacy \u2192 the day\u2019s cases, drugs and consumables together.',
+      'Tick the items the scheme will not carry \u2192 choose a reason \u2192 Send selected items on.',
+      'Where the scheme covers part of a quantity, send on only the remainder \u2014 the line splits.',
+      'Surgical Catalog \u2192 tick coverage as you confirm it, so the routing improves for everybody.',
+    ],
+    cautions: [
+      'Sending an item on is one-directional. The Theatre Pharmacy and the pack providers cannot send it back \u2014 only an administrator can put a wrong routing right.',
+      'An item you have not answered is an item nobody is picking. The theatre reads silence as ready.',
+      'Say early what the scheme will not carry. Said at the theatre door, it is the family finding out with the patient already gowned.',
+    ],
+    benefits: [
+      'One screen for the whole case \u2014 drugs and consumables together, which is how the ward asks about them.',
+      'Every reassignment is recorded with who, when, how many and why.',
+      'The booking team sees where each of their items went without telephoning you.',
+    ],
+    quickStart: [
+      'Login \u2192 NHIA Pharmacy.',
+      'Set the dates to tomorrow and work down the list.',
+      'Tick what the scheme will not carry and send it on today, not on the morning.',
+    ],
+  },
+
   {
     id: 'BLOODBANK_STAFF',
     label: 'Blood Bank Staff',

@@ -87,6 +87,15 @@ enum UserRole {
   PROCUREMENT_OFFICER
   BLOODBANK_STAFF
   PHARMACIST
+  /// The NHIA desk, added 25 November 2026.
+  ///
+  /// A SECOND PHARMACY, not a permission on the first. It answers to the
+  /// scheme rather than to the theatre, holds different stock, and is the
+  /// only unit allowed to decide that an item the scheme will not cover must
+  /// go back to the Theatre Pharmacy or to the pack providers. Giving the
+  /// existing pharmacist that power instead would have put the hospital's
+  /// money and the scheme's money in one pair of hands.
+  NHIA_PHARMACY
   CSSD_STAFF
   POWER_PLANT_OPERATOR
   THEATRE_CAFETERIA_MANAGER
@@ -1315,6 +1324,43 @@ model Patient {
   @@map("patients")
 }
 
+/// WHO PAYS FOR THIS CASE, asked at booking and never guessed.
+///
+/// It decides where the drug and consumable lists are SENT, not only what
+/// anybody is charged: an insured patient's covered items go to the NHIA
+/// Pharmacy, and the rest go where they have always gone. So a wrong value
+/// here is a trolley that never arrives, not a billing correction.
+///
+/// NHIS IS KEPT SEPARATE FROM NHIA even though the scheme was absorbed into
+/// the Authority. Records written before the change say NHIS, people still
+/// say NHIS, and collapsing the two would quietly rewrite what a booking
+/// clerk actually chose. Coverage follows the NHIA flag unless a particular
+/// item says otherwise.
+///
+/// UNSPECIFIED IS FOR HISTORY ONLY. Every case booked before this field
+/// existed carries it, routes exactly as it did before, and is asked for a
+/// real answer the next time somebody opens it. It is not offered on the
+/// booking form -- a required field with an escape hatch is not required.
+enum PayerCategory {
+  NHIA
+  NHIS
+  CEmONC
+  PRIVATE
+  UNSPECIFIED
+}
+
+/// Which unit fulfils one line of a pack.
+///
+/// A case can have all three at once -- that is the normal shape for an
+/// insured patient with a mixed list -- and each unit sees only its own
+/// lines. There is no fourth state for "nobody": an unrouted line is a line
+/// nobody is picking, so routeRequestItems() always answers.
+enum FulfilmentUnit {
+  NHIA_PHARMACY
+  THEATRE_PHARMACY
+  CONSUMABLE_PACK
+}
+
 model Surgery {
   id                   String                 @id @default(uuid())
   patientId            String
@@ -1344,6 +1390,26 @@ model Surgery {
   // base consumable pack (gauze bundle, glove/gown counts, etc.).
   magnitude            String?
   readinessStatus      SurgeryReadinessStatus @default(PENDING_CHECKS)
+
+  // ── Who pays ────────────────────────────────────────────────────────────
+  /// Required on the booking form. UNSPECIFIED exists for the cases booked
+  /// before the field did; they keep their original routing and are asked
+  /// for a real answer when next opened.
+  payerCategory    PayerCategory @default(UNSPECIFIED)
+  /// Enrolee or scheme number, where the patient has one. Optional: the
+  /// number is often on a card nobody has brought, and refusing the booking
+  /// over it would send the case back to the ward.
+  payerSchemeId    String?
+  /// Youth corps members are covered under the NHIA, and are asked about
+  /// separately because the enrolee number they carry is not the one a
+  /// pharmacist expects to see.
+  payerIsNyscCorps Boolean       @default(false)
+  /// When the category was last set or changed, and by whom. The routing
+  /// re-runs on a change, so this is the first thing to look at when a list
+  /// arrives at the wrong counter.
+  payerSetAt       DateTime?
+  payerSetById     String?
+  payerSetByName   String?
 
   // Anesthesia
   anesthesiaType AnesthesiaType?
@@ -9002,6 +9068,19 @@ model SurgicalConsumableTemplate {
   unit            String                     @default("piece") // piece, pair, pack, ml, L
   specialty       String? // Subspecialty hint, null = applies to all
   defaultQuantity Int                        @default(1)
+
+  /// Covered by the scheme, and therefore routed to the NHIA Pharmacy for an
+  /// insured patient.
+  ///
+  /// FALSE IS THE DEFAULT, AND DELIBERATELY SO. Nobody has told this
+  /// application what the NHIA actually covers, and a default of true would
+  /// send items to a counter that will refuse them and bill the hospital for
+  /// the argument. Everything therefore starts at the Theatre Pharmacy --
+  /// where it goes today -- and the NHIA pharmacist ticks items as they are
+  /// confirmed. Noisier in the first week; never wrong in the direction that
+  /// costs money.
+  coveredByNHIA   Boolean                    @default(false)
+  coveredByCEmONC Boolean                    @default(false)
   isActive        Boolean                    @default(true)
   sortOrder       Int                        @default(0)
   notes           String?
@@ -9033,6 +9112,11 @@ model SurgicalDrugDressingTemplate {
   defaultDosage   String? // e.g. "1 g IV stat"
   defaultRoute    String? // IV, IM, PO, Topical
   defaultQuantity Int                      @default(1)
+
+  /// See the note on SurgicalConsumableTemplate: false by default, ticked by
+  /// the NHIA pharmacist as coverage is confirmed.
+  coveredByNHIA   Boolean                  @default(false)
+  coveredByCEmONC Boolean                  @default(false)
   unit            String                   @default("vial")
   specialty       String? // Subspecialty hint, null = applies to all
   isControlled    Boolean                  @default(false)
@@ -9089,6 +9173,35 @@ model SurgeryConsumableRequest {
   removedAt         DateTime?
   removalReason     String?
 
+  /// ── Which counter picks this line ──────────────────────────────────────
+  ///
+  /// Decided once by routeRequestItems() from the case's payer category and
+  /// the item's coverage flags, and re-decided if the payer category is
+  /// corrected. A unit's queue is "the rows on this case routed to me", which
+  /// is why there is no separate sub-request table: one row, one owner, and
+  /// the surgeon's combined view is the same query without the filter.
+  routedTo     FulfilmentUnit @default(CONSUMABLE_PACK)
+  routedAt     DateTime?
+  /// Shown to the team and on the patient's copy where an insured patient's
+  /// item is NOT covered: "Not covered by NHIA. Patient pays." Said early,
+  /// because the family finds out either way and the ward is a better place
+  /// to hear it than the theatre door.
+  coverageNote String?
+
+  /// ── Sent on by the NHIA Pharmacy ───────────────────────────────────────
+  /// One-directional on purpose: the receiving unit cannot push a line back
+  /// without an administrator, because two counters each insisting the other
+  /// owns an item is how a patient waits for both.
+  reassignedFrom   FulfilmentUnit?
+  reassignReason   String?
+  reassignedById   String?
+  reassignedByName String?
+  reassignedAt     DateTime?
+  /// Where only part of a quantity is covered the line is SPLIT, and the
+  /// remainder points back at the line it came from so the two halves can be
+  /// read as one decision.
+  splitFromId      String?
+
   /// HOW MANY, CORRECTED AFTER BOOKING.
   ///
   /// A pack is composed from a standard and the standard is an average: this
@@ -9143,6 +9256,35 @@ model SurgeryDrugDressingRequest {
   removedById       String?
   removedAt         DateTime?
   removalReason     String?
+
+  /// ── Which counter picks this line ──────────────────────────────────────
+  ///
+  /// Decided once by routeRequestItems() from the case's payer category and
+  /// the item's coverage flags, and re-decided if the payer category is
+  /// corrected. A unit's queue is "the rows on this case routed to me", which
+  /// is why there is no separate sub-request table: one row, one owner, and
+  /// the surgeon's combined view is the same query without the filter.
+  routedTo     FulfilmentUnit @default(CONSUMABLE_PACK)
+  routedAt     DateTime?
+  /// Shown to the team and on the patient's copy where an insured patient's
+  /// item is NOT covered: "Not covered by NHIA. Patient pays." Said early,
+  /// because the family finds out either way and the ward is a better place
+  /// to hear it than the theatre door.
+  coverageNote String?
+
+  /// ── Sent on by the NHIA Pharmacy ───────────────────────────────────────
+  /// One-directional on purpose: the receiving unit cannot push a line back
+  /// without an administrator, because two counters each insisting the other
+  /// owns an item is how a patient waits for both.
+  reassignedFrom   FulfilmentUnit?
+  reassignReason   String?
+  reassignedById   String?
+  reassignedByName String?
+  reassignedAt     DateTime?
+  /// Where only part of a quantity is covered the line is SPLIT, and the
+  /// remainder points back at the line it came from so the two halves can be
+  /// read as one decision.
+  splitFromId      String?
 
   /// HOW MANY, CORRECTED AFTER BOOKING.
   ///
