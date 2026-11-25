@@ -29,6 +29,8 @@ import AmendCaseButton from '@/components/surgeries/AmendCaseButton';
 import CaseActionsMenu from '@/components/surgeries/CaseActionsMenu';
 import { watInstantFrom } from '@/lib/watDay';
 import { roleAllowed } from '@/lib/roleGroups';
+import PayerBadge from '@/components/PayerBadge';
+import { PAYER_BADGE } from '@/lib/payer/categories';
 
 interface Surgery {
   id: string;
@@ -71,6 +73,10 @@ interface Surgery {
    * go and find out.
    */
   magnitude?: string | null;
+  /** Who pays. Returned by the list projection since 25 November 2026. */
+  payerCategory?: string | null;
+  payerSchemeId?: string | null;
+  payerIsNyscCorps?: boolean | null;
   indication?: string;
   scheduledDate: string;
   scheduledTime: string;
@@ -844,6 +850,7 @@ export default function SurgeriesPage() {
         <th style="width:3%">#</th>
         <th style="width:11%">Patient</th>
         <th style="width:5%">Folder</th>
+        <th style="width:5%">Payer</th>
         <th style="width:6%">Age / Sex</th>
         <th style="width:6%">Ward</th>
         <th style="width:14%">Procedure</th>
@@ -864,6 +871,10 @@ export default function SurgeriesPage() {
           <td>${i + 1}</td>
           <td>${escape(s.patient?.name || 'Unknown')}</td>
           <td>${escape(s.patient?.folderNumber || 'N/A')}</td>
+          <td>${escape(
+            PAYER_BADGE[(s.payerCategory ?? 'UNSPECIFIED') as keyof typeof PAYER_BADGE]
+            ?? PAYER_BADGE.UNSPECIFIED,
+          )}${s.payerIsNyscCorps ? '<br/><span class="sub">NYSC</span>' : ''}</td>
           <td>${escape(ageSex)}</td>
           <td>${s.isDayCase
             ? '<span class="daycase">DAY CASE</span><br/><span class="sub">not on a ward &mdash; arrives on the morning</span>'
@@ -1519,6 +1530,18 @@ export default function SurgeriesPage() {
                                 {surgery.isDayCase ? 'Admitting ward' : 'Ward'}: {surgery.patient.ward}
                               </div>
                             )}
+                            {/* WHO PAYS, on the card. It decides which
+                                pharmacy packs this case, and a category
+                                nobody can see from the list is a category
+                                nobody corrects -- every case booked before
+                                the question existed is sitting here unset. */}
+                            <div className="mt-1">
+                              <PayerBadge
+                                payer={surgery.payerCategory}
+                                nysc={surgery.payerIsNyscCorps}
+                                size="xs"
+                              />
+                            </div>
                           </>
                         );
                       })()}

@@ -25,9 +25,15 @@ import { withAssistingNote } from '@/lib/surgery/assistants';
 import SurgeryPackEditor from '@/components/SurgeryPackEditor';
 import ActualTeamPanel from '@/components/ActualTeamPanel';
 import { roleAllowed } from '@/lib/roleGroups';
+import PayerBadge from '@/components/PayerBadge';
+import { PAYER_UNSET_PROMPT } from '@/lib/payer/categories';
 
 interface Surgery {
   id: string;
+  /** Who pays. Decides which pharmacy packs this case. */
+  payerCategory?: string | null;
+  payerSchemeId?: string | null;
+  payerIsNyscCorps?: boolean | null;
   patient: {
     id: string;
     name: string;
@@ -357,6 +363,34 @@ export default function SurgeryDetailPage() {
                 <label className="text-sm font-medium text-gray-500">Ward</label>
                 <p className="text-gray-900">{surgery.patient.ward}</p>
               </div>
+            </div>
+            {/*
+              WHO PAYS. On the case page as well as the list, because this is
+              the screen somebody opens when a pack has not arrived -- and
+              "which pharmacy was it sent to" is the first question.
+            */}
+            <div>
+              <label className="text-sm font-medium text-gray-500">Payer category</label>
+              <div className="mt-0.5">
+                <PayerBadge
+                  payer={surgery.payerCategory}
+                  nysc={surgery.payerIsNyscCorps}
+                  schemeId={surgery.payerSchemeId}
+                />
+              </div>
+              {/*
+                THE PROMPT FOR A LEGACY CASE, and it is a prompt rather than
+                a block: this case was booked before the question existed, it
+                routes exactly as it always did, and refusing to show it would
+                help nobody. It is asked for HERE because this is where
+                somebody already is when they notice.
+              */}
+              {(!surgery.payerCategory || surgery.payerCategory === 'UNSPECIFIED') && (
+                <p className="mt-1 text-xs text-amber-800">
+                  {PAYER_UNSET_PROMPT} Until then this case is packed the way it was
+                  before the question was asked.
+                </p>
+              )}
             </div>
           </div>
         </div>

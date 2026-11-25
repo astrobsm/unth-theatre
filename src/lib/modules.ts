@@ -258,6 +258,10 @@ export const MODULES: AppModule[] = [
   { id: 'theatre-meals', label: 'Theatre Meals', paths: ['/dashboard/theatre-meals'], defaultRoles: ['THEATRE_CAFETERIA_MANAGER'], category: 'Reports' },
   { id: 'staff-effectiveness', label: 'Staff Effectiveness', paths: ['/dashboard/reports/staff-effectiveness'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
   { id: 'reports', label: 'Reports & Analytics', paths: ['/dashboard/reports'], defaultRoles: ADMIN_VIEWERS, category: 'Reports' },
+  // The NHIA desk is in the roles deliberately: the list of items that keep
+  // coming back is theirs to act on, and a report they cannot open is a
+  // report nobody acts on.
+  { id: 'insurance-coverage', label: 'Insurance Coverage', paths: ['/dashboard/reports/insurance-coverage'], defaultRoles: [...ADMIN_VIEWERS, 'NHIA_PHARMACY', 'PHARMACIST', 'HEAD_OF_PHARMACY'], category: 'Reports' },
   // Operative workload by size, month, subspecialty and unit. Same audience
   // as the other reports: it is a management view of the whole hospital's
   // theatre activity, not a clinical screen.

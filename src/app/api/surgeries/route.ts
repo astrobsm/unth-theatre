@@ -365,6 +365,11 @@ export async function GET(request: NextRequest) {
         id: true, patientId: true, procedureName: true, indication: true,
         scheduledDate: true, scheduledTime: true, createdAt: true,
         surgeryType: true, status: true, listOrder: true, magnitude: true,
+        // Who pays, on the list projection: the badge belongs on the card,
+        // not only on the case page. A category nobody can see from the list
+        // is a category nobody corrects, and every case booked before the
+        // question existed is sitting there as UNSPECIFIED.
+        payerCategory: true, payerSchemeId: true, payerIsNyscCorps: true,
         subspecialty: true, unit: true, location: true, theatreId: true,
         surgeonName: true, supervisingConsultantName: true,
         anesthesiaType: true, anesthetistId: true, theatreTechnicianId: true,

@@ -334,6 +334,7 @@ export default function DashboardLayout({
     // stock and a pharmacist needs to see at a glance which one they are
     // looking at.
     { href: '/dashboard/nhia-pharmacy', icon: FileText, label: 'NHIA Pharmacy' },
+    { href: '/dashboard/reports/insurance-coverage', icon: FileText, label: 'Insurance Coverage' },
     { href: '/dashboard/blood-bank', icon: Droplet, label: 'Blood Bank' },
     { href: '/dashboard/anesthesia-setup', icon: BriefcaseMedical, label: 'Anesthesia Setup' },
     { href: '/dashboard/setup-chase', icon: Wrench, label: 'Theatre Setup Checks', badge: 'NEW' },
@@ -685,6 +686,7 @@ export default function DashboardLayout({
     { type: 'group', label: 'Pharmacy', icon: Pill, hrefs: [
       '/dashboard/prescriptions',
       '/dashboard/nhia-pharmacy',
+      '/dashboard/reports/insurance-coverage',
       '/announcement-display/pharmacy',
       '/dashboard/medication-tracking',
     ] },

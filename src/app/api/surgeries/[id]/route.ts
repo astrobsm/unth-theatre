@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
+import { PAYER_REQUIRED_MESSAGE, parsePayerCategory } from '@/lib/payer/categories';
+import { applyRoutingToSurgery } from '@/lib/payer/applyRouting';
 import { authOptions } from '@/lib/auth';
 import { detectConflict } from '@/lib/concurrency';
 import { ensureEmergencyBooking } from '@/lib/emergency/ensureBooking';
@@ -240,6 +242,16 @@ export async function PUT(
       // the only way to mark a day case already booked for tomorrow would be
       // to cancel the case and book it again.
       isDayCase,
+      // WHO PAYS, correctable after booking.
+      //
+      // The clerk who books is often not the person who later finds the
+      // enrolee card, and a wrong category sends the whole pack list to the
+      // wrong counter. Changing it re-runs the routing for everything not
+      // yet dispensed -- see below, where the reason this is not a plain
+      // column assignment is set out.
+      payerCategory,
+      payerSchemeId,
+      payerIsNyscCorps,
     } = body;
 
     // ── Double-booking guard, on the path that now does the allocating ──────
@@ -390,6 +402,40 @@ export async function PUT(
     if (depositAmount !== undefined) updateData.depositAmount = depositAmount;
     if (depositConfirmed !== undefined) updateData.depositConfirmed = depositConfirmed;
 
+    // ── Who pays ───────────────────────────────────────────────────────────
+    // Only the four real answers are accepted. UNSPECIFIED is a fact about
+    // cases booked before the question existed, and an edit must not be able
+    // to put a case BACK into that state -- which would silently return its
+    // pack list to the old routing and tell nobody.
+    const parsedPayer = payerCategory === undefined
+      ? null
+      : parsePayerCategory(payerCategory);
+    const payerChanged = !!parsedPayer
+      && parsedPayer !== 'UNSPECIFIED'
+      && parsedPayer !== existingSurgery.payerCategory;
+
+    if (payerCategory !== undefined) {
+      if (!parsedPayer || parsedPayer === 'UNSPECIFIED') {
+        return NextResponse.json({ error: PAYER_REQUIRED_MESSAGE }, { status: 400 });
+      }
+      updateData.payerCategory = parsedPayer;
+      if (payerChanged) {
+        updateData.payerSetAt = new Date();
+        updateData.payerSetById = (session.user as any)?.id ?? null;
+        updateData.payerSetByName =
+          (session.user as any)?.fullName || (session.user as any)?.name || null;
+      }
+    }
+    if (payerSchemeId !== undefined) {
+      updateData.payerSchemeId = String(payerSchemeId ?? '').trim() || null;
+    }
+    if (payerIsNyscCorps !== undefined) {
+      // Coerced like isDayCase above: a string "false" from a form post is
+      // truthy, and this one decides which counter a corps member's drugs
+      // come from.
+      updateData.payerIsNyscCorps = payerIsNyscCorps === true;
+    }
+
     const updatedSurgery = await prisma.surgery.update({
       where: { id },
       data: updateData,
@@ -459,17 +505,54 @@ export async function PUT(
       });
     }
 
+    // ── A changed payer category moves the pack list ───────────────────────
+    //
+    // THE WHOLE POINT OF THE FIELD. Correcting NHIA to Private, or the other
+    // way, decides which counter picks every line of this case -- so a
+    // correction that updated the column and left the rows where they were
+    // would be worse than no correction at all: the screen would say one
+    // thing and three pharmacies would do another.
+    //
+    // applyRoutingToSurgery() leaves alone anything already dispensed, and
+    // anything the NHIA Pharmacy has sent on by hand. Both of those are
+    // somebody's decision and recomputing them would quietly overrule it.
+    //
+    // GUARDED, because the surgery row is already saved. A routing that
+    // fails leaves every line where it was -- recoverable, and visible on
+    // the case -- where a 500 here would tell somebody their edit failed
+    // when it did not.
+    let rerouted: { consumables: number; pharmacy: number; skipped: number } | null = null;
+    if (payerChanged) {
+      try {
+        rerouted = await applyRoutingToSurgery(id);
+      } catch (e) {
+        console.warn('Re-routing skipped for', id, e);
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
         action: 'UPDATE',
         tableName: 'surgeries',
         recordId: id,
-        changes: JSON.stringify(updateData),
+        changes: JSON.stringify({
+          ...updateData,
+          // Named separately from the column change, because "payerCategory
+          // moved from NHIA to PRIVATE" and "nine lines moved counter as a
+          // result" are two different questions somebody will ask later.
+          ...(payerChanged ? {
+            payerCategoryChange: {
+              from: existingSurgery.payerCategory,
+              to: updateData.payerCategory,
+              rerouted,
+            },
+          } : {}),
+        }),
       },
     });
 
-    return NextResponse.json(updatedSurgery);
+    return NextResponse.json({ ...updatedSurgery, rerouted });
   } catch (error) {
     console.error('Error updating surgery:', error);
     return NextResponse.json({ error: 'Failed to update surgery' }, { status: 500 });
