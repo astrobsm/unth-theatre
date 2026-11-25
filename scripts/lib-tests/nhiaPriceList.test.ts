@@ -176,6 +176,25 @@ describe('matching a catalogue name to the list', () => {
     expect(matchNhia('Amoxicillin-Clavulanate 1.2 g IV').item?.name).not.toBe('Amoxycillin');
   });
 
+  it('picks the form the line is actually talking about', () => {
+    // The failure the first run on real data produced: "Frusemide 20 mg /
+    // 2 ml (Ampoule)" matched the 40mg TABLET at twenty-nine naira, because
+    // the strength did not line up and the cheapest row won. Right drug,
+    // right coverage, wrong row — and the row carries the price the NHIA
+    // desk reads.
+    expect(matchNhia('Frusemide 20 mg / 2 ml (Ampoule)').item?.code).toBe('NHIA-12-03-04');
+    expect(matchNhia('Diclofenac 75 mg IM (Ampoule)').item?.code).toBe('NHIA-02-04-07');
+    expect(matchNhia('Diclofenac 100mg Suppository').item?.code).toBe('NHIA-02-04-24');
+    expect(matchNhia('Gentamicin 80 mg (Ampoule)').item?.name).toBe('Gentamycin');
+  });
+
+  it('lets a strength break a tie between two rows of the same form', () => {
+    // Both cefuroxime vials say "vial"; only one says 750.
+    expect(matchNhia('Cefuroxime 750 mg (Vial)').item?.code).toBe('NHIA-06-07-43');
+    expect(matchNhia('Cefuroxime 250 mg (Vial)').item?.code).toBe('NHIA-06-07-44');
+    expect(matchNhia('Ceftriaxone 1g IV').item?.code).toBe('NHIA-06-07-38');
+  });
+
   it('does not match a name made only of form words', () => {
     // "Injection" normalises to nothing useful; it must fail rather than
     // match whatever happens to sort first.

@@ -199,6 +199,42 @@ export function splitNameAndStrength(
   return { name, strength: [...dropped, ...asides].join(' ').trim() };
 }
 
+
+/**
+ * Which dosage form a catalogue line is talking about.
+ *
+ * WHY THIS MATTERS MORE THAN THE STRENGTH. The first run matched
+ * "Frusemide 20 mg / 2 ml (Ampoule)" to the 40mg TABLET at twenty-nine naira,
+ * and "Diclofenac 75 mg IM (Ampoule)" to the 50mg tablet at thirty-five.
+ * Right drug, right coverage, wrong row -- and the row carries the price the
+ * NHIA desk reads. A strength that does not line up falls back to the
+ * cheapest row, and the cheapest row is almost always the tablet.
+ *
+ * The words below are the ones stripped out of the name by
+ * normaliseDrugName, which is exactly why they have to be read off the
+ * ORIGINAL text before that happens.
+ */
+const FORM_HINTS: Array<[RegExp, string[]]> = [
+  [/\b(injection|inj|i\.?v|i\.?m|ampoule|amp|vial)\b/i, ['injection', 'ampoule', 'vial', 'amp']],
+  [/\b(infusion|drip)\b/i, ['infusion']],
+  [/\b(nebule|nebuliser|nebulizer)\b/i, ['nebule']],
+  [/\b(suppositor\w*)\b/i, ['suppository', 'supp']],
+  [/\b(pessar\w*|ovule)\b/i, ['pessary', 'ovule']],
+  [/\b(cream|ointment|gel|paste)\b/i, ['cream', 'ointment', 'gel', 'tube']],
+  [/\b(gauze|dressing)\b/i, ['gauze', 'dressing']],
+  [/\b(eye|ear|nasal)\s*drops?\b/i, ['drops']],
+  [/\b(spray|aerosol|inhal\w*)\b/i, ['spray', 'inhalation', 'aerosol']],
+  [/\b(syrup|suspension|elixir|solution|mixture)\b/i, ['syrup', 'suspension', 'solution', 'mixture']],
+  [/\b(capsule|caps)\b/i, ['capsule', 'caps']],
+  [/\b(tablet|tabs?)\b/i, ['tablet', 'tab']],
+];
+
+export function formHint(raw: string | null | undefined): string[] {
+  const text = String(raw ?? '');
+  for (const [re, words] of FORM_HINTS) if (re.test(text)) return words;
+  return [];
+}
+
 export type MatchHow = 'EXACT' | 'ALIAS' | 'NONE';
 
 export interface NhiaMatch {
@@ -271,9 +307,24 @@ export function matchNhia(
     if (NHIA_ALIASES[stripped]) take(BY_NAME.get(normaliseDrugName(NHIA_ALIASES[stripped])), 'ALIAS');
   }
 
-  const rows = Array.from(candidates.values());
+  let rows = Array.from(candidates.values());
   if (rows.length === 0) return NO_MATCH;
   if (rows.length === 1) return { how, item: rows[0], alternatives: rows };
+
+  // ── FORM FIRST, then strength ──────────────────────────────────────────
+  // An ampoule is not a tablet. Where the line says which it is and some
+  // candidate says the same, the others are not candidates at all -- and
+  // that is decided BEFORE the cheapest-row fallback, which is what put
+  // frusemide ampoules on a twenty-nine-naira tablet.
+  const wantedForms = formHint(name);
+  if (wantedForms.length) {
+    const sameForm = rows.filter((r) => {
+      const said = [r.form, r.presentation].filter(Boolean).join(' ').toLowerCase();
+      return said !== '' && wantedForms.some((w) => said.includes(w));
+    });
+    if (sameForm.length === 1) return { how, item: sameForm[0], alternatives: rows };
+    if (sameForm.length > 1) rows = sameForm;
+  }
 
   // Narrowed against the strength AND the form and presentation, because
   // "80 mg (Ampoule)" tells the two gentamicins apart where the strength
@@ -283,17 +334,24 @@ export function matchNhia(
     const describes = (r: NhiaItem) =>
       [r.strength, r.form, r.presentation].filter(Boolean).join(' ')
         .toLowerCase().replace(/\s+/g, '');
-    const narrowed = rows.filter((r) => {
+    // SCORED, NOT FILTERED. Filtering on "any hint word appears" kept both
+    // the 750mg and the 250mg cefuroxime vial, because both say "vial", and
+    // the cheapest-row fallback then chose the 250. Counting how many of the
+    // hint's words a row accounts for lets "750" break that tie, which is
+    // the whole reason the strength was carried this far.
+    const words = hint.toLowerCase().split(/[\s/]+/)
+      .map((w) => w.replace(/[(),.;:]/g, ''))
+      .filter((w) => w.length > 1);
+    const score = (r: NhiaItem) => {
       const have = describes(r);
-      if (have === '') return false;
-      if (have.includes(want) || want.includes(have)) return true;
-      // Or any single word of the hint naming this row's form: "ampoule",
-      // "vial", "tube". One word is enough where the rest is a dose.
-      return hint.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
-        .some((w) => have.includes(w));
-    });
-    if (narrowed.length === 1) return { how, item: narrowed[0], alternatives: rows };
-    if (narrowed.length > 1) {
+      if (have === '') return -1;
+      if (have.includes(want) || want.includes(have)) return 1000;
+      return words.filter((w) => have.includes(w)).length;
+    };
+    const best = Math.max(...rows.map(score));
+    if (best > 0) {
+      const narrowed = rows.filter((r) => score(r) === best);
+      if (narrowed.length === 1) return { how, item: narrowed[0], alternatives: rows };
       const cheapestOf = [...narrowed].sort((a, b) => (a.price ?? 0) - (b.price ?? 0))[0];
       return { how, item: cheapestOf, alternatives: rows };
     }
