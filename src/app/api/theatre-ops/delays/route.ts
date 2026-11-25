@@ -18,6 +18,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { CATEGORY_BY_CODE, notifiedBy } from '@/lib/theatreOps/delays';
 import { idempotencyKeyFrom, replayIfSeen, rememberResult } from '@/lib/idempotency';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   const user = session?.user as { id?: string; role?: string; fullName?: string; name?: string } | undefined;
   if (!user?.id) return NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 });
-  if (!user.role || !CAN_RECORD.includes(user.role)) {
+  if (!user.role || !roleAllowed(user.role, CAN_RECORD)) {
     return NextResponse.json(
       { error: 'Your role does not allow you to record a theatre delay.' },
       { status: 403 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/apiMiddleware';
 import { ssiRates, followUpDue, type SurveillanceRow } from '@/lib/ipc/ssiRate';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const user = session!.user as { id: string; role: string; fullName?: string; name?: string };
-  if (!IPC_ROLES.includes(user.role)) {
+  if (!roleAllowed(user.role, IPC_ROLES)) {
     return NextResponse.json({ error: 'Your role cannot open SSI surveillance.' }, { status: 403 });
   }
 

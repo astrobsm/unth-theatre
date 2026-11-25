@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { autoBuildLines, replaceLines, nextEstimateNumber } from '@/lib/estimates/service';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const user = session?.user as { id?: string; name?: string; role?: string } | undefined;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!PREPARE_ROLES.includes(user.role ?? '')) {
+  if (!roleAllowed(user.role ?? '', PREPARE_ROLES)) {
     return NextResponse.json({ error: 'Not permitted to prepare estimates.' }, { status: 403 });
   }
 

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { captureOnDuty } from '@/lib/diagnostics/captureDuty';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     // Lab staff see all; surgeons/anaesthetists see their own requests
     if (session.user.role === 'LABORATORY_STAFF') {
       // Lab staff sees everything
-    } else if (['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role)) {
+    } else if (roleAllowed(session.user.role, ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'])) {
       where.requestedById = session.user.id;
     }
 
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
       'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
       'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR',
     ];
-    if (!allowedRoles.includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, allowedRoles)) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 

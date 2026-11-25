@@ -41,6 +41,7 @@ import {
   type ChaseMember,
 } from '@/lib/theatreOps/checkInChase';
 import type { CheckInStatus } from '@/lib/theatreOps/checkIn';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     const slots = caseTeamSlots(surgery);
     const onThisCase = slots.some((s) => s.userId === me.id);
-    if (!onThisCase && !CHASE_ROLES.includes(me.role ?? '')) {
+    if (!onThisCase && !roleAllowed(me.role ?? '', CHASE_ROLES)) {
       return NextResponse.json(
         {
           error:

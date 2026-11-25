@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { sendPushToRoles } from '@/lib/fcm';
 import { z } from 'zod';
-import { isSurgeonRole } from '@/lib/roleGroups';
+import { isSurgeonRole, roleAllowed } from '@/lib/roleGroups';
 import { ensureEmergencyBooking } from '@/lib/emergency/ensureBooking';
 
 export const dynamic = 'force-dynamic';
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user can trigger emergency alerts
-    if (!['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'])) {
       return NextResponse.json(
         { error: 'Insufficient permissions to trigger emergency alerts' },
         { status: 403 }

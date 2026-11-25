@@ -25,6 +25,7 @@ import {
 } from '@/lib/anaesthesia/fitness';
 import TheatreTeamAssigner from '@/components/TheatreTeamAssigner';
 import AnaesthesiaPackPicker, { type AnaesPackPayload } from '@/components/AnaesthesiaPackPicker';
+import { roleAllowed } from '@/lib/roleGroups';
 
 // ==================== BNF DRUG DIRECTORY ====================
 interface DrugEntry { name: string; unit: string; commonDoses: string[]; }
@@ -1503,19 +1504,19 @@ export default function EmergencyBookingPage() {
   }, [chaseFor, chaseNote, chaseSending]);
 
   const canChaseTeam = Boolean(
-    session?.user?.role && CHASE_ROLES.includes(session.user.role),
+    session?.user?.role && roleAllowed(session.user.role, CHASE_ROLES),
   );
 
-  const canCreateBooking = session?.user?.role && [
+  const canCreateBooking = session?.user?.role && roleAllowed(session.user.role, [
     'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER',
     'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'
-  ].includes(session.user.role);
+  ]);
 
-  const canRespondToEmergency = session?.user?.role && EMERGENCY_TEAM_USER_ROLES.includes(session.user.role);
+  const canRespondToEmergency = session?.user?.role && roleAllowed(session.user.role, EMERGENCY_TEAM_USER_ROLES);
 
   const isAnaesthetist = session?.user?.role && ['ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session.user.role);
 
-  const canUpdateStatus = session?.user?.role && STATUS_UPDATE_ROLES.includes(session.user.role);
+  const canUpdateStatus = session?.user?.role && roleAllowed(session.user.role, STATUS_UPDATE_ROLES);
 
   if (loading) {
     return (

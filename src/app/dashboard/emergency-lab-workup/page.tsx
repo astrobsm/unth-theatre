@@ -6,6 +6,7 @@ import { speakAnnouncement } from '@/lib/radioTts';
 import { applyHumanVoice } from '@/lib/humanVoice';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   FlaskConical,
   Bell,
@@ -773,7 +774,7 @@ export default function EmergencyLabWorkupPage() {
 
   const isLabStaff = session?.user?.role === 'LABORATORY_STAFF';
   const isAdmin = session?.user?.role === 'ADMIN' || session?.user?.role === 'THEATRE_MANAGER';
-  const isClinician = ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST'].includes(session?.user?.role || '');
+  const isClinician = roleAllowed(session?.user?.role || '', ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST']);
 
   // Filter requests by active tab
   const filteredByTab = requests.filter(req => {

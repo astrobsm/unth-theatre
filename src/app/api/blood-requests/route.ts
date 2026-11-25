@@ -6,6 +6,7 @@ import { pushToUsers } from '@/lib/pushAll';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user can request blood (surgeon, anesthetist, or admin)
-    if (!['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'].includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'THEATRE_MANAGER', 'ADMIN'])) {
       return NextResponse.json(
         { error: 'Only surgeons, anesthetists, or admins can request blood' },
         { status: 403 }

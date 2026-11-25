@@ -32,6 +32,7 @@ import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 import { watToday, watMinutesOfDay } from '@/lib/watDay';
 import { parseTheatreDay } from '@/lib/theatre/day';
 import { electiveShiftFromMinutes, type DutyShift } from '@/lib/rosterOnDutyShift';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   normaliseComplex, complexOfRow, complexForTheatre, HOLDING_AREA_COMPLEXES,
 } from '@/lib/holdingArea/complexes';
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!MAY_CHASE.includes((session.user.role ?? '').toUpperCase())) {
+  if (!roleAllowed((session.user.role ?? '').toUpperCase(), MAY_CHASE)) {
     return NextResponse.json({
       error: 'Chasing the holding area is done by the theatre team and theatre management.',
       code: 'NO_ACCESS',

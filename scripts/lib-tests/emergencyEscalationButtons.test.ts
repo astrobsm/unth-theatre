@@ -471,8 +471,23 @@ describe('the endpoints', () => {
   });
 
   it('keeps the escalation button off a case nobody may escalate', () => {
-    expect(cmac).toContain('ESCALATE_ROLES.includes(session.user.role)');
-    expect(assign).toContain('CHASE_ROLES.includes(session.user.role)');
+    // On 25 November 2026 these two gates moved to roleAllowed(), so a house
+    // officer -- and a Head of Surgery -- is seen through ROLE_INHERITS
+    // instead of having to be listed by hand. The test checks the same
+    // property it always did, and more of it: each endpoint must decide BOTH
+    // the reported capability and the actual refusal from its own role list,
+    // and must not have stopped consulting that list at all.
+    for (const [src, list] of [[cmac, 'ESCALATE_ROLES'], [assign, 'CHASE_ROLES']] as const) {
+      expect(src).toContain(`roleAllowed(session.user.role, ${list})`);
+      // Twice: once for the can-I flag the card reads, once for the refusal.
+      expect(src.split(`roleAllowed(session.user.role, ${list})`).length - 1)
+        .toBeGreaterThanOrEqual(2);
+      // Not quietly replaced by something that lets anybody through.
+      expect(src).toContain(`const ${list} = [`);
+    }
+    // And the list is still what it was: the clinical team, not the world.
+    expect(cmac).toContain("'SURGEON', 'CONSULTANT_SURGEON'");
+    expect(assign).toContain("'SURGEON', 'CONSULTANT_SURGEON'");
   });
 });
 

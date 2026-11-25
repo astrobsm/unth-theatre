@@ -13,6 +13,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { timingsFor } from '@/lib/theatreOps/durations';
 import { scheduledInstant } from '@/lib/theatreOps/clock';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   bottlenecks,
   byDepartment,
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   const user = session?.user as { role?: string } | undefined;
   if (!session?.user) return NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 });
-  if (!user?.role || !CAN_VIEW.includes(user.role)) {
+  if (!user?.role || !roleAllowed(user.role, CAN_VIEW)) {
     return NextResponse.json(
       { error: 'Theatre performance figures are shown to consultants and management.' },
       { status: 403 }

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { triggerRadio, speak3, getOnDutyPortersAndCleaners, namesPhrase } from '@/lib/radioEvents';
 import { sendPushToRoles } from '@/lib/fcm';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +66,7 @@ export async function POST(
 
     // Check authorization
     const allowedRoles = ['SURGEON', 'CONSULTANT_SURGEON', 'CIRCULATING_NURSE', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
-    if (!allowedRoles.includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, allowedRoles)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -175,7 +176,7 @@ export async function PUT(
     }
 
     const allowedRoles = ['SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE', 'ANAESTHETIST', 'ADMIN', 'THEATRE_MANAGER'];
-    if (!allowedRoles.includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, allowedRoles)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

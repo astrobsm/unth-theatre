@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { mergeFeed } from '@/lib/postop/noteFeed';
 import { NOTE_INCLUDE } from '@/lib/postop/service';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +66,7 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!ALLOWED.includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, ALLOWED)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

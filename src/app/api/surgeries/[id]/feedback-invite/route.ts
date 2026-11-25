@@ -24,6 +24,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { apiError } from '@/lib/apiError';
 import { patientContact } from '@/lib/patients/contact';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   newInviteToken, inviteExpiry, inviteUrl, buildInviteMessage, careContextOf,
   INVITE_TTL_DAYS,
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!MAY_INVITE.includes((session.user.role ?? '').toUpperCase())) {
+  if (!roleAllowed((session.user.role ?? '').toUpperCase(), MAY_INVITE)) {
     return NextResponse.json({
       error: 'Inviting a patient to give feedback is done by the ward and theatre staff.',
       code: 'NO_ACCESS',

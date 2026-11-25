@@ -7,6 +7,7 @@ import { z } from "zod";
 import { triggerRadio } from "@/lib/radioEvents";
 import { findDuplicate, UNTOUCHED_STATUSES } from "@/lib/prescriptions/duplicateGuard";
 import { watDayRange } from "@/lib/watDay";
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const role = (session.user as any).role;
-  if (!READ_ROLES.includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!roleAllowed(role, READ_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const role = (session.user as any).role;
-  if (!SURGEON_ROLES.includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!roleAllowed(role, SURGEON_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const idemKey = idempotencyKeyFrom(req);

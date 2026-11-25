@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { triggerRadio } from '@/lib/radioEvents';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -300,7 +301,7 @@ export async function PATCH(
         }
 
         const updateData: any = {};
-        if (['SURGEON', 'CONSULTANT_SURGEON'].includes(session.user.role)) {
+        if (roleAllowed(session.user.role, ['SURGEON', 'CONSULTANT_SURGEON'])) {
           updateData.viewedBySurgeon = true;
           updateData.viewedBySurgeonAt = new Date();
         }

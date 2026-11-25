@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { captureOnDuty } from '@/lib/diagnostics/captureDuty';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/apiMiddleware';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const user = session!.user as { id: string; role: string; fullName?: string; name?: string };
-  if (!REQUEST_ROLES.includes(user.role)) {
+  if (!roleAllowed(user.role, REQUEST_ROLES)) {
     return NextResponse.json(
       { error: 'Only the clinicians responsible for a case may request imaging.' },
       { status: 403 });

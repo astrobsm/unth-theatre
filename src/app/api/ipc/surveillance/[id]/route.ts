@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/apiMiddleware';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (error) return error;
 
   const user = session!.user as { id: string; role: string; fullName?: string; name?: string };
-  if (!IPC_ROLES.includes(user.role)) {
+  if (!roleAllowed(user.role, IPC_ROLES)) {
     return NextResponse.json({ error: 'Your role cannot record a wound assessment.' }, { status: 403 });
   }
 
@@ -118,7 +119,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (error) return error;
 
   const user = session!.user as { id: string; role: string };
-  if (!IPC_ROLES.includes(user.role)) {
+  if (!roleAllowed(user.role, IPC_ROLES)) {
     return NextResponse.json({ error: 'Your role cannot close surveillance.' }, { status: 403 });
   }
 

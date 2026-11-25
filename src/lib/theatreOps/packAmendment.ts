@@ -21,6 +21,8 @@
 // ============================================================
 
 /** Who may change a pack list after booking. */
+import { roleAllowed } from '@/lib/roleGroups';
+
 export const PACK_EDITOR_ROLES = [
   'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'REGISTRAR',
   'THEATRE_MANAGER', 'ADMIN', 'SYSTEM_ADMINISTRATOR',
@@ -38,7 +40,7 @@ export const PACK_EDITOR_ROLES = [
  * is how a tray and a record diverge.
  */
 export function canEditPack(role: string | null | undefined): boolean {
-  return PACK_EDITOR_ROLES.includes((role ?? '').toUpperCase());
+  return roleAllowed((role ?? '').toUpperCase(), PACK_EDITOR_ROLES);
 }
 
 export const MIN_PACK_REASON = 10;

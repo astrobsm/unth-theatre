@@ -35,6 +35,7 @@ import { hourRuleStanding, isSettled } from '@/lib/emergency/hourRule';
 import { assembleRollCall } from '@/lib/emergency/caseRollCall';
 import { readReviewState } from '@/lib/emergency/assignmentChase';
 import { blockerSpec } from '@/lib/emergency/blockers';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   CMAC_FALLBACK_ROLES, CMAC_LABELS, CMAC_ROLES, buildCmacMessage,
   cmacNotificationLine, cmacStanding, dialable, teamDirectory,
@@ -179,7 +180,7 @@ export async function GET(
       expected: summary.expected,
       review: { done: review.done, started: review.started, reviewerName: review.reviewerName },
       openBlockers: blockersOf(booking),
-      canEscalate: ESCALATE_ROLES.includes(session.user.role)
+      canEscalate: roleAllowed(session.user.role, ESCALATE_ROLES)
         || booking.surgeonId === session.user.id
         || booking.anesthetistId === session.user.id,
     });
@@ -205,7 +206,7 @@ export async function POST(
       return NextResponse.json({ error: 'Emergency booking not found' }, { status: 404 });
     }
 
-    const allowed = ESCALATE_ROLES.includes(session.user.role)
+    const allowed = roleAllowed(session.user.role, ESCALATE_ROLES)
       || booking.surgeonId === session.user.id
       || booking.anesthetistId === session.user.id;
     if (!allowed) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,14 @@ export const dynamic = 'force-dynamic';
  * surgeon alone means recovery is blocked on somebody who has already moved
  * on — and the recovery nurse, who is with the patient, could not record what
  * had plainly happened.
+ *
+ * HOUSE OFFICERS REACH THIS LIST WITHOUT BEING IN IT, and so do the clinical
+ * heads. The check is roleAllowed(), which expands ROLE_INHERITS in
+ * src/lib/roleGroups.ts; HOUSE_OFFICER inherits SURGEON there, on instruction
+ * of 25 November 2026. Written as a bare Array.includes() on the list below —
+ * which is what this was — inheritance was ignored, so a Head of Surgery could
+ * not close a case either. Add a role HERE only if it should be able to close
+ * a case WITHOUT being able to do what a surgeon does.
  *
  * Who actually pressed it is recorded in the audit log below, so widening the
  * list costs no accountability.
@@ -36,7 +45,7 @@ export async function POST(
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    if (!ALLOWED.includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, ALLOWED)) {
       return NextResponse.json(
         { error: 'Only the surgical team, the scrub or recovery room nurse, the theatre manager or an administrator can mark a surgery as completed' },
         { status: 403 }

@@ -12,6 +12,8 @@
  * the messages in a month.
  */
 
+import { roleAllowed } from '@/lib/roleGroups';
+
 export type PackList = 'CONSUMABLE' | 'PHARMACY';
 
 export interface ChaseLine {
@@ -77,7 +79,7 @@ export const PACK_CHASE_ROLES = [
 ];
 
 export function canChasePack(role: string | null | undefined): boolean {
-  return PACK_CHASE_ROLES.includes((role ?? '').toUpperCase());
+  return roleAllowed((role ?? '').toUpperCase(), PACK_CHASE_ROLES);
 }
 
 /** The role that owns each list. */

@@ -19,6 +19,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { scheduledInstant } from '@/lib/theatreOps/clock';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   captureOrder,
   caseState,
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   const me = session?.user as { id?: string; role?: string; fullName?: string; name?: string } | undefined;
   if (!me?.id) return NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 });
-  if (!me.role || !CAN_RECORD.includes(me.role)) {
+  if (!me.role || !roleAllowed(me.role, CAN_RECORD)) {
     return NextResponse.json(
       { error: 'Milestones are recorded by the theatre team.' },
       { status: 403 }

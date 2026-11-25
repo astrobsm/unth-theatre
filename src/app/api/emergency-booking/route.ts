@@ -12,7 +12,7 @@ import { resolveBasePack, BASE_PACK_LABEL } from '@/lib/baseConsumablePack';
 import { buildPackRequests } from '@/lib/packRequests';
 import { fallbackPacks } from '@/lib/packs/fallback';
 import { toConsumableCategory, toDrugType } from '@/lib/packs/enums';
-import { isSurgeonRole } from '@/lib/roleGroups';
+import { isSurgeonRole, roleAllowed } from '@/lib/roleGroups';
 import { reconcileEmergencyBoard } from '@/lib/emergency/ensureBooking';
 import { checkRequiredByTime } from '@/lib/emergency/requiredByTime';
 import { checkPreopRequirements } from '@/lib/preopRequirements';
@@ -260,7 +260,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const role = session.user?.role;
-    if (!role || !STATUS_UPDATE_ROLES.includes(role)) {
+    if (!role || !roleAllowed(role, STATUS_UPDATE_ROLES)) {
       return NextResponse.json(
         { error: 'You do not have permission to update emergency booking status' },
         { status: 403 }
@@ -320,7 +320,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only surgeons, anesthetists, house officers, theatre managers, and admins can create emergency bookings
-    if (!['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'].includes(session.user.role)) {
+    if (!roleAllowed(session.user.role, ['SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'HOUSE_OFFICER', 'THEATRE_MANAGER', 'ADMIN', 'CMAC', 'DC_MAC', 'CHIEF_MEDICAL_DIRECTOR'])) {
       return NextResponse.json(
         { error: 'Insufficient permissions to create emergency booking' },
         { status: 403 }

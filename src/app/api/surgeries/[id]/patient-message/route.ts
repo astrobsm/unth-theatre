@@ -28,6 +28,7 @@ import { apiError } from '@/lib/apiError';
 import { queueMessage } from '@/lib/comms/send';
 import { patientContact, NO_CONTACT_MESSAGE } from '@/lib/patients/contact';
 import { patientFeedbackLink } from '@/lib/patients/publicLink';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   buildPatientNotice, noticeAuditLine, reasonsFor, depositSentence,
   DELAY_REASONS, CHANGE_REASONS, EATING_INSTRUCTIONS,
@@ -146,7 +147,7 @@ export async function POST(
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!MAY_MESSAGE.includes((session.user.role ?? '').toUpperCase())) {
+  if (!roleAllowed((session.user.role ?? '').toUpperCase(), MAY_MESSAGE)) {
     return NextResponse.json({
       error: 'Messaging patients is done by the ward and theatre nurses, the surgical team '
         + 'and the booking office.',

@@ -45,6 +45,10 @@ export async function POST(request: NextRequest) {
         const validRoles = [
           'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN',
           'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST',
+          // House officers were missing from this list while 55 of them held
+          // accounts, so the one role that arrives in a cohort every few
+          // months was the one role that had to be typed in one at a time.
+          'HOUSE_OFFICER',
           'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE',
           'THEATRE_STORE_KEEPER', 'PORTER', 'ANAESTHETIC_TECHNICIAN',
           'BIOMEDICAL_ENGINEER', 'CLEANER', 'PROCUREMENT_OFFICER',

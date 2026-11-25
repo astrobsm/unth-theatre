@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { replaceLines, autoBuildLines, isLocked } from '@/lib/estimates/service';
 import { EstimateError, type DraftLine } from '@/lib/estimates/calculate';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,7 @@ export async function PATCH(
   const session = await getServerSession(authOptions);
   const user = session?.user as { id?: string; name?: string; role?: string } | undefined;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!EDIT_ROLES.includes(user.role ?? '')) {
+  if (!roleAllowed(user.role ?? '', EDIT_ROLES)) {
     return NextResponse.json({ error: 'Not permitted to edit estimates.' }, { status: 403 });
   }
 

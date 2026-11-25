@@ -30,6 +30,7 @@ import {
   type DraftMember,
 } from '@/lib/surgery/actualTeam';
 import { TEAM_GRADES } from '@/lib/surgery/assistants';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,7 +142,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       confirmed,
       history: confirmationHistory(rows),
       changedFromBooking: confirmed ? describeChange(booked, confirmed.members) : null,
-      mayConfirm: MAY_CONFIRM.includes(session!.user.role),
+      mayConfirm: roleAllowed(session!.user.role, MAY_CONFIRM),
     });
   } catch (e) {
     console.error('[actual-team] GET failed:', e);
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { error, session } = await requireAuth();
   if (error) return error;
 
-  if (!MAY_CONFIRM.includes(session!.user.role)) {
+  if (!roleAllowed(session!.user.role, MAY_CONFIRM)) {
     return NextResponse.json(
       { error: 'Only the operating team, the scrub or recovery room nurse, the theatre manager or an administrator can confirm who operated' },
       { status: 403 },

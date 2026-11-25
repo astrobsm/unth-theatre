@@ -33,6 +33,33 @@ export const ROLE_INHERITS: Record<string, string[]> = {
   HEAD_OF_OPHTHALMOLOGY: ['CONSULTANT_SURGEON'],
   HEAD_OF_ANAESTHESIA: ['CONSULTANT_ANAESTHETIST'],
   HEAD_OF_PHARMACY: ['PHARMACIST'],
+
+  // House officers, 25 November 2026, on instruction: they are to mark cases
+  // completed and otherwise have the same access as a surgeon.
+  //
+  // INHERITANCE RATHER THAN FIFTY-FIVE EDITS. HOUSE_OFFICER was already named
+  // in about a dozen role lists and absent from the rest, so a house officer
+  // could request imaging and amend a pack but could not close the case they
+  // had just scrubbed for. Listing them beside every 'SURGEON' would be the
+  // same work again next time, and one missed line is an account that looks
+  // right and is locked out of one screen.
+  //
+  // THIS IS A DIRECTION, NOT A SENIORITY. Everywhere else in this map the
+  // junior role is inherited BY the senior one. Here the opposite: the house
+  // officer is the most junior grade and is being GIVEN the resident's access,
+  // because in this theatre they do the work -- the booking, the consent, the
+  // pre-op requirements, the post-op note -- and the system was making a
+  // consultant log in to record it.
+  //
+  // WHAT IT DOES NOT GIVE THEM. Inheritance only answers "may this account
+  // open that"; it does not make a house officer a surgeon. They are
+  // deliberately NOT in SURGEON_ROLES below, so they are not offered in the
+  // operating-surgeon picker, are not recorded as the surgeon on a case they
+  // create, and are not counted as a surgeon in the research figures. And
+  // nothing here reaches consultant-only ground -- the theatre analytics and
+  // the procedure-pack catalogue name CONSULTANT_SURGEON and not SURGEON, so
+  // a house officer gets neither, which is exactly surgeon parity.
+  HOUSE_OFFICER: ['SURGEON'],
   // NOTE: CONSULTANT_ANAESTHETIST is deliberately NOT mapped to ANAESTHETIST.
   // That pair predates this file and is already listed explicitly wherever it
   // applies; adding inheritance would silently widen consultants' access

@@ -171,6 +171,45 @@ const ROLES: Role[] = [
   },
 
   // ─── Anaesthesia ───────────────────────────────────────────────
+  // There was no House Officer entry here at all, for the role that does most
+  // of the booking and reads this page before registering.
+  {
+    id: 'HOUSE_OFFICER',
+    label: 'House Officer',
+    group: 'Surgical Team',
+    icon: Stethoscope,
+    color: 'from-blue-500 to-indigo-600',
+    intro:
+      'You have the same access as your resident: book the case, prepare it, close it. Most of what turns a patient back at the theatre door is paperwork that was yours to finish.',
+    responsibilities: [
+      'Book the case with a specific diagnosis and indication.',
+      'Get consent recorded before the day of surgery.',
+      'Enter the haemoglobin with the time the sample was taken.',
+      'Mark the case completed when the patient leaves theatre, and write the post-operative note the same day.',
+    ],
+    howToUse: [
+      'Surgeries → + New Surgery — the wizard saves as you go, so you can stop and come back.',
+      'Blood Bank → raise the request as soon as the case is booked.',
+      'Surgeries → the case → Mark completed, as the patient goes to recovery.',
+      'Surgeries → the case → Operative Notes.',
+    ],
+    cautions: [
+      'Consent and a haemoglobin within 48 hours are enforced by the app — a case without them cannot proceed, and 08:00 is too late to fix it.',
+      'Do not mark a case completed before the patient has actually left theatre.',
+      'You are not recorded as the operating surgeon on a case you book — name your consultant or registrar, because that is who the log book and the appraisal figures follow.',
+    ],
+    benefits: [
+      'Every case you prepare is counted in your own log book.',
+      'Recovery can admit your patient the moment you close the case, instead of waiting for somebody to find a consultant.',
+      'The booking wizard keeps your place, so a case started on the ward can be finished at the desk.',
+    ],
+    quickStart: [
+      'Login → Dashboard → Surgeries.',
+      'Finish anything flagged outstanding on today and tomorrow.',
+      'Close each case as it leaves theatre.',
+    ],
+  },
+
   {
     id: 'ANAESTHETIST',
     label: 'Anaesthetist / Consultant Anaesthetist',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    if (!ALLOWED.includes((session.user as any).role)) {
+    if (!roleAllowed((session.user as any).role, ALLOWED)) {
       return NextResponse.json(
         { error: 'Only surgeons, perioperative nurses and administrators can reorder the list.' },
         { status: 403 }

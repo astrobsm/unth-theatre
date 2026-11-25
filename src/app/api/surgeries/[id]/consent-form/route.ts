@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { CONSENT_TARGET_BYTES, CONSENT_TARGET_LABEL, formatBytes } from '@/lib/consentCompression';
 import prisma from "@/lib/prisma";
 import { clearanceFor } from "@/lib/preopVisitClearance";
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const session = await getServerSession(authOptions);
   const user = getUser(session);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ALLOWED_ROLES.includes(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!roleAllowed(user.role, ALLOWED_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const surgery = await prisma.surgery.findUnique({
     where: { id: params.id },
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const session = await getServerSession(authOptions);
   const user = getUser(session);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ALLOWED_ROLES.includes(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!roleAllowed(user.role, ALLOWED_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const surgery = await prisma.surgery.findUnique({ where: { id: params.id }, select: { id: true } });
   if (!surgery) return NextResponse.json({ error: "Surgery not found" }, { status: 404 });

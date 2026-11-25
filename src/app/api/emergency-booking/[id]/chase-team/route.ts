@@ -31,6 +31,7 @@ import { queueMessage } from '@/lib/comms/send';
 import { toWhatsAppNumber } from '@/lib/comms/whatsapp';
 import { hourRuleStanding } from '@/lib/emergency/hourRule';
 import { assembleRollCall } from '@/lib/emergency/caseRollCall';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   buildTeamChaseMessage, chaseNotificationLine, type CaseFacts,
 } from '@/lib/emergency/teamChase';
@@ -144,7 +145,7 @@ export async function GET(
         reviewDone: summary.reviewDone,
         reachable: summary.reachable,
       },
-      canChase: CHASE_ROLES.includes(session.user.role)
+      canChase: roleAllowed(session.user.role, CHASE_ROLES)
         || booking.surgeonId === session.user.id
         || booking.anesthetistId === session.user.id,
       chases: booking.teamChases.map((c) => ({
@@ -179,7 +180,7 @@ export async function POST(
       return NextResponse.json({ error: 'Emergency booking not found' }, { status: 404 });
     }
 
-    const allowed = CHASE_ROLES.includes(session.user.role)
+    const allowed = roleAllowed(session.user.role, CHASE_ROLES)
       || booking.surgeonId === session.user.id
       || booking.anesthetistId === session.user.id;
     if (!allowed) {

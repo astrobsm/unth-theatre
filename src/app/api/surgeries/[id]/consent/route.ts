@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { roleAllowed } from '@/lib/roleGroups';
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const role = (session.user as any).role;
-  if (!ALLOWED_ROLES.includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!roleAllowed(role, ALLOWED_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const surgery = await prisma.surgery.findUnique({
     where: { id: params.id },
@@ -57,7 +58,7 @@ export async function HEAD(_req: NextRequest, { params }: { params: { id: string
   const session = await getServerSession(authOptions);
   if (!session?.user) return new NextResponse(null, { status: 401 });
   const role = (session.user as any).role;
-  if (!ALLOWED_ROLES.includes(role)) return new NextResponse(null, { status: 403 });
+  if (!roleAllowed(role, ALLOWED_ROLES)) return new NextResponse(null, { status: 403 });
   const surgery = await prisma.surgery.findUnique({
     where: { id: params.id },
     select: { consentFileMimeType: true, consentFileData: true },

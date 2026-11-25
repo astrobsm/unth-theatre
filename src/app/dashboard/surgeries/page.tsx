@@ -28,6 +28,7 @@ import CasePacksButton from '@/components/CasePacksButton';
 import AmendCaseButton from '@/components/surgeries/AmendCaseButton';
 import CaseActionsMenu from '@/components/surgeries/CaseActionsMenu';
 import { watInstantFrom } from '@/lib/watDay';
+import { roleAllowed } from '@/lib/roleGroups';
 
 interface Surgery {
   id: string;
@@ -117,23 +118,23 @@ export default function SurgeriesPage() {
 
   // Role-based action visibility
   const userRole = session?.user?.role;
-  const canAccessWHOChecklist = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'].includes(userRole || '');
+  const canAccessWHOChecklist = roleAllowed(userRole || '', ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE']);
   const canAccessAnesthesia = ['ADMIN', 'THEATRE_MANAGER', 'ANAESTHETIST'].includes(userRole || '');
   const canAccessSurgicalCount = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE'].includes(userRole || '');
-  const canAccessTiming = ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE'].includes(userRole || '');
+  const canAccessTiming = roleAllowed(userRole || '', ['ADMIN', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'ANAESTHETIST', 'SCRUB_NURSE']);
   const canAccessConsumables = ['ADMIN', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'THEATRE_STORE_KEEPER', 'PROCUREMENT_OFFICER'].includes(userRole || '');
   const canAccessBOM = ['ADMIN', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');
   // Consent can be completed by the surgical/anaesthetic team or theatre nurses caring for the patient.
-  const canAccessConsent = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'RECOVERY_ROOM_NURSE'].includes(userRole || '');
+  const canAccessConsent = roleAllowed(userRole || '', ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SURGEON', 'CONSULTANT_SURGEON', 'HOUSE_OFFICER', 'ANAESTHETIST', 'CONSULTANT_ANAESTHETIST', 'ANAESTHETIC_TECHNICIAN', 'SCRUB_NURSE', 'CIRCULATING_NURSE', 'RECOVERY_ROOM_NURSE']);
   // Surgeons (and admins / theatre managers) may close out a case so PACU can admit and the post-op note can be written.
-  const canCompleteSurgery = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR'].includes(userRole || '');
+  const canCompleteSurgery = roleAllowed(userRole || '', ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'THEATRE_MANAGER', 'SYSTEM_ADMINISTRATOR']);
   // Perioperative nurses and admins can re-assign / change the theatre a booked case is allocated to.
   const canReassignTheatre = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE'].includes(userRole || '');
   // Surgeons (and admins / theatre managers) can reschedule a case to another day
   // when it could not be performed on the set date.
-  const canReschedule = ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
+  const canReschedule = roleAllowed(userRole || '', ['SURGEON', 'CONSULTANT_SURGEON', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER']);
   // Surgeons & perioperative nurses can change the order a unit's cases are listed.
-  const canReorder = ['SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER'].includes(userRole || '');
+  const canReorder = roleAllowed(userRole || '', ['SURGEON', 'CONSULTANT_SURGEON', 'SCRUB_NURSE', 'RECOVERY_ROOM_NURSE', 'ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER']);
   // Withdrawing a case as a duplicate is a correction to the list rather than a
   // clinical decision, so it sits with the people who own the list.
   const canMarkDuplicate = ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'THEATRE_CHAIRMAN'].includes(userRole || '');

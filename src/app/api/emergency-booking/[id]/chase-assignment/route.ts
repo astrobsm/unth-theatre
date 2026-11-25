@@ -41,6 +41,7 @@ import {
   locationForTheatreName, resolveEmergencyNursing,
 } from '@/lib/roster/theatreNursing';
 import { hourRuleStanding } from '@/lib/emergency/hourRule';
+import { roleAllowed } from '@/lib/roleGroups';
 import {
   ASSIGNMENT_STEPS, assignmentNotificationLine, assignmentSummary,
   buildAssignmentChaseMessage, needsAssignment, readReviewState, reviewSentence,
@@ -332,7 +333,7 @@ export async function GET(
         name: t.name, label: t.label, kind: t.kind, reachable: Boolean(t.phoneNumber),
       })),
       skipped,
-      canChase: CHASE_ROLES.includes(session.user.role)
+      canChase: roleAllowed(session.user.role, CHASE_ROLES)
         || booking.surgeonId === session.user.id
         || booking.anesthetistId === session.user.id,
       chases: booking.teamChases.map((c) => ({
@@ -365,7 +366,7 @@ export async function POST(
       return NextResponse.json({ error: 'Emergency booking not found' }, { status: 404 });
     }
 
-    const allowed = CHASE_ROLES.includes(session.user.role)
+    const allowed = roleAllowed(session.user.role, CHASE_ROLES)
       || booking.surgeonId === session.user.id
       || booking.anesthetistId === session.user.id;
     if (!allowed) {

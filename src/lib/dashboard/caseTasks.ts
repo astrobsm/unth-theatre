@@ -1,5 +1,6 @@
 import type { TaskInput, BoardSeverity } from './personalBoard';
 import { isSupervisingConsultant } from '@/lib/surgery/consultantIds';
+import { roleSatisfies } from '@/lib/roleGroups';
 
 /**
  * What THIS person still has to do about THIS case.
@@ -127,7 +128,11 @@ export function caseTasksFor(
   };
 
   // ---- The surgeon and the supervising consultant own the booking ---------
-  if (role === 'SURGEON' || role === 'CONSULTANT') {
+  // roleSatisfies, not ===: a consultant surgeon, a clinical head and (since
+  // 25 November 2026) a house officer all stand in for SURGEON, and all three
+  // need the consent and pre-op chases on their own board. A bare equality
+  // check gave them an empty board and no clue why.
+  if (roleSatisfies(role, 'SURGEON') || role === 'CONSULTANT') {
     if (!started && !surgery.hasConsentFile && !surgery.hasConsentForm) {
       add('consent',
         `Consent not recorded — ${surgery.procedureName}`,
