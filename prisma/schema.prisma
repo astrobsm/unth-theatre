@@ -9121,6 +9121,20 @@ model SurgicalConsumableTemplate {
   /// note on it says what the family owes.
   nhiaPartial Boolean  @default(false)
 
+  /// Retired in favour of another row, because the two were the same item
+  /// under two names.
+  ///
+  /// NOT DELETED. A template id is written onto every pack line raised from
+  /// it, so deleting one would orphan rows on cases already booked. The row
+  /// stays, isActive goes false, and this says which row took its place --
+  /// which keeps the history readable and the decision reversible.
+  supersededById    String?
+  /// An administrator has looked at this row beside its apparent duplicates
+  /// and said they are different things. Set so the pair stops being
+  /// offered for review every time somebody opens the screen.
+  dedupeConfirmedAt DateTime?
+  dedupeConfirmedBy String?
+
   isActive        Boolean                    @default(true)
   sortOrder       Int                        @default(0)
   notes           String?
@@ -9170,6 +9184,20 @@ model SurgicalDrugDressingTemplate {
   /// told. Covered is still true -- the line goes to the NHIA desk -- but the
   /// note on it says what the family owes.
   nhiaPartial Boolean  @default(false)
+
+  /// Retired in favour of another row, because the two were the same item
+  /// under two names.
+  ///
+  /// NOT DELETED. A template id is written onto every pack line raised from
+  /// it, so deleting one would orphan rows on cases already booked. The row
+  /// stays, isActive goes false, and this says which row took its place --
+  /// which keeps the history readable and the decision reversible.
+  supersededById    String?
+  /// An administrator has looked at this row beside its apparent duplicates
+  /// and said they are different things. Set so the pair stops being
+  /// offered for review every time somebody opens the screen.
+  dedupeConfirmedAt DateTime?
+  dedupeConfirmedBy String?
 
   unit            String                   @default("vial")
   specialty       String? // Subspecialty hint, null = applies to all

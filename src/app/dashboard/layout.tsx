@@ -525,6 +525,9 @@ export default function DashboardLayout({
     menuItems.push({ href: '/dashboard/admin/access', icon: Shield, label: 'Module Access', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-units', icon: Building2, label: 'Surgical Units', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-catalog', icon: Package, label: 'Surgical Catalog', badge: 'ADMIN' });
+    // The same item entered more than once, beside the catalogue it is
+    // about — which is where somebody is standing when they notice.
+    menuItems.push({ href: '/dashboard/admin/catalogue-duplicates', icon: Package, label: 'Catalogue Duplicates', badge: 'ADMIN' });
     menuItems.push({ href: '/dashboard/admin/surgical-packs', icon: Package, label: 'Surgical Packs', badge: 'ADMIN' });
     // What the hospital charges patients. Same roles as the access editor:
     // changing prices is an administrative act, not a clinical one, and the

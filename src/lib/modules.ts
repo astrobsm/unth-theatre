@@ -300,6 +300,11 @@ export const MODULES: AppModule[] = [
   // Admin-only modules (cannot be granted; gated separately)
   { id: 'users', label: 'User Management', paths: ['/dashboard/users'], defaultRoles: [], category: 'Admin' },
   { id: 'surgical-catalog', label: 'Surgical Catalog', paths: ['/dashboard/admin/surgical-catalog'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST', 'NHIA_PHARMACY'], category: 'Admin' },
+  // Where one item sits in the catalogue under several names. Readable by
+  // the two pharmacies and the pack providers, because they are the ones
+  // who notice; only an administrator or the theatre manager may retire a
+  // row, which the route enforces rather than the menu.
+  { id: 'catalogue-duplicates', label: 'Catalogue Duplicates', paths: ['/dashboard/admin/catalogue-duplicates'], defaultRoles: ['ADMIN', 'SYSTEM_ADMINISTRATOR', 'THEATRE_MANAGER', 'CONSUMABLE_PACK_PROVIDER', 'PHARMACIST', 'NHIA_PHARMACY'], category: 'Admin' },
   { id: 'surgical-packs', label: 'Surgical Packs', paths: ['/dashboard/admin/surgical-packs'], defaultRoles: ['CONSUMABLE_PACK_PROVIDER', 'PHARMACIST'], category: 'Admin' },
   { id: 'disciplinary-queries', label: 'Disciplinary Queries', paths: ['/dashboard/disciplinary-queries'], defaultRoles: [], category: 'Admin' },
   { id: 'late-bookings', label: 'Late Bookings', paths: ['/dashboard/late-bookings'], defaultRoles: [], category: 'Admin' },
