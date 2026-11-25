@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/apiMiddleware';
 import prisma from '@/lib/prisma';
 import { detectConflict } from '@/lib/concurrency';
 import { phoneProblem } from '@/lib/patients/contact';
+import { PAYER_REQUIRED_MESSAGE, parsePayerCategory } from '@/lib/payer/categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -146,6 +147,35 @@ export async function PUT(
     }
     if (body.caregiverName !== undefined) {
       updateData.caregiverName = String(body.caregiverName ?? '').trim() || null;
+    }
+
+    // ── Who pays ──────────────────────────────────────────────────────────
+    //
+    // Correctable, because a scheme lapses and a card expires. Only the four
+    // real answers: UNSPECIFIED is a fact about records written before the
+    // question existed and an edit must not be able to put a patient back
+    // into it.
+    //
+    // CHANGING IT HERE DOES NOT RE-ROUTE ANY EXISTING CASE, deliberately.
+    // The booking carries its own copy, taken when it was made; a pack list
+    // already sent to a counter must not move because somebody corrected a
+    // patient record months later. A booking in flight is corrected on the
+    // booking, where the re-routing is visible to the person doing it.
+    if (body.payerCategory !== undefined) {
+      const next = parsePayerCategory(body.payerCategory);
+      if (!next || next === 'UNSPECIFIED') {
+        return NextResponse.json(
+          { error: PAYER_REQUIRED_MESSAGE, field: 'payerCategory' },
+          { status: 400 },
+        );
+      }
+      updateData.payerCategory = next;
+    }
+    if (body.payerSchemeId !== undefined) {
+      updateData.payerSchemeId = String(body.payerSchemeId ?? '').trim() || null;
+    }
+    if (body.payerIsNyscCorps !== undefined) {
+      updateData.payerIsNyscCorps = body.payerIsNyscCorps === true;
     }
 
     const updatedPatient = await prisma.patient.update({

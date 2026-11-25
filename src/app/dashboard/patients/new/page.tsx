@@ -13,6 +13,9 @@ import {
   NUMBER_KIND_LABEL, type PatientNumberKind,
 } from '@/lib/patients/patientNumber';
 import dynamic from 'next/dynamic';
+import {
+  BOOKABLE_PAYER_CATEGORIES, PAYER_DESCRIPTION, PAYER_LABEL, isInsuredPayer,
+} from '@/lib/payer/categories';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 
 // Comprehensive Risk Assessment Calculators
@@ -103,6 +106,9 @@ interface PatientDraft {
 }
 
 export default function NewPatientPage() {
+  /** Who pays. PRIVATE unless the clerk says otherwise, on instruction. */
+  const [payerCategory, setPayerCategory] = useState<string>('PRIVATE');
+
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -657,6 +663,11 @@ export default function NewPatientPage() {
       phoneNumber: (formData.get('phoneNumber') as string)?.trim() || null,
       caregiverName: (formData.get('caregiverName') as string)?.trim() || null,
       caregiverPhone: (formData.get('caregiverPhone') as string)?.trim() || null,
+      payerCategory: (formData.get('payerCategory') as string) || 'PRIVATE',
+      payerSchemeId: (formData.get('payerSchemeId') as string)?.trim() || null,
+      // A checkbox is absent from FormData when it is not ticked, so this is
+      // read as "did it arrive at all" rather than compared to a string.
+      payerIsNyscCorps: formData.get('payerIsNyscCorps') !== null,
       
       // DVT Risk Assessment
       dvtRiskScore: dvtScore,
@@ -1193,6 +1204,71 @@ export default function NewPatientPage() {
                 className="input-field"
                 placeholder="e.g., 0803 765 4321"
               />
+            </div>
+
+            {/*
+              WHO PAYS, asked once here rather than again at every booking.
+              It is a fact about the PATIENT: a man enrolled with the NHIA is
+              enrolled for his hernia in March and his cholecystectomy in
+              August, and asking twice is how the two answers end up
+              different. The booking form fills itself in from this.
+
+              PRIVATE IS PRE-SELECTED, on instruction, and it is also what
+              every patient already on file was in practice. The clerk at the
+              desk either has the card in front of them or does not; a
+              registration must never fail for want of this box.
+            */}
+            <div className="md:col-span-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
+              <label className="label" htmlFor="payerCategory">Payer category</label>
+              <select
+                id="payerCategory"
+                name="payerCategory"
+                className="input-field"
+                value={payerCategory}
+                onChange={(e) => setPayerCategory(e.target.value)}
+              >
+                {BOOKABLE_PAYER_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{PAYER_LABEL[c]}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-600">
+                {PAYER_DESCRIPTION[payerCategory as keyof typeof PAYER_DESCRIPTION]}
+                {' '}It decides which pharmacy packs this patient&apos;s operations, and is
+                carried onto every booking.
+              </p>
+
+              {isInsuredPayer(payerCategory as never) && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="label" htmlFor="payerSchemeId">
+                      Enrolee / scheme ID{' '}
+                      <span className="font-normal text-gray-500">(optional)</span>
+                    </label>
+                    <input
+                      id="payerSchemeId"
+                      name="payerSchemeId"
+                      className="input-field"
+                      maxLength={60}
+                      placeholder="As printed on the card"
+                    />
+                  </div>
+                  <div className="flex items-start gap-2 pt-7">
+                    <input
+                      id="payerIsNyscCorps"
+                      name="payerIsNyscCorps"
+                      type="checkbox"
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="payerIsNyscCorps" className="text-sm text-gray-800">
+                      NYSC corps member
+                      <span className="block text-xs text-gray-500">
+                        Covered under the NHIA, and the number they carry is not the one a
+                        pharmacist expects to see.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1230,6 +1230,32 @@ model Patient {
   caregiverName  String? // Optional next-of-kin / caregiver name
   caregiverPhone String? // Optional caregiver phone number to reach for information
 
+  // ── Who pays, asked once at registration ────────────────────────────────
+  /// The patient's own payer category, set when they are registered and
+  /// carried onto every booking they ever have.
+  ///
+  /// ASKED HERE RATHER THAN ONLY AT BOOKING because it is a fact about the
+  /// PATIENT, not about an operation. A man enrolled with the NHIA is
+  /// enrolled for his hernia in March and his cholecystectomy in August, and
+  /// asking the question again each time is how one of the two answers ends
+  /// up different from the other. The booking still carries its own copy --
+  /// a scheme can lapse, and a case already routed must not silently change
+  /// counter because somebody edited a patient record -- but the booking
+  /// form is filled in from this, so it is answered before anybody looks at
+  /// it.
+  ///
+  /// PRIVATE IS THE DEFAULT, on instruction. It is also what was true of
+  /// every patient already registered: before this existed, every case was
+  /// packed and billed as self-paying. So the default states what the
+  /// records already say rather than guessing at something new.
+  payerCategory    PayerCategory @default(PRIVATE)
+  /// Enrolee or scheme number. Optional: the card is often at home, and a
+  /// registration refused over it is a patient sent away.
+  payerSchemeId    String?
+  /// Corps members are covered under the NHIA and carry a different number
+  /// from the one a pharmacist expects.
+  payerIsNyscCorps Boolean       @default(false)
+
   /// The patient has asked not to be written to on WhatsApp.
   ///
   /// Staff have had this since the comms module was built; patients had not,

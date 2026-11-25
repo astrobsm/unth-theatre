@@ -491,6 +491,22 @@ export default function NewSurgeryPage() {
       ageUnit: p.ageUnit ?? 'years',
       ward: p.ward ?? '',
     });
+
+    // WHO PAYS, carried from the patient record.
+    //
+    // It is a fact about the person, asked once when they were registered,
+    // so the booking should not ask again — asking twice is how the two
+    // answers end up different. It stays EDITABLE here: a scheme lapses, a
+    // card expires, and the booking is the last moment anybody checks.
+    //
+    // The patient's answer overwrites whatever is in the box, because
+    // changing the patient changes whose cover this is. A half-chosen
+    // category must never carry to another person, exactly as a half-typed
+    // ward must not.
+    const fromPatient = (p as { payerCategory?: string | null }).payerCategory;
+    setPayerCategory(fromPatient && fromPatient !== 'UNSPECIFIED' ? fromPatient : 'PRIVATE');
+    setPayerSchemeId((p as { payerSchemeId?: string | null }).payerSchemeId ?? '');
+    setPayerIsNyscCorps(!!(p as { payerIsNyscCorps?: boolean | null }).payerIsNyscCorps);
   }, [selectedPatientId, patients]);
 
   /** Write the corrected details back to the patient record. */

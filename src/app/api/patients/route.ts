@@ -74,6 +74,11 @@ const PICKER_FIELDS = {
   // case can be booked at all, and a second round trip to find out is a second
   // of somebody staring at a form that has not yet said it will refuse.
   phoneNumber: true, caregiverName: true, caregiverPhone: true,
+  // Who pays, on the same reasoning as the line above: the booking form
+  // fills its own payer field in from this the moment a patient is chosen,
+  // and a second round trip to find out is a second of somebody staring at
+  // a form that has not yet answered itself.
+  payerCategory: true, payerSchemeId: true, payerIsNyscCorps: true,
 } as const;
 
 const patientSchema = z.object({
@@ -92,7 +97,17 @@ const patientSchema = z.object({
   phoneNumber: z.string().optional().nullable().transform(val => val || null),
   caregiverName: z.string().optional().nullable().transform(val => val || null),
   caregiverPhone: z.string().optional().nullable().transform(val => val || null),
-  
+
+  // ── Who pays ────────────────────────────────────────
+  // PRIVATE unless somebody says otherwise, on instruction. A registration
+  // must never fail for want of this: the clerk at the desk either has the
+  // card in front of them or does not, and sending a patient away over a
+  // dropdown is a worse failure than the default being wrong once.
+  payerCategory: z.enum(['NHIA', 'NHIS', 'CEmONC', 'PRIVATE']).optional().default('PRIVATE'),
+  payerSchemeId: z.string().max(60).optional().nullable()
+    .transform((v) => (v ?? '').trim() || null),
+  payerIsNyscCorps: z.boolean().optional().default(false),
+
   // DVT Risk Assessment
   dvtRiskScore: z.number().optional(),
   hasDVTHistory: z.boolean().optional(),
