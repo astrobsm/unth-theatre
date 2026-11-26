@@ -24,6 +24,9 @@ const AssistantWidget = dynamic(() => import('@/components/AssistantWidget'), { 
 const OrmGoLiveBanner = dynamic(() => import('@/components/OrmGoLiveBanner'), { ssr: false });
 const OrmHourlyBroadcast = dynamic(() => import('@/components/OrmHourlyBroadcast'), { ssr: false });
 const CarelineBar = dynamic(() => import('@/components/CarelineBar'), { ssr: false });
+// The hospital EMR, one tap under the careline strip. Client-only because it
+// reads this device's "last opened" and the online state.
+const HospitalEmrBar = dynamic(() => import('@/components/HospitalEmrBar'), { ssr: false });
 // Reports what a page actually took, for one load in ten. See PerfBeacon for
 // why it is sampled, beaconed and anonymous.
 const PerfBeacon = dynamic(() => import('@/components/PerfBeacon'), { ssr: false });
@@ -1106,6 +1109,7 @@ export default function DashboardLayout({
           <div className="relative">
             <PerfBeacon />
             <CarelineBar />
+            <HospitalEmrBar />
             {/* "Am I coming?" — in the layout because each role lands on a
                 different page and the people whose answer the theatre needs
                 are the least likely to go looking for the board. Renders
