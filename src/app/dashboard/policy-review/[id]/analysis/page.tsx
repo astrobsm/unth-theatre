@@ -226,11 +226,11 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   /**
    * Drive the run to completion.
    *
-   * The server analyses what it can in about forty-five seconds, banks it and
+   * The server analyses what it can in about four minutes, banks it and
    * returns `done: false` with a count, because the deployment kills a function
-   * at sixty seconds and a twenty-two section policy does not fit. So this
-   * calls again until it is done — and a resumed run skips the sections already
-   * analysed, so no section is paid for twice.
+   * at five and an eighty-section policy does not fit. So this calls again
+   * until it is done — and a resumed run skips the sections already analysed,
+   * so no section is paid for twice.
    *
    * The loop is bounded. An endless client loop against a paid API is a bill
    * nobody authorised, so it stops after enough slices to cover any realistic

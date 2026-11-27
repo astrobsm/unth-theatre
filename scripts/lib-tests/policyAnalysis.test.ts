@@ -632,20 +632,71 @@ describe('the decisions that must not quietly change', () => {
 });
 
 describe('the run survives being cut off, without paying twice', () => {
-  // A twenty-two section policy at high effort does not finish inside the
-  // sixty seconds this deployment allows a function. A single-shot run would
-  // be killed every time on the cloud node, after paying for whatever had
-  // completed. These pin the three things that make that safe.
+  // An eighty-section policy at high effort does not finish inside one
+  // function invocation however long it is allowed. A single-shot run would be
+  // killed every time on the cloud node, after paying for whatever had
+  // completed. These pin the things that make that safe.
 
   const run = codeOf('src/lib/policy/analysis/run.ts');
   const route = codeOf('src/app/api/policy/rounds/[id]/analysis/route.ts');
   const page = codeOf('src/app/dashboard/policy-review/[id]/analysis/page.tsx');
 
-  it('declares a duration the deployment actually allows', () => {
-    // Every other long route here says 60. Declaring 800 would either be
-    // refused or silently capped, and the analysis would die mid-run.
-    expect(route).toContain('maxDuration = 60');
+  it('declares the longest duration the PLAN allows, not the Hobby limit', () => {
+    // This said 60 and was pinned at 60 by this very test, which is how a
+    // wrong assumption survived review. 60 is the Hobby ceiling; the account
+    // is on Pro, where 300 is allowed. On 27 Nov 2026 production logged
+    // "Vercel Runtime Timeout Error: Task timed out after 60 seconds" against
+    // this route twice, with nothing banked and the run stuck at RUNNING.
+    expect(route).toContain('maxDuration = 300');
+    expect(route).not.toContain('maxDuration = 60');
+    // 800 is the Fluid-compute ceiling, not this one.
     expect(route).not.toContain('maxDuration = 800');
+  });
+
+  it('hands back BEFORE the function is killed, with time left to save', () => {
+    // A soft deadline equal to the hard one banks nothing, which was exactly
+    // the shipped failure. The gap pays for the calls still in flight and for
+    // writing what came back.
+    const soft = run.match(/const SOFT_DEADLINE_MS = ([\d_]+);/);
+    expect(soft).not.toBeNull();
+    const softMs = Number(soft![1].replace(/_/g, ''));
+    const hardMs = Number(route.match(/maxDuration = (\d+)/)![1]) * 1000;
+    expect(softMs).toBeLessThan(hardMs);
+    expect(hardMs - softMs).toBeGreaterThanOrEqual(45_000);
+  });
+
+  it('gives each CALL a deadline, not just the pass', () => {
+    // The pass deadline only stops a call STARTING. One already in flight runs
+    // until the platform kills the function and takes every finished section
+    // with it. That is the bug; this is the fix.
+    expect(run).toContain('timeout: Math.max(MIN_CALL_MS, deadline - Date.now())');
+  });
+
+  it('treats a call that ran out of time as skipped, not as a failed run', () => {
+    // Otherwise one slow section throws, the pooled pass rejects, and the
+    // sections that DID come back are thrown away unbanked.
+    expect(run).toContain('ranOutOfTime');
+    expect(run).toContain('APIConnectionTimeoutError');
+    expect(run).toContain('APIUserAbortError');
+    expect(run).toContain('if (!ranOutOfTime(err)) throw err;');
+  });
+
+  it('keeps saying it is alive, so the concurrency guard still means something', () => {
+    // The guard reads updatedAt fresh within 20s. A slice that works for four
+    // minutes and writes only at the end looks abandoned throughout, and the
+    // production logs show overlapping slices really do happen.
+    expect(run).toContain('HEARTBEAT_MS');
+    expect(run).toContain('const heartbeat = setInterval(');
+    expect(run).toContain('clearInterval(heartbeat);');
+    const beat = Number(run.match(/const HEARTBEAT_MS = ([\d_]+);/)![1].replace(/_/g, ''));
+    // Two missed beats inside the route's twenty-second window.
+    expect(beat * 2).toBeLessThanOrEqual(20_000);
+  });
+
+  it('stops the heartbeat on EVERY exit, including a refusal', () => {
+    // A finally, not a line at the happy end: a run that returns FAILED_API
+    // must not keep the next press locked out for twenty seconds.
+    expect(run).toMatch(/\}\s*finally\s*\{[\s\S]*clearInterval\(heartbeat\);[\s\S]*\}/);
   });
 
   it('banks the expensive pass BEFORE the cheap ones can fail', () => {

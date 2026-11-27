@@ -75,18 +75,40 @@ const MAX_TOKENS = 16000;
  * Stop starting new section calls after this long and hand back, so the caller
  * can come straight back for the rest.
  *
- * WHY THE RUN IS RESUMABLE AT ALL. Every other long route in this project
- * declares `maxDuration = 60`, which is the ceiling the deployment actually
- * allows. A twenty-two section policy at high effort does not finish in sixty
- * seconds, so a single-shot run would be killed on the cloud node every time --
- * after paying for whatever calls had completed.
+ * WHY THE RUN IS RESUMABLE AT ALL. The route may run for 300 seconds, and an
+ * eighty-section policy at high effort does not finish in that. So the
+ * per-section pass banks what it has, returns `done: false`, and the page
+ * calls again. A resumed run finds the earlier one by its input snapshot hash
+ * and skips the sections already analysed, so nothing is paid for twice. It
+ * also means the Chairman watches a count climb instead of a spinner.
  *
- * So the per-section pass banks what it has, returns `done: false`, and the
- * page calls again. A resumed run finds the earlier one by its input snapshot
- * hash and skips the sections already analysed, so nothing is paid for twice.
- * It also means the Chairman watches a count climb instead of a spinner.
+ * WHY THIS IS 240 AND NOT 300. The sixty seconds held back are not slack: they
+ * pay for the calls still in flight when the deadline passes, and for writing
+ * what came back. A deadline equal to the function's own is a deadline that
+ * banks nothing, which is exactly the failure this module shipped with.
  */
-const SOFT_DEADLINE_MS = 45_000;
+const SOFT_DEADLINE_MS = 240_000;
+
+/**
+ * The least time a call is given, even at the very end of a slice.
+ *
+ * A call started with three seconds left is three seconds wasted; one started
+ * with twenty has a chance. Below this the pass simply stops.
+ */
+const MIN_CALL_MS = 20_000;
+
+/**
+ * How often a working slice says "still here".
+ *
+ * The route refuses a second slice while one is in flight and decides that
+ * from `updatedAt` being fresh within twenty seconds. A slice now works for
+ * minutes and writes only when it banks, so without a heartbeat the row looks
+ * abandoned for the whole time it is busy -- and the production logs show
+ * overlapping slices do happen in practice (two timeouts thirty seconds apart,
+ * not sixty). Two in flight would double the bill and race each other writing
+ * proposed changes.
+ */
+const HEARTBEAT_MS = 10_000;
 
 const maxCents = (): number => {
   const raw = Number(process.env.POLICY_ANALYSIS_MAX_CENTS);
@@ -137,6 +159,19 @@ async function pooled<T, R>(
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
 }
+
+/**
+ * Did this call run out of its own time, rather than fail?
+ *
+ * Abandoning a slow call is routine housekeeping -- the section is left for
+ * the next slice -- while a bad request, a refusal or a budget breach must
+ * still stop the run. Telling the two apart is the difference between banking
+ * twenty analysed sections and losing them.
+ */
+const ranOutOfTime = (err: unknown): boolean =>
+  err instanceof Anthropic.APIConnectionTimeoutError
+  || err instanceof Anthropic.APIUserAbortError
+  || (err instanceof Error && err.name === 'AbortError');
 
 class BudgetExceeded extends Error {}
 class Refused extends Error {
@@ -264,6 +299,16 @@ export async function runPolicyAnalysis(opts: {
     };
   };
 
+  // Said every ten seconds, so the route can tell a slice that is working from
+  // one the platform killed. A killed slice leaves no code behind to tidy up,
+  // so the beat simply stops and the row goes stale within one interval --
+  // which is the behaviour the concurrency guard was always written for.
+  const heartbeat = setInterval(() => {
+    prisma.policyAnalysisRun
+      .update({ where: { id: run.id }, data: { status: 'RUNNING' } })
+      .catch(() => undefined);
+  }, HEARTBEAT_MS);
+
   try {
     // ── Pre-flight: count before spending ──────────────────────────────
     // The API's own counter, not a character estimate: the point of a ceiling
@@ -314,31 +359,51 @@ export async function runPolicyAnalysis(opts: {
       // deadline is a call that gets killed mid-flight and paid for anyway.
       if (Date.now() > deadline) return undefined;
 
-      const response = await client.beta.messages.parse({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        // Opus 5.5 defaults to medium; this is judgement-heavy clustering of
-        // clinicians' prose, so it is set explicitly.
-        output_config: {
-          effort: 'high',
-          format: zodOutputFormat(sectionAnalysisSchema),
-        },
-        // Opted in by default: on a policy decline the API re-runs the same
-        // request on a fallback model inside the same call, so one refused
-        // section does not lose the whole run.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        system: SYSTEM_PROMPT,
-        messages: [{
-          role: 'user',
-          content: `${input.rendered}\n\n${sectionInstruction({
-            sectionNumber: input.number,
-            sectionTitle: input.title,
-            responseCount: input.facts.engagedCount,
-            minimumForAnalysis: MINIMUM_FOR_ANALYSIS,
-          })}`,
-        }],
-      });
+      // A deadline for the call itself, inside the slice's own.
+      //
+      // WHY THIS EXISTS. The check above stops a call from STARTING late;
+      // nothing stops one already in flight, and that is precisely how this
+      // module failed in production -- several calls running, none finished,
+      // the whole function killed, not a section saved. A call that will not
+      // come back in time has to be abandoned so the ones that did can be
+      // written down.
+      //
+      // An abandoned call may still have been billed at the other end; what
+      // it cannot do is take twenty finished sections down with it.
+      let response;
+      try {
+        response = await client.beta.messages.parse({
+          model: MODEL,
+          max_tokens: MAX_TOKENS,
+          // Opus 5.5 defaults to medium; this is judgement-heavy clustering of
+          // clinicians' prose, so it is set explicitly.
+          output_config: {
+            effort: 'high',
+            format: zodOutputFormat(sectionAnalysisSchema),
+          },
+          // Opted in by default: on a policy decline the API re-runs the same
+          // request on a fallback model inside the same call, so one refused
+          // section does not lose the whole run.
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          system: SYSTEM_PROMPT,
+          messages: [{
+            role: 'user',
+            content: `${input.rendered}\n\n${sectionInstruction({
+              sectionNumber: input.number,
+              sectionTitle: input.title,
+              responseCount: input.facts.engagedCount,
+              minimumForAnalysis: MINIMUM_FOR_ANALYSIS,
+            })}`,
+          }],
+        }, { timeout: Math.max(MIN_CALL_MS, deadline - Date.now()) });
+      } catch (err) {
+        // Out of time is not a failure of the run. The section is left
+        // exactly as it was, unanalysed and unbanked, and the next slice
+        // starts it afresh.
+        if (!ranOutOfTime(err)) throw err;
+        return undefined;
+      }
 
       chargeAndCheck(response.usage);
 
@@ -664,5 +729,10 @@ export async function runPolicyAnalysis(opts: {
       [],
       [],
     );
+  } finally {
+    // Every path out of here, including the ones that return a refusal, must
+    // stop claiming to be alive -- otherwise the next press is refused with
+    // "an analysis is already running" for twenty seconds of nothing.
+    clearInterval(heartbeat);
   }
 }

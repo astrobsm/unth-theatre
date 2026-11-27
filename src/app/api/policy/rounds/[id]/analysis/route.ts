@@ -17,16 +17,25 @@ import { runPolicyAnalysis } from '@/lib/policy/analysis/run';
 
 export const dynamic = 'force-dynamic';
 /**
- * Sixty seconds, matching every other long route here, because that is the
- * ceiling the deployment actually allows.
+ * Five minutes: the longest a function may run on this account's plan.
  *
- * A twenty-two section policy at high effort does not finish in sixty seconds,
- * which is why the run is RESUMABLE rather than single-shot: each call analyses
- * what it can in about forty-five seconds, banks it, and returns `done: false`
- * with a count. The page calls again until it is done, and a resumed run skips
- * the sections already analysed so nothing is paid for twice.
+ * THIS SAID 60, AND 60 COULD NEVER HAVE WORKED. Sixty seconds is the HOBBY
+ * ceiling; this project is on Pro, where 300 is allowed. The module was built
+ * on the wrong assumption and the Committee's eighty-section round found it on
+ * 27 November 2026: four Opus calls at high effort would start, none would
+ * return inside a minute, and the platform killed the whole function --
+ * `Vercel Runtime Timeout Error: Task timed out after 60 seconds` -- with not
+ * one section banked. The run sat at RUNNING for ever and pressing the button
+ * again simply bought another sixty wasted seconds. Raising the SPENDING cap
+ * could not have helped, because nothing was ever being spent.
+ *
+ * The run stays RESUMABLE regardless: five minutes is not enough for eighty
+ * sections either. Each call analyses what it can, banks it, and returns
+ * `done: false` with a count; the page calls again until it is done, and a
+ * resumed run skips the sections already analysed so nothing is paid for
+ * twice. What changed is that a pass now reaches the end and SAVES.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const { error, actor } = await requirePolicyViewer();
