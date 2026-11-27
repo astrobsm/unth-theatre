@@ -13,7 +13,7 @@ import {
   removePendingRecord,
   loadClientIdMap,
 } from './offlineStore';
-import { isAuthEndpoint } from './blockers/catalogue';
+import { isAuthEndpoint, isLongServerJob } from './blockers/catalogue';
 import {
   parseApiPath,
   mergePendingIntoList,
@@ -162,6 +162,15 @@ export function installFetchInterceptor(): void {
     // be reported as one. (Offline sign-in exists and is separate — it unlocks
     // a session already enrolled on this device, and never comes through here.)
     if (isAuthEndpoint(url)) {
+      return originalFetch(input, init);
+    }
+
+    // Long server jobs, for the same reason and with one addition: replaying
+    // one spends money. The thirty-second deadline below is measured against a
+    // booking, not against five minutes of analysis, and everything it then
+    // does -- queue it, answer "saved on this device", replay it later -- is
+    // wrong for a request that asks the server to go away and work.
+    if (isLongServerJob(url)) {
       return originalFetch(input, init);
     }
 

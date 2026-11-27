@@ -11,6 +11,7 @@ import {
   remapUrl,
   type PendingRecord,
 } from './offlineMerge';
+import { isLongServerJob } from './blockers/catalogue';
 
 const DB_NAME = 'orm-offline';
 const DB_VERSION = 6;
@@ -702,6 +703,20 @@ export async function processOfflineQueue(): Promise<{ synced: number; failed: n
   const pendingRecords = await getPendingRecords().catch(() => [] as PendingRecord[]);
 
   for (const rawItem of queue) {
+    // Anything this device queued for a long server job is dropped, not sent.
+    //
+    // These should never have been queued and no longer are, but a device
+    // still running the old code has them, and each one would start a fresh
+    // paid analysis on replay -- then time out at thirty seconds, be queued
+    // again, and do it again. This is the one discard it is right to make
+    // quietly: none of it is the user's typing, nothing is lost that a single
+    // button press cannot redo, and the alternative is a bill.
+    if (isLongServerJob(rawItem.url)) {
+      await removeFromOfflineQueue(rawItem.id!);
+      await removePendingByIdempotencyKey(rawItem.headers?.['X-Idempotency-Key']);
+      continue;
+    }
+
     // Hold back anything still pointing at a local id we have not resolved —
     // its parent has not synced yet. Sending it would guarantee a rejection and
     // dead-letter real clinical work.

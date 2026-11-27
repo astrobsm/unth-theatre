@@ -200,6 +200,47 @@ function serverMessage(body: unknown): string {
 }
 
 /**
+ * Work the server does over minutes, which must never be queued or replayed.
+ *
+ * WHY THIS EXISTS, AND WHAT IT COST TO LEARN. Every mutation in this
+ * application is given thirty seconds to answer; past that the offline layer
+ * assumes the link has gone, files the request on the device and hands the
+ * caller a synthetic success reading "Saved on this device. It will sync
+ * automatically when you are back online." For a booking that is exactly
+ * right. For a request that ASKS THE SERVER TO WORK FOR FIVE MINUTES it is
+ * wrong three times over:
+ *
+ *   - The caller is told its work was saved when nothing was saved at all. On
+ *     27 November 2026 the Chairman pressed "Run the analysis" again and again
+ *     and watched a card that never moved, because the press was being filed
+ *     on his own computer and never reaching the server.
+ *   - The queue is durable and REPLAYS what it holds. Replaying an analysis
+ *     starts another paid run on the hospital's Anthropic account -- and the
+ *     replay goes out through this same interceptor, times out at thirty
+ *     seconds again, and is queued again. A loop that bills.
+ *   - A job like this has no offline meaning at all. There is no version of
+ *     "analyse the committee's responses" that happens on a laptop with no
+ *     network.
+ *
+ * So these go straight to the network, undeadlined, exactly as the sign-in
+ * POST does below and for the same underlying reason: not everything that
+ * looks like a write is one.
+ */
+const LONG_SERVER_JOBS = /^\/api\/policy\/rounds\/[^/]+\/analysis$/;
+
+/** Is this URL one of them? */
+export function isLongServerJob(url: string): boolean {
+  try {
+    const base = typeof window === 'undefined'
+      ? 'http://localhost' : window.location.origin;
+    return LONG_SERVER_JOBS.test(new URL(url, base).pathname);
+  } catch {
+    // Not parseable: test the raw string, minus any query, rather than guess.
+    return LONG_SERVER_JOBS.test(url.split('?')[0]);
+  }
+}
+
+/**
  * Is this the sign-in machinery itself?
  *
  * THIS IS THE DIFFERENCE BETWEEN "wrong password" AND "you have been signed
