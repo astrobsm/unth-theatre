@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import BackLink from '@/components/BackLink';
+import { formatAge } from '@/lib/age';
+// The same limits the server will judge these observations by, so the
+// anaesthetist sees the band before typing rather than an alert afterwards.
+import {
+  bandForAge, heartRateRangeText, hypertensionSystolic, hypotensionSystolic,
+  systolicRangeText,
+} from '@/lib/pacu/vitals';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 const VitalsChart = dynamic(() => import('@/components/VitalsChart'), {
@@ -61,6 +68,8 @@ interface AnesthesiaRecord {
     patient: {
       name: string;
       age: number;
+      /** YEARS | MONTHS | WEEKS | DAYS. "6" alone is not an age. */
+      ageUnit?: string | null;
       gender: string;
     };
   };
@@ -472,13 +481,25 @@ export default function AnesthesiaMonitoringPage() {
     );
   }
 
+  // WHICH LIMITS THIS PATIENT IS BEING JUDGED BY. The record carries the age
+  // twice -- on the anaesthesia record and on the surgery -- and either will
+  // do; the surgery's is the one the header already prints.
+  const patientAge = record.surgery?.patient ?? null;
+  const ageBand = bandForAge(patientAge);
+  const isPaediatric = ageBand.band.key !== 'ADULT';
+  const sysLow = hypotensionSystolic(patientAge);
+  const sysHigh = hypertensionSystolic(patientAge);
+  const hrOut = (hr: number) =>
+    hr > 0 && (hr < ageBand.band.heartRateLow || hr > ageBand.band.heartRateHigh);
+  const sysOut = (sys: number) => sys > 0 && (sys < sysLow || sys > sysHigh);
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-6">
         <BackLink fallback={`/dashboard/surgeries/${surgeryId}`} />
         <h1 className="text-3xl font-bold text-gray-900 mt-4">WHO Anesthesia Monitoring Record</h1>
         <p className="text-gray-600 mt-2">
-          {record.surgery.procedureName} - {record.surgery?.patient?.name || 'Unknown Patient'} ({record.surgery?.patient?.age || 'N/A'}y, {record.surgery?.patient?.gender || 'N/A'})
+          {record.surgery.procedureName} - {record.surgery?.patient?.name || 'Unknown Patient'} ({formatAge(record.surgery?.patient?.age, record.surgery?.patient?.ageUnit)}, {record.surgery?.patient?.gender || 'N/A'})
         </p>
       </div>
 
@@ -839,7 +860,39 @@ export default function AnesthesiaMonitoringPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
             <h3 className="text-xl font-bold mb-4">Record Vital Signs</h3>
-            
+
+            {/* The limits these observations will be judged by, stated before
+                they are typed. A theatre that cannot see which band is in use
+                cannot tell a real alert from one the app has misunderstood. */}
+            {ageBand.known ? (
+              <div
+                className={`mb-4 rounded-lg border p-3 text-sm ${
+                  isPaediatric
+                    ? 'border-sky-300 bg-sky-50 text-sky-900'
+                    : 'border-gray-200 bg-gray-50 text-gray-700'
+                }`}
+              >
+                <div className="font-semibold">
+                  {isPaediatric ? 'Paediatric limits in use' : 'Adult limits in use'}
+                  {' — '}{ageBand.ageText}, {ageBand.band.label}
+                </div>
+                <div className="mt-1">
+                  Alerts outside <strong>{heartRateRangeText(ageBand.band)}</strong> or
+                  {' '}<strong>{systolicRangeText(patientAge)}</strong> systolic, or below 90% SpO
+                  <sub>2</sub>.
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-semibold">No age on this record &mdash; adult limits are in use.</div>
+                <div className="mt-1">
+                  Add the age to the patient&rsquo;s record. Until then a child is judged by
+                  {' '}{heartRateRangeText(ageBand.band)} and {systolicRangeText(null)}, which
+                  alarm on a well child and stay silent on a sick one.
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm text-gray-700 mb-1">HR (bpm)</label>
@@ -847,8 +900,13 @@ export default function AnesthesiaMonitoringPage() {
                   type="number"
                   value={vitalData.heartRate}
                   onChange={(e) => setVitalData({...vitalData, heartRate: parseInt(e.target.value) || 0})}
-                  className="w-full border rounded px-3 py-2"
+                  className={`w-full border rounded px-3 py-2 ${
+                    hrOut(vitalData.heartRate) ? 'border-red-400 bg-red-50' : ''
+                  }`}
                 />
+                <p className={`mt-1 text-xs ${hrOut(vitalData.heartRate) ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                  {heartRateRangeText(ageBand.band)} for {ageBand.band.article}
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Systolic BP</label>
@@ -856,8 +914,15 @@ export default function AnesthesiaMonitoringPage() {
                   type="number"
                   value={vitalData.systolicBP}
                   onChange={(e) => setVitalData({...vitalData, systolicBP: parseInt(e.target.value) || 0})}
-                  className="w-full border rounded px-3 py-2"
+                  className={`w-full border rounded px-3 py-2 ${
+                    sysOut(vitalData.systolicBP) ? 'border-red-400 bg-red-50' : ''
+                  }`}
                 />
+                <p className={`mt-1 text-xs ${sysOut(vitalData.systolicBP) ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                  {sysOut(vitalData.systolicBP)
+                    ? `${vitalData.systolicBP < sysLow ? 'Hypotensive' : 'Hypertensive'} for ${ageBand.band.article}`
+                    : `${sysLow}–${sysHigh} mmHg for ${ageBand.band.article}`}
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Diastolic BP</label>

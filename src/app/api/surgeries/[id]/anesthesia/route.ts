@@ -28,6 +28,10 @@ export async function GET(
                 name: true,
                 folderNumber: true,
                 age: true,
+                // The unit is as much a part of the age as the number. "6" is
+                // a six-year-old or a six-month-old, and the two are judged
+                // by different pulse, breathing and pressure limits.
+                ageUnit: true,
                 gender: true
               }
             },
@@ -42,6 +46,7 @@ export async function GET(
           select: {
             name: true,
             age: true,
+            ageUnit: true,
             gender: true
           }
         },

@@ -105,11 +105,23 @@ export async function POST(
 
     // Check for alerts based on vital signs
     const alerts = [];
-    
-    if (body.systolicBP && body.systolicBP < 90) {
+
+    // HYPOTENSION AND HYPERTENSION WERE AN ADULT'S NUMBERS, AND THE FLOOR WAS
+    // THE WORSE OF THE TWO.
+    //
+    // A hard-coded 90 is where PALS puts a patient of ten and over. A well
+    // two-year-old runs a systolic around 90, so every toddler on this table
+    // was HYPOTENSIVE from the first cuff cycle -- and a fifteen-year-old at
+    // 85, shocked by any paediatric standard, sat just under the same line
+    // the toddler had been failing all afternoon in an alert nobody read.
+    //
+    // The floor is now the PALS formula, which moves with each year of age,
+    // and the ceiling is normal-for-age + 30.
+    const limits = limitsForAge(anesthesiaRecord.patient);
+    if (body.systolicBP && body.systolicBP < limits.systolicLow) {
       alerts.push('HYPOTENSION');
     }
-    if (body.systolicBP && body.systolicBP > 180) {
+    if (body.systolicBP && body.systolicBP > limits.systolicHigh) {
       alerts.push('HYPERTENSION');
     }
     // BRADYCARDIA AND TACHYCARDIA ARE AGE-DEPENDENT, AND THESE WERE NOT.
@@ -120,7 +132,6 @@ export async function POST(
     // paediatric resuscitation begins -- raised nothing, because 70 is a fine
     // adult pulse. An alarm that cries wolf all afternoon is an alarm that is
     // silent when it counts.
-    const limits = limitsForAge(anesthesiaRecord.patient);
     if (body.heartRate && body.heartRate < limits.heartRateLow) {
       alerts.push('BRADYCARDIA');
     }

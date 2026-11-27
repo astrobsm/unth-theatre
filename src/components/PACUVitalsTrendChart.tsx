@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
+
+import { parseBloodPressure } from '@/lib/pacu/vitals';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -47,13 +49,9 @@ interface Props {
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-/** Split a "120/80" blood-pressure string into systolic & diastolic numbers. */
-function parseBP(bp?: string | null): { systolic: number | null; diastolic: number | null } {
-  if (!bp || typeof bp !== 'string') return { systolic: null, diastolic: null };
-  const m = bp.match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
-  if (!m) return { systolic: null, diastolic: null };
-  return { systolic: parseInt(m[1], 10), diastolic: parseInt(m[2], 10) };
-}
+// The blood-pressure parser lives in @/lib/pacu/vitals, with the rule that
+// decides whether a pressure is safe for the patient's age. A second copy
+// here is how a chart and an alert come to disagree about the same reading.
 
 export default function PACUVitalsTrendChart({ records, admissionTimeISO }: Props) {
   const sorted = useMemo(
@@ -85,7 +83,7 @@ export default function PACUVitalsTrendChart({ records, admissionTimeISO }: Prop
     const temp: (number | null)[] = [];
     const pain: (number | null)[] = [];
     for (const r of sorted) {
-      const bp = parseBP(r.bloodPressure);
+      const bp = parseBloodPressure(r.bloodPressure);
       hr.push(r.heartRate ?? null);
       sbp.push(r.systolicBP ?? bp.systolic);
       dbp.push(r.diastolicBP ?? bp.diastolic);

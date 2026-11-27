@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { isAbnormal, describeAbnormal, bandForAge } from '@/lib/pacu/vitals';
+import { isAbnormal, describeAbnormal, bandForAge, limitsForAge } from '@/lib/pacu/vitals';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,8 +85,15 @@ export async function POST(
     // to ask the same question in reverse — "is this patient stable again?" —
     // and two copies of a clinical limit is how the two screens end up
     // disagreeing about the same patient.
+    //
+    // The blood pressure goes in with the rest of them now. The form has
+    // always made it MANDATORY and the rule has never once looked at it: a
+    // post-operative patient could be recorded at 70/40 and recovery was told
+    // nothing, at any age.
     const observed = {
       heartRate, respiratoryRate, oxygenSaturation, painScore,
+      systolicBP: systolic, diastolicBP: diastolic,
+      bloodPressure,
       consciousnessLevel: vitalsData.consciousnessLevel,
     };
 
@@ -112,6 +119,7 @@ export async function POST(
     });
 
     const banding = bandForAge(assessment?.patient);
+    const limits = limitsForAge(assessment?.patient);
     const abnormalVitals = isAbnormal(observed, assessment?.patient);
 
     if (abnormalVitals) {
@@ -190,6 +198,11 @@ export async function POST(
         label: banding.band.label,
         heartRateLow: banding.band.heartRateLow,
         heartRateHigh: banding.band.heartRateHigh,
+        // The pressure limits are age-derived too, and the floor moves with
+        // every year, so the screen is told the numbers rather than left to
+        // work them out from the band.
+        systolicLow: limits.systolicLow,
+        systolicHigh: limits.systolicHigh,
         ageKnown: banding.known,
         ageText: banding.ageText,
       },

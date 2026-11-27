@@ -47,6 +47,41 @@
  * as well as children, so the band is drawn at the point somebody should be
  * CALLED rather than at the edge of textbook normal: an adult breathing 22 in
  * pain is not an event, and one breathing 8 on opioids is.
+ *
+ * WHY BLOOD PRESSURE IS HERE NOW
+ *
+ * It is the one observation the recovery form makes MANDATORY and the alert
+ * rule never looked at. Every set of observations in this hospital carries a
+ * blood pressure, and not one of them has ever raised anything, at any age.
+ *
+ * In theatre it WAS looked at, by a hard-coded `< 90`. That number is an
+ * adult's, and it fails in both directions at once. A well two-year-old runs
+ * a systolic around 90, so under that rule a healthy toddler was hypotensive
+ * from the moment the cuff first cycled. And a fifteen-year-old at 85 --
+ * shocked by any paediatric standard -- sat just under the same line that a
+ * toddler was failing all afternoon, in an alert everybody had already
+ * learned to ignore.
+ *
+ * THE FLOOR IS A FORMULA, NOT A BAND. Paediatric hypotension is defined by
+ * the PALS thresholds: under 60 for a term newborn, under 70 for an infant,
+ * under 70 + (2 x age in years) from one to ten, and under 90 from ten up.
+ * The middle one moves every birthday, so it is computed from the age rather
+ * than read off a band -- a six-year-old's floor is 82 and a nine-year-old's
+ * is 88, and flattening those to one "school age" number hands the
+ * nine-year-old a six-year-old's threshold.
+ *
+ * THE CEILING IS THE NORMAL RANGE PLUS 30. The AAP treats a pressure 30 mmHg
+ * above the 95th centile as the point of concern for acute target-organ
+ * damage, and the Royal Children's Hospital draws hypertensive urgency on the
+ * same line. Adults keep 180, where they have always been, which is that same
+ * severe-hypertension line reached by another route.
+ *
+ * SOURCES, so that whoever changes a number next knows what they are
+ * overruling. The heart rate, respiratory rate and systolic ranges are the
+ * AHA PALS 2020 tables as published in the San Francisco EMS Agency
+ * paediatric vital signs protocol 14.1 (effective 01/10/25). The hypotension
+ * thresholds are PALS/APLS. The +30 ceiling is AAP 2017, via the MSD Manuals
+ * professional entry on acute severe hypertension in children.
  */
 
 import { ageInDays, formatAge } from '@/lib/age';
@@ -70,6 +105,14 @@ export const PACU_LIMITS = {
   respiratoryRateLow: 9,
   respiratoryRateHigh: 25,
   oxygenSaturationLow: 92,
+  /**
+   * Systolic. 90 is the adult hypotension line everywhere it is drawn -- it
+   * is where PALS puts a patient of ten and over, and where NEWS2 starts
+   * scoring an adult 3. 180 is severe hypertension, and is the number theatre
+   * has alerted on since the anaesthesia chart was written.
+   */
+  systolicLow: 90,
+  systolicHigh: 180,
   /** Above this is severe pain, not merely uncomfortable. */
   painScoreHigh: 8,
 } as const;
@@ -87,6 +130,15 @@ export interface AgeBand {
   heartRateHigh: number;
   respiratoryRateLow: number;
   respiratoryRateHigh: number;
+  /**
+   * The systolic pressure a well patient of this age sits at, from the PALS
+   * 2020 table. This is NOT the alert range: the floor comes from the
+   * hypotension formula, which moves with each year of age, and the ceiling
+   * is systolicNormalHigh + 30. It is here so a form can tell a nurse what
+   * to expect before she writes a number down.
+   */
+  systolicNormalLow: number;
+  systolicNormalHigh: number;
 }
 
 /**
@@ -119,6 +171,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     heartRateHigh: 205,
     respiratoryRateLow: 25,
     respiratoryRateHigh: 65,
+    systolicNormalLow: 67,
+    systolicNormalHigh: 76,
   },
   {
     key: 'INFANT',
@@ -129,6 +183,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     heartRateHigh: 180,
     respiratoryRateLow: 25,
     respiratoryRateHigh: 60,
+    systolicNormalLow: 72,
+    systolicNormalHigh: 104,
   },
   {
     key: 'TODDLER',
@@ -139,6 +195,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     heartRateHigh: 140,
     respiratoryRateLow: 18,
     respiratoryRateHigh: 45,
+    systolicNormalLow: 86,
+    systolicNormalHigh: 106,
   },
   {
     key: 'PRESCHOOL',
@@ -149,6 +207,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     heartRateHigh: 120,
     respiratoryRateLow: 16,
     respiratoryRateHigh: 35,
+    systolicNormalLow: 89,
+    systolicNormalHigh: 112,
   },
   {
     key: 'SCHOOL_AGE',
@@ -159,6 +219,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     heartRateHigh: 118,
     respiratoryRateLow: 14,
     respiratoryRateHigh: 30,
+    systolicNormalLow: 97,
+    systolicNormalHigh: 120,
   },
   {
     key: 'ADULT',
@@ -169,6 +231,8 @@ export const PACU_AGE_BANDS: readonly AgeBand[] = [
     heartRateHigh: PACU_LIMITS.heartRateHigh,
     respiratoryRateLow: PACU_LIMITS.respiratoryRateLow,
     respiratoryRateHigh: PACU_LIMITS.respiratoryRateHigh,
+    systolicNormalLow: 100,
+    systolicNormalHigh: 130,
   },
 ];
 
@@ -221,12 +285,83 @@ export function bandForAge(p?: PatientAge | null): AgeBanding {
   return { band, known: true, ageText };
 }
 
+/**
+ * The systolic pressure below which this patient is hypotensive.
+ *
+ * The PALS thresholds, and the only limit in this file computed from the age
+ * itself rather than from a band:
+ *
+ *   under 28 days      60
+ *   under 1 year       70
+ *   1 to under 10      70 + (2 x whole years)
+ *   10 and over        90
+ *
+ * The middle line moves every birthday. A six-year-old's floor is 82 and a
+ * nine-year-old's is 88, and a single "school age" number would give the
+ * nine-year-old the younger child's threshold -- which is the direction that
+ * misses a shocked child, not the direction that cries wolf.
+ *
+ * An unknown age gets the adult 90, in common with every other limit here.
+ */
+export function hypotensionSystolic(p?: PatientAge | null): number {
+  const { band, known } = bandForAge(p);
+  if (!known) return PACU_LIMITS.systolicLow;
+  if (band.key === 'NEONATE') return 60;
+  if (band.key === 'INFANT') return 70;
+
+  const days = ageInDays(p?.age, p?.ageUnit);
+  if (days === null) return PACU_LIMITS.systolicLow;
+
+  const years = Math.floor(days / 365.25);
+  if (years >= 10) return PACU_LIMITS.systolicLow;
+  return 70 + 2 * years;
+}
+
+/**
+ * The systolic pressure above which somebody should be called.
+ *
+ * Normal-for-age plus 30: the AAP's line for concern about acute target-organ
+ * damage, and the Royal Children's Hospital's for hypertensive urgency.
+ * Adults keep the 180 theatre has always used.
+ */
+export function hypertensionSystolic(p?: PatientAge | null): number {
+  const { band, known } = bandForAge(p);
+  if (!known || band.key === 'ADULT') return PACU_LIMITS.systolicHigh;
+  return band.systolicNormalHigh + 30;
+}
+
+/**
+ * Pull the systolic and diastolic out of whatever is in the record.
+ *
+ * Recovery stores one string -- "120/80" -- because that is how a cuff is
+ * read aloud and written on a chart. Theatre stores two integers. Both end up
+ * here, so both are accepted, and a reading nobody could parse returns nulls
+ * rather than a zero: a blank pressure is not a pressure of nothing.
+ */
+export function parseBloodPressure(
+  value: string | null | undefined,
+): { systolic: number | null; diastolic: number | null } {
+  const text = String(value ?? '').trim();
+  if (!text) return { systolic: null, diastolic: null };
+  // "120/80", "120 / 80", "120-80", and "120" on its own.
+  const m = text.match(/^(\d{1,3})\s*(?:[/-]\s*(\d{1,3}))?/);
+  if (!m) return { systolic: null, diastolic: null };
+  const systolic = Number(m[1]);
+  const diastolic = m[2] === undefined ? null : Number(m[2]);
+  return {
+    systolic: Number.isFinite(systolic) ? systolic : null,
+    diastolic: diastolic !== null && Number.isFinite(diastolic) ? diastolic : null,
+  };
+}
+
 export interface PacuLimits {
   heartRateLow: number;
   heartRateHigh: number;
   respiratoryRateLow: number;
   respiratoryRateHigh: number;
   oxygenSaturationLow: number;
+  systolicLow: number;
+  systolicHigh: number;
   painScoreHigh: number;
 }
 
@@ -242,6 +377,9 @@ export function limitsForAge(p?: PatientAge | null): PacuLimits & { band: AgeBan
     // age, and a pain score is already scaled 0-10 whichever tool recorded it.
     oxygenSaturationLow: PACU_LIMITS.oxygenSaturationLow,
     painScoreHigh: PACU_LIMITS.painScoreHigh,
+    // These two DO move with age, and the floor moves with every year of it.
+    systolicLow: hypotensionSystolic(p),
+    systolicHigh: hypertensionSystolic(p),
     band,
     known,
   };
@@ -257,6 +395,21 @@ export function respiratoryRateRangeText(band: AgeBand): string {
   return `${band.respiratoryRateLow}–${band.respiratoryRateHigh} /min`;
 }
 
+/**
+ * "82–142 mmHg" — the systolic range this patient will be judged against.
+ *
+ * Takes the patient and not the band, unlike its two neighbours, because the
+ * floor is computed from the age in years rather than read off the band.
+ */
+export function systolicRangeText(p?: PatientAge | null): string {
+  return `${hypotensionSystolic(p)}–${hypertensionSystolic(p)} mmHg`;
+}
+
+/** "67–76 mmHg" — what a well patient of this age actually runs at. */
+export function systolicNormalText(band: AgeBand): string {
+  return `${band.systolicNormalLow}–${band.systolicNormalHigh} mmHg`;
+}
+
 export interface PacuVitals {
   heartRate?: number | null;
   respiratoryRate?: number | null;
@@ -264,6 +417,14 @@ export interface PacuVitals {
   consciousnessLevel?: string | null;
   painScore?: number | null;
   recordedAt?: Date | string | null;
+  /**
+   * Blood pressure, in either of the two shapes this hospital records it.
+   * Recovery writes one string ("120/80"); theatre writes integers. A caller
+   * may pass either, and systolicBP wins where both are given.
+   */
+  bloodPressure?: string | null;
+  systolicBP?: number | null;
+  diastolicBP?: number | null;
 }
 
 /**
@@ -308,6 +469,23 @@ export function abnormalVitalReasons(v: PacuVitals, patient?: PatientAge | null)
     // tell at a glance whether the app knew how old the patient was.
     const whose = paediatric ? ` for ${limits.band.article}` : '';
     out.push(`RR ${respiratoryRate} /min (${side}${whose})`);
+  }
+  // BLOOD PRESSURE. Recorded on every observation in this hospital and, until
+  // now, judged on none of them. The floor moves with every year of a child's
+  // age, so the limit is named in the reason for adults too -- there is no
+  // established wording here to preserve, and a pressure alert that does not
+  // say which line it crossed is an alert somebody has to go and look up.
+  const parsed = parseBloodPressure(v.bloodPressure);
+  const systolic = v.systolicBP ?? parsed.systolic;
+  const diastolic = v.diastolicBP ?? parsed.diastolic;
+  if (systolic != null && (systolic < limits.systolicLow || systolic > limits.systolicHigh)) {
+    const reading = diastolic != null ? `${systolic}/${diastolic}` : `${systolic}`;
+    const side =
+      systolic < limits.systolicLow
+        ? `systolic below ${limits.systolicLow}`
+        : `systolic above ${limits.systolicHigh}`;
+    const whose = paediatric ? ` for ${limits.band.article}` : '';
+    out.push(`BP ${reading} mmHg (${side}${whose})`);
   }
   if (oxygenSaturation != null && oxygenSaturation < limits.oxygenSaturationLow) {
     out.push(`SpO2 ${oxygenSaturation}%`);

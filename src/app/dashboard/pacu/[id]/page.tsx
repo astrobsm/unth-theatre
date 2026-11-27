@@ -6,7 +6,10 @@ import BackLink from '@/components/BackLink';
 import { useParams } from 'next/navigation';
 import { generatePatientDischargePDF } from '@/lib/pdfGenerator';
 import { formatAge } from '@/lib/age';
-import { bandForAge, heartRateRangeText, respiratoryRateRangeText } from '@/lib/pacu/vitals';
+import {
+  bandForAge, heartRateRangeText, hypertensionSystolic, hypotensionSystolic,
+  parseBloodPressure, respiratoryRateRangeText, systolicRangeText,
+} from '@/lib/pacu/vitals';
 import dynamic from 'next/dynamic';
 const SmartTextInput = dynamic(() => import('@/components/SmartTextInput'), { ssr: false });
 const PACUVitalsTrendChart = dynamic(() => import('@/components/PACUVitalsTrendChart'), { ssr: false });
@@ -14,9 +17,10 @@ const PACUVitalsTrendChart = dynamic(() => import('@/components/PACUVitalsTrendC
 interface VitalSigns {
   id: string;
   recordedAt: string;
+  // One string, "120/80". The record has no systolic / diastolic columns --
+  // declaring them here is what let two screens read fields the API has
+  // never sent.
   bloodPressure?: string | null;
-  systolicBP: number;
-  diastolicBP: number;
   heartRate: number;
   respiratoryRate: number;
   oxygenSaturation: number;
@@ -550,6 +554,17 @@ export default function PACUAssessmentDetailPage() {
   const typedRr = vitalForm.respiratoryRate.trim();
   const typedRrOutOfBand = typedRr !== '' && rrOutOfBand(Number(typedRr));
 
+  // Blood pressure is the one the form has always demanded and the rule has
+  // never read. The floor is the PALS hypotension line, which moves with each
+  // year of a child's age, so it is taken from the patient rather than the
+  // band.
+  const sysLow = hypotensionSystolic(assessment.patient);
+  const sysHigh = hypertensionSystolic(assessment.patient);
+  const sysOutOfBand = (sys: number | null | undefined) =>
+    sys != null && Number.isFinite(sys) && (sys < sysLow || sys > sysHigh);
+  const typedSys = vitalForm.systolicBP.trim();
+  const typedSysOutOfBand = typedSys !== '' && sysOutOfBand(Number(typedSys));
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -879,7 +894,16 @@ export default function PACUAssessmentDetailPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="border-l-4 border-blue-500 pl-3">
                   <p className="text-sm text-gray-600">Blood Pressure</p>
-                  <p className="text-lg font-bold">{latestVitals.systolicBP}/{latestVitals.diastolicBP} mmHg</p>
+                  {/* The record keeps ONE string, "120/80" -- there are no
+                      systolicBP / diastolicBP columns on a PACU observation,
+                      so reading them printed "undefined/undefined mmHg" on
+                      every patient this card has ever shown. */}
+                  <p className={`text-lg font-bold ${
+                    sysOutOfBand(parseBloodPressure(latestVitals.bloodPressure).systolic) ? 'text-red-700' : ''
+                  }`}>
+                    {latestVitals.bloodPressure || '—'} mmHg
+                  </p>
+                  <p className="text-xs text-gray-500">{sysLow}–{sysHigh} mmHg systolic</p>
                 </div>
                 <div className={`border-l-4 pl-3 ${hrOutOfBand(latestVitals.heartRate) ? 'border-red-500' : 'border-gray-300'}`}>
                   <p className="text-sm text-gray-600">Heart Rate</p>
@@ -945,9 +969,10 @@ export default function PACUAssessmentDetailPage() {
                   {' \u2014 '}{ageBand.ageText}, {ageBand.band.label}
                 </div>
                 <div className="mt-1">
-                  Red alert outside <strong>{heartRateRangeText(ageBand.band)}</strong> or
-                  {' '}<strong>{respiratoryRateRangeText(ageBand.band)}</strong>, below 92% SpO
-                  <sub>2</sub>, or above 8/10 pain.
+                  Red alert outside <strong>{heartRateRangeText(ageBand.band)}</strong>,
+                  {' '}<strong>{respiratoryRateRangeText(ageBand.band)}</strong> or
+                  {' '}<strong>{systolicRangeText(assessment.patient)}</strong> systolic, below
+                  {' '}92% SpO<sub>2</sub>, or above 8/10 pain.
                 </div>
               </div>
             ) : (
@@ -970,10 +995,19 @@ export default function PACUAssessmentDetailPage() {
                     type="number"
                     value={vitalForm.systolicBP}
                     onChange={(e) => setVitalForm({...vitalForm, systolicBP: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="120"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                      typedSysOutOfBand ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    }`}
+                    placeholder={String(
+                      Math.round((ageBand.band.systolicNormalLow + ageBand.band.systolicNormalHigh) / 2),
+                    )}
                     required
                   />
+                  <p className={`mt-1 text-xs ${typedSysOutOfBand ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                    {typedSysOutOfBand
+                      ? `${Number(typedSys) < sysLow ? 'Hypotensive' : 'Hypertensive'} for ${ageBand.band.article} — saving this raises a red alert.`
+                      : `Expected ${sysLow}–${sysHigh} mmHg for ${ageBand.band.article}.`}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1140,8 +1174,10 @@ export default function PACUAssessmentDetailPage() {
                       <td className="px-3 py-2 whitespace-nowrap text-sm">
                         {new Date(vital.recordedAt).toLocaleTimeString()}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
-                        {vital.systolicBP}/{vital.diastolicBP}
+                      <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium ${
+                        sysOutOfBand(parseBloodPressure(vital.bloodPressure).systolic) ? 'text-red-700' : ''
+                      }`}>
+                        {vital.bloodPressure || '—'}
                       </td>
                       <td className={`px-3 py-2 whitespace-nowrap text-sm ${
                         hrOutOfBand(vital.heartRate) ? 'font-semibold text-red-700' : ''
