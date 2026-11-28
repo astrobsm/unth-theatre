@@ -847,8 +847,8 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
           findings rest on one.
         */}
         {run?.output?.corrections && run.output.corrections.length > 0 && ((all) => {
-          const flagged = all.filter((c) => c.kind !== 'citation-outside-decision-item');
-          const traced = all.filter((c) => c.kind === 'citation-outside-decision-item');
+          const flagged = all.filter((c) => c.kind === 'forced-clinical-review');
+          const traced = all.filter((c) => c.kind !== 'forced-clinical-review');
           return (
             <div className="mt-3 space-y-2">
               {flagged.length > 0 && (
@@ -866,13 +866,13 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
               {traced.length > 0 && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-bold text-slate-900">
-                    {traced.length} piece(s) of support came from a comment, not from the open
-                    value&rsquo;s own box
+                    {traced.length} citation(s) ORM read differently from the model
                   </p>
                   <p className="mt-1 text-[11px] text-slate-700">
-                    The reviewer gave the view in prose instead of typing it into the field.
-                    Each one is named below with the response it rests on, so you can read the
-                    words yourself before accepting the recommendation.
+                    Support a reviewer gave in a comment rather than in an open value&rsquo;s own
+                    box, and ids copied out wrong and resolved to the one response they could
+                    have meant. Each is named below, so you can read the words yourself before
+                    accepting the recommendation.
                   </p>
                   <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-[11px] text-slate-700">
                     {traced.map((c, i) => (

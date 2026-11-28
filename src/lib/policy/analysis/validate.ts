@@ -91,7 +91,7 @@ export interface Violation {
 }
 
 export interface Correction {
-  kind: 'forced-clinical-review' | 'citation-outside-decision-item';
+  kind: 'forced-clinical-review' | 'citation-outside-decision-item' | 'repaired-citation';
   detail: string;
   where: string;
 }
@@ -128,12 +128,83 @@ export function touchesClinicalSafety(...texts: Array<string | null | undefined>
 }
 
 /**
+ * Longest run of mistyped characters tolerated in a copied response id.
+ *
+ * WHY THIS NUMBER IS NOT ZERO. On 28 November 2026 a run of eighty sections
+ * was refused for one citation: "e6aa71-7441-4ac5-8bfa-c2ddb45843bb". That is
+ * a real response whose first group lost two of its eight characters on the
+ * way out of the model. The support existed, the reviewer existed, the row
+ * existed; thirty-four characters of a thirty-six character name were right.
+ * Refusing it discarded all eighty sections, and no amount of re-running
+ * would reliably stop a model dropping a character out of a UUID.
+ *
+ * WHY IT IS NOT LARGER, EITHER. The repair is accepted only when exactly ONE
+ * real id is within this distance. A random id invented whole is not two
+ * edits from anything, and two real ids of this section are not two edits
+ * from each other, so the guard against fabrication survives intact: a
+ * stranger is still a stranger, and an ambiguous near-miss is refused rather
+ * than guessed.
+ */
+const MAX_ID_TYPOS = 2;
+
+/** Is `a` reachable from `b` in at most `max` edits? Early-exits. */
+function withinTypos(a: string, b: string, max: number): boolean {
+  if (Math.abs(a.length - b.length) > max) return false;
+  if (a === b) return true;
+  const n = b.length;
+  let prev = new Array<number>(n + 1);
+  let cur = new Array<number>(n + 1);
+  for (let j = 0; j <= n; j += 1) prev[j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    cur[0] = i;
+    let best = cur[0];
+    for (let j = 1; j <= n; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return false;
+    const swap = prev; prev = cur; cur = swap;
+  }
+  return prev[n] <= max;
+}
+
+/**
+ * Which real response did this citation mean?
+ *
+ * Exact match, or the single real id a couple of typos away. Null when it
+ * names nothing, or when it is equally close to two things -- a guess between
+ * two reviewers is worse than a refusal.
+ */
+export function resolveCitation(
+  id: string,
+  candidates: ReadonlySet<string>,
+): { id: string; repaired: boolean } | null {
+  if (candidates.has(id)) return { id, repaired: false };
+  // Copied into an array first: this project's TypeScript target cannot
+  // iterate a Set directly, and a Set of a section's responses is small.
+  const list: string[] = [];
+  candidates.forEach((candidate) => list.push(candidate));
+  let hit: string | null = null;
+  for (const candidate of list) {
+    if (!withinTypos(id, candidate, MAX_ID_TYPOS)) continue;
+    if (hit !== null) return null;
+    hit = candidate;
+  }
+  return hit === null ? null : { id: hit, repaired: true };
+}
+
+/**
  * Check one section's analysis.
  *
  * Returns the analysis with corrections applied, or the list of violations. The
  * caller stores a violating run as FAILED_VALIDATION and shows the reasons
  * rather than retrying silently: a prompt that has started inventing support is
  * something the owner needs to know about, not something to paper over.
+ *
+ * The analysis it returns has every citation RESOLVED to the real id, so what
+ * is stored and shown to the committee is the row itself and never the
+ * model's spelling of it.
  */
 export function validateSectionAnalysis(
   analysis: SectionAnalysis,
@@ -151,24 +222,47 @@ export function validateSectionAnalysis(
     });
   }
 
-  const checkIds = (ids: string[], where: string) => {
+  /** Resolve a cited list, repairing near-misses and refusing strangers. */
+  const mapIds = (ids: string[], where: string): string[] => {
+    const out: string[] = [];
     for (const id of ids) {
-      if (!facts.responseIds.has(id)) {
+      const hit = resolveCitation(id, facts.responseIds);
+      if (hit === null) {
         violations.push({
           kind: 'fabricated-response-id',
           detail: `Cites response "${id}", which is not one of the responses to this section.`,
           where,
         });
+        continue;
       }
+      if (hit.repaired) {
+        corrections.push({
+          kind: 'repaired-citation',
+          detail:
+            `Cited response "${id}", which is not a response to this section but is within `
+            + `two characters of exactly one that is, "${hit.id}". Read as that one.`,
+          where,
+        });
+      }
+      out.push(hit.id);
     }
+    return out;
   };
 
-  analysis.themes.forEach((theme, i) => checkIds(theme.response_ids, `theme ${i + 1}`));
-  analysis.critical_concerns.forEach((c, i) => checkIds(c.response_ids, `concern ${i + 1}`));
-  analysis.unit_conflicts.forEach((c, i) => checkIds(c.response_ids, `conflict ${i + 1}`));
-  analysis.proposed_changes.forEach((c, i) => checkIds(c.response_ids, `proposed change ${i + 1}`));
+  const themes = analysis.themes.map((theme, i) => ({
+    ...theme,
+    response_ids: mapIds(theme.response_ids, `theme ${i + 1}`),
+  }));
+  const criticalConcerns = analysis.critical_concerns.map((c, i) => ({
+    ...c,
+    response_ids: mapIds(c.response_ids, `concern ${i + 1}`),
+  }));
+  const unitConflicts = analysis.unit_conflicts.map((c, i) => ({
+    ...c,
+    response_ids: mapIds(c.response_ids, `conflict ${i + 1}`),
+  }));
 
-  analysis.decision_items.forEach((item, i) => {
+  const decisionItems = analysis.decision_items.map((item, i) => {
     const where = `decision item ${i + 1}`;
     if (!facts.decisionItemIds.has(item.decision_item_id)) {
       violations.push({
@@ -177,22 +271,22 @@ export function validateSectionAnalysis(
           `Reports on open value "${item.decision_item_id}", which is not in this section.`,
         where,
       });
-      return;
+      return item;
     }
 
     const allowed = facts.responseIdsByDecisionItem.get(item.decision_item_id)
       ?? new Set<string>();
 
-    item.proposals.forEach((proposal, j) => {
+    const proposals = item.proposals.map((proposal, j) => {
       const place = `${where}, proposal ${j + 1}`;
-      checkIds(proposal.response_ids, place);
+      const ids = mapIds(proposal.response_ids, place);
 
-      for (const id of proposal.response_ids) {
+      for (const id of ids) {
         // Support drawn from a section comment rather than from this open
         // value's own box. Noted, not refused -- see the third failure mode
         // at the top of this file. The id is real and belongs to this
         // section, so the Chairman can open it and read what was said.
-        if (facts.responseIds.has(id) && !allowed.has(id)) {
+        if (!allowed.has(id)) {
           corrections.push({
             kind: 'citation-outside-decision-item',
             detail:
@@ -206,16 +300,20 @@ export function validateSectionAnalysis(
 
       // Support claimed beyond the citations is inflated support, and it is the
       // number the committee would read off the page.
-      if (proposal.support > proposal.response_ids.length) {
+      if (proposal.support > ids.length) {
         violations.push({
           kind: 'support-exceeds-citations',
           detail:
             `Claims ${proposal.support} reviewers proposed "${proposal.value}" but `
-            + `cites ${proposal.response_ids.length}.`,
+            + `cites ${ids.length}.`,
           where: place,
         });
       }
+
+      return { ...proposal, response_ids: ids };
     });
+
+    return { ...item, proposals };
   });
 
   const counts = analysis.stance_counts;
@@ -256,32 +354,42 @@ export function validateSectionAnalysis(
     });
   }
 
-  // ── Corrections ────────────────────────────────────────────────────────
+  // -- Corrections --------------------------------------------------------
+  const proposedChanges = analysis.proposed_changes.map((change, i) => {
+    const where = `proposed change ${i + 1}`;
+    const ids = mapIds(change.response_ids, where);
+    const mapped = { ...change, response_ids: ids };
+    if (mapped.clinical_review_required) return mapped;
+
+    const citedSafety = ids.some((id) => facts.safetyResponseIds.has(id));
+    const readsClinical = touchesClinicalSafety(change.current_text, change.proposed_text);
+    if (!citedSafety && !readsClinical) return mapped;
+
+    corrections.push({
+      kind: 'forced-clinical-review',
+      detail: citedSafety
+        ? 'Flagged for clinical review: it rests on a response that raised a '
+          + 'patient-safety concern.'
+        : 'Flagged for clinical review: the wording touches a clinical '
+          + 'provision or threshold.',
+      where,
+    });
+    return { ...mapped, clinical_review_required: true };
+  });
+
   const corrected: SectionAnalysis = {
     ...analysis,
-    proposed_changes: analysis.proposed_changes.map((change, i) => {
-      if (change.clinical_review_required) return change;
-
-      const citedSafety = change.response_ids.some((id) => facts.safetyResponseIds.has(id));
-      const readsClinical = touchesClinicalSafety(change.current_text, change.proposed_text);
-      if (!citedSafety && !readsClinical) return change;
-
-      corrections.push({
-        kind: 'forced-clinical-review',
-        detail: citedSafety
-          ? 'Flagged for clinical review: it rests on a response that raised a '
-            + 'patient-safety concern.'
-          : 'Flagged for clinical review: the wording touches a clinical '
-            + 'provision or threshold.',
-        where: `proposed change ${i + 1}`,
-      });
-      return { ...change, clinical_review_required: true };
-    }),
+    themes,
+    critical_concerns: criticalConcerns,
+    unit_conflicts: unitConflicts,
+    decision_items: decisionItems,
+    proposed_changes: proposedChanges,
   };
 
   if (violations.length > 0) return { ok: false, violations, corrections };
   return { ok: true, analysis: corrected, corrections };
 }
+
 
 /** The cross-section pass may only name sections it was given. */
 export function validateCrossSection(

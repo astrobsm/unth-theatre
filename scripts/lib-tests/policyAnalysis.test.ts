@@ -284,6 +284,93 @@ describe('too few voices is not a committee view', () => {
   });
 });
 
+describe('an id copied wrong is REPAIRED, not refused', () => {
+  // The real one, from the run of 28 November 2026. The model dropped two of
+  // the eight characters in the first group of a thirty-six character id and
+  // the whole eighty-section analysis was discarded for it.
+  const REAL = 'e6aa71c3-7441-4ac5-8bfa-c2ddb45843bb';
+  const TYPO = 'e6aa71-7441-4ac5-8bfa-c2ddb45843bb';
+  const OTHER = 'f1b2c3d4-9e8f-4a7b-9c6d-5e4f3a2b1c0d';
+
+  const uuidFacts = (over: Partial<SectionFacts> = {}): SectionFacts => facts({
+    responseIds: new Set([REAL, OTHER]),
+    responseIdsByDecisionItem: new Map([['item-1', new Set([REAL])]]),
+    ...over,
+  });
+
+  const themeCiting = (id: string) => analysis({
+    themes: [{ summary: 'The upload time is too early.', response_ids: [id], units: [] }],
+    unit_conflicts: [],
+    decision_items: [],
+    proposed_changes: [],
+  });
+
+  it('reads a two-character typo as the one real id it is near', () => {
+    const result = validateSectionAnalysis(themeCiting(TYPO) as never, uuidFacts());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.corrections.map((c) => c.kind)).toContain('repaired-citation');
+  });
+
+  it('STORES the real id, not the model spelling of it', () => {
+    // Otherwise the finding is kept but points at nothing, and "open the
+    // response" fails for the one citation anybody would want to check.
+    const result = validateSectionAnalysis(themeCiting(TYPO) as never, uuidFacts());
+    if (!result.ok) throw new Error('expected this to pass');
+    expect(result.analysis.themes[0].response_ids).toEqual([REAL]);
+  });
+
+  it('still refuses an id that is near NOTHING', () => {
+    const result = validateSectionAnalysis(
+      themeCiting('00000000-0000-4000-8000-000000000000') as never,
+      uuidFacts(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations[0].kind).toBe('fabricated-response-id');
+  });
+
+  it('refuses rather than guesses when two real ids are equally near', () => {
+    // A guess between two reviewers is worse than a refusal: it would put one
+    // colleague's name behind the other's opinion.
+    const twinA = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const twinB = 'aaaaaaaa-1111-4111-8111-111111111122';
+    const result = validateSectionAnalysis(
+      themeCiting('aaaaaaaa-1111-4111-8111-1111111111') as never,
+      uuidFacts({ responseIds: new Set([twinA, twinB]) }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations[0].kind).toBe('fabricated-response-id');
+  });
+
+  it('repairs a citation inside an open value too, and keeps it eligible', () => {
+    const result = validateSectionAnalysis(
+      analysis({
+        themes: [],
+        unit_conflicts: [],
+        proposed_changes: [],
+        decision_items: [{
+          decision_item_id: 'item-1',
+          current_value: '11:00',
+          proposals: [{ value: '14:00', support: 1, response_ids: [TYPO] }],
+          recommended_value: '14:00',
+          rationale: 'x',
+          status: 'recommended',
+        }],
+      }) as never,
+      uuidFacts(),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.analysis.decision_items[0].proposals[0].response_ids).toEqual([REAL]);
+    // Repaired to an id that DID answer the box, so it is not also reported as
+    // prose-derived support.
+    expect(result.corrections.map((c) => c.kind))
+      .not.toContain('citation-outside-decision-item');
+  });
+});
+
 describe('support given in prose is RECORDED, not refused', () => {
   // This is what failed the real run of 28 November 2026. Eight citations of
   // this kind, out of eighty sections, discarded every finding in all eighty
