@@ -25,6 +25,21 @@
 //   missing boolean, and the likely next step would be re-running until it
 //   passed -- which is worse than setting the flag.
 //
+//   SUPPORT FOUND IN THE WRONG BOX IS RECORDED, not rejected. A reviewer who
+//   wrote "make it 14:00" in the comment box, rather than typing 14:00 into
+//   the open value's own field, holds that view every bit as much as the one
+//   who used the field. Which box they used is an artifact of the form, not a
+//   fact about the committee. So a proposal that cites a response from
+//   elsewhere in THIS SECTION'S OWN INPUT is kept, and the citation is noted
+//   on the Chairman's screen so he can read the words for himself.
+//
+//   It used to fail the whole run, and on 28 November 2026 it did: eight such
+//   citations threw away the findings for all eighty sections, after every one
+//   of them had been paid for. The guard that actually matters is untouched --
+//   an id that was NOT in the input is still a refusal, and support claimed
+//   beyond the citations is still a refusal -- so the number of supporters on
+//   the page can still never exceed the responses standing behind it.
+//
 // Pure, so every one of these can be exercised without a database or an API
 // key. That matters: these are the checks nobody will think to test by hand,
 // because when they are working there is nothing to see.
@@ -66,7 +81,6 @@ export interface Violation {
   | 'wrong-section'
   | 'fabricated-response-id'
   | 'fabricated-decision-item-id'
-  | 'citation-outside-decision-item'
   | 'stance-count-mismatch'
   | 'should-be-insufficient'
   | 'wrongly-declared-insufficient'
@@ -77,7 +91,7 @@ export interface Violation {
 }
 
 export interface Correction {
-  kind: 'forced-clinical-review';
+  kind: 'forced-clinical-review' | 'citation-outside-decision-item';
   detail: string;
   where: string;
 }
@@ -174,15 +188,17 @@ export function validateSectionAnalysis(
       checkIds(proposal.response_ids, place);
 
       for (const id of proposal.response_ids) {
-        // A citation that exists but answered a DIFFERENT open value is the
-        // subtle version of inventing support: the id checks out, and the
-        // person never expressed a view on this value at all.
+        // Support drawn from a section comment rather than from this open
+        // value's own box. Noted, not refused -- see the third failure mode
+        // at the top of this file. The id is real and belongs to this
+        // section, so the Chairman can open it and read what was said.
         if (facts.responseIds.has(id) && !allowed.has(id)) {
-          violations.push({
+          corrections.push({
             kind: 'citation-outside-decision-item',
             detail:
-              `Cites response "${id}" in support of "${proposal.value}", but that `
-              + 'response did not answer this open value.',
+              `Support for "${proposal.value}" rests on response "${id}", which is a `
+              + "comment on this section rather than an answer typed into this open value's "
+              + 'own box. Open it to read what was actually said.',
             where: place,
           });
         }

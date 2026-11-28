@@ -155,12 +155,22 @@ export async function loadSectionInputs(roundId: string): Promise<SectionInput[]
     if (section.decisionItems.length > 0) {
       lines.push('OPEN VALUES IN THIS SECTION:');
       for (const d of section.decisionItems) {
+        // The ids that answered THIS value, named under it.
+        //
+        // Without this the model had to work out for itself which of the two
+        // id lists below belonged to which open value, and when it guessed
+        // wrong the whole run was discarded. Naming them here costs a few
+        // tokens and removes the guess.
+        const answered = myItemResponses
+          .filter((r) => r.decisionItemId === d.id)
+          .map((r) => r.id);
         lines.push(
           `- decision_item_id: ${d.id}`,
           `  placeholder: ${d.placeholder}`,
           `  current value as drafted: ${d.currentValue}`,
           `  kind: ${d.type}`,
           `  in context: ${d.surroundingSentence}`,
+          `  answered in its own box by: ${answered.length > 0 ? answered.join(', ') : '(nobody)'}`,
         );
       }
       lines.push('');

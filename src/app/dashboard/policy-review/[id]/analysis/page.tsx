@@ -131,7 +131,7 @@ interface Run {
   output: {
     synthesis?: Synthesis;
     crossSection?: { inconsistencies?: Array<{ summary: string; section_ids: string[] }> };
-    corrections?: Array<{ detail: string; where: string }>;
+    corrections?: Array<{ kind?: string; detail: string; where: string }>;
   } | null;
   validationErrors: { message?: string; violations?: Array<{ detail: string; where?: string }> } | null;
   inputTokens: number | null;
@@ -815,18 +815,57 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
           </div>
         )}
 
-        {run?.output?.corrections && run.output.corrections.length > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <p className="text-xs font-bold text-amber-900">
-              {run.output.corrections.length} change(s) were flagged for clinical review
-              automatically
-            </p>
-            <p className="mt-1 text-[11px] text-amber-900">
-              Either they rest on a response that raised a patient-safety concern, or their
-              wording touches a clinical provision. The flag was added by ORM, not by the model.
-            </p>
-          </div>
-        )}
+        {/*
+          WHAT ORM CHANGED AFTER THE MODEL ANSWERED, IN TWO KINDS.
+
+          A safety flag ORM added, and support the model found in a reviewer's
+          prose rather than in an open value's own box. The second used to
+          abort the entire run; it is now shown here, item by item, because
+          the Chairman is the one who should judge whether a comment really
+          argued for a value, and he can only do that if he is told which
+          findings rest on one.
+        */}
+        {run?.output?.corrections && run.output.corrections.length > 0 && ((all) => {
+          const flagged = all.filter((c) => c.kind !== 'citation-outside-decision-item');
+          const traced = all.filter((c) => c.kind === 'citation-outside-decision-item');
+          return (
+            <div className="mt-3 space-y-2">
+              {flagged.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-bold text-amber-900">
+                    {flagged.length} change(s) were flagged for clinical review automatically
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-900">
+                    Either they rest on a response that raised a patient-safety concern, or
+                    their wording touches a clinical provision. The flag was added by ORM, not
+                    by the model.
+                  </p>
+                </div>
+              )}
+              {traced.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold text-slate-900">
+                    {traced.length} piece(s) of support came from a comment, not from the open
+                    value&rsquo;s own box
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-700">
+                    The reviewer gave the view in prose instead of typing it into the field.
+                    Each one is named below with the response it rests on, so you can read the
+                    words yourself before accepting the recommendation.
+                  </p>
+                  <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-[11px] text-slate-700">
+                    {traced.map((c, i) => (
+                      <li key={i}>
+                        <strong>{c.where}: </strong>
+                        {c.detail}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })(run.output.corrections)}
       </section>
 
       {/* ── Synthesis ───────────────────────────────────────────────────── */}

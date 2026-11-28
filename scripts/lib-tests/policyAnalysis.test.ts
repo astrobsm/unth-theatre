@@ -122,16 +122,15 @@ describe('invented support is REFUSED', () => {
     }
   });
 
-  it('rejects a citation that answered a DIFFERENT open value', () => {
-    // The subtle version: the id checks out, and the person never expressed a
-    // view on this value at all.
+  it('still rejects an invented id inside a proposal for an open value', () => {
+    // The proposals are where support turns into a number on the page, so a
+    // citation to nothing at all has to die here as surely as anywhere else.
     const result = validateSectionAnalysis(
       analysis({
         decision_items: [{
           decision_item_id: 'item-1',
           current_value: '11:00',
-          // r1 is a section response, not an answer to this open value.
-          proposals: [{ value: '14:00', support: 1, response_ids: ['r1'] }],
+          proposals: [{ value: '14:00', support: 1, response_ids: ['ghost'] }],
           recommended_value: '14:00',
           rationale: 'x',
           status: 'recommended',
@@ -141,7 +140,7 @@ describe('invented support is REFUSED', () => {
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.violations.map((v) => v.kind)).toContain('citation-outside-decision-item');
+    expect(result.violations.map((v) => v.kind)).toContain('fabricated-response-id');
   });
 
   it('rejects support claimed beyond the citations', () => {
@@ -282,6 +281,87 @@ describe('too few voices is not a committee view', () => {
       f,
     );
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('support given in prose is RECORDED, not refused', () => {
+  // This is what failed the real run of 28 November 2026. Eight citations of
+  // this kind, out of eighty sections, discarded every finding in all eighty
+  // after the whole analysis had been paid for.
+
+  it('keeps a proposal whose support came from a section comment', () => {
+    const result = validateSectionAnalysis(
+      analysis({
+        decision_items: [{
+          decision_item_id: 'item-1',
+          current_value: '11:00',
+          // r1 is a comment on the section, not an answer typed into the box.
+          proposals: [{ value: '14:00', support: 1, response_ids: ['r1'] }],
+          recommended_value: '14:00',
+          rationale: 'x',
+          status: 'recommended',
+        }],
+      }) as never,
+      facts(),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.corrections.map((c) => c.kind))
+      .toContain('citation-outside-decision-item');
+  });
+
+  it('names the response and the place, so the Chairman can go and read it', () => {
+    const result = validateSectionAnalysis(
+      analysis({
+        decision_items: [{
+          decision_item_id: 'item-1',
+          current_value: '11:00',
+          proposals: [{ value: '14:00', support: 2, response_ids: ['ir1', 'r2'] }],
+          recommended_value: '14:00',
+          rationale: 'x',
+          status: 'recommended',
+        }],
+      }) as never,
+      facts(),
+    );
+    if (!result.ok) throw new Error('expected this to pass');
+    const noted = result.corrections.find((c) => c.kind === 'citation-outside-decision-item');
+    expect(noted?.detail).toContain('r2');
+    expect(noted?.detail).toContain('14:00');
+    expect(noted?.where).toBe('decision item 1, proposal 1');
+    // The one that DID answer the box is not reported as anything.
+    expect(result.corrections.filter((c) => c.detail.includes('ir1'))).toHaveLength(0);
+  });
+
+  it('does not let the recorded citation inflate the number on the page', () => {
+    // The guard that survives: support beyond the citations is still refused,
+    // so a proposal can never claim more backing than it names.
+    const result = validateSectionAnalysis(
+      analysis({
+        decision_items: [{
+          decision_item_id: 'item-1',
+          current_value: '11:00',
+          proposals: [{ value: '14:00', support: 5, response_ids: ['r1'] }],
+          recommended_value: '14:00',
+          rationale: 'x',
+          status: 'recommended',
+        }],
+      }) as never,
+      facts(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.kind)).toContain('support-exceeds-citations');
+  });
+
+  it('tells the model which ids answered each open value', () => {
+    // The prompt asks and the input shows. Without the second, the model had
+    // to infer from two undifferentiated id lists which belonged where.
+    const input = read('src/lib/policy/analysis/input.ts');
+    expect(input).toContain('answered in its own box by');
+    const prompt = read('src/lib/policy/analysis/prompt.ts');
+    expect(prompt).toContain('answered it in its own box');
+    expect(prompt).toContain('never to a larger number');
   });
 });
 

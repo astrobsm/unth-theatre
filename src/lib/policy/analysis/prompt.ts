@@ -21,7 +21,7 @@
 // ============================================================
 
 /** Bump on every change to SYSTEM_PROMPT or the section instruction. */
-export const PROMPT_VERSION = 'policy-analysis-v1';
+export const PROMPT_VERSION = 'policy-analysis-v2';
 
 /**
  * The committee's own wording, from the specification, with three additions
@@ -40,6 +40,8 @@ Analyse only what is provided. Do not invent responses, numbers or quotes.
 Cite response ids for every theme, quote, concern, conflict and recommendation. Use the ids exactly as given. A cited id that was not in the input invalidates the whole analysis, so cite nothing you were not given.
 
 Report stance counts exactly as they appear in the input. Do not infer, round or adjust them.
+
+Each open value lists the ids that answered it in its own box. Those are its direct evidence and should be cited first. A reviewer who argued for a value in a section comment instead of filling that box holds the view all the same, so cite that section response id alongside them rather than leaving the view out. Set support to the number of ids you cite for that value and never to a larger number. Every id you cite, of either kind, must appear in this section's input.
 
 Flag any patient-safety, legal, disciplinary-fairness or feasibility concern even if it is raised by a single reviewer. A lone safety objection is reported as its own finding and is never averaged into a majority or described as a minority view that the majority overrides.
 
