@@ -742,7 +742,47 @@ describe('the run survives being cut off, without paying twice', () => {
     const softMs = Number(soft![1].replace(/_/g, ''));
     const hardMs = Number(route.match(/maxDuration = (\d+)/)![1]) * 1000;
     expect(softMs).toBeLessThan(hardMs);
-    expect(hardMs - softMs).toBeGreaterThanOrEqual(45_000);
+    // 45 seconds was the first guess and it was not enough: a slice was killed
+    // at the full 300 on 28 Nov 2026. The margin has to cover the longest a
+    // call started at the deadline may still run, plus the writing.
+    const minCall = Number(run.match(/const MIN_CALL_MS = ([\d_]+);/)![1].replace(/_/g, ''));
+    expect(hardMs - softMs).toBeGreaterThanOrEqual(minCall * 3);
+  });
+
+  it('starts the clock when the FUNCTION starts, not when the reading ends', () => {
+    // Three queries over eighty sections and every response to them is not
+    // free, and the platform was counting it while the slice was not.
+    const deadlineAt = run.indexOf('const deadline = Date.now() + SOFT_DEADLINE_MS;');
+    const loadAt = run.indexOf('await loadSectionInputs(');
+    expect(deadlineAt).toBeGreaterThan(0);
+    expect(loadAt).toBeGreaterThan(0);
+    expect(deadlineAt).toBeLessThan(loadAt);
+  });
+
+  it('does not let the SDK retry a call past the deadline', () => {
+    // `timeout` is per attempt. At the default of two retries, a 20-second
+    // call that times out runs for a minute -- which is how a pass written to
+    // hand back at 240 seconds was still alive at 300.
+    expect(run).toContain('maxRetries: 0');
+  });
+
+  it('leaves a rate-limited or overloaded section for the next slice', () => {
+    // The pass is resumable, so abandoning one section costs a retry; failing
+    // the run costs every section already analysed in this slice.
+    expect(run).toContain('leaveForNextSlice');
+    expect(run).toContain('err.status === 429');
+    expect(run).toContain('err.status >= 500');
+    expect(run).toContain('if (!leaveForNextSlice(err)) throw err;');
+  });
+
+  it('stops a pass that gained nothing, instead of repeating it twenty times', () => {
+    // Told `done: false`, the page comes straight back. A slice that analysed
+    // no new section would do the same nothing again, twenty times, each one a
+    // function invocation and a fresh pre-flight token count.
+    expect(run).toContain('sections.length === banked.length');
+    expect(run).toContain('analysed no new section');
+    // And it must say WHY, or a bad key looks identical to a slow network.
+    expect(run).toContain('abandoned[0].message');
   });
 
   it('gives each CALL a deadline, not just the pass', () => {
@@ -758,7 +798,7 @@ describe('the run survives being cut off, without paying twice', () => {
     expect(run).toContain('ranOutOfTime');
     expect(run).toContain('APIConnectionTimeoutError');
     expect(run).toContain('APIUserAbortError');
-    expect(run).toContain('if (!ranOutOfTime(err)) throw err;');
+    expect(run).toContain('if (ranOutOfTime(err)) return true;');
   });
 
   it('keeps saying it is alive, so the concurrency guard still means something', () => {

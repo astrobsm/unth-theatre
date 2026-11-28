@@ -162,6 +162,16 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   const [notice, setNotice] = useState<string | null>(null);
 
   const [running, setRunning] = useState(false);
+  /**
+   * Why the LAST PRESS of the button failed, shown AT the button.
+   *
+   * Kept apart from `error` for one reason: `error` renders at the top of the
+   * page, and the button is most of a screen below it. On 28 November 2026 a
+   * press failed, said so at the top, and the Chairman -- looking at the card
+   * he had just pressed -- saw an unchanged card and concluded nothing had
+   * happened. A message nobody scrolls to is not a message.
+   */
+  const [runError, setRunError] = useState<string | null>(null);
   const [progress, setProgress] = useState<
   { analysed: number; remaining: number; costCents: number } | null
   >(null);
@@ -239,6 +249,7 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
   const runAnalysis = async () => {
     setRunning(true);
     setError(null);
+    setRunError(null);
     setNotice(null);
     setProgress(null);
 
@@ -249,7 +260,7 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
         const body = await res.json();
 
         if (!res.ok) {
-          setError(body?.error ?? 'The analysis could not be run.');
+          setRunError(body?.error ?? 'The analysis could not be run.');
           return;
         }
 
@@ -265,19 +276,22 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
         setProgress(null);
         setNotice(body.message ?? null);
         if (body.status !== 'VALIDATED') {
-          setError(body.message ?? 'The analysis was refused.');
+          setRunError(body.message ?? 'The analysis was refused.');
         }
         await load();
         return;
       }
 
-      setError(
+      setRunError(
         'The analysis is taking an unusual number of passes. What it has done so far is '
         + 'saved and paid for — press Run again to carry on from there.',
       );
       await load();
     } catch {
-      setError('The analysis could not be run.');
+      setRunError(
+        'The analysis could not be run: the request did not reach the server, or the '
+        + 'reply never arrived. Check that you are still signed in, then press again.',
+      );
     } finally {
       setRunning(false);
     }
@@ -747,6 +761,13 @@ export default function PolicyAnalysisPage({ params }: { params: { id: string } 
             {run ? 'Run it again' : 'Run the analysis'}
           </button>
         </div>
+
+        {runError && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border-2 border-rose-300 bg-rose-50 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <p className="text-sm text-rose-900">{runError}</p>
+          </div>
+        )}
 
         {progress && (
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">

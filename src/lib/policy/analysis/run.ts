@@ -82,12 +82,23 @@ const MAX_TOKENS = 16000;
  * and skips the sections already analysed, so nothing is paid for twice. It
  * also means the Chairman watches a count climb instead of a spinner.
  *
- * WHY THIS IS 240 AND NOT 300. The sixty seconds held back are not slack: they
- * pay for the calls still in flight when the deadline passes, and for writing
- * what came back. A deadline equal to the function's own is a deadline that
- * banks nothing, which is exactly the failure this module shipped with.
+ * WHY IT IS HELD WELL BELOW 300. The time held back is not slack: it pays for
+ * the calls still in flight when the deadline passes, and for writing what
+ * came back. A deadline equal to the function's own is a deadline that banks
+ * nothing, which is exactly the failure this module shipped with.
+ *
+ * WHY 240 WAS STILL TOO LATE. On 28 November 2026 a slice was killed at the
+ * full three hundred seconds -- `Vercel Runtime Timeout Error: Task timed out
+ * after 300 seconds` -- and the page, handed an HTML error document where it
+ * expected JSON, could say no more than "The analysis could not be run." Two
+ * things ate the sixty-second margin. The clock used to start AFTER the
+ * sections and every response had been read out of the database, so a slow
+ * read was free; it now starts when the function does. And a call abandoned on
+ * its own timeout was being RETRIED by the SDK, twice, each attempt allowed
+ * the same timeout again -- so one twenty-second call at the end of the pass
+ * could run for a minute past the deadline it was written to respect.
  */
-const SOFT_DEADLINE_MS = 240_000;
+const SOFT_DEADLINE_MS = 200_000;
 
 /**
  * The least time a call is given, even at the very end of a slice.
@@ -173,6 +184,28 @@ const ranOutOfTime = (err: unknown): boolean =>
   || err instanceof Anthropic.APIUserAbortError
   || (err instanceof Error && err.name === 'AbortError');
 
+/**
+ * May this section simply be left for the next slice?
+ *
+ * The pass is resumable, so abandoning ONE section costs a retry on the next
+ * slice; failing the run costs every section already analysed in this one.
+ * Given that asymmetry, anything that is plausibly momentary -- a rate limit,
+ * an overloaded model, a gateway hiccup, a call that ran out of its own time
+ * -- is left behind rather than thrown.
+ *
+ * It cannot hide a broken deployment: a slice that analyses NO new section is
+ * stopped below and reports the first error it swallowed, so a bad key or a
+ * rejected parameter surfaces on the first press instead of looping.
+ */
+const leaveForNextSlice = (err: unknown): boolean => {
+  if (ranOutOfTime(err)) return true;
+  if (err instanceof Anthropic.APIError && typeof err.status === 'number') {
+    return err.status === 408 || err.status === 409 || err.status === 429
+      || err.status >= 500;
+  }
+  return false;
+};
+
 class BudgetExceeded extends Error {}
 class Refused extends Error {
   constructor(readonly category: string | null, message: string) {
@@ -185,6 +218,16 @@ export async function runPolicyAnalysis(opts: {
   actorId: string;
   actorName: string;
 }): Promise<AnalysisOutcome> {
+  // Started HERE, not after the database work below.
+  //
+  // Reading eighty sections, every response to them and every answer to every
+  // open value is three queries against a pooled connection on another
+  // continent, and it is not free. Measuring the slice from after that read
+  // made the read invisible to the deadline while the platform was counting it
+  // all along -- which is half the reason a slice died at three hundred
+  // seconds with nothing saved.
+  const deadline = Date.now() + SOFT_DEADLINE_MS;
+
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error(
       'ANTHROPIC_API_KEY is not set on this deployment, so the analysis cannot run. '
@@ -248,7 +291,6 @@ export async function runPolicyAnalysis(opts: {
     outputTokens: run.outputTokens ?? 0,
   };
   const ceiling = maxCents();
-  const deadline = Date.now() + SOFT_DEADLINE_MS;
 
   /** The sections this slice still has to do. */
   const todo = inputs.filter((i) => !alreadyDone.has(i.sectionId));
@@ -353,6 +395,8 @@ export async function runPolicyAnalysis(opts: {
     // ── Pass 1: per section, resumable ─────────────────────────────────
     const allViolations: Violation[] = [];
     const allCorrections: Correction[] = [...bankedCorrections];
+    /** Sections this slice gave up on, and why. Reported only if none landed. */
+    const abandoned: Error[] = [];
 
     const analysed = await pooled(todo, CONCURRENCY, async (input) => {
       // Checked before each call rather than after: a call started past the
@@ -396,12 +440,25 @@ export async function runPolicyAnalysis(opts: {
               minimumForAnalysis: MINIMUM_FOR_ANALYSIS,
             })}`,
           }],
-        }, { timeout: Math.max(MIN_CALL_MS, deadline - Date.now()) });
+        }, {
+          timeout: Math.max(MIN_CALL_MS, deadline - Date.now()),
+          // NO RETRIES, and this is the whole point of the option.
+          //
+          // `timeout` is per ATTEMPT, not per call. At the SDK's default of
+          // two retries, a twenty-second call that times out is tried again
+          // twice, twenty seconds each, and runs a full minute past the
+          // deadline it was given -- which is how a slice written to hand back
+          // at 240 seconds was still alive at 300. Here a retry buys nothing
+          // anyway: the next slice starts the section afresh and pays for it
+          // once.
+          maxRetries: 0,
+        });
       } catch (err) {
-        // Out of time is not a failure of the run. The section is left
-        // exactly as it was, unanalysed and unbanked, and the next slice
-        // starts it afresh.
-        if (!ranOutOfTime(err)) throw err;
+        // Out of time, rate-limited, or the model was busy. None of those is a
+        // failure of the RUN. The section is left exactly as it was,
+        // unanalysed and unbanked, and the next slice starts it afresh.
+        if (!leaveForNextSlice(err)) throw err;
+        abandoned.push(err instanceof Error ? err : new Error(String(err)));
         return undefined;
       }
 
@@ -475,6 +532,38 @@ export async function runPolicyAnalysis(opts: {
     });
 
     const remaining = inputs.length - sections.length;
+
+    // ── A pass that gained nothing stops here ──────────────────────────
+    // Otherwise the page, told `done: false`, comes straight back and does
+    // the same nothing again -- twenty times, each one a function invocation
+    // and a fresh pre-flight token count. If calls were abandoned, the first
+    // one says why; if none were, the slice spent its whole life reading the
+    // database and the Chairman needs to know that rather than watch a
+    // spinner.
+    if (remaining > 0 && sections.length === banked.length) {
+      const why = abandoned.length > 0
+        ? `${abandoned.length} call(s) were abandoned. The first said: ${abandoned[0].message}`
+        : 'No call finished inside the time this pass had.';
+      return {
+        runId: run.id,
+        status: 'RUNNING',
+        message:
+          `This pass analysed no new section, so it stopped rather than repeat itself. ${why} `
+          + `${banked.length} section(s) analysed earlier are saved and will not be paid for `
+          + 'again. Press Run to carry on.',
+        sectionsAnalysed: sections.length,
+        sectionsSkipped: allInputs.length - inputs.length,
+        proposedChanges: 0,
+        corrections: allCorrections,
+        violations: [],
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costCents: Math.round(spend()),
+        done: true,
+        remaining,
+      };
+    }
+
     if (remaining > 0) {
       // Out of time, not out of work. The status stays RUNNING, the findings so
       // far are banked, and the caller comes back for the rest.
